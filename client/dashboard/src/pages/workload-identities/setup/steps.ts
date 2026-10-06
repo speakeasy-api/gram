@@ -7,6 +7,8 @@ export interface StepInputs {
   values: VariableValues;
   agentId: string;
   tags: string[];
+  /** The agent of an existing rule the values would duplicate, if any. */
+  conflictingRuleAgent: string | null;
 }
 
 export function stepIndexById(
@@ -36,12 +38,15 @@ export function stepComplete(step: SetupStep, inputs: StepInputs): boolean {
         return inputs.agentId !== "";
       case "tags":
         return tagsProblem(inputs.tags) === null;
+      case "subject_rule":
+        return inputs.conflictingRuleAgent === null;
       case "text":
       case "image":
       case "link":
-      case "subject_rule":
       case "computed_status":
       case "computed":
+      // Ticked as the operator follows along; never required to continue.
+      case "checklist_item":
         return true;
     }
   });

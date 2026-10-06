@@ -123,6 +123,13 @@ type ListPlatformsResponseBody struct {
 	Platforms []*WorkloadPlatformResponseBody `form:"platforms,omitempty" json:"platforms,omitempty" xml:"platforms,omitempty"`
 }
 
+// ListTokenEndpointsResponseBody is the type of the "workloadIdentities"
+// service "listTokenEndpoints" endpoint HTTP response body.
+type ListTokenEndpointsResponseBody struct {
+	// Organization-level issuers first, then by project name and issuer slug.
+	Items []*WorkloadTokenEndpointResponseBody `form:"items,omitempty" json:"items,omitempty" xml:"items,omitempty"`
+}
+
 // RegisterIssuerResponseBody is the type of the "workloadIdentities" service
 // "registerIssuer" endpoint HTTP response body.
 type RegisterIssuerResponseBody struct {
@@ -531,6 +538,196 @@ type ListPlatformsUnexpectedResponseBody struct {
 // "workloadIdentities" service "listPlatforms" endpoint HTTP response body for
 // the "gateway_error" error.
 type ListPlatformsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTokenEndpointsUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "unauthorized" error.
+type ListTokenEndpointsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTokenEndpointsForbiddenResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "forbidden" error.
+type ListTokenEndpointsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTokenEndpointsBadRequestResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "bad_request" error.
+type ListTokenEndpointsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTokenEndpointsNotFoundResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "not_found" error.
+type ListTokenEndpointsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTokenEndpointsConflictResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "conflict" error.
+type ListTokenEndpointsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTokenEndpointsUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "unsupported_media" error.
+type ListTokenEndpointsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTokenEndpointsInvalidResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "invalid" error.
+type ListTokenEndpointsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTokenEndpointsInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "invariant_violation" error.
+type ListTokenEndpointsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTokenEndpointsUnexpectedResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "unexpected" error.
+type ListTokenEndpointsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListTokenEndpointsGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "gateway_error" error.
+type ListTokenEndpointsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1820,7 +2017,8 @@ type WorkloadPlatformStepResponseBody struct {
 type WorkloadPlatformBlockResponseBody struct {
 	// The kind of content.
 	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
-	// A text block's Markdown. Raw HTML in it must not be rendered.
+	// A text block's Markdown, or what a checklist item without a value asks the
+	// operator to do. Raw HTML in it must not be rendered.
 	Markdown *string `form:"markdown,omitempty" json:"markdown,omitempty" xml:"markdown,omitempty"`
 	// An image's path on the dashboard's origin.
 	Src *string `form:"src,omitempty" json:"src,omitempty" xml:"src,omitempty"`
@@ -1830,14 +2028,36 @@ type WorkloadPlatformBlockResponseBody struct {
 	Caption *string `form:"caption,omitempty" json:"caption,omitempty" xml:"caption,omitempty"`
 	// A link's https target.
 	Href *string `form:"href,omitempty" json:"href,omitempty" xml:"href,omitempty"`
-	// A link's or computed value's label.
+	// A link's or computed value's label, or the console field or control a
+	// checklist item names.
 	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
 	// The variable key a field collects.
 	Variable *string `form:"variable,omitempty" json:"variable,omitempty" xml:"variable,omitempty"`
-	// The value a computed block shows.
+	// The value a computed block or checklist item shows.
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
-	// Shown under a computed value.
+	// Shown under a computed value or checklist item.
 	Help *string `form:"help,omitempty" json:"help,omitempty" xml:"help,omitempty"`
+}
+
+// WorkloadTokenEndpointResponseBody is used to define fields on response body
+// types.
+type WorkloadTokenEndpointResponseBody struct {
+	// The user session issuer id.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The user session issuer slug.
+	UserSessionIssuerSlug *string `form:"user_session_issuer_slug,omitempty" json:"user_session_issuer_slug,omitempty" xml:"user_session_issuer_slug,omitempty"`
+	// The owning project id; empty for an organization-level issuer.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning project name; empty for an organization-level issuer.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// The authorization server's issuer identifier, as its RFC 8414 metadata
+	// publishes it.
+	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// The authorization server's token endpoint.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// The host MCP servers are served on, which a platform calls with the tokens
+	// it is issued.
+	McpHost *string `form:"mcp_host,omitempty" json:"mcp_host,omitempty" xml:"mcp_host,omitempty"`
 }
 
 // NewRegisterIssuerRequestBody builds the HTTP request body from the payload
@@ -2261,6 +2481,172 @@ func NewListPlatformsUnexpected(body *ListPlatformsUnexpectedResponseBody) *goa.
 // NewListPlatformsGatewayError builds a workloadIdentities service
 // listPlatforms endpoint gateway_error error.
 func NewListPlatformsGatewayError(body *ListPlatformsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTokenEndpointsWorkloadTokenEndpointsOK builds a "workloadIdentities"
+// service "listTokenEndpoints" endpoint result from a HTTP "OK" response.
+func NewListTokenEndpointsWorkloadTokenEndpointsOK(body *ListTokenEndpointsResponseBody) *types.WorkloadTokenEndpoints {
+	v := &types.WorkloadTokenEndpoints{}
+	v.Items = make([]*types.WorkloadTokenEndpoint, len(body.Items))
+	for i, val := range body.Items {
+		if val == nil {
+			v.Items[i] = nil
+			continue
+		}
+		v.Items[i] = unmarshalWorkloadTokenEndpointResponseBodyToTypesWorkloadTokenEndpoint(val)
+	}
+
+	return v
+}
+
+// NewListTokenEndpointsUnauthorized builds a workloadIdentities service
+// listTokenEndpoints endpoint unauthorized error.
+func NewListTokenEndpointsUnauthorized(body *ListTokenEndpointsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTokenEndpointsForbidden builds a workloadIdentities service
+// listTokenEndpoints endpoint forbidden error.
+func NewListTokenEndpointsForbidden(body *ListTokenEndpointsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTokenEndpointsBadRequest builds a workloadIdentities service
+// listTokenEndpoints endpoint bad_request error.
+func NewListTokenEndpointsBadRequest(body *ListTokenEndpointsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTokenEndpointsNotFound builds a workloadIdentities service
+// listTokenEndpoints endpoint not_found error.
+func NewListTokenEndpointsNotFound(body *ListTokenEndpointsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTokenEndpointsConflict builds a workloadIdentities service
+// listTokenEndpoints endpoint conflict error.
+func NewListTokenEndpointsConflict(body *ListTokenEndpointsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTokenEndpointsUnsupportedMedia builds a workloadIdentities service
+// listTokenEndpoints endpoint unsupported_media error.
+func NewListTokenEndpointsUnsupportedMedia(body *ListTokenEndpointsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTokenEndpointsInvalid builds a workloadIdentities service
+// listTokenEndpoints endpoint invalid error.
+func NewListTokenEndpointsInvalid(body *ListTokenEndpointsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTokenEndpointsInvariantViolation builds a workloadIdentities service
+// listTokenEndpoints endpoint invariant_violation error.
+func NewListTokenEndpointsInvariantViolation(body *ListTokenEndpointsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTokenEndpointsUnexpected builds a workloadIdentities service
+// listTokenEndpoints endpoint unexpected error.
+func NewListTokenEndpointsUnexpected(body *ListTokenEndpointsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListTokenEndpointsGatewayError builds a workloadIdentities service
+// listTokenEndpoints endpoint gateway_error error.
+func NewListTokenEndpointsGatewayError(body *ListTokenEndpointsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3358,6 +3744,22 @@ func ValidateListPlatformsResponseBody(body *ListPlatformsResponseBody) (err err
 	return
 }
 
+// ValidateListTokenEndpointsResponseBody runs the validations defined on
+// ListTokenEndpointsResponseBody
+func ValidateListTokenEndpointsResponseBody(body *ListTokenEndpointsResponseBody) (err error) {
+	if body.Items == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
+	}
+	for _, e := range body.Items {
+		if e != nil {
+			if err2 := ValidateWorkloadTokenEndpointResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateRegisterIssuerResponseBody runs the validations defined on
 // RegisterIssuerResponseBody
 func ValidateRegisterIssuerResponseBody(body *RegisterIssuerResponseBody) (err error) {
@@ -3973,6 +4375,246 @@ func ValidateListPlatformsUnexpectedResponseBody(body *ListPlatformsUnexpectedRe
 // ValidateListPlatformsGatewayErrorResponseBody runs the validations defined
 // on listPlatforms_gateway_error_response_body
 func ValidateListPlatformsGatewayErrorResponseBody(body *ListPlatformsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTokenEndpointsUnauthorizedResponseBody runs the validations
+// defined on listTokenEndpoints_unauthorized_response_body
+func ValidateListTokenEndpointsUnauthorizedResponseBody(body *ListTokenEndpointsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTokenEndpointsForbiddenResponseBody runs the validations defined
+// on listTokenEndpoints_forbidden_response_body
+func ValidateListTokenEndpointsForbiddenResponseBody(body *ListTokenEndpointsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTokenEndpointsBadRequestResponseBody runs the validations
+// defined on listTokenEndpoints_bad_request_response_body
+func ValidateListTokenEndpointsBadRequestResponseBody(body *ListTokenEndpointsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTokenEndpointsNotFoundResponseBody runs the validations defined
+// on listTokenEndpoints_not_found_response_body
+func ValidateListTokenEndpointsNotFoundResponseBody(body *ListTokenEndpointsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTokenEndpointsConflictResponseBody runs the validations defined
+// on listTokenEndpoints_conflict_response_body
+func ValidateListTokenEndpointsConflictResponseBody(body *ListTokenEndpointsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTokenEndpointsUnsupportedMediaResponseBody runs the validations
+// defined on listTokenEndpoints_unsupported_media_response_body
+func ValidateListTokenEndpointsUnsupportedMediaResponseBody(body *ListTokenEndpointsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTokenEndpointsInvalidResponseBody runs the validations defined
+// on listTokenEndpoints_invalid_response_body
+func ValidateListTokenEndpointsInvalidResponseBody(body *ListTokenEndpointsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTokenEndpointsInvariantViolationResponseBody runs the
+// validations defined on listTokenEndpoints_invariant_violation_response_body
+func ValidateListTokenEndpointsInvariantViolationResponseBody(body *ListTokenEndpointsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTokenEndpointsUnexpectedResponseBody runs the validations
+// defined on listTokenEndpoints_unexpected_response_body
+func ValidateListTokenEndpointsUnexpectedResponseBody(body *ListTokenEndpointsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListTokenEndpointsGatewayErrorResponseBody runs the validations
+// defined on listTokenEndpoints_gateway_error_response_body
+func ValidateListTokenEndpointsGatewayErrorResponseBody(body *ListTokenEndpointsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5743,14 +6385,44 @@ func ValidateWorkloadPlatformBlockResponseBody(body *WorkloadPlatformBlockRespon
 		err = goa.MergeErrors(err, goa.MissingFieldError("help", "body"))
 	}
 	if body.Type != nil {
-		if !(*body.Type == "text" || *body.Type == "image" || *body.Type == "link" || *body.Type == "field" || *body.Type == "subject_rule" || *body.Type == "agent_picker" || *body.Type == "tags" || *body.Type == "computed_status" || *body.Type == "computed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"text", "image", "link", "field", "subject_rule", "agent_picker", "tags", "computed_status", "computed"}))
+		if !(*body.Type == "text" || *body.Type == "image" || *body.Type == "link" || *body.Type == "field" || *body.Type == "subject_rule" || *body.Type == "agent_picker" || *body.Type == "tags" || *body.Type == "computed_status" || *body.Type == "computed" || *body.Type == "checklist_item") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"text", "image", "link", "field", "subject_rule", "agent_picker", "tags", "computed_status", "computed", "checklist_item"}))
 		}
 	}
 	if body.Value != nil {
 		if !(*body.Value == "" || *body.Value == "token_endpoint" || *body.Value == "issuer_url" || *body.Value == "mcp_host") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.value", *body.Value, []any{"", "token_endpoint", "issuer_url", "mcp_host"}))
 		}
+	}
+	return
+}
+
+// ValidateWorkloadTokenEndpointResponseBody runs the validations defined on
+// WorkloadTokenEndpointResponseBody
+func ValidateWorkloadTokenEndpointResponseBody(body *WorkloadTokenEndpointResponseBody) (err error) {
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.UserSessionIssuerSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_slug", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.ProjectName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
+	}
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	if body.TokenEndpoint == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("token_endpoint", "body"))
+	}
+	if body.McpHost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_host", "body"))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
 	return
 }

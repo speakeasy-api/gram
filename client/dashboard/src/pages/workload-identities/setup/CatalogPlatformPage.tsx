@@ -148,6 +148,7 @@ function CatalogPlatform({
           entry={entry}
           definition={entry.setup}
           connected={issuer !== undefined}
+          admissions={policy.data?.admissions ?? []}
           stepId={searchParams.get(STEP_PARAM)}
           onStepChange={(stepId) => setSetup(true, stepId)}
           onClose={() => setSetup(false, null)}

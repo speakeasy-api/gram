@@ -101,12 +101,17 @@ const (
 	// BlockTags collects optional labels for the access rule.
 	BlockTags BlockType = "tags"
 
-	// BlockComputedStatus says why computed values cannot be shown, if they
-	// cannot.
+	// BlockComputedStatus picks the user session issuer whose computed values
+	// are shown, or says why there are none.
 	BlockComputedStatus BlockType = "computed_status"
 
 	// BlockComputed shows one value Gram derives, with a copy button.
 	BlockComputed BlockType = "computed"
+
+	// BlockChecklistItem is one thing to do in the platform's console, with a
+	// checkbox the operator ticks as they go: a console field and the value
+	// Gram derives for it, or a field or control and what to do with it.
+	BlockChecklistItem BlockType = "checklist_item"
 )
 
 // Computed values a definition may place. Each is derived by the server, the
@@ -170,7 +175,8 @@ type Block struct {
 	// Type is the kind of content.
 	Type BlockType `yaml:"type"`
 
-	// Markdown is a text block's content.
+	// Markdown is a text block's content, or what a checklist item without a
+	// computed value asks the operator to do.
 	Markdown string `yaml:"markdown"`
 
 	// Src is an image's path on the dashboard's origin.
@@ -185,16 +191,17 @@ type Block struct {
 	// Href is a link's target.
 	Href string `yaml:"href"`
 
-	// Label is a link's or computed value's label.
+	// Label is a link's or computed value's label, or the console field or
+	// control a checklist item names.
 	Label string `yaml:"label"`
 
 	// Variable is the key a field collects.
 	Variable string `yaml:"variable"`
 
-	// Value is the computed value a computed block shows.
+	// Value is the computed value a computed block or checklist item shows.
 	Value string `yaml:"value"`
 
-	// Help is shown under a computed value.
+	// Help is shown under a computed value or checklist item.
 	Help string `yaml:"help"`
 }
 
@@ -566,6 +573,22 @@ func validateBlock(b Block, variables map[string]Variable) error {
 		}
 		if strings.TrimSpace(b.Label) == "" {
 			return errors.New("computed value needs a label")
+		}
+	case BlockChecklistItem:
+		if strings.TrimSpace(b.Label) == "" {
+			return errors.New("checklist item needs a label")
+		}
+		switch {
+		case b.Value != "" && strings.TrimSpace(b.Markdown) != "":
+			return errors.New("checklist item shows a computed value or markdown, not both")
+		case b.Value != "":
+			if !slices.Contains(computedValues, b.Value) {
+				return fmt.Errorf("computed value %q is not one Gram derives", b.Value)
+			}
+		case strings.TrimSpace(b.Markdown) == "":
+			return errors.New("checklist item needs a computed value or markdown")
+		case strings.Contains(b.Markdown, "!["):
+			return errors.New("checklist item must not hold an image; use an image block")
 		}
 	case BlockSubjectRule, BlockAgentPicker, BlockTags, BlockComputedStatus:
 	default:

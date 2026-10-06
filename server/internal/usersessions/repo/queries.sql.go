@@ -2567,6 +2567,73 @@ func (q *Queries) ListRemoteSessionUpstreamsForSubjects(ctx context.Context, arg
 	return items, nil
 }
 
+const listSharedUserSessionIssuersInOrganization = `-- name: ListSharedUserSessionIssuersInOrganization :many
+SELECT
+    user_session_issuers.id, user_session_issuers.project_id, user_session_issuers.organization_id, user_session_issuers.attachment_scope, user_session_issuers.slug, user_session_issuers.authn_challenge_mode, user_session_issuers.session_duration, user_session_issuers.classification, user_session_issuers.client_id_metadata_admission_mode, user_session_issuers.trusted_remote_session_issuer_id, user_session_issuers.trusted_remote_session_client_id, user_session_issuers.use_authentication_host, user_session_issuers.authorization_server_mode, user_session_issuers.pinned_issuer_url, user_session_issuers.created_at, user_session_issuers.updated_at, user_session_issuers.deleted_at, user_session_issuers.deleted,
+    projects.name AS project_name,
+    projects.slug AS project_slug
+FROM user_session_issuers
+LEFT JOIN projects ON projects.id = user_session_issuers.project_id
+WHERE COALESCE(user_session_issuers.organization_id, projects.organization_id) = $1::text
+  AND user_session_issuers.authorization_server_mode = 'shared'
+  AND user_session_issuers.deleted IS FALSE
+  AND (user_session_issuers.project_id IS NULL OR projects.deleted IS FALSE)
+ORDER BY (user_session_issuers.project_id IS NULL) DESC, projects.name, user_session_issuers.slug, user_session_issuers.id
+`
+
+type ListSharedUserSessionIssuersInOrganizationRow struct {
+	UserSessionIssuer UserSessionIssuer
+	ProjectName       pgtype.Text
+	ProjectSlug       pgtype.Text
+}
+
+// Every shared-mode issuer an organization owns, at the organization level and
+// in each of its live projects, for showing which token endpoint an external
+// platform is pointed at. A project-owned issuer may carry no organization_id,
+// so its tenancy is read through the project. Organization-level issuers
+// first, then by project name and slug, so the list reads the same way every
+// time.
+func (q *Queries) ListSharedUserSessionIssuersInOrganization(ctx context.Context, organizationID string) ([]ListSharedUserSessionIssuersInOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, listSharedUserSessionIssuersInOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSharedUserSessionIssuersInOrganizationRow
+	for rows.Next() {
+		var i ListSharedUserSessionIssuersInOrganizationRow
+		if err := rows.Scan(
+			&i.UserSessionIssuer.ID,
+			&i.UserSessionIssuer.ProjectID,
+			&i.UserSessionIssuer.OrganizationID,
+			&i.UserSessionIssuer.AttachmentScope,
+			&i.UserSessionIssuer.Slug,
+			&i.UserSessionIssuer.AuthnChallengeMode,
+			&i.UserSessionIssuer.SessionDuration,
+			&i.UserSessionIssuer.Classification,
+			&i.UserSessionIssuer.ClientIDMetadataAdmissionMode,
+			&i.UserSessionIssuer.TrustedRemoteSessionIssuerID,
+			&i.UserSessionIssuer.TrustedRemoteSessionClientID,
+			&i.UserSessionIssuer.UseAuthenticationHost,
+			&i.UserSessionIssuer.AuthorizationServerMode,
+			&i.UserSessionIssuer.PinnedIssuerUrl,
+			&i.UserSessionIssuer.CreatedAt,
+			&i.UserSessionIssuer.UpdatedAt,
+			&i.UserSessionIssuer.DeletedAt,
+			&i.UserSessionIssuer.Deleted,
+			&i.ProjectName,
+			&i.ProjectSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserSessionClientFacets = `-- name: ListUserSessionClientFacets :many
 SELECT c.id::text AS value, c.client_name AS display_name, COUNT(*)::bigint AS count
 FROM user_sessions AS s

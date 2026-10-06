@@ -24,6 +24,10 @@ type Client struct {
 	// listPlatforms endpoint.
 	ListPlatformsDoer goahttp.Doer
 
+	// ListTokenEndpoints Doer is the HTTP client used to make requests to the
+	// listTokenEndpoints endpoint.
+	ListTokenEndpointsDoer goahttp.Doer
+
 	// RegisterIssuer Doer is the HTTP client used to make requests to the
 	// registerIssuer endpoint.
 	RegisterIssuerDoer goahttp.Doer
@@ -69,19 +73,20 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListDoer:            doer,
-		ListPlatformsDoer:   doer,
-		RegisterIssuerDoer:  doer,
-		UpdateIssuerDoer:    doer,
-		WithdrawIssuerDoer:  doer,
-		AdmitSubjectDoer:    doer,
-		UpdateSubjectDoer:   doer,
-		WithdrawSubjectDoer: doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		ListDoer:               doer,
+		ListPlatformsDoer:      doer,
+		ListTokenEndpointsDoer: doer,
+		RegisterIssuerDoer:     doer,
+		UpdateIssuerDoer:       doer,
+		WithdrawIssuerDoer:     doer,
+		AdmitSubjectDoer:       doer,
+		UpdateSubjectDoer:      doer,
+		WithdrawSubjectDoer:    doer,
+		RestoreResponseBody:    restoreBody,
+		scheme:                 scheme,
+		host:                   host,
+		decoder:                dec,
+		encoder:                enc,
 	}
 }
 
@@ -128,6 +133,30 @@ func (c *Client) ListPlatforms() goa.Endpoint {
 		resp, err := c.ListPlatformsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("workloadIdentities", "listPlatforms", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListTokenEndpoints returns an endpoint that makes HTTP requests to the
+// workloadIdentities service listTokenEndpoints server.
+func (c *Client) ListTokenEndpoints() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListTokenEndpointsRequest(c.encoder)
+		decodeResponse = DecodeListTokenEndpointsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListTokenEndpointsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListTokenEndpointsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "listTokenEndpoints", err)
 		}
 		return decodeResponse(resp)
 	}

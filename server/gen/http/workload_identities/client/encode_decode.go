@@ -495,6 +495,245 @@ func DecodeListPlatformsResponse(decoder func(*http.Response) goahttp.Decoder, r
 	}
 }
 
+// BuildListTokenEndpointsRequest instantiates a HTTP request object with
+// method and path set to call the "workloadIdentities" service
+// "listTokenEndpoints" endpoint
+func (c *Client) BuildListTokenEndpointsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListTokenEndpointsWorkloadIdentitiesPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("workloadIdentities", "listTokenEndpoints", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListTokenEndpointsRequest returns an encoder for requests sent to the
+// workloadIdentities listTokenEndpoints server.
+func EncodeListTokenEndpointsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*workloadidentities.ListTokenEndpointsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("workloadIdentities", "listTokenEndpoints", "*workloadidentities.ListTokenEndpointsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListTokenEndpointsResponse returns a decoder for responses returned by
+// the workloadIdentities listTokenEndpoints endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListTokenEndpointsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListTokenEndpointsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListTokenEndpointsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			res := NewListTokenEndpointsWorkloadTokenEndpointsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListTokenEndpointsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			return nil, NewListTokenEndpointsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListTokenEndpointsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			return nil, NewListTokenEndpointsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListTokenEndpointsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			return nil, NewListTokenEndpointsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListTokenEndpointsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			return nil, NewListTokenEndpointsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListTokenEndpointsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			return nil, NewListTokenEndpointsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListTokenEndpointsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			return nil, NewListTokenEndpointsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListTokenEndpointsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			return nil, NewListTokenEndpointsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListTokenEndpointsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+				}
+				err = ValidateListTokenEndpointsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+				}
+				return nil, NewListTokenEndpointsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListTokenEndpointsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+				}
+				err = ValidateListTokenEndpointsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+				}
+				return nil, NewListTokenEndpointsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("workloadIdentities", "listTokenEndpoints", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListTokenEndpointsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			return nil, NewListTokenEndpointsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("workloadIdentities", "listTokenEndpoints", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRegisterIssuerRequest instantiates a HTTP request object with method
 // and path set to call the "workloadIdentities" service "registerIssuer"
 // endpoint
@@ -2110,6 +2349,23 @@ func unmarshalWorkloadPlatformBlockResponseBodyToWorkloadidentitiesWorkloadPlatf
 		Variable: *v.Variable,
 		Value:    *v.Value,
 		Help:     *v.Help,
+	}
+
+	return res
+}
+
+// unmarshalWorkloadTokenEndpointResponseBodyToTypesWorkloadTokenEndpoint
+// builds a value of type *types.WorkloadTokenEndpoint from a value of type
+// *WorkloadTokenEndpointResponseBody.
+func unmarshalWorkloadTokenEndpointResponseBodyToTypesWorkloadTokenEndpoint(v *WorkloadTokenEndpointResponseBody) *types.WorkloadTokenEndpoint {
+	res := &types.WorkloadTokenEndpoint{
+		UserSessionIssuerID:   *v.UserSessionIssuerID,
+		UserSessionIssuerSlug: *v.UserSessionIssuerSlug,
+		ProjectID:             *v.ProjectID,
+		ProjectName:           *v.ProjectName,
+		Issuer:                *v.Issuer,
+		TokenEndpoint:         *v.TokenEndpoint,
+		McpHost:               *v.McpHost,
 	}
 
 	return res

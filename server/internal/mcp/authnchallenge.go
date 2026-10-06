@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -1131,7 +1132,7 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	// keeps its MCP servers on their per-endpoint authorization servers, which
 	// serve regardless of mode, rather than taking them offline.
 	endpoint.sharedAuthorizationServer = nil
-	if issuerInSharedMode(issuer) {
+	if usersessions.IssuerInSharedMode(issuer) {
 		shared, err := s.sharedAuthorizationServerFor(issuer)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "shared authorization server is misconfigured, serving per-endpoint authorization servers",

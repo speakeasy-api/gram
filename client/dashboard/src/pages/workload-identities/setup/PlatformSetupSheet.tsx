@@ -8,8 +8,15 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { cn } from "@/lib/utils";
+import { inlineError } from "@/pages/org/identity-provider/identityProviderQueries";
+import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
+import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 import { useAdmitWorkloadSubjectMutation } from "@gram/client/react-query/admitWorkloadSubject.js";
-import { useAgents } from "@gram/client/react-query/agents.js";
+import {
+  invalidateAllAgents,
+  useAgents,
+} from "@gram/client/react-query/agents.js";
+import { useCreateAgentMutation } from "@gram/client/react-query/createAgent.js";
 import { useRegisterWorkloadIssuerMutation } from "@gram/client/react-query/registerWorkloadIssuer.js";
 import { invalidateAllWorkloadIdentities } from "@gram/client/react-query/workloadIdentities.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -30,12 +37,15 @@ import {
 } from "./steps";
 import { tagsProblem } from "../tagLimits";
 import { subjectRule, type VariableValues } from "./template";
+import { duplicateRuleMessage, existingRule } from "./platforms";
 
 interface PlatformSetupSheetProps {
   entry: CatalogEntry;
   definition: SetupDefinition;
   /** Whether this organization already trusts the entry's issuer. */
   connected: boolean;
+  /** The organization's access rules, to catch one the values would repeat. */
+  admissions: WorkloadAdmission[];
   /** The step named in the URL, if any. */
   stepId: string | null;
   onStepChange: (stepId: string) => void;
@@ -54,6 +64,7 @@ export function PlatformSetupSheet({
   entry,
   definition,
   connected,
+  admissions,
   stepId,
   onStepChange,
   onClose,
@@ -62,11 +73,17 @@ export function PlatformSetupSheet({
   const [values, setValues] = useState<VariableValues>({});
   const [agentId, setAgentId] = useState("");
   const [tags, setTags] = useState<string[]>([]);
+  const [checkedItems, setCheckedItems] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [creating, setCreating] = useState(false);
   // Set once this flow has trusted the platform, so the platform-side steps
   // unlock without waiting for the refetch that reports it.
   const [trusted, setTrusted] = useState(false);
   const isTrusted = connected || trusted;
+  // The rule this flow saved, which the refetched list then holds; it is not
+  // a duplicate of itself.
+  const [admittedSubject, setAdmittedSubject] = useState<string | null>(null);
 
   const agentsQuery = useAgents({}, undefined, { throwOnError: false });
   const agents = useMemo<Option[]>(
@@ -89,7 +106,23 @@ export function PlatformSetupSheet({
 
   const setupValues = useSetupValues();
 
-  const inputs: StepInputs = { entry, values, agentId, tags };
+  const rule = subjectRule(entry, values);
+  const conflicting =
+    rule === null || rule.subject === admittedSubject
+      ? undefined
+      : existingRule(entry, admissions, rule.subject);
+  const ruleConflict =
+    conflicting === undefined
+      ? null
+      : duplicateRuleMessage(entry, conflicting.agentName);
+
+  const inputs: StepInputs = {
+    entry,
+    values,
+    agentId,
+    tags,
+    conflictingRuleAgent: conflicting?.agentName ?? null,
+  };
   const requested = stepIndexById(definition, stepId);
   const activeIndex =
     requested !== -1 && stepReachable(definition, requested, inputs, isTrusted)
@@ -100,11 +133,35 @@ export function PlatformSetupSheet({
   const previousStep = definition.steps[activeIndex - 1];
   const activeComplete = stepComplete(activeStep, inputs);
 
-  const registerIssuer = useRegisterWorkloadIssuerMutation();
-  const admitSubject = useAdmitWorkloadSubjectMutation();
+  // Each failure below is toasted with its own message, so the global
+  // "Request failed" toast would only repeat it.
+  const createAgent = useCreateAgentMutation({ onError: inlineError });
+  const onCreateAgent = async (name: string): Promise<boolean> => {
+    try {
+      // Organization-wide, like the access rule it is assigned to.
+      const agent = await createAgent.mutateAsync({
+        request: { createAgentForm: { name } },
+      });
+      await invalidateAllAgents(queryClient);
+      setAgentId(agent.id);
+      toast.success(`Agent ${agent.name} created`);
+      return true;
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create the agent",
+      );
+      return false;
+    }
+  };
+
+  const registerIssuer = useRegisterWorkloadIssuerMutation({
+    onError: inlineError,
+  });
+  const admitSubject = useAdmitWorkloadSubjectMutation({
+    onError: inlineError,
+  });
 
   const create = async () => {
-    const rule = subjectRule(entry, values);
     if (rule === null || agentId === "" || creating) return;
     setCreating(true);
     try {
@@ -133,6 +190,7 @@ export function PlatformSetupSheet({
           },
         },
       });
+      setAdmittedSubject(rule.subject);
       toast.success(
         isTrusted
           ? `Access rule added to ${entry.displayName}`
@@ -140,11 +198,7 @@ export function PlatformSetupSheet({
       );
       if (nextStep !== undefined) onStepChange(nextStep.id);
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : `Failed to set up ${entry.displayName}`,
-      );
+      toast.error(setupFailureMessage(entry, error));
     } finally {
       // Refetched on failure too: the platform may have been trusted before
       // the access rule was refused, and a retry must then only add the rule.
@@ -186,9 +240,19 @@ export function PlatformSetupSheet({
     agentsUnavailable,
     agentId,
     onAgentChange: setAgentId,
+    onCreateAgent,
     tags,
     onTagsChange: setTags,
+    ruleConflict,
     setupValues,
+    checkedItems,
+    onCheckedChange: (blockKey, checked) =>
+      setCheckedItems((current) => {
+        const next = new Set(current);
+        if (checked) next.add(blockKey);
+        else next.delete(blockKey);
+        return next;
+      }),
   };
 
   return (
@@ -239,6 +303,7 @@ export function PlatformSetupSheet({
                   <SetupBlockView
                     key={blockIndex}
                     block={block}
+                    blockKey={`${step.id}-${blockIndex}`}
                     context={context}
                   />
                 ))}
@@ -400,4 +465,17 @@ function dashClass(index: number, activeIndex: number): string {
   if (index === activeIndex) return "bg-foreground w-6";
   if (index < activeIndex) return "bg-foreground/40 hover:bg-foreground/60 w-4";
   return "bg-border w-4";
+}
+
+/**
+ * What to tell the operator when the create step fails. A conflict means the
+ * access rule was added since the list loaded, for instance in another tab.
+ */
+function setupFailureMessage(entry: CatalogEntry, error: unknown): string {
+  if (error instanceof ServiceError && error.statusCode === 409) {
+    return duplicateRuleMessage(entry);
+  }
+  return error instanceof Error
+    ? error.message
+    : `Failed to set up ${entry.displayName}`;
 }

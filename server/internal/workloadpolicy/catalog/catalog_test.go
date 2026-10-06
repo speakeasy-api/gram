@@ -123,6 +123,11 @@ func TestParseRefusesInvalidPlatforms(t *testing.T) {
 		{name: "unicode class in pattern", from: `pattern: "[a-z0-9-]+"`, to: `pattern: "\\pL+"`, wantErr: "Go and JavaScript"},
 		{name: "posix class in pattern", from: `pattern: "[a-z0-9-]+"`, to: `pattern: "[[:alnum:]-]+"`, wantErr: "POSIX"},
 		{name: "image in markdown", from: "- type: agent_picker", to: "- type: text\n          markdown: \"![x](https://evil.example.com/px)\"", wantErr: "use an image block"},
+		{name: "checklist item without a label", from: "- type: agent_picker", to: "- type: checklist_item\n          markdown: Leave empty", wantErr: "needs a label"},
+		{name: "checklist item with nothing to do", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource", wantErr: "computed value or markdown"},
+		{name: "checklist item with both", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource\n          value: token_endpoint\n          markdown: Leave empty", wantErr: "not both"},
+		{name: "checklist item with unknown value", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource\n          value: client_secret", wantErr: "not one Gram derives"},
+		{name: "checklist item with an image", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource\n          markdown: \"![x](https://evil.example.com/px)\"", wantErr: "use an image block"},
 		{name: "collect after create", from: "      title: Console\n      phase: connect", to: "      title: Console\n      phase: collect", wantErr: "collect, then create, then connect"},
 	}
 	for _, tc := range tests {

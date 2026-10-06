@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy"
 )
 
@@ -35,6 +36,10 @@ const (
 	fleetRule       = fleetStem + "*"
 	channelOne      = fleetStem + "agent-111"
 )
+
+// testServerURL is the deployment's server URL, where shared authorization
+// servers are served.
+const testServerURL = "https://gram.example.com"
 
 var infra *testenv.Environment
 
@@ -82,7 +87,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	service := workloadpolicy.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger())
+	service := workloadpolicy.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), usersessions.SharedAuthorizationServerHosts{ServerURL: testServerURL, AuthenticationHostBaseURL: "", PlatformHosts: nil})
 
 	return ctx, &testInstance{
 		service:   service,

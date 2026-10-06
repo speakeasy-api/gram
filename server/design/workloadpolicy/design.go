@@ -73,6 +73,30 @@ var _ = Service("workloadIdentities", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WorkloadPlatforms"}`)
 	})
 
+	Method("listTokenEndpoints", func() {
+		Description("List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(WorkloadTokenEndpoints)
+
+		HTTP(func() {
+			GET("/rpc/workloadIdentities.listTokenEndpoints")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listWorkloadTokenEndpoints")
+		Meta("openapi:extension:x-speakeasy-name-override", "listTokenEndpoints")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WorkloadTokenEndpoints"}`)
+	})
+
 	Method("registerIssuer", func() {
 		Description("Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.")
 
@@ -438,19 +462,19 @@ var WorkloadPlatformBlock = Type("WorkloadPlatformBlock", func() {
 	Description("One piece of a guided setup step. Which fields are set depends on type; the rest are empty.")
 
 	Attribute("type", String, "The kind of content.", func() {
-		Enum("text", "image", "link", "field", "subject_rule", "agent_picker", "tags", "computed_status", "computed")
+		Enum("text", "image", "link", "field", "subject_rule", "agent_picker", "tags", "computed_status", "computed", "checklist_item")
 	})
-	Attribute("markdown", String, "A text block's Markdown. Raw HTML in it must not be rendered.")
+	Attribute("markdown", String, "A text block's Markdown, or what a checklist item without a value asks the operator to do. Raw HTML in it must not be rendered.")
 	Attribute("src", String, "An image's path on the dashboard's origin.")
 	Attribute("alt", String, "An image's alternative text.")
 	Attribute("caption", String, "Shown under an image.")
 	Attribute("href", String, "A link's https target.")
-	Attribute("label", String, "A link's or computed value's label.")
+	Attribute("label", String, "A link's or computed value's label, or the console field or control a checklist item names.")
 	Attribute("variable", String, "The variable key a field collects.")
-	Attribute("value", String, "The value a computed block shows.", func() {
+	Attribute("value", String, "The value a computed block or checklist item shows.", func() {
 		Enum("", "token_endpoint", "issuer_url", "mcp_host")
 	})
-	Attribute("help", String, "Shown under a computed value.")
+	Attribute("help", String, "Shown under a computed value or checklist item.")
 
 	Required("type", "markdown", "src", "alt", "caption", "href", "label", "variable", "value", "help")
 })
@@ -491,4 +515,30 @@ var WorkloadPlatformCatalog = Type("WorkloadPlatformCatalog", func() {
 	Attribute("platforms", ArrayOf(WorkloadPlatform), "The catalog entries.")
 
 	Required("platforms")
+})
+
+var WorkloadTokenEndpoint = Type("WorkloadTokenEndpoint", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("The shared authorization server of a user session issuer, which an external platform exchanges its workload token at.")
+
+	Attribute("user_session_issuer_id", String, "The user session issuer id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("user_session_issuer_slug", String, "The user session issuer slug.")
+	Attribute("project_id", String, "The owning project id; empty for an organization-level issuer.")
+	Attribute("project_name", String, "The owning project name; empty for an organization-level issuer.")
+	Attribute("issuer", String, "The authorization server's issuer identifier, as its RFC 8414 metadata publishes it.")
+	Attribute("token_endpoint", String, "The authorization server's token endpoint.")
+	Attribute("mcp_host", String, "The host MCP servers are served on, which a platform calls with the tokens it is issued.")
+
+	Required("user_session_issuer_id", "user_session_issuer_slug", "project_id", "project_name", "issuer", "token_endpoint", "mcp_host")
+})
+
+var WorkloadTokenEndpoints = Type("WorkloadTokenEndpoints", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("items", ArrayOf(WorkloadTokenEndpoint), "Organization-level issuers first, then by project name and issuer slug.")
+
+	Required("items")
 })

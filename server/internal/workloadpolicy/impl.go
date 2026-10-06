@@ -29,6 +29,7 @@ import (
 	"goa.design/goa/v3/security"
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/workload_identities/server"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -43,6 +44,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/catalog"
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
@@ -67,6 +70,10 @@ type Service struct {
 
 	// catalog is the platforms the Access Hub offers to trust.
 	catalog catalog.Source
+
+	// sharedHosts are the hosts the deployment serves shared authorization
+	// servers on, which the token endpoints it lists are derived from.
+	sharedHosts usersessions.SharedAuthorizationServerHosts
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -79,6 +86,7 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	sharedHosts usersessions.SharedAuthorizationServerHosts,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("workloadpolicy.api"))
 	return &Service{
@@ -90,6 +98,8 @@ func NewService(
 		audit:   auditLogger,
 		repo:    repo.New(db),
 		catalog: catalog.Embedded(),
+
+		sharedHosts: sharedHosts,
 	}
 }
 
@@ -228,6 +238,44 @@ func (s *Service) ListPlatforms(ctx context.Context, payload *gen.ListPlatformsP
 	}
 
 	return mv.BuildWorkloadPlatformCatalogView(platforms), nil
+}
+
+func (s *Service) ListTokenEndpoints(ctx context.Context, payload *gen.ListTokenEndpointsPayload) (*types.WorkloadTokenEndpoints, error) {
+	t, err := s.resolve(ctx, authz.ScopeWorkloadRead)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := usersessions_repo.New(s.db).ListSharedUserSessionIssuersInOrganization(ctx, t.organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list token endpoints").LogError(ctx, s.logger)
+	}
+
+	// MCP servers are served on the server URL's host, whichever host their
+	// issuer's authorization server is on.
+	serverURL, err := url.Parse(s.sharedHosts.ServerURL)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read the server URL").LogError(ctx, s.logger)
+	}
+
+	items := make([]*types.WorkloadTokenEndpoint, 0, len(rows))
+	for _, row := range rows {
+		issuer := row.UserSessionIssuer
+		issuerURL, err := s.sharedHosts.SharedIssuerURL(issuer)
+		if err != nil {
+			// The issuer's MCP servers fall back to per-endpoint authorization
+			// servers, so there is no shared token endpoint to point a platform at.
+			s.logger.WarnContext(ctx, "skip user session issuer without a served shared authorization server", attr.SlogError(err))
+			continue
+		}
+		tokenEndpoint, err := usersessions.SharedTokenEndpoint(issuerURL)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to build token endpoint").LogError(ctx, s.logger)
+		}
+		items = append(items, mv.BuildWorkloadTokenEndpointView(issuer, row.ProjectName.String, issuerURL, tokenEndpoint, serverURL.Host))
+	}
+
+	return &types.WorkloadTokenEndpoints{Items: items}, nil
 }
 
 // requireTrustDomain enforces the WIMSE identifier draft's guidance that a trust

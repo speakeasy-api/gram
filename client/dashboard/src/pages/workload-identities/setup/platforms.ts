@@ -1,3 +1,4 @@
+import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import type { WorkloadPlatform } from "@gram/client/models/components/workloadplatform.js";
 import type { WorkloadPlatformBlock } from "@gram/client/models/components/workloadplatformblock.js";
@@ -109,11 +110,64 @@ function toSetupBlock(block: WorkloadPlatformBlock): SetupBlock[] {
           help: optional(block.help),
         },
       ];
+    case "checklist_item":
+      if (block.value !== "") {
+        return [
+          {
+            type: "checklist_item",
+            label: block.label,
+            value: block.value satisfies ComputedValueKey,
+            help: optional(block.help),
+          },
+        ];
+      }
+      return [
+        {
+          type: "checklist_item",
+          label: block.label,
+          instruction: block.markdown,
+          help: optional(block.help),
+        },
+      ];
   }
 }
 
 function optional(value: string): string | undefined {
   return value === "" ? undefined : value;
+}
+
+/**
+ * The organization-wide access rule already admitting subject under the
+ * entry's issuer, if there is one. The server refuses a second one, so the
+ * setup says so before the operator gets that far.
+ */
+export function existingRule(
+  entry: CatalogEntry,
+  admissions: WorkloadAdmission[],
+  subject: string,
+): WorkloadAdmission | undefined {
+  return admissions.find(
+    (admission) =>
+      admission.issuer === entry.issuer.value &&
+      admission.subject === subject &&
+      admission.projectId === "",
+  );
+}
+
+/**
+ * Says the access rule the operator's values produce already exists, naming
+ * the values by their labels, such as "This Anthropic organization ID".
+ */
+export function duplicateRuleMessage(
+  entry: CatalogEntry,
+  agentName?: string,
+): string {
+  const labels = entry.variables
+    .filter((variable) => variable.tier === "rule")
+    .map((variable) => variable.label);
+  const what = labels.length === 1 ? `This ${labels[0]}` : "This access rule";
+  const under = agentName === undefined ? "" : `, under ${agentName}`;
+  return `${what} is already connected to ${entry.displayName}${under}. Use a different one, or change its agent from the access list.`;
 }
 
 /**

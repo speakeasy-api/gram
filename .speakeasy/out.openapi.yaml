@@ -74688,6 +74688,104 @@ paths:
       x-speakeasy-name-override: listPlatforms
       x-speakeasy-react-hook:
         name: WorkloadPlatforms
+  /rpc/workloadIdentities.listTokenEndpoints:
+    get:
+      description: 'List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.'
+      operationId: listWorkloadTokenEndpoints
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadTokenEndpoints'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listTokenEndpoints workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: listTokenEndpoints
+      x-speakeasy-react-hook:
+        name: WorkloadTokenEndpoints
   /rpc/workloadIdentities.registerIssuer:
     post:
       description: Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
@@ -106409,16 +106507,16 @@ components:
           description: Shown under an image.
         help:
           type: string
-          description: Shown under a computed value.
+          description: Shown under a computed value or checklist item.
         href:
           type: string
           description: A link's https target.
         label:
           type: string
-          description: A link's or computed value's label.
+          description: A link's or computed value's label, or the console field or control a checklist item names.
         markdown:
           type: string
-          description: A text block's Markdown. Raw HTML in it must not be rendered.
+          description: A text block's Markdown, or what a checklist item without a value asks the operator to do. Raw HTML in it must not be rendered.
         src:
           type: string
           description: An image's path on the dashboard's origin.
@@ -106435,9 +106533,10 @@ components:
             - tags
             - computed_status
             - computed
+            - checklist_item
         value:
           type: string
-          description: The value a computed block shows.
+          description: The value a computed block or checklist item shows.
           enum:
             - ""
             - token_endpoint
@@ -106561,6 +106660,50 @@ components:
         - placeholder
         - pattern
         - pattern_message
+    WorkloadTokenEndpoint:
+      type: object
+      properties:
+        issuer:
+          type: string
+          description: The authorization server's issuer identifier, as its RFC 8414 metadata publishes it.
+        mcp_host:
+          type: string
+          description: The host MCP servers are served on, which a platform calls with the tokens it is issued.
+        project_id:
+          type: string
+          description: The owning project id; empty for an organization-level issuer.
+        project_name:
+          type: string
+          description: The owning project name; empty for an organization-level issuer.
+        token_endpoint:
+          type: string
+          description: The authorization server's token endpoint.
+        user_session_issuer_id:
+          type: string
+          description: The user session issuer id.
+          format: uuid
+        user_session_issuer_slug:
+          type: string
+          description: The user session issuer slug.
+      description: The shared authorization server of a user session issuer, which an external platform exchanges its workload token at.
+      required:
+        - user_session_issuer_id
+        - user_session_issuer_slug
+        - project_id
+        - project_name
+        - issuer
+        - token_endpoint
+        - mcp_host
+    WorkloadTokenEndpoints:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadTokenEndpoint'
+          description: Organization-level issuers first, then by project name and issuer slug.
+      required:
+        - items
     KillswitchCapabilityKey: {type: string, enum: [mcp_tool_calls]}
     KillswitchStatus: {type: string, enum: [active, scheduled, expired, lifted]}
     KillswitchListStatus: {type: string, enum: [active, scheduled, expired, lifted]}

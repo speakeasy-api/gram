@@ -25,7 +25,7 @@ export function CatalogPlatforms({
       <Cards noGrid>
         <SourceSectionError
           heading="Couldn’t load the catalog"
-          description="The platforms Gram can connect failed to load. Try again in a moment."
+          description="The platforms Speakeasy can connect failed to load. Try again in a moment."
           onRetry={catalog.refetch}
         />
       </Cards>

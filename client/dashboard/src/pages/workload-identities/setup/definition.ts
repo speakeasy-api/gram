@@ -75,7 +75,22 @@ export type SetupBlock =
   | { type: "agent_picker" }
   | { type: "tags" }
   | { type: "computed_status" }
-  | { type: "computed"; value: ComputedValueKey; label: string; help?: string };
+  | { type: "computed"; value: ComputedValueKey; label: string; help?: string }
+  | ChecklistItemBlock;
+
+/**
+ * One thing to do in the platform's console, ticked off as the operator goes:
+ * a field and the value Speakeasy derives for it, or a field or control and
+ * what to do with it.
+ */
+export type ChecklistItemBlock = {
+  type: "checklist_item";
+  label: string;
+  help?: string;
+} & (
+  | { value: ComputedValueKey; instruction?: undefined }
+  | { value?: undefined; instruction: string }
+);
 
 /**
  * Steps before `create` collect what the trusted platform and its first access

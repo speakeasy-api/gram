@@ -86,9 +86,20 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
         },
   invalidateAllWorkloadIdentities: vi.fn(),
 }));
+vi.mock("@gram/client/react-query/createAgent.js", () => ({
+  useCreateAgentMutation: () => ({ mutateAsync: vi.fn() }),
+}));
 vi.mock("@gram/client/react-query/agents.js", () => ({
+  invalidateAllAgents: vi.fn(),
   useAgents: () => ({
     data: [{ id: "agent-1", name: "Support bot", lifecycle: "active" }],
+    isPending: false,
+    isError: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/workloadTokenEndpoints.js", () => ({
+  useWorkloadTokenEndpoints: () => ({
+    data: { items: [] },
     isPending: false,
     isError: false,
   }),

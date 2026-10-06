@@ -174,7 +174,7 @@ export function CatalogEmptyState({
     <InlineEmptyState
       icon="cpu"
       heading={`No ${catalog.name} connections yet`}
-      description={`There are currently no existing ${catalog.name} connections. Set one up to let it sign in to Gram.`}
+      description={`There are currently no existing ${catalog.name} connections. Set one up to let it sign in to Speakeasy.`}
       action={catalog.setupButton}
     />
   );

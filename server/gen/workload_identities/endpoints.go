@@ -16,14 +16,15 @@ import (
 
 // Endpoints wraps the "workloadIdentities" service endpoints.
 type Endpoints struct {
-	List            goa.Endpoint
-	ListPlatforms   goa.Endpoint
-	RegisterIssuer  goa.Endpoint
-	UpdateIssuer    goa.Endpoint
-	WithdrawIssuer  goa.Endpoint
-	AdmitSubject    goa.Endpoint
-	UpdateSubject   goa.Endpoint
-	WithdrawSubject goa.Endpoint
+	List               goa.Endpoint
+	ListPlatforms      goa.Endpoint
+	ListTokenEndpoints goa.Endpoint
+	RegisterIssuer     goa.Endpoint
+	UpdateIssuer       goa.Endpoint
+	WithdrawIssuer     goa.Endpoint
+	AdmitSubject       goa.Endpoint
+	UpdateSubject      goa.Endpoint
+	WithdrawSubject    goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "workloadIdentities" service with
@@ -32,14 +33,15 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		List:            NewListEndpoint(s, a.APIKeyAuth),
-		ListPlatforms:   NewListPlatformsEndpoint(s, a.APIKeyAuth),
-		RegisterIssuer:  NewRegisterIssuerEndpoint(s, a.APIKeyAuth),
-		UpdateIssuer:    NewUpdateIssuerEndpoint(s, a.APIKeyAuth),
-		WithdrawIssuer:  NewWithdrawIssuerEndpoint(s, a.APIKeyAuth),
-		AdmitSubject:    NewAdmitSubjectEndpoint(s, a.APIKeyAuth),
-		UpdateSubject:   NewUpdateSubjectEndpoint(s, a.APIKeyAuth),
-		WithdrawSubject: NewWithdrawSubjectEndpoint(s, a.APIKeyAuth),
+		List:               NewListEndpoint(s, a.APIKeyAuth),
+		ListPlatforms:      NewListPlatformsEndpoint(s, a.APIKeyAuth),
+		ListTokenEndpoints: NewListTokenEndpointsEndpoint(s, a.APIKeyAuth),
+		RegisterIssuer:     NewRegisterIssuerEndpoint(s, a.APIKeyAuth),
+		UpdateIssuer:       NewUpdateIssuerEndpoint(s, a.APIKeyAuth),
+		WithdrawIssuer:     NewWithdrawIssuerEndpoint(s, a.APIKeyAuth),
+		AdmitSubject:       NewAdmitSubjectEndpoint(s, a.APIKeyAuth),
+		UpdateSubject:      NewUpdateSubjectEndpoint(s, a.APIKeyAuth),
+		WithdrawSubject:    NewWithdrawSubjectEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -48,6 +50,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.List = m(e.List)
 	e.ListPlatforms = m(e.ListPlatforms)
+	e.ListTokenEndpoints = m(e.ListTokenEndpoints)
 	e.RegisterIssuer = m(e.RegisterIssuer)
 	e.UpdateIssuer = m(e.UpdateIssuer)
 	e.WithdrawIssuer = m(e.WithdrawIssuer)
@@ -147,6 +150,53 @@ func NewListPlatformsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			return nil, err
 		}
 		return s.ListPlatforms(ctx, p)
+	}
+}
+
+// NewListTokenEndpointsEndpoint returns an endpoint function that calls the
+// method "listTokenEndpoints" of service "workloadIdentities".
+func NewListTokenEndpointsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListTokenEndpointsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListTokenEndpoints(ctx, p)
 	}
 }
 

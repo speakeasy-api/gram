@@ -21,6 +21,7 @@ export const WorkloadPlatformBlockType = {
   Tags: "tags",
   ComputedStatus: "computed_status",
   Computed: "computed",
+  ChecklistItem: "checklist_item",
 } as const;
 /**
  * The kind of content.
@@ -30,7 +31,7 @@ export type WorkloadPlatformBlockType = ClosedEnum<
 >;
 
 /**
- * The value a computed block shows.
+ * The value a computed block or checklist item shows.
  */
 export const Value = {
   Unknown: "",
@@ -39,7 +40,7 @@ export const Value = {
   McpHost: "mcp_host",
 } as const;
 /**
- * The value a computed block shows.
+ * The value a computed block or checklist item shows.
  */
 export type Value = ClosedEnum<typeof Value>;
 
@@ -56,7 +57,7 @@ export type WorkloadPlatformBlock = {
    */
   caption: string;
   /**
-   * Shown under a computed value.
+   * Shown under a computed value or checklist item.
    */
   help: string;
   /**
@@ -64,11 +65,11 @@ export type WorkloadPlatformBlock = {
    */
   href: string;
   /**
-   * A link's or computed value's label.
+   * A link's or computed value's label, or the console field or control a checklist item names.
    */
   label: string;
   /**
-   * A text block's Markdown. Raw HTML in it must not be rendered.
+   * A text block's Markdown, or what a checklist item without a value asks the operator to do. Raw HTML in it must not be rendered.
    */
   markdown: string;
   /**
@@ -80,7 +81,7 @@ export type WorkloadPlatformBlock = {
    */
   type: WorkloadPlatformBlockType;
   /**
-   * The value a computed block shows.
+   * The value a computed block or checklist item shows.
    */
   value: Value;
   /**

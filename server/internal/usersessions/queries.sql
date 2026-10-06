@@ -110,6 +110,25 @@ WHERE project_id IS NULL
 ORDER BY id DESC
 LIMIT sqlc.arg('limit_value');
 
+-- name: ListSharedUserSessionIssuersInOrganization :many
+-- Every shared-mode issuer an organization owns, at the organization level and
+-- in each of its live projects, for showing which token endpoint an external
+-- platform is pointed at. A project-owned issuer may carry no organization_id,
+-- so its tenancy is read through the project. Organization-level issuers
+-- first, then by project name and slug, so the list reads the same way every
+-- time.
+SELECT
+    sqlc.embed(user_session_issuers),
+    projects.name AS project_name,
+    projects.slug AS project_slug
+FROM user_session_issuers
+LEFT JOIN projects ON projects.id = user_session_issuers.project_id
+WHERE COALESCE(user_session_issuers.organization_id, projects.organization_id) = @organization_id::text
+  AND user_session_issuers.authorization_server_mode = 'shared'
+  AND user_session_issuers.deleted IS FALSE
+  AND (user_session_issuers.project_id IS NULL OR projects.deleted IS FALSE)
+ORDER BY (user_session_issuers.project_id IS NULL) DESC, projects.name, user_session_issuers.slug, user_session_issuers.id;
+
 -- name: UpdateUserSessionIssuer :one
 UPDATE user_session_issuers
 SET
