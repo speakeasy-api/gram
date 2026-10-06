@@ -22,7 +22,7 @@ export type Widget = {
    */
   createdByUserId?: string | undefined;
   /**
-   * The dashboards this widget is placed on, each once. Widgets are linked, not copied: an edit reaches all of them, and a delete removes it from all of them.
+   * The dashboards this widget is placed on, each once, by name. Widgets are linked, not copied: an edit reaches all of them, and a delete removes it from all of them.
    */
   dashboards: Array<WidgetDashboard>;
   /**

@@ -85,9 +85,9 @@ type GetWidgetResponseBody struct {
 	// catalog dropped, or a chart that cannot draw the question. A catalog change
 	// fails visibly rather than returning wrong numbers.
 	InvalidReason *string `form:"invalid_reason,omitempty" json:"invalid_reason,omitempty" xml:"invalid_reason,omitempty"`
-	// The dashboards this widget is placed on, each once. Widgets are linked, not
-	// copied: an edit reaches all of them, and a delete removes it from all of
-	// them.
+	// The dashboards this widget is placed on, each once, by name. Widgets are
+	// linked, not copied: an edit reaches all of them, and a delete removes it
+	// from all of them.
 	Dashboards []*WidgetDashboardResponseBody `form:"dashboards" json:"dashboards" xml:"dashboards"`
 	CreatedAt  string                         `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt  string                         `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -118,9 +118,9 @@ type CreateWidgetResponseBody struct {
 	// catalog dropped, or a chart that cannot draw the question. A catalog change
 	// fails visibly rather than returning wrong numbers.
 	InvalidReason *string `form:"invalid_reason,omitempty" json:"invalid_reason,omitempty" xml:"invalid_reason,omitempty"`
-	// The dashboards this widget is placed on, each once. Widgets are linked, not
-	// copied: an edit reaches all of them, and a delete removes it from all of
-	// them.
+	// The dashboards this widget is placed on, each once, by name. Widgets are
+	// linked, not copied: an edit reaches all of them, and a delete removes it
+	// from all of them.
 	Dashboards []*WidgetDashboardResponseBody `form:"dashboards" json:"dashboards" xml:"dashboards"`
 	CreatedAt  string                         `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt  string                         `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -151,9 +151,9 @@ type UpdateWidgetResponseBody struct {
 	// catalog dropped, or a chart that cannot draw the question. A catalog change
 	// fails visibly rather than returning wrong numbers.
 	InvalidReason *string `form:"invalid_reason,omitempty" json:"invalid_reason,omitempty" xml:"invalid_reason,omitempty"`
-	// The dashboards this widget is placed on, each once. Widgets are linked, not
-	// copied: an edit reaches all of them, and a delete removes it from all of
-	// them.
+	// The dashboards this widget is placed on, each once, by name. Widgets are
+	// linked, not copied: an edit reaches all of them, and a delete removes it
+	// from all of them.
 	Dashboards []*WidgetDashboardResponseBody `form:"dashboards" json:"dashboards" xml:"dashboards"`
 	CreatedAt  string                         `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt  string                         `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -184,9 +184,9 @@ type DuplicateWidgetResponseBody struct {
 	// catalog dropped, or a chart that cannot draw the question. A catalog change
 	// fails visibly rather than returning wrong numbers.
 	InvalidReason *string `form:"invalid_reason,omitempty" json:"invalid_reason,omitempty" xml:"invalid_reason,omitempty"`
-	// The dashboards this widget is placed on, each once. Widgets are linked, not
-	// copied: an edit reaches all of them, and a delete removes it from all of
-	// them.
+	// The dashboards this widget is placed on, each once, by name. Widgets are
+	// linked, not copied: an edit reaches all of them, and a delete removes it
+	// from all of them.
 	Dashboards []*WidgetDashboardResponseBody `form:"dashboards" json:"dashboards" xml:"dashboards"`
 	CreatedAt  string                         `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt  string                         `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -1305,9 +1305,9 @@ type WidgetResponseBody struct {
 	// catalog dropped, or a chart that cannot draw the question. A catalog change
 	// fails visibly rather than returning wrong numbers.
 	InvalidReason *string `form:"invalid_reason,omitempty" json:"invalid_reason,omitempty" xml:"invalid_reason,omitempty"`
-	// The dashboards this widget is placed on, each once. Widgets are linked, not
-	// copied: an edit reaches all of them, and a delete removes it from all of
-	// them.
+	// The dashboards this widget is placed on, each once, by name. Widgets are
+	// linked, not copied: an edit reaches all of them, and a delete removes it
+	// from all of them.
 	Dashboards []*WidgetDashboardResponseBody `form:"dashboards" json:"dashboards" xml:"dashboards"`
 	CreatedAt  string                         `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt  string                         `form:"updated_at" json:"updated_at" xml:"updated_at"`

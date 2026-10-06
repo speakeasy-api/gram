@@ -190,7 +190,7 @@ func (q *Queries) GetWidgetForUpdate(ctx context.Context, arg GetWidgetForUpdate
 const listDashboardsForWidget = `-- name: ListDashboardsForWidget :many
 SELECT DISTINCT d.id AS dashboard_id, d.name AS dashboard_name
 FROM dashboard_widgets p
-JOIN dashboards d ON d.id = p.dashboard_id AND d.deleted IS FALSE
+JOIN dashboards d ON d.id = p.dashboard_id AND d.project_id = p.project_id AND d.deleted IS FALSE
 WHERE p.project_id = $1
   AND p.widget_id = $2
 ORDER BY d.name, d.id
@@ -229,7 +229,7 @@ func (q *Queries) ListDashboardsForWidget(ctx context.Context, arg ListDashboard
 const listWidgetDashboards = `-- name: ListWidgetDashboards :many
 SELECT DISTINCT p.widget_id, d.id AS dashboard_id, d.name AS dashboard_name
 FROM dashboard_widgets p
-JOIN dashboards d ON d.id = p.dashboard_id AND d.deleted IS FALSE
+JOIN dashboards d ON d.id = p.dashboard_id AND d.project_id = p.project_id AND d.deleted IS FALSE
 WHERE p.project_id = $1
 ORDER BY p.widget_id, d.name, d.id
 `

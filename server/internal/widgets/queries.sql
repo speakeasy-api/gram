@@ -58,14 +58,14 @@ RETURNING *;
 -- however many cards show it.
 SELECT DISTINCT p.widget_id, d.id AS dashboard_id, d.name AS dashboard_name
 FROM dashboard_widgets p
-JOIN dashboards d ON d.id = p.dashboard_id AND d.deleted IS FALSE
+JOIN dashboards d ON d.id = p.dashboard_id AND d.project_id = p.project_id AND d.deleted IS FALSE
 WHERE p.project_id = @project_id
 ORDER BY p.widget_id, d.name, d.id;
 
 -- name: ListDashboardsForWidget :many
 SELECT DISTINCT d.id AS dashboard_id, d.name AS dashboard_name
 FROM dashboard_widgets p
-JOIN dashboards d ON d.id = p.dashboard_id AND d.deleted IS FALSE
+JOIN dashboards d ON d.id = p.dashboard_id AND d.project_id = p.project_id AND d.deleted IS FALSE
 WHERE p.project_id = @project_id
   AND p.widget_id = @widget_id
 ORDER BY d.name, d.id;

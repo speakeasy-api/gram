@@ -117384,7 +117384,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/WidgetDashboard'
-                    description: 'The dashboards this widget is placed on, each once. Widgets are linked, not copied: an edit reaches all of them, and a delete removes it from all of them.'
+                    description: 'The dashboards this widget is placed on, each once, by name. Widgets are linked, not copied: an edit reaches all of them, and a delete removes it from all of them.'
                 dataset:
                     type: string
                     description: The catalog dataset the widget asks

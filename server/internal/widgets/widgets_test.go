@@ -600,10 +600,12 @@ func TestWidgetDashboards(t *testing.T) {
 	require.Equal(t, []*gen.WidgetDashboard{{ID: alpha.ID.String(), Name: "Alpha"}}, got.Dashboards)
 
 	// Deleting the widget takes it off the dashboard; the dashboard stays.
+	// Read through the dashboards side, which does not hide a deleted
+	// widget's cards, so rows left behind would show.
 	require.NoError(t, ti.service.DeleteWidget(ctx, &gen.DeleteWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil}))
-	placements, err := dashboards.ListPlacements(ctx, dashboardsrepo.ListPlacementsParams{ProjectID: ti.projectID, DashboardID: alpha.ID})
+	left, err := widgetsrepo.New(ti.conn).ListDashboardsForWidget(ctx, widgetsrepo.ListDashboardsForWidgetParams{ProjectID: ti.projectID, WidgetID: uuid.MustParse(created.ID)})
 	require.NoError(t, err)
-	require.Empty(t, placements)
+	require.Empty(t, left)
 	_, err = dashboards.GetDashboard(ctx, dashboardsrepo.GetDashboardParams{ProjectID: ti.projectID, ID: alpha.ID})
 	require.NoError(t, err)
 }
