@@ -115,6 +115,8 @@ func TestParseContextWithoutNonce(t *testing.T) {
 func TestParseDoesNotSearchWithinFramingOrQuotedText(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, text string }{
+		{"invalid nonce", `<session-context nonce=broken>opaque</session-context><wake><channel id="C_DEMO"><message from="human">hello</message></channel></wake>`},
+		{"framing name suffix", `<system-reminder-extra>opaque</system-reminder><wake><channel id="C_DEMO"><message from="human">hello</message></channel></wake>`},
 		{"reminder only", `<system-reminder><standing_owner_message sender='U_DEMO'>quoted</standing_owner_message></system-reminder>`},
 		{"unclosed reminder", `<system-reminder><standing_owner_message sender='U_DEMO'>quoted</standing_owner_message>`},
 		{"prose after reminder", `<system-reminder>instructions</system-reminder>Example: <standing_owner_message sender='U_DEMO'>quoted</standing_owner_message>`},
@@ -125,4 +127,36 @@ func TestParseDoesNotSearchWithinFramingOrQuotedText(t *testing.T) {
 			require.False(t, claudetag.Parse(tc.text).Detected)
 		})
 	}
+}
+
+func TestParsePreservesLiteralTextAndCDATA(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, body, want string }{
+		{"comparison", "a < b & c > d", "a < b & c > d"},
+		{"CDATA closing tags", "<![CDATA[example </wake> </standing_owner_message> & raw text]]>", "example </wake> </standing_owner_message> & raw text"},
+		{"CDATA", "<![CDATA[a < b & <@U_DEMO_BOT|Claude> &amp;]]>", "a < b & <@U_DEMO_BOT|Claude> &amp;"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := claudetag.Parse(`<wake><channel id="C_DEMO"><message from="human" author-id="U_DEMO">` + tc.body + `</message></channel></wake>`)
+			require.True(t, got.Detected)
+			require.Equal(t, tc.want, got.Text)
+			owner := claudetag.Parse(`<standing_owner_message sender="U_DEMO">` + tc.body + `</standing_owner_message>`)
+			require.True(t, owner.Detected)
+			require.Equal(t, tc.want, owner.Text)
+		})
+	}
+}
+
+func TestParseTrimsBotID(t *testing.T) {
+	t.Parallel()
+	got := claudetag.Parse("<session-context>You: @Claude (bot user id ` U_DEMO_BOT `)</session-context>" + `<wake><channel id="C_DEMO"><message from="human" author-id="U_DEMO_BOT">bot</message></channel></wake>`)
+	require.False(t, got.Detected)
+}
+
+func TestParseContextNonceAmongFutureAttributes(t *testing.T) {
+	t.Parallel()
+	got := claudetag.Parse(`<session-context data-nonce="other" nonce="demo">opaque</session-context nonce="demo"><wake><channel id="C_DEMO"><message from="human">hello</message></channel></wake>`)
+	require.True(t, got.Detected)
+	require.Equal(t, "hello", got.Text)
 }

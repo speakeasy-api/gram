@@ -72,6 +72,65 @@ Still opaque.
       buildDisplayItems({ rows }).filter((item) => item.type === "turnHeader"),
     ).toMatchObject([{ userId: "U_DEMO_ONE" }, { userId: "Demo Person" }]);
   });
+  it.each([
+    ["a < b & c > d", "a < b & c > d"],
+    [
+      "<![CDATA[example </wake> </standing_owner_message> & raw text]]>",
+      "example </wake> </standing_owner_message> & raw text",
+    ],
+    ["<![CDATA[a < b & <@U_DEMO_BOT|Claude> &amp;]]>", "a < b & @Claude &amp;"],
+  ])("preserves literal comparisons and CDATA text: %s", (body, expected) => {
+    expect(
+      parseClaudeTagWake(
+        `<wake><channel id="C_DEMO"><message from="human" author-id="U_DEMO">${body}</message></channel></wake>`,
+      )?.messages[0]?.text,
+    ).toBe(expected);
+    expect(
+      parseClaudeTagWake(
+        `<standing_owner_message sender="U_DEMO">${body}</standing_owner_message>`,
+      )?.messages[0]?.text,
+    ).toBe(expected);
+  });
+  it("reads the actual nonce attribute among future attributes", () => {
+    expect(
+      parseClaudeTagWake(
+        '<session-context data-nonce="other" nonce="demo">opaque</session-context nonce="demo"><wake><channel id="C_DEMO"><message from="human">hello</message></channel></wake>',
+      )?.messages[0]?.text,
+    ).toBe("hello");
+  });
+  it("normalizes standing owner titles", () => {
+    expect(
+      parseClaudeTagWake(
+        '<standing_owner_message sender="U_DEMO">Hi <@U_DEMO_BOT|Claude></standing_owner_message>',
+      )?.title,
+    ).toBe("Hi @Claude");
+  });
+  it("trims the bot ID before filtering deliveries", () => {
+    expect(
+      parseClaudeTagWake(
+        '<session-context>You: @Claude (bot user id ` U_DEMO_BOT `)</session-context><wake><channel id="C_DEMO"><message from="human" author-id="U_DEMO_BOT">bot</message></channel></wake>',
+      ),
+    ).toBeNull();
+  });
+  it.each([undefined, "Directory Name"])(
+    "fills a missing participant display name without replacing directory names: %s",
+    (displayName) => {
+      const input = message({
+        content:
+          '<wake><channel id="C_DEMO"><message from="human" author="Observed Name" author-id="U_DEMO">hello</message></channel></wake>',
+        participants: [
+          { provider: "slack", providerUserId: "U_DEMO", displayName },
+        ],
+      });
+      const rows = projectClaudeTagRows(buildTranscript([input]));
+      expect(
+        buildDisplayItems({ rows }).filter(
+          (item) => item.type === "turnHeader",
+        ),
+      ).toMatchObject([{ userId: displayName ?? "Observed Name" }]);
+      expect(input.participants?.[0]?.displayName).toBe(displayName);
+    },
+  );
   it("accepts context without a nonce and alternate Slack ID attributes", () => {
     expect(
       parseClaudeTagWake(
@@ -82,6 +141,8 @@ Still opaque.
     });
   });
   it.each([
+    '<session-context nonce=broken>opaque</session-context><wake><channel id="C_DEMO"><message from="human">hello</message></channel></wake>',
+    '<system-reminder-extra>opaque</system-reminder><wake><channel id="C_DEMO"><message from="human">hello</message></channel></wake>',
     "<system-reminder><standing_owner_message sender='U_DEMO'>quoted</standing_owner_message></system-reminder>",
     "<system-reminder><standing_owner_message sender='U_DEMO'>quoted</standing_owner_message>",
     "<system-reminder>instructions</system-reminder>Example: <standing_owner_message sender='U_DEMO'>quoted</standing_owner_message>",

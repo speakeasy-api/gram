@@ -20,9 +20,10 @@ type Metadata struct {
 	Text         string
 }
 
-var framingHeader = regexp.MustCompile(`^<(system-reminder|session-context)\b[^>]*>`)
-var contextClosing = regexp.MustCompile(`</session-context\b[^>]*>`)
+var framingHeader = regexp.MustCompile(`^<(system-reminder|session-context)(?:\s[^>]*|)>`)
+var contextClosing = regexp.MustCompile(`</session-context(?:\s[^>]*|)>`)
 var slackMarkup = regexp.MustCompile(`<(?:[@#][^<>\s]+|https?://[^<>\s]+)>`)
+var cdataSection = regexp.MustCompile(`(?s)<!\[CDATA\[.*?\]\]>`)
 var xmlEntity = regexp.MustCompile(`^&(?:amp|lt|gt|quot|apos|#[0-9]+|#x[0-9A-Fa-f]+);`)
 var channelLine = regexp.MustCompile("(?m)^Channel: #([^\n]+) \\(id: `([^`]+)`\\)\r?$")
 var botLine = regexp.MustCompile("(?m)^You: .*bot user id `([^`]+)`")
@@ -47,14 +48,18 @@ func deliveryEnvelope(text string) (string, string) {
 		if header == nil {
 			return text, context.String()
 		}
+		nonce, valid := elementAttribute(header[0], "nonce")
+		if !valid {
+			return "", ""
+		}
 		name := header[1]
 		closingStart, closingEnd := -1, -1
 		if name == "session-context" {
-			nonce := elementAttribute(header[0], "nonce")
 			for _, loc := range contextClosing.FindAllStringIndex(text[len(header[0]):], -1) {
 				start, end := loc[0]+len(header[0]), loc[1]+len(header[0])
 				closing := strings.Replace(text[start:end], "</", "<", 1)
-				if elementAttribute(closing, "nonce") == nonce {
+				closingNonce, valid := elementAttribute(closing, "nonce")
+				if valid && closingNonce == nonce {
 					closingStart, closingEnd = start, end
 					break
 				}
@@ -77,32 +82,47 @@ func deliveryEnvelope(text string) (string, string) {
 	}
 }
 
-func elementAttribute(header, name string) string {
+func elementAttribute(header, name string) (string, bool) {
 	token, err := xml.NewDecoder(strings.NewReader(header)).Token()
 	if err != nil {
-		return ""
+		return "", false
 	}
 	start, ok := token.(xml.StartElement)
 	if !ok {
-		return ""
+		return "", false
 	}
 	for _, attr := range start.Attr {
 		if attr.Name.Local == name {
-			return strings.TrimSpace(attr.Value)
+			return strings.TrimSpace(attr.Value), true
 		}
 	}
-	return ""
+	return "", true
 }
 
 // Delivery bodies sometimes contain raw Slack mentions, links and ampersands.
 // Escape those text forms without repairing broken envelope structure.
 func deliveryXML(text string) string {
+	var result strings.Builder
+	start := 0
+	for _, loc := range cdataSection.FindAllStringIndex(text, -1) {
+		result.WriteString(escapeDeliveryText(text[start:loc[0]]))
+		result.WriteString(text[loc[0]:loc[1]])
+		start = loc[1]
+	}
+	result.WriteString(escapeDeliveryText(text[start:]))
+	return result.String()
+}
+
+func escapeDeliveryText(text string) string {
 	text = slackMarkup.ReplaceAllStringFunc(text, func(value string) string {
 		return "&lt;" + value[1:len(value)-1] + "&gt;"
 	})
 	var result strings.Builder
 	for i := 0; i < len(text); i++ {
-		if text[i] == '&' && !xmlEntity.MatchString(text[i:]) {
+		if text[i] == '<' && (i+1 == len(text) || !strings.ContainsRune("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_:/!?", rune(text[i+1]))) {
+			// Tag-like markup must remain intact so malformed envelopes fail parsing.
+			result.WriteString("&lt;")
+		} else if text[i] == '&' && !xmlEntity.MatchString(text[i:]) {
 			result.WriteString("&amp;")
 		} else {
 			result.WriteByte(text[i])
@@ -123,7 +143,7 @@ func Parse(text string) Metadata {
 	channelID, channelName, botID := "", "", ""
 	if context != "" {
 		if match := botLine.FindStringSubmatch(context); match != nil {
-			botID = match[1]
+			botID = strings.TrimSpace(match[1])
 		}
 		if match := channelLine.FindStringSubmatch(context); match != nil {
 			channelName, channelID = match[1], match[2]

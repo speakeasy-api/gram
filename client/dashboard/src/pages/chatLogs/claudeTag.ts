@@ -20,15 +20,18 @@ function deliveryEnvelope(text: string): { body: string; context: string } {
   text = text.trim();
   const contexts: string[] = [];
   for (;;) {
-    const header = text.match(/^<(system-reminder|session-context)\b[^>]*>/);
+    const header = text.match(
+      /^<(system-reminder|session-context)(?:\s[^>]*|)>/,
+    );
     if (!header) return { body: text, context: contexts.join("\n") };
+    const nonce = contextNonce(header[0]);
+    if (nonce === null) return { body: "", context: "" };
     let end = -1;
     let closingLength = 0;
     if (header[1] === "session-context") {
-      const nonce = contextNonce(header[0]);
       const closings = text
         .slice(header[0].length)
-        .matchAll(/<\/session-context\b[^>]*>/g);
+        .matchAll(/<\/session-context(?:\s[^>]*|)>/g);
       for (const closing of closings) {
         if (contextNonce(closing[0]) === nonce) {
           end = closing.index + header[0].length;
@@ -48,18 +51,49 @@ function deliveryEnvelope(text: string): { body: string; context: string } {
   }
 }
 
-function contextNonce(tag: string): string | undefined {
-  const match = tag.match(/\bnonce\s*=\s*(?:"([^"]*)"|'([^']*)')/);
-  return match?.[1] ?? match?.[2];
+function contextNonce(tag: string): string | undefined | null {
+  const doc = new DOMParser().parseFromString(
+    tag.replace(/^<\//, "<").replace(/>$/, "/>"),
+    "application/xml",
+  );
+  if (doc.querySelector("parsererror")) return null;
+  return doc.documentElement.getAttribute("nonce")?.trim();
+}
+
+function deliveryEnd(text: string, name: string): number {
+  const closing = `</${name}>`;
+  const token = /<!\[CDATA\[[\s\S]*?\]\]>|<\/[^>]*>/g;
+  for (const match of text.matchAll(token)) {
+    if (match[0] === closing) return match.index + closing.length;
+  }
+  return -1;
 }
 
 function deliveryXML(text: string): string {
   return text
-    .replace(
-      /<(?:[@#][^<>\s]+|https?:\/\/[^<>\s]+)>/g,
-      (value) => `&lt;${value.slice(1, -1)}&gt;`,
-    )
-    .replace(/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;");
+    .split(/(<!\[CDATA\[[\s\S]*?\]\]>)/)
+    .map((part) => {
+      if (part.startsWith("<![CDATA["))
+        return part
+          .slice(9, -3)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      return (
+        part
+          .replace(
+            /<(?:[@#][^<>\s]+|https?:\/\/[^<>\s]+)>/g,
+            (value) => `&lt;${value.slice(1, -1)}&gt;`,
+          )
+          // Keep tag-like markup intact so malformed envelopes still fail XML parsing.
+          .replace(/<(?![A-Za-z_:/!?])/g, "&lt;")
+          .replace(
+            /&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/g,
+            "&amp;",
+          )
+      );
+    })
+    .join("");
 }
 
 function deliveryMessages(element: Element): Element[] {
@@ -96,15 +130,15 @@ function slackText(text: string): string {
 
 export function parseClaudeTagWake(content: unknown): ClaudeTagWake | null {
   const { body: text, context } = deliveryEnvelope(messageText(content));
-  const botId = context.match(/^You: .*bot user id `([^`]+)`/m)?.[1];
+  const botId = context.match(/^You: .*bot user id `([^`]+)`/m)?.[1]?.trim();
   const channel = context.match(/^Channel: #([^\n]+) \(id: `([^`]+)`\)\r?$/m);
   let contextChannel: { id: string; name: string } | undefined;
   if (channel) contextChannel = { id: channel[2]!, name: channel[1]! };
   if (/^<standing_owner_message[\s>]/.test(text)) {
-    const end = text.indexOf("</standing_owner_message>");
+    const end = deliveryEnd(text, "standing_owner_message");
     if (end < 0) return null;
     const doc = new DOMParser().parseFromString(
-      deliveryXML(text.slice(0, end + "</standing_owner_message>".length)),
+      deliveryXML(text.slice(0, end)),
       "application/xml",
     );
     const el = doc.documentElement;
@@ -115,7 +149,10 @@ export function parseClaudeTagWake(content: unknown): ClaudeTagWake | null {
     )
       return null;
     return {
-      title: (el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 80),
+      title: slackText(el.textContent ?? "")
+        .trim()
+        .replace(/\s+/g, " ")
+        .slice(0, 80),
       messages: [
         {
           text: slackText(el.textContent ?? ""),
@@ -130,10 +167,10 @@ export function parseClaudeTagWake(content: unknown): ClaudeTagWake | null {
     };
   }
   if (!text.startsWith("<wake")) return null;
-  const end = text.indexOf("</wake>");
+  const end = deliveryEnd(text, "wake");
   if (end < 0) return null;
   const doc = new DOMParser().parseFromString(
-    deliveryXML(text.slice(0, end + "</wake>".length)),
+    deliveryXML(text.slice(0, end)),
     "application/xml",
   );
   if (
@@ -266,16 +303,18 @@ export function projectClaudeTagRows(rows: TranscriptRow[]): TranscriptRow[] {
         let displayName: string | undefined;
         if (message.author !== "User" && message.author !== message.sender)
           displayName = message.author;
+        const participant = row.message.participants?.find(
+          (participant) =>
+            participant.provider === "slack" &&
+            participant.providerUserId === message.sender,
+        );
         const participants = message.sender
           ? [
-              row.message.participants?.find(
-                (participant) =>
-                  participant.provider === "slack" &&
-                  participant.providerUserId === message.sender,
-              ) ?? {
+              {
+                ...participant,
                 provider: "slack",
                 providerUserId: message.sender,
-                displayName,
+                displayName: participant?.displayName ?? displayName,
               },
             ]
           : undefined;
