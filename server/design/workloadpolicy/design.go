@@ -480,7 +480,7 @@ var WorkloadPlatform = Type("WorkloadPlatform", func() {
 	Attribute("jwks_uri", WorkloadPlatformConstant, "Where it publishes its signing keys.")
 	Attribute("variables", ArrayOf(WorkloadPlatformVariable), "What the operator supplies.")
 	Attribute("subject", WorkloadPlatformSubject, "The access rule it produces.")
-	Attribute("steps", ArrayOf(WorkloadPlatformStep), "The guided setup. Empty for a platform without one, which falls back to the registration form.")
+	Attribute("steps", ArrayOf(WorkloadPlatformStep), "The guided setup. Empty for a platform without one, which is listed as coming soon and cannot be opened.")
 
 	Required("key", "display_name", "description", "icon", "enabled", "issuer", "jwks_uri", "variables", "subject", "steps")
 })

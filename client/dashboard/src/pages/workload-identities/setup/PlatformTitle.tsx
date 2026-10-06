@@ -1,4 +1,4 @@
-import { isRelativePath } from "./SetupBlocks";
+import { isRelativePath } from "./origin";
 
 /** A catalog platform's name with its logo, for page titles. */
 export function PlatformTitle({

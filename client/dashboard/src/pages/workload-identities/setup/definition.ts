@@ -55,7 +55,7 @@ export interface CatalogEntry {
   subject: SubjectTemplate;
   /** A disabled entry stays listed so operators can see it is known. */
   enabled: boolean;
-  /** Without a guided setup, choosing the entry falls back to the form. */
+  /** Without a guided setup, the entry is listed as coming soon and cannot be opened. */
   setup?: SetupDefinition;
 }
 

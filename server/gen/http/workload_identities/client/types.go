@@ -1758,8 +1758,8 @@ type WorkloadPlatformResponseBody struct {
 	Variables []*WorkloadPlatformVariableResponseBody `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
 	// The access rule it produces.
 	Subject *WorkloadPlatformSubjectResponseBody `form:"subject,omitempty" json:"subject,omitempty" xml:"subject,omitempty"`
-	// The guided setup. Empty for a platform without one, which falls back to the
-	// registration form.
+	// The guided setup. Empty for a platform without one, which is listed as
+	// coming soon and cannot be opened.
 	Steps []*WorkloadPlatformStepResponseBody `form:"steps,omitempty" json:"steps,omitempty" xml:"steps,omitempty"`
 }
 

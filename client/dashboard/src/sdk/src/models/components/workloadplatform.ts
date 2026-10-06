@@ -57,7 +57,7 @@ export type WorkloadPlatform = {
    */
   key: string;
   /**
-   * The guided setup. Empty for a platform without one, which falls back to the registration form.
+   * The guided setup. Empty for a platform without one, which is listed as coming soon and cannot be opened.
    */
   steps: Array<WorkloadPlatformStep>;
   /**

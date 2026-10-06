@@ -116172,7 +116172,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/WorkloadPlatformStep'
-                    description: The guided setup. Empty for a platform without one, which falls back to the registration form.
+                    description: The guided setup. Empty for a platform without one, which is listed as coming soon and cannot be opened.
                 subject:
                     $ref: '#/components/schemas/WorkloadPlatformSubject'
                 variables:

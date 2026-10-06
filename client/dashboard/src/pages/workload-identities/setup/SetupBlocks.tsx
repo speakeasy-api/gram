@@ -14,6 +14,7 @@ import { TagInput } from "@/components/ui/TagInput";
 import { Text } from "@/components/ui/Text";
 import { Markdown } from "@/elements/components/Markdown";
 import type { CatalogEntry, SetupBlock } from "./definition";
+import { isRelativePath } from "./origin";
 import { tagsProblem } from "../tagLimits";
 import type { SetupValues } from "./setupValues";
 import { subjectRule, variableProblem, type VariableValues } from "./template";
@@ -88,15 +89,6 @@ export function SetupBlockView({
   }
 }
 
-/**
- * Only same-origin paths are rendered. Images ship with the dashboard for now,
- * and a definition must not be able to point the operator's browser at an
- * arbitrary host.
- */
-export function isRelativePath(src: string): boolean {
-  return src.startsWith("/") && !src.startsWith("//");
-}
-
 function SetupImage({
   src,
   alt,
@@ -133,8 +125,8 @@ function VariableField({
     return null;
   }
   const value = context.values[variable.key] ?? "";
-  // Say nothing about an untouched field; an empty value already keeps Next
-  // disabled.
+  // Say nothing about an untouched field; an empty value already keeps
+  // Continue disabled.
   const problem =
     value.trim().length > 0 ? variableProblem(variable, value) : null;
   const id = `setup-${variable.key}`;

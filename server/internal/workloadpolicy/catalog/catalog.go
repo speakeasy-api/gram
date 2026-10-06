@@ -248,7 +248,8 @@ type Platform struct {
 	// Subject is the access rule the entry produces.
 	Subject Subject `yaml:"subject"`
 
-	// Setup is the guided setup; nil falls back to the registration form.
+	// Setup is the guided setup. Without one, the entry is listed as coming
+	// soon and cannot be opened.
 	Setup *Setup `yaml:"setup"`
 }
 

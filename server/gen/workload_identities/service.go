@@ -253,8 +253,8 @@ type WorkloadPlatform struct {
 	Variables []*WorkloadPlatformVariable
 	// The access rule it produces.
 	Subject *WorkloadPlatformSubject
-	// The guided setup. Empty for a platform without one, which falls back to the
-	// registration form.
+	// The guided setup. Empty for a platform without one, which is listed as
+	// coming soon and cannot be opened.
 	Steps []*WorkloadPlatformStep
 }
 
