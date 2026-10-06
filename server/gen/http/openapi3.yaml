@@ -22908,6 +22908,954 @@ paths:
             tags:
                 - cliAuth
             x-speakeasy-name-override: redeem
+    /rpc/dashboards.addWidget:
+        post:
+            description: Place a saved widget on a dashboard, as a new card at the bottom, sized for its chart type.
+            operationId: addDashboardWidget
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AddDashboardWidgetRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Dashboard'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: addDashboardWidget dashboards
+            tags:
+                - dashboards
+            x-speakeasy-name-override: addWidget
+            x-speakeasy-react-hook:
+                name: AddDashboardWidget
+    /rpc/dashboards.create:
+        post:
+            description: Make an empty dashboard. Any member of the project can.
+            operationId: createDashboard
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateDashboardRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Dashboard'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createDashboard dashboards
+            tags:
+                - dashboards
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: CreateDashboard
+    /rpc/dashboards.delete:
+        delete:
+            description: Delete a dashboard and its cards. Its widgets stay saved. Its creator can; deleting someone else's needs project write access.
+            operationId: deleteDashboard
+            parameters:
+                - allowEmptyValue: true
+                  description: The dashboard to delete
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The dashboard to delete
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: deleteDashboard dashboards
+            tags:
+                - dashboards
+            x-speakeasy-name-override: delete
+            x-speakeasy-react-hook:
+                name: DeleteDashboard
+    /rpc/dashboards.duplicate:
+        post:
+            description: Copy a dashboard into a new one the caller owns, named "<name> (copy)". Every card's widget is copied into a new saved widget too, so the copy is fully independent of the original. Like every widget save, each copy is validated, so a dashboard with a broken widget cannot be duplicated until the widget is fixed.
+            operationId: duplicateDashboard
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DuplicateDashboardRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Dashboard'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: duplicateDashboard dashboards
+            tags:
+                - dashboards
+            x-speakeasy-name-override: duplicate
+            x-speakeasy-react-hook:
+                name: DuplicateDashboard
+    /rpc/dashboards.get:
+        get:
+            description: Get one dashboard by id, with its cards and saved filters.
+            operationId: getDashboard
+            parameters:
+                - allowEmptyValue: true
+                  description: The dashboard to get
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The dashboard to get
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Dashboard'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getDashboard dashboards
+            tags:
+                - dashboards
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: Dashboard
+                type: query
+    /rpc/dashboards.list:
+        get:
+            description: List the project's dashboards, most recently updated first, each with its cards.
+            operationId: listDashboards
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDashboardsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listDashboards dashboards
+            tags:
+                - dashboards
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: Dashboards
+                type: query
+    /rpc/dashboards.removeWidget:
+        post:
+            description: Take a card off a dashboard. The widget itself stays saved.
+            operationId: removeDashboardWidget
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RemoveDashboardWidgetRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Dashboard'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: removeDashboardWidget dashboards
+            tags:
+                - dashboards
+            x-speakeasy-name-override: removeWidget
+            x-speakeasy-react-hook:
+                name: RemoveDashboardWidget
+    /rpc/dashboards.saveFilters:
+        post:
+            description: Store the date range and filter values a dashboard opens on, for everyone. Until saved, changes in the filter bar are the viewer's own.
+            operationId: saveDashboardFilters
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SaveDashboardFiltersRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Dashboard'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: saveDashboardFilters dashboards
+            tags:
+                - dashboards
+            x-speakeasy-name-override: saveFilters
+            x-speakeasy-react-hook:
+                name: SaveDashboardFilters
+    /rpc/dashboards.saveLayout:
+        post:
+            description: Replace a dashboard's layout with the given cards. A card with an id moves or resizes the existing placement, one without an id is added, and any placement not listed is removed. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.
+            operationId: saveDashboardLayout
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SaveDashboardLayoutRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Dashboard'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: saveDashboardLayout dashboards
+            tags:
+                - dashboards
+            x-speakeasy-name-override: saveLayout
+            x-speakeasy-react-hook:
+                name: SaveDashboardLayout
+    /rpc/dashboards.update:
+        post:
+            description: Rename a dashboard or change its description. Its creator can; editing someone else's needs project write access.
+            operationId: updateDashboard
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateDashboardRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Dashboard'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: updateDashboard dashboards
+            tags:
+                - dashboards
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: UpdateDashboard
     /rpc/dataExports.createDestination:
         post:
             description: Create a data export destination in the selected project.
@@ -82412,6 +83360,20 @@ components:
                 - name
                 - type
                 - description
+        AddDashboardWidgetRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The dashboard to place it on
+                    format: uuid
+                widget_id:
+                    type: string
+                    description: The widget to place
+                    format: uuid
+            required:
+                - id
+                - widget_id
         AddDeploymentPackageForm:
             type: object
             properties:
@@ -87719,6 +88681,20 @@ components:
             required:
                 - rule_id
                 - title
+        CreateDashboardRequestBody:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: What the dashboard is for, at most 2000 characters
+                    maxLength: 2000
+                name:
+                    type: string
+                    description: Display name, at most 200 characters
+                    minLength: 1
+                    maxLength: 200
+            required:
+                - name
         CreateDataExportRouteForm:
             type: object
             properties:
@@ -89780,6 +90756,118 @@ components:
                 - project_name
                 - project_slug
                 - is_domain_root
+        Dashboard:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                created_by_user_id:
+                    type: string
+                    description: Who made it, when known
+                description:
+                    type: string
+                    description: What the dashboard is for, when its creator said
+                filters:
+                    $ref: '#/components/schemas/DashboardFilters'
+                id:
+                    type: string
+                    format: uuid
+                name:
+                    type: string
+                    description: Display name. Not unique.
+                organization_id:
+                    type: string
+                project_id:
+                    type: string
+                    format: uuid
+                updated_at:
+                    type: string
+                    format: date-time
+                widgets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DashboardPlacement'
+                    description: Its cards, in no particular order; the grid places them by position
+            description: 'A project''s layout of saved widgets on a 12-column grid, under one date range and filter bar. Belongs to a project and is visible to everyone in it. Widgets are linked, not copied: editing one changes it on every dashboard it is on.'
+            required:
+                - id
+                - project_id
+                - organization_id
+                - name
+                - filters
+                - widgets
+                - created_at
+                - updated_at
+        DashboardFilters:
+            type: object
+            properties:
+                range:
+                    $ref: '#/components/schemas/DashboardRange'
+                values:
+                    type: object
+                    description: Values picked per catalog dimension, by field name
+                    additionalProperties:
+                        type: array
+                        items:
+                            type: string
+            description: 'What a dashboard opens on: its date range and the values picked for each catalog dimension its filter bar offers. Changes in the bar are a personal view until they are saved here.'
+            required:
+                - values
+        DashboardPlacement:
+            type: object
+            properties:
+                h:
+                    type: integer
+                    description: Height in rows
+                    format: int64
+                id:
+                    type: string
+                    description: Stable across layout edits, so the grid keeps the card's identity
+                    format: uuid
+                w:
+                    type: integer
+                    description: Width in columns
+                    format: int64
+                widget_id:
+                    type: string
+                    format: uuid
+                x:
+                    type: integer
+                    description: Column the card starts at, from 0
+                    format: int64
+                "y":
+                    type: integer
+                    description: Row the card starts at, from 0
+                    format: int64
+            description: 'One card on a dashboard: the saved widget it links to and where it sits on the 12-column grid. The same widget may be placed more than once.'
+            required:
+                - id
+                - widget_id
+                - x
+                - "y"
+                - w
+                - h
+        DashboardRange:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Start of an absolute range
+                    format: date-time
+                label:
+                    type: string
+                    description: How the date picker named the absolute range
+                    example: Last Tuesday
+                preset:
+                    type: string
+                    description: A relative window, one a widget may be saved with
+                    example: 7d
+                to:
+                    type: string
+                    description: End of an absolute range
+                    format: date-time
+            description: 'The date range a dashboard opens on: a relative window, or an absolute range with the label the date picker gave it.'
         DataExportRoute:
             type: object
             properties:
@@ -90781,6 +91869,15 @@ components:
                     description: The CNAME target subdomain custom domains should point at, if configured
             required:
                 - a_records
+        DuplicateDashboardRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The dashboard to copy
+                    format: uuid
+            required:
+                - id
         DuplicateWidgetRequestBody:
             type: object
             properties:
@@ -96208,6 +97305,16 @@ components:
             required:
                 - domains
                 - dns_config
+        ListDashboardsResult:
+            type: object
+            properties:
+                dashboards:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Dashboard'
+                    description: Dashboards in the project, most recently updated first
+            required:
+                - dashboards
         ListDataExportRoutesResult:
             type: object
             properties:
@@ -100902,6 +102009,39 @@ components:
                 - included_servers
                 - actual_enabled_server_count
                 - has_active_subscription
+        PlacementInput:
+            type: object
+            properties:
+                h:
+                    type: integer
+                    format: int64
+                    minimum: 1
+                id:
+                    type: string
+                    description: The existing placement, when the card is already on the dashboard
+                    format: uuid
+                w:
+                    type: integer
+                    format: int64
+                    minimum: 1
+                widget_id:
+                    type: string
+                    format: uuid
+                x:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                "y":
+                    type: integer
+                    format: int64
+                    minimum: 0
+            description: A card's place in a layout being saved. With an id it moves or resizes the existing card; without one it adds the widget as a new card.
+            required:
+                - widget_id
+                - x
+                - "y"
+                - w
+                - h
         PlatformKillswitchDefinition:
             type: object
             properties:
@@ -103485,6 +104625,20 @@ components:
             required:
                 - client_id
                 - mcp_server_id
+        RemoveDashboardWidgetRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The dashboard the card is on
+                    format: uuid
+                placement_id:
+                    type: string
+                    description: The card to remove
+                    format: uuid
+            required:
+                - id
+                - placement_id
         RenameAgentForm:
             type: object
             properties:
@@ -105859,6 +107013,33 @@ components:
                 - id
                 - name
                 - key_prefix
+        SaveDashboardFiltersRequestBody:
+            type: object
+            properties:
+                filters:
+                    $ref: '#/components/schemas/DashboardFilters'
+                id:
+                    type: string
+                    description: The dashboard to save filters on
+                    format: uuid
+            required:
+                - id
+                - filters
+        SaveDashboardLayoutRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The dashboard to lay out
+                    format: uuid
+                placements:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PlacementInput'
+                    description: Every card and where it sits
+            required:
+                - id
+                - placements
         SaveRegistryEntryRequestBody:
             type: object
             properties:
@@ -113138,6 +114319,25 @@ components:
                 - id
                 - title
                 - severity
+        UpdateDashboardRequestBody:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: What the dashboard is for, at most 2000 characters
+                    maxLength: 2000
+                id:
+                    type: string
+                    description: The dashboard to update
+                    format: uuid
+                name:
+                    type: string
+                    description: Display name, at most 200 characters
+                    minLength: 1
+                    maxLength: 200
+            required:
+                - id
+                - name
         UpdateDataExportRouteForm:
             type: object
             properties:
@@ -116344,6 +117544,8 @@ tags:
       description: Manages chat session tokens for client-side authentication
     - name: cliAuth
       description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
+    - name: dashboards
+      description: 'Dashboards: a project''s layouts of saved widgets. Any member can make one; editing someone else''s needs project write access.'
     - name: dataExports
       description: Manage project-scoped data export destinations and routes.
     - name: deployments

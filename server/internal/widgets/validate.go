@@ -95,6 +95,19 @@ var windows = map[string]time.Duration{
 // windowNames lists the windows a widget can be saved with, for messages.
 const windowNames = "15m, 1h, 4h, 1d, 2d, 3d, 7d, 15d, 30d, 90d"
 
+// Validate is validate for another service that stores a widget's shape,
+// such as dashboards copying cards into saved widgets.
+func Validate(catalog *analytics.Catalog, dataset string, rawQuery, rawVisualization []byte, now time.Time) (string, error) {
+	return validate(catalog, dataset, rawQuery, rawVisualization, now)
+}
+
+// IsWindow reports whether a relative window is one a widget may be saved
+// with, for a dashboard's saved date range to use the same vocabulary.
+func IsWindow(window string) bool {
+	_, ok := windows[window]
+	return ok
+}
+
 // validate returns what is wrong with a widget, or "" when it works: the
 // question is planned against the catalog, then the chart is checked against
 // the question. Used on save, so a mistake is rejected immediately, and on

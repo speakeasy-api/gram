@@ -26,6 +26,7 @@ var All = []outbox.EventRegistration{
 	ChatAnalysisSettingsV1,
 	ChatSessionV1,
 	CustomDomainV1,
+	DashboardV1,
 	DataExportRouteV1,
 	DeploymentV1,
 	DeviceIntegrationV1,
