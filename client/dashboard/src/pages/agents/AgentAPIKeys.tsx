@@ -570,6 +570,15 @@ function AgentAPIKeysContent({
       render: (key) => (key.expiresAt ? <KeyDate date={key.expiresAt} /> : "—"),
     },
     {
+      key: "lastAccessedAt",
+      header: "Last used",
+      width: "160px",
+      // A device agent has no session to show, so its key's last use is the
+      // only sign it is still checking in.
+      render: (key) =>
+        key.lastAccessedAt ? <KeyDate date={key.lastAccessedAt} /> : "Never",
+    },
+    {
       key: "id",
       header: "",
       // A fixed action column, so the control never lands half-clipped at the

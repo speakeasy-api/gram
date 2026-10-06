@@ -6,9 +6,13 @@ import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useRBAC } from "@/hooks/useRBAC";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type JSX } from "react";
 import {
   agentPolicyGrantsFromDraft,
@@ -17,7 +21,27 @@ import {
 } from "../agent-policy-grants";
 import { buildRequestedGrants } from "../agent-api-key-grants";
 import { discoverKeyServerGrants } from "../agent-key-discovery";
-import { agentGatewayURL, mintInstallCommand } from "./gateway";
+import {
+  agentPurposeFromPolicy,
+  DEVICE_AGENT_SCOPES,
+  deviceAgentPolicyGrants,
+  deviceAgentPurposeBlocked,
+  missingPolicyGrants,
+  policyConnectsToMCP,
+  selectDeviceAgentKeyGrants,
+  undelegableScopesMessage,
+  type AgentPurpose,
+  type DeviceAgentRunMode,
+} from "./device-agent";
+import {
+  StepDeviceAgentProject,
+  StepProvisionDeviceAgent,
+} from "./DeviceAgentSteps";
+import {
+  agentGatewayURL,
+  mintInstallCommand,
+  type InstallRequest,
+} from "./gateway";
 import { StepProvision } from "./StepProvision";
 import { StepServers, type ServerSelection } from "./StepServers";
 import { StepVerify, type VerifyState } from "./StepVerify";
@@ -48,13 +72,46 @@ const STEPS = [
   "Verify",
 ];
 
+/** A device agent reaches no servers; its second step picks a project. */
+const DEVICE_AGENT_STEPS = [
+  "Name & scope",
+  "Project",
+  "Credential",
+  "Provision",
+  "Verify",
+];
+
 /** Keys live 90 days unless the agent page rotates them sooner. */
 const KEY_LIFETIME_DAYS = 90;
 
 type Scope = "project" | "organization";
 
+function installRequestFor(
+  purpose: AgentPurpose,
+  mode: DeviceAgentRunMode,
+): InstallRequest {
+  switch (purpose) {
+    case "device-agent":
+      return { flavor: "device_agent", mode };
+    case "mcp":
+      return { flavor: "mcp" };
+  }
+}
+
+function verifyNote(
+  purpose: AgentPurpose | undefined,
+  connected: boolean,
+): string {
+  if (!connected)
+    return "Run the setup from the previous step, then wait for the first call.";
+  return purpose === "device-agent"
+    ? "The device agent has synced with Gram."
+    : "The agent has called the gateway.";
+}
+
 export function ProvisionWizard({
   agent,
+  initialPurpose,
   onDone,
   onBusy,
 }: {
@@ -64,6 +121,11 @@ export function ProvisionWizard({
    * ahead is still a draft and none of them can be revisited.
    */
   agent?: ManagedAgent;
+  /**
+   * What a new agent is provisioned for, when the link that opened the wizard
+   * already knows. An existing agent's purpose is read from its policy.
+   */
+  initialPurpose?: AgentPurpose;
   /** Leaves the wizard for the agent it created, or the list if it made none. */
   onDone: (agentID?: string) => void;
   onBusy?: (busy: boolean) => void;
@@ -88,6 +150,13 @@ export function ProvisionWizard({
   // id, and strand the form on organization scope.
   const [chosenScope, setChosenScope] = useState<Scope | null>(null);
   const [selected, setSelected] = useState<ServerSelection[]>([]);
+  const [chosenPurpose, setChosenPurpose] = useState<AgentPurpose>(
+    initialPurpose ?? "mcp",
+  );
+  const [hooksProjectID, setHooksProjectID] = useState(
+    project.id || organization.projects[0]?.id || "",
+  );
+  const [mode, setMode] = useState<DeviceAgentRunMode>("ephemeral");
   const [error, setError] = useState<string | null>(null);
   const [provisioning, setProvisioning] = useState(false);
 
@@ -109,6 +178,32 @@ export function ProvisionWizard({
   useEffect(() => {
     onBusy?.(provisioning);
   }, [provisioning, onBusy]);
+
+  // An agent is provisioned for MCP or for the device agent, never both, so an
+  // existing agent's purpose is whatever its stored policy already says. The
+  // same cache the agent page's permissions panel reads and writes.
+  const storedPolicy = useQuery({
+    queryKey: ["agent-policy-grants", organization.id, agent?.id],
+    queryFn: ({ signal }) =>
+      sdk.agents.listPolicyGrants({ agentId: agent!.id }, undefined, {
+        signal,
+      }),
+    enabled: existing,
+    retry: false,
+    throwOnError: false,
+  });
+  const purpose: AgentPurpose | undefined = existing
+    ? storedPolicy.data && agentPurposeFromPolicy(storedPolicy.data)
+    : chosenPurpose;
+
+  // Organization scopes can only be delegated by an org admin, so the device
+  // agent is offered only to one, and only where the device agent is enabled.
+  const { hasScope } = useRBAC();
+  const deviceAgentFlag = useFeatureFlag(FEATURE_FLAGS.deviceAgent);
+  const deviceAgentBlocked = deviceAgentPurposeBlocked({
+    deviceAgentEnabled: deviceAgentFlag.status === "enabled",
+    isOrgAdmin: hasScope("org:admin"),
+  });
 
   // Project leads once one is available; an explicit pick always wins. Until
   // a project resolves, project scope would send an empty id, which the server
@@ -148,17 +243,84 @@ export function ProvisionWizard({
     };
   }, [step, agentID, verify, sdk]);
 
-  const regenerate = (key: string, url: string) => {
+  const regenerate = (key: string, url: string, request: InstallRequest) => {
     setMinting(true);
     setCommandError(null);
     lastSelfUse.current = Date.now();
-    mintInstallCommand(url, key)
+    mintInstallCommand(url, key, request)
       .then((next) => {
         lastSelfUse.current = Date.now();
         setCommand(next);
       })
       .catch((failure: Error) => setCommandError(failure.message))
       .finally(() => setMinting(false));
+  };
+
+  /** The grants a new MCP key carries: everything delegable on the servers. */
+  const mcpKeyGrants = async (
+    targetID: string,
+  ): Promise<AgentPolicyGrantForm[]> => {
+    const controller = new AbortController();
+    const delegable = await discoverKeyServerGrants(
+      sdk.agents,
+      targetID,
+      selected.map((entry) => ({
+        resourceId: entry.server.resourceId,
+        projectId: entry.server.projectId,
+        kind: entry.server.kind,
+      })),
+      controller.signal,
+    );
+    return buildRequestedGrants(
+      delegable.map((grant) => ({ grant, narrowing: {} })),
+    );
+  };
+
+  /**
+   * The grants a device agent key carries: exactly sync, hooks, and read on
+   * the chosen project. An existing agent is given whatever of those its
+   * policy lacks first, and is refused if its policy reaches MCP servers.
+   */
+  const deviceAgentKeyGrants = async (
+    target: ManagedAgent,
+  ): Promise<AgentPolicyGrantForm[]> => {
+    const required = deviceAgentPolicyGrants(hooksProjectID);
+    if (existing) {
+      const stored = await sdk.agents.listPolicyGrants({ agentId: target.id });
+      if (policyConnectsToMCP(stored))
+        throw new Error(
+          "This agent can connect to MCP servers, so it cannot run the device agent. Create a separate agent for the device agent.",
+        );
+      const missing = missingPolicyGrants(stored, required);
+      if (missing.length > 0 && !target.permissions.write)
+        throw new Error(
+          "You do not have permission to change this agent's permissions.",
+        );
+      try {
+        for (const form of missing)
+          await sdk.agents.createPolicyGrant({
+            createAgentPolicyGrantForm: { agentId: target.id, ...form },
+          });
+      } finally {
+        if (missing.length > 0)
+          void invalidateAgentPolicy(
+            queryClient,
+            organization.id,
+            user.id,
+            target.id,
+          );
+      }
+    }
+    const delegable = await sdk.agents.listDelegableGrants({
+      agentId: target.id,
+    });
+    const { selections, missingScopes } = selectDeviceAgentKeyGrants(
+      delegable,
+      required,
+    );
+    if (missingScopes.length > 0)
+      throw new Error(undelegableScopesMessage(missingScopes));
+    return buildRequestedGrants(selections);
   };
 
   /**
@@ -171,6 +333,10 @@ export function ProvisionWizard({
     setProvisioning(true);
     setError(null);
     try {
+      if (!purpose)
+        throw new Error("This agent's permissions are still loading.");
+      if (purpose === "device-agent" && !existing && deviceAgentBlocked)
+        throw new Error(deviceAgentBlocked);
       const draft: AgentPolicyDraft = {
         "mcp:connect": selected.map((entry) => ({
           resourceKind: "mcp" as const,
@@ -180,13 +346,19 @@ export function ProvisionWizard({
       };
       // An agent that exists keeps its stored ceiling: this flow issues a key
       // against it rather than rewriting what the agent may ever be delegated.
+      // A device agent is organization-wide: its sync and hook grants are.
       const target =
         agent ??
         (await sdk.agents.create({
           createAgentForm: {
             name: name.trim(),
-            ...(scopedProjectID ? { projectId: scopedProjectID } : {}),
-            policyGrants: agentPolicyGrantsFromDraft(draft),
+            ...(purpose === "mcp" && scopedProjectID
+              ? { projectId: scopedProjectID }
+              : {}),
+            policyGrants:
+              purpose === "device-agent"
+                ? deviceAgentPolicyGrants(hooksProjectID)
+                : agentPolicyGrantsFromDraft(draft),
           },
         }));
       setAgentID(target.id);
@@ -202,20 +374,10 @@ export function ProvisionWizard({
         });
       }
 
-      const controller = new AbortController();
-      const delegable = await discoverKeyServerGrants(
-        sdk.agents,
-        target.id,
-        selected.map((entry) => ({
-          resourceId: entry.server.resourceId,
-          projectId: entry.server.projectId,
-          kind: entry.server.kind,
-        })),
-        controller.signal,
-      );
-      const requestedGrants = buildRequestedGrants(
-        delegable.map((grant) => ({ grant, narrowing: {} })),
-      );
+      const requestedGrants =
+        purpose === "device-agent"
+          ? await deviceAgentKeyGrants(target)
+          : await mcpKeyGrants(target.id);
       if (requestedGrants.length === 0) {
         throw new Error(
           existing
@@ -228,7 +390,9 @@ export function ProvisionWizard({
       const issued = await sdk.keys.create({
         createKeyForm: {
           agentId: target.id,
-          name: `${name.trim()} key ${new Date().toISOString().slice(0, 10)}`,
+          // Key names are unique per organization, so a date alone collides
+          // the second time an agent is issued a key that day.
+          name: `${name.trim()} key ${new Date().toISOString().slice(0, 16).replace("T", " ")}`,
           expiresAt,
           delegatedGrantsVersion: 2,
           requestedGrants,
@@ -238,7 +402,12 @@ export function ProvisionWizard({
       keyID.current = issued.id;
       setSecret(issued.key ?? null);
       setStep(3);
-      if (issued.key) regenerate(issued.key, agentGatewayURL(target.id));
+      if (issued.key)
+        regenerate(
+          issued.key,
+          agentGatewayURL(target.id),
+          installRequestFor(purpose, mode),
+        );
     } catch (failure) {
       const conflict =
         failure instanceof GramError && failure.statusCode === 409
@@ -260,23 +429,54 @@ export function ProvisionWizard({
       step={step + 1}
       stepCount={STEPS.length}
       name={name}
-      rows={[
-        { label: "Owner", value: user.displayName || user.email },
-        {
-          label: "Scope",
-          value: scope === "project" ? project.name : organization.name,
-        },
-        {
-          label: "Grants",
-          value: <code className="text-xs">mcp:connect</code>,
-        },
-        { label: "Credential", value: "API key" },
-      ]}
-      servers={selected.map((entry) => ({
-        id: entry.server.id,
-        name: entry.server.name,
-        detail: "all tools",
-      }))}
+      rows={
+        purpose === "device-agent"
+          ? [
+              { label: "Owner", value: user.displayName || user.email },
+              { label: "Runs", value: "Device agent" },
+              {
+                label: "Project",
+                value:
+                  organization.projects.find(
+                    (candidate) => candidate.id === hooksProjectID,
+                  )?.name ?? "—",
+              },
+              {
+                label: "Grants",
+                value: (
+                  <span className="flex flex-col items-end">
+                    {DEVICE_AGENT_SCOPES.map((grant) => (
+                      <code key={grant} className="text-xs">
+                        {grant}
+                      </code>
+                    ))}
+                  </span>
+                ),
+              },
+              { label: "Credential", value: "API key" },
+            ]
+          : [
+              { label: "Owner", value: user.displayName || user.email },
+              {
+                label: "Scope",
+                value: scope === "project" ? project.name : organization.name,
+              },
+              {
+                label: "Grants",
+                value: <code className="text-xs">mcp:connect</code>,
+              },
+              { label: "Credential", value: "API key" },
+            ]
+      }
+      servers={
+        purpose === "device-agent"
+          ? undefined
+          : selected.map((entry) => ({
+              id: entry.server.id,
+              name: entry.server.name,
+              detail: "all tools",
+            }))
+      }
     />
   );
 
@@ -308,7 +508,40 @@ export function ProvisionWizard({
                   : "Shown in audit logs and session lists. You can rename it later."}
               </Text>
             </div>
-            {
+            <div className="space-y-2">
+              <Label>Runs</Label>
+              <Text muted small>
+                {existing
+                  ? "Set when the agent was first provisioned. An agent runs one of these, never both."
+                  : "What this agent's key is for. An agent runs one of these, never both."}
+              </Text>
+              <RadioCardGroup
+                value={purpose ?? ""}
+                onValueChange={(value) =>
+                  setChosenPurpose(value as AgentPurpose)
+                }
+                disabled={existing}
+                className="sm:grid-cols-2"
+              >
+                <RadioCard value="mcp" title="MCP servers" className="p-3">
+                  <Text muted small>
+                    Calls MCP servers through one gateway endpoint.
+                  </Text>
+                </RadioCard>
+                <RadioCard
+                  value="device-agent"
+                  title="Device agent"
+                  className="p-3"
+                  disabled={!existing && deviceAgentBlocked !== null}
+                >
+                  <Text muted small>
+                    {(!existing && deviceAgentBlocked) ||
+                      "Runs the device agent on a Linux host no person uses."}
+                  </Text>
+                </RadioCard>
+              </RadioCardGroup>
+            </div>
+            {purpose === "mcp" && (
               <div className="space-y-2">
                 <Label>Scope</Label>
                 <Text muted small>
@@ -345,10 +578,17 @@ export function ProvisionWizard({
                   </RadioCard>
                 </RadioCardGroup>
               </div>
-            }
+            )}
           </div>
         );
       case 1:
+        if (purpose === "device-agent")
+          return (
+            <StepDeviceAgentProject
+              projectId={hooksProjectID}
+              onChange={setHooksProjectID}
+            />
+          );
         return (
           <StepServers
             servers={inventory.servers.filter(
@@ -408,13 +648,42 @@ export function ProvisionWizard({
           </div>
         );
       case 3:
+        if (purpose === "device-agent")
+          return (
+            <StepProvisionDeviceAgent
+              command={command}
+              commandError={commandError}
+              minting={minting}
+              mode={mode}
+              canRegenerate={!!secret}
+              onModeChange={(next) => {
+                setMode(next);
+                // A code renders one script; a new mode needs a new code.
+                if (secret && gatewayURL)
+                  regenerate(
+                    secret,
+                    gatewayURL,
+                    installRequestFor("device-agent", next),
+                  );
+              }}
+              onRegenerate={() => {
+                if (secret && gatewayURL)
+                  regenerate(
+                    secret,
+                    gatewayURL,
+                    installRequestFor("device-agent", mode),
+                  );
+              }}
+            />
+          );
         return (
           <StepProvision
             command={command}
             commandError={commandError}
             minting={minting}
             onRegenerate={() => {
-              if (secret && gatewayURL) regenerate(secret, gatewayURL);
+              if (secret && gatewayURL)
+                regenerate(secret, gatewayURL, installRequestFor("mcp", mode));
             }}
             secret={secret}
             gatewayURL={gatewayURL}
@@ -427,21 +696,34 @@ export function ProvisionWizard({
             state={verify}
             firstCallAt={firstCallAt}
             gatewayURL={gatewayURL}
+            purpose={purpose}
           />
         );
     }
   };
 
-  const blocked =
-    step === 0
-      ? !name.trim()
-        ? "Name this agent."
-        : null
-      : step === 1
-        ? selected.length === 0
-          ? "Select at least one MCP server."
-          : null
-        : null;
+  const blocked = blockedReason();
+
+  function blockedReason(): string | null {
+    switch (step) {
+      case 0:
+        if (!name.trim()) return "Name this agent.";
+        if (!purpose) return "Reading this agent's permissions…";
+        if (purpose === "device-agent" && !existing) return deviceAgentBlocked;
+        return null;
+      case 1:
+        if (purpose === "device-agent")
+          return hooksProjectID ? null : "Choose a project.";
+        return selected.length === 0 ? "Select at least one MCP server." : null;
+      default:
+        return null;
+    }
+  }
+
+  const selectionNote =
+    purpose === "device-agent"
+      ? "Hook events are recorded in the chosen project."
+      : `${selected.length} of ${inventory.servers.length} servers selected.`;
 
   const footer = () => {
     switch (step) {
@@ -481,11 +763,7 @@ export function ProvisionWizard({
       case 4:
         return (
           <WizardFooter
-            note={
-              verify === "connected"
-                ? "The agent has called the gateway."
-                : "Run the setup from the previous step, then wait for the first call."
-            }
+            note={verifyNote(purpose, verify === "connected")}
             onBack={() => setStep(3)}
             primary={
               <Button onClick={() => onDone(agentID ?? undefined)}>
@@ -503,7 +781,7 @@ export function ProvisionWizard({
                 ? existing
                   ? "This agent's identity is settled; this flow issues it a key."
                   : "Name and scope can be changed later."
-                : `${selected.length} of ${inventory.servers.length} servers selected.`)
+                : selectionNote)
             }
             onBack={step > 0 ? () => setStep(step - 1) : undefined}
             primary={
@@ -519,7 +797,7 @@ export function ProvisionWizard({
   return (
     <div className="space-y-6">
       <WizardStepper
-        steps={STEPS}
+        steps={purpose === "device-agent" ? DEVICE_AGENT_STEPS : STEPS}
         current={step}
         // While creating, only a step already completed is a destination: the
         // ones ahead are built from choices not yet made. Provisioning an

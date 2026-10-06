@@ -1,6 +1,8 @@
 package mcp
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,4 +17,73 @@ func TestAgentInstallScriptQuotesInterpolatedValues(t *testing.T) {
 	// The injected command must stay inside the quoted word, never become a
 	// statement of its own.
 	require.NotContains(t, script, "\ntouch pwned")
+}
+
+// managedConfigFrom extracts the managed enrollment written by the script's
+// heredoc, so assertions read the JSON the device agent will read.
+func managedConfigFrom(t *testing.T, script string) deviceAgentManagedConfig {
+	t.Helper()
+	_, rest, ok := strings.Cut(script, "<<'JSON'\n")
+	require.True(t, ok)
+	body, _, ok := strings.Cut(rest, "\nJSON\n")
+	require.True(t, ok)
+	var config deviceAgentManagedConfig
+	require.NoError(t, json.Unmarshal([]byte(body), &config))
+	return config
+}
+
+func TestDeviceAgentInstallScriptEphemeralRunsOnce(t *testing.T) {
+	t.Parallel()
+	script, err := deviceAgentInstallScript("https://gram.example.test", "gram_test_key", deviceAgentRunModeEphemeral)
+	require.NoError(t, err)
+
+	require.Contains(t, script, `"$BIN_DIR/speakeasyd" sync --once`)
+	require.NotContains(t, script, "-service install")
+	require.NotContains(t, script, "enable-linger")
+	require.Equal(t, deviceAgentManagedConfig{
+		V:               1,
+		AgentKey:        "gram_test_key",
+		Environment:     "ephemeral",
+		HideUI:          true,
+		AutoUpdate:      "disabled",
+		ControlPlaneURL: "https://gram.example.test",
+	}, managedConfigFrom(t, script))
+}
+
+func TestDeviceAgentInstallScriptServiceLingers(t *testing.T) {
+	t.Parallel()
+	script, err := deviceAgentInstallScript("https://gram.example.test", "gram_test_key", deviceAgentRunModeService)
+	require.NoError(t, err)
+
+	require.Contains(t, script, `sudo loginctl enable-linger "$(id -un)"`)
+	require.Contains(t, script, `"$BIN_DIR/speakeasyd" -service start`)
+	require.NotContains(t, script, "sync --once")
+	config := managedConfigFrom(t, script)
+	require.Equal(t, "server", config.Environment)
+	require.Equal(t, "automatic", config.AutoUpdate)
+}
+
+// The device agent defaults to production, so production enrollment names no
+// override.
+func TestDeviceAgentInstallScriptOmitsTheProductionControlPlane(t *testing.T) {
+	t.Parallel()
+	script, err := deviceAgentInstallScript("https://app.getgram.ai/", "gram_test_key", deviceAgentRunModeService)
+	require.NoError(t, err)
+	require.NotContains(t, script, "_control_plane_url")
+}
+
+// The key lands in a quoted heredoc. JSON encoding must keep any value from
+// ending the heredoc and running what follows as commands.
+func TestDeviceAgentInstallScriptKeepsTheKeyInsideTheHeredoc(t *testing.T) {
+	t.Parallel()
+	script, err := deviceAgentInstallScript("https://gram.example.test", "key\nJSON\ntouch pwned", deviceAgentRunModeEphemeral)
+	require.NoError(t, err)
+	require.NotContains(t, script, "\ntouch pwned")
+	require.Equal(t, "key\nJSON\ntouch pwned", managedConfigFrom(t, script).AgentKey)
+}
+
+func TestDeviceAgentInstallScriptRejectsAnUnknownMode(t *testing.T) {
+	t.Parallel()
+	_, err := deviceAgentInstallScript("https://gram.example.test", "gram_test_key", "daemon")
+	require.Error(t, err)
 }

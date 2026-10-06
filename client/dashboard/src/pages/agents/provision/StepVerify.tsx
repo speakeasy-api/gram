@@ -1,7 +1,8 @@
 import { Text } from "@/components/ui/Text";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
+import type { AgentPurpose } from "./device-agent";
 
 /**
  * Whether the thing we just provisioned actually works. The page watches the
@@ -15,28 +16,95 @@ import type { JSX } from "react";
 
 export type VerifyState = "waiting" | "connected" | "unknown";
 
+type VerifyCopy = {
+  waiting: string;
+  waitingDetail: string;
+  connected: string;
+  checks: { title: string; description: string }[];
+  troubleshooting: ReactNode[];
+};
+
+function verifyCopy(purpose: AgentPurpose, gatewayURL: string): VerifyCopy {
+  switch (purpose) {
+    case "device-agent":
+      return {
+        waiting: "Waiting for the device agent to check in",
+        waitingDetail:
+          "Keep this page open while the setup runs. This updates when the device agent first syncs, which can take a minute to show.",
+        connected: "The device agent has checked in.",
+        checks: [
+          {
+            title: "Device agent installed",
+            description: "The setup script installed and enrolled the agent.",
+          },
+          {
+            title: "Key accepted",
+            description:
+              "The device agent synced with Gram using the agent's key.",
+          },
+        ],
+        troubleshooting: [
+          <>
+            <code className="text-xs">403</code> — the key cannot sync. Check
+            the agent still holds{" "}
+            <code className="text-xs">org:device_agent_sync</code>.
+          </>,
+          <>
+            Persistent installs —{" "}
+            <code className="text-xs">systemctl --user status speakeasyd</code>{" "}
+            shows whether the service is running.
+          </>,
+          "No check-in at all — the setup command was not run, or its code had already been used. Regenerate it.",
+        ],
+      };
+    case "mcp":
+      return {
+        waiting: "Waiting for the first call",
+        waitingDetail:
+          "Keep this page open while the agent runs its setup. This updates as calls reach the gateway.",
+        connected: "The agent is live.",
+        checks: [
+          {
+            title: "Credential accepted",
+            description:
+              "The API key was presented to the agent gateway and admitted.",
+          },
+          {
+            title: "Gateway reachable",
+            description: `The runtime resolved ${gatewayURL} and completed a request.`,
+          },
+        ],
+        troubleshooting: [
+          <>
+            <code className="text-xs">401</code> — the credential was rejected.
+            Run the setup command again; a code is spent on first use.
+          </>,
+          <>
+            <code className="text-xs">403</code> — the tool is not granted.
+            Check the server selection and the agent&apos;s permissions.
+          </>,
+          "No requests at all — the runtime is not pointed at the gateway URL.",
+        ],
+      };
+  }
+}
+
 export function StepVerify({
   state,
   firstCallAt,
   gatewayURL,
+  purpose = "mcp",
 }: {
   state: VerifyState;
   firstCallAt?: Date;
   gatewayURL: string;
+  purpose?: AgentPurpose;
 }): JSX.Element {
-  const checks: { title: string; description: string; done: boolean }[] = [
-    {
-      title: "Credential accepted",
-      description:
-        "The API key was presented to the agent gateway and admitted.",
-      done: state === "connected",
-    },
-    {
-      title: "Gateway reachable",
-      description: `The runtime resolved ${gatewayURL} and completed a request.`,
-      done: state === "connected",
-    },
-  ];
+  const copy = verifyCopy(purpose, gatewayURL);
+  const checks = copy.checks.map((check) => ({
+    ...check,
+    done: state === "connected",
+  }));
 
   return (
     <div className="space-y-5">
@@ -52,12 +120,12 @@ export function StepVerify({
                   : "bg-muted-foreground",
               )}
             />
-            {state === "connected" ? "Connected" : "Waiting for the first call"}
+            {state === "connected" ? "Connected" : copy.waiting}
           </h2>
           <Text muted small>
             {state === "connected"
-              ? `First call ${firstCallAt ? dateTimeFormatters.full.format(firstCallAt) : "received"}. The agent is live.`
-              : "Keep this page open while the agent runs its setup. This updates as calls reach the gateway."}
+              ? `First call ${firstCallAt ? dateTimeFormatters.full.format(firstCallAt) : "received"}. ${copy.connected}`
+              : copy.waitingDetail}
           </Text>
         </div>
       </div>
@@ -96,17 +164,10 @@ export function StepVerify({
           If nothing arrives
         </span>
         <ul className="space-y-1 text-sm">
-          <li>
-            <code className="text-xs">401</code> — the credential was rejected.
-            Run the setup command again; a code is spent on first use.
-          </li>
-          <li>
-            <code className="text-xs">403</code> — the tool is not granted.
-            Check the server selection and the agent's permissions.
-          </li>
-          <li>
-            No requests at all — the runtime is not pointed at the gateway URL.
-          </li>
+          {copy.troubleshooting.map((item, index) => (
+            // Static copy in a fixed order, so the position is the identity.
+            <li key={index}>{item}</li>
+          ))}
         </ul>
       </div>
     </div>
