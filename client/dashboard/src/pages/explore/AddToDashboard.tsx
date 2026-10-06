@@ -35,6 +35,9 @@ export function AddToDashboard({
           key={widget.id}
           widget={widget}
           dashboards={placing.dashboards}
+          loading={placing.loading}
+          failed={placing.failed}
+          onRetry={placing.retry}
           open={!creating}
           pending={placing.pending}
           onCancel={onClose}

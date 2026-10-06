@@ -56,6 +56,9 @@ const testState = vi.hoisted(() => ({
   dashboardWrites: [] as { kind: string; request: Record<string, unknown> }[],
   /** Who is told when the dashboards change, as react-query would tell. */
   dashboardListeners: new Set<() => void>(),
+  /** Whether the dashboards list is still loading, or failed. */
+  dashboardsPending: false,
+  dashboardsFailed: false,
   /** Every success toast, with its text and action. */
   toasts: [] as {
     text: string;
@@ -321,10 +324,16 @@ vi.mock("@gram/client/react-query/dashboards.js", async () => {
     useDashboards: () => {
       useDashboardChanges();
       return {
-        isPending: false,
-        isError: false,
-        data: { dashboards: testState.dashboards },
-        refetch: vi.fn(),
+        isPending: testState.dashboardsPending,
+        isError: testState.dashboardsFailed,
+        data:
+          testState.dashboardsPending || testState.dashboardsFailed
+            ? undefined
+            : { dashboards: testState.dashboards },
+        refetch: () => {
+          testState.dashboardsFailed = false;
+          return Promise.resolve();
+        },
       };
     },
     invalidateAllDashboards: () => Promise.resolve(),
@@ -722,6 +731,8 @@ describe("Explore", () => {
     testState.pageTouched = false;
     testState.pageApplied = [];
     testState.toasts = [];
+    testState.dashboardsPending = false;
+    testState.dashboardsFailed = false;
   });
 
   afterEach(() => {
@@ -2116,6 +2127,29 @@ describe("Explore", () => {
       act(() => toast?.action?.onClick());
       expect(param("tab")).toBe("dashboards");
       expect(param("dashboard")).toBe("d-1");
+    });
+
+    it("says while the dashboards load, and when they did not, rather than offering none", async () => {
+      const user = userEvent.setup();
+      testState.widgets = [savedWidget("w-1", "Sessions by user")];
+      testState.dashboardsFailed = true;
+      renderExplore("/explore?tab=widgets");
+
+      await user.click(
+        screen.getByRole("button", { name: "Actions for Sessions by user" }),
+      );
+      await user.click(
+        screen.getByRole("menuitem", { name: /Add to dashboard/ }),
+      );
+      const dialog = screen.getByRole("dialog");
+      expect(
+        within(dialog).getByText("The dashboards could not be fetched."),
+      ).toBeTruthy();
+      expect(within(dialog).queryByText(/yours to change yet/)).toBeNull();
+      await user.click(
+        within(dialog).getByRole("button", { name: "Try again" }),
+      );
+      expect(testState.dashboardsFailed).toBe(false);
     });
 
     it("makes a new dashboard for a widget when none is theirs to change", async () => {

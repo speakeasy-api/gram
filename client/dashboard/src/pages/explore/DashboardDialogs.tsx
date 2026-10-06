@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
+import { Skeleton } from "@/components/ui/Skeleton";
 import type { Dashboard } from "@gram/client/models/components/dashboard.js";
 import type { Widget } from "@gram/client/models/components/widget.js";
 import type { WidgetDashboard } from "@gram/client/models/components/widgetdashboard.js";
@@ -181,6 +182,9 @@ export function AddWidgetDialog({
 export function AddToDashboardDialog({
   widget,
   dashboards,
+  loading,
+  failed,
+  onRetry,
   open,
   pending,
   onCancel,
@@ -189,6 +193,11 @@ export function AddToDashboardDialog({
 }: {
   widget: { name: string; dashboards: WidgetDashboard[] };
   dashboards: Dashboard[];
+  /** The dashboards have not answered yet. */
+  loading: boolean;
+  /** The dashboards could not be fetched. */
+  failed: boolean;
+  onRetry: () => void;
   open: boolean;
   pending: boolean;
   onCancel: () => void;
@@ -212,7 +221,19 @@ export function AddToDashboardDialog({
             there too. Only dashboards you can change are offered.
           </Dialog.Description>
         </Dialog.Header>
-        {dashboards.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col gap-2" aria-busy="true">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : failed ? (
+          <p className="text-muted-foreground flex items-center justify-between gap-3 text-sm">
+            The dashboards could not be fetched.
+            <Button variant="secondary" size="sm" onClick={onRetry}>
+              Try again
+            </Button>
+          </p>
+        ) : dashboards.length === 0 ? (
           <p className="text-muted-foreground text-sm">
             None of this project's dashboards is yours to change yet. Make one,
             with this widget as its first card.
