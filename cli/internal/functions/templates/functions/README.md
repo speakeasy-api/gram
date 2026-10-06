@@ -31,10 +31,10 @@ hosted databases.
 
 ## Quick start
 
-To get started, install dependencies:
+To get started, install dependencies with your package manager:
 
 ```bash
-pnpm install
+npm install
 ```
 
 To build a zip file that can be deployed to Gram, run:

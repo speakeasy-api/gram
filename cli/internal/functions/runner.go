@@ -38,14 +38,18 @@ func NewRunner() Runner {
 	}
 }
 
-// Getenv returns the value of key in r.Env.
+// Getenv returns the value of key in r.Env. Names are case-insensitive on
+// Windows, where the environment holds Path rather than PATH.
 func (r Runner) Getenv(key string) string {
-	prefix := key + "="
 	value := ""
 	for _, kv := range r.Env {
-		if strings.HasPrefix(kv, prefix) {
+		name, v, ok := strings.Cut(kv, "=")
+		if !ok {
+			continue
+		}
+		if name == key || (runtime.GOOS == "windows" && strings.EqualFold(name, key)) {
 			// Later entries win, as they do for exec.Cmd.
-			value = kv[len(prefix):]
+			value = v
 		}
 	}
 	return value
@@ -65,7 +69,9 @@ func (r Runner) lookPath(name string) (string, error) {
 	}
 
 	for _, dir := range filepath.SplitList(r.Getenv("PATH")) {
-		if dir == "" {
+		// Skip empty and relative entries, which resolve against the project
+		// directory, as exec.LookPath refuses them with exec.ErrDot.
+		if !filepath.IsAbs(dir) {
 			continue
 		}
 		for _, ext := range exts {

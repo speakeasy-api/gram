@@ -476,3 +476,22 @@ func TestFunctionsInit_ExtraArgs(t *testing.T) {
 	_, err = runApp(t, "functions", "init", "a", "--nope")
 	require.ErrorContains(t, err, "flag provided but not defined: -nope")
 }
+
+func TestOptionalUint_ZeroIsUnset(t *testing.T) {
+	t.Parallel()
+
+	got := map[string]*uint{}
+	app := &cli.App{
+		Flags: []cli.Flag{&cli.UintFlag{Name: "scale"}, &cli.UintFlag{Name: "memory-mib"}, &cli.UintFlag{Name: "other"}},
+		Action: func(c *cli.Context) error {
+			for _, name := range []string{"scale", "memory-mib", "other"} {
+				got[name] = optionalUint(c, name)
+			}
+			return nil
+		},
+	}
+	require.NoError(t, app.RunContext(t.Context(), []string{"x", "--scale", "0", "--memory-mib", "512"}))
+	require.Nil(t, got["scale"])
+	require.Equal(t, new(uint(512)), got["memory-mib"])
+	require.Nil(t, got["other"])
+}

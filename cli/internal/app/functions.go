@@ -16,6 +16,7 @@ import (
 	"syscall"
 
 	"github.com/urfave/cli/v2"
+	"golang.org/x/term"
 
 	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/flags"
@@ -267,8 +268,8 @@ func optionalBool(c *cli.Context, name string) *bool {
 }
 
 func stdinIsTerminal() bool {
-	info, err := os.Stdin.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
+	// A character device check would also match /dev/null.
+	return term.IsTerminal(int(os.Stdin.Fd())) // #nosec G115 -- file descriptors fit in an int.
 }
 
 // prompter asks questions on a terminal. Every answer has a default that an
@@ -466,11 +467,14 @@ name without its scope.
 	}
 }
 
+// optionalUint returns the flag's value, or nil when it is unset or 0, which
+// stage function also treats as unset.
 func optionalUint(c *cli.Context, name string) *uint {
-	if !c.IsSet(name) {
+	v := c.Uint(name)
+	if v == 0 {
 		return nil
 	}
-	return new(c.Uint(name))
+	return &v
 }
 
 // functionsProject builds or resolves a functions project.

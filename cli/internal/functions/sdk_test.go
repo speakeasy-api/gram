@@ -202,6 +202,29 @@ func TestBuild_RealNode(t *testing.T) {
 		require.Equal(t, "fake", result.Project.Slug)
 	})
 
+	t.Run("build entry not exported", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		sdkDir := filepath.Join(dir, "node_modules", "@gram-ai", "functions")
+		writeFile(t, filepath.Join(sdkDir, "package.json"), `{"name":"@gram-ai/functions","type":"module","exports":{".":"./index.js"}}`)
+		writeFile(t, filepath.Join(sdkDir, "index.js"), "export {};\n")
+		_, err := runner.Build(t.Context(), ProjectOptions{Dir: dir, ConfigFile: "", Entrypoint: "", OutDir: ""})
+		require.ErrorIs(t, err, ErrSDKOutdated)
+	})
+
+	t.Run("dependency export error is not an outdated sdk", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		depDir := filepath.Join(dir, "node_modules", "some-dep")
+		writeFile(t, filepath.Join(depDir, "package.json"), `{"name":"some-dep","type":"module","exports":{".":"./index.js"}}`)
+		writeFile(t, filepath.Join(depDir, "index.js"), "export {};\n")
+		installSDK(t, dir, "import \"some-dep/missing\";\nexport async function build() { return {}; }\n")
+		_, err := runner.Build(t.Context(), ProjectOptions{Dir: dir, ConfigFile: "", Entrypoint: "", OutDir: ""})
+		require.Error(t, err)
+		require.NotErrorIs(t, err, ErrSDKOutdated)
+		require.ErrorContains(t, err, "@gram-ai/functions build failed")
+	})
+
 	t.Run("sdk throws", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
@@ -233,4 +256,26 @@ func TestVersionAtLeast(t *testing.T) {
 	for _, tc := range tests {
 		require.Equal(t, tc.want, versionAtLeast(tc.version, MinNodeVersion), tc.version)
 	}
+}
+
+func TestBuild_IgnoresRelativePathEntries(t *testing.T) {
+	t.Parallel()
+
+	bin := fakeNode(t, "v22.18.0", `echo '{"result":{}}' > "$SPEAKEASY_FUNCTIONS_RESULT"`+"\n")
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	rel, err := filepath.Rel(wd, bin)
+	require.NoError(t, err)
+
+	_, err = testRunner(rel, &bytes.Buffer{}).Build(t.Context(), ProjectOptions{Dir: t.TempDir(), ConfigFile: "", Entrypoint: "", OutDir: ""})
+	require.ErrorIs(t, err, ErrNodeNotFound)
+}
+
+func TestRunnerGetenv(t *testing.T) {
+	t.Parallel()
+
+	r := Runner{Env: []string{"A=1", "B=x=y", "A=2", "broken"}, Stdin: nil, Stdout: nil, Stderr: nil}
+	require.Equal(t, "2", r.Getenv("A"))
+	require.Equal(t, "x=y", r.Getenv("B"))
+	require.Empty(t, r.Getenv("C"))
 }

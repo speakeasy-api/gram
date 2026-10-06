@@ -51,7 +51,9 @@ try {
     done({ error: "missing" });
     process.exit(0);
   }
-  if (err?.code === "ERR_PACKAGE_PATH_NOT_EXPORTED") {
+  // Only this script's own import counts: Node names "[eval1]" as the
+  // importer, while a failing import inside the SDK names an SDK file.
+  if (err?.code === "ERR_PACKAGE_PATH_NOT_EXPORTED" && String(err.message).includes("[eval")) {
     done({ error: "outdated" });
     process.exit(0);
   }

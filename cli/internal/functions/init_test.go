@@ -210,7 +210,7 @@ func TestValidateProjectName(t *testing.T) {
 	for _, name := range []string{"tools", "my-tools", "my_tools", "@acme/tools", "a1"} {
 		require.NoError(t, ValidateProjectName(name), name)
 	}
-	for _, name := range []string{"", "Tools", "my tools", "@acme/", "a/b/c", "../x"} {
+	for _, name := range []string{"", "Tools", "my tools", "@acme/", "a/b/c", "../x", "acme/tools"} {
 		require.Error(t, ValidateProjectName(name), name)
 	}
 }
