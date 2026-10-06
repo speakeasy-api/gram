@@ -10470,6 +10470,88 @@ CREATE TABLE IF NOT EXISTS widgets (
 CREATE INDEX IF NOT EXISTS widgets_project_id_updated_at_idx
 ON widgets (project_id, updated_at DESC) WHERE deleted IS FALSE;
 
+-- Dashboards are a project's layouts of saved widgets. A dashboard owns its
+-- placements but not its widgets: a widget is linked onto any number of
+-- dashboards, and editing it changes it everywhere. Built-in pages such as
+-- MCP & Tools are dashboards too, but their layouts ship in code and are
+-- never rows here; duplicating one copies its cards into saved widgets and
+-- a row here.
+-- filters is the date range and filter values the dashboard opens on, in
+-- the shape the dashboards service reads; changes in the bar are a
+-- personal view until someone saves them here.
+CREATE TABLE IF NOT EXISTS dashboards (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  created_by_user_id TEXT,
+
+  -- Name and description lengths are checked by the dashboards service, so
+  -- the limits can move without a migration.
+  name TEXT NOT NULL,
+  description TEXT,
+  filters jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT dashboards_pkey PRIMARY KEY (id),
+  CONSTRAINT dashboards_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS dashboards_project_id_updated_at_idx
+ON dashboards (project_id, updated_at DESC) WHERE deleted IS FALSE;
+
+-- The target of a card's tenant-pinned link to its dashboard.
+CREATE UNIQUE INDEX IF NOT EXISTS dashboards_project_id_id_key
+ON dashboards (project_id, id);
+
+-- The target of a card's tenant-pinned link to its widget.
+CREATE UNIQUE INDEX IF NOT EXISTS widgets_project_id_id_key
+ON widgets (project_id, id);
+
+-- A placement is one card on a dashboard: the widget it links to and where
+-- it sits on the dashboard's 12-column grid. Placements are structural
+-- rather than content, so they are replaced wholesale as a layout is edited
+-- and go with their dashboard or widget rather than being soft deleted. The
+-- same widget may be placed on a dashboard more than once.
+CREATE TABLE IF NOT EXISTS dashboard_widgets (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  dashboard_id uuid NOT NULL,
+  widget_id uuid NOT NULL,
+
+  -- Grid position and size, in columns and rows. The dashboards service
+  -- keeps them on the grid and above each chart type's minimum.
+  x integer NOT NULL,
+  y integer NOT NULL,
+  w integer NOT NULL,
+  h integer NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT dashboard_widgets_pkey PRIMARY KEY (id),
+  -- The columns are NOT NULL, so a physical delete of a project, dashboard
+  -- or widget has to remove its cards first; the services do. The dashboard
+  -- and widget links carry the project, so a card cannot point across one.
+  CONSTRAINT dashboard_widgets_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL,
+  CONSTRAINT dashboard_widgets_project_id_dashboard_id_fkey FOREIGN KEY (project_id, dashboard_id) REFERENCES dashboards (project_id, id) ON DELETE SET NULL,
+  CONSTRAINT dashboard_widgets_project_id_widget_id_fkey FOREIGN KEY (project_id, widget_id) REFERENCES widgets (project_id, id) ON DELETE SET NULL
+);
+
+-- Loading a dashboard's cards, and asking which dashboards a widget is on.
+CREATE INDEX IF NOT EXISTS dashboard_widgets_dashboard_id_idx
+ON dashboard_widgets (dashboard_id);
+CREATE INDEX IF NOT EXISTS dashboard_widgets_widget_id_idx
+ON dashboard_widgets (widget_id);
+
+-- The widgets list asks which dashboards each of a project's widgets is on.
+CREATE INDEX IF NOT EXISTS dashboard_widgets_project_id_widget_id_idx
+ON dashboard_widgets (project_id, widget_id);
+
 -- Observed conversation participants are independent of message ownership and
 -- billing attribution. Directory resolution is a snapshot, not an auth grant.
 CREATE TABLE IF NOT EXISTS chat_message_participants (
