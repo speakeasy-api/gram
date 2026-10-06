@@ -30,6 +30,15 @@ func (q *Queries) AcquireChatPromptCorrelationLock(ctx context.Context, arg Acqu
 	return err
 }
 
+const acquireToolSummaryLock = `-- name: AcquireToolSummaryLock :exec
+SELECT pg_advisory_lock($1::bigint)
+`
+
+func (q *Queries) AcquireToolSummaryLock(ctx context.Context, lockKey int64) error {
+	_, err := q.db.Exec(ctx, acquireToolSummaryLock, lockKey)
+	return err
+}
+
 const addUserFeedbackChatResolution = `-- name: AddUserFeedbackChatResolution :exec
 UPDATE chat_user_feedback
 SET chat_resolution_id = $1
@@ -3962,6 +3971,15 @@ func (q *Queries) RecordSlackMessageParticipant(ctx context.Context, arg RecordS
 		arg.TeamID,
 		arg.MessageID,
 	)
+	return err
+}
+
+const releaseToolSummaryLock = `-- name: ReleaseToolSummaryLock :exec
+SELECT pg_advisory_unlock($1::bigint)
+`
+
+func (q *Queries) ReleaseToolSummaryLock(ctx context.Context, lockKey int64) error {
+	_, err := q.db.Exec(ctx, releaseToolSummaryLock, lockKey)
 	return err
 }
 

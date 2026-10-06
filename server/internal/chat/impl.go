@@ -2517,13 +2517,13 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		return nil, oops.E(oops.CodeUnexpected, err, "acquire tool summary lock connection").LogError(ctx, s.logger)
 	}
 	defer conn.Release()
-	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock($1)", lockKey); err != nil {
+	if err := repo.New(conn).AcquireToolSummaryLock(ctx, lockKey); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "acquire tool summary lock").LogError(ctx, s.logger)
 	}
 	defer func() {
 		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		if _, err := conn.Exec(unlockCtx, "SELECT pg_advisory_unlock($1)", lockKey); err != nil {
+		if err := repo.New(conn).ReleaseToolSummaryLock(unlockCtx, lockKey); err != nil {
 			s.logger.ErrorContext(unlockCtx, "failed to release tool summary lock", attr.SlogError(err))
 		}
 	}()
