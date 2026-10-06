@@ -1,8 +1,17 @@
 import { Button } from "@/components/ui/Button";
 import { MoreActions } from "@/components/ui/MoreActions";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import type { Widget } from "@gram/client/models/components/widget.js";
 import { useId, useState, type JSX } from "react";
+import { AddToDashboard } from "./AddToDashboard";
 import type { ExploreSpec } from "./exploreModel";
+import { useAddToDashboard } from "./useAddToDashboard";
 import { useCanEditWidget } from "./useCanEditWidget";
 import { useWidgetMutations } from "./useWidgetMutations";
 import {
@@ -21,6 +30,9 @@ import {
 
 type Naming = "create" | "copy" | "rename";
 
+/** The Advanced pick's value for placing the new widget nowhere. */
+const NO_DASHBOARD = "__none__";
+
 const RANGED_REASON = "Pick a window to save: a widget keeps a relative one";
 
 /**
@@ -38,6 +50,7 @@ export function WidgetBar({
   onOpen,
   confirmLeave,
   onWidgetIdChange,
+  onOpenDashboard,
 }: {
   spec: ExploreSpec;
   /** The widget the builder has open, if any. */
@@ -52,6 +65,8 @@ export function WidgetBar({
   confirmLeave: (proceed: () => void) => void;
   /** The builder now has this widget open, or none. */
   onWidgetIdChange: (widgetId: string | null) => void;
+  /** Open a dashboard, once a widget is placed on it. */
+  onOpenDashboard: (dashboardId: string) => void;
 }): JSX.Element {
   const open = widgetId
     ? widgets.find((widget) => widget.id === widgetId)
@@ -66,6 +81,14 @@ export function WidgetBar({
 
   const [naming, setNaming] = useState<Naming | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [placing, setPlacing] = useState(false);
+  // Saving as new can put the widget straight onto a dashboard.
+  const placement = useAddToDashboard(onOpenDashboard);
+  const [dashboardId, setDashboardId] = useState<string | null>(null);
+  const openNaming = (kind: Naming) => {
+    setDashboardId(null);
+    setNaming(kind);
+  };
 
   const draft = (details: Details) => ({
     ...details,
@@ -88,9 +111,11 @@ export function WidgetBar({
       );
       return;
     }
+    const target = placement.dashboards.find((d) => d.id === dashboardId);
     mutations.create(draft(details), (created) => {
       setNaming(null);
       onWidgetIdChange(created.id);
+      if (target) placement.add(target, created.id);
     });
   };
 
@@ -158,7 +183,7 @@ export function WidgetBar({
                     {
                       label: "Rename",
                       icon: "pencil" as const,
-                      onClick: () => setNaming("rename"),
+                      onClick: () => openNaming("rename"),
                     },
                   ]
                 : []),
@@ -169,7 +194,13 @@ export function WidgetBar({
                   ? RANGED_REASON
                   : "Keeps the builder's unsaved edits",
                 disabled: ranged,
-                onClick: () => setNaming("copy"),
+                onClick: () => openNaming("copy"),
+              },
+              {
+                label: "Add to dashboard",
+                icon: "layout-dashboard",
+                description: "Places the widget as it was saved",
+                onClick: () => setPlacing(true),
               },
               {
                 label: "Duplicate",
@@ -202,7 +233,7 @@ export function WidgetBar({
             icon="save"
             disabled={resolving || ranged}
             aria-describedby={ranged ? rangedHintId : undefined}
-            onClick={() => setNaming("create")}
+            onClick={() => openNaming("create")}
           >
             Save widget
           </Button>
@@ -227,9 +258,39 @@ export function WidgetBar({
               ? { name: copyName(open.name), description: open.description }
               : { name: "" }
         }
-        pending={mutations.pending}
+        pending={mutations.pending || placement.pending}
+        advanced={
+          naming !== "rename" && placement.dashboards.length > 0 ? (
+            <label className="flex flex-col gap-1.5 text-sm">
+              Add to dashboard
+              <Select
+                value={dashboardId ?? NO_DASHBOARD}
+                onValueChange={(next) =>
+                  setDashboardId(next === NO_DASHBOARD ? null : next)
+                }
+              >
+                <SelectTrigger className="h-10 w-full" aria-label="Dashboard">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_DASHBOARD}>No dashboard</SelectItem>
+                  {placement.dashboards.map((dashboard) => (
+                    <SelectItem key={dashboard.id} value={dashboard.id}>
+                      {dashboard.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+          ) : undefined
+        }
         onCancel={() => setNaming(null)}
         onSubmit={submit}
+      />
+      <AddToDashboard
+        widget={placing && open ? open : null}
+        onClose={() => setPlacing(false)}
+        onOpenDashboard={onOpenDashboard}
       />
       {open ? (
         <DeleteWidgetDialog

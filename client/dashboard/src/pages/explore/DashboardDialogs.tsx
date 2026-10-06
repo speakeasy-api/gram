@@ -2,7 +2,9 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
+import type { Dashboard } from "@gram/client/models/components/dashboard.js";
 import type { Widget } from "@gram/client/models/components/widget.js";
+import type { WidgetDashboard } from "@gram/client/models/components/widgetdashboard.js";
 import { useState, type JSX } from "react";
 import {
   DetailsDialog,
@@ -166,6 +168,100 @@ export function AddWidgetDialog({
           autoFocus
         />
         {list}
+      </Dialog.Content>
+    </Dialog>
+  );
+}
+
+/**
+ * Picks a dashboard to place a widget on, among those the viewer may
+ * change, or starts a new one with the widget on it. A widget already on a
+ * dashboard may be placed there again, as a second card.
+ */
+export function AddToDashboardDialog({
+  widget,
+  dashboards,
+  open,
+  pending,
+  onCancel,
+  onAdd,
+  onNew,
+}: {
+  widget: { name: string; dashboards: WidgetDashboard[] };
+  dashboards: Dashboard[];
+  open: boolean;
+  pending: boolean;
+  onCancel: () => void;
+  onAdd: (dashboard: Dashboard) => void;
+  /** Make a new dashboard for it instead. */
+  onNew: () => void;
+}): JSX.Element {
+  const on = new Set(widget.dashboards.map((dashboard) => dashboard.id));
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && !pending) onCancel();
+      }}
+    >
+      <Dialog.Content closeable={!pending}>
+        <Dialog.Header>
+          <Dialog.Title>Add “{widget.name}” to a dashboard</Dialog.Title>
+          <Dialog.Description>
+            The widget is linked, not copied: editing it later changes its card
+            there too. Only dashboards you can change are offered.
+          </Dialog.Description>
+        </Dialog.Header>
+        {dashboards.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            None of this project's dashboards is yours to change yet. Make one,
+            with this widget as its first card.
+          </p>
+        ) : (
+          <ul className="border-border max-h-80 divide-y overflow-y-auto border">
+            {dashboards.map((dashboard) => (
+              <li key={dashboard.id}>
+                <button
+                  type="button"
+                  className="hover:bg-muted flex w-full items-center justify-between gap-3 px-3 py-2 text-left disabled:opacity-50"
+                  disabled={pending}
+                  onClick={() => onAdd(dashboard)}
+                >
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate text-sm font-medium">
+                      {dashboard.name}
+                    </span>
+                    <span className="text-muted-foreground truncate text-xs">
+                      {dashboard.widgets.length}{" "}
+                      {dashboard.widgets.length === 1 ? "card" : "cards"}
+                      {on.has(dashboard.id) ? " · already on it" : ""}
+                    </span>
+                  </span>
+                  <Icon
+                    name="plus"
+                    className="text-muted-foreground size-4 shrink-0"
+                    aria-hidden
+                  />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <Dialog.Footer>
+          <Button
+            type="button"
+            variant="tertiary"
+            icon="plus"
+            className="mr-auto"
+            disabled={pending}
+            onClick={onNew}
+          >
+            New dashboard
+          </Button>
+          <Button variant="tertiary" onClick={onCancel} disabled={pending}>
+            Cancel
+          </Button>
+        </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
   );

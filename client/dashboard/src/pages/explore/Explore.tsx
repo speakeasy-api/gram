@@ -270,6 +270,7 @@ function ExploreWorkbench({
             if (id === url.widgetId) url.setWidgetId(null);
           }}
           onExplore={() => tab.go("explore")}
+          onOpenDashboard={(id) => tab.go("dashboards", id)}
           onRetry={() => void list.refetch()}
         />
       ) : null}
@@ -315,6 +316,7 @@ function ExploreWorkbench({
           onOpen={open}
           confirmLeave={confirmLeave}
           onWidgetIdChange={url.setWidgetId}
+          onOpenDashboard={(id) => tab.go("dashboards", id)}
           onChange={url.edit}
           onRun={run}
         />
@@ -346,6 +348,7 @@ function ExploreTab({
   onOpen,
   confirmLeave,
   onWidgetIdChange,
+  onOpenDashboard,
   onChange,
   onRun,
 }: {
@@ -361,6 +364,7 @@ function ExploreTab({
   onOpen: (widget: Widget) => void;
   confirmLeave: (proceed: () => void) => void;
   onWidgetIdChange: (widgetId: string | null) => void;
+  onOpenDashboard: (dashboardId: string) => void;
   onChange: (spec: ExploreSpec) => void;
   onRun: () => void;
 }): JSX.Element {
@@ -392,6 +396,7 @@ function ExploreTab({
             onOpen={onOpen}
             confirmLeave={confirmLeave}
             onWidgetIdChange={onWidgetIdChange}
+            onOpenDashboard={onOpenDashboard}
           />
         }
       />
