@@ -9,7 +9,7 @@ import type { Dashboard } from "@gram/client/models/components/dashboard.js";
 import type { Widget } from "@gram/client/models/components/widget.js";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
 import { useDashboard } from "@gram/client/react-query/dashboard.js";
-import { useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { useEffect, useMemo, useState, type JSX } from "react";
 import { Link } from "react-router";
 import {
   AddWidgetDialog,
@@ -162,13 +162,15 @@ function DashboardView({
     optionsDatasets: datasets,
   });
   // A dashboard opens on its saved filters, unless the link already says
-  // what to show. Once per dashboard, after the bar knows its fields.
-  const seeded = useRef<string | null>(null);
+  // what to show. Once per dashboard, after the bar knows its fields; until
+  // then the bar is not compared with what is saved, or the defaults it
+  // shows meanwhile could be offered as a save.
+  const [seededFor, setSeededFor] = useState<string | null>(null);
   const { touched, apply } = bar;
   useEffect(() => {
-    if (seeded.current === dashboard.id || !catalog || !widgetsLoaded) return;
-    seeded.current = dashboard.id;
+    if (seededFor === dashboard.id || !catalog || !widgetsLoaded) return;
     if (!touched) apply(barValuesFromSaved(dashboard.filters, fields));
+    setSeededFor(dashboard.id);
   }, [
     dashboard.id,
     dashboard.filters,
@@ -177,10 +179,13 @@ function DashboardView({
     widgetsLoaded,
     touched,
     apply,
+    seededFor,
   ]);
   // What the bar holds is the viewer's own until it is saved for everyone.
   const current = savedFromContext(bar.context, fields);
-  const changed = !sameFilters(current, dashboard.filters);
+  const changed =
+    seededFor === dashboard.id &&
+    !sameFilters(current, dashboard.filters, fields);
 
   const actions: Action[] = [
     ...(editable

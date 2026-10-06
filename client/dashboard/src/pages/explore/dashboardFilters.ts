@@ -65,13 +65,18 @@ export function savedFromContext(
 }
 
 /**
- * Whether two saved filters open on the same thing. No saved range means
- * the default window, so a bar on the default has nothing to save.
+ * Whether two saved filters open on the same thing, over the fields the bar
+ * offers: a value saved for a field no card can be filtered by any more is
+ * neither shown nor saved, so it does not count. No saved range means the
+ * default window, so a bar on the default has nothing to save.
  */
-export function sameFilters(a: DashboardFilters, b: DashboardFilters): boolean {
+export function sameFilters(
+  a: DashboardFilters,
+  b: DashboardFilters,
+  fields: readonly PageFilterField[],
+): boolean {
   if (!sameRange(a, b)) return false;
-  const fields = new Set([...Object.keys(a.values), ...Object.keys(b.values)]);
-  for (const field of fields) {
+  for (const { field } of fields) {
     const x = [...(a.values[field] ?? [])].sort();
     const y = [...(b.values[field] ?? [])].sort();
     if (x.length !== y.length || x.some((value, i) => value !== y[i])) {

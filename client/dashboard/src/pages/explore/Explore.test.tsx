@@ -1936,6 +1936,28 @@ describe("Explore", () => {
       ).toBeNull();
     });
 
+    it("offers nothing to save until the bar has opened on the saved filters", () => {
+      testState.listPending = true;
+      testState.dashboards = [
+        dashboard("d-1", "Agent activity", {
+          filters: { range: { preset: "30d" }, values: {} },
+          widgets: [{ id: "p-1", widgetId: "w-1", x: 0, y: 0, w: 6, h: 3 }],
+        }),
+      ];
+      // The bar still shows its defaults, which differ from what is saved.
+      testState.pageContext = {
+        window: { preset: "7d", customRange: null, customLabel: null },
+        filters: {},
+      };
+      renderExplore("/explore?tab=dashboards&dashboard=d-1");
+
+      expect(testState.pageApplied).toEqual([]);
+      expect(screen.queryByRole("button", { name: "Save filters" })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Reset filters" }),
+      ).toBeNull();
+    });
+
     it("leaves a link that says what to show alone", () => {
       testState.widgets = [savedWidget("w-1", "Sessions by user")];
       testState.dashboards = [

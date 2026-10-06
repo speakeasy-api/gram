@@ -85,10 +85,18 @@ describe("savedFromContext", () => {
 describe("sameFilters", () => {
   it("treats no saved range as seven days", () => {
     expect(
-      sameFilters({ values: {} }, { range: { preset: "7d" }, values: {} }),
+      sameFilters(
+        { values: {} },
+        { range: { preset: "7d" }, values: {} },
+        fields,
+      ),
     ).toBe(true);
     expect(
-      sameFilters({ values: {} }, { range: { preset: "30d" }, values: {} }),
+      sameFilters(
+        { values: {} },
+        { range: { preset: "30d" }, values: {} },
+        fields,
+      ),
     ).toBe(false);
   });
 
@@ -100,16 +108,28 @@ describe("sameFilters", () => {
           range: { from: new Date(from), to: new Date(to) },
           values: { user: ["a", "b"] },
         },
+        fields,
       ),
     ).toBe(true);
     expect(
       sameFilters(
         { range: { from, to }, values: {} },
         { range: { preset: "7d" }, values: {} },
+        fields,
       ),
     ).toBe(false);
     expect(
-      sameFilters({ values: { user: ["a"] } }, { values: { user: [] } }),
+      sameFilters(
+        { values: { user: ["a"] } },
+        { values: { user: [] } },
+        fields,
+      ),
     ).toBe(false);
+  });
+
+  it("ignores a value saved for a field the bar no longer offers", () => {
+    expect(
+      sameFilters({ values: {} }, { values: { status: ["error"] } }, fields),
+    ).toBe(true);
   });
 });
