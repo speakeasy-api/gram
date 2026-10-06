@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/businessmemory/repo"
 )
 
 const (
@@ -15,7 +16,7 @@ const (
 )
 
 func enableFilteredVectorScan(ctx context.Context, tx pgx.Tx) error {
-	if _, err := tx.Exec(ctx, "SET LOCAL hnsw.iterative_scan = strict_order"); err != nil {
+	if err := repo.New(tx).EnableFilteredVectorScan(ctx); err != nil {
 		return fmt.Errorf("enable filtered vector scan: %w", err)
 	}
 	return nil

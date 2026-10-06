@@ -57,6 +57,15 @@ func (q *Queries) CountBusinessMemories(ctx context.Context, arg CountBusinessMe
 	return column_1, err
 }
 
+const enableFilteredVectorScan = `-- name: EnableFilteredVectorScan :exec
+SET LOCAL hnsw.iterative_scan = strict_order
+`
+
+func (q *Queries) EnableFilteredVectorScan(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, enableFilteredVectorScan)
+	return err
+}
+
 const getNearestActiveBusinessMemory = `-- name: GetNearestActiveBusinessMemory :one
 SELECT
   id,
