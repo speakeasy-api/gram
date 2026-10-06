@@ -1182,15 +1182,7 @@ func writeAssistantToolsets(
 	}
 	// A hosted MCP wrapper mirrors the toolset's enabled state. Assistant
 	// attachment can enable the toolset outside the toolset update API.
-	if _, err := tx.Exec(ctx, `UPDATE mcp_servers AS server
-		SET visibility = CASE WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END,
-			updated_at = clock_timestamp()
-		FROM toolsets AS toolset
-		WHERE server.id = toolset.id AND server.toolset_id = toolset.id
-			AND server.project_id = $2 AND toolset.project_id = $2
-			AND toolset.id = ANY($1::uuid[]) AND toolset.mcp_enabled IS TRUE
-			AND toolset.deleted IS FALSE AND server.deleted IS FALSE
-			AND server.visibility = 'disabled'`, toolsetIDs, projectID); err != nil {
+	if err := queries.EnableHostedMCPForToolsets(ctx, assistantrepo.EnableHostedMCPForToolsetsParams{ToolsetIds: toolsetIDs, ProjectID: projectID}); err != nil {
 		return fmt.Errorf("enable hosted mcp wrappers for assistant toolsets: %w", err)
 	}
 	return nil
