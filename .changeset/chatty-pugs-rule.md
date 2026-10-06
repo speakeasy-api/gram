@@ -2,4 +2,4 @@
 "dashboard": patch
 ---
 
-feat: link MCP overview tools to filtered logs
+Link MCP overview tools to filtered logs
