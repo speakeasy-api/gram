@@ -93,7 +93,7 @@ func RejectWritesTo(t *testing.T, ctx context.Context, conn *pgxpool.Pool, table
 	stmt := "ALTER TABLE " + pgx.Identifier{table}.Sanitize() +
 		" ADD CONSTRAINT " + name + " CHECK (false) NOT VALID"
 
-	_, err := conn.Exec(ctx, stmt)
+	_, err := conn.Exec(ctx, stmt) //nolint:forbidigo // GG015: fault injection installs DDL on a caller-selected table; SQLc cannot parameterize table identifiers or trigger definitions.
 	require.NoError(t, err)
 }
 

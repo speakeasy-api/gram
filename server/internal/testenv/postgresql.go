@@ -72,7 +72,7 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 	}
 	defer o11y.NoLogDefer(func() error { return conn.Close(ctx) })
 
-	if _, err := conn.Exec(ctx, "ALTER DATABASE gotestdb WITH is_template = true;"); err != nil {
+	if _, err := conn.Exec(ctx, "ALTER DATABASE gotestdb WITH is_template = true;"); err != nil { //nolint:forbidigo // GG015: provisions the test database template before application queries can run; this is database lifecycle DDL.
 		return nil, nil, fmt.Errorf("mark template database: %w", err)
 	}
 
@@ -109,7 +109,7 @@ func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBClone
 		defer o11y.NoLogDefer(func() error { return conn.Close(ctx) })
 
 		cloneName := fmt.Sprintf("%s_%s", name, nextPostgresCloneSuffix())
-		if _, err := conn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s WITH TEMPLATE gotestdb;", cloneName)); err != nil {
+		if _, err := conn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s WITH TEMPLATE gotestdb;", cloneName)); err != nil { //nolint:forbidigo // GG015: creates a uniquely named test database; SQLc cannot parameterize database identifiers.
 			return nil, fmt.Errorf("create test database: %w", err)
 		}
 
@@ -131,7 +131,7 @@ func newPostgresCloneFunc(container *postgres.PostgresContainer) PostgresDBClone
 			}
 			defer o11y.NoLogDefer(func() error { return conn.Close(timeoutCtx) })
 
-			if _, err := conn.Exec(timeoutCtx, fmt.Sprintf("DROP DATABASE %s;", cloneName)); err != nil {
+			if _, err := conn.Exec(timeoutCtx, fmt.Sprintf("DROP DATABASE %s;", cloneName)); err != nil { //nolint:forbidigo // GG015: removes a uniquely named test database; SQLc cannot parameterize database identifiers.
 				panic(fmt.Errorf("drop test database: exec: %w", err))
 			}
 		})
