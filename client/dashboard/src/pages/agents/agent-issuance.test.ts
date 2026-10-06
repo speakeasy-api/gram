@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { agentIssuanceBlocked } from "./AgentAPIKeys";
+import { agentIssuanceBlocked } from "./agent-issuance";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 
 /** Only the fields the rule reads. */

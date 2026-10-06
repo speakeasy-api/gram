@@ -210,10 +210,7 @@ vi.mock("@gram/client/react-query/agentsRevoke.js", () => ({
 vi.mock("@gram/client/react-query/agentsSuspend.js", () => ({
   useAgentsSuspendMutation: () => ({ mutate: vi.fn() }),
 }));
-vi.mock("./AgentAPIKeys", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./AgentAPIKeys")>()),
-  AgentAPIKeys: () => <div>API keys</div>,
-}));
+vi.mock("./AgentAPIKeys", () => ({ AgentAPIKeys: () => <div>API keys</div> }));
 vi.mock("./ManagedAgentSessions", () => ({
   ManagedAgentSessions: () => <div>Sessions</div>,
 }));

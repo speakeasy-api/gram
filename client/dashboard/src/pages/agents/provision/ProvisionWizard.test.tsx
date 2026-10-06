@@ -87,7 +87,11 @@ function setup() {
   const onDone = vi.fn();
   const view = render(
     <QueryClientProvider client={client}>
-      <ProvisionWizard onDone={onDone} />
+      <ProvisionWizard
+        onDone={(id) => {
+          onDone(id);
+        }}
+      />
     </QueryClientProvider>,
   );
   return { ...view, onDone };

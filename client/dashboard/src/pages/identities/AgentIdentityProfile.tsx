@@ -72,11 +72,11 @@ export function AgentIdentityProfile({
           <AgentAPIKeys
             agent={agent}
             variant="bare"
-            onCreate={() =>
-              navigate(
+            onCreate={() => {
+              void navigate(
                 `${registeredAgentHref(routes.agents.href(), "", agent.id)}&credential=new`,
-              )
-            }
+              );
+            }}
           />
         </IdentitySection>
       );
