@@ -202,7 +202,7 @@ func Status(ctx context.Context, db *pgxpool.Pool, orgID string) (State, error) 
 func applyTx(ctx context.Context, tx pgx.Tx, orgID string, profile Profile, anchor time.Time, before State) error {
 	// Deliberately outside public: no production migration, application table,
 	// role grant, or demo seed change. This local marker also scopes stub behavior.
-	if _, err := tx.Exec(ctx, localSchema); err != nil {
+	if _, err := tx.Exec(ctx, localSchema); err != nil { //nolint:forbidigo // GG015: bootstraps the embedded local-only DDL schema; SQLc query methods cannot install a multi-statement schema.
 		return fmt.Errorf("create local account schema: %w", err)
 	}
 	var err error
