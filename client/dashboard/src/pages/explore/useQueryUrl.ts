@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocation, useSearchParams } from "react-router";
 import { specProblem, type ExploreSpec } from "./exploreModel";
 import {
+  DASHBOARD_PARAM,
   encodeSpec,
   parseSpec,
   QUERY_PARAM,
@@ -106,7 +107,10 @@ export function useQueryUrl(
         if (next) out.set(QUERY_PARAM, encodeSpec(next));
         if (id === null) out.delete(WIDGET_PARAM);
         else out.set(WIDGET_PARAM, id);
+        // Opening a question lands on the Explore tab, leaving whatever the
+        // other tabs had open.
         out.delete(TAB_PARAM);
+        out.delete(DASHBOARD_PARAM);
         return out;
       });
     },

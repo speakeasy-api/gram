@@ -9,34 +9,59 @@ import { MAX_NAME_LENGTH } from "./widgetNames";
 const MAX_DESCRIPTION_LENGTH = 2000;
 
 /** What the details dialog submits. */
-export interface WidgetDetails {
+export interface Details {
   name: string;
   /** Omitted when left blank. */
   description?: string | undefined;
 }
+
+/** What a details dialog names, so its copy fits the thing being named. */
+export interface DetailsSubject {
+  /** "Widget" or "Dashboard": how the fields are labelled. */
+  noun: string;
+  /** Under the title: who sees the thing, and what its name is for. */
+  blurb: string;
+  /** A name to suggest, as the name field's placeholder. */
+  example: string;
+}
+
+interface DetailsDialogProps {
+  open: boolean;
+  title: string;
+  confirm: string;
+  initial: Details;
+  pending: boolean;
+  onCancel: () => void;
+  onSubmit: (details: Details) => void;
+}
+
+const WIDGET_SUBJECT: DetailsSubject = {
+  noun: "Widget",
+  blurb:
+    "Widgets are shared with everyone in this project. Names need not be unique; each shows who saved it.",
+  example: "Cost by model",
+};
 
 /**
  * Names a widget and says what it is for: used to save one, to save the
  * builder as a new one, and to rename one. Remount it per opening (key it) so
  * the fields start from the right values.
  */
-export function WidgetDetailsDialog({
+export function WidgetDetailsDialog(props: DetailsDialogProps): JSX.Element {
+  return <DetailsDialog {...props} subject={WIDGET_SUBJECT} />;
+}
+
+/** Names something saved to the project, and says what it is for. */
+export function DetailsDialog({
   open,
   title,
   confirm,
+  subject,
   initial,
   pending,
   onCancel,
   onSubmit,
-}: {
-  open: boolean;
-  title: string;
-  confirm: string;
-  initial: WidgetDetails;
-  pending: boolean;
-  onCancel: () => void;
-  onSubmit: (details: WidgetDetails) => void;
-}): JSX.Element {
+}: DetailsDialogProps & { subject: DetailsSubject }): JSX.Element {
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description ?? "");
   const trimmed = name.trim();
@@ -57,17 +82,14 @@ export function WidgetDetailsDialog({
         <form onSubmit={submit} className="flex flex-col gap-4">
           <Dialog.Header>
             <Dialog.Title>{title}</Dialog.Title>
-            <Dialog.Description>
-              Widgets are shared with everyone in this project. Names need not
-              be unique; each shows who saved it.
-            </Dialog.Description>
+            <Dialog.Description>{subject.blurb}</Dialog.Description>
           </Dialog.Header>
           <Input
             value={name}
             onChange={setName}
             maxLength={MAX_NAME_LENGTH}
-            placeholder="Cost by model"
-            aria-label="Widget name"
+            placeholder={subject.example}
+            aria-label={`${subject.noun} name`}
             autoFocus
           />
           <TextArea
@@ -79,7 +101,7 @@ export function WidgetDetailsDialog({
               )
             }
             placeholder="What it is for (optional)"
-            aria-label="Widget description"
+            aria-label={`${subject.noun} description`}
             rows={2}
           />
           <Dialog.Footer>

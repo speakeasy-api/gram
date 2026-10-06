@@ -36,6 +36,8 @@ const testState = vi.hoisted(() => ({
   widgets: [] as unknown[],
   /** Whether the widget list is still loading. */
   listPending: false,
+  /** Whether the widget list failed to load. */
+  listFailed: false,
   /** Every widget write, in call order. */
   writes: [] as { kind: string; request: Record<string, unknown> }[],
   /** Whether the viewer holds project:write on the project. */
@@ -44,6 +46,10 @@ const testState = vi.hoisted(() => ({
   pageContext: {} as Record<string, unknown>,
   /** What the Widgets tab last asked of the cards' filter bar. */
   pageFilterConfig: undefined as Record<string, unknown> | undefined,
+  /** The project's dashboards, as the list endpoint returns them. */
+  dashboards: [] as Record<string, unknown>[],
+  /** Every dashboard write, in call order. */
+  dashboardWrites: [] as { kind: string; request: Record<string, unknown> }[],
 }));
 
 type Write = "create" | "update" | "duplicate" | "delete";
@@ -113,9 +119,15 @@ vi.mock("@gram/client/react-query/widgets.js", () => ({
   useWidgets: () => ({
     isPending: testState.listPending,
     isFetching: testState.listPending,
-    isError: false,
-    data: testState.listPending ? undefined : { widgets: testState.widgets },
-    refetch: vi.fn(),
+    isError: testState.listFailed,
+    data:
+      testState.listPending || testState.listFailed
+        ? undefined
+        : { widgets: testState.widgets },
+    refetch: () => {
+      testState.listFailed = false;
+      return Promise.resolve();
+    },
   }),
   invalidateAllWidgets: () => Promise.resolve(),
 }));
@@ -134,6 +146,230 @@ vi.mock("@gram/client/react-query/duplicateWidget.js", () => ({
 vi.mock("@gram/client/react-query/deleteWidget.js", () => ({
   useDeleteWidgetMutation: mockWrite("delete"),
 }));
+
+type DashboardWrite =
+  | "create"
+  | "update"
+  | "saveLayout"
+  | "addWidget"
+  | "removeWidget"
+  | "duplicate"
+  | "delete";
+
+// Each dashboard write succeeds at once and is applied to the list, as the
+// refetch after it would show.
+function applyDashboardWrite(
+  kind: DashboardWrite,
+  request: Record<string, unknown>,
+): unknown {
+  testState.dashboardWrites.push({ kind, request });
+  const now = new Date();
+  const find = (id: unknown) =>
+    testState.dashboards.find((dashboard) => dashboard.id === id)!;
+  const put = (next: Record<string, unknown>) => {
+    testState.dashboards = testState.dashboards.map((dashboard) =>
+      dashboard.id === next.id ? next : dashboard,
+    );
+    return next;
+  };
+  const add = (dashboard: Record<string, unknown>) => {
+    testState.dashboards = [dashboard, ...testState.dashboards];
+    return dashboard;
+  };
+  const placements = (dashboard: Record<string, unknown>) =>
+    dashboard.widgets as Record<string, unknown>[];
+  switch (kind) {
+    case "create":
+      return add({
+        ...(request.createDashboardRequestBody as Record<string, unknown>),
+        id: `dashboard-${testState.dashboardWrites.length}`,
+        projectId: "project",
+        organizationId: "org",
+        createdByUserId: "member-1",
+        filters: { values: {} },
+        widgets: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+    case "update": {
+      const body = request.updateDashboardRequestBody as { id: string };
+      return put({ ...find(body.id), ...body, updatedAt: now });
+    }
+    case "saveLayout": {
+      const body = request.saveDashboardLayoutRequestBody as {
+        id: string;
+        placements: Record<string, unknown>[];
+      };
+      return put({
+        ...find(body.id),
+        widgets: body.placements.map((placement, index) => ({
+          id: placement.id ?? `placement-${index}`,
+          ...placement,
+        })),
+        updatedAt: now,
+      });
+    }
+    case "addWidget": {
+      const body = request.addDashboardWidgetRequestBody as {
+        id: string;
+        widgetId: string;
+      };
+      const dashboard = find(body.id);
+      const cards = placements(dashboard);
+      return put({
+        ...dashboard,
+        widgets: [
+          ...cards,
+          {
+            id: `placement-${cards.length + 1}`,
+            widgetId: body.widgetId,
+            x: 0,
+            y: 99,
+            w: 6,
+            h: 3,
+          },
+        ],
+        updatedAt: now,
+      });
+    }
+    case "removeWidget": {
+      const body = request.removeDashboardWidgetRequestBody as {
+        id: string;
+        placementId: string;
+      };
+      const dashboard = find(body.id);
+      return put({
+        ...dashboard,
+        widgets: placements(dashboard).filter(
+          (placement) => placement.id !== body.placementId,
+        ),
+        updatedAt: now,
+      });
+    }
+    case "duplicate": {
+      const { id } = request.duplicateDashboardRequestBody as { id: string };
+      const source = find(id);
+      return add({
+        ...source,
+        id: `dashboard-${testState.dashboardWrites.length}`,
+        name: `${String(source.name)} (copy)`,
+        createdByUserId: "member-1",
+      });
+    }
+    case "delete":
+      testState.dashboards = testState.dashboards.filter(
+        (dashboard) => dashboard.id !== request.id,
+      );
+      return undefined;
+  }
+}
+
+function mockDashboardWrite(kind: DashboardWrite) {
+  return () => ({
+    isPending: false,
+    mutate: (
+      { request }: { request: Record<string, unknown> },
+      options?: {
+        onSuccess?: (data: unknown) => unknown;
+        onSettled?: () => unknown;
+      },
+    ) => {
+      void options?.onSuccess?.(applyDashboardWrite(kind, request));
+      void options?.onSettled?.();
+    },
+  });
+}
+
+vi.mock("@gram/client/react-query/dashboards.js", () => ({
+  useDashboards: () => ({
+    isPending: false,
+    isError: false,
+    data: { dashboards: testState.dashboards },
+    refetch: vi.fn(),
+  }),
+  invalidateAllDashboards: () => Promise.resolve(),
+}));
+vi.mock("@gram/client/react-query/dashboard.js", () => ({
+  useDashboard: ({ id }: { id: string }) => {
+    const found = testState.dashboards.find((dashboard) => dashboard.id === id);
+    return {
+      isPending: false,
+      isError: found === undefined,
+      data: found,
+      refetch: vi.fn(),
+    };
+  },
+  invalidateAllDashboard: () => Promise.resolve(),
+}));
+vi.mock("@gram/client/react-query/createDashboard.js", () => ({
+  useCreateDashboardMutation: mockDashboardWrite("create"),
+}));
+vi.mock("@gram/client/react-query/updateDashboard.js", () => ({
+  useUpdateDashboardMutation: mockDashboardWrite("update"),
+}));
+vi.mock("@gram/client/react-query/saveDashboardLayout.js", () => ({
+  useSaveDashboardLayoutMutation: mockDashboardWrite("saveLayout"),
+}));
+vi.mock("@gram/client/react-query/addDashboardWidget.js", () => ({
+  useAddDashboardWidgetMutation: mockDashboardWrite("addWidget"),
+}));
+vi.mock("@gram/client/react-query/removeDashboardWidget.js", () => ({
+  useRemoveDashboardWidgetMutation: mockDashboardWrite("removeWidget"),
+}));
+vi.mock("@gram/client/react-query/duplicateDashboard.js", () => ({
+  useDuplicateDashboardMutation: mockDashboardWrite("duplicate"),
+}));
+vi.mock("@gram/client/react-query/deleteDashboard.js", () => ({
+  useDeleteDashboardMutation: mockDashboardWrite("delete"),
+}));
+// The grid is react-grid-layout's, tested on its own; here a dashboard's
+// cards only have to be there, openable and removable.
+vi.mock("./DashboardGrid", async () => {
+  const { specFromStoredWidget } = await import("./widgetSpec");
+  type Placement = { id: string; widgetId: string };
+  type Card = { id: string; name: string } & Parameters<
+    typeof specFromStoredWidget
+  >[0];
+  return {
+    DashboardGrid: ({
+      dashboard,
+      widgets,
+      canEdit,
+      onOpen,
+      onRemove,
+    }: {
+      dashboard: { widgets: Placement[] };
+      widgets: Card[];
+      canEdit: boolean;
+      onOpen: (spec: unknown, widgetId: string) => void;
+      onRemove: (placementId: string) => void;
+    }) => (
+      <ul aria-label="Cards" data-editable={canEdit}>
+        {dashboard.widgets.map((placement) => {
+          const widget = widgets.find((card) => card.id === placement.widgetId);
+          const name = widget?.name ?? "…";
+          return (
+            <li key={placement.id}>
+              {name}
+              <button
+                type="button"
+                onClick={() => {
+                  const spec = widget && specFromStoredWidget(widget);
+                  if (spec && widget) onOpen(spec, widget.id);
+                }}
+              >
+                Open {name} in Explore
+              </button>
+              <button type="button" onClick={() => onRemove(placement.id)}>
+                Remove {name}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    ),
+  };
+});
 vi.mock("@/contexts/Auth", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/contexts/Auth")>()),
   useUser: () => ({ id: "member-1", email: "member@example.invalid" }),
@@ -406,9 +642,12 @@ describe("Explore", () => {
     testState.answers = false;
     testState.widgets = [];
     testState.listPending = false;
+    testState.listFailed = false;
     testState.writes = [];
     testState.projectWrite = false;
     testState.pageContext = {};
+    testState.dashboards = [];
+    testState.dashboardWrites = [];
   });
 
   afterEach(() => {
@@ -1358,6 +1597,237 @@ describe("Explore", () => {
         expect(param("widget")).toBe("w-1");
         expect(urlSpec()).toMatchObject({ chartType: "bar" });
       });
+    });
+  });
+
+  describe("dashboards", () => {
+    const sessionsByUser: ExploreSpec = {
+      dataset: "sessions",
+      measures: [{ op: "count", field: "*" }],
+      filters: [],
+      dimensions: ["user"],
+      orderBy: "count",
+      limit: 0,
+      window: "7d",
+      chartType: "bar",
+    };
+
+    function savedWidget(id: string, name: string) {
+      return {
+        id,
+        name,
+        dataset: sessionsByUser.dataset,
+        ...widgetFromSpec(sessionsByUser),
+        dashboards: [],
+        projectId: "project",
+        organizationId: "org",
+        createdByUserId: "member-1",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    }
+
+    function dashboard(
+      id: string,
+      name: string,
+      extra: Record<string, unknown> = {},
+    ): Record<string, unknown> {
+      return {
+        id,
+        name,
+        projectId: "project",
+        organizationId: "org",
+        createdByUserId: "member-1",
+        filters: { values: {} },
+        widgets: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...extra,
+      };
+    }
+
+    function dashboardsTab() {
+      return screen.getByRole("tab", { name: /Dashboards/ });
+    }
+
+    function param(name: string) {
+      return new URLSearchParams(nav.search).get(name);
+    }
+
+    it("counts the project's dashboards on the tab, lists them, and opens one into the URL", () => {
+      testState.widgets = [savedWidget("w-1", "Sessions by user")];
+      testState.dashboards = [
+        dashboard("d-1", "Agent activity", {
+          description: "What the agents did",
+          widgets: [{ id: "p-1", widgetId: "w-1", x: 0, y: 0, w: 6, h: 3 }],
+        }),
+      ];
+      renderExplore();
+
+      expect(dashboardsTab().textContent).toContain("1");
+      fireEvent.click(dashboardsTab());
+      expect(param("tab")).toBe("dashboards");
+      expect(screen.getByText("What the agents did")).toBeTruthy();
+      expect(screen.getByText("Test Member")).toBeTruthy();
+
+      fireEvent.click(screen.getByText("Agent activity"));
+      expect(param("dashboard")).toBe("d-1");
+      expect(
+        screen.getByRole("heading", { name: "Agent activity" }),
+      ).toBeTruthy();
+      expect(
+        within(screen.getByRole("list", { name: "Cards" })).getByText(
+          "Sessions by user",
+        ),
+      ).toBeTruthy();
+
+      // Switching tabs leaves the dashboard; coming back lands on the list.
+      fireEvent.click(screen.getByRole("tab", { name: /Widgets/ }));
+      expect(param("dashboard")).toBeNull();
+      fireEvent.click(dashboardsTab());
+      expect(
+        screen.queryByRole("heading", { name: "Agent activity" }),
+      ).toBeNull();
+      expect(screen.getByText("Agent activity")).toBeTruthy();
+    });
+
+    it("makes a dashboard and opens it, empty", async () => {
+      const user = userEvent.setup();
+      renderExplore("/explore?tab=dashboards");
+      expect(screen.getByText("No dashboards yet")).toBeTruthy();
+
+      await user.click(screen.getByRole("button", { name: "New dashboard" }));
+      await user.type(
+        screen.getByRole("textbox", { name: "Dashboard name" }),
+        "Agent activity",
+      );
+      await user.click(screen.getByRole("button", { name: "Create" }));
+
+      expect(testState.dashboardWrites).toEqual([
+        {
+          kind: "create",
+          request: { createDashboardRequestBody: { name: "Agent activity" } },
+        },
+      ]);
+      expect(param("dashboard")).toBe("dashboard-1");
+      expect(
+        screen.getByRole("heading", { name: "Agent activity" }),
+      ).toBeTruthy();
+      expect(screen.getByText("Nothing on this dashboard yet")).toBeTruthy();
+    });
+
+    it("places a saved widget from the picker and takes a card off again", async () => {
+      const user = userEvent.setup();
+      testState.widgets = [savedWidget("w-1", "Sessions by user")];
+      testState.dashboards = [dashboard("d-1", "Agent activity")];
+      renderExplore("/explore?tab=dashboards&dashboard=d-1");
+
+      await user.click(screen.getByRole("button", { name: "Add widget" }));
+      await user.click(
+        screen.getByRole("button", { name: /Sessions by user/ }),
+      );
+      expect(testState.dashboardWrites[0]).toEqual({
+        kind: "addWidget",
+        request: {
+          addDashboardWidgetRequestBody: { id: "d-1", widgetId: "w-1" },
+        },
+      });
+      const cards = screen.getByRole("list", { name: "Cards" });
+      expect(within(cards).getByText("Sessions by user")).toBeTruthy();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Remove Sessions by user" }),
+      );
+      expect(testState.dashboardWrites[1]).toEqual({
+        kind: "removeWidget",
+        request: {
+          removeDashboardWidgetRequestBody: {
+            id: "d-1",
+            placementId: "placement-1",
+          },
+        },
+      });
+    });
+
+    it("opens a card's question in Explore, as the saved widget", () => {
+      testState.widgets = [savedWidget("w-1", "Sessions by user")];
+      testState.dashboards = [
+        dashboard("d-1", "Agent activity", {
+          widgets: [{ id: "p-1", widgetId: "w-1", x: 0, y: 0, w: 6, h: 3 }],
+        }),
+      ];
+      renderExplore("/explore?tab=dashboards&dashboard=d-1");
+
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Open Sessions by user in Explore",
+        }),
+      );
+      expect(param("tab")).toBeNull();
+      expect(param("dashboard")).toBeNull();
+      expect(param("widget")).toBe("w-1");
+      expect(urlSpec()).toMatchObject({
+        dataset: "sessions",
+        chartType: "bar",
+      });
+      expect(screen.getByRole("button", { name: "Run query" })).toBeTruthy();
+    });
+
+    it("lets someone else's dashboard be read and duplicated, not changed, without project write", async () => {
+      const user = userEvent.setup();
+      testState.dashboards = [
+        dashboard("d-1", "Agent activity", { createdByUserId: "other" }),
+      ];
+      renderExplore("/explore?tab=dashboards&dashboard=d-1");
+
+      expect(screen.queryByRole("button", { name: "Add widget" })).toBeNull();
+      await user.click(
+        screen.getByRole("button", { name: "Actions for Agent activity" }),
+      );
+      expect(screen.queryByRole("menuitem", { name: /Rename/ })).toBeNull();
+      expect(screen.queryByRole("menuitem", { name: /Delete/ })).toBeNull();
+      await user.click(screen.getByRole("menuitem", { name: /Duplicate/ }));
+
+      expect(testState.dashboardWrites[0]?.kind).toBe("duplicate");
+      expect(param("dashboard")).toBe("dashboard-1");
+      expect(
+        screen.getByRole("heading", { name: "Agent activity (copy)" }),
+      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Add widget" })).toBeTruthy();
+    });
+
+    it("says when the widgets behind the cards did not load, and tries again", () => {
+      testState.listFailed = true;
+      testState.dashboards = [
+        dashboard("d-1", "Agent activity", {
+          widgets: [{ id: "p-1", widgetId: "w-1", x: 0, y: 0, w: 6, h: 3 }],
+        }),
+      ];
+      renderExplore("/explore?tab=dashboards&dashboard=d-1");
+
+      expect(screen.getByText("The widgets did not load")).toBeTruthy();
+      expect(screen.queryByRole("list", { name: "Cards" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      expect(testState.listFailed).toBe(false);
+    });
+
+    it("deletes a dashboard from its page and returns to the list", async () => {
+      const user = userEvent.setup();
+      testState.dashboards = [dashboard("d-1", "Agent activity")];
+      renderExplore("/explore?tab=dashboards&dashboard=d-1");
+
+      await user.click(
+        screen.getByRole("button", { name: "Actions for Agent activity" }),
+      );
+      await user.click(screen.getByRole("menuitem", { name: /Delete/ }));
+      await user.click(screen.getByRole("button", { name: "Delete" }));
+
+      expect(testState.dashboardWrites).toEqual([
+        { kind: "delete", request: { id: "d-1" } },
+      ]);
+      expect(param("tab")).toBe("dashboards");
+      expect(param("dashboard")).toBeNull();
+      expect(screen.getByText("No dashboards yet")).toBeTruthy();
     });
   });
 });

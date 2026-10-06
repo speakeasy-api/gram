@@ -9,7 +9,7 @@ import {
   DeleteWidgetDialog,
   UnsavedDot,
   WidgetDetailsDialog,
-  type WidgetDetails,
+  type Details,
 } from "./WidgetDialogs";
 import { copyName } from "./widgetNames";
 import {
@@ -66,12 +66,12 @@ export function WidgetBar({
   const [naming, setNaming] = useState<Naming | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const draft = (details: WidgetDetails) => ({
+  const draft = (details: Details) => ({
     ...details,
     dataset: spec.dataset,
     ...widgetFromSpec(spec),
   });
-  const submit = (details: WidgetDetails) => {
+  const submit = (details: Details) => {
     if (naming === "rename" && open) {
       // Renaming changes the name and description alone, so edits not yet
       // saved stay unsaved.
