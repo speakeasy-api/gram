@@ -31,11 +31,26 @@ interface PolicyDraft {
 
 export function AgentPolicySection({
   agent,
+  variant = "section",
 }: {
   agent: ManagedAgent;
+  /** "bare" drops the section chrome for a caller that supplies its own. */
+  variant?: "section" | "bare";
 }): JSX.Element {
   const organization = useOrganization();
   const { user } = useSession();
+  const content = (
+    <AgentPolicyContent
+      // A draft is only valid for the context it was built in, so any of
+      // these changing must discard it.
+      key={`${organization.id}:${user.id}:${agent.id}:${agent.permissions.write}`}
+      agent={agent}
+      organizationId={organization.id}
+      userId={user.id}
+    />
+  );
+  if (variant === "bare")
+    return <div className="border-border border">{content}</div>;
   return (
     <SettingsSection>
       <SettingsSection.Header>

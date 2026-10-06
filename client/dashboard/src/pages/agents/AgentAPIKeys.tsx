@@ -51,12 +51,15 @@ const security = { sessionHeaderGramSession: "" };
 export function AgentAPIKeys({
   agent,
   creation = false,
+  variant = "section",
   onCreate,
   onDone,
   onBusy,
 }: {
   agent: ManagedAgent;
   creation?: boolean;
+  /** "bare" drops the section chrome for a caller that supplies its own. */
+  variant?: "section" | "bare";
   onCreate?: () => void;
   onDone?: () => void;
   onBusy?: (busy: boolean) => void;
@@ -79,6 +82,17 @@ export function AgentAPIKeys({
         onBusy={onBusy}
       />
     );
+  const content = (
+    <AgentAPIKeysContent
+      key={`${organization.id}:${user.id}:${agent.id}:${agent.permissions.authorize}`}
+      agent={agent}
+      organizationId={organization.id}
+      userId={user.id}
+      flag={flag}
+      onCreate={onCreate}
+    />
+  );
+  if (variant === "bare") return content;
   // The identity kept here is a stand-in for an agent that runs somewhere
   // else, so the page's subject is provisioning: the endpoint to point that
   // runtime at, the keys handed out to do it, and nothing in between.

@@ -22,6 +22,8 @@ export type AgentSessionRow = {
 };
 
 export type AgentSessionsSectionProps = {
+  /** "bare" drops the section chrome for a caller that supplies its own. */
+  variant?: "section" | "bare";
   sessions: AgentSessionRow[];
   isLoading: boolean;
   isError: boolean;
@@ -51,6 +53,7 @@ function SessionDate({ date }: { date: Date }): JSX.Element {
 }
 
 export function AgentSessionsSection({
+  variant = "section",
   sessions,
   isLoading,
   isError,
@@ -216,64 +219,72 @@ export function AgentSessionsSection({
     },
   ];
 
+  const body = (
+    <>
+      {!canRead ? (
+        <Text>You do not have permission to view this agent's sessions.</Text>
+      ) : isLoading ? (
+        <div role="status" aria-label="Loading agent sessions">
+          <SkeletonTable />
+        </div>
+      ) : isError ? (
+        <div role="alert" className="space-y-3">
+          <Text>Unable to load agent sessions.</Text>
+          <Button variant="secondary" onClick={onRetry}>
+            Try again
+          </Button>
+        </div>
+      ) : sessions.length === 0 ? (
+        <InlineEmptyState
+          icon="key-round"
+          heading="No sessions yet"
+          description="Choose this agent when authorizing an MCP connection to create a session."
+        />
+      ) : (
+        <Table
+          columns={columns}
+          data={sessions}
+          rowKey={(session) => session.id}
+        />
+      )}
+      {canRead && loadMoreError && (
+        <Text role="alert">Unable to load more sessions. Try again.</Text>
+      )}
+      {canRead && hasMore && onLoadMore && (
+        <Button
+          variant="secondary"
+          disabled={isLoadingMore}
+          onClick={onLoadMore}
+        >
+          {isLoadingMore ? "Loading more…" : "Load more sessions"}
+        </Button>
+      )}
+      {canRead && !canRevoke && (
+        <Text small muted>
+          You do not have permission to revoke this agent's sessions.
+        </Text>
+      )}
+    </>
+  );
+
   return (
-    <SettingsSection>
-      <SettingsSection.Header>
-        <SettingsSection.Title>Sessions</SettingsSection.Title>
-        <SettingsSection.Description>
-          The clients acting as this agent right now. Revoking one stops it
-          without touching the agent's keys.
-        </SettingsSection.Description>
-      </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <SettingsSection.Body>
-          {!canRead ? (
-            <Text>
-              You do not have permission to view this agent's sessions.
-            </Text>
-          ) : isLoading ? (
-            <div role="status" aria-label="Loading agent sessions">
-              <SkeletonTable />
-            </div>
-          ) : isError ? (
-            <div role="alert" className="space-y-3">
-              <Text>Unable to load agent sessions.</Text>
-              <Button variant="secondary" onClick={onRetry}>
-                Try again
-              </Button>
-            </div>
-          ) : sessions.length === 0 ? (
-            <InlineEmptyState
-              icon="key-round"
-              heading="No sessions yet"
-              description="Choose this agent when authorizing an MCP connection to create a session."
-            />
-          ) : (
-            <Table
-              columns={columns}
-              data={sessions}
-              rowKey={(session) => session.id}
-            />
-          )}
-          {canRead && loadMoreError && (
-            <Text role="alert">Unable to load more sessions. Try again.</Text>
-          )}
-          {canRead && hasMore && onLoadMore && (
-            <Button
-              variant="secondary"
-              disabled={isLoadingMore}
-              onClick={onLoadMore}
-            >
-              {isLoadingMore ? "Loading more…" : "Load more sessions"}
-            </Button>
-          )}
-          {canRead && !canRevoke && (
-            <Text small muted>
-              You do not have permission to revoke this agent's sessions.
-            </Text>
-          )}
-        </SettingsSection.Body>
-      </SettingsSection.Panel>
+    <>
+      {variant === "bare" ? (
+        <div className="border-border space-y-4 border p-4">{body}</div>
+      ) : (
+        <SettingsSection>
+          <SettingsSection.Header>
+            <SettingsSection.Title>Sessions</SettingsSection.Title>
+            <SettingsSection.Description>
+              The clients acting as this agent right now. Revoking one stops it
+              without touching the agent's keys.
+            </SettingsSection.Description>
+          </SettingsSection.Header>
+          <SettingsSection.Panel>
+            <SettingsSection.Body>{body}</SettingsSection.Body>
+          </SettingsSection.Panel>
+        </SettingsSection>
+      )}
       <Dialog
         open={canRead && selected !== null}
         onOpenChange={(open) => {
@@ -316,7 +327,7 @@ export function AgentSessionsSection({
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
-    </SettingsSection>
+    </>
   );
 }
 

@@ -72,6 +72,24 @@ vi.mock("./provision/ProvisionWizard", () => ({
     </>
   ),
 }));
+// The review frame names the servers the agent's ceiling reaches, so the org
+// inventory loads with the detail page.
+vi.mock("@gram/client/react-query/listMcpServersForOrg.js", () => ({
+  useListMcpServersForOrg: () => ({
+    data: { mcpServers: [] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
+vi.mock("@gram/client/react-query/listToolsetsForOrg.js", () => ({
+  useListToolsetsForOrg: () => ({
+    data: { toolsets: [] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock("./ManagedAgentSessions", () => ({
   ManagedAgentSessions: () => <div>Sessions</div>,
 }));
@@ -301,9 +319,16 @@ describe("Agent owner access", () => {
     mocks.params = new URLSearchParams({ id: "agent_example" });
     const consoleError = vi.spyOn(console, "error");
     try {
+      mocks.params = new URLSearchParams({
+        id: "agent_example",
+        step: "verify",
+      });
       setup();
-      // The identity facts live in the page header now, not a section.
-      expect(screen.getByText("agent:agent_example")).toBeTruthy();
+      // The identity facts live in the page header now, not a section, and
+      // the sessions panel is the last step rather than a section of its own.
+      expect(screen.getAllByText("agent:agent_example").length).toBeGreaterThan(
+        0,
+      );
       expect(screen.getByText("Sessions")).toBeTruthy();
       expect(
         consoleError.mock.calls.filter((args) =>
@@ -412,7 +437,10 @@ describe("Agent owner access", () => {
     expect(mocks.list).not.toHaveBeenCalled();
   });
   it("routes key creation to a dedicated page and returns to the agent", async () => {
-    mocks.params = new URLSearchParams({ id: "agent_example" });
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      step: "credential",
+    });
     const view = setup();
     fireEvent.click(await screen.findByRole("button", { name: "Issue a key" }));
     expect(mocks.navigate).toHaveBeenCalledWith({

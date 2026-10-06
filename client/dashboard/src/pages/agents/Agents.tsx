@@ -39,6 +39,7 @@ import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AgentAPIKeys } from "./AgentAPIKeys";
 import { ProvisionWizard } from "./provision/ProvisionWizard";
+import { AgentReview } from "./provision/AgentReview";
 import { AgentPolicySection } from "./AgentPolicySection";
 import { ManagedAgentSessions } from "./ManagedAgentSessions";
 
@@ -372,20 +373,41 @@ function AgentSettings({
         </div>
       }
     >
-      {/* Four sections, in the order the work happens: point a runtime at
-          this identity, decide what it may reach, see who is acting as it,
-          and end it. What used to be an Identity card is in the header. */}
-      <AgentAPIKeys
+      {/* The agent read through the same five steps that made it: every step
+          complete, every step a destination, and the panels below each one
+          are the surfaces that change it. Lifecycle is not a step — ending an
+          agent is not part of provisioning it. */}
+      <AgentReview
         agent={agentQuery.data}
-        onCreate={() => setSearchParams({ id: agentID, credential: "new" })}
-      />
-      <AgentPolicySection
-        key={`policy-${agentQuery.data.id}`}
-        agent={agentQuery.data}
-      />
-      <ManagedAgentSessions
-        key={`sessions-${agentQuery.data.id}`}
-        agent={agentQuery.data}
+        scopeLabel={organization.name}
+        canIssue={agentQuery.data.permissions.authorize}
+        onIssueKey={() => setSearchParams({ id: agentID, credential: "new" })}
+        panels={{
+          identity: <AgentIdentityPanel agent={agentQuery.data} />,
+          servers: (
+            <AgentPolicySection
+              key={`policy-${agentQuery.data.id}`}
+              agent={agentQuery.data}
+              variant="bare"
+            />
+          ),
+          credential: (
+            <AgentAPIKeys
+              agent={agentQuery.data}
+              variant="bare"
+              onCreate={() =>
+                setSearchParams({ id: agentID, credential: "new" })
+              }
+            />
+          ),
+          sessions: (
+            <ManagedAgentSessions
+              key={`sessions-${agentQuery.data.id}`}
+              agent={agentQuery.data}
+              variant="bare"
+            />
+          ),
+        }}
       />
       <AgentLifecycle
         agent={agentQuery.data}
@@ -393,6 +415,40 @@ function AgentSettings({
         onDeleted={onBack}
       />
     </SettingsPage>
+  );
+}
+
+/**
+ * Step one, for an agent that exists: the name it is known by and the facts
+ * that cannot change — its principal and its owner. Renaming is the only edit
+ * here, because everything else about an identity is fixed at creation.
+ */
+function AgentIdentityPanel({ agent }: { agent: ManagedAgent }) {
+  const { user } = useSession();
+  return (
+    <div className="border-border space-y-4 border p-4">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
+        <dt className="text-muted-foreground">Name</dt>
+        <dd>{agent.name}</dd>
+        <dt className="text-muted-foreground">Principal</dt>
+        <dd className="font-mono text-xs">agent:{agent.id}</dd>
+        <dt className="text-muted-foreground">Owner</dt>
+        <dd>
+          {agent.ownerProfile?.displayName ??
+            (agent.ownerUserId === user.id
+              ? user.displayName || user.email
+              : "Unavailable")}
+        </dd>
+        <dt className="text-muted-foreground">Lifecycle</dt>
+        <dd>
+          <LifecycleBadge lifecycle={agent.lifecycle} />
+        </dd>
+      </dl>
+      <Text muted small>
+        The principal and the owner are durable. The name can change, and the
+        change is recorded in the organization audit log.
+      </Text>
+    </div>
   );
 }
 

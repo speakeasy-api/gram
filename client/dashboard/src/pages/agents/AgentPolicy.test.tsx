@@ -139,6 +139,24 @@ vi.mock("@/pages/access/GrantRuleDrawerContent", () => ({
   ),
 }));
 
+// The review frame names the servers an agent's ceiling reaches, which means
+// the org inventory loads beside the policy editor under test.
+vi.mock("@gram/client/react-query/listMcpServersForOrg.js", () => ({
+  useListMcpServersForOrg: () => ({
+    data: { mcpServers: [] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
+vi.mock("@gram/client/react-query/listToolsetsForOrg.js", () => ({
+  useListToolsetsForOrg: () => ({
+    data: { toolsets: [] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({
     id: "project_one",
@@ -257,12 +275,13 @@ function setup() {
   return {
     ...view,
     client,
-    rerenderPage: () =>
+    rerenderPage: () => {
       view.rerender(
         <QueryClientProvider client={client}>
           <AgentsPage />
         </QueryClientProvider>,
-      ),
+      );
+    },
   };
 }
 
@@ -289,7 +308,10 @@ beforeEach(() => {
 
 describe("Editing an existing agent's permissions", () => {
   beforeEach(() => {
-    mocks.params = new URLSearchParams({ id: "agent_example" });
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      step: "servers",
+    });
   });
 
   it("says a permissionless agent cannot authorize anything", async () => {
@@ -449,7 +471,10 @@ function deferred<T>() {
 
 describe("Draft ownership across context changes", () => {
   it("drops a dirty policy draft and closes the picker when write access is lost", async () => {
-    mocks.params = new URLSearchParams({ id: "agent_example" });
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      step: "servers",
+    });
     const view = setup();
     fireEvent.click(
       await screen.findByRole("button", { name: "Add mcp:connect" }),
@@ -501,7 +526,10 @@ describe("Draft ownership across context changes", () => {
   });
 
   it("refuses to open the picker for a viewer who cannot write", async () => {
-    mocks.params = new URLSearchParams({ id: "agent_example" });
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      step: "servers",
+    });
     mocks.agent.permissions = {
       read: true,
       write: false,
@@ -530,7 +558,10 @@ describe("Draft ownership across context changes", () => {
 
 describe("Confirming the stored ceiling after a save", () => {
   beforeEach(() => {
-    mocks.params = new URLSearchParams({ id: "agent_example" });
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      step: "servers",
+    });
   });
 
   it("keeps the editor locked until the confirming read resolves", async () => {
@@ -635,7 +666,10 @@ describe("Confirming the stored ceiling after a save", () => {
 
 describe("Stored constraints the editor cannot show", () => {
   beforeEach(() => {
-    mocks.params = new URLSearchParams({ id: "agent_example" });
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      step: "servers",
+    });
     mocks.listPolicyGrants.mockResolvedValue([
       {
         id: "grant_risk",
@@ -698,7 +732,10 @@ describe("A concurrent change by another administrator", () => {
   };
 
   beforeEach(() => {
-    mocks.params = new URLSearchParams({ id: "agent_example" });
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      step: "servers",
+    });
   });
 
   it("blocks and writes nothing when the server has a grant the cache never saw", async () => {
@@ -832,7 +869,10 @@ describe("Losing the editor part-way through a multi-grant save", () => {
   ];
 
   beforeEach(() => {
-    mocks.params = new URLSearchParams({ id: "agent_example" });
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      step: "servers",
+    });
     mocks.listPolicyGrants.mockResolvedValue(storedGrants);
   });
 
