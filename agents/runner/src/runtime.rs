@@ -76,7 +76,10 @@ pub struct RuntimeHost {
     pub admission: tokio::sync::Mutex<()>,
 }
 
-/// A message and its opaque bearer stay together until the turn starts.
+/// A message and its opaque bearer, handed to an idle thread loop. A thread
+/// admits one turn at a time: the backend keeps every later event pending
+/// until the thread is idle again, so no accepted input waits behind a turn
+/// that could fail, and every credential is minted just before its turn runs.
 pub struct QueuedTurn {
     pub input: RunnerContent,
     pub token: String,
@@ -119,6 +122,9 @@ impl ConfiguredThread {
             .idle_since
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if idle.is_none() {
+            return Err(RunnerError::InvocationBusy);
+        }
         self.inbox_tx
             .send(QueuedTurn {
                 input,
@@ -367,7 +373,7 @@ async fn spawn_thread(
         }
     });
 
-    let (mcp_cmd_tx, mcp_catalog) = spawn_mcp_actor(
+    let (mcp_cmd_tx, mcp_catalog, mcp_known_tools) = spawn_mcp_actor(
         host.gram_client.clone(),
         host.mcp_http_client.clone(),
         &thread_id,
@@ -480,6 +486,7 @@ async fn spawn_thread(
     let compose_source = agentkit_tool_compose::ComposeTool::wrap(HiddenCatalogSource::new(
         mcp_catalog,
         mcp_cmd_tx.clone(),
+        mcp_known_tools,
     ))
     .with_source(native_tools.merge(agentkit_tool_fs::registry()))
     .with_source(UnknownToolSource);

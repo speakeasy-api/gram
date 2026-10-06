@@ -2,6 +2,10 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum RunnerError {
+    /// The thread is running a turn. The backend keeps the event pending and
+    /// redelivers it, minting its credential again, once the thread is idle.
+    #[error("assistant invocation busy")]
+    InvocationBusy,
     #[error("invalid mcp server header name for {server}: {name}: {source}")]
     McpHeaderName {
         server: String,

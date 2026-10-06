@@ -101,7 +101,10 @@ func (m *Manager) AuthorizeRuntime(ctx context.Context, header string) (context.
 	}
 	authed, err = m.authz.PrepareContext(authed)
 	if err != nil {
-		return ctx, nil, fmt.Errorf("admit runtime credential: %w", err)
+		if denied, ok := errors.AsType[*oops.ShareableError](err); ok && (denied.Code == oops.CodeUnauthorized || denied.Code == oops.CodeForbidden) {
+			return ctx, nil, oops.E(denied.Code, err, "runtime credential is no longer admitted")
+		}
+		return ctx, nil, oops.E(oops.CodeUnexpected, err, "admit runtime credential")
 	}
 	authed = context.WithValue(authed, runtimeChatKey{}, binding.ChatID)
 	authed = contextvalues.SetAssistantPrincipal(authed, contextvalues.AssistantPrincipal{AssistantID: binding.AssistantID, ThreadID: binding.ThreadID})

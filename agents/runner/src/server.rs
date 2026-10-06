@@ -9,6 +9,7 @@ use tokio::net::TcpListener;
 use tokio::sync::{Mutex, Notify};
 use tracing::Instrument;
 
+use crate::errors::RunnerError;
 use crate::http_layer::TokenRegistry;
 use crate::runtime::{
     AppState, DEFAULT_THREAD_IDLE_TTL, build_host, ensure_thread, lookup_thread, snapshot_threads,
@@ -255,6 +256,9 @@ async fn thread_turn_inner(
         if let Some(key) = &idempotency_key {
             host.seen.remove(key);
         }
+        if matches!(error, RunnerError::InvocationBusy) {
+            return Err((StatusCode::TOO_MANY_REQUESTS, error.to_string()));
+        }
         host.threads.remove_if(&thread_id, |_, cell| {
             cell.get()
                 .is_some_and(|current| Arc::ptr_eq(current, &thread))
@@ -415,6 +419,50 @@ mod tests {
         assert_eq!(denied_duplicate.0, StatusCode::UNAUTHORIZED);
         assert_eq!(calls.load(Ordering::SeqCst), 7);
         assert!(rx.try_recv().is_err());
+
+        // The accepted turn is running. A second event is turned away as busy
+        // rather than queued behind it, and stays retryable.
+        let mut next = HeaderMap::new();
+        next.insert(IDEMPOTENCY_HEADER, "next-event".parse().unwrap());
+        let busy = thread_turn_inner(
+            host.clone(),
+            "T".into(),
+            next.clone(),
+            request(Some("opaque-valid"), None),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            busy,
+            (
+                StatusCode::TOO_MANY_REQUESTS,
+                "assistant invocation busy".into()
+            )
+        );
+        assert!(rx.try_recv().is_err(), "a busy thread never queues input");
+        assert!(
+            host.threads.contains_key("T"),
+            "backpressure keeps the thread"
+        );
+        *host
+            .threads
+            .get("T")
+            .unwrap()
+            .get()
+            .unwrap()
+            .idle_since
+            .lock()
+            .unwrap() = Some(std::time::Instant::now());
+        let retried = thread_turn_inner(
+            host.clone(),
+            "T".into(),
+            next,
+            request(Some("opaque-valid"), None),
+        )
+        .await
+        .unwrap();
+        assert_eq!(retried.0.finish_reason, "accepted");
+        assert!(rx.try_recv().is_ok());
         task.abort();
     }
 }
