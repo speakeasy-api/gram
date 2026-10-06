@@ -8,8 +8,8 @@
 //! before `close()` can fail, so any mirror of "connected" drifts on
 //! exactly the error paths it would exist to handle.
 
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Arc, PoisonError, RwLock};
 use std::time::{Duration, Instant};
 
 use agentkit_mcp::{
@@ -24,7 +24,7 @@ use tokio::sync::oneshot;
 
 use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
-use crate::http_layer::{McpRotatingClient, TokenRegistry};
+use crate::http_layer::{McpSessionClient, TokenRegistry};
 use crate::wire::McpServer;
 
 const MCP_CMD_CAPACITY: usize = 32;
@@ -55,6 +55,14 @@ pub enum McpCmd {
     /// coverage plus authorization links.
     EnsureConnected {
         reply: oneshot::Sender<Vec<McpServerStatus>>,
+    },
+    /// Sent by the catalog dispatch layer when the model calls a tool that a
+    /// configured server exposed before its connection was closed — at a
+    /// credential boundary, typically. The actor connects the owning server
+    /// so the call can dispatch against the fresh session.
+    ConnectForTool {
+        tool_name: String,
+        reply: oneshot::Sender<Result<(), String>>,
     },
     /// Sent by the catalog dispatch layer when an MCP-backed tool call
     /// fails with a transport-shaped error. The actor reseats the owning
@@ -97,6 +105,45 @@ pub struct McpServerStatus {
     pub error: Option<String>,
 }
 
+/// Tool names each configured server exposed when it last connected.
+///
+/// Closing a connection unregisters its tools from the live catalog, but the
+/// model still holds their schemas from earlier `tool_search` results. This
+/// record survives disconnects so dispatch can reconnect the owning server
+/// instead of treating a discovered tool as unknown. A server's entry is
+/// forgotten only when its configuration changes or it is detached.
+#[derive(Clone, Default)]
+pub struct KnownTools(Arc<RwLock<BTreeMap<String, BTreeSet<String>>>>);
+
+impl KnownTools {
+    pub fn contains(&self, tool: &str) -> bool {
+        self.server_for(tool).is_some()
+    }
+
+    fn server_for(&self, tool: &str) -> Option<String> {
+        self.0
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .find(|(_, tools)| tools.contains(tool))
+            .map(|(server, _)| server.clone())
+    }
+
+    fn record(&self, server: &str, tools: BTreeSet<String>) {
+        self.0
+            .write()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(server.to_string(), tools);
+    }
+
+    fn forget(&self, server: &str) {
+        self.0
+            .write()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(server);
+    }
+}
+
 /// Registers the bootstrap server set (without connecting — thread
 /// bootstrap, and therefore first-token latency, is never gated on MCP
 /// handshakes) and spawns the actor task.
@@ -107,13 +154,14 @@ pub fn spawn_mcp_actor(
     servers: &[McpServer],
     tokens: &TokenRegistry,
     inbox_tx: UnboundedSender<String>,
-) -> Result<(mpsc::Sender<McpCmd>, CatalogReader), RunnerError> {
+) -> Result<(mpsc::Sender<McpCmd>, CatalogReader, KnownTools), RunnerError> {
     let mut manager = McpServerManager::new();
     let catalog = manager.source();
     let mut configured = BTreeMap::new();
+    let token = tokens.current()?;
 
     for server in servers {
-        let config = build_mcp_server_config(server, &http_client, tokens)?;
+        let config = build_mcp_server_config(server, &http_client, &token)?;
         manager.register_server_with_options(
             config,
             McpServerOptions::new().with_timeout(MCP_HANDSHAKE_TIMEOUT),
@@ -133,9 +181,11 @@ pub fn spawn_mcp_actor(
         last_errors: BTreeMap::new(),
         last_reconnects: BTreeMap::new(),
         configured,
+        known_tools: KnownTools::default(),
     };
+    let known_tools = actor.known_tools.clone();
     tokio::spawn(actor.run(cmd_rx));
-    Ok((cmd_tx, catalog))
+    Ok((cmd_tx, catalog, known_tools))
 }
 
 struct McpActor {
@@ -159,6 +209,7 @@ struct McpActor {
     // set). Drives EnsureConnected's pending diff and gates ReconnectTool
     // so a detached server cannot be resurrected.
     configured: BTreeMap<String, McpServer>,
+    known_tools: KnownTools,
 }
 
 impl McpActor {
@@ -168,6 +219,10 @@ impl McpActor {
                 McpCmd::EnsureConnected { reply } => {
                     let statuses = self.ensure_connected().await;
                     let _ = reply.send(statuses);
+                }
+                McpCmd::ConnectForTool { tool_name, reply } => {
+                    let result = self.connect_for_tool(&tool_name).await;
+                    let _ = reply.send(result);
                 }
                 McpCmd::ReconnectTool { tool_name, reply } => {
                     let result = self.reconnect_for_tool(&tool_name).await;
@@ -223,32 +278,71 @@ impl McpActor {
             .cloned()
             .collect();
         for id in pending {
-            // Auth-pending servers fail fast, so they retry unconditionally;
-            // hard failures wait out the cooldown to keep repeated searches
-            // from re-paying the handshake timeout for a down server.
-            if !self.auth_pending.contains_key(&id)
-                && let Some((_, at)) = self.last_errors.get(&id)
-                && at.elapsed() < MCP_RETRY_COOLDOWN
-            {
-                continue;
-            }
-            match self.connect_one(&id).await {
-                Ok(()) => {
-                    self.auth_pending.remove(&id);
-                    self.last_errors.remove(&id);
-                }
-                Err(failure) if failure.auth_required => {
-                    self.last_errors.remove(&id);
-                    self.ensure_auth_flow(&id).await;
-                }
-                Err(failure) => {
-                    self.last_errors
-                        .insert(id, (failure.message, Instant::now()));
-                }
-            }
+            self.connect_pending(&id).await;
         }
 
         self.server_statuses()
+    }
+
+    /// Connects one configured, unconnected server, recording an auth flow or
+    /// transient failure for its status. Auth-pending servers fail fast, so
+    /// they retry unconditionally; hard failures wait out the cooldown so
+    /// repeated calls don't re-pay the handshake timeout for a down server.
+    async fn connect_pending(&mut self, id: &str) {
+        if !self.auth_pending.contains_key(id)
+            && let Some((_, at)) = self.last_errors.get(id)
+            && at.elapsed() < MCP_RETRY_COOLDOWN
+        {
+            return;
+        }
+        match self.connect_one(id).await {
+            Ok(()) => {
+                self.auth_pending.remove(id);
+                self.last_errors.remove(id);
+            }
+            Err(failure) if failure.auth_required => {
+                self.last_errors.remove(id);
+                self.ensure_auth_flow(id).await;
+            }
+            Err(failure) => {
+                self.last_errors
+                    .insert(id.to_string(), (failure.message, Instant::now()));
+            }
+        }
+    }
+
+    /// Reconnects the configured server that last exposed `tool_name`, so a
+    /// discovered tool keeps dispatching after its session was closed.
+    async fn connect_for_tool(&mut self, tool_name: &str) -> Result<(), String> {
+        let Some(id) = self
+            .known_tools
+            .server_for(tool_name)
+            .filter(|id| self.configured.contains_key(id))
+        else {
+            return Err(format!(
+                "tool {tool_name} does not map to a configured MCP server"
+            ));
+        };
+        if !self.is_connected(&id) {
+            self.connect_pending(&id).await;
+        }
+        if self.is_connected(&id) {
+            return Ok(());
+        }
+        Err(
+            match (self.auth_pending.get(&id), self.last_errors.get(&id)) {
+                (Some(Some(flow)), _) => format!(
+                    "MCP server {id} requires authorization: {url}",
+                    url = flow.url
+                ),
+                (Some(None), _) => format!(
+                    "MCP server {id} requires authorization; the authorization link \
+                 could not be created yet"
+                ),
+                (None, Some((message, _))) => format!("MCP server {id} is unreachable: {message}"),
+                (None, None) => format!("MCP server {id} is unreachable"),
+            },
+        )
     }
 
     fn server_statuses(&self) -> Vec<McpServerStatus> {
@@ -367,6 +461,9 @@ impl McpActor {
         // Build every changed configuration before mutating credentials, live
         // sessions, or the desired set. An invalid replacement must not leave
         // the old endpoint registered under the next invocation's credential.
+        // Every transport carries the credential it was built with, so a new
+        // credential re-registers every server.
+        let rotating = self.tokens.current()? != token;
         let mut prepared = Vec::new();
         let mut attached = Vec::new();
         for (id, server) in &desired_map {
@@ -375,12 +472,12 @@ impl McpActor {
             if is_new {
                 attached.push(id.clone());
             }
-            if is_new || changed {
-                let config = build_mcp_server_config(server, &self.http_client, &self.tokens)?;
+            if is_new || changed || rotating {
+                let config = build_mcp_server_config(server, &self.http_client, &token)?;
                 prepared.push((id.clone(), config, changed));
             }
         }
-        if self.tokens.current()? != token {
+        if rotating {
             // HTTP token rotation does not invalidate MCP protocol sessions or
             // credential-specific OAuth/cooldown state. Tear those down under
             // the old credential before publishing the next one.
@@ -413,6 +510,7 @@ impl McpActor {
                 self.auth_pending.remove(&id);
                 self.last_errors.remove(&id);
                 self.last_reconnects.remove(&id);
+                self.known_tools.forget(&id);
                 if self.is_connected(&id) {
                     self.drop_connection(&id, "config_drift").await;
                 }
@@ -426,6 +524,7 @@ impl McpActor {
             .cloned()
             .collect();
         for id in &detached {
+            self.known_tools.forget(id);
             self.auth_pending.remove(id);
             self.last_errors.remove(id);
             self.last_reconnects.remove(id);
@@ -510,11 +609,14 @@ impl McpActor {
         let server_uid = McpServerId::new(id);
         match self.manager.connect_server(&server_uid).await {
             Ok(handle) => {
-                tracing::info!(
-                    server_id = %server_uid,
-                    tools = handle.snapshot().tools.len(),
-                    "mcp connect ok"
-                );
+                let tools: BTreeSet<String> = handle
+                    .snapshot()
+                    .tools
+                    .iter()
+                    .map(|tool| handle.namespace().apply(&server_uid, tool.name.as_ref()))
+                    .collect();
+                tracing::info!(server_id = %server_uid, tools = tools.len(), "mcp connect ok");
+                self.known_tools.record(id, tools);
                 Ok(())
             }
             Err(e) => {
@@ -585,12 +687,12 @@ pub fn validated_server_headers(server: &McpServer) -> Result<http::HeaderMap, R
 fn build_mcp_server_config(
     server: &McpServer,
     http_client: &reqwest::Client,
-    tokens: &TokenRegistry,
+    token: &str,
 ) -> Result<McpServerConfig, RunnerError> {
     let server_headers = validated_server_headers(server)?;
-    let mcp_http = Arc::new(McpRotatingClient::new(
+    let mcp_http = Arc::new(McpSessionClient::new(
         http_client.clone(),
-        tokens.clone(),
+        token.to_string(),
         server_headers,
     ));
     let transport = StreamableHttpTransportConfig::new(&server.url).with_http_client(mcp_http);
@@ -662,7 +764,7 @@ mod tests {
             url: format!("http://{addr}/old"),
             headers: BTreeMap::new(),
         };
-        let (cmd, _catalog) = spawn_mcp_actor(
+        let (cmd, _catalog, _known) = spawn_mcp_actor(
             GramBootstrapClient::new(
                 format!("http://{addr}"),
                 crate::http_layer::build_bootstrap_client(client.clone()),
@@ -782,6 +884,7 @@ mod tests {
             auth_pending: BTreeMap::from([("server".into(), None)]),
             last_errors: BTreeMap::from([("server".into(), ("old error".into(), Instant::now()))]),
             last_reconnects: BTreeMap::from([("server".into(), Instant::now())]),
+            known_tools: KnownTools::default(),
         };
         actor.turn_boundary("opaque-a".into(), None).await.unwrap();
         assert_eq!(actor.auth_pending.len(), 1);
@@ -801,5 +904,141 @@ mod tests {
         assert!(actor.last_errors.is_empty());
         assert!(actor.last_reconnects.is_empty());
         assert!(actor.configured.contains_key("new"));
+    }
+
+    #[tokio::test]
+    async fn discovered_tools_reconnect_their_server_after_a_credential_boundary() {
+        use agentkit_tools_core::ToolSource;
+        use axum::{Json, Router, http::HeaderMap, response::IntoResponse, routing::post};
+        use serde_json::{Value, json};
+        let (events_tx, mut events) = mpsc::unbounded_channel();
+        let post_events = events_tx.clone();
+        let app = Router::new().route("/mcp", post(move |headers: HeaderMap, Json(message): Json<Value>| {
+            let events = post_events.clone();
+            async move {
+                let bearer = headers.get("authorization").unwrap().to_str().unwrap().to_string();
+                let method = message["method"].as_str().unwrap().to_string();
+                events.send((bearer.clone(), method.clone())).unwrap();
+                if message.get("id").is_none() { return axum::http::StatusCode::ACCEPTED.into_response(); }
+                let result = if method == "initialize" {
+                    json!({"protocolVersion": message["params"]["protocolVersion"], "capabilities":{"tools":{}}, "serverInfo":{"name":"fixture", "version":"1"}})
+                } else { json!({"tools":[{"name":"echo", "inputSchema":{"type":"object"}}]}) };
+                let mut response = Json(json!({"jsonrpc":"2.0", "id":message["id"], "result":result})).into_response();
+                response.headers_mut().insert("mcp-session-id", bearer.replace("Bearer ", "session-").parse().unwrap());
+                response
+            }
+        }).get(|| async { axum::http::StatusCode::METHOD_NOT_ALLOWED }).delete(move |headers: HeaderMap| {
+            let events = events_tx.clone();
+            async move {
+                events.send((headers.get("authorization").unwrap().to_str().unwrap().to_string(), "DELETE".into())).unwrap();
+                axum::http::StatusCode::OK
+            }
+        }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let tokens = TokenRegistry::new("opaque-a");
+        let client = reqwest::Client::new();
+        let (notice_tx, _notices) = mpsc::unbounded_channel();
+        let server = McpServer {
+            id: "srv".into(),
+            url: format!("http://{addr}/mcp"),
+            headers: BTreeMap::new(),
+        };
+        let (cmd, catalog, known) = spawn_mcp_actor(
+            GramBootstrapClient::new(
+                format!("http://{addr}"),
+                crate::http_layer::build_bootstrap_client(client.clone()),
+            ),
+            client,
+            "T",
+            std::slice::from_ref(&server),
+            &tokens,
+            notice_tx,
+        )
+        .unwrap();
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::EnsureConnected { reply }).await.unwrap();
+        let tool = ack.await.unwrap()[0].tools[0].clone();
+        let name = agentkit_tools_core::ToolName::new(tool.clone());
+        assert!(catalog.get(&name).is_some());
+
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::TurnBoundary {
+            token: "opaque-b".into(),
+            desired: None,
+            reply,
+        })
+        .await
+        .unwrap();
+        ack.await.unwrap().unwrap();
+        assert!(
+            catalog.get(&name).is_none(),
+            "the boundary closed the session"
+        );
+        assert!(known.contains(&tool), "the discovered tool is still known");
+
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::ConnectForTool {
+            tool_name: tool.clone(),
+            reply,
+        })
+        .await
+        .unwrap();
+        ack.await.unwrap().unwrap();
+        assert!(
+            catalog.get(&name).is_some(),
+            "dispatch reconnected the server"
+        );
+
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::ConnectForTool {
+            tool_name: "mcp_other_tool".into(),
+            reply,
+        })
+        .await
+        .unwrap();
+        assert!(
+            ack.await.unwrap().is_err(),
+            "unknown tools never connect anything"
+        );
+
+        let (reply, ack) = oneshot::channel();
+        cmd.send(McpCmd::TurnBoundary {
+            token: "opaque-b".into(),
+            desired: Some(Vec::new()),
+            reply,
+        })
+        .await
+        .unwrap();
+        ack.await.unwrap().unwrap();
+        assert!(
+            !known.contains(&tool),
+            "detaching a server forgets its tools"
+        );
+
+        let mut seen = Vec::new();
+        while let Ok(event) = events.try_recv() {
+            seen.push(event);
+        }
+        let initialized: Vec<_> = seen
+            .iter()
+            .filter(|(_, method)| method == "initialize")
+            .map(|(bearer, _)| bearer.as_str())
+            .collect();
+        assert_eq!(initialized, vec!["Bearer opaque-a", "Bearer opaque-b"]);
+        let deleted: Vec<_> = seen
+            .iter()
+            .filter(|(_, method)| method == "DELETE")
+            .map(|(bearer, _)| bearer.as_str())
+            .collect();
+        assert_eq!(
+            deleted,
+            vec!["Bearer opaque-a", "Bearer opaque-b"],
+            "each session is closed with the credential it was opened with"
+        );
+        server_task.abort();
     }
 }

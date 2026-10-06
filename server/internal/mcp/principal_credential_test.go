@@ -35,6 +35,10 @@ func TestPrincipalCredentialAuthenticatesAsItsAgent(t *testing.T) {
 	require.NoError(t, err)
 	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(t.Context(), accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), Scope: string(authz.ScopeMCPConnect), Selectors: selector})
 	require.NoError(t, err)
+	projectRead, err := authz.NewSelector(authz.ScopeProjectRead, ac.ProjectID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(t.Context(), accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), Scope: string(authz.ScopeProjectRead), Selectors: projectRead})
+	require.NoError(t, err)
 	token, _, err := ti.principalCredentials.Mint(principalcredential.Credential{
 		OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
 		Principal: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), AuthorizerUserID: ac.UserID,
