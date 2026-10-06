@@ -9,8 +9,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
-	"github.com/speakeasy-api/gram/server/internal/authz"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 )
 
@@ -152,26 +150,11 @@ func (s *ServiceCore) turnUserID(ctx context.Context, assistant assistantRecord,
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", ErrTurnIdentity, err)
 	}
-	active, err := orgrepo.New(s.db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{OrganizationID: assistant.OrganizationID, UserID: user})
-	if err != nil {
-		return "", fmt.Errorf("check turn user membership: %w", err)
-	}
-	if !active {
-		return "", fmt.Errorf("%w: turn user is not an active organization member", ErrTurnIdentity)
-	}
-	// The selected user's own grants decide project access, never the grants
-	// of whatever transport delivered the event.
-	principals, err := authz.ResolveUserPrincipals(ctx, s.db, assistant.OrganizationID, user)
-	if err != nil {
-		return "", fmt.Errorf("resolve turn user principals: %w", err)
-	}
-	grants, err := authz.LoadGrants(ctx, s.db, assistant.OrganizationID, principals)
-	if err != nil {
-		return "", fmt.Errorf("load turn user grants: %w", err)
-	}
-	check := authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: assistant.ProjectID.String(), Dimensions: nil}
-	if err := s.authz.EvaluateLoadedGrants(ctx, grants, check); err != nil {
-		return "", fmt.Errorf("%w: turn user cannot read the assistant project: %w", ErrTurnIdentity, err)
+	if err := assistantidentity.CheckActor(ctx, s.db, s.authz, assistant.OrganizationID, assistant.ProjectID, user); err != nil {
+		if errors.Is(err, assistantidentity.ErrActorIneligible) {
+			return "", fmt.Errorf("%w: turn user: %w", ErrTurnIdentity, err)
+		}
+		return "", fmt.Errorf("check turn user: %w", err)
 	}
 	return user, nil
 }
