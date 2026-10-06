@@ -123,6 +123,7 @@ async function $do(
   const query = encodeFormQuery({
     "cursor": payload?.cursor,
     "limit": payload?.limit,
+    "tier": payload?.tier,
   });
 
   const headers = new Headers(compactMap({

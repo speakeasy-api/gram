@@ -15,6 +15,9 @@ vi.mock("./workspace-switcher.tsx", () => ({
 vi.mock("./command-palette/CommandPaletteTrigger", () => ({
   CommandPaletteTrigger: () => <button data-testid="command-palette" />,
 }));
+vi.mock("./impersonation-banner-state", () => ({
+  useShowsImpersonationBanner: () => false,
+}));
 vi.mock("@/components/ui/Sidebar", () => ({
   SidebarTrigger: () => <button data-testid="sidebar-trigger" />,
 }));
@@ -120,6 +123,22 @@ describe("PageHeader.Breadcrumbs", () => {
     const back = screen.getByRole("link", { name: "Identities" });
     expect(back.getAttribute("href")).toBe(
       "/placeholder-organization/projects/placeholder-project/identities",
+    );
+  });
+
+  it("links a session client back to its identity provider", () => {
+    render(
+      <PageHeader>
+        <PageHeader.Breadcrumbs substitutions={{ "issuer-1": "Okta" }} />
+      </PageHeader>,
+      {
+        at: "/placeholder-organization/projects/placeholder-project/remote-identity-providers/issuer-1/clients/client-1/overview",
+      },
+    );
+
+    const back = screen.getByRole("link", { name: "Okta" });
+    expect(back.getAttribute("href")).toBe(
+      "/placeholder-organization/projects/placeholder-project/remote-identity-providers/issuer-1",
     );
   });
 

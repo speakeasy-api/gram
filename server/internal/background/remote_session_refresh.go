@@ -23,7 +23,11 @@ const (
 	remoteSessionRefreshScheduleID = "v1:remote-session-refresh-schedule"
 	remoteSessionRefreshWorkflowID = "v1:remote-session-refresh"
 
-	remoteSessionRefreshInterval       = time.Hour
+	remoteSessionRefreshInterval = time.Hour
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	remoteSessionRefreshCatchupWindow = remoteSessionRefreshInterval - time.Second
+
 	remoteSessionRefreshScheduleJitter = 20 * time.Minute
 	remoteSessionRefreshBatchSize      = 10
 	remoteSessionRefreshRunBudget      = 45 * time.Minute
@@ -116,8 +120,9 @@ func RemoteSessionRefreshWorkflow(ctx workflow.Context) error {
 func AddRemoteSessionRefreshSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
 	scheduleClient := temporalEnv.Client().ScheduleClient()
 	options := client.ScheduleOptions{
-		ID:      remoteSessionRefreshScheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		CatchupWindow: remoteSessionRefreshCatchupWindow,
+		ID:            remoteSessionRefreshScheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{{Every: remoteSessionRefreshInterval}},
 			Jitter:    remoteSessionRefreshScheduleJitter,
@@ -142,14 +147,7 @@ func AddRemoteSessionRefreshSchedule(ctx context.Context, temporalEnv *tenv.Envi
 			schedule := input.Description.Schedule
 			schedule.Spec = &options.Spec
 			schedule.Action = options.Action
-			if schedule.Policy == nil {
-				schedule.Policy = &client.SchedulePolicies{
-					Overlap:        enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-					CatchupWindow:  0,
-					PauseOnFailure: false,
-				}
-			}
-			schedule.Policy.Overlap = enums.SCHEDULE_OVERLAP_POLICY_SKIP
+			setScheduleCatchup(&schedule, remoteSessionRefreshCatchupWindow)
 			return &client.ScheduleUpdate{Schedule: &schedule, TypedSearchAttributes: nil}, nil
 		},
 	}); err != nil {

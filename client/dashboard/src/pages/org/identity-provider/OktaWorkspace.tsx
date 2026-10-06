@@ -16,9 +16,10 @@ import { ApplicationsTab } from "./tabs/applications/ApplicationsTab";
 import { CONNECTION_STATUS, isConnected } from "./connectionView";
 import { CrossAppAccessTab } from "./tabs/cross-app-access/CrossAppAccessTab";
 import { useOktaConnection } from "./identityProviderQueries";
+import { ChecklistOverridesProvider } from "./tabs/setup/ConnectionChecklist";
 import { OktaConnectionTab } from "./tabs/setup/OktaConnectionTab";
 import {
-  enterpriseManagedAuthHref,
+  identityProvidersHref,
   OKTA_VIEWS,
   oktaViewHref,
   type OktaView,
@@ -50,8 +51,8 @@ export function OktaProviderCard(): JSX.Element {
         )}
       </div>
       <Text muted small>
-        Sync applications from Okta and set up Cross App Access for your AI
-        agents.
+        Sync applications from Okta and set up Enterprise Managed Auth for your
+        AI agents.
       </Text>
       {query.isPending ? (
         <SkeletonParagraph />
@@ -108,13 +109,10 @@ export function OktaWorkspace(): JSX.Element {
   const { query, connection } = useOktaConnection();
   const connected = isConnected(connection);
   return (
-    <section
-      className="flex min-w-0 flex-col gap-6"
-      aria-label="Okta Enterprise Managed Auth"
-    >
+    <section className="flex min-w-0 flex-col gap-6" aria-label="Okta">
       <div className="flex flex-col gap-3">
         <Link
-          to={enterpriseManagedAuthHref()}
+          to={identityProvidersHref()}
           className="inline-flex w-fit items-center gap-2 text-sm underline underline-offset-4"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -123,7 +121,8 @@ export function OktaWorkspace(): JSX.Element {
         <Heading variant="h2">Okta</Heading>
         {connected && (
           <Text muted>
-            Manage how your AI agents access company applications using Okta.
+            Leverage your Okta connection for application syncing and automated
+            authorization.
           </Text>
         )}
       </div>
@@ -137,27 +136,32 @@ export function OktaWorkspace(): JSX.Element {
           <ApiErrorAlert error={query.error} />
           {query.data !== undefined &&
             (connected ? (
-              <Tabs
-                value={view}
-                onValueChange={(value) => {
-                  const next = OKTA_VIEWS.find((item) => item === value);
-                  if (next) void navigate(oktaViewHref(next));
-                }}
-                className="min-w-0 gap-6"
-              >
-                <div className="min-w-0 overflow-x-auto">
-                  <TabsList aria-label="Okta setup and access" className="h-10">
-                    {OKTA_VIEWS.map((item) => (
-                      <TabsTrigger key={item} value={item}>
-                        {VIEW_LABELS[item]}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </div>
-                <TabsContent value={view}>
-                  <ViewContent view={view} connection={connection} />
-                </TabsContent>
-              </Tabs>
+              <ChecklistOverridesProvider key={connection.id}>
+                <Tabs
+                  value={view}
+                  onValueChange={(value) => {
+                    const next = OKTA_VIEWS.find((item) => item === value);
+                    if (next) void navigate(oktaViewHref(next));
+                  }}
+                  className="min-w-0 gap-6"
+                >
+                  <div className="min-w-0 overflow-x-auto">
+                    <TabsList
+                      aria-label="Okta setup and access"
+                      className="h-10"
+                    >
+                      {OKTA_VIEWS.map((item) => (
+                        <TabsTrigger key={item} value={item}>
+                          {VIEW_LABELS[item]}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </div>
+                  <TabsContent value={view}>
+                    <ViewContent view={view} connection={connection} />
+                  </TabsContent>
+                </Tabs>
+              </ChecklistOverridesProvider>
             ) : (
               <OktaConnectionTab connection={connection} />
             ))}

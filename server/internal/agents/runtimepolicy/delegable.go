@@ -2,12 +2,19 @@ package runtimepolicy
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
+
+// MaxDelegableGrantCandidates bounds the candidates one discovery may return.
+const MaxDelegableGrantCandidates = 4096
+
+// ErrTooManyDelegableGrantCandidates marks a discovery over that bound.
+var ErrTooManyDelegableGrantCandidates = errors.New("too many delegable grant candidates")
 
 // DelegableGrants returns safe representable allow-only candidates, not a full
 // resource inventory. An overlapping exclusion removes the entire candidate:
@@ -59,8 +66,8 @@ func DelegableGrants(agent, owner, caller []authz.Grant, constraints ...authz.Se
 						return nil, fmt.Errorf("encode delegable selector: %w", err)
 					}
 					candidates[string(scope)+"\x00"+string(encoded)] = candidate
-					if len(candidates) > 4096 {
-						return nil, fmt.Errorf("too many delegable grant candidates")
+					if len(candidates) > MaxDelegableGrantCandidates {
+						return nil, ErrTooManyDelegableGrantCandidates
 					}
 				}
 			}
@@ -78,7 +85,8 @@ func DelegableGrants(agent, owner, caller []authz.Grant, constraints ...authz.Se
 // all implied scopes, is allowed by every parent policy. Instance authorization
 // alone is insufficient: a narrower exclusion may overlap a broad delegation
 // without matching its dimensionless check. Such overlap fails closed because
-// delegated policies cannot encode exclusions. Discovery and issuance share
+// delegated policies cannot encode exclusions, unless a direct grant naming the
+// resource outranks the inherited restriction. Discovery and issuance share
 // this check so neither can broaden a parent's effective permissions.
 func DelegationContained(delegated DelegatedPolicy, policies ...[]authz.Grant) (bool, error) {
 	for _, grant := range delegated.RuntimeGrants() {
@@ -90,9 +98,17 @@ func DelegationContained(delegated DelegatedPolicy, policies ...[]authz.Grant) (
 			if !hasExclusion {
 				continue
 			}
+			// A direct grant naming the concrete resource outranks restrictions
+			// inherited from roles or user:all, exactly as it does at runtime.
+			// The principal's own restrictions are never outranked.
+			directlyGranted := authz.ExclusionYieldsToDirectGrants(grant.Scope) &&
+				authz.GrantsContainSelector(authz.DirectOverrideGrants(policy), grant.Scope, grant.Selector)
 			for _, restriction := range policy {
 				// Root is deliberately not an exclusion, matching authz's evaluator.
 				if !slices.Contains(authz.ScopeImplicationClosure(restriction.Scope), exclusion) {
+					continue
+				}
+				if directlyGranted && !authz.IsDirectGrant(restriction) {
 					continue
 				}
 				if _, overlaps := intersectSelectors(grant.Selector, restriction.Selector); overlaps {

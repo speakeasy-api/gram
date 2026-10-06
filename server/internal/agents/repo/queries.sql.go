@@ -16,11 +16,13 @@ const createAgent = `-- name: CreateAgent :one
 INSERT INTO agents (
   organization_id,
   owner_user_id,
+  project_id,
   name
 ) VALUES (
   $1,
   $2,
-  $3
+  $3,
+  $4
 )
 RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
@@ -28,11 +30,20 @@ RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, re
 type CreateAgentParams struct {
 	OrganizationID string
 	OwnerUserID    string
+	ProjectID      uuid.NullUUID
 	Name           string
 }
 
+// project_id is nullable while agents created before project scoping carry
+// none. The composite foreign key pins it to the agent's own organization, so
+// a project from another tenant is rejected by the database rather than here.
 func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent, error) {
-	row := q.db.QueryRow(ctx, createAgent, arg.OrganizationID, arg.OwnerUserID, arg.Name)
+	row := q.db.QueryRow(ctx, createAgent,
+		arg.OrganizationID,
+		arg.OwnerUserID,
+		arg.ProjectID,
+		arg.Name,
+	)
 	var i Agent
 	err := row.Scan(
 		&i.ID,
@@ -96,12 +107,14 @@ INSERT INTO agents (
   id,
   organization_id,
   owner_user_id,
+  project_id,
   name
 ) VALUES (
   $1,
   $2,
   $3,
-  $4
+  $4,
+  $5
 )
 RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
@@ -110,6 +123,7 @@ type CreateAgentWithIDParams struct {
 	ID             uuid.UUID
 	OrganizationID string
 	OwnerUserID    string
+	ProjectID      uuid.NullUUID
 	Name           string
 }
 
@@ -118,6 +132,7 @@ func (q *Queries) CreateAgentWithID(ctx context.Context, arg CreateAgentWithIDPa
 		arg.ID,
 		arg.OrganizationID,
 		arg.OwnerUserID,
+		arg.ProjectID,
 		arg.Name,
 	)
 	var i Agent

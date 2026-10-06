@@ -11,7 +11,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -318,7 +318,7 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 		// identity-less session carries nothing else, and later events may
 		// omit the hostname the fallback attribution needs.
 		if metadata.SessionID != "" && !isAgentActor(ctx) && (metadata.UserEmail != "" || metadata.Hostname != "") {
-			if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
+			if err := s.cacheSessionMetadata(ctx, *metadata); err != nil {
 				s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
 					attr.SlogError(err),
 					attr.SlogGenAIConversationID(metadata.SessionID),
@@ -326,7 +326,7 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 			}
 		}
 	} else {
-		s.refreshMCPListTTL(ctx, metadata.SessionID)
+		s.refreshMCPListTTL(ctx, metadata.ProjectID, metadata.SessionID)
 	}
 
 	s.writeCodexHookToClickHouse(ctx, payload, metadata, blockReason)
@@ -334,19 +334,19 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 	switch payload.HookEventName {
 	case "PreToolUse":
 		if err := s.writeCodexToolCallRequestToPG(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "failed to persist Codex tool call request", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Codex tool call request", err)
 		}
 	case "PostToolUse":
 		if err := s.writeCodexToolCallResultToPG(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "failed to persist Codex tool call result", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Codex tool call result", err)
 		}
 	case "UserPromptSubmit":
 		if err := s.writeCodexUserPromptToPG(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "failed to persist Codex user prompt", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Codex user prompt", err)
 		}
 	case "Stop":
 		if err := s.writeCodexAssistantResponseToPG(ctx, payload, metadata); err != nil {
-			s.logger.ErrorContext(ctx, "failed to persist Codex assistant response", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Codex assistant response", err)
 		}
 	}
 }
@@ -367,10 +367,10 @@ func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.
 	}
 
 	entries := ParseCodexMCPList(raw)
-	if !s.claimMCPListSnapshot(ctx, *payload.SessionID) {
+	if !s.claimMCPListSnapshot(ctx, projectID, *payload.SessionID) {
 		return
 	}
-	if err := s.cache.Set(ctx, sessionMCPListCacheKey(*payload.SessionID), entries, sessionMCPListTTL); err != nil {
+	if err := s.cache.Set(ctx, sessionMCPListCacheKey(projectID, *payload.SessionID), entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache Codex MCP list snapshot",
 			attr.SlogEvent("codex_hook_mcp_list_cache_set_failed"),
 			attr.SlogError(err),
@@ -476,7 +476,7 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		// SessionStart is excluded: recordCodexHook already persists this
 		// metadata (attribution included) for that event; this write-back
 		// exists for sessions whose SessionStart was never seen.
-		if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
+		if err := s.cacheSessionMetadata(ctx, *metadata); err != nil {
 			s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
 				attr.SlogError(err),
 				attr.SlogGenAIConversationID(metadata.SessionID),
@@ -681,7 +681,7 @@ func (s *Service) writeCodexToolCallRequestToPG(ctx context.Context, payload *ge
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCodexChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, chat.DefaultCodexChatTitle)
 }
 
 func (s *Service) writeCodexToolCallResultToPG(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata) error {
@@ -729,7 +729,7 @@ func (s *Service) writeCodexToolCallResultToPG(ctx context.Context, payload *gen
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCodexChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, chat.DefaultCodexChatTitle)
 }
 
 func (s *Service) writeCodexUserPromptToPG(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata) error {
@@ -778,7 +778,7 @@ func (s *Service) writeCodexUserPromptToPG(ctx context.Context, payload *gen.Cod
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCodexChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, chat.DefaultCodexChatTitle)
 }
 
 func (s *Service) writeCodexAssistantResponseToPG(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata) error {
@@ -827,7 +827,7 @@ func (s *Service) writeCodexAssistantResponseToPG(ctx context.Context, payload *
 		Generation:       0,
 	}
 
-	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCodexChatTitle); err != nil {
+	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, chat.DefaultCodexChatTitle); err != nil {
 		return err
 	}
 

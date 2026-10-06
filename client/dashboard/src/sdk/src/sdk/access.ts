@@ -3,13 +3,17 @@
  */
 
 import { accessCreateRole } from "../funcs/accessCreateRole.js";
+import { accessDeleteDirectoryRoleMapping } from "../funcs/accessDeleteDirectoryRoleMapping.js";
 import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
+import { accessExplainResourceAccess } from "../funcs/accessExplainResourceAccess.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
 import { accessGetShadowMCPInventoryServer } from "../funcs/accessGetShadowMCPInventoryServer.js";
 import { accessListAIDetections } from "../funcs/accessListAIDetections.js";
+import { accessListAIDetectionUsers } from "../funcs/accessListAIDetectionUsers.js";
 import { accessListAudienceOptions } from "../funcs/accessListAudienceOptions.js";
 import { accessListChallengeBuckets } from "../funcs/accessListChallengeBuckets.js";
 import { accessListChallenges } from "../funcs/accessListChallenges.js";
+import { accessListDirectoryRoleMappings } from "../funcs/accessListDirectoryRoleMappings.js";
 import { accessListEmployeeAIDetections } from "../funcs/accessListEmployeeAIDetections.js";
 import { accessListGrants } from "../funcs/accessListGrants.js";
 import { accessListIdentityAccess } from "../funcs/accessListIdentityAccess.js";
@@ -24,16 +28,22 @@ import { accessRequestAccess } from "../funcs/accessRequestAccess.js";
 import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
 import { accessResolveShadowMCPInventoryRequest } from "../funcs/accessResolveShadowMCPInventoryRequest.js";
 import { accessSetAIToolDecision } from "../funcs/accessSetAIToolDecision.js";
+import { accessSetDirectoryRoleMapping } from "../funcs/accessSetDirectoryRoleMapping.js";
 import { accessSetResourceAudience } from "../funcs/accessSetResourceAudience.js";
+import { accessSyncDirectoryGroups } from "../funcs/accessSyncDirectoryGroups.js";
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
 import { accessUpdateShadowMCPInventoryServerName } from "../funcs/accessUpdateShadowMCPInventoryServerName.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AccessMember } from "../models/components/accessmember.js";
+import { DirectoryRoleMapping } from "../models/components/directoryrolemapping.js";
+import { ExplainResourceAccessResult } from "../models/components/explainresourceaccessresult.js";
 import { ListAIDetectionsResult } from "../models/components/listaidetectionsresult.js";
+import { ListAIDetectionUsersResult } from "../models/components/listaidetectionusersresult.js";
 import { ListAudienceOptionsResult } from "../models/components/listaudienceoptionsresult.js";
 import { ListChallengeBucketsResult } from "../models/components/listchallengebucketsresult.js";
 import { ListChallengesResult } from "../models/components/listchallengesresult.js";
+import { ListDirectoryRoleMappingsResult } from "../models/components/listdirectoryrolemappingsresult.js";
 import { ListIdentityAccessResult } from "../models/components/listidentityaccessresult.js";
 import { ListMembersResult } from "../models/components/listmembersresult.js";
 import { ListRolesResult } from "../models/components/listrolesresult.js";
@@ -48,14 +58,23 @@ import { Role } from "../models/components/role.js";
 import { SetAIToolDecisionResult } from "../models/components/setaitooldecisionresult.js";
 import { ShadowMCPInventoryServer } from "../models/components/shadowmcpinventoryserver.js";
 import { ShadowMCPInventoryURLState } from "../models/components/shadowmcpinventoryurlstate.js";
+import { SyncDirectoryGroupsResult } from "../models/components/syncdirectorygroupsresult.js";
 import {
   CreateRoleRequest,
   CreateRoleSecurity,
 } from "../models/operations/createrole.js";
 import {
+  DeleteDirectoryRoleMappingRequest,
+  DeleteDirectoryRoleMappingSecurity,
+} from "../models/operations/deletedirectoryrolemapping.js";
+import {
   DeleteRoleRequest,
   DeleteRoleSecurity,
 } from "../models/operations/deleterole.js";
+import {
+  ExplainResourceAccessRequest,
+  ExplainResourceAccessSecurity,
+} from "../models/operations/explainresourceaccess.js";
 import {
   GetRoleRequest,
   GetRoleSecurity,
@@ -69,6 +88,10 @@ import {
   ListAIDetectionsSecurity,
 } from "../models/operations/listaidetections.js";
 import {
+  ListAIDetectionUsersRequest,
+  ListAIDetectionUsersSecurity,
+} from "../models/operations/listaidetectionusers.js";
+import {
   ListAudienceOptionsRequest,
   ListAudienceOptionsSecurity,
 } from "../models/operations/listaudienceoptions.js";
@@ -80,6 +103,10 @@ import {
   ListChallengesRequest,
   ListChallengesSecurity,
 } from "../models/operations/listchallenges.js";
+import {
+  ListDirectoryRoleMappingsRequest,
+  ListDirectoryRoleMappingsSecurity,
+} from "../models/operations/listdirectoryrolemappings.js";
 import {
   ListEmployeeAIDetectionsRequest,
   ListEmployeeAIDetectionsSecurity,
@@ -137,9 +164,17 @@ import {
   SetAIToolDecisionSecurity,
 } from "../models/operations/setaitooldecision.js";
 import {
+  SetDirectoryRoleMappingRequest,
+  SetDirectoryRoleMappingSecurity,
+} from "../models/operations/setdirectoryrolemapping.js";
+import {
   SetResourceAudienceRequest,
   SetResourceAudienceSecurity,
 } from "../models/operations/setresourceaudience.js";
+import {
+  SyncDirectoryGroupsRequest,
+  SyncDirectoryGroupsSecurity,
+} from "../models/operations/syncdirectorygroups.js";
 import {
   UpdateMemberRolesRequest,
   UpdateMemberRolesSecurity,
@@ -175,6 +210,25 @@ export class Access extends ClientSDK {
   }
 
   /**
+   * deleteDirectoryRoleMapping access
+   *
+   * @remarks
+   * Remove a directory role mapping.
+   */
+  async deleteDirectoryRoleMapping(
+    request: DeleteDirectoryRoleMappingRequest,
+    security?: DeleteDirectoryRoleMappingSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(accessDeleteDirectoryRoleMapping(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * deleteRole access
    *
    * @remarks
@@ -186,6 +240,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(accessDeleteRole(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * explainResourceAccess access
+   *
+   * @remarks
+   * Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead. Like listIdentityAccess it describes one person's access, so it takes a session only: API keys are not checked against grants and would see any member's rules.
+   */
+  async explainResourceAccess(
+    request: ExplainResourceAccessRequest,
+    security?: ExplainResourceAccessSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ExplainResourceAccessResult> {
+    return unwrapAsync(accessExplainResourceAccess(
       this,
       request,
       security,
@@ -224,6 +297,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ShadowMCPInventoryServer> {
     return unwrapAsync(accessGetShadowMCPInventoryServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listAIDetectionUsers access
+   *
+   * @remarks
+   * List the enrolled users one detected AI tool was found for, each with their devices, signals, versions and first and last sightings: the evidence listEmployeeAIDetections gives per tool for one person, expanded the other way round. Org-scoped like listAIDetections and, like it, requires an authenticated session authorized for org:admin on the active organization. Linked alias emails are folded to the canonical identity, so one person is one row. A target with no detections in the organization is not_found.
+   */
+  async listAIDetectionUsers(
+    request: ListAIDetectionUsersRequest,
+    security?: ListAIDetectionUsersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAIDetectionUsersResult> {
+    return unwrapAsync(accessListAIDetectionUsers(
       this,
       request,
       security,
@@ -300,6 +392,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListChallengesResult> {
     return unwrapAsync(accessListChallenges(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listDirectoryRoleMappings access
+   *
+   * @remarks
+   * List the organization's directory groups and attribute values, and the roles mapped to them.
+   */
+  async listDirectoryRoleMappings(
+    request?: ListDirectoryRoleMappingsRequest | undefined,
+    security?: ListDirectoryRoleMappingsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListDirectoryRoleMappingsResult> {
+    return unwrapAsync(accessListDirectoryRoleMappings(
       this,
       request,
       security,
@@ -574,6 +685,25 @@ export class Access extends ClientSDK {
   }
 
   /**
+   * setDirectoryRoleMapping access
+   *
+   * @remarks
+   * Map a directory group or attribute value to a role, replacing any role it was mapped to before.
+   */
+  async setDirectoryRoleMapping(
+    request: SetDirectoryRoleMappingRequest,
+    security?: SetDirectoryRoleMappingSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<DirectoryRoleMapping> {
+    return unwrapAsync(accessSetDirectoryRoleMapping(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * setResourceAudience access
    *
    * @remarks
@@ -585,6 +715,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ResourceAudienceResult> {
     return unwrapAsync(accessSetResourceAudience(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * syncDirectoryGroups access
+   *
+   * @remarks
+   * Fetch the organization's directory groups from WorkOS and save any that are new or changed.
+   */
+  async syncDirectoryGroups(
+    request?: SyncDirectoryGroupsRequest | undefined,
+    security?: SyncDirectoryGroupsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SyncDirectoryGroupsResult> {
+    return unwrapAsync(accessSyncDirectoryGroups(
       this,
       request,
       security,

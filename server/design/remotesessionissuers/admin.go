@@ -37,13 +37,15 @@ var ListOrganizationRemoteSessionIssuersResult = Type("ListOrganizationRemoteSes
 // OrganizationIssuerDeletePreflight describes the impact of deleting an issuer so the
 // confirmation dialog can be authoritative.
 var OrganizationIssuerDeletePreflight = Type("OrganizationIssuerDeletePreflight", func() {
-	Description("Authoritative impact summary for deleting a remote_session_issuer: its client and trusted user-session-issuer references.")
+	Description("Authoritative impact summary for deleting a remote_session_issuer: its client, trusted user-session-issuer, and active identity-chaining binding references.")
 
 	Attribute("client_count", Int, "Number of non-deleted remote_session_clients registered with this issuer.")
 	Attribute("mcp_server_names", ArrayOf(String), "Display names of MCP servers attached to this issuer's clients.")
 	Attribute("trusted_user_session_issuers", ArrayOf(TrustedUserSessionIssuerReference), "Organization-owned user_session_issuers that trust this issuer and block deletion.")
 
 	Required("client_count", "mcp_server_names", "trusted_user_session_issuers")
+	Attribute("ema_binding_count", Int64, "Active identity-chaining bindings that must be explicitly unlinked before deletion.")
+	Required("ema_binding_count")
 })
 
 var TrustedUserSessionIssuerReference = Type("TrustedUserSessionIssuerReference", func() {
@@ -79,8 +81,8 @@ var IssuerFieldMismatch = Type("IssuerFieldMismatch", func() {
 // OrganizationIssuerMigratePreflight describes the impact of consolidating a
 // source issuer onto a target issuer so the confirmation dialog can list every
 // blocker before the mutation runs. can_migrate is FALSE when endpoint
-// metadata differs, an MCP-server binding conflicts, or a user-session issuer
-// still trusts the source — the same conditions the mutation rejects with 409.
+// metadata differs, an MCP-server binding conflicts, an EMA binding is active,
+// or a user-session issuer still trusts the source — the same conditions the mutation rejects with 409.
 var OrganizationIssuerMigratePreflight = Type("OrganizationIssuerMigratePreflight", func() {
 	Description("Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: how many clients move, which MCP servers are affected, and every blocker that would make the migration fail.")
 
@@ -90,9 +92,10 @@ var OrganizationIssuerMigratePreflight = Type("OrganizationIssuerMigratePrefligh
 	Attribute("conflicting_mcp_server_names", ArrayOf(String), "Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.")
 	Attribute("warnings", ArrayOf(IssuerFieldMismatch), "Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.")
 	Attribute("trusted_user_session_issuers", ArrayOf(TrustedUserSessionIssuerReference), "User-session issuers that trust the source and block migration until explicitly unlinked or re-linked.")
-	Attribute("can_migrate", Boolean, "TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.")
+	Attribute("ema_binding_count", Int64, "Number of active identity-chaining bindings on the source. Non-zero blocks migration; explicitly unlink these bindings before migration, then prepare new bindings for the target.")
+	Attribute("can_migrate", Boolean, "TRUE when the migration would succeed: no active identity-chaining bindings, endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.")
 
-	Required("client_count", "mcp_server_names", "endpoint_mismatches", "conflicting_mcp_server_names", "warnings", "trusted_user_session_issuers", "can_migrate")
+	Required("ema_binding_count", "client_count", "mcp_server_names", "endpoint_mismatches", "conflicting_mcp_server_names", "warnings", "trusted_user_session_issuers", "can_migrate")
 })
 
 // MigrateOrganizationRemoteSessionIssuerResult reports the outcome of a

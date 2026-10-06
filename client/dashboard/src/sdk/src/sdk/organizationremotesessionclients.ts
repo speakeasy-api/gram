@@ -8,6 +8,7 @@ import { organizationRemoteSessionClientsCreateCimd } from "../funcs/organizatio
 import { organizationRemoteSessionClientsDelete } from "../funcs/organizationRemoteSessionClientsDelete.js";
 import { organizationRemoteSessionClientsDetachKeySet } from "../funcs/organizationRemoteSessionClientsDetachKeySet.js";
 import { organizationRemoteSessionClientsGet } from "../funcs/organizationRemoteSessionClientsGet.js";
+import { organizationRemoteSessionClientsGetDelegationStatus } from "../funcs/organizationRemoteSessionClientsGetDelegationStatus.js";
 import { organizationRemoteSessionClientsGetDeletePreflight } from "../funcs/organizationRemoteSessionClientsGetDeletePreflight.js";
 import { organizationRemoteSessionClientsList } from "../funcs/organizationRemoteSessionClientsList.js";
 import { organizationRemoteSessionClientsListMcpServers } from "../funcs/organizationRemoteSessionClientsListMcpServers.js";
@@ -16,6 +17,7 @@ import { organizationRemoteSessionClientsRotate } from "../funcs/organizationRem
 import { organizationRemoteSessionClientsUpdate } from "../funcs/organizationRemoteSessionClientsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListOrganizationMcpServersResult } from "../models/components/listorganizationmcpserversresult.js";
+import { OrganizationClientDelegationStatus } from "../models/components/organizationclientdelegationstatus.js";
 import { OrganizationClientDeletePreflight } from "../models/components/organizationclientdeletepreflight.js";
 import { RemoteSessionClient } from "../models/components/remotesessionclient.js";
 import {
@@ -42,6 +44,10 @@ import {
   GetOrganizationRemoteSessionClientRequest,
   GetOrganizationRemoteSessionClientSecurity,
 } from "../models/operations/getorganizationremotesessionclient.js";
+import {
+  GetOrganizationRemoteSessionClientDelegationStatusRequest,
+  GetOrganizationRemoteSessionClientDelegationStatusSecurity,
+} from "../models/operations/getorganizationremotesessionclientdelegationstatus.js";
 import {
   GetOrganizationRemoteSessionClientDeletePreflightRequest,
   GetOrganizationRemoteSessionClientDeletePreflightSecurity,
@@ -178,6 +184,27 @@ export class OrganizationRemoteSessionClients extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RemoteSessionClient> {
     return unwrapAsync(organizationRemoteSessionClientsGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getClientDelegationStatus organizationRemoteSessionClients
+   *
+   * @remarks
+   * Read sanitized delegation observations for the current upstream configuration in the last 30 days. Requires org:admin. Never exercises credentials; presence is not proof of future refresh success.
+   */
+  async getDelegationStatus(
+    request: GetOrganizationRemoteSessionClientDelegationStatusRequest,
+    security?:
+      | GetOrganizationRemoteSessionClientDelegationStatusSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<OrganizationClientDelegationStatus> {
+    return unwrapAsync(organizationRemoteSessionClientsGetDelegationStatus(
       this,
       request,
       security,

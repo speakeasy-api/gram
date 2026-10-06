@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -59,7 +60,7 @@ type Service struct {
 	roleMgr  *RoleManager
 	audit    *audit.Logger
 	email    *email.Service
-	siteURL  *url.URL
+	orgHosts *orghost.Resolver
 	foldGate CanonicalFoldGate
 }
 
@@ -85,7 +86,7 @@ func NewService(
 	authz *authz.Engine,
 	auditLogger *audit.Logger,
 	emailService *email.Service,
-	siteURL *url.URL,
+	orgHosts *orghost.Resolver,
 	foldGate CanonicalFoldGate,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
@@ -100,7 +101,7 @@ func NewService(
 		roleMgr:  roleMgr,
 		audit:    auditLogger,
 		email:    emailService,
-		siteURL:  siteURL,
+		orgHosts: orgHosts,
 		foldGate: foldGate,
 	}
 }
@@ -306,6 +307,10 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeSkillBlockedWrite, description: "Store exceptions for skill write access.", resourceType: "skill"},
 		{scope: authz.ScopePluginWrite, description: "Manage plugin contents and publish plugins within the project, without editing referenced skills or MCP servers.", resourceType: "project"},
 		{scope: authz.ScopePluginBlockedWrite, description: "Store exceptions for plugin write access.", resourceType: "project"},
+		{scope: authz.ScopeAssistantRead, description: "View and interact with assistants within the project.", resourceType: "assistant"},
+		{scope: authz.ScopeAssistantBlockedRead, description: "Store exceptions for assistant read access.", resourceType: "assistant"},
+		{scope: authz.ScopeAssistantWrite, description: "Create and modify assistants within the project.", resourceType: "assistant"},
+		{scope: authz.ScopeAssistantBlockedWrite, description: "Store exceptions for assistant write access.", resourceType: "assistant"},
 		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
@@ -315,6 +320,8 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeAgentWrite, description: "Create, configure, and manage agents.", resourceType: "agent"},
 		{scope: authz.ScopeAgentAuthorize, description: "Authorize and manage agent credentials.", resourceType: "agent"},
 		{scope: authz.ScopeAgentTransfer, description: "Transfer agent ownership.", resourceType: "agent"},
+		{scope: authz.ScopeWorkloadRead, description: "View workload identity trust policy: issuers, admitted subjects, and assigned agents.", resourceType: "workload"},
+		{scope: authz.ScopeWorkloadWrite, description: "Register workload issuers, admit and withdraw subjects, and assign agents to workloads.", resourceType: "workload"},
 		{scope: authz.ScopeOrgDeviceAgentSync, description: "Let an agent's device agent sync the plugins assigned to it.", resourceType: "org"},
 		{scope: authz.ScopeOrgHooksIngest, description: "Let an agent send AI-tool hook events and telemetry.", resourceType: "org"},
 	}
@@ -526,7 +533,28 @@ func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemb
 		attr.UserID(ac.UserID),
 	)
 
-	return memberUpdate.After, nil
+	// The update's After is also the audit snapshot, which leaves out
+	// directory-owned data, so the response gets the member's mapped roles on a
+	// copy. The roles are already committed, so a failed read only leaves the
+	// mapped roles out of the response.
+	result := *memberUpdate.After
+	principals, err := repo.New(s.db).ListUserRolePrincipals(ctx, repo.ListUserRolePrincipalsParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		UserID:         result.ID,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "load directory mapped roles for member role update response", attr.SlogError(err))
+		return &result, nil
+	}
+	for _, principal := range principals {
+		if !principal.FromDirectoryMapping {
+			continue
+		}
+		// A role principal URN ends in the role ID: role:<kind>:<id>.
+		roleID := principal.PrincipalUrn[strings.LastIndex(principal.PrincipalUrn, ":")+1:]
+		result.DirectoryRoleIds = append(result.DirectoryRoleIds, roleID)
+	}
+	return &result, nil
 }
 
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
@@ -685,6 +713,8 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeSkillRead), Selectors: nil},
 		{Scope: string(authz.ScopeSkillWrite), Selectors: nil},
 		{Scope: string(authz.ScopePluginWrite), Selectors: nil},
+		{Scope: string(authz.ScopeAssistantRead), Selectors: nil},
+		{Scope: string(authz.ScopeAssistantWrite), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBlock), Selectors: nil},
@@ -694,6 +724,8 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeAgentWrite), Selectors: nil},
 		{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil},
 		{Scope: string(authz.ScopeAgentTransfer), Selectors: nil},
+		{Scope: string(authz.ScopeWorkloadRead), Selectors: nil},
+		{Scope: string(authz.ScopeWorkloadWrite), Selectors: nil},
 		{Scope: string(authz.ScopeOrgDeviceAgentSync), Selectors: nil},
 		{Scope: string(authz.ScopeOrgHooksIngest), Selectors: nil},
 	}
@@ -701,13 +733,19 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 
 func listRoleGrantsFromGrants(grants []authz.Grant) []*gen.ListRoleGrant {
 	scoped := authz.GrantsToScopedGrants(grants)
+	// Direct selectors let clients apply principal precedence: a direct grant
+	// naming a resource outranks a block inherited from a role or everyone.
+	direct := make(map[string][]*gen.Selector)
+	for _, grant := range authz.DirectOverrideGrants(grants) {
+		direct[string(grant.Scope)] = append(direct[string(grant.Scope)], authzSelectorToGen(grant.Selector))
+	}
 	out := make([]*gen.ListRoleGrant, 0, len(scoped))
 	for _, g := range scoped {
 		var selectors []*gen.Selector
 		for _, sel := range g.Selectors {
 			selectors = append(selectors, authzSelectorToGen(sel))
 		}
-		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Selectors: selectors})
+		out = append(out, &gen.ListRoleGrant{Scope: g.Scope, SubScopes: g.SubScopes, Selectors: selectors, DirectSelectors: direct[g.Scope]})
 	}
 	return out
 }
@@ -1558,8 +1596,8 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	// project from the tenant-qualified resource rather than trusting browser
 	// state or a client-supplied project id.
 	manageAccessLink := ""
-	if s.siteURL != nil {
-		accessURL := s.siteURL.JoinPath(org.Slug, "access", "roles")
+	if siteURL := s.orgHosts.SiteURL(org.DefaultHost); siteURL != nil {
+		accessURL := siteURL.JoinPath(org.Slug, "access", "roles")
 		q := url.Values{}
 		q.Set("grant_user", ac.UserID)
 		q.Set("scope", payload.Scope)

@@ -66,7 +66,7 @@ func (s *Service) ListClients(ctx context.Context, payload *orgclientsgen.ListCl
 
 	items := make([]*orgclientsgen.OrganizationRemoteSessionClient, 0, len(rows))
 	for _, row := range rows {
-		clientView, err := mv.BuildRemoteSessionClientView(row.RemoteSessionClient, row.UserSessionIssuerIds)
+		clientView, err := s.clientView(row.RemoteSessionClient, row.UserSessionIssuerIds)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
 		}
@@ -118,7 +118,7 @@ func (s *Service) GetClient(ctx context.Context, payload *orgclientsgen.GetClien
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	view, err := mv.BuildRemoteSessionClientView(client.RemoteSessionClient, client.UserSessionIssuerIds)
+	view, err := s.clientView(client.RemoteSessionClient, client.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -195,12 +195,24 @@ func (s *Service) GetClientDeletePreflight(ctx context.Context, payload *orgclie
 		blockingReason = &reason
 	}
 
+	emaCount, err := r.CountActiveEMABindingsForClient(ctx, repo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(clientID), OrganizationID: authCtx.ActiveOrganizationID, ProjectID: uuid.Nil})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count identity-chaining bindings")
+	}
+
+	if canDelete && emaCount > 0 {
+		canDelete = false
+		reason := "identity_chaining"
+		blockingReason = &reason
+	}
+
 	return &orgclientsgen.OrganizationClientDeletePreflight{
 		SessionCount:              int(sessionCount),
 		McpServerNames:            names,
 		TrustedUserSessionIssuers: trustedIssuers,
 		CanDelete:                 canDelete,
 		BlockingReason:            blockingReason,
+		EmaBindingCount:           emaCount,
 	}, nil
 }
 
@@ -362,6 +374,7 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 		LegacyCallbackUrl:               false,
 		JsonWebKeySetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CallbackBaseUrl:                 s.origins.NewClientBaseURL(true),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create organization admin remote session client").LogError(ctx, logger)
@@ -384,7 +397,7 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 	}
 
 	// Standalone client: no user_session_issuer attachments.
-	view, err := mv.BuildRemoteSessionClientView(created, nil)
+	view, err := s.clientView(created, nil)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -501,15 +514,17 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 		return nil, oops.E(oops.CodeUnexpected, err, "generate client id").LogError(ctx, logger)
 	}
 
+	callbackBaseURL := s.origins.NewClientBaseURL(true)
 	created, err := txRepo.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
 		ID:                    clientID,
 		ProjectID:             clientProjectID,
 		OrganizationID:        conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID: issuerID,
-		ClientIDMetadataUri:   ClientMetadataDocumentURL(s.serverURL, clientID),
+		ClientIDMetadataUri:   ClientMetadataDocumentURL(s.origins.ForClient(callbackBaseURL), clientID),
 		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
 		Scope:                 payload.Scope,
 		Audience:              conv.PtrToPGText(payload.Audience),
+		CallbackBaseUrl:       callbackBaseURL,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create organization admin remote session client").LogError(ctx, logger)
@@ -532,7 +547,7 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 	}
 
 	// Standalone client: no user_session_issuer attachments.
-	view, err := mv.BuildRemoteSessionClientView(created, nil)
+	view, err := s.clientView(created, nil)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -557,6 +572,10 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
+	}
+
+	if payload.LegacyCallbackURL != nil && !authCtx.IsAdmin {
+		return nil, oops.E(oops.CodeForbidden, nil, "changing a client's legacy callback mode requires a platform admin").LogError(ctx, logger)
 	}
 
 	// Encrypt a rotated client secret before it touches the database; an absent
@@ -631,12 +650,17 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, err
 	}
 
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.ProjectID.UUID, clientID); err != nil {
+		return nil, err
+	}
+
 	updated, err := txRepo.UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{
 		ClientSecretEncrypted:           clientSecretEncrypted,
 		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
 		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
 		Scope:                           payload.Scope,
 		Audience:                        conv.PtrToPGText(payload.Audience),
+		LegacyCallbackUrl:               conv.PtrToPGBool(payload.LegacyCallbackURL),
 		ID:                              clientID,
 		OrganizationID:                  conv.ToPGText(authCtx.ActiveOrganizationID),
 	})
@@ -688,6 +712,8 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	// Set after the audit snapshot so it matches the snapshot before.
+	afterView.CallbackURL = new(s.origins.ClientCallbackURL(updated.CallbackBaseUrl))
 	return afterView, nil
 }
 
@@ -742,8 +768,13 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 		OrganizationID:           authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
+		if conflict, ok := errors.AsType[*oops.ShareableError](err); ok && conflict.Code == oops.CodeConflict {
+			return nil, conflict.LogWarn(ctx, logger)
+		}
 		var registrationErr *DynamicClientRegistrationError
 		switch {
+		case errors.Is(err, ErrRotationSnapshotChanged):
+			return nil, oops.E(oops.CodeConflict, err, "client or issuer changed during rotation; reload before retrying").LogWarn(ctx, logger)
 		case errors.Is(err, ErrClientNotRotatable):
 			return nil, oops.E(oops.CodeBadRequest, err, "only dynamically registered clients using a client secret or no client authentication can be rotated").LogWarn(ctx, logger)
 		case errors.Is(err, ErrIssuerHasNoRegistrationEndpoint):
@@ -757,7 +788,7 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 		case errors.Is(err, ErrInvalidDynamicClientRegistrationEndpoint):
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid identity provider registration endpoint").LogWarn(ctx, logger)
 		case errors.As(err, &registrationErr) && registrationErr.StatusCode >= http.StatusBadRequest && registrationErr.StatusCode < http.StatusInternalServerError:
-			return nil, oops.E(oops.CodeBadRequest, err, "identity provider rejected the client registration: %s", registrationErr.Detail).LogWarn(ctx, logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "identity provider rejected the client registration: %s", registrationErr.ProviderMessage).LogWarn(ctx, logger)
 		case errors.As(err, &registrationErr):
 			return nil, oops.E(oops.CodeGatewayError, err, "failed to re-register the client with the identity provider").LogError(ctx, logger)
 		default:
@@ -765,7 +796,7 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 		}
 	}
 
-	view, err := mv.BuildRemoteSessionClientView(rotated, existing.UserSessionIssuerIds)
+	view, err := s.clientView(rotated, existing.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -828,6 +859,10 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 	}
 
 	if err := managedrows.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+		return err
+	}
+
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.ProjectID.UUID, clientID); err != nil {
 		return err
 	}
 
@@ -933,7 +968,20 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 		return oops.E(oops.CodeNotFound, nil, "mcp server is not attached to this client").LogError(ctx, logger)
 	}
 
-	affected, err := txRepo.DetachRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachRemoteSessionClientFromUserSessionIssuerParams{
+	// Match preparation's user-issuer-before-client lock order, rechecking each
+	// tenant after waits. The server lock also stabilizes its issuer association.
+	if _, err := txRepo.LockOrganizationUserIssuerForDetach(ctx, repo.LockOrganizationUserIssuerForDetachParams{ID: server.UserSessionIssuerID.UUID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+		return lifecycleLockError(err)
+	}
+	if _, err := txRepo.LockOrganizationMCPServerForDetach(ctx, repo.LockOrganizationMCPServerForDetachParams{ID: server.ID, ProjectID: server.ProjectID, UserSessionIssuerID: server.UserSessionIssuerID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+		return lifecycleLockError(err)
+	}
+	if _, err := txRepo.LockEMAClientForLifecycle(ctx, repo.LockEMAClientForLifecycleParams{ID: clientID, ProjectID: client.ProjectID.UUID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+		return lifecycleLockError(err)
+	}
+
+	affected, err := txRepo.DetachOrganizationRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachOrganizationRemoteSessionClientFromUserSessionIssuerParams{
+		OrganizationID:        authCtx.ActiveOrganizationID,
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   server.UserSessionIssuerID.UUID,
 	})
@@ -942,6 +990,10 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 	}
 	if affected == 0 {
 		return oops.E(oops.CodeNotFound, nil, "mcp server is not attached to this client").LogError(ctx, logger)
+	}
+
+	if err := guardEMABindingsForClientUserIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, uuid.Nil, clientID, server.UserSessionIssuerID.UUID); err != nil {
+		return err
 	}
 
 	if err := s.auditLogger.LogRemoteSessionClientDetachMcpServer(ctx, dbtx, audit.LogRemoteSessionClientDetachMcpServerEvent{

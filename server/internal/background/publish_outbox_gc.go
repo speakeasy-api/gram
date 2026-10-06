@@ -18,6 +18,10 @@ const (
 	publishOutboxGCScheduleID = "v1:publish-outbox-gc-schedule"
 	publishOutboxGCWorkflowID = publishOutboxGCScheduleID + "/scheduled"
 	publishOutboxGCInterval   = 1 * time.Hour
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	publishOutboxGCCatchupWindow = publishOutboxGCInterval - time.Second
+
 	// Dead letters are kept long enough to be noticed and replayed. The queue
 	// table itself needs no GC — rows are deleted as they publish.
 	publishOutboxGCRetentionPeriod       = 30 * 24 * time.Hour
@@ -72,10 +76,11 @@ func AddPublishOutboxGCSchedule(ctx context.Context, temporalEnv *tenv.Environme
 	}
 
 	_, err := sc.Create(ctx, client.ScheduleOptions{
-		ID:      publishOutboxGCScheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-		Spec:    spec,
-		Action:  action,
+		CatchupWindow: publishOutboxGCCatchupWindow,
+		ID:            publishOutboxGCScheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		Spec:          spec,
+		Action:        action,
 	})
 	switch {
 	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
@@ -83,6 +88,7 @@ func AddPublishOutboxGCSchedule(ctx context.Context, temporalEnv *tenv.Environme
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &spec
 				input.Description.Schedule.Action = action
+				setScheduleCatchup(&input.Description.Schedule, publishOutboxGCCatchupWindow)
 				return &client.ScheduleUpdate{
 					Schedule:              &input.Description.Schedule,
 					TypedSearchAttributes: nil,

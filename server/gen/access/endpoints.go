@@ -21,6 +21,10 @@ type Endpoints struct {
 	CreateRole                           goa.Endpoint
 	UpdateRole                           goa.Endpoint
 	DeleteRole                           goa.Endpoint
+	ListDirectoryRoleMappings            goa.Endpoint
+	SyncDirectoryGroups                  goa.Endpoint
+	SetDirectoryRoleMapping              goa.Endpoint
+	DeleteDirectoryRoleMapping           goa.Endpoint
 	ListScopes                           goa.Endpoint
 	ListMembers                          goa.Endpoint
 	ListGrants                           goa.Endpoint
@@ -33,10 +37,12 @@ type Endpoints struct {
 	ResolveShadowMCPInventoryRequest     goa.Endpoint
 	ListAIDetections                     goa.Endpoint
 	ListEmployeeAIDetections             goa.Endpoint
+	ListAIDetectionUsers                 goa.Endpoint
 	SetAIToolDecision                    goa.Endpoint
 	ListResourceAudience                 goa.Endpoint
 	SetResourceAudience                  goa.Endpoint
 	ListAudienceOptions                  goa.Endpoint
+	ExplainResourceAccess                goa.Endpoint
 	RequestAccess                        goa.Endpoint
 	ListChallenges                       goa.Endpoint
 	ListChallengeBuckets                 goa.Endpoint
@@ -54,6 +60,10 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateRole:                           NewCreateRoleEndpoint(s, a.APIKeyAuth),
 		UpdateRole:                           NewUpdateRoleEndpoint(s, a.APIKeyAuth),
 		DeleteRole:                           NewDeleteRoleEndpoint(s, a.APIKeyAuth),
+		ListDirectoryRoleMappings:            NewListDirectoryRoleMappingsEndpoint(s, a.APIKeyAuth),
+		SyncDirectoryGroups:                  NewSyncDirectoryGroupsEndpoint(s, a.APIKeyAuth),
+		SetDirectoryRoleMapping:              NewSetDirectoryRoleMappingEndpoint(s, a.APIKeyAuth),
+		DeleteDirectoryRoleMapping:           NewDeleteDirectoryRoleMappingEndpoint(s, a.APIKeyAuth),
 		ListScopes:                           NewListScopesEndpoint(s, a.APIKeyAuth),
 		ListMembers:                          NewListMembersEndpoint(s, a.APIKeyAuth),
 		ListGrants:                           NewListGrantsEndpoint(s, a.APIKeyAuth),
@@ -66,10 +76,12 @@ func NewEndpoints(s Service) *Endpoints {
 		ResolveShadowMCPInventoryRequest:     NewResolveShadowMCPInventoryRequestEndpoint(s, a.APIKeyAuth),
 		ListAIDetections:                     NewListAIDetectionsEndpoint(s, a.APIKeyAuth),
 		ListEmployeeAIDetections:             NewListEmployeeAIDetectionsEndpoint(s, a.APIKeyAuth),
+		ListAIDetectionUsers:                 NewListAIDetectionUsersEndpoint(s, a.APIKeyAuth),
 		SetAIToolDecision:                    NewSetAIToolDecisionEndpoint(s, a.APIKeyAuth),
 		ListResourceAudience:                 NewListResourceAudienceEndpoint(s, a.APIKeyAuth),
 		SetResourceAudience:                  NewSetResourceAudienceEndpoint(s, a.APIKeyAuth),
 		ListAudienceOptions:                  NewListAudienceOptionsEndpoint(s, a.APIKeyAuth),
+		ExplainResourceAccess:                NewExplainResourceAccessEndpoint(s, a.APIKeyAuth),
 		RequestAccess:                        NewRequestAccessEndpoint(s, a.APIKeyAuth),
 		ListChallenges:                       NewListChallengesEndpoint(s, a.APIKeyAuth),
 		ListChallengeBuckets:                 NewListChallengeBucketsEndpoint(s, a.APIKeyAuth),
@@ -85,6 +97,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateRole = m(e.CreateRole)
 	e.UpdateRole = m(e.UpdateRole)
 	e.DeleteRole = m(e.DeleteRole)
+	e.ListDirectoryRoleMappings = m(e.ListDirectoryRoleMappings)
+	e.SyncDirectoryGroups = m(e.SyncDirectoryGroups)
+	e.SetDirectoryRoleMapping = m(e.SetDirectoryRoleMapping)
+	e.DeleteDirectoryRoleMapping = m(e.DeleteDirectoryRoleMapping)
 	e.ListScopes = m(e.ListScopes)
 	e.ListMembers = m(e.ListMembers)
 	e.ListGrants = m(e.ListGrants)
@@ -97,10 +113,12 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ResolveShadowMCPInventoryRequest = m(e.ResolveShadowMCPInventoryRequest)
 	e.ListAIDetections = m(e.ListAIDetections)
 	e.ListEmployeeAIDetections = m(e.ListEmployeeAIDetections)
+	e.ListAIDetectionUsers = m(e.ListAIDetectionUsers)
 	e.SetAIToolDecision = m(e.SetAIToolDecision)
 	e.ListResourceAudience = m(e.ListResourceAudience)
 	e.SetResourceAudience = m(e.SetResourceAudience)
 	e.ListAudienceOptions = m(e.ListAudienceOptions)
+	e.ExplainResourceAccess = m(e.ExplainResourceAccess)
 	e.RequestAccess = m(e.RequestAccess)
 	e.ListChallenges = m(e.ListChallenges)
 	e.ListChallengeBuckets = m(e.ListChallengeBuckets)
@@ -280,6 +298,146 @@ func NewDeleteRoleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return nil, s.DeleteRole(ctx, p)
+	}
+}
+
+// NewListDirectoryRoleMappingsEndpoint returns an endpoint function that calls
+// the method "listDirectoryRoleMappings" of service "access".
+func NewListDirectoryRoleMappingsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListDirectoryRoleMappingsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListDirectoryRoleMappings(ctx, p)
+	}
+}
+
+// NewSyncDirectoryGroupsEndpoint returns an endpoint function that calls the
+// method "syncDirectoryGroups" of service "access".
+func NewSyncDirectoryGroupsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SyncDirectoryGroupsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SyncDirectoryGroups(ctx, p)
+	}
+}
+
+// NewSetDirectoryRoleMappingEndpoint returns an endpoint function that calls
+// the method "setDirectoryRoleMapping" of service "access".
+func NewSetDirectoryRoleMappingEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetDirectoryRoleMappingPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SetDirectoryRoleMapping(ctx, p)
+	}
+}
+
+// NewDeleteDirectoryRoleMappingEndpoint returns an endpoint function that
+// calls the method "deleteDirectoryRoleMapping" of service "access".
+func NewDeleteDirectoryRoleMappingEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteDirectoryRoleMappingPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteDirectoryRoleMapping(ctx, p)
 	}
 }
 
@@ -621,6 +779,29 @@ func NewListEmployeeAIDetectionsEndpoint(s Service, authAPIKeyFn security.AuthAP
 	}
 }
 
+// NewListAIDetectionUsersEndpoint returns an endpoint function that calls the
+// method "listAIDetectionUsers" of service "access".
+func NewListAIDetectionUsersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListAIDetectionUsersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListAIDetectionUsers(ctx, p)
+	}
+}
+
 // NewSetAIToolDecisionEndpoint returns an endpoint function that calls the
 // method "setAIToolDecision" of service "access".
 func NewSetAIToolDecisionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -746,6 +927,29 @@ func NewListAudienceOptionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 			return nil, err
 		}
 		return s.ListAudienceOptions(ctx, p)
+	}
+}
+
+// NewExplainResourceAccessEndpoint returns an endpoint function that calls the
+// method "explainResourceAccess" of service "access".
+func NewExplainResourceAccessEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ExplainResourceAccessPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ExplainResourceAccess(ctx, p)
 	}
 }
 

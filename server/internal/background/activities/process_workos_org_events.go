@@ -15,6 +15,7 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -25,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
@@ -68,6 +70,10 @@ type ProcessWorkOSOrganizationEvents struct {
 	// deprovisioning events can invalidate a user's cached org memberships
 	// instead of waiting out the cache TTL.
 	userInfoCache cache.TypedCacheObject[sessions.CachedUserInfo]
+
+	// newOrganizationDefaultHost is recorded as the default host of
+	// organizations created from WorkOS events.
+	newOrganizationDefaultHost pgtype.Text
 }
 
 func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient, cacheAdapter cache.Cache, identityMap IdentityMapRefreshSignaler) *ProcessWorkOSOrganizationEvents {
@@ -77,7 +83,15 @@ func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, w
 		workosClient:  workosClient,
 		identityMap:   identityMap,
 		userInfoCache: cache.NewTypedObjectCache[sessions.CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cacheAdapter, cache.SuffixNone),
+
+		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 	}
+}
+
+// SetNewOrganizationDefaultHost sets the default host recorded on
+// organizations created from WorkOS events. Unset records none.
+func (p *ProcessWorkOSOrganizationEvents) SetNewOrganizationDefaultHost(host pgtype.Text) {
+	p.newOrganizationDefaultHost = host
 }
 
 func (p *ProcessWorkOSOrganizationEvents) Do(ctx context.Context, params ProcessWorkOSOrganizationEventsParams) (*ProcessWorkOSOrganizationEventsResult, error) {
@@ -104,6 +118,9 @@ func (p *ProcessWorkOSOrganizationEvents) Do(ctx context.Context, params Process
 			string(workos.EventKindOrganizationCreated),
 			string(workos.EventKindOrganizationUpdated),
 			string(workos.EventKindOrganizationDeleted),
+
+			string(workos.EventKindOrganizationDomainVerified),
+			string(workos.EventKindOrganizationDomainDeleted),
 
 			string(workos.EventKindOrganizationRoleCreated),
 			string(workos.EventKindOrganizationRoleDeleted),
@@ -251,7 +268,7 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	effects, err := handleOrganizationEvent(ctx, logger, dbtx, event)
+	effects, err := handleOrganizationEvent(ctx, logger, dbtx, workosOrgID, event, p.newOrganizationDefaultHost)
 	if err != nil {
 		return "", err
 	}
@@ -275,15 +292,21 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 // handleOrganizationEvent dispatches a WorkOS event scoped to a specific
 // organization to its handler. Each handler is responsible for the
 // ShouldProcessEvent guard against duplicate apply. The returned effects are
-// run by the caller after the transaction commits.
-func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (postCommitEffects, error) {
+// run by the caller after the transaction commits. workosOrgID is the
+// organization whose event stream is being processed. newOrganizationDefaultHost
+// is recorded on an organization the event creates.
+func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, workosOrgID string, event events.Event, newOrganizationDefaultHost pgtype.Text) (postCommitEffects, error) {
 	var none postCommitEffects
 
 	switch event.Event {
 	case string(workos.EventKindOrganizationCreated), string(workos.EventKindOrganizationUpdated):
-		return handleOrganizationUpsert(ctx, logger, dbtx, event)
+		return handleOrganizationUpsert(ctx, logger, dbtx, event, newOrganizationDefaultHost)
 	case string(workos.EventKindOrganizationDeleted):
 		return none, handleOrganizationDeleted(ctx, logger, dbtx, event)
+	case string(workos.EventKindOrganizationDomainVerified):
+		return none, handleOrganizationDomainEvent(ctx, logger, dbtx, workosOrgID, event, true)
+	case string(workos.EventKindOrganizationDomainDeleted):
+		return none, handleOrganizationDomainEvent(ctx, logger, dbtx, workosOrgID, event, false)
 	case string(workos.EventKindOrganizationRoleCreated), string(workos.EventKindOrganizationRoleUpdated):
 		return none, handleRoleUpsert(ctx, logger, dbtx, event)
 	case string(workos.EventKindOrganizationRoleDeleted):
@@ -312,10 +335,27 @@ func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx data
 // workosOrganizationEventPayload is the relevant subset of an
 // organization.{created,updated,deleted} event payload.
 type workosOrganizationEventPayload struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	ExternalID string    `json:"external_id"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID         string                     `json:"id"`
+	Name       string                     `json:"name"`
+	ExternalID string                     `json:"external_id"`
+	UpdatedAt  time.Time                  `json:"updated_at"`
+	Domains    []workosOrganizationDomain `json:"domains"`
+}
+
+type workosOrganizationDomain struct {
+	Domain string                         `json:"domain"`
+	State  workos.OrganizationDomainState `json:"state"`
+}
+
+// domainPolicy returns the domains listed on the event. The payload carries
+// every domain on the organization, so its verified domains are the full
+// list, not a delta.
+func (p workosOrganizationEventPayload) domainPolicy() *workos.OrganizationDomainPolicy {
+	domains := make([]workos.OrganizationDomain, 0, len(p.Domains))
+	for _, d := range p.Domains {
+		domains = append(domains, workos.OrganizationDomain{Domain: d.Domain, State: d.State})
+	}
+	return &workos.OrganizationDomainPolicy{Domains: domains}
 }
 
 type workosOrgExternalIDUpdate struct {
@@ -344,7 +384,7 @@ type resolvedWorkOSOrganization struct {
 //
 // WorkOS owns name/workos_id/cursor metadata, but never updates an existing
 // Gram slug. New org slugs are chosen once and uniqued locally.
-func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (postCommitEffects, error) {
+func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, newOrganizationDefaultHost pgtype.Text) (postCommitEffects, error) {
 	var effects postCommitEffects
 
 	var payload workosOrganizationEventPayload
@@ -359,7 +399,7 @@ func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx dat
 	case err != nil:
 		return effects, err
 	case resolved.isNew:
-		if err := createOrganizationFromWorkOSEvent(ctx, repo, payload, event.ID, resolved.organizationID); err != nil {
+		if err := createOrganizationFromWorkOSEvent(ctx, repo, payload, event.ID, resolved.organizationID, newOrganizationDefaultHost); err != nil {
 			return effects, err
 		}
 		tx, ok := dbtx.(pgx.Tx)
@@ -435,7 +475,7 @@ func resolveOrgForWorkOSEvent(ctx context.Context, repo *orgrepo.Queries, payloa
 	}
 }
 
-func createOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Queries, payload workosOrganizationEventPayload, eventID string, organizationID string) error {
+func createOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Queries, payload workosOrganizationEventPayload, eventID string, organizationID string, defaultHost pgtype.Text) error {
 	// A zero row makes the normal cursor check accept genuine creates while
 	// keeping the create path consistent if a row appears between resolve and
 	// insert.
@@ -465,6 +505,8 @@ func createOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Querie
 		WorkosID:          conv.ToPGText(payload.ID),
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(payload.UpdatedAt),
 		WorkosLastEventID: conv.ToPGText(eventID),
+		VerifiedDomains:   payload.domainPolicy().VerifiedDomains(),
+		DefaultHost:       defaultHost,
 	})
 	if err != nil {
 		return fmt.Errorf("create organization %q from workos event: %w", payload.ID, err)
@@ -484,6 +526,7 @@ func updateOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Querie
 		WorkosID:          conv.ToPGText(payload.ID),
 		WorkosUpdatedAt:   conv.ToPGTimestamptz(payload.UpdatedAt),
 		WorkosLastEventID: conv.ToPGText(eventID),
+		VerifiedDomains:   payload.domainPolicy().VerifiedDomains(),
 	})
 	if err != nil {
 		return fmt.Errorf("update organization %q from workos event: %w", payload.ID, err)
@@ -673,8 +716,99 @@ func handleRoleDeleted(ctx context.Context, logger *slog.Logger, dbtx database.D
 	}
 
 	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+existing.ID.String())
+	if err := pluginassignments.RemoveDeletedRole(ctx, dbtx, audit.NewLogger(), pluginassignments.RoleDeletion{
+		OrganizationID:   org.ID,
+		PrincipalURN:     rolePrincipal.String(),
+		Actor:            urn.NewSystemPrincipal("workos-role-sync"),
+		ActorDisplayName: nil,
+	}); err != nil {
+		return fmt.Errorf("delete plugin assignments for role %q: %w", payload.Slug, err)
+	}
+
 	if err := authz.DeleteRoleGrants(ctx, repo, org.ID, rolePrincipal.String()); err != nil {
 		return fmt.Errorf("delete grants for role %q: %w", payload.Slug, err)
+	}
+
+	return nil
+}
+
+// workosOrganizationDomainEventPayload is the relevant subset of an
+// organization_domain.* event payload. WorkOS either nests the Organization
+// Domain object under organization_domain or sends it as the payload itself,
+// so both shapes are read.
+type workosOrganizationDomainEventPayload struct {
+	OrganizationDomain struct {
+		OrganizationID string `json:"organization_id"`
+		Domain         string `json:"domain"`
+	} `json:"organization_domain"`
+	OrganizationID string `json:"organization_id"`
+	Domain         string `json:"domain"`
+}
+
+// handleOrganizationDomainEvent applies a WorkOS organization_domain.verified
+// (verified is true) or organization_domain.deleted (verified is false) event.
+// Each event describes one domain, so it adds that domain to verified_domains
+// or removes it, and leaves the other domains as they are. workosOrgID is the
+// organization whose event stream is being processed.
+func handleOrganizationDomainEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, workosOrgID string, event events.Event, verified bool) error {
+	var payload workosOrganizationDomainEventPayload
+	if err := json.Unmarshal(event.Data, &payload); err != nil {
+		return oops.Permanent(fmt.Errorf("unmarshal organization domain event payload: %w", err))
+	}
+
+	domain := workos.NormalizeDomain(conv.Default(payload.OrganizationDomain.Domain, payload.Domain))
+	if domain == "" {
+		logger.WarnContext(ctx, "skipping organization domain event without a domain", attr.SlogWorkOSOrganizationID(workosOrgID))
+		return nil
+	}
+
+	eventOrgID := conv.Default(payload.OrganizationDomain.OrganizationID, payload.OrganizationID)
+	if eventOrgID != "" && eventOrgID != workosOrgID {
+		logger.WarnContext(ctx, "skipping organization domain event for a different organization",
+			attr.SlogWorkOSOrganizationID(workosOrgID),
+			attr.SlogWorkOSEventOrganizationID(eventOrgID),
+		)
+		return nil
+	}
+
+	repo := orgrepo.New(dbtx)
+	org, err := repo.GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		logger.DebugContext(ctx, "skipping organization domain event for unknown organization", attr.SlogWorkOSOrganizationID(workosOrgID))
+		return nil
+	case err != nil:
+		return fmt.Errorf("get organization by workos id %q: %w", workosOrgID, err)
+	}
+
+	var lastEventID *string
+	if org.WorkosLastEventID.Valid {
+		lastEventID = &org.WorkosLastEventID.String
+	}
+	var rowUpdatedAt *time.Time
+	if org.WorkosUpdatedAt.Valid {
+		rowUpdatedAt = &org.WorkosUpdatedAt.Time
+	}
+	if !ShouldProcessEvent(lastEventID, rowUpdatedAt, event.ID, event.CreatedAt) {
+		return nil
+	}
+
+	if verified {
+		if err := repo.AddVerifiedDomainByWorkosID(ctx, orgrepo.AddVerifiedDomainByWorkosIDParams{
+			Domain:            domain,
+			WorkosLastEventID: conv.ToPGText(event.ID),
+			WorkosID:          conv.ToPGText(workosOrgID),
+		}); err != nil {
+			return fmt.Errorf("add verified domain for workos org %q: %w", workosOrgID, err)
+		}
+	} else {
+		if err := repo.RemoveVerifiedDomainByWorkosID(ctx, orgrepo.RemoveVerifiedDomainByWorkosIDParams{
+			Domain:            domain,
+			WorkosLastEventID: conv.ToPGText(event.ID),
+			WorkosID:          conv.ToPGText(workosOrgID),
+		}); err != nil {
+			return fmt.Errorf("remove verified domain for workos org %q: %w", workosOrgID, err)
+		}
 	}
 
 	return nil

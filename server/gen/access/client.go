@@ -20,6 +20,10 @@ type Client struct {
 	CreateRoleEndpoint                           goa.Endpoint
 	UpdateRoleEndpoint                           goa.Endpoint
 	DeleteRoleEndpoint                           goa.Endpoint
+	ListDirectoryRoleMappingsEndpoint            goa.Endpoint
+	SyncDirectoryGroupsEndpoint                  goa.Endpoint
+	SetDirectoryRoleMappingEndpoint              goa.Endpoint
+	DeleteDirectoryRoleMappingEndpoint           goa.Endpoint
 	ListScopesEndpoint                           goa.Endpoint
 	ListMembersEndpoint                          goa.Endpoint
 	ListGrantsEndpoint                           goa.Endpoint
@@ -32,10 +36,12 @@ type Client struct {
 	ResolveShadowMCPInventoryRequestEndpoint     goa.Endpoint
 	ListAIDetectionsEndpoint                     goa.Endpoint
 	ListEmployeeAIDetectionsEndpoint             goa.Endpoint
+	ListAIDetectionUsersEndpoint                 goa.Endpoint
 	SetAIToolDecisionEndpoint                    goa.Endpoint
 	ListResourceAudienceEndpoint                 goa.Endpoint
 	SetResourceAudienceEndpoint                  goa.Endpoint
 	ListAudienceOptionsEndpoint                  goa.Endpoint
+	ExplainResourceAccessEndpoint                goa.Endpoint
 	RequestAccessEndpoint                        goa.Endpoint
 	ListChallengesEndpoint                       goa.Endpoint
 	ListChallengeBucketsEndpoint                 goa.Endpoint
@@ -44,13 +50,17 @@ type Client struct {
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, setAIToolDecision, listResourceAudience, setResourceAudience, listAudienceOptions, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge, listIdentityAccess goa.Endpoint) *Client {
+func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listDirectoryRoleMappings, syncDirectoryGroups, setDirectoryRoleMapping, deleteDirectoryRoleMapping, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, listAIDetections, listEmployeeAIDetections, listAIDetectionUsers, setAIToolDecision, listResourceAudience, setResourceAudience, listAudienceOptions, explainResourceAccess, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge, listIdentityAccess goa.Endpoint) *Client {
 	return &Client{
 		ListRolesEndpoint:                            listRoles,
 		GetRoleEndpoint:                              getRole,
 		CreateRoleEndpoint:                           createRole,
 		UpdateRoleEndpoint:                           updateRole,
 		DeleteRoleEndpoint:                           deleteRole,
+		ListDirectoryRoleMappingsEndpoint:            listDirectoryRoleMappings,
+		SyncDirectoryGroupsEndpoint:                  syncDirectoryGroups,
+		SetDirectoryRoleMappingEndpoint:              setDirectoryRoleMapping,
+		DeleteDirectoryRoleMappingEndpoint:           deleteDirectoryRoleMapping,
 		ListScopesEndpoint:                           listScopes,
 		ListMembersEndpoint:                          listMembers,
 		ListGrantsEndpoint:                           listGrants,
@@ -63,10 +73,12 @@ func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScope
 		ResolveShadowMCPInventoryRequestEndpoint:     resolveShadowMCPInventoryRequest,
 		ListAIDetectionsEndpoint:                     listAIDetections,
 		ListEmployeeAIDetectionsEndpoint:             listEmployeeAIDetections,
+		ListAIDetectionUsersEndpoint:                 listAIDetectionUsers,
 		SetAIToolDecisionEndpoint:                    setAIToolDecision,
 		ListResourceAudienceEndpoint:                 listResourceAudience,
 		SetResourceAudienceEndpoint:                  setResourceAudience,
 		ListAudienceOptionsEndpoint:                  listAudienceOptions,
+		ExplainResourceAccessEndpoint:                explainResourceAccess,
 		RequestAccessEndpoint:                        requestAccess,
 		ListChallengesEndpoint:                       listChallenges,
 		ListChallengeBucketsEndpoint:                 listChallengeBuckets,
@@ -178,6 +190,94 @@ func (c *Client) UpdateRole(ctx context.Context, p *UpdateRolePayload) (res *Rol
 //   - error: internal error
 func (c *Client) DeleteRole(ctx context.Context, p *DeleteRolePayload) (err error) {
 	_, err = c.DeleteRoleEndpoint(ctx, p)
+	return
+}
+
+// ListDirectoryRoleMappings calls the "listDirectoryRoleMappings" endpoint of
+// the "access" service.
+// ListDirectoryRoleMappings may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListDirectoryRoleMappings(ctx context.Context, p *ListDirectoryRoleMappingsPayload) (res *ListDirectoryRoleMappingsResult, err error) {
+	var ires any
+	ires, err = c.ListDirectoryRoleMappingsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListDirectoryRoleMappingsResult), nil
+}
+
+// SyncDirectoryGroups calls the "syncDirectoryGroups" endpoint of the "access"
+// service.
+// SyncDirectoryGroups may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SyncDirectoryGroups(ctx context.Context, p *SyncDirectoryGroupsPayload) (res *SyncDirectoryGroupsResult, err error) {
+	var ires any
+	ires, err = c.SyncDirectoryGroupsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SyncDirectoryGroupsResult), nil
+}
+
+// SetDirectoryRoleMapping calls the "setDirectoryRoleMapping" endpoint of the
+// "access" service.
+// SetDirectoryRoleMapping may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetDirectoryRoleMapping(ctx context.Context, p *SetDirectoryRoleMappingPayload) (res *DirectoryRoleMapping, err error) {
+	var ires any
+	ires, err = c.SetDirectoryRoleMappingEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*DirectoryRoleMapping), nil
+}
+
+// DeleteDirectoryRoleMapping calls the "deleteDirectoryRoleMapping" endpoint
+// of the "access" service.
+// DeleteDirectoryRoleMapping may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteDirectoryRoleMapping(ctx context.Context, p *DeleteDirectoryRoleMappingPayload) (err error) {
+	_, err = c.DeleteDirectoryRoleMappingEndpoint(ctx, p)
 	return
 }
 
@@ -450,6 +550,29 @@ func (c *Client) ListEmployeeAIDetections(ctx context.Context, p *ListEmployeeAI
 	return ires.(*ListAIDetectionsResult), nil
 }
 
+// ListAIDetectionUsers calls the "listAIDetectionUsers" endpoint of the
+// "access" service.
+// ListAIDetectionUsers may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListAIDetectionUsers(ctx context.Context, p *ListAIDetectionUsersPayload) (res *ListAIDetectionUsersResult, err error) {
+	var ires any
+	ires, err = c.ListAIDetectionUsersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListAIDetectionUsersResult), nil
+}
+
 // SetAIToolDecision calls the "setAIToolDecision" endpoint of the "access"
 // service.
 // SetAIToolDecision may return the following errors:
@@ -540,6 +663,29 @@ func (c *Client) ListAudienceOptions(ctx context.Context, p *ListAudienceOptions
 		return
 	}
 	return ires.(*ListAudienceOptionsResult), nil
+}
+
+// ExplainResourceAccess calls the "explainResourceAccess" endpoint of the
+// "access" service.
+// ExplainResourceAccess may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ExplainResourceAccess(ctx context.Context, p *ExplainResourceAccessPayload) (res *ExplainResourceAccessResult, err error) {
+	var ires any
+	ires, err = c.ExplainResourceAccessEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ExplainResourceAccessResult), nil
 }
 
 // RequestAccess calls the "requestAccess" endpoint of the "access" service.

@@ -299,6 +299,7 @@ func (r *Runner) Run(ctx context.Context, input RunInput) (json.RawMessage, RunM
 
 		compactToolHistory(messages)
 		response, err := r.completions.GetCompletion(ctx, openrouter.CompletionRequest{
+			MaxTokens:      nil,
 			OrgID:          input.OrgID,
 			ProjectID:      input.ProjectID.String(),
 			Messages:       messages,
@@ -706,6 +707,7 @@ func (r *Runner) extract(ctx context.Context, input RunInput, transcript string,
 	strict := true
 	temperature := 0.0
 	response, err := r.completions.GetObjectCompletion(ctx, openrouter.ObjectCompletionRequest{
+		MaxTokens:    nil,
 		OrgID:        input.OrgID,
 		ProjectID:    input.ProjectID.String(),
 		Model:        extractionModel,

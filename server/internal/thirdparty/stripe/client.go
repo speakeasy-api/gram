@@ -43,6 +43,12 @@ var ErrWebhookNotConfigured = errors.New("stripe webhook is not configured")
 // ErrCustomerNotFound indicates that a customer is missing or deleted in Stripe.
 var ErrCustomerNotFound = errors.New("stripe customer not found or deleted")
 
+// ErrSubscriptionNotFound indicates that a subscription is missing in Stripe.
+var ErrSubscriptionNotFound = errors.New("stripe subscription not found")
+
+// ErrCheckoutTrialEndInvalid means Stripe rejected the trial_end parameter.
+var ErrCheckoutTrialEndInvalid = errors.New("stripe checkout trial end is invalid")
+
 // ErrCustomerLookupUnavailable indicates that no live customer lookup is configured.
 var ErrCustomerLookupUnavailable = errors.New("stripe customer lookup is unavailable")
 
@@ -263,6 +269,9 @@ type SubscriptionState struct {
 
 	// CurrentPeriodEnd is the exclusive service-period boundary for the TUM item.
 	CurrentPeriodEnd time.Time
+
+	// BillingCycleAnchor is Stripe's billing-cycle anchor for this subscription.
+	BillingCycleAnchor time.Time
 
 	// TrialStart is the start of the subscription trial, when present.
 	TrialStart time.Time
@@ -687,6 +696,11 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 
 	session, err := c.api.createCheckoutSession(ctx, params)
 	if err != nil {
+		if stripeErr, ok := errors.AsType[*stripesdk.Error](err); ok &&
+			stripeErr.HTTPStatusCode == 400 && stripeErr.Type == stripesdk.ErrorTypeInvalidRequest &&
+			stripeErr.Param == "subscription_data[trial_end]" {
+			err = errors.Join(ErrCheckoutTrialEndInvalid, err)
+		}
 		return nil, fmt.Errorf("create Stripe Checkout session: %w", err)
 	}
 	return &CheckoutSession{ID: session.ID, URL: session.URL}, nil
@@ -749,6 +763,9 @@ func (c *client) GetSubscription(ctx context.Context, id string) (*SubscriptionS
 	params.AddExpand("latest_invoice")
 	subscription, err := c.api.retrieveSubscription(ctx, id, params)
 	if err != nil {
+		if stripeErr, ok := errors.AsType[*stripesdk.Error](err); ok && stripeErr.Code == stripesdk.ErrorCodeResourceMissing {
+			return nil, fmt.Errorf("%w: %w", ErrSubscriptionNotFound, err)
+		}
 		return nil, fmt.Errorf("retrieve Stripe subscription: %w", err)
 	}
 	return c.subscriptionState(subscription)
@@ -835,6 +852,7 @@ func (c *client) subscriptionState(subscription *stripesdk.Subscription) (*Subsc
 		Status:                       status,
 		CurrentPeriodStart:           time.Unix(tumItem.CurrentPeriodStart, 0).UTC(),
 		CurrentPeriodEnd:             time.Unix(tumItem.CurrentPeriodEnd, 0).UTC(),
+		BillingCycleAnchor:           unixTime(subscription.BillingCycleAnchor),
 		TrialStart:                   unixTime(subscription.TrialStart),
 		TrialEnd:                     unixTime(subscription.TrialEnd),
 		CancelAtPeriodEnd:            subscription.CancelAtPeriodEnd,

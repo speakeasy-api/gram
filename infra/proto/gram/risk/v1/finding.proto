@@ -6,11 +6,53 @@ import "gcp/pubsub/v1/options.proto";
 
 option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
 
-// Finding is a single secret or sensitive-data match detected in a message.
-// dead_letter_reason is populated only on synthetic "could not analyze" markers
-// emitted when a scanner exhausts its retry budget for a message; it is empty
-// on every real finding.
+// Finding is one risk match detected in a chat message or mediated MCP
+// execution. A durable chat anchor is optional when attribution and execution
+// metadata travel with the finding. dead_letter_reason is populated only on
+// synthetic "could not analyze" markers emitted when a scanner exhausts its
+// retry budget; it is empty on every real finding.
 message Finding {
+  // EnforcementOutcome records the action taken, independently of detection.
+  // The lifecycle values preserve warning acknowledgement/abandonment and
+  // quarantine without overloading a boolean blocked flag.
+  enum EnforcementOutcome {
+    ENFORCEMENT_OUTCOME_UNSPECIFIED = 0;
+    ENFORCEMENT_OUTCOME_LOGGED = 1;
+    ENFORCEMENT_OUTCOME_DENIED = 2;
+    ENFORCEMENT_OUTCOME_WITHHELD = 3;
+    ENFORCEMENT_OUTCOME_WARNED_PENDING = 4;
+    ENFORCEMENT_OUTCOME_WARNED_ACKNOWLEDGED = 5;
+    ENFORCEMENT_OUTCOME_WARNED_ABANDONED = 6;
+    ENFORCEMENT_OUTCOME_QUARANTINED = 7;
+  }
+
+  // Presence is authoritative, including intentionally empty values. Absent
+  // attribution retains project-bounded chat-anchor enrichment at ingest.
+  message Attribution {
+    string chat_id = 1;
+    string user_id = 2;
+    string external_user_id = 3;
+    string assistant_id = 4;
+    string message_created_at = 5; // Optional RFC3339 event time.
+    string chat_source = 6;
+    string team = 7;
+    string user_email = 8;
+  }
+
+  // Metadata only: never arguments, results, credentials, or stream contents.
+  message Execution {
+    string execution_id = 1;
+    string mcp_server_id = 2;
+    string meta_mcp_server_id = 3;
+    string toolset_id = 4;
+    string tool_name = 5;
+    string phase = 6; // "request" or "response"
+    string mediation_surface = 7;
+    string method = 8;
+    string principal_kind = 9; // Credential provenance from mcpidentity only.
+    bool identity_stamped = 10;
+  }
+
   string id = 1;
   string request_id = 2;
   string chat_message_id = 3;
@@ -76,6 +118,20 @@ message Finding {
   // that predate the field: the writer derives "suppression" when
   // excluded_at/false_positive_at is carried and "finding" otherwise.
   string event_kind = 27;
+
+  // Engine-comparison marker. True on findings the LLM analyzer produced
+  // while the organization's risk engine mode was shadow, where the legacy
+  // engines enforce the same batch and the model's verdict is recorded only
+  // to be compared with theirs per message. A shadow finding is never
+  // enforced and the ClickHouse writer persists it as shadow = 1, which every
+  // user-facing read path filters out, so it is hidden from Risk Events, the
+  // overview, signals and the Watchdog by default. False on every finding the
+  // enforcing engines produce.
+  bool shadow = 28;
+
+  Attribution attribution = 29;
+  Execution execution = 30;
+  EnforcementOutcome enforcement_outcome = 31;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {

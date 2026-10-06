@@ -1,3 +1,4 @@
+import { RiskSetupEmptyState } from "@/components/setup-empty-state";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { IdentityLink } from "@/components/identity-link";
 import { identityRefForUserKey } from "@/lib/identity-urn";
@@ -12,7 +13,9 @@ import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { useOrganization } from "@/contexts/Auth";
-import { useSdkClient } from "@/contexts/Sdk";
+import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
 import { cn } from "@/lib/utils";
@@ -20,9 +23,16 @@ import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { getPresetRange } from "@/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
+import { useProject } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { useMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useRiskMcpServerCounts } from "@gram/client/react-query/riskMcpServerCounts.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
+import { useRiskListMcpPlatformToolsets } from "@gram/client/react-query/riskListMcpPlatformToolsets.js";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { useInfiniteQuery } from "@tanstack/react-query";
@@ -31,6 +41,17 @@ import { History } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
+import {
+  enforcementOutcomeLabel,
+  isBlockingOutcome,
+  mcpServerDisplayName,
+} from "./risk-outcome";
+import { MCPFindingContext } from "./MCPFindingContext";
+import {
+  buildMCPFindingNames,
+  isMCPFinding,
+  type MCPFindingNames,
+} from "./mcp-finding-context";
 import { useDismissFinding } from "./useDismissFinding";
 import { useSetupExclusionRule } from "./useSetupExclusionRule";
 import {
@@ -61,6 +82,9 @@ import {
 // a sentence or two of rationale, where every other column holds a label.
 const RISK_EVENTS_GRID =
   "grid grid-cols-[28px_88px_172px_minmax(0,1.3fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,2.4fr)_minmax(0,0.9fr)_110px] gap-3";
+// MCP-scoped layout: the actions track also holds the enforcement outcome.
+const RISK_EVENTS_GRID_MCP =
+  "grid grid-cols-[28px_88px_172px_minmax(0,1.3fr)_minmax(0,0.95fr)_minmax(0,0.85fr)_minmax(0,2.2fr)_minmax(0,0.9fr)_150px] gap-3";
 
 // Signal severity palette: band → text / row-edge classes. Colors are
 // token-derived — brand red hsl(4,67%,47%) (--color-brand-red-500) is reserved
@@ -123,12 +147,14 @@ function SignalScore({ score }: { score: number | undefined }): JSX.Element {
 }
 
 // Strongly-typed filter schema for Risk Events. `policy_id` and the date range
-// are pinned (always visible in the bar); the rest live behind "More filters".
+// and the MCP server are pinned (always visible in the bar); the rest live
+// behind "More filters".
 // `listRiskResults` already accepts from/to, so the date range needs no backend
 // change. (Source isn't a list param, so it's intentionally omitted here.)
 const RISK_FILTERS = defineFilters([
   { id: "policy_id", label: "Policy", kind: "select", pinned: true },
   { id: "date", label: "Date range", kind: "daterange", pinned: true },
+  { id: "mcp_server_id", label: "MCP server", kind: "select", pinned: true },
   {
     id: "rule_id",
     label: "Rule ID",
@@ -141,6 +167,10 @@ const RISK_FILTERS = defineFilters([
     kind: "text",
     placeholder: "User contains...",
   },
+  // Whole external user ids, set by an identity's "Open in Risk Events" so a
+  // person known by several ids lands on all of their events and nobody
+  // else's. Not offered for picking: its only options are the ids it holds.
+  { id: "identifier", label: "Identifier", kind: "multiselect" },
   {
     id: "unique",
     label: "Unique matches only",
@@ -150,13 +180,20 @@ const RISK_FILTERS = defineFilters([
   { id: "assistant", label: "Assistant", kind: "select" },
 ]);
 
+// The per-server counts endpoint rejects windows longer than this.
+const MAX_COUNTS_WINDOW_MS = 31 * 24 * 60 * 60 * 1000;
+
 // Sentinel option value for the assistant filter meaning "chats with no
 // assistant link" — maps to the API's non_assistant flag rather than an
 // assistant_id. Assistant ids are UUIDs, so this can't collide.
 const NO_ASSISTANT = "none";
 
 export default function RiskEvents(): JSX.Element {
+  const project = useProject();
+  const { hasScope } = useRBAC();
+  const canReadAssistants = hasScope("assistant:read", undefined, project.id);
   const client = useSdkClient();
+  const gramProject = useProjectSlugForRequests();
   const organization = useOrganization();
   const featuresQuery = useProductFeatures({
     organizationId: organization.id,
@@ -173,8 +210,13 @@ export default function RiskEvents(): JSX.Element {
   const { values, setValue, clearValue, clearAll } =
     useFilterState(RISK_FILTERS);
   const policyFilter = values.policy_id ?? "";
+  const mcpServerFilter = values.mcp_server_id ?? "";
   const ruleFilter = values.rule_id;
   const userFilter = values.user_id;
+  const identifierFilter = values.identifier;
+  // A stable dependency: the array is rebuilt whenever any param changes,
+  // including opening a row.
+  const identifierKey = identifierFilter.join(",");
   const uniqueOnly = values.unique;
   // "No assistant" pre-selects the non-assistant events (the API's
   // non_assistant flag); any other value scopes to that assistant's chats.
@@ -219,6 +261,82 @@ export default function RiskEvents(): JSX.Element {
     [policiesData?.policies],
   );
 
+  const mcpScopedFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
+  const mcpScoped = mcpScopedFlag.status === "enabled";
+
+  const { data: mcpServersData } = useMcpServers({ gramProject }, undefined, {
+    throwOnError: false,
+  });
+  const mcpServers = useMemo(
+    () => mcpServersData?.mcpServers ?? [],
+    [mcpServersData?.mcpServers],
+  );
+  // Per-server finding counts for the picker, for the selected range. The
+  // endpoint rejects windows over 31 days, so longer or open-ended ranges show
+  // the servers without counts rather than counts for a different range.
+  const countsWindow = useMemo(() => {
+    if (!from) return null;
+    const end = to ?? new Date();
+    if (end.getTime() - from.getTime() > MAX_COUNTS_WINDOW_MS) return null;
+    return { from, to: end };
+  }, [from, to]);
+  const { data: serverCountsData } = useRiskMcpServerCounts(
+    countsWindow ?? {},
+    undefined,
+    { throwOnError: false, enabled: mcpScoped && countsWindow !== null },
+  );
+  const findingsByServer = useMemo(
+    () =>
+      new Map(
+        (serverCountsData?.servers ?? []).map((row) => [
+          row.mcpServerId,
+          row.findings,
+        ]),
+      ),
+    [serverCountsData?.servers],
+  );
+  const mcpServerNameById = useMemo(
+    () =>
+      mcpScoped
+        ? new Map(
+            mcpServers.map((server) => [
+              server.id,
+              mcpServerDisplayName(server),
+            ]),
+          )
+        : null,
+    [mcpScoped, mcpServers],
+  );
+
+  const { data: platformToolsetsData } = useRiskListMcpPlatformToolsets(
+    { gramProject },
+    undefined,
+    { throwOnError: false },
+  );
+  const platformToolsets = useMemo(
+    () => platformToolsetsData?.toolsets ?? [],
+    [platformToolsetsData?.toolsets],
+  );
+  const { data: metaMcpServersData } = useMetaMcpServers(
+    { gramProject },
+    undefined,
+    { throwOnError: false },
+  );
+  const metaMcpServers = useMemo(
+    () => metaMcpServersData?.metaMcpServers ?? [],
+    [metaMcpServersData?.metaMcpServers],
+  );
+  const { data: toolsetsData } = useListToolsets({ gramProject }, undefined, {
+    throwOnError: false,
+  });
+  const toolsets = useMemo(
+    () => toolsetsData?.toolsets ?? [],
+    [toolsetsData?.toolsets],
+  );
+  const mcpFindingNames = useMemo(
+    () => buildMCPFindingNames([...mcpServers, ...metaMcpServers], toolsets),
+    [mcpServers, metaMcpServers, toolsets],
+  );
   // Powers the rule_id filter autocomplete: surface only rules that actually
   // have findings in this project's recent window.
   const { data: overviewData } = useRiskOverview({}, undefined, {
@@ -228,11 +346,16 @@ export default function RiskEvents(): JSX.Element {
     () => (overviewData?.topRules ?? []).map((r) => r.ruleId).filter(Boolean),
     [overviewData?.topRules],
   );
+  // The default view includes disabled policies' historical findings, so their
+  // rows carry the same "(inactive)" label as the policy filter.
   const policyNameById = useMemo(() => {
     const m = new Map<string, string>();
     for (const policy of policies) {
       if (policy.name && policy.name.trim() !== "") {
-        m.set(policy.id, policy.name);
+        m.set(
+          policy.id,
+          policy.enabled === false ? `${policy.name} (inactive)` : policy.name,
+        );
       }
     }
     return m;
@@ -250,9 +373,8 @@ export default function RiskEvents(): JSX.Element {
   }, [policies]);
 
   // The policy currently selected in the filter, if any. When it's disabled the
-  // list still returns its historical findings (the backend drops the
-  // enabled-only filter for explicit policy selections), so we surface a notice
-  // that the user is viewing data for an inactive policy.
+  // list returns only its historical findings, so we surface a notice that the
+  // user is viewing data for an inactive policy.
   const selectedPolicy = useMemo(
     () => policies.find((p) => p.id === policyFilter),
     [policies, policyFilter],
@@ -263,12 +385,17 @@ export default function RiskEvents(): JSX.Element {
   // Powers the assistant filter options; "No assistant" is always offered so
   // findings missing user attribution can be surfaced even before any
   // assistant exists in the project.
-  const { data: assistantsData } = useAssistantsList(undefined, undefined, {
-    throwOnError: false,
-  });
+  const { data: assistantsData } = useAssistantsList(
+    { gramProject: project.slug },
+    undefined,
+    {
+      enabled: canReadAssistants,
+      throwOnError: false,
+    },
+  );
   const assistants = useMemo(
-    () => assistantsData?.assistants ?? [],
-    [assistantsData?.assistants],
+    () => (canReadAssistants ? (assistantsData?.assistants ?? []) : []),
+    [assistantsData?.assistants, canReadAssistants],
   );
 
   // Page-supplied option lists for the schema's select/text dimensions.
@@ -280,13 +407,40 @@ export default function RiskEvents(): JSX.Element {
         label: p.enabled === false ? `${p.name} (inactive)` : p.name,
         value: p.id,
       })),
+      mcp_server_id: [
+        ...mcpServers.map((server) => {
+          const findings = findingsByServer.get(server.id);
+          const name = mcpServerDisplayName(server);
+          return {
+            label:
+              mcpScoped && findings != null
+                ? `${name} · ${findings.toLocaleString()} findings`
+                : name,
+            value: server.id,
+          };
+        }),
+        ...platformToolsets.map((toolset) => ({
+          label: `${toolset.name} (Platform MCP)`,
+          value: toolset.id,
+        })),
+      ],
       rule_id: ruleSuggestions.map((r) => ({ label: r, value: r })),
+      identifier: identifierFilter.map((id) => ({ label: id, value: id })),
       assistant: [
         { label: "No assistant", value: NO_ASSISTANT },
         ...assistants.map((a) => ({ label: a.name, value: a.id })),
       ],
     }),
-    [policies, ruleSuggestions, assistants],
+    [
+      policies,
+      mcpServers,
+      platformToolsets,
+      mcpScoped,
+      findingsByServer,
+      ruleSuggestions,
+      assistants,
+      identifierFilter,
+    ],
   );
 
   const fromIso = from?.toISOString();
@@ -298,8 +452,10 @@ export default function RiskEvents(): JSX.Element {
     containerRef.current?.scrollTo({ top: 0 });
   }, [
     policyFilter,
+    mcpServerFilter,
     ruleFilter,
     userFilter,
+    identifierKey,
     uniqueOnly,
     assistantFilter,
     fromIso,
@@ -312,8 +468,10 @@ export default function RiskEvents(): JSX.Element {
       "results",
       "list",
       policyFilter,
+      mcpServerFilter,
       ruleFilter,
       userFilter,
+      identifierKey,
       uniqueOnly,
       assistantFilter,
       fromIso,
@@ -324,8 +482,11 @@ export default function RiskEvents(): JSX.Element {
         cursor: pageParam,
         limit: 50,
         policyId: policyFilter || undefined,
+        mcpServerId: mcpServerFilter || undefined,
         ruleId: ruleFilter || undefined,
         userId: userFilter || undefined,
+        externalUserIds:
+          identifierFilter.length > 0 ? identifierFilter : undefined,
         uniqueMatch: uniqueOnly || undefined,
         nonAssistant: nonAssistantOnly || undefined,
         assistantId,
@@ -467,6 +628,7 @@ export default function RiskEvents(): JSX.Element {
             <RiskEventsHeader
               selection={selection}
               headerRef={headerMeasure.ref}
+              mcpScoped={mcpScoped}
             />
           </div>
         }
@@ -499,9 +661,23 @@ export default function RiskEvents(): JSX.Element {
         <RiskEventsRows
           error={resultsQuery.error}
           isLoading={isInitialLoading}
+          filtered={
+            !!(
+              policyFilter ||
+              mcpServerFilter ||
+              ruleFilter ||
+              userFilter ||
+              uniqueOnly ||
+              assistantFilter ||
+              from ||
+              to
+            )
+          }
           results={visibleResults}
           policyNameById={policyNameById}
           policyScoreById={policyScoreById}
+          mcpServerNameById={mcpServerNameById}
+          mcpFindingNames={mcpFindingNames}
           scrollRef={containerRef}
           onSelectChat={setSelectedChatId}
           selection={selection}
@@ -543,15 +719,17 @@ function InactivePolicyNotice({
 function RiskEventsHeader({
   selection,
   headerRef,
+  mcpScoped,
 }: {
   selection: RowSelection<RiskResult>;
   headerRef: (node: HTMLDivElement | null) => void;
+  mcpScoped: boolean;
 }) {
   return (
     <div
       ref={headerRef}
       className={cn(
-        RISK_EVENTS_GRID,
+        mcpScoped ? RISK_EVENTS_GRID_MCP : RISK_EVENTS_GRID,
         // whitespace-nowrap keeps two-word labels ("Session Name") on one
         // line when their fr track compresses.
         "text-eyebrow bg-muted/30 shrink-0 items-center border-b px-5 py-2.5 whitespace-nowrap",
@@ -567,7 +745,9 @@ function RiskEventsHeader({
       <div className="min-w-0">Severity</div>
       <div className="min-w-0">Timestamp</div>
       <div className="min-w-0">Category / Rule</div>
-      <div className="min-w-0 whitespace-nowrap">Session Name</div>
+      <div className="min-w-0 whitespace-nowrap">
+        {mcpScoped ? "Session · Tool" : "Session Name"}
+      </div>
       <div className="min-w-0">User</div>
       <div className="min-w-0">Evidence</div>
       <div className="min-w-0">Policy</div>
@@ -578,26 +758,34 @@ function RiskEventsHeader({
 
 function RiskEventsRows({
   error,
+  filtered,
   isLoading,
   results,
   policyNameById,
   policyScoreById,
+  mcpFindingNames,
   scrollRef,
   onSelectChat,
   selection,
   onDismiss,
   onSetupExclusion,
+  mcpServerNameById,
 }: {
   error: Error | null;
+  filtered: boolean;
   isLoading: boolean;
   results: RiskResult[];
   policyNameById: Map<string, string>;
+  mcpFindingNames: MCPFindingNames;
   policyScoreById: Map<string, number>;
   scrollRef: RefObject<HTMLDivElement | null>;
   onSelectChat: (chatId: string | null) => void;
   selection: RowSelection<RiskResult>;
   onDismiss: (result: RiskResult) => void;
   onSetupExclusion: (result: RiskResult) => void;
+  // Set only when MCP-scoped guardrails are enabled; switches the rows to the
+  // server/tool + outcome layout.
+  mcpServerNameById: Map<string, string> | null;
 }) {
   const rowVirtualizer = useVirtualizer({
     count: results.length,
@@ -634,19 +822,7 @@ function RiskEventsRows({
   }
 
   if (results.length === 0) {
-    return (
-      <div className="flex flex-col items-center gap-3 py-12 text-center">
-        <div className="bg-muted flex size-12 items-center justify-center">
-          <Icon name="inbox" className="text-muted-foreground size-6" />
-        </div>
-        <span className="text-foreground font-medium">
-          No risk events found
-        </span>
-        <span className="text-muted-foreground max-w-sm text-sm">
-          Findings will appear here as messages are analyzed.
-        </span>
-      </div>
-    );
+    return <RiskSetupEmptyState filtered={filtered} />;
   }
 
   return (
@@ -670,10 +846,12 @@ function RiskEventsRows({
               result={result}
               policyName={policyNameById.get(result.policyId)}
               policyScore={policyScoreById.get(result.policyId)}
+              mcpFindingNames={mcpFindingNames}
               onSelectChat={onSelectChat}
               selection={selection}
               onDismiss={onDismiss}
               onSetupExclusion={onSetupExclusion}
+              mcpServerNameById={mcpServerNameById}
             />
           </div>
         );
@@ -686,19 +864,27 @@ export function RiskEventsRow({
   result,
   policyName,
   policyScore,
+  mcpFindingNames,
   onSelectChat,
   selection,
   onDismiss,
   onSetupExclusion,
+  mcpServerNameById = null,
 }: {
   result: RiskResult;
   policyName: string | undefined;
   policyScore: number | undefined;
+  mcpFindingNames?: MCPFindingNames;
   onSelectChat: (chatId: string | null) => void;
   selection: RowSelection<RiskResult>;
   onDismiss: (result: RiskResult) => void;
   onSetupExclusion: (result: RiskResult) => void;
+  mcpServerNameById?: Map<string, string> | null;
 }): JSX.Element {
+  const mcpScoped = mcpServerNameById != null;
+  const outcomeLabel = mcpScoped
+    ? enforcementOutcomeLabel(result.enforcementOutcome)
+    : null;
   const isShadowMCP = isShadowMcpSource(result.source);
   // Judge and LLM analyzer findings carry their evidence as a rationale.
   const isEventSource = isRationaleSource(result.source);
@@ -739,7 +925,7 @@ export function RiskEventsRow({
       role={result.chatId ? "button" : undefined}
       tabIndex={result.chatId ? 0 : undefined}
       className={cn(
-        RISK_EVENTS_GRID,
+        mcpScoped ? RISK_EVENTS_GRID_MCP : RISK_EVENTS_GRID,
         "hover:bg-muted/30 w-full items-center border-b border-l-2 px-5 py-3 text-left text-sm transition-colors",
         edgeRating ? SEVERITY_EDGE[edgeRating] : "border-l-transparent",
         !result.chatId && "cursor-default",
@@ -795,8 +981,14 @@ export function RiskEventsRow({
         <CategoryLabel source={result.source} ruleId={result.ruleId} />
         <RuleLabel source={result.source} ruleId={result.ruleId} />
       </div>
-      <div className="text-muted-foreground min-w-0 truncate font-mono text-xs">
-        {result.chatTitle ?? "Untitled"}
+      <div className="text-muted-foreground min-w-0 font-mono text-xs">
+        {isMCPFinding(result) ? (
+          <MCPFindingContext finding={result} names={mcpFindingNames} />
+        ) : (
+          <span className="block truncate">
+            {result.chatTitle ?? "Untitled"}
+          </span>
+        )}
       </div>
       <div className="text-muted-foreground min-w-0 truncate font-mono text-xs">
         <IdentityLink identifier={identityRefForUserKey(result.userId)}>
@@ -834,10 +1026,23 @@ export function RiskEventsRow({
         {policyName ?? "-"}
       </div>
       <div
-        className="flex min-w-0 justify-center"
+        className="flex min-w-0 items-center justify-center gap-2"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
+        {outcomeLabel ? (
+          <span
+            className={cn(
+              "truncate font-mono text-xs",
+              isBlockingOutcome(result.enforcementOutcome)
+                ? "text-foreground font-medium"
+                : "text-muted-foreground",
+            )}
+            title={outcomeLabel}
+          >
+            {outcomeLabel}
+          </span>
+        ) : null}
         <MoreActions actions={rowActions} />
       </div>
     </div>

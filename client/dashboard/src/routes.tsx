@@ -71,6 +71,7 @@ import IdentityOverview from "./pages/identities/IdentityOverview";
 import IdentityAccess from "./pages/identities/IdentityAccess";
 import IdentityUsage from "./pages/identities/IdentityUsage";
 import IdentitySecurity from "./pages/identities/IdentitySecurity";
+import IdentityFindingsPage from "./pages/identities/IdentityFindings";
 import IdentityCost from "./pages/identities/IdentityCost";
 import IdentityDevices from "./pages/identities/IdentityDevices";
 import IdentityConnections from "./pages/identities/IdentityConnections";
@@ -110,6 +111,12 @@ import {
   RemoteIdentityProvidersPage,
   RemoteIdentityProvidersRoot,
 } from "./pages/remote-identity-providers/RemoteIdentityProviders";
+import {
+  WorkloadIssuersPage,
+  WorkloadIssuersRoot,
+} from "./pages/workload-identities/WorkloadIssuers";
+import { WorkloadIssuerDetailPage } from "./pages/workload-identities/WorkloadIssuerDetail";
+import AccessHubRedirect from "./pages/workload-identities/AccessHubRedirect";
 import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
 import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
 import PlatformAdminOverview from "./pages/platform-admin/Overview";
@@ -140,6 +147,7 @@ import {
 import ShadowAIHarnesses from "./pages/shadow-ai/ShadowAIHarnesses";
 import ShadowAIAssistants from "./pages/shadow-ai/ShadowAIAssistants";
 import ShadowAIModels from "./pages/shadow-ai/ShadowAIModels";
+import ShadowAIToolDetail from "./pages/shadow-ai/ShadowAIToolDetail";
 import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
@@ -162,9 +170,10 @@ import {
   ToolBuilderPage,
 } from "./pages/toolBuilder/ToolBuilder";
 
-const SetupBoard = React.lazy(() => import("./pages/setup/SetupBoard"));
-const SetupTaskPage = React.lazy(() => import("./pages/setup/SetupTaskPage"));
 const SetupWizard = React.lazy(() => import("./pages/setup/SetupWizard"));
+const SetupTaskRedirect = React.lazy(
+  () => import("./pages/setup/SetupTaskRedirect"),
+);
 
 type AppRouteBasic = {
   title: string;
@@ -541,6 +550,10 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Team Access",
             url: "team-access",
           },
+          guardrails: {
+            title: "MCP Server Guardrails",
+            url: "guardrails",
+          },
           sessions: {
             title: "MCP Server Clients and Sessions",
             url: "sessions",
@@ -698,10 +711,26 @@ const ROUTE_STRUCTURE = {
     },
   },
 
+  // Legacy project-scoped URLs for the Access Hub and the Workload Identities
+  // page redirect to the organization-level Access Hub.
+  legacyWorkloadIdentities: {
+    title: "Workload Identities",
+    url: "workload-identities",
+    legacyRedirect: true,
+    component: AccessHubRedirect,
+  },
+  legacyAccessHub: {
+    title: "Access Hub",
+    url: "access-hub/*",
+    legacyRedirect: true,
+    component: AccessHubRedirect,
+  },
+
   agents: {
     title: "Agent Identity",
     url: "agent-management",
     icon: "bot",
+    stage: "preview",
     component: AgentsPage,
   },
   // One page per person, reached from every surface that renders a human. The
@@ -761,6 +790,11 @@ const ROUTE_STRUCTURE = {
             title: "Identity Security",
             url: "security",
             component: IdentitySecurity,
+          },
+          findings: {
+            title: "Identity Findings",
+            url: "findings",
+            component: IdentityFindingsPage,
           },
           cost: {
             title: "Identity Cost",
@@ -919,20 +953,47 @@ const ROUTE_STRUCTURE = {
     component: ShadowAIRoot,
     indexComponent: ShadowAIIndexRedirect,
     subPages: {
+      // Each tool tab opens a row onto the people running that tool. The
+      // detail is nested under its tab, as the server detail is under MCPs,
+      // so the breadcrumb says which tab a pasted link came from.
       harnesses: {
         title: "Harnesses",
         url: "harnesses",
-        component: ShadowAIHarnesses,
+        component: ShadowAIRoot,
+        indexComponent: ShadowAIHarnesses,
+        subPages: {
+          detail: {
+            title: "Shadow AI Tool",
+            url: ":targetId",
+            component: ShadowAIToolDetail,
+          },
+        },
       },
       assistants: {
         title: "Assistants",
         url: "assistants",
-        component: ShadowAIAssistants,
+        component: ShadowAIRoot,
+        indexComponent: ShadowAIAssistants,
+        subPages: {
+          detail: {
+            title: "Shadow AI Tool",
+            url: ":targetId",
+            component: ShadowAIToolDetail,
+          },
+        },
       },
       models: {
         title: "Models",
         url: "models",
-        component: ShadowAIModels,
+        component: ShadowAIRoot,
+        indexComponent: ShadowAIModels,
+        subPages: {
+          detail: {
+            title: "Shadow AI Tool",
+            url: ":targetId",
+            component: ShadowAIToolDetail,
+          },
+        },
       },
       mcps: {
         title: "MCPs",
@@ -1405,6 +1466,23 @@ const ORG_ROUTE_STRUCTURE = {
       },
     },
   },
+  // The trust policy is configured for the organization as a whole, so the
+  // Access Hub names no project.
+  workloadIssuers: {
+    title: "Access Hub",
+    url: "access-hub",
+    icon: "cpu",
+    stage: "preview",
+    component: WorkloadIssuersRoot,
+    indexComponent: WorkloadIssuersPage,
+    subPages: {
+      issuerDetail: {
+        title: "Trusted Platform",
+        url: ":issuerId",
+        component: WorkloadIssuerDetailPage,
+      },
+    },
+  },
   auditLogs: {
     title: "Audit Logs",
     url: "audit-logs",
@@ -1556,26 +1634,16 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Setup",
     url: "setup",
     icon: "settings",
-    component: SetupBoard,
-    outsideMainLayout: true,
-  },
-  // The linear wizard walks every board card in order, one owner in one
-  // sitting; the board at /setup stays the default. The header's view button
-  // swaps between the two. Static, so it wins over setup/:taskSlug below.
-  setupWizard: {
-    title: "Setup wizard",
-    url: "setup/wizard",
-    icon: "list-checks",
     component: SetupWizard,
     outsideMainLayout: true,
   },
-  // Each board card opens as its own page at a short slug (setup/idp,
-  // setup/anthropic-observability, ...), with a rail of that card's own steps.
+  // Legacy per-card pages (setup/idp, setup/wizard, ...) open the wizard on
+  // that card.
   setupTask: {
     title: "Setup task",
     url: "setup/:taskSlug",
     icon: "list-checks",
-    component: SetupTaskPage,
+    component: SetupTaskRedirect,
     outsideMainLayout: true,
   },
   // Headless mode renders its own chrome (mode tabs only, no sidebar or
@@ -1591,10 +1659,24 @@ const ORG_ROUTE_STRUCTURE = {
 type OrgRouteStructure = typeof ORG_ROUTE_STRUCTURE;
 type OrgRoutesWithGoTo = TransformRouteToGoTo<OrgRouteStructure>;
 
-/** The URL segments used by org-level routes (for redirect logic). */
-export const orgRoutePaths = Object.values(ORG_ROUTE_STRUCTURE)
-  .map((r) => r.url)
-  .filter(Boolean);
+function routePaths(
+  routes: Record<string, RouteEntry>,
+  parent?: string,
+): string[] {
+  return Object.values(routes).flatMap((route) => {
+    if (!route.url) return [];
+    const path = parent ? `${parent}/${route.url}` : route.url;
+    return [path, ...routePaths(route.subPages ?? {}, path)];
+  });
+}
+
+/**
+ * The org-relative path of every org-level route, nested pages included (for
+ * redirect logic). A detail page such as "access-hub/:issuerId" has to be
+ * listed with its parent, or its URL reads as a path inside a project that
+ * happens to share the parent's slug.
+ */
+export const orgRoutePaths = routePaths(ORG_ROUTE_STRUCTURE);
 
 export const useOrgRoutes = (): OrgRoutesWithGoTo => {
   const location = useLocation();

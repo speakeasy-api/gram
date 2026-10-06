@@ -34,7 +34,6 @@ export function StepSupportProvider({
 }
 
 interface StepContainerProps {
-  icon: ReactNode;
   title: string;
   description: string;
   children: ReactNode;
@@ -49,7 +48,6 @@ interface StepContainerProps {
 }
 
 export function StepContainer({
-  icon,
   title,
   description,
   children,
@@ -100,10 +98,7 @@ export function StepContainer({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center gap-0">
-        <div className="flex-shrink-0">{icon}</div>
-        <h1 className="text-foreground text-display-sm font-thin">{title}</h1>
-      </div>
+      <h1 className="text-foreground text-display-sm font-thin">{title}</h1>
       <p className="text-muted-foreground mt-2 text-sm">{description}</p>
 
       {/* Content */}

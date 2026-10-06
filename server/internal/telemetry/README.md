@@ -370,7 +370,8 @@ Key testing patterns:
 - Use `testenv.Launch()` in `TestMain` to set up infrastructure
 - Create helper functions for inserting test data
 - Use table-driven tests with descriptive names
-- After inserts, call `testenv.FlushClickHouseAsyncInserts(t, conn)` (`server/internal/testenv/clickhouse.go`) before querying. Telemetry writes use ClickHouse [async inserts](https://clickhouse.com/docs/optimize/asynchronous-inserts), so rows only become visible after the async insert queue flushes — this helper drains it synchronously (`SYSTEM FLUSH ASYNC INSERT QUEUE`), making the data deterministically visible.
+- For logger-backed query fixtures, use `require.NoError(t, logger.LogSyncForTest(ctx, params))`. This test-only helper preserves the normal logger pipeline but uses synchronous inserts, so rows are committed before it returns and no async queue flush is needed.
+- Production telemetry writes use ClickHouse [async inserts](https://clickhouse.com/docs/optimize/asynchronous-inserts). Tests that exercise that path still need `testenv.FlushClickHouseAsyncInserts(t, conn)` (`server/internal/testenv/clickhouse.go`) before querying. Do not treat the shared queue flush as a per-write completion barrier: it can miss batches already dequeued for a background flush. Prefer synchronous inserts when testing query behavior rather than async ingestion.
 - **Never wait for visibility non-deterministically** — no `time.Sleep` (enforced repo-wide via `forbidigo`; see the `golang` skill) and no `require.EventuallyWithT` polling for async-insert visibility. Polling masks the real synchronization point, slows tests, and still flakes under load. Reserve `require.EventuallyWithT` for conditions that are genuinely eventually consistent with no explicit flush mechanism.
 
 ## Data Models

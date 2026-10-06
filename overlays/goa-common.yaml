@@ -201,6 +201,20 @@ actions:
   - target: $.components.schemas.BillingEmail.properties.email
     update:
       nullable: true
+  # Registration grants are always encoded: null means unknown, [] means
+  # explicitly empty, and a populated array records the effective grants.
+  - target: $.components.schemas.RemoteSessionClient.required
+    update:
+      - grant_types
+  - target: $.components.schemas.RemoteSessionClient.properties.grant_types
+    update:
+      nullable: true
+  - target: $.components.schemas.IdentityChainingPreparation.required
+    update:
+      - grant_types
+  - target: $.components.schemas.IdentityChainingPreparation.properties.grant_types
+    update:
+      nullable: true
   # code_challenge_methods_supported suppresses omitempty in the Go encoding
   # (Meta struct:tag:json in the design) so null ("never captured") stays
   # distinct from [] ("captured; the issuer advertises no methods") on the

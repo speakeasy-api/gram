@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env node
 
 //MISE description="Summarize development environment"
 //MISE alias="info"
@@ -179,19 +179,19 @@ async function pokeHTTPService(
   }
 }
 
-const temporalWebPort = process.env["TEMPORAL_WEB_PORT"] ?? "8233";
+const temporalWebPort = process.env["TEMPORAL_WEB_PORT"] ?? "18233";
 await pokeDockerService(
   "gram-temporal",
   "Temporal",
   `http://localhost:${temporalWebPort}`,
-  true,
+  false,
 );
 
-const grafanaPort = process.env["GRAFANA_PORT"] ?? "13000";
+const otlpGrpcPort = process.env["OTLP_GRPC_PORT"] ?? "4317";
 await pokeDockerService(
-  "lgtm",
-  "Grafana",
-  `http://localhost:${grafanaPort}`,
+  "otlp-sink",
+  "OTLP sink",
+  `http://localhost:${otlpGrpcPort}`,
   true,
 );
 

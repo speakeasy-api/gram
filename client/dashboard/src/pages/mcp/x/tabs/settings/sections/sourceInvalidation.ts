@@ -2,6 +2,7 @@ import { invalidateAllGetRemoteMcpServer } from "@gram/client/react-query/getRem
 import { invalidateAllGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
 import { invalidateAllRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { invalidateAllRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { invalidateAllTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
 import { invalidateAllUserSessionIssuerCimdClients } from "@gram/client/react-query/userSessionIssuerCimdClients.js";
@@ -10,7 +11,7 @@ import type {
   InvalidateQueryFilters,
   QueryClient,
 } from "@tanstack/react-query";
-import { resetAllProtectedResourceMetadata } from "./authentication/useProtectedResourceMetadata";
+import { resetAllProtectedResourceMetadata } from "@/lib/remote-identity";
 
 // A source edit has two consumers: the per-id query the settings sections and
 // sidebar read from, and the project-wide list the sources shelf reads from.
@@ -49,6 +50,7 @@ export async function invalidateWrapperDeleteAuthViews(
     invalidateAllUserSessionIssuers(queryClient, filters),
     invalidateAllUserSessionIssuerCimdClients(queryClient, filters),
     invalidateAllRemoteSessionIssuers(queryClient, filters),
+    invalidateAllRemoteSessionIssuer(queryClient, filters),
     invalidateAllRemoteSessionClients(queryClient, filters),
   ]);
 }

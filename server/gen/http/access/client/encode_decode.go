@@ -1190,6 +1190,940 @@ func DecodeDeleteRoleResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildListDirectoryRoleMappingsRequest instantiates a HTTP request object
+// with method and path set to call the "access" service
+// "listDirectoryRoleMappings" endpoint
+func (c *Client) BuildListDirectoryRoleMappingsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListDirectoryRoleMappingsAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "listDirectoryRoleMappings", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListDirectoryRoleMappingsRequest returns an encoder for requests sent
+// to the access listDirectoryRoleMappings server.
+func EncodeListDirectoryRoleMappingsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ListDirectoryRoleMappingsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "listDirectoryRoleMappings", "*access.ListDirectoryRoleMappingsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListDirectoryRoleMappingsResponse returns a decoder for responses
+// returned by the access listDirectoryRoleMappings endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeListDirectoryRoleMappingsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListDirectoryRoleMappingsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListDirectoryRoleMappingsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryRoleMappings", err)
+			}
+			err = ValidateListDirectoryRoleMappingsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryRoleMappings", err)
+			}
+			res := NewListDirectoryRoleMappingsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListDirectoryRoleMappingsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryRoleMappings", err)
+			}
+			err = ValidateListDirectoryRoleMappingsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryRoleMappings", err)
+			}
+			return nil, NewListDirectoryRoleMappingsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListDirectoryRoleMappingsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryRoleMappings", err)
+			}
+			err = ValidateListDirectoryRoleMappingsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryRoleMappings", err)
+			}
+			return nil, NewListDirectoryRoleMappingsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListDirectoryRoleMappingsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryRoleMappings", err)
+			}
+			err = ValidateListDirectoryRoleMappingsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryRoleMappings", err)
+			}
+			return nil, NewListDirectoryRoleMappingsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListDirectoryRoleMappingsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryRoleMappings", err)
+			}
+			err = ValidateListDirectoryRoleMappingsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryRoleMappings", err)
+			}
+			return nil, NewListDirectoryRoleMappingsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListDirectoryRoleMappingsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryRoleMappings", err)
+			}
+			err = ValidateListDirectoryRoleMappingsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryRoleMappings", err)
+			}
+			return nil, NewListDirectoryRoleMappingsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListDirectoryRoleMappingsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryRoleMappings", err)
+			}
+			err = ValidateListDirectoryRoleMappingsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryRoleMappings", err)
+			}
+			return nil, NewListDirectoryRoleMappingsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListDirectoryRoleMappingsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryRoleMappings", err)
+			}
+			err = ValidateListDirectoryRoleMappingsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryRoleMappings", err)
+			}
+			return nil, NewListDirectoryRoleMappingsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListDirectoryRoleMappingsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listDirectoryRoleMappings", err)
+				}
+				err = ValidateListDirectoryRoleMappingsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listDirectoryRoleMappings", err)
+				}
+				return nil, NewListDirectoryRoleMappingsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListDirectoryRoleMappingsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listDirectoryRoleMappings", err)
+				}
+				err = ValidateListDirectoryRoleMappingsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listDirectoryRoleMappings", err)
+				}
+				return nil, NewListDirectoryRoleMappingsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "listDirectoryRoleMappings", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListDirectoryRoleMappingsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listDirectoryRoleMappings", err)
+			}
+			err = ValidateListDirectoryRoleMappingsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listDirectoryRoleMappings", err)
+			}
+			return nil, NewListDirectoryRoleMappingsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "listDirectoryRoleMappings", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSyncDirectoryGroupsRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "syncDirectoryGroups"
+// endpoint
+func (c *Client) BuildSyncDirectoryGroupsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SyncDirectoryGroupsAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "syncDirectoryGroups", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSyncDirectoryGroupsRequest returns an encoder for requests sent to the
+// access syncDirectoryGroups server.
+func EncodeSyncDirectoryGroupsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.SyncDirectoryGroupsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "syncDirectoryGroups", "*access.SyncDirectoryGroupsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeSyncDirectoryGroupsResponse returns a decoder for responses returned
+// by the access syncDirectoryGroups endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeSyncDirectoryGroupsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSyncDirectoryGroupsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SyncDirectoryGroupsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "syncDirectoryGroups", err)
+			}
+			err = ValidateSyncDirectoryGroupsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "syncDirectoryGroups", err)
+			}
+			res := NewSyncDirectoryGroupsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SyncDirectoryGroupsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "syncDirectoryGroups", err)
+			}
+			err = ValidateSyncDirectoryGroupsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "syncDirectoryGroups", err)
+			}
+			return nil, NewSyncDirectoryGroupsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SyncDirectoryGroupsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "syncDirectoryGroups", err)
+			}
+			err = ValidateSyncDirectoryGroupsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "syncDirectoryGroups", err)
+			}
+			return nil, NewSyncDirectoryGroupsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SyncDirectoryGroupsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "syncDirectoryGroups", err)
+			}
+			err = ValidateSyncDirectoryGroupsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "syncDirectoryGroups", err)
+			}
+			return nil, NewSyncDirectoryGroupsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SyncDirectoryGroupsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "syncDirectoryGroups", err)
+			}
+			err = ValidateSyncDirectoryGroupsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "syncDirectoryGroups", err)
+			}
+			return nil, NewSyncDirectoryGroupsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SyncDirectoryGroupsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "syncDirectoryGroups", err)
+			}
+			err = ValidateSyncDirectoryGroupsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "syncDirectoryGroups", err)
+			}
+			return nil, NewSyncDirectoryGroupsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SyncDirectoryGroupsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "syncDirectoryGroups", err)
+			}
+			err = ValidateSyncDirectoryGroupsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "syncDirectoryGroups", err)
+			}
+			return nil, NewSyncDirectoryGroupsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SyncDirectoryGroupsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "syncDirectoryGroups", err)
+			}
+			err = ValidateSyncDirectoryGroupsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "syncDirectoryGroups", err)
+			}
+			return nil, NewSyncDirectoryGroupsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SyncDirectoryGroupsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "syncDirectoryGroups", err)
+				}
+				err = ValidateSyncDirectoryGroupsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "syncDirectoryGroups", err)
+				}
+				return nil, NewSyncDirectoryGroupsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SyncDirectoryGroupsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "syncDirectoryGroups", err)
+				}
+				err = ValidateSyncDirectoryGroupsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "syncDirectoryGroups", err)
+				}
+				return nil, NewSyncDirectoryGroupsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "syncDirectoryGroups", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SyncDirectoryGroupsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "syncDirectoryGroups", err)
+			}
+			err = ValidateSyncDirectoryGroupsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "syncDirectoryGroups", err)
+			}
+			return nil, NewSyncDirectoryGroupsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "syncDirectoryGroups", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetDirectoryRoleMappingRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "setDirectoryRoleMapping"
+// endpoint
+func (c *Client) BuildSetDirectoryRoleMappingRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetDirectoryRoleMappingAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "setDirectoryRoleMapping", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetDirectoryRoleMappingRequest returns an encoder for requests sent to
+// the access setDirectoryRoleMapping server.
+func EncodeSetDirectoryRoleMappingRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.SetDirectoryRoleMappingPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "setDirectoryRoleMapping", "*access.SetDirectoryRoleMappingPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetDirectoryRoleMappingRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "setDirectoryRoleMapping", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetDirectoryRoleMappingResponse returns a decoder for responses
+// returned by the access setDirectoryRoleMapping endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSetDirectoryRoleMappingResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetDirectoryRoleMappingResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetDirectoryRoleMappingResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setDirectoryRoleMapping", err)
+			}
+			err = ValidateSetDirectoryRoleMappingResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setDirectoryRoleMapping", err)
+			}
+			res := NewSetDirectoryRoleMappingDirectoryRoleMappingOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetDirectoryRoleMappingUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setDirectoryRoleMapping", err)
+			}
+			err = ValidateSetDirectoryRoleMappingUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setDirectoryRoleMapping", err)
+			}
+			return nil, NewSetDirectoryRoleMappingUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetDirectoryRoleMappingForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setDirectoryRoleMapping", err)
+			}
+			err = ValidateSetDirectoryRoleMappingForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setDirectoryRoleMapping", err)
+			}
+			return nil, NewSetDirectoryRoleMappingForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetDirectoryRoleMappingBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setDirectoryRoleMapping", err)
+			}
+			err = ValidateSetDirectoryRoleMappingBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setDirectoryRoleMapping", err)
+			}
+			return nil, NewSetDirectoryRoleMappingBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetDirectoryRoleMappingNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setDirectoryRoleMapping", err)
+			}
+			err = ValidateSetDirectoryRoleMappingNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setDirectoryRoleMapping", err)
+			}
+			return nil, NewSetDirectoryRoleMappingNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetDirectoryRoleMappingConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setDirectoryRoleMapping", err)
+			}
+			err = ValidateSetDirectoryRoleMappingConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setDirectoryRoleMapping", err)
+			}
+			return nil, NewSetDirectoryRoleMappingConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetDirectoryRoleMappingUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setDirectoryRoleMapping", err)
+			}
+			err = ValidateSetDirectoryRoleMappingUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setDirectoryRoleMapping", err)
+			}
+			return nil, NewSetDirectoryRoleMappingUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetDirectoryRoleMappingInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setDirectoryRoleMapping", err)
+			}
+			err = ValidateSetDirectoryRoleMappingInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setDirectoryRoleMapping", err)
+			}
+			return nil, NewSetDirectoryRoleMappingInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetDirectoryRoleMappingInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "setDirectoryRoleMapping", err)
+				}
+				err = ValidateSetDirectoryRoleMappingInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "setDirectoryRoleMapping", err)
+				}
+				return nil, NewSetDirectoryRoleMappingInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetDirectoryRoleMappingUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "setDirectoryRoleMapping", err)
+				}
+				err = ValidateSetDirectoryRoleMappingUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "setDirectoryRoleMapping", err)
+				}
+				return nil, NewSetDirectoryRoleMappingUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "setDirectoryRoleMapping", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetDirectoryRoleMappingGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "setDirectoryRoleMapping", err)
+			}
+			err = ValidateSetDirectoryRoleMappingGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "setDirectoryRoleMapping", err)
+			}
+			return nil, NewSetDirectoryRoleMappingGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "setDirectoryRoleMapping", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDeleteDirectoryRoleMappingRequest instantiates a HTTP request object
+// with method and path set to call the "access" service
+// "deleteDirectoryRoleMapping" endpoint
+func (c *Client) BuildDeleteDirectoryRoleMappingRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteDirectoryRoleMappingAccessPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "deleteDirectoryRoleMapping", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeleteDirectoryRoleMappingRequest returns an encoder for requests sent
+// to the access deleteDirectoryRoleMapping server.
+func EncodeDeleteDirectoryRoleMappingRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.DeleteDirectoryRoleMappingPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "deleteDirectoryRoleMapping", "*access.DeleteDirectoryRoleMappingPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDeleteDirectoryRoleMappingResponse returns a decoder for responses
+// returned by the access deleteDirectoryRoleMapping endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeDeleteDirectoryRoleMappingResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeleteDirectoryRoleMappingResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeleteDirectoryRoleMappingUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "deleteDirectoryRoleMapping", err)
+			}
+			err = ValidateDeleteDirectoryRoleMappingUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "deleteDirectoryRoleMapping", err)
+			}
+			return nil, NewDeleteDirectoryRoleMappingUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeleteDirectoryRoleMappingForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "deleteDirectoryRoleMapping", err)
+			}
+			err = ValidateDeleteDirectoryRoleMappingForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "deleteDirectoryRoleMapping", err)
+			}
+			return nil, NewDeleteDirectoryRoleMappingForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeleteDirectoryRoleMappingBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "deleteDirectoryRoleMapping", err)
+			}
+			err = ValidateDeleteDirectoryRoleMappingBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "deleteDirectoryRoleMapping", err)
+			}
+			return nil, NewDeleteDirectoryRoleMappingBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeleteDirectoryRoleMappingNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "deleteDirectoryRoleMapping", err)
+			}
+			err = ValidateDeleteDirectoryRoleMappingNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "deleteDirectoryRoleMapping", err)
+			}
+			return nil, NewDeleteDirectoryRoleMappingNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeleteDirectoryRoleMappingConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "deleteDirectoryRoleMapping", err)
+			}
+			err = ValidateDeleteDirectoryRoleMappingConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "deleteDirectoryRoleMapping", err)
+			}
+			return nil, NewDeleteDirectoryRoleMappingConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeleteDirectoryRoleMappingUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "deleteDirectoryRoleMapping", err)
+			}
+			err = ValidateDeleteDirectoryRoleMappingUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "deleteDirectoryRoleMapping", err)
+			}
+			return nil, NewDeleteDirectoryRoleMappingUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeleteDirectoryRoleMappingInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "deleteDirectoryRoleMapping", err)
+			}
+			err = ValidateDeleteDirectoryRoleMappingInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "deleteDirectoryRoleMapping", err)
+			}
+			return nil, NewDeleteDirectoryRoleMappingInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeleteDirectoryRoleMappingInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "deleteDirectoryRoleMapping", err)
+				}
+				err = ValidateDeleteDirectoryRoleMappingInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "deleteDirectoryRoleMapping", err)
+				}
+				return nil, NewDeleteDirectoryRoleMappingInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeleteDirectoryRoleMappingUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "deleteDirectoryRoleMapping", err)
+				}
+				err = ValidateDeleteDirectoryRoleMappingUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "deleteDirectoryRoleMapping", err)
+				}
+				return nil, NewDeleteDirectoryRoleMappingUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "deleteDirectoryRoleMapping", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeleteDirectoryRoleMappingGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "deleteDirectoryRoleMapping", err)
+			}
+			err = ValidateDeleteDirectoryRoleMappingGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "deleteDirectoryRoleMapping", err)
+			}
+			return nil, NewDeleteDirectoryRoleMappingGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "deleteDirectoryRoleMapping", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListScopesRequest instantiates a HTTP request object with method and
 // path set to call the "access" service "listScopes" endpoint
 func (c *Client) BuildListScopesRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -4025,6 +4959,240 @@ func DecodeListEmployeeAIDetectionsResponse(decoder func(*http.Response) goahttp
 	}
 }
 
+// BuildListAIDetectionUsersRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "listAIDetectionUsers"
+// endpoint
+func (c *Client) BuildListAIDetectionUsersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListAIDetectionUsersAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "listAIDetectionUsers", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListAIDetectionUsersRequest returns an encoder for requests sent to
+// the access listAIDetectionUsers server.
+func EncodeListAIDetectionUsersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ListAIDetectionUsersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "listAIDetectionUsers", "*access.ListAIDetectionUsersPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("target_id", p.TargetID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListAIDetectionUsersResponse returns a decoder for responses returned
+// by the access listAIDetectionUsers endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeListAIDetectionUsersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListAIDetectionUsersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListAIDetectionUsersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAIDetectionUsers", err)
+			}
+			err = ValidateListAIDetectionUsersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAIDetectionUsers", err)
+			}
+			res := NewListAIDetectionUsersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListAIDetectionUsersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAIDetectionUsers", err)
+			}
+			err = ValidateListAIDetectionUsersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAIDetectionUsers", err)
+			}
+			return nil, NewListAIDetectionUsersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListAIDetectionUsersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAIDetectionUsers", err)
+			}
+			err = ValidateListAIDetectionUsersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAIDetectionUsers", err)
+			}
+			return nil, NewListAIDetectionUsersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListAIDetectionUsersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAIDetectionUsers", err)
+			}
+			err = ValidateListAIDetectionUsersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAIDetectionUsers", err)
+			}
+			return nil, NewListAIDetectionUsersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListAIDetectionUsersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAIDetectionUsers", err)
+			}
+			err = ValidateListAIDetectionUsersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAIDetectionUsers", err)
+			}
+			return nil, NewListAIDetectionUsersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListAIDetectionUsersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAIDetectionUsers", err)
+			}
+			err = ValidateListAIDetectionUsersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAIDetectionUsers", err)
+			}
+			return nil, NewListAIDetectionUsersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListAIDetectionUsersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAIDetectionUsers", err)
+			}
+			err = ValidateListAIDetectionUsersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAIDetectionUsers", err)
+			}
+			return nil, NewListAIDetectionUsersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListAIDetectionUsersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAIDetectionUsers", err)
+			}
+			err = ValidateListAIDetectionUsersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAIDetectionUsers", err)
+			}
+			return nil, NewListAIDetectionUsersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListAIDetectionUsersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listAIDetectionUsers", err)
+				}
+				err = ValidateListAIDetectionUsersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listAIDetectionUsers", err)
+				}
+				return nil, NewListAIDetectionUsersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListAIDetectionUsersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listAIDetectionUsers", err)
+				}
+				err = ValidateListAIDetectionUsersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listAIDetectionUsers", err)
+				}
+				return nil, NewListAIDetectionUsersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "listAIDetectionUsers", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListAIDetectionUsersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAIDetectionUsers", err)
+			}
+			err = ValidateListAIDetectionUsersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAIDetectionUsers", err)
+			}
+			return nil, NewListAIDetectionUsersGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "listAIDetectionUsers", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildSetAIToolDecisionRequest instantiates a HTTP request object with method
 // and path set to call the "access" service "setAIToolDecision" endpoint
 func (c *Client) BuildSetAIToolDecisionRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -4968,6 +6136,242 @@ func DecodeListAudienceOptionsResponse(decoder func(*http.Response) goahttp.Deco
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("access", "listAudienceOptions", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildExplainResourceAccessRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "explainResourceAccess"
+// endpoint
+func (c *Client) BuildExplainResourceAccessRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ExplainResourceAccessAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "explainResourceAccess", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeExplainResourceAccessRequest returns an encoder for requests sent to
+// the access explainResourceAccess server.
+func EncodeExplainResourceAccessRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ExplainResourceAccessPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "explainResourceAccess", "*access.ExplainResourceAccessPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("resource_kind", p.ResourceKind)
+		values.Add("resource_id", p.ResourceID)
+		values.Add("user_id", p.UserID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeExplainResourceAccessResponse returns a decoder for responses returned
+// by the access explainResourceAccess endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeExplainResourceAccessResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeExplainResourceAccessResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ExplainResourceAccessResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			res := NewExplainResourceAccessResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ExplainResourceAccessUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			return nil, NewExplainResourceAccessUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ExplainResourceAccessForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			return nil, NewExplainResourceAccessForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ExplainResourceAccessBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			return nil, NewExplainResourceAccessBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ExplainResourceAccessNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			return nil, NewExplainResourceAccessNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ExplainResourceAccessConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			return nil, NewExplainResourceAccessConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ExplainResourceAccessUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			return nil, NewExplainResourceAccessUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ExplainResourceAccessInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			return nil, NewExplainResourceAccessInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ExplainResourceAccessInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+				}
+				err = ValidateExplainResourceAccessInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+				}
+				return nil, NewExplainResourceAccessInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ExplainResourceAccessUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+				}
+				err = ValidateExplainResourceAccessUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+				}
+				return nil, NewExplainResourceAccessUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "explainResourceAccess", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ExplainResourceAccessGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "explainResourceAccess", err)
+			}
+			err = ValidateExplainResourceAccessGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "explainResourceAccess", err)
+			}
+			return nil, NewExplainResourceAccessGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "explainResourceAccess", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -6344,6 +7748,51 @@ func marshalSelectorRequestBodyToAccessSelector(v *SelectorRequestBody) *access.
 	return res
 }
 
+// unmarshalDirectoryGroupOptionResponseBodyToAccessDirectoryGroupOption builds
+// a value of type *access.DirectoryGroupOption from a value of type
+// *DirectoryGroupOptionResponseBody.
+func unmarshalDirectoryGroupOptionResponseBodyToAccessDirectoryGroupOption(v *DirectoryGroupOptionResponseBody) *access.DirectoryGroupOption {
+	res := &access.DirectoryGroupOption{
+		ID:          *v.ID,
+		Name:        *v.Name,
+		MemberCount: *v.MemberCount,
+	}
+
+	return res
+}
+
+// unmarshalDirectoryAttributeOptionResponseBodyToAccessDirectoryAttributeOption
+// builds a value of type *access.DirectoryAttributeOption from a value of type
+// *DirectoryAttributeOptionResponseBody.
+func unmarshalDirectoryAttributeOptionResponseBodyToAccessDirectoryAttributeOption(v *DirectoryAttributeOptionResponseBody) *access.DirectoryAttributeOption {
+	res := &access.DirectoryAttributeOption{
+		Key:         *v.Key,
+		Value:       *v.Value,
+		MemberCount: *v.MemberCount,
+	}
+
+	return res
+}
+
+// unmarshalDirectoryRoleMappingResponseBodyToAccessDirectoryRoleMapping builds
+// a value of type *access.DirectoryRoleMapping from a value of type
+// *DirectoryRoleMappingResponseBody.
+func unmarshalDirectoryRoleMappingResponseBodyToAccessDirectoryRoleMapping(v *DirectoryRoleMappingResponseBody) *access.DirectoryRoleMapping {
+	res := &access.DirectoryRoleMapping{
+		ID:                 *v.ID,
+		SourceKind:         *v.SourceKind,
+		DirectoryGroupID:   v.DirectoryGroupID,
+		DirectoryGroupName: v.DirectoryGroupName,
+		AttributeKey:       v.AttributeKey,
+		AttributeValue:     v.AttributeValue,
+		RoleUrn:            *v.RoleUrn,
+		CreatedAt:          *v.CreatedAt,
+		UpdatedAt:          *v.UpdatedAt,
+	}
+
+	return res
+}
+
 // unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition builds a value
 // of type *access.ScopeDefinition from a value of type
 // *ScopeDefinitionResponseBody.
@@ -6376,6 +7825,10 @@ func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberRespon
 	for i, val := range v.RoleIds {
 		res.RoleIds[i] = val
 	}
+	res.DirectoryRoleIds = make([]string, len(v.DirectoryRoleIds))
+	for i, val := range v.DirectoryRoleIds {
+		res.DirectoryRoleIds[i] = val
+	}
 	if v.Groups != nil {
 		res.Groups = make([]string, len(v.Groups))
 		for i, val := range v.Groups {
@@ -6406,6 +7859,16 @@ func unmarshalListRoleGrantResponseBodyToAccessListRoleGrant(v *ListRoleGrantRes
 				continue
 			}
 			res.Selectors[i] = unmarshalSelectorResponseBodyToAccessSelector(val)
+		}
+	}
+	if v.DirectSelectors != nil {
+		res.DirectSelectors = make([]*access.Selector, len(v.DirectSelectors))
+		for i, val := range v.DirectSelectors {
+			if val == nil {
+				res.DirectSelectors[i] = nil
+				continue
+			}
+			res.DirectSelectors[i] = unmarshalSelectorResponseBodyToAccessSelector(val)
 		}
 	}
 
@@ -6594,6 +8057,28 @@ func unmarshalAIToolAccessSummaryResponseBodyToAccessAIToolAccessSummary(v *AITo
 	return res
 }
 
+// unmarshalAIDetectionUserResponseBodyToAccessAIDetectionUser builds a value
+// of type *access.AIDetectionUser from a value of type
+// *AIDetectionUserResponseBody.
+func unmarshalAIDetectionUserResponseBodyToAccessAIDetectionUser(v *AIDetectionUserResponseBody) *access.AIDetectionUser {
+	res := &access.AIDetectionUser{
+		UserEmail:   *v.UserEmail,
+		DeviceCount: *v.DeviceCount,
+		FirstSeen:   *v.FirstSeen,
+		LastSeen:    *v.LastSeen,
+	}
+	res.Signals = make([]string, len(v.Signals))
+	for i, val := range v.Signals {
+		res.Signals[i] = val
+	}
+	res.Versions = make([]string, len(v.Versions))
+	for i, val := range v.Versions {
+		res.Versions[i] = val
+	}
+
+	return res
+}
+
 // unmarshalResourceAudienceEntryResponseBodyToAccessResourceAudienceEntry
 // builds a value of type *access.ResourceAudienceEntry from a value of type
 // *ResourceAudienceEntryResponseBody.
@@ -6692,6 +8177,84 @@ func unmarshalAudienceOptionResponseBodyToAccessAudienceOption(v *AudienceOption
 		DisplayName:  *v.DisplayName,
 		Description:  v.Description,
 		MemberCount:  v.MemberCount,
+	}
+
+	return res
+}
+
+// unmarshalExplainedAccessLevelResponseBodyToAccessExplainedAccessLevel builds
+// a value of type *access.ExplainedAccessLevel from a value of type
+// *ExplainedAccessLevelResponseBody.
+func unmarshalExplainedAccessLevelResponseBodyToAccessExplainedAccessLevel(v *ExplainedAccessLevelResponseBody) *access.ExplainedAccessLevel {
+	res := &access.ExplainedAccessLevel{
+		Level:      *v.Level,
+		Allowed:    *v.Allowed,
+		ToolAccess: v.ToolAccess,
+	}
+	res.Rules = make([]*access.ExplainedAccessRule, len(v.Rules))
+	for i, val := range v.Rules {
+		if val == nil {
+			res.Rules[i] = nil
+			continue
+		}
+		res.Rules[i] = unmarshalExplainedAccessRuleResponseBodyToAccessExplainedAccessRule(val)
+	}
+
+	return res
+}
+
+// unmarshalExplainedAccessRuleResponseBodyToAccessExplainedAccessRule builds a
+// value of type *access.ExplainedAccessRule from a value of type
+// *ExplainedAccessRuleResponseBody.
+func unmarshalExplainedAccessRuleResponseBodyToAccessExplainedAccessRule(v *ExplainedAccessRuleResponseBody) *access.ExplainedAccessRule {
+	res := &access.ExplainedAccessRule{
+		PrincipalUrn:        *v.PrincipalUrn,
+		Kind:                *v.Kind,
+		DisplayName:         *v.DisplayName,
+		Level:               *v.Level,
+		AppliesTo:           *v.AppliesTo,
+		Effect:              *v.Effect,
+		Reason:              v.Reason,
+		ViaDirectoryMapping: *v.ViaDirectoryMapping,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]string, len(v.Tools))
+		for i, val := range v.Tools {
+			res.Tools[i] = val
+		}
+	}
+	if v.Dispositions != nil {
+		res.Dispositions = make([]string, len(v.Dispositions))
+		for i, val := range v.Dispositions {
+			res.Dispositions[i] = val
+		}
+	}
+	if v.DirectorySources != nil {
+		res.DirectorySources = make([]*access.ExplainedAccessDirectorySource, len(v.DirectorySources))
+		for i, val := range v.DirectorySources {
+			if val == nil {
+				res.DirectorySources[i] = nil
+				continue
+			}
+			res.DirectorySources[i] = unmarshalExplainedAccessDirectorySourceResponseBodyToAccessExplainedAccessDirectorySource(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalExplainedAccessDirectorySourceResponseBodyToAccessExplainedAccessDirectorySource
+// builds a value of type *access.ExplainedAccessDirectorySource from a value
+// of type *ExplainedAccessDirectorySourceResponseBody.
+func unmarshalExplainedAccessDirectorySourceResponseBodyToAccessExplainedAccessDirectorySource(v *ExplainedAccessDirectorySourceResponseBody) *access.ExplainedAccessDirectorySource {
+	if v == nil {
+		return nil
+	}
+	res := &access.ExplainedAccessDirectorySource{
+		SourceKind:         *v.SourceKind,
+		DirectoryGroupName: v.DirectoryGroupName,
+		AttributeKey:       v.AttributeKey,
+		AttributeValue:     v.AttributeValue,
 	}
 
 	return res

@@ -384,8 +384,9 @@ func TestE2E_ExternalMCP_Proxy_StreamableHTTP(t *testing.T) {
 	require.Equal(t, "The weather in San Francisco is sunny and 72°F", firstContent["text"])
 	_, successIsError := metaToolResultText(t, decodeRPCResponse(t, callResp))
 	require.False(t, successIsError)
-	require.Len(t, scanner.payloads, 1)
+	require.Len(t, scanner.payloads, 2)
 	require.JSONEq(t, `{"location":"San Francisco"}`, string(scanner.payloads[0]))
+	require.Equal(t, "The weather in San Francisco is sunny and 72°F", string(scanner.payloads[1]))
 
 	rejected := sendMCPRequest(t, ctx, ti, config.toolset.McpSlug.String, map[string]any{
 		"jsonrpc": "2.0", "id": 4, "method": "tools/call",
@@ -395,16 +396,23 @@ func TestE2E_ExternalMCP_Proxy_StreamableHTTP(t *testing.T) {
 	text, isError := metaToolResultText(t, decodeRPCResponse(t, rejected))
 	require.True(t, isError)
 	require.Equal(t, "upstream rejection", text)
+	require.Len(t, scanner.payloads, 4)
+	require.JSONEq(t, `{}`, string(scanner.payloads[2]))
+	require.Equal(t, "upstream rejection", string(scanner.payloads[3]))
 
 	events := scanAttributes(recorder, mcpriskscan.SurfaceHostedMCP)
-	require.Len(t, events, 2)
+	require.Len(t, events, 4)
 	for _, event := range events {
 		require.Equal(t, config.toolset.OrganizationID, event[attr.OrganizationIDKey])
 		require.Equal(t, config.toolset.ProjectID.String(), event[attr.ProjectIDKey])
 		require.Equal(t, config.toolset.ID.String(), event[attr.ToolsetIDKey])
 		require.Equal(t, "proxy", event[attr.ToolNameKey], "external scans identify the stable URN, not the placeholder descriptor name")
 		require.Equal(t, mcpriskscan.MethodToolsCall, event["gram.mcp.risk.scan.method"])
-		require.Equal(t, mcpriskscan.PhaseBeforeExecution, event["gram.mcp.risk.scan.phase"])
+	}
+	for i := 0; i < len(events); i += 2 {
+		require.Equal(t, mcpriskscan.PhaseRequest, events[i]["gram.mcp.risk.scan.phase"])
+		require.Equal(t, mcpriskscan.PhaseResponse, events[i+1]["gram.mcp.risk.scan.phase"])
+		require.Equal(t, events[i]["gram.mcp.risk.scan.execution_id"], events[i+1]["gram.mcp.risk.scan.execution_id"])
 	}
 }
 

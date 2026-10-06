@@ -8,6 +8,13 @@ import { assertNever } from "@/lib/utils";
  * the moment the string lands in this list.
  */
 export const AUDIT_ACTIONS = [
+  "slack-directory-connection:authorize",
+  "slack-directory-connection:disconnect",
+  "slack-directory-connection:sync",
+  "slack-identity-mapping:confirm",
+  "slack-identity-mapping:reassign",
+  "slack-identity-mapping:reconfirm",
+  "slack-identity-mapping:unmap",
   "access_challenge:resolve",
   "access_member:update_role",
   "access_role:create",
@@ -55,6 +62,8 @@ export const AUDIT_ACTIONS = [
   "custom_domains:update",
   "data_export_route:create",
   "data_export_route:delete",
+  "data_export_route:pause",
+  "data_export_route:resume",
   "data_export_route:update",
   "deployments:create",
   "deployments:evolve",
@@ -66,6 +75,8 @@ export const AUDIT_ACTIONS = [
   "device_integration:retry_schedule",
   "device_integration:update_schedule",
   "device_integration:upsert",
+  "directory_role_mapping:delete",
+  "directory_role_mapping:set",
   "environment:create",
   "environment:delete",
   "environment:update",
@@ -126,6 +137,9 @@ export const AUDIT_ACTIONS = [
   "openrouter-key:enable",
   "openrouter-key:set_spend_cap",
   "organization:device_agent_configuration_updated",
+  "organization:disabled",
+  "organization:enabled",
+  "organization:whitelist_updated",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_converted",
   "organization:enterprise_trial_demoted",
@@ -135,6 +149,10 @@ export const AUDIT_ACTIONS = [
   "organization:enterprise_trial_started",
   "organization:hooks_fail_open_disabled",
   "organization:hooks_fail_open_enabled",
+  "organization:onboarding_updated",
+  "organization:onboarding_stack_updated",
+  "organization:onboarding_playbook_assigned",
+  "organization:onboarding_playbook_unassigned",
   "organization:payg_activated",
   "organization:payg_deactivated",
   "organization:product_feature_disabled",
@@ -149,6 +167,9 @@ export const AUDIT_ACTIONS = [
   "otel_destination:delete",
   "okta-resource-connection:confirm",
   "okta-resource-connection:reset",
+  "okta-resource-connection:observe",
+  "okta-server-suggestion:dismiss",
+  "okta-server-suggestion:restore",
   "otel_destination:update",
   "platform-mcp-diagnostics:attribution_read",
   "platform-mcp-diagnostics:user_status_read",
@@ -266,6 +287,15 @@ export const AUDIT_ACTIONS = [
   "wake:cancelled",
   "wake:fired",
   "wake:scheduled",
+  "widget:create",
+  "widget:delete",
+  "widget:update",
+  "workload-admission:admit",
+  "workload-admission:update",
+  "workload-admission:withdraw",
+  "workload-issuer:create",
+  "workload-issuer:delete",
+  "workload-issuer:update",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -287,6 +317,20 @@ export function isAuditAction(action: string): action is AuditAction {
  */
 export function staticActionPhrase(action: AuditAction): string {
   switch (action) {
+    case "slack-identity-mapping:confirm":
+      return "confirmed the Slack mapping for";
+    case "slack-identity-mapping:reassign":
+      return "reassigned the Slack mapping for";
+    case "slack-identity-mapping:reconfirm":
+      return "reviewed and confirmed the Slack mapping for";
+    case "slack-identity-mapping:unmap":
+      return "removed the Slack mapping for";
+    case "slack-directory-connection:sync":
+      return "synced Slack directory";
+    case "slack-directory-connection:authorize":
+      return "authorized Slack workspace";
+    case "slack-directory-connection:disconnect":
+      return "disconnected Slack workspace";
     case "access_challenge:resolve":
       return "resolved access challenge";
     case "access_member:update_role":
@@ -385,6 +429,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "confirmed the Cross App Access connection for";
     case "okta-resource-connection:reset":
       return "reset the Cross App Access connection for";
+    case "okta-resource-connection:observe":
+      return "observed a Cross App Access exchange result for";
+    case "okta-server-suggestion:dismiss":
+      return "dismissed a suggestion for";
+    case "okta-server-suggestion:restore":
+      return "restored a suggestion for";
     case "json_web_key_set:create":
       return "created JSON Web Key Set";
     case "json_web_key_set:update":
@@ -436,6 +486,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated data export route";
     case "data_export_route:delete":
       return "deleted data export route";
+    case "data_export_route:pause":
+      return "paused data export route";
+    case "data_export_route:resume":
+      return "resumed data export route";
 
     case "network_ingress:create":
       return "created private network ingress";
@@ -467,6 +521,11 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated device integration schedule";
     case "device_integration:retry_schedule":
       return "retried device integration sync";
+
+    case "directory_role_mapping:set":
+      return "set directory role mapping";
+    case "directory_role_mapping:delete":
+      return "removed directory role mapping";
 
     case "environment:create":
       return "created environment";
@@ -548,6 +607,12 @@ export function staticActionPhrase(action: AuditAction): string {
     case "openrouter-key:set_spend_cap":
       return "changed inference cap for";
 
+    case "organization:enabled":
+      return "enabled organization access for";
+    case "organization:disabled":
+      return "disabled organization access for";
+    case "organization:whitelist_updated":
+      return "changed demo-access whitelisting for";
     case "organization:webhooks_enabled":
       return "enabled webhook delivery";
     case "organization:webhooks_disabled":
@@ -582,6 +647,14 @@ export function staticActionPhrase(action: AuditAction): string {
       return "disabled a product feature for";
     case "organization:setup_task_updated":
       return "updated setup task for";
+    case "organization:onboarding_updated":
+      return "updated onboarding for";
+    case "organization:onboarding_stack_updated":
+      return "updated the onboarding stack for";
+    case "organization:onboarding_playbook_assigned":
+      return "assigned an onboarding playbook to";
+    case "organization:onboarding_playbook_unassigned":
+      return "removed the onboarding playbook from";
 
     case "organization_invitation:create":
       return "invited";
@@ -635,12 +708,20 @@ export function staticActionPhrase(action: AuditAction): string {
     case "project:delete":
       return "deleted project";
 
+    // Saved queries were replaced by widgets; these stay so audit rows
+    // written before the change still read well.
     case "query:create":
       return "created saved query";
     case "query:update":
       return "updated saved query";
     case "query:delete":
       return "deleted saved query";
+    case "widget:create":
+      return "created widget";
+    case "widget:update":
+      return "updated widget";
+    case "widget:delete":
+      return "deleted widget";
 
     case "remote-mcp:create":
       return "added remote MCP server";
@@ -847,6 +928,21 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated a global variation for";
     case "variation:delete_global":
       return "deleted a global variation for";
+
+    case "workload-issuer:create":
+      return "started trusting workload issuer";
+    case "workload-issuer:update":
+      return "updated workload issuer";
+    case "workload-issuer:delete":
+      return "stopped trusting workload issuer";
+    // Named for what they do, because the row is the grant of machine access
+    // rather than a record about one.
+    case "workload-admission:admit":
+      return "admitted workload";
+    case "workload-admission:update":
+      return "updated workload";
+    case "workload-admission:withdraw":
+      return "withdrew workload";
 
     default:
       return assertNever(action);

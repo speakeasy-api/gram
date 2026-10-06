@@ -66,6 +66,11 @@ type testData struct {
 
 func seedTestData(t *testing.T, conn *pgxpool.Pool, enabled bool) testData {
 	t.Helper()
+	return seedTestDataWithScope(t, conn, enabled, nil)
+}
+
+func seedTestDataWithScope(t *testing.T, conn *pgxpool.Pool, enabled bool, mcpScope []byte) testData {
+	t.Helper()
 	ctx := t.Context()
 
 	orgID := "test-org-" + uuid.NewString()[:8]
@@ -96,6 +101,7 @@ func seedTestData(t *testing.T, conn *pgxpool.Pool, enabled bool) testData {
 		Name:           "test policy",
 		Sources:        []string{"gitleaks"},
 		Enabled:        enabled,
+		McpScope:       mcpScope,
 		Action:         "flag",
 		AudienceType:   "everyone",
 		AutoName:       false,

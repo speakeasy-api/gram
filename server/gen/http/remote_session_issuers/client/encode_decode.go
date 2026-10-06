@@ -1043,6 +1043,15 @@ func EncodeListRemoteSessionIssuersRequest(encoder func(*http.Request) goahttp.E
 		if p.Limit != nil {
 			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
 		}
+		if p.Search != nil {
+			values.Add("search", *p.Search)
+		}
+		if p.UpstreamHost != nil {
+			values.Add("upstream_host", *p.UpstreamHost)
+		}
+		if p.Tier != nil {
+			values.Add("tier", *p.Tier)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -2021,6 +2030,12 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		res.GrantTypesSupported = make([]string, len(v.GrantTypesSupported))
 		for i, val := range v.GrantTypesSupported {
 			res.GrantTypesSupported[i] = val
+		}
+	}
+	if v.AuthorizationGrantProfilesSupported != nil {
+		res.AuthorizationGrantProfilesSupported = make([]string, len(v.AuthorizationGrantProfilesSupported))
+		for i, val := range v.AuthorizationGrantProfilesSupported {
+			res.AuthorizationGrantProfilesSupported[i] = val
 		}
 	}
 	if v.ResponseTypesSupported != nil {

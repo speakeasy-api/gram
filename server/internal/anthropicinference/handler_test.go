@@ -220,7 +220,7 @@ func TestAttachDeadlineIncludesUnresponsiveResolver(t *testing.T) {
 		response := httptest.NewRecorder()
 		start := time.Now()
 		mux.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/hooks/anthropic-inference/example", strings.NewReader(`{}`)))
-		require.Equal(t, 9*time.Second, time.Since(start))
+		require.Equal(t, requestBudget, time.Since(start))
 		require.Equal(t, http.StatusOK, response.Code)
 		require.Equal(t, "application/json", response.Header().Get("Content-Type"))
 		require.JSONEq(t, fallbackVerdictJSON, response.Body.String())

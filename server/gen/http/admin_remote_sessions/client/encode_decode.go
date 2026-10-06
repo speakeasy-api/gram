@@ -3799,6 +3799,7 @@ func unmarshalGlobalRemoteSessionIssuerResponseBodyToAdminremotesessionsGlobalRe
 		GlobalClientCount:             *v.GlobalClientCount,
 		TenantClientCount:             *v.TenantClientCount,
 		TrustedUserSessionIssuerCount: *v.TrustedUserSessionIssuerCount,
+		EmaBindingCount:               v.EmaBindingCount,
 	}
 	res.Issuer = unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v.Issuer)
 
@@ -3850,6 +3851,12 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		res.GrantTypesSupported = make([]string, len(v.GrantTypesSupported))
 		for i, val := range v.GrantTypesSupported {
 			res.GrantTypesSupported[i] = val
+		}
+	}
+	if v.AuthorizationGrantProfilesSupported != nil {
+		res.AuthorizationGrantProfilesSupported = make([]string, len(v.AuthorizationGrantProfilesSupported))
+		for i, val := range v.AuthorizationGrantProfilesSupported {
+			res.AuthorizationGrantProfilesSupported[i] = val
 		}
 	}
 	if v.ResponseTypesSupported != nil {
@@ -3916,8 +3923,16 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		TokenEndpointAuthAudienceFormat: v.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 v.JSONWebKeySetID,
 		Audience:                        v.Audience,
+		LegacyCallbackURL:               *v.LegacyCallbackURL,
+		CallbackURL:                     v.CallbackURL,
 		CreatedAt:                       *v.CreatedAt,
 		UpdatedAt:                       *v.UpdatedAt,
+	}
+	if v.GrantTypes != nil {
+		res.GrantTypes = make([]string, len(v.GrantTypes))
+		for i, val := range v.GrantTypes {
+			res.GrantTypes[i] = val
+		}
 	}
 	res.UserSessionIssuerIds = make([]string, len(v.UserSessionIssuerIds))
 	for i, val := range v.UserSessionIssuerIds {

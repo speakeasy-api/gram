@@ -17,6 +17,10 @@ import {
  */
 export type GlobalRemoteSessionIssuer = {
   /**
+   * Number of active identity-chaining bindings that block deletion and must be explicitly unlinked by their owning organizations. Included in the detail response; omitted from listings.
+   */
+  emaBindingCount?: number | undefined;
+  /**
    * Number of non-deleted global remote_session_clients (project_id NULL, organization_id NULL) registered with this issuer. These block a delete and the platform admin can remove them here.
    */
   globalClientCount: number;
@@ -40,6 +44,7 @@ export const GlobalRemoteSessionIssuer$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    ema_binding_count: z.optional(z.int()),
     global_client_count: z.int(),
     issuer: RemoteSessionIssuer$inboundSchema,
     tenant_client_count: z.int(),
@@ -47,6 +52,7 @@ export const GlobalRemoteSessionIssuer$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "ema_binding_count": "emaBindingCount",
       "global_client_count": "globalClientCount",
       "tenant_client_count": "tenantClientCount",
       "trusted_user_session_issuer_count": "trustedUserSessionIssuerCount",

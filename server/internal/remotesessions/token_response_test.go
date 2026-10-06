@@ -2,12 +2,74 @@ package remotesessions
 
 import (
 	"encoding/json"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 )
+
+func TestTokenResponseExpiresIn(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
+	for _, value := range []string{`3600`, `"3600"`, `"03600"`, `0`, `"0"`, `"000"`, `null`} {
+		t.Run(value, func(t *testing.T) {
+			t.Parallel()
+			var response tokenResponse
+			require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a","scope":"read","expires_in":`+value+`}`), &response))
+			require.Equal(t, "a", response.AccessToken)
+			require.True(t, response.ScopeReported())
+			if value == `3600` || value == `"3600"` || value == `"03600"` {
+				require.Equal(t, 3600, response.ExpiresIn)
+				require.Equal(t, now.Add(time.Hour), *response.AccessExpiresAt(now))
+			} else {
+				require.Zero(t, response.ExpiresIn)
+				require.Nil(t, response.AccessExpiresAt(now))
+			}
+		})
+	}
+	var omitted tokenResponse
+	require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a"}`), &omitted))
+	require.Zero(t, omitted.ExpiresIn)
+	for _, value := range []string{`-1`, `"-1"`, `9223372037`, `"9223372037"`, `""`, `"never"`, `1.5`, `"1.5"`, `true`, `{}`, `[]`, `"999999999999999999999999"`} {
+		t.Run("invalid_"+value, func(t *testing.T) {
+			t.Parallel()
+			var response tokenResponse
+			require.Error(t, json.Unmarshal([]byte(`{"expires_in":`+value+`}`), &response))
+		})
+	}
+}
+
+func TestTokenResponseWireExpiresIn(t *testing.T) {
+	t.Parallel()
+	maxSeconds := int(min(int64(^uint(0)>>1), int64((1<<63-1)/time.Second)))
+	for _, want := range []int{0, 60, 7200, maxSeconds} {
+		number := strconv.Itoa(want)
+		for _, raw := range []string{number, strconv.Quote(number)} {
+			t.Run(raw, func(t *testing.T) {
+				t.Parallel()
+				var wire tokenResponseWire
+				require.NoError(t, json.Unmarshal([]byte(`{"access_token":"a","expires_in":`+raw+`}`), &wire))
+				require.Equal(t, want, wire.ExpiresIn)
+				require.Equal(t, "a", wire.AccessToken)
+				encoded, err := json.Marshal(wire)
+				require.NoError(t, err)
+				var members map[string]json.RawMessage
+				require.NoError(t, json.Unmarshal(encoded, &members))
+				require.JSONEq(t, number, string(members["expires_in"]))
+			})
+		}
+	}
+	for _, raw := range []string{`-1`, `"-1"`, `9223372037`, `"9223372037"`, `1e3`, `"1e3"`, `999999999999999999999999`, `"999999999999999999999999"`} {
+		t.Run("invalid_"+raw, func(t *testing.T) {
+			t.Parallel()
+			wire := tokenResponseWire{ExpiresIn: 42}
+			require.Error(t, json.Unmarshal([]byte(`{"expires_in":`+raw+`}`), &wire))
+			require.Equal(t, 42, wire.ExpiresIn)
+		})
+	}
+}
 
 func TestTokenResponseRejectsMalformedScope(t *testing.T) {
 	t.Parallel()

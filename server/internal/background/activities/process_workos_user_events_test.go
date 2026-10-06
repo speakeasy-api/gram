@@ -13,6 +13,8 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -763,10 +765,14 @@ func TestProcessWorkOSUserEvents_SoftDeletesUser(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, latched.OwnerReassignmentRequiredAt.Valid)
 	require.Equal(t, "owner_deleted", latched.OwnerReassignmentReason.String)
-	var auditCount int
-	err = conn.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE subject_id = $1 AND action = 'agent:owner_loss'`, agent.ID).Scan(&auditCount) //nolint:glint // notestingrawsql: verifies user deletion audit
+	// The cloned database holds only this agent, so the action-wide count and
+	// the latest row together pin the single event to it.
+	auditCount, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAgentOwnerLoss)
 	require.NoError(t, err)
-	require.Equal(t, 1, auditCount)
+	require.EqualValues(t, 1, auditCount)
+	record, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionAgentOwnerLoss)
+	require.NoError(t, err)
+	require.Equal(t, agent.ID.String(), record.SubjectID)
 }
 
 func TestProcessWorkOSUserEvents_AdvancesAndResumesCursor(t *testing.T) {

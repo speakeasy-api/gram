@@ -74,7 +74,10 @@ func isMCPJSONRPCEndpoint(path string) bool {
 	case "mcp":
 		// /mcp/{mcpSlug} — the hosted toolset endpoint. A further slash means
 		// an OAuth or metadata sub-route, not the MCP endpoint itself.
-		return isEndpointSlug(tail) && !isSlugSiblingRoute(tail)
+		// GET /mcp/remote_login_bind is the remote login browser hop. The consent
+		// page or the bind stop on another platform host navigates here. It is
+		// registered under /mcp/ only, so under /x/mcp/ the name is a slug.
+		return isEndpointSlug(tail) && !isSlugSiblingRoute(tail) && tail != "remote_login_bind"
 	case "x":
 		// /x/mcp/{slug} — toolset-backed, remote-backed, and tunneled. Carries
 		// the same OAuth callback siblings as /mcp/ (internal/xmcp/service.go).
@@ -85,6 +88,12 @@ func isMCPJSONRPCEndpoint(path string) bool {
 		// so every one-segment tail here really is a slug.
 		slug, ok := strings.CutPrefix(tail, "mcp/")
 		return ok && isEndpointSlug(slug)
+	case "agent-mcp":
+		// POST /agent-mcp/{agentID} — the per-agent gateway
+		// (internal/mcp/serve_agent_gateway.go). Nothing static is registered
+		// beside it, and the tail is an agent id rather than a slug, so every
+		// one-segment tail here is the endpoint itself.
+		return isEndpointSlug(tail)
 	case "platform-mcp":
 		// POST /platform-mcp is Gram's own platform MCP server
 		// (internal/platformmcp), served by the go-sdk's Streamable HTTP

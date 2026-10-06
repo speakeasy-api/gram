@@ -1,3 +1,4 @@
+import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { useProject } from "@/contexts/Auth";
 import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
@@ -53,6 +54,7 @@ export function SkillPickerDialog({
 }): JSX.Element {
   const canWritePlugin = usePluginWriteAccess();
   const project = useProject();
+  const scope = usePluginQueryScope();
   const { grants, isLoading: isLoadingPermissions } = useRBAC();
   const canReadSkills =
     !isLoadingPermissions &&
@@ -66,7 +68,7 @@ export function SkillPickerDialog({
     setSearch("");
     setSelectedSkillIds([]);
   }, [open, target.assistantId, target.pluginId]);
-  const skillsQuery = useSkillsInfinite({ limit: 200 }, undefined, {
+  const skillsQuery = useSkillsInfinite({ ...scope, limit: 200 }, undefined, {
     throwOnError: false,
     enabled: open && canLoadSkills,
   });

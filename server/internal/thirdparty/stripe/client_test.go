@@ -216,14 +216,15 @@ func (f *fakeStripeAPI) listCreditNotes(_ context.Context, params *stripesdk.Cre
 
 func testSubscription() *stripesdk.Subscription {
 	return &stripesdk.Subscription{
-		ID:                "sub_test",
-		Customer:          &stripesdk.Customer{ID: "cus_test"},
-		Status:            stripesdk.SubscriptionStatusPastDue,
-		CancelAtPeriodEnd: true,
-		CancelAt:          time.Date(2026, time.September, 15, 0, 0, 0, 0, time.UTC).Unix(),
-		CanceledAt:        time.Date(2026, time.August, 16, 12, 0, 0, 0, time.UTC).Unix(),
-		TrialStart:        time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC).Unix(),
-		TrialEnd:          time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC).Unix(),
+		ID:                 "sub_test",
+		Customer:           &stripesdk.Customer{ID: "cus_test"},
+		Status:             stripesdk.SubscriptionStatusPastDue,
+		CancelAtPeriodEnd:  true,
+		BillingCycleAnchor: time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC).Unix(),
+		CancelAt:           time.Date(2026, time.September, 15, 0, 0, 0, 0, time.UTC).Unix(),
+		CanceledAt:         time.Date(2026, time.August, 16, 12, 0, 0, 0, time.UTC).Unix(),
+		TrialStart:         time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC).Unix(),
+		TrialEnd:           time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC).Unix(),
 		Items: &stripesdk.SubscriptionItemList{Data: []*stripesdk.SubscriptionItem{
 			{
 				Price:              &stripesdk.Price{ID: "price_tum"},
@@ -252,6 +253,7 @@ func TestGetSubscriptionReturnsLiveLifecycleState(t *testing.T) {
 	require.Equal(t, "past_due", state.Status)
 	require.Equal(t, time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC), state.CurrentPeriodStart)
 	require.Equal(t, time.Date(2026, time.September, 15, 0, 0, 0, 0, time.UTC), state.CurrentPeriodEnd)
+	require.Equal(t, time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC), state.BillingCycleAnchor)
 	require.True(t, state.CancelAtPeriodEnd)
 	require.True(t, state.PaymentFailed)
 	require.Equal(t, "in_test", state.LatestInvoiceID)
@@ -295,6 +297,16 @@ func TestGetSubscriptionPaymentFailed(t *testing.T) {
 			require.Equal(t, tt.want, state.PaymentFailed)
 		})
 	}
+}
+
+func TestGetSubscriptionNotFound(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{err: &stripesdk.Error{Code: stripesdk.ErrorCodeResourceMissing}}
+	c := &client{api: api, catalog: Catalog{PriceIDTUM: "price_tum", PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PortalConfigurationID: "bpc_test"}}
+
+	_, err := c.GetSubscription(t.Context(), "sub_missing")
+	require.ErrorIs(t, err, ErrSubscriptionNotFound)
 }
 
 func TestGetSubscriptionRequiresConfiguredTUMItem(t *testing.T) {

@@ -261,7 +261,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -302,7 +302,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -484,7 +484,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -622,7 +622,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -761,7 +761,7 @@ jobs:
     if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
     services:
       clickhouse:
-        image: clickhouse/clickhouse-server:26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd
+        image: clickhouse/clickhouse-server:26.4.5.143-distroless@sha256:d7c4cf5575c3d0d49cf1beb7ce8d938d64f707789d9fa3fa538c7d3f898b0649
         env:
           CLICKHOUSE_DB: gram
           CLICKHOUSE_USER: gram
@@ -769,24 +769,37 @@ jobs:
           CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
         ports:
           - 9000:9000
-        options: >-
-          --health-cmd "clickhouse-client --user gram --password gram --query 'SELECT 1'"
-          --health-interval 10s
-          --health-start-period 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
           env: false
+
+      # The distroless image has no shell for a service --health-cmd, and its
+      # init runs a localhost-only bootstrap server first. Dial the container
+      # hostname so readiness requires the final network listener.
+      - name: Wait for ClickHouse
+        env:
+          CLICKHOUSE_CONTAINER: ${{ job.services.clickhouse.id }}
+        run: |
+          host="$(docker inspect --format '{{.Config.Hostname}}' "$CLICKHOUSE_CONTAINER")"
+          for _ in $(seq 1 60); do
+            if docker exec "$CLICKHOUSE_CONTAINER" \
+              clickhouse-client --host "$host" --user gram --password gram --query 'SELECT 1' >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::ClickHouse did not become ready"
+          docker logs "$CLICKHOUSE_CONTAINER"
+          exit 1
 
       - name: Bootstrap local ClickHouse principals
         env:
@@ -822,7 +835,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -886,7 +899,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -998,7 +1011,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1053,7 +1066,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1117,7 +1130,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1218,7 +1231,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1288,7 +1301,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1345,7 +1358,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1403,7 +1416,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1448,7 +1461,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1490,7 +1503,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1558,7 +1571,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1582,6 +1595,14 @@ jobs:
 
       - name: Install Go deps
         run: mise run install:go
+
+      - name: Install discovery wire-test dependencies on its shard
+        shell: bash
+        run: |
+          packages=$(cd server && go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${{ matrix.shard }}/${{ strategy.job-total }}" -tags=inv.debug ./...)
+          if grep -qx 'github.com/speakeasy-api/gram/server/internal/mcpregistry' <<< "$packages"; then
+            aube install --frozen-lockfile --filter . --filter 'dashboard...'
+          fi
 
       - name: Test
         # Each package can launch Postgres, Redis, and ClickHouse concurrently.
@@ -1607,7 +1628,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1650,7 +1671,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1835,7 +1856,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1902,7 +1923,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1934,6 +1955,12 @@ jobs:
         run: aube run test
         working-directory: client/admin
 
+      - name: Test registry editor in Chromium
+        working-directory: e2e
+        run: |
+          aube exec playwright install --with-deps chromium
+          aube run test:registry-editor
+
       - name: Prune aube store
         if: success()
         run: aube store prune
@@ -1950,7 +1977,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -2009,7 +2036,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -2113,7 +2140,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -2292,7 +2319,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -2354,7 +2381,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -2470,7 +2497,7 @@ jobs:
           replace-all: true
 
   preview-label:
-    name: Manage the preview label
+    name: Add the preview label
     runs-on: blacksmith-2vcpu-ubuntu-2404
     needs:
       [
@@ -2483,89 +2510,32 @@ jobs:
       ]
     permissions:
       pull-requests: write
-    # The `preview` label triggers gram-infra's gram-app-previews
-    # ApplicationSet, whose wait-for-images PreSync hook polls GCR for the
-    # pr-<number>-<sha8> tags of every component. Labelling before those tags
-    # exist leaves the hook polling for images that never arrive, and ArgoCD's
-    # selfHeal recreates it forever (this is what #2749 cleaned up), so the
-    # label is only added once this run has produced a complete tag set, and
-    # removed again the moment a head commit fails to produce one.
-    #
-    # A component's tag comes either from its docker build job or, when that
-    # job is skipped, from preview-image-tags aliasing main's image. Those two
-    # sources are keyed off the same `changes` gates, so readiness is checked
-    # as "gate closed, or the build succeeded" rather than as "not failed".
-    # `skipped` on its own is not enough: docker-build-server also needs
-    # server-build-lint, so a lint failure skips it under the default
-    # success() condition while its gate is open — leaving no server tag for
-    # preview-retag to have aliased either.
-    # Temporarily disabled; remove the false guard to restore automatic labelling.
+    # Only on PR creation, so a manually removed label stays removed. Waits
+    # for every preview image tag, or the preview polls for missing images.
     if: >-
-      false &&
       !cancelled() &&
       github.event_name == 'pull_request' &&
+      (github.event.action == 'opened' || github.event.action == 'ready_for_review') &&
       !github.event.pull_request.draft &&
       !github.event.pull_request.head.repo.fork &&
       github.event.pull_request.user.login != 'dependabot[bot]' &&
-      needs.changes.outputs.preview-ui == 'true'
+      needs.changes.outputs.preview-ui == 'true' &&
+      (needs.changes.outputs.server != 'true' ||
+       needs.docker-build-server.result == 'success') &&
+      ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
+       needs.docker-build-client.result == 'success') &&
+      (needs.changes.outputs.pystreams != 'true' ||
+       needs.docker-build-pystreams.result == 'success') &&
+      ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
+       needs.upload-dashboard-assets.result == 'success') &&
+      contains(fromJSON('["success","skipped"]'), needs.preview-image-tags.result)
     env:
       GH_TOKEN: ${{ github.token }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       REPO: ${{ github.repository }}
-      OPTED_OUT: ${{ contains(github.event.pull_request.labels.*.name, 'preview:off') }}
-      IMAGES_READY: >-
-        ${{ (needs.changes.outputs.server != 'true' ||
-             needs.docker-build-server.result == 'success') &&
-            ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
-             needs.docker-build-client.result == 'success') &&
-            (needs.changes.outputs.pystreams != 'true' ||
-             needs.docker-build-pystreams.result == 'success') &&
-            ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
-             needs.upload-dashboard-assets.result == 'success') &&
-            contains(fromJSON('["success","skipped"]'), needs.preview-image-tags.result) }}
     steps:
-      - name: Add or remove the preview label
-        run: |
-          set -euo pipefail
-
-          has_label() {
-            gh pr view "$PR_NUMBER" --repo "$REPO" --json labels \
-              --jq 'any(.labels[]; .name == "preview")'
-          }
-
-          # preview:off both stops this job labelling and withdraws a preview
-          # that an earlier commit put up. It takes effect on the next run
-          # rather than on the label itself: triggering on `labeled` would
-          # start a full CI run every time any label is touched.
-          if [[ "$OPTED_OUT" == "true" ]]; then
-            if [[ "$(has_label)" == "true" ]]; then
-              echo "PR carries preview:off; removing the preview label."
-              gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label preview
-            else
-              echo "PR carries preview:off; nothing to do."
-            fi
-            exit 0
-          fi
-
-          if [[ "$IMAGES_READY" == "true" ]]; then
-            if [[ "$(has_label)" == "true" ]]; then
-              echo "Preview label already present."
-            else
-              echo "Every preview image tag exists for this commit; labelling."
-              gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label preview
-            fi
-            exit 0
-          fi
-
-          # An image job failed, so this commit has no complete tag set. Drop
-          # the label rather than let the preview chase a tag that will never
-          # land; the next green commit puts it back.
-          if [[ "$(has_label)" == "true" ]]; then
-            echo "Preview images are incomplete for this commit; removing the label."
-            gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label preview
-          else
-            echo "Preview images are incomplete and the label is not set; nothing to do."
-          fi
+      - name: Add the preview label
+        run: gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label preview
 
   dispatch-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404

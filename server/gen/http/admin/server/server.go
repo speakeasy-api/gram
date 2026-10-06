@@ -39,7 +39,10 @@ type Server struct {
 	GetOrganization                       http.Handler
 	ListOrganizationMembers               http.Handler
 	ListOrganizationProjects              http.Handler
+	ListProjectMcpServers                 http.Handler
 	ListOrganizationActivity              http.Handler
+	ListUsers                             http.Handler
+	ListUserOrganizations                 http.Handler
 	ListOrganizations                     http.Handler
 	ExtendTrial                           http.Handler
 	CreateOrganization                    http.Handler
@@ -74,6 +77,33 @@ type Server struct {
 	GetSpendBreakdown                     http.Handler
 	GetSupportMatrix                      http.Handler
 	UpdateSupportMatrix                   http.Handler
+	GetSupportCoverage                    http.Handler
+	DescribeMcpServerHealth               http.Handler
+	GetMcpServerToolCalls                 http.Handler
+	GetRegistryOktaCandidates             http.Handler
+	ListRegistryOktaUnmapped              http.Handler
+	ListRegistryEntries                   http.Handler
+	GetRegistryEntry                      http.Handler
+	CreateRegistryEntry                   http.Handler
+	SaveRegistryEntry                     http.Handler
+	SetRegistryEntryPublished             http.Handler
+	ListOnboardingSteps                   http.Handler
+	GetOnboardingStackOptions             http.Handler
+	GetOrganizationOnboardingStack        http.Handler
+	SetOrganizationOnboardingStack        http.Handler
+	ListOnboardingUseCases                http.Handler
+	CreateOnboardingUseCase               http.Handler
+	UpdateOnboardingUseCase               http.Handler
+	DeleteOnboardingUseCase               http.Handler
+	ListOnboardingPlaybooks               http.Handler
+	CreateOnboardingPlaybook              http.Handler
+	UpdateOnboardingPlaybook              http.Handler
+	DeleteOnboardingPlaybook              http.Handler
+	CloneOnboardingPlaybook               http.Handler
+	GetOrganizationOnboardingPlaybook     http.Handler
+	AssignOrganizationOnboardingPlaybook  http.Handler
+	GetStripeSubscriptionCandidate        http.Handler
+	SetStripeSubscription                 http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -121,7 +151,10 @@ func New(
 			{"GetOrganization", "GET", "/admin/organization.get"},
 			{"ListOrganizationMembers", "GET", "/admin/organization.members"},
 			{"ListOrganizationProjects", "GET", "/admin/organization.projects"},
+			{"ListProjectMcpServers", "GET", "/admin/project.mcpServers"},
 			{"ListOrganizationActivity", "GET", "/admin/organization.activity"},
+			{"ListUsers", "GET", "/admin/users.list"},
+			{"ListUserOrganizations", "GET", "/admin/users.organizations.list"},
 			{"ListOrganizations", "GET", "/admin/organizations.list"},
 			{"ExtendTrial", "POST", "/admin/trial.extend"},
 			{"CreateOrganization", "POST", "/admin/organization.create"},
@@ -156,6 +189,33 @@ func New(
 			{"GetSpendBreakdown", "GET", "/admin/organization.spendBreakdown"},
 			{"GetSupportMatrix", "GET", "/admin/supportMatrix.get"},
 			{"UpdateSupportMatrix", "POST", "/admin/supportMatrix.update"},
+			{"GetSupportCoverage", "GET", "/admin/supportCoverage.get"},
+			{"DescribeMcpServerHealth", "GET", "/admin/project.mcpServerHealth"},
+			{"GetMcpServerToolCalls", "GET", "/admin/project.mcpServerToolCalls"},
+			{"GetRegistryOktaCandidates", "GET", "/admin/registry.oktaCandidates"},
+			{"ListRegistryOktaUnmapped", "GET", "/admin/registry.oktaUnmapped"},
+			{"ListRegistryEntries", "GET", "/admin/registry.list"},
+			{"GetRegistryEntry", "GET", "/admin/registry.get"},
+			{"CreateRegistryEntry", "POST", "/admin/registry.create"},
+			{"SaveRegistryEntry", "POST", "/admin/registry.save"},
+			{"SetRegistryEntryPublished", "POST", "/admin/registry.setPublished"},
+			{"ListOnboardingSteps", "GET", "/admin/onboarding.steps"},
+			{"GetOnboardingStackOptions", "GET", "/admin/onboarding.stackOptions"},
+			{"GetOrganizationOnboardingStack", "GET", "/admin/organization.onboardingStack"},
+			{"SetOrganizationOnboardingStack", "POST", "/admin/organization.onboardingStack"},
+			{"ListOnboardingUseCases", "GET", "/admin/onboarding.useCases"},
+			{"CreateOnboardingUseCase", "POST", "/admin/onboarding.useCases.create"},
+			{"UpdateOnboardingUseCase", "POST", "/admin/onboarding.useCases.update"},
+			{"DeleteOnboardingUseCase", "POST", "/admin/onboarding.useCases.delete"},
+			{"ListOnboardingPlaybooks", "GET", "/admin/onboarding.playbooks"},
+			{"CreateOnboardingPlaybook", "POST", "/admin/onboarding.playbooks.create"},
+			{"UpdateOnboardingPlaybook", "POST", "/admin/onboarding.playbooks.update"},
+			{"DeleteOnboardingPlaybook", "POST", "/admin/onboarding.playbooks.delete"},
+			{"CloneOnboardingPlaybook", "POST", "/admin/onboarding.playbooks.clone"},
+			{"GetOrganizationOnboardingPlaybook", "GET", "/admin/organization.onboardingPlaybook"},
+			{"AssignOrganizationOnboardingPlaybook", "POST", "/admin/organization.onboardingPlaybook"},
+			{"GetStripeSubscriptionCandidate", "GET", "/admin/organization.stripeSubscriptionCandidate"},
+			{"SetStripeSubscription", "POST", "/admin/organization.setStripeSubscription"},
 		},
 		Login:                                 NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                              NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -175,7 +235,10 @@ func New(
 		GetOrganization:                       NewGetOrganizationHandler(e.GetOrganization, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizationMembers:               NewListOrganizationMembersHandler(e.ListOrganizationMembers, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizationProjects:              NewListOrganizationProjectsHandler(e.ListOrganizationProjects, mux, decoder, encoder, errhandler, formatter),
+		ListProjectMcpServers:                 NewListProjectMcpServersHandler(e.ListProjectMcpServers, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizationActivity:              NewListOrganizationActivityHandler(e.ListOrganizationActivity, mux, decoder, encoder, errhandler, formatter),
+		ListUsers:                             NewListUsersHandler(e.ListUsers, mux, decoder, encoder, errhandler, formatter),
+		ListUserOrganizations:                 NewListUserOrganizationsHandler(e.ListUserOrganizations, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizations:                     NewListOrganizationsHandler(e.ListOrganizations, mux, decoder, encoder, errhandler, formatter),
 		ExtendTrial:                           NewExtendTrialHandler(e.ExtendTrial, mux, decoder, encoder, errhandler, formatter),
 		CreateOrganization:                    NewCreateOrganizationHandler(e.CreateOrganization, mux, decoder, encoder, errhandler, formatter),
@@ -210,6 +273,33 @@ func New(
 		GetSpendBreakdown:                     NewGetSpendBreakdownHandler(e.GetSpendBreakdown, mux, decoder, encoder, errhandler, formatter),
 		GetSupportMatrix:                      NewGetSupportMatrixHandler(e.GetSupportMatrix, mux, decoder, encoder, errhandler, formatter),
 		UpdateSupportMatrix:                   NewUpdateSupportMatrixHandler(e.UpdateSupportMatrix, mux, decoder, encoder, errhandler, formatter),
+		GetSupportCoverage:                    NewGetSupportCoverageHandler(e.GetSupportCoverage, mux, decoder, encoder, errhandler, formatter),
+		DescribeMcpServerHealth:               NewDescribeMcpServerHealthHandler(e.DescribeMcpServerHealth, mux, decoder, encoder, errhandler, formatter),
+		GetMcpServerToolCalls:                 NewGetMcpServerToolCallsHandler(e.GetMcpServerToolCalls, mux, decoder, encoder, errhandler, formatter),
+		GetRegistryOktaCandidates:             NewGetRegistryOktaCandidatesHandler(e.GetRegistryOktaCandidates, mux, decoder, encoder, errhandler, formatter),
+		ListRegistryOktaUnmapped:              NewListRegistryOktaUnmappedHandler(e.ListRegistryOktaUnmapped, mux, decoder, encoder, errhandler, formatter),
+		ListRegistryEntries:                   NewListRegistryEntriesHandler(e.ListRegistryEntries, mux, decoder, encoder, errhandler, formatter),
+		GetRegistryEntry:                      NewGetRegistryEntryHandler(e.GetRegistryEntry, mux, decoder, encoder, errhandler, formatter),
+		CreateRegistryEntry:                   NewCreateRegistryEntryHandler(e.CreateRegistryEntry, mux, decoder, encoder, errhandler, formatter),
+		SaveRegistryEntry:                     NewSaveRegistryEntryHandler(e.SaveRegistryEntry, mux, decoder, encoder, errhandler, formatter),
+		SetRegistryEntryPublished:             NewSetRegistryEntryPublishedHandler(e.SetRegistryEntryPublished, mux, decoder, encoder, errhandler, formatter),
+		ListOnboardingSteps:                   NewListOnboardingStepsHandler(e.ListOnboardingSteps, mux, decoder, encoder, errhandler, formatter),
+		GetOnboardingStackOptions:             NewGetOnboardingStackOptionsHandler(e.GetOnboardingStackOptions, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationOnboardingStack:        NewGetOrganizationOnboardingStackHandler(e.GetOrganizationOnboardingStack, mux, decoder, encoder, errhandler, formatter),
+		SetOrganizationOnboardingStack:        NewSetOrganizationOnboardingStackHandler(e.SetOrganizationOnboardingStack, mux, decoder, encoder, errhandler, formatter),
+		ListOnboardingUseCases:                NewListOnboardingUseCasesHandler(e.ListOnboardingUseCases, mux, decoder, encoder, errhandler, formatter),
+		CreateOnboardingUseCase:               NewCreateOnboardingUseCaseHandler(e.CreateOnboardingUseCase, mux, decoder, encoder, errhandler, formatter),
+		UpdateOnboardingUseCase:               NewUpdateOnboardingUseCaseHandler(e.UpdateOnboardingUseCase, mux, decoder, encoder, errhandler, formatter),
+		DeleteOnboardingUseCase:               NewDeleteOnboardingUseCaseHandler(e.DeleteOnboardingUseCase, mux, decoder, encoder, errhandler, formatter),
+		ListOnboardingPlaybooks:               NewListOnboardingPlaybooksHandler(e.ListOnboardingPlaybooks, mux, decoder, encoder, errhandler, formatter),
+		CreateOnboardingPlaybook:              NewCreateOnboardingPlaybookHandler(e.CreateOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
+		UpdateOnboardingPlaybook:              NewUpdateOnboardingPlaybookHandler(e.UpdateOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
+		DeleteOnboardingPlaybook:              NewDeleteOnboardingPlaybookHandler(e.DeleteOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
+		CloneOnboardingPlaybook:               NewCloneOnboardingPlaybookHandler(e.CloneOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationOnboardingPlaybook:     NewGetOrganizationOnboardingPlaybookHandler(e.GetOrganizationOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
+		AssignOrganizationOnboardingPlaybook:  NewAssignOrganizationOnboardingPlaybookHandler(e.AssignOrganizationOnboardingPlaybook, mux, decoder, encoder, errhandler, formatter),
+		GetStripeSubscriptionCandidate:        NewGetStripeSubscriptionCandidateHandler(e.GetStripeSubscriptionCandidate, mux, decoder, encoder, errhandler, formatter),
+		SetStripeSubscription:                 NewSetStripeSubscriptionHandler(e.SetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -236,7 +326,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetOrganization = m(s.GetOrganization)
 	s.ListOrganizationMembers = m(s.ListOrganizationMembers)
 	s.ListOrganizationProjects = m(s.ListOrganizationProjects)
+	s.ListProjectMcpServers = m(s.ListProjectMcpServers)
 	s.ListOrganizationActivity = m(s.ListOrganizationActivity)
+	s.ListUsers = m(s.ListUsers)
+	s.ListUserOrganizations = m(s.ListUserOrganizations)
 	s.ListOrganizations = m(s.ListOrganizations)
 	s.ExtendTrial = m(s.ExtendTrial)
 	s.CreateOrganization = m(s.CreateOrganization)
@@ -271,6 +364,33 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetSpendBreakdown = m(s.GetSpendBreakdown)
 	s.GetSupportMatrix = m(s.GetSupportMatrix)
 	s.UpdateSupportMatrix = m(s.UpdateSupportMatrix)
+	s.GetSupportCoverage = m(s.GetSupportCoverage)
+	s.DescribeMcpServerHealth = m(s.DescribeMcpServerHealth)
+	s.GetMcpServerToolCalls = m(s.GetMcpServerToolCalls)
+	s.GetRegistryOktaCandidates = m(s.GetRegistryOktaCandidates)
+	s.ListRegistryOktaUnmapped = m(s.ListRegistryOktaUnmapped)
+	s.ListRegistryEntries = m(s.ListRegistryEntries)
+	s.GetRegistryEntry = m(s.GetRegistryEntry)
+	s.CreateRegistryEntry = m(s.CreateRegistryEntry)
+	s.SaveRegistryEntry = m(s.SaveRegistryEntry)
+	s.SetRegistryEntryPublished = m(s.SetRegistryEntryPublished)
+	s.ListOnboardingSteps = m(s.ListOnboardingSteps)
+	s.GetOnboardingStackOptions = m(s.GetOnboardingStackOptions)
+	s.GetOrganizationOnboardingStack = m(s.GetOrganizationOnboardingStack)
+	s.SetOrganizationOnboardingStack = m(s.SetOrganizationOnboardingStack)
+	s.ListOnboardingUseCases = m(s.ListOnboardingUseCases)
+	s.CreateOnboardingUseCase = m(s.CreateOnboardingUseCase)
+	s.UpdateOnboardingUseCase = m(s.UpdateOnboardingUseCase)
+	s.DeleteOnboardingUseCase = m(s.DeleteOnboardingUseCase)
+	s.ListOnboardingPlaybooks = m(s.ListOnboardingPlaybooks)
+	s.CreateOnboardingPlaybook = m(s.CreateOnboardingPlaybook)
+	s.UpdateOnboardingPlaybook = m(s.UpdateOnboardingPlaybook)
+	s.DeleteOnboardingPlaybook = m(s.DeleteOnboardingPlaybook)
+	s.CloneOnboardingPlaybook = m(s.CloneOnboardingPlaybook)
+	s.GetOrganizationOnboardingPlaybook = m(s.GetOrganizationOnboardingPlaybook)
+	s.AssignOrganizationOnboardingPlaybook = m(s.AssignOrganizationOnboardingPlaybook)
+	s.GetStripeSubscriptionCandidate = m(s.GetStripeSubscriptionCandidate)
+	s.SetStripeSubscription = m(s.SetStripeSubscription)
 }
 
 // MethodNames returns the methods served.
@@ -296,7 +416,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetOrganizationHandler(mux, h.GetOrganization)
 	MountListOrganizationMembersHandler(mux, h.ListOrganizationMembers)
 	MountListOrganizationProjectsHandler(mux, h.ListOrganizationProjects)
+	MountListProjectMcpServersHandler(mux, h.ListProjectMcpServers)
 	MountListOrganizationActivityHandler(mux, h.ListOrganizationActivity)
+	MountListUsersHandler(mux, h.ListUsers)
+	MountListUserOrganizationsHandler(mux, h.ListUserOrganizations)
 	MountListOrganizationsHandler(mux, h.ListOrganizations)
 	MountExtendTrialHandler(mux, h.ExtendTrial)
 	MountCreateOrganizationHandler(mux, h.CreateOrganization)
@@ -331,6 +454,33 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetSpendBreakdownHandler(mux, h.GetSpendBreakdown)
 	MountGetSupportMatrixHandler(mux, h.GetSupportMatrix)
 	MountUpdateSupportMatrixHandler(mux, h.UpdateSupportMatrix)
+	MountGetSupportCoverageHandler(mux, h.GetSupportCoverage)
+	MountDescribeMcpServerHealthHandler(mux, h.DescribeMcpServerHealth)
+	MountGetMcpServerToolCallsHandler(mux, h.GetMcpServerToolCalls)
+	MountGetRegistryOktaCandidatesHandler(mux, h.GetRegistryOktaCandidates)
+	MountListRegistryOktaUnmappedHandler(mux, h.ListRegistryOktaUnmapped)
+	MountListRegistryEntriesHandler(mux, h.ListRegistryEntries)
+	MountGetRegistryEntryHandler(mux, h.GetRegistryEntry)
+	MountCreateRegistryEntryHandler(mux, h.CreateRegistryEntry)
+	MountSaveRegistryEntryHandler(mux, h.SaveRegistryEntry)
+	MountSetRegistryEntryPublishedHandler(mux, h.SetRegistryEntryPublished)
+	MountListOnboardingStepsHandler(mux, h.ListOnboardingSteps)
+	MountGetOnboardingStackOptionsHandler(mux, h.GetOnboardingStackOptions)
+	MountGetOrganizationOnboardingStackHandler(mux, h.GetOrganizationOnboardingStack)
+	MountSetOrganizationOnboardingStackHandler(mux, h.SetOrganizationOnboardingStack)
+	MountListOnboardingUseCasesHandler(mux, h.ListOnboardingUseCases)
+	MountCreateOnboardingUseCaseHandler(mux, h.CreateOnboardingUseCase)
+	MountUpdateOnboardingUseCaseHandler(mux, h.UpdateOnboardingUseCase)
+	MountDeleteOnboardingUseCaseHandler(mux, h.DeleteOnboardingUseCase)
+	MountListOnboardingPlaybooksHandler(mux, h.ListOnboardingPlaybooks)
+	MountCreateOnboardingPlaybookHandler(mux, h.CreateOnboardingPlaybook)
+	MountUpdateOnboardingPlaybookHandler(mux, h.UpdateOnboardingPlaybook)
+	MountDeleteOnboardingPlaybookHandler(mux, h.DeleteOnboardingPlaybook)
+	MountCloneOnboardingPlaybookHandler(mux, h.CloneOnboardingPlaybook)
+	MountGetOrganizationOnboardingPlaybookHandler(mux, h.GetOrganizationOnboardingPlaybook)
+	MountAssignOrganizationOnboardingPlaybookHandler(mux, h.AssignOrganizationOnboardingPlaybook)
+	MountGetStripeSubscriptionCandidateHandler(mux, h.GetStripeSubscriptionCandidate)
+	MountSetStripeSubscriptionHandler(mux, h.SetStripeSubscription)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -1299,6 +1449,59 @@ func NewListOrganizationProjectsHandler(
 	})
 }
 
+// MountListProjectMcpServersHandler configures the mux to serve the "admin"
+// service "listProjectMcpServers" endpoint.
+func MountListProjectMcpServersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/project.mcpServers", f)
+}
+
+// NewListProjectMcpServersHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "listProjectMcpServers" endpoint.
+func NewListProjectMcpServersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListProjectMcpServersRequest(mux, decoder)
+		encodeResponse = EncodeListProjectMcpServersResponse(encoder)
+		encodeError    = EncodeListProjectMcpServersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listProjectMcpServers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountListOrganizationActivityHandler configures the mux to serve the "admin"
 // service "listOrganizationActivity" endpoint.
 func MountListOrganizationActivityHandler(mux goahttp.Muxer, h http.Handler) {
@@ -1330,6 +1533,112 @@ func NewListOrganizationActivityHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listOrganizationActivity")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListUsersHandler configures the mux to serve the "admin" service
+// "listUsers" endpoint.
+func MountListUsersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/users.list", f)
+}
+
+// NewListUsersHandler creates a HTTP handler which loads the HTTP request and
+// calls the "admin" service "listUsers" endpoint.
+func NewListUsersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListUsersRequest(mux, decoder)
+		encodeResponse = EncodeListUsersResponse(encoder)
+		encodeError    = EncodeListUsersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listUsers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListUserOrganizationsHandler configures the mux to serve the "admin"
+// service "listUserOrganizations" endpoint.
+func MountListUserOrganizationsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/users.organizations.list", f)
+}
+
+// NewListUserOrganizationsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "listUserOrganizations" endpoint.
+func NewListUserOrganizationsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListUserOrganizationsRequest(mux, decoder)
+		encodeResponse = EncodeListUserOrganizationsResponse(encoder)
+		encodeError    = EncodeListUserOrganizationsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listUserOrganizations")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -3178,6 +3487,1455 @@ func NewUpdateSupportMatrixHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateSupportMatrix")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetSupportCoverageHandler configures the mux to serve the "admin"
+// service "getSupportCoverage" endpoint.
+func MountGetSupportCoverageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/supportCoverage.get", f)
+}
+
+// NewGetSupportCoverageHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getSupportCoverage" endpoint.
+func NewGetSupportCoverageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetSupportCoverageRequest(mux, decoder)
+		encodeResponse = EncodeGetSupportCoverageResponse(encoder)
+		encodeError    = EncodeGetSupportCoverageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getSupportCoverage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDescribeMcpServerHealthHandler configures the mux to serve the "admin"
+// service "describeMcpServerHealth" endpoint.
+func MountDescribeMcpServerHealthHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/project.mcpServerHealth", f)
+}
+
+// NewDescribeMcpServerHealthHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "describeMcpServerHealth"
+// endpoint.
+func NewDescribeMcpServerHealthHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDescribeMcpServerHealthRequest(mux, decoder)
+		encodeResponse = EncodeDescribeMcpServerHealthResponse(encoder)
+		encodeError    = EncodeDescribeMcpServerHealthError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "describeMcpServerHealth")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetMcpServerToolCallsHandler configures the mux to serve the "admin"
+// service "getMcpServerToolCalls" endpoint.
+func MountGetMcpServerToolCallsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/project.mcpServerToolCalls", f)
+}
+
+// NewGetMcpServerToolCallsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getMcpServerToolCalls" endpoint.
+func NewGetMcpServerToolCallsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetMcpServerToolCallsRequest(mux, decoder)
+		encodeResponse = EncodeGetMcpServerToolCallsResponse(encoder)
+		encodeError    = EncodeGetMcpServerToolCallsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getMcpServerToolCalls")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetRegistryOktaCandidatesHandler configures the mux to serve the
+// "admin" service "getRegistryOktaCandidates" endpoint.
+func MountGetRegistryOktaCandidatesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/registry.oktaCandidates", f)
+}
+
+// NewGetRegistryOktaCandidatesHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "getRegistryOktaCandidates"
+// endpoint.
+func NewGetRegistryOktaCandidatesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetRegistryOktaCandidatesRequest(mux, decoder)
+		encodeResponse = EncodeGetRegistryOktaCandidatesResponse(encoder)
+		encodeError    = EncodeGetRegistryOktaCandidatesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getRegistryOktaCandidates")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListRegistryOktaUnmappedHandler configures the mux to serve the "admin"
+// service "listRegistryOktaUnmapped" endpoint.
+func MountListRegistryOktaUnmappedHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/registry.oktaUnmapped", f)
+}
+
+// NewListRegistryOktaUnmappedHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "listRegistryOktaUnmapped"
+// endpoint.
+func NewListRegistryOktaUnmappedHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListRegistryOktaUnmappedRequest(mux, decoder)
+		encodeResponse = EncodeListRegistryOktaUnmappedResponse(encoder)
+		encodeError    = EncodeListRegistryOktaUnmappedError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listRegistryOktaUnmapped")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListRegistryEntriesHandler configures the mux to serve the "admin"
+// service "listRegistryEntries" endpoint.
+func MountListRegistryEntriesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/registry.list", f)
+}
+
+// NewListRegistryEntriesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "listRegistryEntries" endpoint.
+func NewListRegistryEntriesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListRegistryEntriesRequest(mux, decoder)
+		encodeResponse = EncodeListRegistryEntriesResponse(encoder)
+		encodeError    = EncodeListRegistryEntriesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listRegistryEntries")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetRegistryEntryHandler configures the mux to serve the "admin" service
+// "getRegistryEntry" endpoint.
+func MountGetRegistryEntryHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/registry.get", f)
+}
+
+// NewGetRegistryEntryHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getRegistryEntry" endpoint.
+func NewGetRegistryEntryHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetRegistryEntryRequest(mux, decoder)
+		encodeResponse = EncodeGetRegistryEntryResponse(encoder)
+		encodeError    = EncodeGetRegistryEntryError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getRegistryEntry")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateRegistryEntryHandler configures the mux to serve the "admin"
+// service "createRegistryEntry" endpoint.
+func MountCreateRegistryEntryHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/registry.create", f)
+}
+
+// NewCreateRegistryEntryHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "createRegistryEntry" endpoint.
+func NewCreateRegistryEntryHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateRegistryEntryRequest(mux, decoder)
+		encodeResponse = EncodeCreateRegistryEntryResponse(encoder)
+		encodeError    = EncodeCreateRegistryEntryError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createRegistryEntry")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSaveRegistryEntryHandler configures the mux to serve the "admin"
+// service "saveRegistryEntry" endpoint.
+func MountSaveRegistryEntryHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/registry.save", f)
+}
+
+// NewSaveRegistryEntryHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "saveRegistryEntry" endpoint.
+func NewSaveRegistryEntryHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSaveRegistryEntryRequest(mux, decoder)
+		encodeResponse = EncodeSaveRegistryEntryResponse(encoder)
+		encodeError    = EncodeSaveRegistryEntryError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "saveRegistryEntry")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetRegistryEntryPublishedHandler configures the mux to serve the
+// "admin" service "setRegistryEntryPublished" endpoint.
+func MountSetRegistryEntryPublishedHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/registry.setPublished", f)
+}
+
+// NewSetRegistryEntryPublishedHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "setRegistryEntryPublished"
+// endpoint.
+func NewSetRegistryEntryPublishedHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetRegistryEntryPublishedRequest(mux, decoder)
+		encodeResponse = EncodeSetRegistryEntryPublishedResponse(encoder)
+		encodeError    = EncodeSetRegistryEntryPublishedError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setRegistryEntryPublished")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListOnboardingStepsHandler configures the mux to serve the "admin"
+// service "listOnboardingSteps" endpoint.
+func MountListOnboardingStepsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/onboarding.steps", f)
+}
+
+// NewListOnboardingStepsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "listOnboardingSteps" endpoint.
+func NewListOnboardingStepsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListOnboardingStepsRequest(mux, decoder)
+		encodeResponse = EncodeListOnboardingStepsResponse(encoder)
+		encodeError    = EncodeListOnboardingStepsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listOnboardingSteps")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetOnboardingStackOptionsHandler configures the mux to serve the
+// "admin" service "getOnboardingStackOptions" endpoint.
+func MountGetOnboardingStackOptionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/onboarding.stackOptions", f)
+}
+
+// NewGetOnboardingStackOptionsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "getOnboardingStackOptions"
+// endpoint.
+func NewGetOnboardingStackOptionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetOnboardingStackOptionsRequest(mux, decoder)
+		encodeResponse = EncodeGetOnboardingStackOptionsResponse(encoder)
+		encodeError    = EncodeGetOnboardingStackOptionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getOnboardingStackOptions")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetOrganizationOnboardingStackHandler configures the mux to serve the
+// "admin" service "getOrganizationOnboardingStack" endpoint.
+func MountGetOrganizationOnboardingStackHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.onboardingStack", f)
+}
+
+// NewGetOrganizationOnboardingStackHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "getOrganizationOnboardingStack" endpoint.
+func NewGetOrganizationOnboardingStackHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetOrganizationOnboardingStackRequest(mux, decoder)
+		encodeResponse = EncodeGetOrganizationOnboardingStackResponse(encoder)
+		encodeError    = EncodeGetOrganizationOnboardingStackError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationOnboardingStack")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetOrganizationOnboardingStackHandler configures the mux to serve the
+// "admin" service "setOrganizationOnboardingStack" endpoint.
+func MountSetOrganizationOnboardingStackHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.onboardingStack", f)
+}
+
+// NewSetOrganizationOnboardingStackHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "setOrganizationOnboardingStack" endpoint.
+func NewSetOrganizationOnboardingStackHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetOrganizationOnboardingStackRequest(mux, decoder)
+		encodeResponse = EncodeSetOrganizationOnboardingStackResponse(encoder)
+		encodeError    = EncodeSetOrganizationOnboardingStackError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setOrganizationOnboardingStack")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListOnboardingUseCasesHandler configures the mux to serve the "admin"
+// service "listOnboardingUseCases" endpoint.
+func MountListOnboardingUseCasesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/onboarding.useCases", f)
+}
+
+// NewListOnboardingUseCasesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "listOnboardingUseCases" endpoint.
+func NewListOnboardingUseCasesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListOnboardingUseCasesRequest(mux, decoder)
+		encodeResponse = EncodeListOnboardingUseCasesResponse(encoder)
+		encodeError    = EncodeListOnboardingUseCasesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listOnboardingUseCases")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateOnboardingUseCaseHandler configures the mux to serve the "admin"
+// service "createOnboardingUseCase" endpoint.
+func MountCreateOnboardingUseCaseHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/onboarding.useCases.create", f)
+}
+
+// NewCreateOnboardingUseCaseHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "createOnboardingUseCase"
+// endpoint.
+func NewCreateOnboardingUseCaseHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateOnboardingUseCaseRequest(mux, decoder)
+		encodeResponse = EncodeCreateOnboardingUseCaseResponse(encoder)
+		encodeError    = EncodeCreateOnboardingUseCaseError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createOnboardingUseCase")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateOnboardingUseCaseHandler configures the mux to serve the "admin"
+// service "updateOnboardingUseCase" endpoint.
+func MountUpdateOnboardingUseCaseHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/onboarding.useCases.update", f)
+}
+
+// NewUpdateOnboardingUseCaseHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "updateOnboardingUseCase"
+// endpoint.
+func NewUpdateOnboardingUseCaseHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateOnboardingUseCaseRequest(mux, decoder)
+		encodeResponse = EncodeUpdateOnboardingUseCaseResponse(encoder)
+		encodeError    = EncodeUpdateOnboardingUseCaseError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateOnboardingUseCase")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteOnboardingUseCaseHandler configures the mux to serve the "admin"
+// service "deleteOnboardingUseCase" endpoint.
+func MountDeleteOnboardingUseCaseHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/onboarding.useCases.delete", f)
+}
+
+// NewDeleteOnboardingUseCaseHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "deleteOnboardingUseCase"
+// endpoint.
+func NewDeleteOnboardingUseCaseHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteOnboardingUseCaseRequest(mux, decoder)
+		encodeResponse = EncodeDeleteOnboardingUseCaseResponse(encoder)
+		encodeError    = EncodeDeleteOnboardingUseCaseError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteOnboardingUseCase")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListOnboardingPlaybooksHandler configures the mux to serve the "admin"
+// service "listOnboardingPlaybooks" endpoint.
+func MountListOnboardingPlaybooksHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/onboarding.playbooks", f)
+}
+
+// NewListOnboardingPlaybooksHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "listOnboardingPlaybooks"
+// endpoint.
+func NewListOnboardingPlaybooksHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListOnboardingPlaybooksRequest(mux, decoder)
+		encodeResponse = EncodeListOnboardingPlaybooksResponse(encoder)
+		encodeError    = EncodeListOnboardingPlaybooksError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listOnboardingPlaybooks")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateOnboardingPlaybookHandler configures the mux to serve the "admin"
+// service "createOnboardingPlaybook" endpoint.
+func MountCreateOnboardingPlaybookHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/onboarding.playbooks.create", f)
+}
+
+// NewCreateOnboardingPlaybookHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "createOnboardingPlaybook"
+// endpoint.
+func NewCreateOnboardingPlaybookHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateOnboardingPlaybookRequest(mux, decoder)
+		encodeResponse = EncodeCreateOnboardingPlaybookResponse(encoder)
+		encodeError    = EncodeCreateOnboardingPlaybookError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createOnboardingPlaybook")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateOnboardingPlaybookHandler configures the mux to serve the "admin"
+// service "updateOnboardingPlaybook" endpoint.
+func MountUpdateOnboardingPlaybookHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/onboarding.playbooks.update", f)
+}
+
+// NewUpdateOnboardingPlaybookHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "updateOnboardingPlaybook"
+// endpoint.
+func NewUpdateOnboardingPlaybookHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateOnboardingPlaybookRequest(mux, decoder)
+		encodeResponse = EncodeUpdateOnboardingPlaybookResponse(encoder)
+		encodeError    = EncodeUpdateOnboardingPlaybookError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateOnboardingPlaybook")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteOnboardingPlaybookHandler configures the mux to serve the "admin"
+// service "deleteOnboardingPlaybook" endpoint.
+func MountDeleteOnboardingPlaybookHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/onboarding.playbooks.delete", f)
+}
+
+// NewDeleteOnboardingPlaybookHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "deleteOnboardingPlaybook"
+// endpoint.
+func NewDeleteOnboardingPlaybookHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteOnboardingPlaybookRequest(mux, decoder)
+		encodeResponse = EncodeDeleteOnboardingPlaybookResponse(encoder)
+		encodeError    = EncodeDeleteOnboardingPlaybookError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteOnboardingPlaybook")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCloneOnboardingPlaybookHandler configures the mux to serve the "admin"
+// service "cloneOnboardingPlaybook" endpoint.
+func MountCloneOnboardingPlaybookHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/onboarding.playbooks.clone", f)
+}
+
+// NewCloneOnboardingPlaybookHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "cloneOnboardingPlaybook"
+// endpoint.
+func NewCloneOnboardingPlaybookHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCloneOnboardingPlaybookRequest(mux, decoder)
+		encodeResponse = EncodeCloneOnboardingPlaybookResponse(encoder)
+		encodeError    = EncodeCloneOnboardingPlaybookError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "cloneOnboardingPlaybook")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetOrganizationOnboardingPlaybookHandler configures the mux to serve
+// the "admin" service "getOrganizationOnboardingPlaybook" endpoint.
+func MountGetOrganizationOnboardingPlaybookHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.onboardingPlaybook", f)
+}
+
+// NewGetOrganizationOnboardingPlaybookHandler creates a HTTP handler which
+// loads the HTTP request and calls the "admin" service
+// "getOrganizationOnboardingPlaybook" endpoint.
+func NewGetOrganizationOnboardingPlaybookHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetOrganizationOnboardingPlaybookRequest(mux, decoder)
+		encodeResponse = EncodeGetOrganizationOnboardingPlaybookResponse(encoder)
+		encodeError    = EncodeGetOrganizationOnboardingPlaybookError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationOnboardingPlaybook")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountAssignOrganizationOnboardingPlaybookHandler configures the mux to serve
+// the "admin" service "assignOrganizationOnboardingPlaybook" endpoint.
+func MountAssignOrganizationOnboardingPlaybookHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.onboardingPlaybook", f)
+}
+
+// NewAssignOrganizationOnboardingPlaybookHandler creates a HTTP handler which
+// loads the HTTP request and calls the "admin" service
+// "assignOrganizationOnboardingPlaybook" endpoint.
+func NewAssignOrganizationOnboardingPlaybookHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeAssignOrganizationOnboardingPlaybookRequest(mux, decoder)
+		encodeResponse = EncodeAssignOrganizationOnboardingPlaybookResponse(encoder)
+		encodeError    = EncodeAssignOrganizationOnboardingPlaybookError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "assignOrganizationOnboardingPlaybook")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetStripeSubscriptionCandidateHandler configures the mux to serve the
+// "admin" service "getStripeSubscriptionCandidate" endpoint.
+func MountGetStripeSubscriptionCandidateHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.stripeSubscriptionCandidate", f)
+}
+
+// NewGetStripeSubscriptionCandidateHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "getStripeSubscriptionCandidate" endpoint.
+func NewGetStripeSubscriptionCandidateHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetStripeSubscriptionCandidateRequest(mux, decoder)
+		encodeResponse = EncodeGetStripeSubscriptionCandidateResponse(encoder)
+		encodeError    = EncodeGetStripeSubscriptionCandidateError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getStripeSubscriptionCandidate")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetStripeSubscriptionHandler configures the mux to serve the "admin"
+// service "setStripeSubscription" endpoint.
+func MountSetStripeSubscriptionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.setStripeSubscription", f)
+}
+
+// NewSetStripeSubscriptionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "setStripeSubscription" endpoint.
+func NewSetStripeSubscriptionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetStripeSubscriptionRequest(mux, decoder)
+		encodeResponse = EncodeSetStripeSubscriptionResponse(encoder)
+		encodeError    = EncodeSetStripeSubscriptionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setStripeSubscription")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

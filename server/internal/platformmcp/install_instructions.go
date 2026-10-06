@@ -47,7 +47,7 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 		return GetMyInstallInstructionsOutput{}, ErrPluginProjectNotFound
 	}
 	if strings.TrimSpace(input.Plugin) != "" {
-		plugin, err := s.GetAssignedPlugin(ctx, principal, GetPluginInput{ProjectID: projectID.String(), Plugin: input.Plugin})
+		plugin, err := s.GetAssignedPlugin(ctx, principal, GetPluginInput{ProjectID: projectID.String(), Plugin: input.Plugin, MembershipLimit: 0, MembershipCursor: ""})
 		if err != nil {
 			return GetMyInstallInstructionsOutput{}, err
 		}
@@ -82,7 +82,7 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 	if name == "" {
 		name = row.Slug.String
 	}
-	return s.standaloneMCPInstallInstructions(input.ClientFamily, name, row.EndpointSlug), nil
+	return s.standaloneMCPInstallInstructions(ctx, input.ClientFamily, name, row.EndpointSlug), nil
 }
 
 func (s *PluginsService) pluginInstallInstructions(ctx context.Context, client OnboardingClientFamily, name string) GetMyInstallInstructionsOutput {
@@ -106,7 +106,7 @@ func (s *PluginsService) pluginInstallInstructions(ctx context.Context, client O
 	return output
 }
 
-func (s *PluginsService) standaloneMCPInstallInstructions(client OnboardingClientFamily, name, slug string) GetMyInstallInstructionsOutput {
+func (s *PluginsService) standaloneMCPInstallInstructions(ctx context.Context, client OnboardingClientFamily, name, slug string) GetMyInstallInstructionsOutput {
 	output := GetMyInstallInstructionsOutput{
 		TargetKind: "mcp", TargetName: name, ClientFamily: client,
 		Supported: false, Instructions: []InstallInstruction{}, Fallback: "",
@@ -115,7 +115,7 @@ func (s *PluginsService) standaloneMCPInstallInstructions(client OnboardingClien
 		output.Fallback = "This MCP server does not have a public installation endpoint. Use the dashboard or ask an organization administrator for the supported setup path."
 		return output
 	}
-	endpoint := s.serverURL.JoinPath("mcp", slug).String()
+	endpoint := platformBaseURL(ctx, s.serverURL).JoinPath("mcp", slug).String()
 	switch client {
 	case OnboardingClientClaudeCode, OnboardingClientClaudeCowork, OnboardingClientCodex, OnboardingClientCursor, OnboardingClientOpencode, OnboardingClientOther:
 		output.Supported = true

@@ -92,6 +92,11 @@ type UpdateClientRequestBody struct {
 	// Replace the upstream OAuth audience sent for this client. Omit to leave
 	// unchanged.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Platform admins only. Set true to run the client in compatibility mode with
+	// the legacy callback URL, or false to migrate it to the current callback URL
+	// once that URL is registered with the identity provider. Omit to leave
+	// unchanged.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
 }
 
 // AttachClientKeySetRequestBody is the type of the
@@ -135,6 +140,9 @@ type ListClientsResponseBody struct {
 // GetClientResponseBody is the type of the "organizationRemoteSessionClients"
 // service "getClient" endpoint HTTP response body.
 type GetClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -176,9 +184,29 @@ type GetClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// GetClientDelegationStatusResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body.
+type GetClientDelegationStatusResponseBody struct {
+	// unknown means no current observations; observed means matching observations
+	// exist; configuration_failure means the current delegation configuration is
+	// known to be invalid, not a per-human observation.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Inclusive observation window start.
+	WindowStart  string                               `form:"window_start" json:"window_start" xml:"window_start"`
+	Observations []*DelegationStatusCountResponseBody `form:"observations" json:"observations" xml:"observations"`
 }
 
 // GetClientDeletePreflightResponseBody is the type of the
@@ -196,6 +224,9 @@ type GetClientDeletePreflightResponseBody struct {
 	CanDelete bool `form:"can_delete" json:"can_delete" xml:"can_delete"`
 	// Stable reason deletion is blocked. Present when can_delete is false.
 	BlockingReason *string `form:"blocking_reason,omitempty" json:"blocking_reason,omitempty" xml:"blocking_reason,omitempty"`
+	// Active identity-chaining bindings that must be explicitly unlinked before
+	// deletion.
+	EmaBindingCount int64 `form:"ema_binding_count" json:"ema_binding_count" xml:"ema_binding_count"`
 }
 
 // ListClientMcpServersResponseBody is the type of the
@@ -209,6 +240,9 @@ type ListClientMcpServersResponseBody struct {
 // "organizationRemoteSessionClients" service "createClient" endpoint HTTP
 // response body.
 type CreateClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -250,15 +284,25 @@ type CreateClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CreateCimdClientResponseBody is the type of the
 // "organizationRemoteSessionClients" service "createCimdClient" endpoint HTTP
 // response body.
 type CreateCimdClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -300,15 +344,25 @@ type CreateCimdClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateClientResponseBody is the type of the
 // "organizationRemoteSessionClients" service "updateClient" endpoint HTTP
 // response body.
 type UpdateClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -350,15 +404,25 @@ type UpdateClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // AttachClientKeySetResponseBody is the type of the
 // "organizationRemoteSessionClients" service "attachClientKeySet" endpoint
 // HTTP response body.
 type AttachClientKeySetResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -400,15 +464,25 @@ type AttachClientKeySetResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // DetachClientKeySetResponseBody is the type of the
 // "organizationRemoteSessionClients" service "detachClientKeySet" endpoint
 // HTTP response body.
 type DetachClientKeySetResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -450,15 +524,25 @@ type DetachClientKeySetResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // RotateClientResponseBody is the type of the
 // "organizationRemoteSessionClients" service "rotateClient" endpoint HTTP
 // response body.
 type RotateClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -500,9 +584,16 @@ type RotateClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListClientsUnauthorizedResponseBody is the type of the
@@ -870,6 +961,196 @@ type GetClientUnexpectedResponseBody struct {
 // "organizationRemoteSessionClients" service "getClient" endpoint HTTP
 // response body for the "gateway_error" error.
 type GetClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDelegationStatusUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "unauthorized" error.
+type GetClientDelegationStatusUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDelegationStatusForbiddenResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "forbidden" error.
+type GetClientDelegationStatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDelegationStatusBadRequestResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "bad_request" error.
+type GetClientDelegationStatusBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDelegationStatusNotFoundResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "not_found" error.
+type GetClientDelegationStatusNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDelegationStatusConflictResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "conflict" error.
+type GetClientDelegationStatusConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDelegationStatusUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "unsupported_media" error.
+type GetClientDelegationStatusUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDelegationStatusInvalidResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "invalid" error.
+type GetClientDelegationStatusInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDelegationStatusInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "invariant_violation" error.
+type GetClientDelegationStatusInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDelegationStatusUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "unexpected" error.
+type GetClientDelegationStatusUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClientDelegationStatusGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint HTTP response body for the "gateway_error" error.
+type GetClientDelegationStatusGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2838,6 +3119,9 @@ type OrganizationRemoteSessionClientResponseBody struct {
 // RemoteSessionClientResponseBody is used to define fields on response body
 // types.
 type RemoteSessionClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -2879,9 +3163,35 @@ type RemoteSessionClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// DelegationStatusCountResponseBody is used to define fields on response body
+// types.
+type DelegationStatusCountResponseBody struct {
+	// Observed per-human delegation outcome, present only when the top-level
+	// status is observed. A configuration_failure count records past per-human
+	// failures for the current configuration; it is distinct from top-level
+	// configuration_failure, which reports a currently invalid configuration and
+	// returns no observations.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Number of humans with this latest outcome.
+	Count int64 `form:"count" json:"count" xml:"count"`
+	// Most recent matching observation.
+	LastObservedAt *string `form:"last_observed_at,omitempty" json:"last_observed_at,omitempty" xml:"last_observed_at,omitempty"`
+	// Most recent credential acquisition, distinct from renewal.
+	LastCredentialObtainedAt *string `form:"last_credential_obtained_at,omitempty" json:"last_credential_obtained_at,omitempty" xml:"last_credential_obtained_at,omitempty"`
+	// Most recent successful assertion renewal.
+	LastRefreshSucceededAt *string `form:"last_refresh_succeeded_at,omitempty" json:"last_refresh_succeeded_at,omitempty" xml:"last_refresh_succeeded_at,omitempty"`
 }
 
 // TrustedClientUserSessionIssuerReferenceResponseBody is used to define fields
@@ -2948,8 +3258,16 @@ func NewGetClientResponseBody(res *types.RemoteSessionClient) *GetClientResponse
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -2968,14 +3286,38 @@ func NewGetClientResponseBody(res *types.RemoteSessionClient) *GetClientResponse
 	return body
 }
 
+// NewGetClientDelegationStatusResponseBody builds the HTTP response body from
+// the result of the "getClientDelegationStatus" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewGetClientDelegationStatusResponseBody(res *organizationremotesessionclients.OrganizationClientDelegationStatus) *GetClientDelegationStatusResponseBody {
+	body := &GetClientDelegationStatusResponseBody{
+		Status:      res.Status,
+		WindowStart: res.WindowStart,
+	}
+	if res.Observations != nil {
+		body.Observations = make([]*DelegationStatusCountResponseBody, len(res.Observations))
+		for i, val := range res.Observations {
+			if val == nil {
+				body.Observations[i] = nil
+				continue
+			}
+			body.Observations[i] = marshalOrganizationremotesessionclientsDelegationStatusCountToDelegationStatusCountResponseBody(val)
+		}
+	} else {
+		body.Observations = []*DelegationStatusCountResponseBody{}
+	}
+	return body
+}
+
 // NewGetClientDeletePreflightResponseBody builds the HTTP response body from
 // the result of the "getClientDeletePreflight" endpoint of the
 // "organizationRemoteSessionClients" service.
 func NewGetClientDeletePreflightResponseBody(res *organizationremotesessionclients.OrganizationClientDeletePreflight) *GetClientDeletePreflightResponseBody {
 	body := &GetClientDeletePreflightResponseBody{
-		SessionCount:   res.SessionCount,
-		CanDelete:      res.CanDelete,
-		BlockingReason: res.BlockingReason,
+		SessionCount:    res.SessionCount,
+		CanDelete:       res.CanDelete,
+		BlockingReason:  res.BlockingReason,
+		EmaBindingCount: res.EmaBindingCount,
 	}
 	if res.McpServerNames != nil {
 		body.McpServerNames = make([]string, len(res.McpServerNames))
@@ -3038,8 +3380,16 @@ func NewCreateClientResponseBody(res *types.RemoteSessionClient) *CreateClientRe
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -3076,8 +3426,16 @@ func NewCreateCimdClientResponseBody(res *types.RemoteSessionClient) *CreateCimd
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -3114,8 +3472,16 @@ func NewUpdateClientResponseBody(res *types.RemoteSessionClient) *UpdateClientRe
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -3152,8 +3518,16 @@ func NewAttachClientKeySetResponseBody(res *types.RemoteSessionClient) *AttachCl
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -3190,8 +3564,16 @@ func NewDetachClientKeySetResponseBody(res *types.RemoteSessionClient) *DetachCl
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -3228,8 +3610,16 @@ func NewRotateClientResponseBody(res *types.RemoteSessionClient) *RotateClientRe
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
@@ -3538,6 +3928,156 @@ func NewGetClientUnexpectedResponseBody(res *goa.ServiceError) *GetClientUnexpec
 // service.
 func NewGetClientGatewayErrorResponseBody(res *goa.ServiceError) *GetClientGatewayErrorResponseBody {
 	body := &GetClientGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDelegationStatusUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getClientDelegationStatus" endpoint of
+// the "organizationRemoteSessionClients" service.
+func NewGetClientDelegationStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetClientDelegationStatusUnauthorizedResponseBody {
+	body := &GetClientDelegationStatusUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDelegationStatusForbiddenResponseBody builds the HTTP response
+// body from the result of the "getClientDelegationStatus" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewGetClientDelegationStatusForbiddenResponseBody(res *goa.ServiceError) *GetClientDelegationStatusForbiddenResponseBody {
+	body := &GetClientDelegationStatusForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDelegationStatusBadRequestResponseBody builds the HTTP response
+// body from the result of the "getClientDelegationStatus" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewGetClientDelegationStatusBadRequestResponseBody(res *goa.ServiceError) *GetClientDelegationStatusBadRequestResponseBody {
+	body := &GetClientDelegationStatusBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDelegationStatusNotFoundResponseBody builds the HTTP response
+// body from the result of the "getClientDelegationStatus" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewGetClientDelegationStatusNotFoundResponseBody(res *goa.ServiceError) *GetClientDelegationStatusNotFoundResponseBody {
+	body := &GetClientDelegationStatusNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDelegationStatusConflictResponseBody builds the HTTP response
+// body from the result of the "getClientDelegationStatus" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewGetClientDelegationStatusConflictResponseBody(res *goa.ServiceError) *GetClientDelegationStatusConflictResponseBody {
+	body := &GetClientDelegationStatusConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDelegationStatusUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getClientDelegationStatus" endpoint of
+// the "organizationRemoteSessionClients" service.
+func NewGetClientDelegationStatusUnsupportedMediaResponseBody(res *goa.ServiceError) *GetClientDelegationStatusUnsupportedMediaResponseBody {
+	body := &GetClientDelegationStatusUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDelegationStatusInvalidResponseBody builds the HTTP response
+// body from the result of the "getClientDelegationStatus" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewGetClientDelegationStatusInvalidResponseBody(res *goa.ServiceError) *GetClientDelegationStatusInvalidResponseBody {
+	body := &GetClientDelegationStatusInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDelegationStatusInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getClientDelegationStatus" endpoint of
+// the "organizationRemoteSessionClients" service.
+func NewGetClientDelegationStatusInvariantViolationResponseBody(res *goa.ServiceError) *GetClientDelegationStatusInvariantViolationResponseBody {
+	body := &GetClientDelegationStatusInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDelegationStatusUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getClientDelegationStatus" endpoint of the
+// "organizationRemoteSessionClients" service.
+func NewGetClientDelegationStatusUnexpectedResponseBody(res *goa.ServiceError) *GetClientDelegationStatusUnexpectedResponseBody {
+	body := &GetClientDelegationStatusUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClientDelegationStatusGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getClientDelegationStatus" endpoint of
+// the "organizationRemoteSessionClients" service.
+func NewGetClientDelegationStatusGatewayErrorResponseBody(res *goa.ServiceError) *GetClientDelegationStatusGatewayErrorResponseBody {
+	body := &GetClientDelegationStatusGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5102,6 +5642,17 @@ func NewGetClientPayload(id string, sessionToken *string, apikeyToken *string) *
 	return v
 }
 
+// NewGetClientDelegationStatusPayload builds a
+// organizationRemoteSessionClients service getClientDelegationStatus endpoint
+// payload.
+func NewGetClientDelegationStatusPayload(id string, sessionToken *string) *organizationremotesessionclients.GetClientDelegationStatusPayload {
+	v := &organizationremotesessionclients.GetClientDelegationStatusPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewGetClientDeletePreflightPayload builds a organizationRemoteSessionClients
 // service getClientDeletePreflight endpoint payload.
 func NewGetClientDeletePreflightPayload(id string, sessionToken *string, apikeyToken *string) *organizationremotesessionclients.GetClientDeletePreflightPayload {
@@ -5179,6 +5730,7 @@ func NewUpdateClientPayload(body *UpdateClientRequestBody, sessionToken *string,
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               body.LegacyCallbackURL,
 	}
 	if body.Scope != nil {
 		v.Scope = make([]string, len(body.Scope))

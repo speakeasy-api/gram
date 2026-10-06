@@ -213,7 +213,7 @@ func newTestServiceWithPoolLimit(t *testing.T, features feature.Provider, maxCon
 	}
 
 	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
-	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID)
+	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID, "")
 	discovery := newFakeDiscovery()
 	fakes := okta.NewFakeFactory(oktaFixtures())
 	syncTrigger := &fakeSyncTrigger{}

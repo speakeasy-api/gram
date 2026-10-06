@@ -13,6 +13,8 @@ import type { RiskExclusion } from "@gram/client/models/components/riskexclusion
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { format } from "date-fns";
 import type { ReactNode } from "react";
+import { MCPFindingContext } from "../MCPFindingContext";
+import { isMCPFinding, type MCPFindingNames } from "../mcp-finding-context";
 import { CategoryLabel } from "../risk-ui";
 import {
   getRuleTitleFallback,
@@ -39,6 +41,7 @@ const TIMESTAMP_FORMAT = "MMM d, yyyy h:mm a";
 export function SuppressedFindingDrawer({
   finding,
   exclusion,
+  mcpFindingNames,
   onClose,
   onRestore,
   onViewRule,
@@ -46,6 +49,7 @@ export function SuppressedFindingDrawer({
 }: {
   /** The finding to detail; null keeps the drawer closed. */
   finding: RiskResult | null;
+  mcpFindingNames?: MCPFindingNames;
   /** The exclusion behind a rule suppression, when it still exists. */
   exclusion: RiskExclusion | undefined;
   onClose: () => void;
@@ -76,7 +80,11 @@ export function SuppressedFindingDrawer({
               <FindingSection finding={finding} />
               <Separator />
               <EvidenceSection finding={finding} />
-              <SessionSection finding={finding} onViewSession={onViewSession} />
+              <SessionSection
+                finding={finding}
+                mcpFindingNames={mcpFindingNames}
+                onViewSession={onViewSession}
+              />
             </div>
             <SheetFooter>
               <FindingActions
@@ -241,10 +249,22 @@ function revealGuidance(finding: RiskResult): string {
 function SessionSection({
   finding,
   onViewSession,
+  mcpFindingNames,
 }: {
   finding: RiskResult;
   onViewSession: (chatId: string) => void;
+  mcpFindingNames?: MCPFindingNames;
 }): JSX.Element {
+  if (isMCPFinding(finding)) {
+    return (
+      <>
+        <Separator />
+        <DetailRow label="MCP context">
+          <MCPFindingContext finding={finding} names={mcpFindingNames} />
+        </DetailRow>
+      </>
+    );
+  }
   const chatId = finding.chatId;
   if (!chatId) return <></>;
   return (

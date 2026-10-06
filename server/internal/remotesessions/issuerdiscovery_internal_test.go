@@ -89,19 +89,31 @@ func TestRawDocumentIssuer(t *testing.T) {
 	require.Empty(t, rawDocumentIssuer([]byte(`null`)))
 }
 
-func TestIssuerIdentifier(t *testing.T) {
+func TestConfiguredIssuerIdentity(t *testing.T) {
 	t.Parallel()
-
-	require.Equal(t, "https://idp.example.com/", issuerIdentifier([]byte(`{"issuer":"https://idp.example.com/"}`), "https://idp.example.com"), "a document issuer is taken verbatim")
-	require.Equal(t, "https://idp.example.com", issuerIdentifier(nil, "https://idp.example.com/"), "the stored URL fallback drops a trailing slash")
-	require.Equal(t, "https://idp.example.com", issuerIdentifier([]byte(`{"jwks_uri":"https://idp.example.com/jwks"}`), "https://idp.example.com//"))
-	require.Equal(t, "https://idp.example.com", issuerIdentifier([]byte(`null`), "https://idp.example.com"))
-}
-
-func TestClientAssertionIssuer(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, "https://idp.example.com/", clientAssertionIssuer([]byte(`{"issuer":"https://idp.example.com/"}`), "https://idp.example.com"), "a canonically matching document preserves its exact issuer identifier")
-	require.Equal(t, "https://idp.example.com/configured/", clientAssertionIssuer([]byte(`{"issuer":"https://idp.example.com/stale/"}`), "https://idp.example.com/configured/"), "metadata retained across an issuer edit cannot override the current issuer")
-	require.Equal(t, "https://idp.example.com/configured/", clientAssertionIssuer(nil, " https://idp.example.com/configured/ "), "the configured fallback preserves a significant trailing slash")
+	for _, helper := range []struct {
+		name       string
+		identifier func([]byte, string) string
+	}{
+		{"callback issuer", issuerIdentifier},
+		{"client assertion audience", clientAssertionIssuer},
+	} {
+		t.Run(helper.name, func(t *testing.T) {
+			t.Parallel()
+			for _, configured := range []string{
+				"https://idp.example.com", "https://idp.example.com/",
+				"https://idp.example.com/tenant//", " https://idp.example.com/tenant/ ",
+			} {
+				for _, metadata := range []string{
+					`{"issuer":"https://idp.example.com/"}`,
+					`{"issuer":"https://idp.example.com"}`,
+					`{"issuer":"https://idp.example.com/stale/"}`,
+					`{"jwks_uri":"https://idp.example.com/jwks"}`, `null`, "",
+				} {
+					require.Equal(t, configured, helper.identifier([]byte(metadata), configured),
+						"stored identity is authoritative and verbatim, regardless of metadata")
+				}
+			}
+		})
+	}
 }

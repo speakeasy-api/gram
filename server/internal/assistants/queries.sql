@@ -79,6 +79,14 @@ WHERE id = @thread_id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: ResolveThreadCorrelationByChat :one
+SELECT id, project_id, assistant_id, correlation_id
+FROM assistant_threads
+WHERE chat_id = @chat_id
+  AND assistant_id = @assistant_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
 -- name: GetAssistantThreadIDByCorrelation :one
 SELECT id
 FROM assistant_threads
@@ -113,6 +121,21 @@ WHERE project_id = @project_id
 -- locks when an MCP server concurrently switches to this toolset backend.
 ORDER BY id
 FOR NO KEY UPDATE;
+
+-- name: ListAttachmentTargetIDs :many
+-- Resolves the toolsets and MCP servers a write would attach so the handler
+-- can authorize them first. Read-only: the write locks them itself.
+SELECT t.id
+FROM toolsets t
+WHERE t.project_id = @project_id
+  AND t.slug = ANY(@toolset_slugs::TEXT[])
+  AND t.deleted IS FALSE
+UNION ALL
+SELECT ms.id
+FROM mcp_servers ms
+WHERE ms.project_id = @project_id
+  AND ms.slug = ANY(@mcp_server_slugs::TEXT[])
+  AND ms.deleted IS FALSE;
 
 -- name: ResolveEnvironmentsForWrite :many
 SELECT id, slug

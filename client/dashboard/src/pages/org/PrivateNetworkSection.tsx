@@ -8,8 +8,10 @@ import {
 } from "@gram/client/react-query/networkIngress.js";
 
 import { Alert } from "@/components/ui/Alert";
+import { BOOK_DEMO_URL } from "@/lib/constants";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { EnterpriseGate } from "@/components/enterprise-gate";
 import { HumanizeDateTime } from "@/lib/dates";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import type { NetworkIngress } from "@gram/client/models/components/networkingress.js";
@@ -25,6 +27,7 @@ import { useNetworkIngressDeleteIngressMutation } from "@gram/client/react-query
 import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 import { useOrganization } from "@/contexts/Auth";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useProductTier } from "@/hooks/useProductTier";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useUpdateNetworkIngressMutation } from "@gram/client/react-query/updateNetworkIngress.js";
@@ -66,6 +69,9 @@ function PrivateNetworkCleanup({
       handleAPIError(error, "Failed to retry private network cleanup"),
   });
 
+  const credentialsRejected =
+    ingress.lastError === "provider_credentials_rejected";
+
   return (
     <SettingsSection.Panel>
       <SettingsSection.Body>
@@ -73,9 +79,15 @@ function PrivateNetworkCleanup({
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <Text variant="subheading">Tailscale</Text>
-              <Badge variant="warning" background>
-                Cleaning up
-              </Badge>
+              {credentialsRejected ? (
+                <Badge variant="destructive" background>
+                  Cleanup blocked
+                </Badge>
+              ) : (
+                <Badge variant="warning" background>
+                  Cleaning up
+                </Badge>
+              )}
             </div>
             <Text small muted>
               Hostname label <code>{ingress.hostname}</code>
@@ -85,11 +97,21 @@ function PrivateNetworkCleanup({
             Removal started <HumanizeDateTime date={ingress.updatedAt} />
           </Text>
         </div>
-        <Alert variant="info" dismissible={false}>
-          Gram is removing the private route and its provider resources. You can
-          connect another tailnet after cleanup completes. This page checks for
-          completion automatically.
-        </Alert>
+        {credentialsRejected ? (
+          <Alert variant="error" dismissible={false}>
+            Tailscale rejected the credentials saved for this connection, so
+            Gram can't remove its devices from your tailnet. If you disabled the
+            OAuth client or removed its scopes, restore them in the Tailscale
+            admin console, then retry cleanup. If the client or its secret was
+            deleted or regenerated, contact support to finish cleanup.
+          </Alert>
+        ) : (
+          <Alert variant="info" dismissible={false}>
+            Gram is removing the private route and its provider resources. You
+            can connect another tailnet after cleanup completes. This page
+            checks for completion automatically.
+          </Alert>
+        )}
         {statusStale && (
           <Alert variant="warning" dismissible={false}>
             Cleanup status may be out of date because the latest check failed.
@@ -121,9 +143,11 @@ function PrivateNetworkCleanup({
 function ConfiguredPrivateNetwork({
   ingress,
   entitled,
+  enterprise,
 }: {
   ingress: NetworkIngress;
   entitled: boolean;
+  enterprise: boolean;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [rotateOpen, setRotateOpen] = useState(false);
@@ -139,7 +163,11 @@ function ConfiguredPrivateNetwork({
   const health = useNetworkIngressCheckHealthMutation({
     onSuccess: async () => {
       await invalidateAllNetworkIngress(queryClient);
-      toast.success("Private network health check requested");
+      toast.success(
+        ingress.status === "error"
+          ? "Private network provisioning retried"
+          : "Private network health checked",
+      );
     },
     onError: (error) =>
       handleAPIError(error, "Failed to check private network health"),
@@ -149,11 +177,23 @@ function ConfiguredPrivateNetwork({
     <SettingsSection.Panel>
       <SettingsSection.Body>
         {!entitled && (
-          <Alert variant="warning" dismissible={false}>
-            Private network access is no longer enabled for this organization.
+          <Alert variant="warning" dismissible={false} alignTop>
+            {enterprise
+              ? "Private network access is no longer enabled for this organization."
+              : "Private network access requires an Enterprise plan."}{" "}
             Existing restrictions remain enforced. You can disable or remove
             this ingress, and restore affected MCP servers to public-only
-            access.
+            access.{" "}
+            {!enterprise && (
+              <a
+                href={BOOK_DEMO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                Talk to our team about Enterprise
+              </a>
+            )}
           </Alert>
         )}
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -210,6 +250,36 @@ function ConfiguredPrivateNetwork({
             Latest check: {statusLabel(ingress.lastError)}
           </Alert>
         )}
+        {ingress.status === "error" && (
+          <Alert variant="warning" dismissible={false}>
+            <div className="space-y-3">
+              <Text small>
+                Tailscale could not be connected. Check your OAuth client and
+                tailnet policy, then retry provisioning. If it still fails, our
+                team can help.
+              </Text>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!entitled || health.isPending}
+                  onClick={() =>
+                    health.mutate({
+                      security: { sessionHeaderGramSession: "" },
+                    })
+                  }
+                >
+                  {health.isPending ? "Retrying..." : "Retry provisioning"}
+                </Button>
+                <Button asChild variant="tertiary" size="sm">
+                  <a href="mailto:support@speakeasy.com?subject=Tailscale%20setup%20help">
+                    Contact support
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </Alert>
+        )}
         <div className="flex items-start justify-between gap-6 border-t pt-4">
           <div className="space-y-1">
             <Text variant="subheading">Require user identity</Text>
@@ -256,16 +326,18 @@ function ConfiguredPrivateNetwork({
           unavailable.
         </SettingsSection.FooterHint>
         <SettingsSection.FooterActions>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!entitled || health.isPending}
-            onClick={() =>
-              health.mutate({ security: { sessionHeaderGramSession: "" } })
-            }
-          >
-            {health.isPending ? "Checking..." : "Check health"}
-          </Button>
+          {ingress.status !== "error" && (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!entitled || health.isPending}
+              onClick={() =>
+                health.mutate({ security: { sessionHeaderGramSession: "" } })
+              }
+            >
+              {health.isPending ? "Checking..." : "Check health"}
+            </Button>
+          )}
           <Button
             variant="secondary"
             size="sm"
@@ -299,8 +371,8 @@ function ConfiguredPrivateNetwork({
 
 export function PrivateNetworkSection(): JSX.Element | null {
   const organization = useOrganization();
-  const { status: rolloutStatus, canManageIngress } =
-    useNetworkIngressRollout();
+  const enterprise = useProductTier() === "enterprise";
+  const { canManageIngress } = useNetworkIngressRollout();
   const features = useProductFeatures(
     { organizationId: organization.id },
     undefined,
@@ -318,7 +390,6 @@ export function PrivateNetworkSection(): JSX.Element | null {
   const [setupOpen, setSetupOpen] = useState(false);
 
   if (!canManageIngress) return null;
-  if (rolloutStatus === "disabled" && !ingress) return null;
 
   return (
     <SettingsSection>
@@ -342,7 +413,7 @@ export function PrivateNetworkSection(): JSX.Element | null {
             </Text>
           </SettingsSection.Body>
         </SettingsSection.Panel>
-      ) : features.isError || !features.data || ingressResult.isError ? (
+      ) : ingressResult.isError || features.isError || !features.data ? (
         <SettingsSection.Panel>
           <SettingsSection.Body>
             <Alert variant="error" dismissible={false}>
@@ -352,24 +423,51 @@ export function PrivateNetworkSection(): JSX.Element | null {
           </SettingsSection.Body>
         </SettingsSection.Panel>
       ) : ingress ? (
-        <ConfiguredPrivateNetwork ingress={ingress} entitled={entitled} />
-      ) : (
+        <ConfiguredPrivateNetwork
+          ingress={ingress}
+          entitled={entitled}
+          enterprise={enterprise}
+        />
+      ) : entitled ? (
         <InlineEmptyState
           icon="network"
           heading="No private network connected"
           description="Connect a Tailscale tailnet to create private URLs for this organization."
           action={
-            entitled ? (
-              <RequireScope scope="org:admin" level="component">
-                <Button size="sm" onClick={() => setSetupOpen(true)}>
-                  Connect Tailscale
-                </Button>
-              </RequireScope>
-            ) : undefined
+            <RequireScope scope="org:admin" level="component">
+              <Button size="sm" onClick={() => setSetupOpen(true)}>
+                Connect Tailscale
+              </Button>
+            </RequireScope>
+          }
+        />
+      ) : !enterprise ? (
+        <EnterpriseGate
+          allowed={false}
+          icon="network"
+          title="Tailscale private access"
+          description="Connect your Tailscale network to serve MCP endpoints privately. Available on the Enterprise plan. Talk to our team about upgrading."
+        />
+      ) : (
+        <InlineEmptyState
+          icon="network"
+          heading="No private network connected"
+          description="Tailscale private access is not enabled for this organization yet. Contact support to enable it."
+          action={
+            <Button asChild variant="secondary" size="sm">
+              <a href="mailto:support@speakeasy.com?subject=Enable%20Tailscale%20private%20access">
+                Contact support
+              </a>
+            </Button>
           }
         />
       )}
-      <PrivateNetworkSetupSheet open={setupOpen} onOpenChange={setSetupOpen} />
+      {entitled && (
+        <PrivateNetworkSetupSheet
+          open={setupOpen}
+          onOpenChange={setSetupOpen}
+        />
+      )}
     </SettingsSection>
   );
 }

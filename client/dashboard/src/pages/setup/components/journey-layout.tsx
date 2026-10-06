@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { cn } from "@/lib/utils";
+import { SETUP_CONTAINER } from "./setup-container";
 
 interface JourneyLayoutProps {
   /** The timeline down the left: a stepper or a status list. */
@@ -11,9 +13,10 @@ interface JourneyLayoutProps {
   children: ReactNode;
 }
 
-// The linear onboarding frame: a narrow rail on the left for where you are in
-// the journey and the current step's content on the right. Shared by the
-// wizard and by each setup task's page so the two never drift apart.
+// The linear onboarding frame: a rail on the left (1/5 of the width) for where
+// you are in the journey and the current step's content on the right (4/5).
+// Shared by the wizard and by each setup task's page so the two never drift
+// apart.
 export function JourneyLayout({
   rail,
   loading = false,
@@ -21,9 +24,11 @@ export function JourneyLayout({
   children,
 }: JourneyLayoutProps): JSX.Element {
   return (
-    <main className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto px-4 py-8 md:px-8 md:py-16">
-      <div className="flex w-full max-w-5xl gap-24">
-        <div className="order-first hidden w-64 flex-shrink-0 md:block">
+    <main className="min-h-0 flex-1 overflow-y-auto py-8 md:py-16">
+      {/* Same frame as the header, so the rail starts under the logo and the
+          content ends under the header actions. */}
+      <div className={cn(SETUP_CONTAINER, "md:grid md:grid-cols-5 md:gap-14")}>
+        <div className="hidden md:col-span-1 md:block">
           {loading ? (
             <Skeleton>
               {Array.from({ length: skeletonRows }, (_, index) => (
@@ -35,7 +40,7 @@ export function JourneyLayout({
           )}
         </div>
 
-        <div className="order-last min-w-0 flex-1">
+        <div className="min-w-0 md:col-span-4">
           {loading ? (
             <Skeleton>
               <div className="h-12 w-2/3" />

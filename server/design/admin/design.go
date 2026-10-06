@@ -25,6 +25,37 @@ var MarkEnterpriseTrialConvertedResult = Type("MarkEnterpriseTrialConvertedResul
 	})
 })
 
+var AdminUserOrganization = Type("AdminUserOrganization", func() {
+	Required("id", "name", "slug")
+	Attribute("id", String)
+	Attribute("name", String)
+	Attribute("slug", String)
+	Attribute("disabled_at", String, func() { Format(FormatDateTime) })
+})
+var AdminUser = Type("AdminUser", func() {
+	Required("id", "display_name", "email", "organizations", "organization_count")
+	Attribute("id", String)
+	Attribute("display_name", String)
+	Attribute("email", String)
+	Attribute("last_login", String, func() { Format(FormatDateTime) })
+	Attribute("organizations", ArrayOf(AdminUserOrganization))
+	Attribute("organization_count", Int64)
+})
+var AdminListUsersResult = Type("AdminListUsersResult", func() {
+	Required("users", "total", "page", "limit")
+	Attribute("users", ArrayOf(AdminUser))
+	Attribute("total", Int64)
+	Attribute("page", Int)
+	Attribute("limit", Int)
+})
+var AdminListUserOrganizationsResult = Type("AdminListUserOrganizationsResult", func() {
+	Required("organizations", "total", "page", "limit")
+	Attribute("organizations", ArrayOf(AdminUserOrganization))
+	Attribute("total", Int64)
+	Attribute("page", Int)
+	Attribute("limit", Int)
+})
+
 var AdminOrganization = Type("AdminOrganization", func() {
 	Description("Organization details surfaced to admin operators.")
 	Required("id", "name", "slug", "account_type", "whitelisted", "member_count", "created_at", "updated_at")
@@ -34,6 +65,10 @@ var AdminOrganization = Type("AdminOrganization", func() {
 	Attribute("slug", String, "The slug of the organization")
 	Attribute("account_type", String, "Gram account type (e.g. free, pro, payg, enterprise).")
 	Attribute("workos_id", String, "WorkOS organization ID, if linked.")
+	Attribute("workos_dashboard_url", String, func() {
+		Description("Link to the organization in the WorkOS dashboard. Absent when the organization is not linked to WorkOS or the deployment has no WorkOS environment configured.")
+		Format(FormatURI)
+	})
 	Attribute("stripe_customer_id", String, "Stripe customer ID, if billing metadata has a customer.")
 	Attribute("stripe_subscription_id", String, "Current Stripe subscription ID, if subscribed.")
 	Attribute("whitelisted", Boolean, "Whether the organization is whitelisted for full access.")
@@ -151,6 +186,28 @@ var AdminListOrganizationProjectsResult = Type("AdminListOrganizationProjectsRes
 	Attribute("projects", ArrayOf(AdminProject), "The projects belonging to the organization.")
 })
 
+var AdminMcpServer = Type("AdminMcpServer", func() {
+	Description("MCP server surfaced to admin operators. Covers both server models: mcp_servers rows and mcp_enabled toolsets that no mcp_servers row points at.")
+	Required("id", "name", "visibility", "source", "created_at")
+
+	Attribute("id", String, "The mcp_servers row ID, or the toolset ID for a toolset-only server.")
+	Attribute("name", String, "Display name of the server.")
+	Attribute("url", String, "The URL clients connect to. Omitted when the server has no routable address.")
+	Attribute("visibility", String, "The visibility of the server.", func() {
+		Enum("disabled", "private", "public")
+	})
+	Attribute("source", String, "What backs the server. toolset_only is a toolset with no mcp_servers row.", func() {
+		Enum("toolset", "remote", "tunneled", "unproxied", "toolset_only")
+	})
+	Attribute("created_at", String, func() { Format(FormatDateTime) })
+})
+
+var AdminListProjectMcpServersResult = Type("AdminListProjectMcpServersResult", func() {
+	Required("mcp_servers")
+
+	Attribute("mcp_servers", ArrayOf(AdminMcpServer), "The project's MCP servers, oldest first.")
+})
+
 var AdminListOrganizationsResult = Type("AdminListOrganizationsResult", func() {
 	Required("organizations", "total")
 
@@ -195,6 +252,15 @@ var AdminStripeCustomer = Type("AdminStripeCustomer", func() {
 	Attribute("email", String)
 	Attribute("description", String)
 	Attribute("livemode", Boolean)
+})
+
+var AdminStripeSubscriptionCandidate = Type("AdminStripeSubscriptionCandidate", func() {
+	Description("Live Stripe subscription details shown before recording the subscription on a PAYG organization.")
+	Required("id", "customer_id", "status")
+
+	Attribute("id", String, "Stripe subscription ID returned by Stripe.")
+	Attribute("customer_id", String, "Stripe customer that owns the subscription.")
+	Attribute("status", String, "Stripe subscription status.")
 })
 
 var AdminStripeSubscription = Type("AdminStripeSubscription", func() {
@@ -680,6 +746,30 @@ var _ = Service("admin", func() {
 		Meta("openapi:operationId", "adminListOrganizationProjects")
 	})
 
+	Method("listProjectMcpServers", func() {
+		Description("Lists the MCP servers in a project (admin view, no auth scoping).")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "project_id")
+
+			Attribute("organization_id", String, "Organization the project must belong to. A project outside it is reported as not found.")
+			Attribute("project_id", String, "Project ID.", func() { Format(FormatUUID) })
+		})
+
+		Result(AdminListProjectMcpServersResult)
+
+		HTTP(func() {
+			GET("/admin/project.mcpServers")
+
+			Param("organization_id")
+			Param("project_id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminListProjectMcpServers")
+	})
+
 	Method("listOrganizationActivity", func() {
 		Description("Lists activity belonging to an organization for admin operators.")
 
@@ -703,6 +793,46 @@ var _ = Service("admin", func() {
 
 		shared.CursorPagination()
 		Meta("openapi:operationId", "adminListOrganizationActivity")
+	})
+
+	Method("listUsers", func() {
+		Description("Staff-only active user discovery.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("q", String)
+
+			Attribute("page", Int, func() { Minimum(1) })
+			Attribute("limit", Int, func() { Minimum(1); Maximum(100) })
+		})
+		Result(AdminListUsersResult)
+		HTTP(func() {
+			GET("/admin/users.list")
+			Param("q")
+			Param("page")
+			Param("limit")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminListUsers")
+	})
+
+	Method("listUserOrganizations", func() {
+		Description("Staff-only active user discovery.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("user_id", String)
+			Required("user_id")
+			Attribute("page", Int, func() { Minimum(1) })
+			Attribute("limit", Int, func() { Minimum(1); Maximum(100) })
+		})
+		Result(AdminListUserOrganizationsResult)
+		HTTP(func() {
+			GET("/admin/users.organizations.list")
+			Param("user_id")
+			Param("page")
+			Param("limit")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminListUserOrganizations")
 	})
 
 	Method("listOrganizations", func() {
@@ -1032,6 +1162,7 @@ var _ = Service("admin", func() {
 
 		Meta("openapi:operationId", "adminMarkEnterpriseTrialConverted")
 	})
+
 	remoteSessionIssuerMethods()
 	platformAssetMethods()
 
@@ -1140,5 +1271,55 @@ var _ = Service("admin", func() {
 	})
 
 	supportMatrixMethods()
+	supportCoverageMethods()
+	mcpServerHealthMethods()
+	registryDesign()
+	onboardingStackMethods()
+	onboardingPlaybookMethods()
+
+	Method("getStripeSubscriptionCandidate", func() {
+		Description("Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "stripe_subscription_id")
+			Attribute("organization_id", String)
+			Attribute("stripe_subscription_id", String, func() {
+				Pattern(`^sub_[A-Za-z0-9_]+$`)
+				MaxLength(255)
+			})
+		})
+		Result(AdminStripeSubscriptionCandidate)
+		declareUnavailable()
+		HTTP(func() {
+			GET("/admin/organization.stripeSubscriptionCandidate")
+			Param("organization_id")
+			Param("stripe_subscription_id")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminGetStripeSubscriptionCandidate")
+	})
+
+	Method("setStripeSubscription", func() {
+		Description("Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "stripe_subscription_id")
+			Attribute("organization_id", String)
+			Attribute("stripe_subscription_id", String, func() {
+				Pattern(`^sub_[A-Za-z0-9_]+$`)
+				MaxLength(255)
+			})
+			Meta("openapi:typename", "SetStripeSubscriptionRequestBody")
+		})
+		Result(AdminOrganization)
+		declareUnavailable()
+		HTTP(func() {
+			POST("/admin/organization.setStripeSubscription")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminSetStripeSubscription")
+	})
 
 })

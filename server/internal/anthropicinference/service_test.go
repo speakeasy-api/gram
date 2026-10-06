@@ -29,6 +29,10 @@ type memoryStore struct {
 	loadErr  error
 }
 
+func (s *memoryStore) ResolveConversation(_ context.Context, config Config, frame Frame) (uuid.UUID, string, error) {
+	return conversationID(config, frame), conversationOutcomeSession, nil
+}
+
 func (s *memoryStore) ResolveActor(_ context.Context, _ Config, _ Frame) (string, error) {
 	return s.userID, nil
 }
@@ -327,4 +331,68 @@ func TestServiceAcceptsCleanPrefixWhenBudgetExhausted(t *testing.T) {
 		require.Equal(t, "stall", retry.inputs[0].text)
 		require.Equal(t, transcriptHashes(frame.Messages), store.accepted)
 	})
+}
+
+// checkpointHeadroomStore exercises the checkpoint window after evaluation expires.
+type checkpointHeadroomStore struct {
+	memoryStore
+	t *testing.T
+}
+
+func (s *checkpointHeadroomStore) Begin(context.Context, Config, Frame, string) (checkpointSession, error) {
+	return &checkpointHeadroomSession{memoryCheckpoint: memoryCheckpoint{store: &s.memoryStore}, t: s.t}, nil
+}
+
+type checkpointHeadroomSession struct {
+	memoryCheckpoint
+	t *testing.T
+}
+
+func (s *checkpointHeadroomSession) Accept(ctx context.Context, hashes [][]byte) error {
+	deadline, ok := ctx.Deadline()
+	require.True(s.t, ok)
+	require.Equal(s.t, checkpointBudget, time.Until(deadline))
+	<-time.After(checkpointBudget - time.Millisecond)
+	return s.memoryCheckpoint.Accept(ctx, hashes)
+}
+
+func TestServiceReservesCheckpointAndResponseHeadroom(t *testing.T) {
+	t.Parallel()
+	// Pin the requested evaluation cap separately from behavioral assertions.
+	require.Equal(t, 9*time.Second, verdictBudget)
+	require.Less(t, requestBudget, 10*time.Second)
+	for _, elapsed := range []time.Duration{0, time.Second} {
+		t.Run(elapsed.String(), func(t *testing.T) {
+			t.Parallel()
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithTimeout(t.Context(), requestBudget)
+				defer cancel()
+				// Account for configuration/body work before Process starts.
+				<-time.After(elapsed)
+				frame := exampleFrame()
+				frame.Messages = []Message{textMessage("user", "first"), textMessage("assistant", "reply"), textMessage("user", "stall")}
+				store := &checkpointHeadroomStore{t: t}
+				service := &Service{logger: testenv.NewLogger(t), store: store, scanner: &stallingScanner{stallOn: "stall"}}
+				start := time.Now()
+				verdict, err := service.Process(ctx, Config{}, frame)
+				require.NoError(t, err)
+				require.Equal(t, "deny", verdict.Action)
+				require.Equal(t, verdictBudget-elapsed+checkpointBudget-time.Millisecond, time.Since(start))
+				require.Equal(t, transcriptHashes(frame.Messages[:2]), store.accepted)
+				deadline, ok := ctx.Deadline()
+				require.True(t, ok)
+				require.GreaterOrEqual(t, time.Until(deadline), responseBudget)
+			})
+		})
+	}
+}
+
+func TestMetricApplicationIsBounded(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "claude-chat-web", metricApplication("claude-ai"))
+	require.Equal(t, "claude-code-web", metricApplication("claude-code"))
+	require.Equal(t, "claude-design", metricApplication("claude-design"))
+	require.Equal(t, "anthropic-inference", metricApplication(""))
+	require.Equal(t, "other", metricApplication("some-future-product"))
+	require.Equal(t, "anthropic-inference", metricApplication("  "), "whitespace trims to the absent application")
 }

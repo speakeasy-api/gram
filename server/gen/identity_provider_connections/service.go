@@ -76,8 +76,9 @@ var MethodNames = [8]string{"create", "submitClientId", "verify", "get", "record
 // create method.
 type CreatePayload struct {
 	SessionToken *string
-	// Okta org URL, for example https://example.okta.com. Must be https with no
-	// path; the host must be an Okta-owned domain.
+	// Okta org URL, for example https://example.okta.com. Must be https on an
+	// Okta-owned domain with no path, except an Admin Console URL with an /admin
+	// path, which resolves to its org.
 	OrgURL string
 	// Checklist template. Defaults to custom_app.
 	ListingMode *string
@@ -155,7 +156,9 @@ type IdentityProviderConnectionChecklistItem struct {
 	Title string
 	// What to do in the console, including any value copied from this connection.
 	Description string
-	// Sub-steps, in order. Empty when the description says it all.
+	// Supporting lines under the description: ordered sub-steps for the public-key
+	// step, otherwise notes or the values to enter. Empty when the description
+	// says it all.
 	Details []string
 	// Whether the last verification observed this step done. Omitted for steps the
 	// server cannot observe; the administrator tracks those.

@@ -213,6 +213,10 @@ func TestChatMessageWriterMetersExternalMessageOnceAtStorageTime(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, written)
 	require.Len(t, meterMessages(t, ti), 1)
+	publications := conversationMessages(t, ti)
+	require.Len(t, publications, 1)
+	require.NotEmpty(t, publications[0].GetMessageId())
+	require.Equal(t, historical.Format(time.RFC3339Nano), publications[0].GetMessageCreatedAt())
 }
 
 func TestChatMessageWriterRejectsExternalMessageForAnotherProject(t *testing.T) {
@@ -418,6 +422,10 @@ func TestChatMessageWriterPreservesInitialReadingOnCorrelatedPromotion(t *testin
 	require.Equal(t, "codex", storedMessages[0].Source.String)
 	require.Equal(t, base.Content, storedMessages[0].Content)
 	require.JSONEq(t, string(base.ToolCalls), string(storedMessages[0].ToolCalls))
+	publications := conversationMessages(t, ti)
+	require.Len(t, publications, 1, "metadata-only promotion must not republish the message")
+	require.Equal(t, initialMessages[0].ID.String(), publications[0].GetMessageId())
+	require.Equal(t, "litellm", publications[0].GetIngestion().GetSource())
 }
 
 func TestChatMessageWriterPreservesNativeReadingOnLaterLiteLLMObservation(t *testing.T) {
@@ -457,6 +465,7 @@ func TestChatMessageWriterPreservesNativeReadingOnLaterLiteLLMObservation(t *tes
 	require.Len(t, storedMessages, 1)
 	require.Equal(t, native.Content, storedMessages[0].Content)
 	require.Equal(t, "codex", storedMessages[0].Source.String)
+	require.Len(t, conversationMessages(t, ti), 1)
 }
 
 func TestChatMessageWriterWriteInTxRollsBackMessageAndReading(t *testing.T) {
@@ -498,9 +507,8 @@ func TestChatMessageWriterWriteInTxRollsBackMessageAndReading(t *testing.T) {
 		},
 		UserEmail: "",
 	}}
-	tx, err := ti.conn.Begin(ctx) //nolint:glint // transaction contains only package APIs and SQLc-generated queries
-	require.NoError(t, err)
-	_, err = writer.WriteInTx(ctx, tx, writes)
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	_, err := writer.WriteInTx(ctx, tx, writes)
 	require.NoError(t, err)
 	require.NoError(t, tx.Rollback(ctx))
 
@@ -508,4 +516,5 @@ func TestChatMessageWriterWriteInTxRollsBackMessageAndReading(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, messages)
 	require.Empty(t, meterMessages(t, ti))
+	require.Empty(t, conversationMessages(t, ti))
 }

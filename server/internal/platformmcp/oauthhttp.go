@@ -28,13 +28,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 const (
@@ -114,6 +114,12 @@ type oauthChallenge struct {
 	OrganizationID string    `json:"organization_id"`
 	Subject        string    `json:"subject,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
+
+	// BaseURL is the platform origin the authorization started on. The
+	// browser legs after the identity provider return there, and the
+	// authorization code is bound to that origin's resource. Empty means the
+	// configured base URL.
+	BaseURL string `json:"base_url,omitempty"`
 }
 
 func (c oauthChallenge) CacheKey() string              { return platformOAuthChallengePrefix + c.ID }
@@ -124,7 +130,14 @@ var _ cache.CacheableObject[oauthChallenge] = (*oauthChallenge)(nil)
 
 // OAuthHTTP serves the Platform MCP-owned authorization server. It deliberately does
 // not import hosted MCP runtime or persistence packages.
+//
+// The resource, issuer, and access token audience follow the platform origin
+// a request arrives on (the server URL or an extra platform host), so each
+// platform host is its own RFC 8707 resource with its own authorization
+// server metadata. Requests from any other surface use baseURL.
 type OAuthHTTP struct {
+	// baseURL is the configured server URL. It is the origin for requests not
+	// stamped as a platform host.
 	baseURL       *url.URL
 	environment   string
 	cache         cache.TypedCacheObject[oauthChallenge]
@@ -135,8 +148,6 @@ type OAuthHTTP struct {
 	organizations OrganizationSelector
 	signer        *sessiontokens.Signer
 	credentials   *CredentialCodec
-	issuer        string
-	audience      string
 	telemetry     OAuthTelemetry
 	now           func() time.Time
 	logger        *slog.Logger
@@ -146,6 +157,10 @@ type OAuthHTTP struct {
 	// unknown, and the AS metadata stops advertising support.
 	cimd          clientMetadataResolver
 	cimdAdmission *admission.Metrics
+	// idpCallbackBaseURL hosts the identity provider callback. The identity
+	// provider stores the callback URL, so it stays pinned when the server
+	// URL moves.
+	idpCallbackBaseURL *url.URL
 }
 
 type OAuthHTTPConfig struct {
@@ -165,6 +180,9 @@ type OAuthHTTPConfig struct {
 	// Nil leaves inbound CIMD disabled.
 	GuardianPolicy *guardian.Policy
 	MeterProvider  metric.MeterProvider
+	// IDPCallbackBaseURL is the pinned origin of the identity provider
+	// callback. Nil uses BaseURL.
+	IDPCallbackBaseURL *url.URL
 }
 
 func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
@@ -190,9 +208,9 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 		resolver = cimd.NewResolver(config.GuardianPolicy, meterProvider, logger)
 	}
 	baseURL := *config.BaseURL
-	issuer, err := url.JoinPath(baseURL.String(), "platform-mcp")
-	if err != nil {
-		return nil, fmt.Errorf("build platform oauth issuer: %w", err)
+	idpCallbackBaseURL := baseURL
+	if config.IDPCallbackBaseURL != nil {
+		idpCallbackBaseURL = *config.IDPCallbackBaseURL
 	}
 	return &OAuthHTTP{
 		baseURL:       &baseURL,
@@ -205,13 +223,13 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 		organizations: config.Organizations,
 		signer:        config.Signer,
 		credentials:   credentials,
-		issuer:        issuer,
-		audience:      issuer,
 		telemetry:     config.Telemetry,
 		now:           time.Now,
 		logger:        logger,
 		cimd:          resolver,
 		cimdAdmission: admission.NewMetrics(meterProvider, logger),
+
+		idpCallbackBaseURL: &idpCallbackBaseURL,
 	}, nil
 }
 
@@ -244,19 +262,21 @@ func handlerFunc(handler http.Handler) http.HandlerFunc {
 }
 
 func (s *OAuthHTTP) ProtectedResourceHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"resource": s.issuer, "authorization_servers": []string{s.issuer}, "bearer_methods_supported": []string{"header"}})
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resource := s.resource(r.Context())
+		writeJSON(w, http.StatusOK, map[string]any{"resource": resource, "authorization_servers": []string{resource}, "bearer_methods_supported": []string{"header"}})
 	})
 }
 
 func (s *OAuthHTTP) AuthorizationServerHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		base := platformBaseURL(r.Context(), s.baseURL)
 		metadata := map[string]any{
-			"issuer":                                s.issuer,
-			"authorization_endpoint":                s.url("authorize"),
-			"token_endpoint":                        s.url("token"),
-			"registration_endpoint":                 s.url("register"),
-			"revocation_endpoint":                   s.url("revoke"),
+			"issuer":                                platformResource(base),
+			"authorization_endpoint":                endpointURL(base, "authorize"),
+			"token_endpoint":                        endpointURL(base, "token"),
+			"registration_endpoint":                 endpointURL(base, "register"),
+			"revocation_endpoint":                   endpointURL(base, "revoke"),
 			"response_types_supported":              usersessions.SupportedResponseTypes,
 			"grant_types_supported":                 supportedGrantTypes,
 			"token_endpoint_auth_methods_supported": supportedAuthMethods,
@@ -357,12 +377,15 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 			writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not start authorization")
 			return
 		}
-		challenge := oauthChallenge{ID: uuid.NewString(), ClientID: request.ClientID, RedirectURI: request.RedirectURI, State: request.State, CodeChallenge: request.CodeChallenge, CSRFToken: csrfToken, OrganizationID: "", Subject: "", CreatedAt: time.Now()}
+		challenge := oauthChallenge{ID: uuid.NewString(), ClientID: request.ClientID, RedirectURI: request.RedirectURI, State: request.State, CodeChallenge: request.CodeChallenge, CSRFToken: csrfToken, OrganizationID: "", Subject: "", CreatedAt: time.Now(), BaseURL: platformBaseURL(r.Context(), s.baseURL).String()}
 		if err := s.cache.Store(r.Context(), challenge); err != nil {
 			writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not start authorization")
 			return
 		}
-		callback := s.url("idp_callback")
+		// The identity provider only accepts registered redirect URIs, so the
+		// callback stays on the pinned callback origin for every platform host;
+		// the challenge carries the origin to return to afterwards.
+		callback := endpointURL(s.idpCallbackBaseURL, "idp_callback")
 		idpURL, err := s.identity.BuildAuthorizationURL(r.Context(), identity.AuthorizationURLParams{CallbackURL: callback, State: challenge.ID, Scope: "", ScopesSupported: nil})
 		if err != nil {
 			writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not start login")
@@ -404,7 +427,7 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 			writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
 			return
 		}
-		http.Redirect(w, r, s.url("select-organization")+"?state="+url.QueryEscape(challenge.ID), http.StatusFound)
+		http.Redirect(w, r, endpointURL(s.challengeBaseURL(challenge), "select-organization")+"?state="+url.QueryEscape(challenge.ID), http.StatusFound)
 	})
 }
 
@@ -495,7 +518,7 @@ func (s *OAuthHTTP) organizationSelectionPost(w http.ResponseWriter, r *http.Req
 				writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
 				return
 			}
-			http.Redirect(w, r, s.url("connect")+"?state="+url.QueryEscape(challenge.ID), http.StatusSeeOther)
+			http.Redirect(w, r, endpointURL(s.challengeBaseURL(challenge), "connect")+"?state="+url.QueryEscape(challenge.ID), http.StatusSeeOther)
 			return
 		}
 	}
@@ -617,7 +640,7 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 		writeAuthorizationGateError(w, r, challenge, err)
 		return
 	}
-	code, err := s.credentials.Issue(authorizationCodeCredential, challenge.OrganizationID)
+	code, err := s.credentials.Issue(authorizationCodeCredential, challenge.OrganizationID, platformResource(s.challengeBaseURL(challenge)))
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not complete authorization")
 		return
@@ -667,6 +690,7 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 			}()
 		}
 		now := s.now()
+		resource := s.resource(r.Context())
 		clientID, clientSecret := clientCredentials(r)
 		client, err := s.authenticateClient(r.Context(), clientID, clientSecret, now)
 		if err != nil {
@@ -680,31 +704,31 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 				writeRequestOAuthError(w, http.StatusBadRequest, err)
 				return
 			}
-			organizationID, err := s.credentials.OrganizationID(authorizationCodeCredential, request.Code)
-			if err != nil {
+			code, err := s.credentials.decode(authorizationCodeCredential, request.Code)
+			if err != nil || s.boundResource(code) != resource {
 				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "authorization code is invalid")
 				return
 			}
-			input := platformoauth.ConsumeGrantInput{OrganizationID: organizationID, Code: request.Code, ClientID: client.ID, RedirectURI: request.RedirectURI, CodeVerifier: request.CodeVerifier, Now: now}
+			input := platformoauth.ConsumeGrantInput{OrganizationID: code.OrganizationID, Code: request.Code, ClientID: client.ID, RedirectURI: request.RedirectURI, CodeVerifier: request.CodeVerifier, Now: now}
 			grant, err := s.store.ValidateGrant(r.Context(), input)
 			if err != nil {
 				writeTokenStateError(w, err, "authorization code")
 				return
 			}
-			s.mintAndExchangeGrant(w, r, input, grant, client.ID, now)
+			s.mintAndExchangeGrant(w, r, input, grant, client.ID, resource, now)
 		case "refresh_token":
 			request := usersessions.RefreshTokenRequestFromForm(r.PostForm)
 			if err := request.Validate(); err != nil {
 				writeRequestOAuthError(w, http.StatusBadRequest, err)
 				return
 			}
-			organizationID, err := s.credentials.OrganizationID(refreshTokenCredential, request.RefreshToken)
-			if err != nil {
+			refresh, err := s.credentials.decode(refreshTokenCredential, request.RefreshToken)
+			if err != nil || s.boundResource(refresh) != resource {
 				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid")
 				return
 			}
 			refreshHash := opaqueHash(request.RefreshToken)
-			old, err := s.store.PrepareRefresh(r.Context(), platformoauth.PrepareRefreshInput{OrganizationID: organizationID, RefreshHash: refreshHash, ClientID: client.ID, Now: now})
+			old, err := s.store.PrepareRefresh(r.Context(), platformoauth.PrepareRefreshInput{OrganizationID: refresh.OrganizationID, RefreshHash: refreshHash, ClientID: client.ID, Now: now})
 			if err != nil {
 				writeTokenStateError(w, err, "refresh token")
 				return
@@ -724,7 +748,7 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 				writeTokenGateError(w, err)
 				return
 			}
-			s.mintReplacementAndRespond(w, r, old, client.ID, now)
+			s.mintReplacementAndRespond(w, r, old, client.ID, resource, now)
 		default:
 			writeOAuthError(w, http.StatusBadRequest, "unsupported_grant_type", "unsupported grant_type")
 		}
@@ -769,7 +793,7 @@ func (s *OAuthHTTP) revokeAccessToken(ctx context.Context, token, clientID strin
 	_, _ = s.store.RevokeAccessSession(ctx, organizationID, jti, clientID, time.Now())
 }
 
-func (s *OAuthHTTP) mintAndExchangeGrant(w http.ResponseWriter, r *http.Request, input platformoauth.ConsumeGrantInput, grant platformoauth.Grant, clientID string, now time.Time) {
+func (s *OAuthHTTP) mintAndExchangeGrant(w http.ResponseWriter, r *http.Request, input platformoauth.ConsumeGrantInput, grant platformoauth.Grant, clientID, resource string, now time.Time) {
 	connection := grant.Connection
 	subject, err := urn.ParseSessionSubject(connection.Subject)
 	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
@@ -781,19 +805,19 @@ func (s *OAuthHTTP) mintAndExchangeGrant(w http.ResponseWriter, r *http.Request,
 		writeTokenGateError(w, err)
 		return
 	}
-	jti, err := s.credentials.Issue(accessJTICredential, connection.OrganizationID)
+	jti, err := s.credentials.Issue(accessJTICredential, connection.OrganizationID, resource)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
 	accessExpiresAt := minTime(now.Add(platformAccessTokenLifetime), connection.AuthorizationExpiresAt)
 	refreshExpiresAt := minTime(now.Add(platformRefreshTokenLifetime), connection.AuthorizationExpiresAt)
-	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: s.audience, Issuer: s.issuer, ExpiresAt: &accessExpiresAt, ClientID: clientID, JTI: jti})
+	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: resource, Issuer: resource, ExpiresAt: &accessExpiresAt, ClientID: clientID, JTI: jti})
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
-	refreshToken, err := s.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
+	refreshToken, err := s.credentials.Issue(refreshTokenCredential, connection.OrganizationID, resource)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
@@ -806,25 +830,25 @@ func (s *OAuthHTTP) mintAndExchangeGrant(w http.ResponseWriter, r *http.Request,
 	writeJSON(w, http.StatusOK, map[string]any{"access_token": accessToken, "token_type": "Bearer", "expires_in": int64(accessExpiresAt.Sub(now).Seconds()), "refresh_token": refreshToken})
 }
 
-func (s *OAuthHTTP) mintReplacementAndRespond(w http.ResponseWriter, r *http.Request, old platformoauth.Session, clientID string, now time.Time) {
+func (s *OAuthHTTP) mintReplacementAndRespond(w http.ResponseWriter, r *http.Request, old platformoauth.Session, clientID, resource string, now time.Time) {
 	subject, err := urn.ParseSessionSubject(old.Connection.Subject)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
-	jti, err := s.credentials.Issue(accessJTICredential, old.Connection.OrganizationID)
+	jti, err := s.credentials.Issue(accessJTICredential, old.Connection.OrganizationID, resource)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
 	accessExpiresAt := minTime(now.Add(platformAccessTokenLifetime), old.Connection.AuthorizationExpiresAt)
 	refreshExpiresAt := minTime(now.Add(platformRefreshTokenLifetime), old.Connection.AuthorizationExpiresAt)
-	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: s.audience, Issuer: s.issuer, ExpiresAt: &accessExpiresAt, ClientID: clientID, JTI: jti})
+	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: resource, Issuer: resource, ExpiresAt: &accessExpiresAt, ClientID: clientID, JTI: jti})
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
-	refreshToken, err := s.credentials.Issue(refreshTokenCredential, old.Connection.OrganizationID)
+	refreshToken, err := s.credentials.Issue(refreshTokenCredential, old.Connection.OrganizationID, resource)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
@@ -1013,26 +1037,50 @@ func writeTokenGateError(w http.ResponseWriter, err error) {
 	writeOAuthError(w, http.StatusForbidden, "access_denied", "organization access is not available")
 }
 
-func (s *OAuthHTTP) Issuer() string {
-	return s.issuer
-}
-
-func (s *OAuthHTTP) Audience() string {
-	return s.audience
-}
-
 // ProviderSetupCompletionURL is the only callback landing page accepted for
 // Platform MCP provider authorization. It is server-owned and carries no state.
 func (s *OAuthHTTP) ProviderSetupCompletionURL() string {
-	return s.url("provider-setup-complete")
+	return endpointURL(s.baseURL, "provider-setup-complete")
 }
 
+// ProtectedResourceURL is the RFC 9728 metadata URL on the configured base
+// URL, used when a request carries no platform origin.
 func (s *OAuthHTTP) ProtectedResourceURL() string {
-	return s.baseURL.JoinPath(".well-known", "oauth-protected-resource", "platform-mcp").String()
+	return platformProtectedResourceMetadataURL(s.baseURL)
 }
 
-func (s *OAuthHTTP) url(segment string) string {
-	return s.issuer + "/" + segment
+// resource is the Platform MCP resource, issuer, and audience for the
+// platform origin the request arrived on.
+func (s *OAuthHTTP) resource(ctx context.Context) string {
+	return platformResource(platformBaseURL(ctx, s.baseURL))
+}
+
+// challengeBaseURL is the platform origin an authorization started on.
+// BaseURL is only ever written from the middleware-stamped origin.
+func (s *OAuthHTTP) challengeBaseURL(challenge oauthChallenge) *url.URL {
+	if challenge.BaseURL == "" {
+		return s.baseURL
+	}
+	base, err := url.Parse(challenge.BaseURL)
+	if err != nil || base.Scheme == "" || base.Host == "" {
+		return s.baseURL
+	}
+	return base
+}
+
+// boundResource is the resource an authorization code or refresh token was
+// issued for. Credentials that predate resource binding were all issued for
+// the configured base URL's resource, so they keep working there and only
+// there.
+func (s *OAuthHTTP) boundResource(credential credentialPayload) string {
+	if credential.Resource == "" {
+		return platformResource(s.baseURL)
+	}
+	return credential.Resource
+}
+
+func endpointURL(base *url.URL, segment string) string {
+	return platformResource(base) + "/" + segment
 }
 
 // writeClientResolutionError maps the resolveClient error contract onto the

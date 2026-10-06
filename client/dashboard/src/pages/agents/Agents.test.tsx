@@ -102,6 +102,8 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   detail: vi.fn(),
   organizationId: "org_example",
+  projectId: "00000000-0000-4000-8000-000000000001",
+  createMutate: vi.fn(),
   impersonatorEmail: undefined as string | undefined,
   user: {
     id: "user_owner",
@@ -119,6 +121,7 @@ const mocks = vi.hoisted(() => ({
       ownerProfile: undefined as
         | { displayName: string; photoUrl?: string }
         | undefined,
+      projectId: undefined as string | undefined,
       lifecycle: "active",
       permissions: { read: true, write: true, authorize: true, transfer: true },
     },
@@ -134,7 +137,12 @@ vi.mock("@/components/ui/Avatar", () => ({
   ),
 }));
 vi.mock("@/contexts/Auth", () => ({
-  useOrganization: () => ({ id: mocks.organizationId, slug: "example" }),
+  useOrganization: () => ({
+    id: mocks.organizationId,
+    slug: "example",
+    name: "Example Org",
+  }),
+  useProject: () => ({ id: mocks.projectId, slug: "alpha", name: "Alpha" }),
   useSession: () => ({
     user: mocks.user,
     organizationOverride: mocks.unsupported,
@@ -158,7 +166,7 @@ vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => mocks.sdkClient(),
 }));
 vi.mock("@gram/client/react-query/createAgent.js", () => ({
-  useCreateAgentMutation: () => ({ mutate: vi.fn() }),
+  useCreateAgentMutation: () => ({ mutate: mocks.createMutate }),
 }));
 vi.mock("@gram/client/react-query/renameAgent.js", () => ({
   useRenameAgentMutation: () => ({ mutate: vi.fn() }),
@@ -189,6 +197,7 @@ vi.mock("@/components/page-templates", () => {
     children,
     title,
     description,
+    stage,
     primaryAction,
     search,
     isEmpty = false,
@@ -197,6 +206,7 @@ vi.mock("@/components/page-templates", () => {
     children: ReactNode;
     title: string;
     description: string;
+    stage?: string;
     primaryAction: ReactNode;
     search?: {
       value: string;
@@ -208,6 +218,7 @@ vi.mock("@/components/page-templates", () => {
   }) => (
     <div>
       <h1>{title}</h1>
+      {stage && <span>{stage === "preview" ? "Preview" : stage}</span>}
       <p>{description}</p>
       {primaryAction}
       {!isEmpty && search && (
@@ -235,6 +246,7 @@ beforeEach(() => {
   mocks.params = new URLSearchParams();
   mocks.unsupported = false;
   mocks.organizationId = "org_example";
+  mocks.projectId = "00000000-0000-4000-8000-000000000001";
   mocks.impersonatorEmail = undefined;
   mocks.scopeOverride = null;
   mocks.agents[0]!.ownerUserId = "user_owner";
@@ -243,7 +255,7 @@ beforeEach(() => {
   mocks.sdkClient.mockReturnValue({
     agents: { list: mocks.list, get: mocks.detail },
   });
-  mocks.list.mockResolvedValue(mocks.agents);
+  mocks.list.mockImplementation(async () => mocks.agents);
   mocks.detail.mockResolvedValue(mocks.agents[0]);
 });
 
@@ -290,6 +302,12 @@ describe("Agent management rollout gate", () => {
 });
 
 describe("Agent owner access", () => {
+  it("labels agent identity as preview", () => {
+    setup();
+
+    expect(screen.getByText("Preview")).toBeTruthy();
+  });
+
   it.each(["loading", "disabled", "missing", "error"] as const)(
     "does not request agents while the rollout is %s",
     (status) => {
@@ -463,5 +481,70 @@ describe("Agent owner access", () => {
     expect(screen.queryByText("Identity")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Wizard done" }));
     expect(mocks.navigate).toHaveBeenLastCalledWith({ id: "agent_example" });
+  });
+});
+
+describe("Agent list scope filtering", () => {
+  const inventory = [...mocks.agents];
+  afterEach(() => {
+    mocks.agents = [...inventory];
+  });
+
+  it("shows the create empty state when only other projects have agents", () => {
+    mocks.agents = [{ ...mocks.agents[0]!, projectId: "other-project" }];
+    setup();
+    expect(screen.getByText("No agents yet")).toBeTruthy();
+    expect(screen.queryByText("No matching agents")).toBeNull();
+  });
+
+  it("shows no matches for a search of project-visible agents", () => {
+    setup();
+    fireEvent.change(screen.getByPlaceholderText("Search agents"), {
+      target: { value: "missing agent" },
+    });
+    expect(screen.getByText("No matching agents")).toBeTruthy();
+    expect(screen.queryByText("No agents yet")).toBeNull();
+  });
+
+  it("hides agents bound to another project and keeps organization-wide ones after refetch", async () => {
+    mocks.agents = [
+      {
+        ...mocks.agents[0]!,
+        id: "agent_here",
+        name: "This project agent",
+        projectId: mocks.projectId,
+      },
+      {
+        ...mocks.agents[0]!,
+        id: "agent_elsewhere",
+        name: "Other project agent",
+        projectId: "00000000-0000-4000-8000-0000000000ff",
+      },
+      {
+        ...mocks.agents[0]!,
+        id: "agent_org",
+        name: "Org wide agent",
+        projectId: undefined,
+      },
+    ];
+    const { client } = setup();
+    await client.invalidateQueries({ queryKey: ["managed-agents"] });
+    expect(mocks.list).toHaveBeenCalled();
+    expect(
+      client.getQueryData([
+        "managed-agents",
+        mocks.organizationId,
+        "list",
+        mocks.user.id,
+      ]),
+    ).toEqual(mocks.agents);
+
+    expect(
+      screen.getByRole("button", { name: "This project agent" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Org wide agent" })).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Other project agent" }),
+    ).toBeNull();
   });
 });

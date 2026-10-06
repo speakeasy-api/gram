@@ -31,6 +31,7 @@ vi.mock("@/components/dev-toolbar-utils", () => ({
   getRBACScopeOverrideHeader: () => null,
 }));
 vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
   useRoutes: () => ({ agents: { href: () => "/agents" } }),
 }));
 vi.mock("@gram/client/react-query/_context.js", () => ({
@@ -152,6 +153,11 @@ it.each(["disabled", "loading", "missing", "error"])(
           .join(" "),
       ).toContain("unknown_subject"),
     );
+    expect(
+      screen
+        .getByRole("link", { name: "Configure IDP sync" })
+        .getAttribute("href"),
+    ).toBe("/org/identity");
     expect(mocks.agents).not.toHaveBeenCalled();
     expect(screen.queryByText("Registered agent")).toBeNull();
   },

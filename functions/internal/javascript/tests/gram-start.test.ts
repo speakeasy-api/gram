@@ -202,9 +202,9 @@ test("catches tool calls that throw", async () => {
     cause: {
       name: "Error",
       message: "Intentional failure",
-      stack: expect.any(String),
     },
   });
+  expect(content).not.toContain("    at ");
 });
 
 test("fails when tool call does not return Response", async () => {
@@ -242,9 +242,9 @@ test("fails when functions file does not exist", async () => {
     cause: {
       name: "Error",
       message: expect.stringMatching(/Cannot find module.*nonexistent\.js/),
-      stack: expect.any(String),
     },
   });
+  expect(content).not.toContain("    at ");
 });
 
 test("fails when functions file does not export handleToolCall", async () => {
@@ -358,9 +358,9 @@ test("catches resource requests that throw", async () => {
     cause: {
       name: "Error",
       message: "Resource access failed",
-      stack: expect.any(String),
     },
   });
+  expect(content).not.toContain("    at ");
 });
 
 test("fails when resource request does not return Response", async () => {

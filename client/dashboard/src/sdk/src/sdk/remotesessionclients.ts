@@ -10,9 +10,15 @@ import { remoteSessionClientsDelete } from "../funcs/remoteSessionClientsDelete.
 import { remoteSessionClientsDetachKeySet } from "../funcs/remoteSessionClientsDetachKeySet.js";
 import { remoteSessionClientsDetachUserSessionIssuer } from "../funcs/remoteSessionClientsDetachUserSessionIssuer.js";
 import { remoteSessionClientsGet } from "../funcs/remoteSessionClientsGet.js";
+import { remoteSessionClientsGetNewClientCallbackUrl } from "../funcs/remoteSessionClientsGetNewClientCallbackUrl.js";
 import { remoteSessionClientsList } from "../funcs/remoteSessionClientsList.js";
+import { remoteSessionClientsPrepareEMA } from "../funcs/remoteSessionClientsPrepareEMA.js";
+import { remoteSessionClientsReadEMA } from "../funcs/remoteSessionClientsReadEMA.js";
+import { remoteSessionClientsUnlinkEMA } from "../funcs/remoteSessionClientsUnlinkEMA.js";
 import { remoteSessionClientsUpdate } from "../funcs/remoteSessionClientsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { IdentityChainingPreparation } from "../models/components/identitychainingpreparation.js";
+import { NewClientCallbackURLResult } from "../models/components/newclientcallbackurlresult.js";
 import { RemoteSessionClient } from "../models/components/remotesessionclient.js";
 import {
   AttachRemoteSessionClientKeySetRequest,
@@ -43,6 +49,10 @@ import {
   DetachUserSessionIssuerSecurity,
 } from "../models/operations/detachusersessionissuer.js";
 import {
+  GetNewRemoteSessionClientCallbackUrlRequest,
+  GetNewRemoteSessionClientCallbackUrlSecurity,
+} from "../models/operations/getnewremotesessionclientcallbackurl.js";
+import {
   GetRemoteSessionClientRequest,
   GetRemoteSessionClientSecurity,
 } from "../models/operations/getremotesessionclient.js";
@@ -51,6 +61,18 @@ import {
   ListRemoteSessionClientsResponse,
   ListRemoteSessionClientsSecurity,
 } from "../models/operations/listremotesessionclients.js";
+import {
+  PrepareEMARequest,
+  PrepareEMASecurity,
+} from "../models/operations/prepareema.js";
+import {
+  ReadEMARequest,
+  ReadEMASecurity,
+} from "../models/operations/readema.js";
+import {
+  UnlinkEMARequest,
+  UnlinkEMASecurity,
+} from "../models/operations/unlinkema.js";
 import {
   UpdateRemoteSessionClientRequest,
   UpdateRemoteSessionClientSecurity,
@@ -225,6 +247,82 @@ export class RemoteSessionClients extends ClientSDK {
     PageIterator<ListRemoteSessionClientsResponse, { cursor: string }>
   > {
     return unwrapResultIterator(remoteSessionClientsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getNewClientCallbackUrl remoteSessionClients
+   *
+   * @remarks
+   * Get the redirect URI a remote_session_client created now in the caller's project registers with its upstream provider.
+   */
+  async getNewClientCallbackUrl(
+    request?: GetNewRemoteSessionClientCallbackUrlRequest | undefined,
+    security?: GetNewRemoteSessionClientCallbackUrlSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<NewClientCallbackURLResult> {
+    return unwrapAsync(remoteSessionClientsGetNewClientCallbackUrl(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * prepareEMA remoteSessionClients
+   *
+   * @remarks
+   * Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.
+   */
+  async prepareEMA(
+    request: PrepareEMARequest,
+    security?: PrepareEMASecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<IdentityChainingPreparation> {
+    return unwrapAsync(remoteSessionClientsPrepareEMA(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * readEMA remoteSessionClients
+   *
+   * @remarks
+   * Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.
+   */
+  async readEMA(
+    request: ReadEMARequest,
+    security?: ReadEMASecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<IdentityChainingPreparation> {
+    return unwrapAsync(remoteSessionClientsReadEMA(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * unlinkEMA remoteSessionClients
+   *
+   * @remarks
+   * Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.
+   */
+  async unlinkEMA(
+    request: UnlinkEMARequest,
+    security?: UnlinkEMASecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<IdentityChainingPreparation> {
+    return unwrapAsync(remoteSessionClientsUnlinkEMA(
       this,
       request,
       security,

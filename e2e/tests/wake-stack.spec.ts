@@ -73,15 +73,6 @@ function running(): string[] {
     .map((c) => c.name);
 }
 
-// The parker writes this only once it is actually listening, so its presence
-// is the difference between "the stack is paused" and "the stack is paused and
-// the URL is dead".
-function parkerPid(): number | null {
-  const raw = fs.readFileSync(marker("gram-stack-parked.pid"), "utf8").trim();
-  const pid = Number(raw);
-  return Number.isInteger(pid) && pid > 0 ? pid : null;
-}
-
 // `pause` and `wake` serialize behind this, and a wake started from the browser
 // outlives the process that clicked the button -- so a previous run of this
 // suite can still be finishing. Waiting turns a confusing "another pause or
@@ -105,39 +96,24 @@ async function waitForNoStackLock(): Promise<void> {
     .toBe(false);
 }
 
-// Identity, not just existence: `wake` kills the parker and the pid is then
-// free to be reused, which a bare `kill(pid, 0)` would report as a parker that
-// outlived its wake. `wake.sh`'s own release_port() makes the same check
-// before it signals anything.
-function parkerAlive(pid: number): boolean {
-  try {
-    return run("ps", ["-o", "command=", "-p", String(pid)], 10_000).includes(
-      "park",
-    );
-  } catch {
-    // `ps` exits non-zero when the pid is gone, which is the answer.
-    return false;
-  }
-}
-
 test.describe.configure({ mode: "serial" });
 
-// `pause` and `wake` run detached and log to the git dir, so their output
-// reaches neither the terminal nor the CI job log -- even when they are the
-// thing that broke. Every failure below is otherwise one sentence about a
-// stack whose own account of itself nobody has seen.
+// Lifecycle operations run under Pitchfork. Attach their supervisor logs so
+// failures include the operation's diagnostics, not only a browser timeout.
 test.afterEach(async ({}, testInfo) => {
   if (testInfo.status === testInfo.expectedStatus) return;
-  for (const name of ["gram-stack-wake.log", "gram-stack-park.log"]) {
+  for (const name of ["wake-stack", "pause-stack", "park"]) {
     let body: string;
     try {
-      body = fs.readFileSync(marker(name), "utf8");
+      body = run(
+        "pitchfork",
+        ["logs", name, "-n", "200", "--no-pager", "--raw"],
+        10_000,
+      );
     } catch {
       continue;
     }
-    // The wake log is mostly redrawn progress spinners and runs to megabytes;
-    // what matters is how it ended.
-    await testInfo.attach(name, {
+    await testInfo.attach(`${name}.log`, {
       body: body.slice(-64 * 1024),
       contentType: "text/plain",
     });
@@ -172,12 +148,6 @@ test("a paused worktree serves the resume page and comes back from it", async ({
       "`pause` removed the containers; it must stop them, not `down` them",
     ).toBeGreaterThan(0);
     expect(fs.existsSync(marker("gram-stack-paused"))).toBe(true);
-
-    const pid = parkerPid();
-    expect(pid, "no parker pid file, so the site port is dead").not.toBeNull();
-    expect(parkerAlive(pid!), "the parker exited after writing its pid").toBe(
-      true,
-    );
   });
 
   await test.step("the dashboard URL answers with the resume page", async () => {
@@ -203,8 +173,6 @@ test("a paused worktree serves the resume page and comes back from it", async ({
     expect(running(), "a GET on the parked port started the stack").toEqual([]);
   });
 
-  const parked = parkerPid();
-
   await test.step("Resume starts the wake", async () => {
     await page.getByRole("button", { name: "Resume stack" }).click();
 
@@ -226,7 +194,6 @@ test("a paused worktree serves the resume page and comes back from it", async ({
     await expect(page.locator("#root")).toBeAttached({ timeout: 10 * 60_000 });
     await expect(page).toHaveTitle("Speakeasy");
 
-    expect(parkerAlive(parked!), "the parker outlived the wake").toBe(false);
     expect(running().length, "the wake started no containers").toBeGreaterThan(
       0,
     );

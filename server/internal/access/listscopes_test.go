@@ -1,6 +1,9 @@
 package access
 
 import (
+	"os"
+	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -17,7 +20,7 @@ func TestService_ListScopes(t *testing.T) {
 
 	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Scopes, 35)
+	require.Len(t, result.Scopes, 41)
 
 	bySlug := make(map[string]*gen.ScopeDefinition, len(result.Scopes))
 	for _, scope := range result.Scopes {
@@ -35,6 +38,8 @@ func TestService_ListScopes(t *testing.T) {
 	require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(authz.ScopePluginWrite)].Visibility)
 	require.Equal(t, string(authz.ScopePluginBlockedWrite), *bySlug[string(authz.ScopePluginWrite)].ExclusionScope)
 	require.Equal(t, authz.ScopeVisibilityInternal, bySlug[string(authz.ScopePluginBlockedWrite)].Visibility)
+	require.Equal(t, "assistant", bySlug[string(authz.ScopeAssistantRead)].ResourceType)
+	require.Equal(t, "assistant", bySlug[string(authz.ScopeAssistantWrite)].ResourceType)
 	require.Equal(t, "risk_policy", bySlug[string(authz.ScopeRiskPolicyEvaluate)].ResourceType)
 	require.Equal(t, "risk_policy", bySlug[string(authz.ScopeRiskPolicyBypass)].ResourceType)
 	require.Equal(t, "chat", bySlug[string(authz.ScopeChatRead)].ResourceType)
@@ -43,6 +48,14 @@ func TestService_ListScopes(t *testing.T) {
 		require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(scope)].Visibility)
 		require.Nil(t, bySlug[string(scope)].ExclusionScope)
 	}
+	// Mirrors the families above: the count alone would still pass if these were
+	// mapped to another resource type or hidden as internal.
+	for _, scope := range []authz.Scope{authz.ScopeWorkloadRead, authz.ScopeWorkloadWrite} {
+		require.Equal(t, "workload", bySlug[string(scope)].ResourceType)
+		require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(scope)].Visibility)
+	}
+	require.Equal(t, string(authz.ScopeWorkloadBlockedRead), *bySlug[string(authz.ScopeWorkloadRead)].ExclusionScope)
+	require.Equal(t, string(authz.ScopeWorkloadBlockedWrite), *bySlug[string(authz.ScopeWorkloadWrite)].ExclusionScope)
 	require.Equal(t, "Read organization metadata and members.", bySlug[string(authz.ScopeOrgRead)].Description)
 	require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(authz.ScopeProjectWrite)].Visibility)
 	require.Equal(t, authz.ScopeVisibilityInternal, bySlug[string(authz.ScopeProjectBlockedWrite)].Visibility)
@@ -56,6 +69,10 @@ func TestService_ListScopes(t *testing.T) {
 	require.Equal(t, authz.ScopeVisibilityInternal, bySlug[string(authz.ScopeSkillBlockedWrite)].Visibility)
 	require.NotNil(t, bySlug[string(authz.ScopeSkillWrite)].ExclusionScope)
 	require.Equal(t, string(authz.ScopeSkillBlockedWrite), *bySlug[string(authz.ScopeSkillWrite)].ExclusionScope)
+	require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(authz.ScopeAssistantWrite)].Visibility)
+	require.Equal(t, authz.ScopeVisibilityInternal, bySlug[string(authz.ScopeAssistantBlockedWrite)].Visibility)
+	require.NotNil(t, bySlug[string(authz.ScopeAssistantWrite)].ExclusionScope)
+	require.Equal(t, string(authz.ScopeAssistantBlockedWrite), *bySlug[string(authz.ScopeAssistantWrite)].ExclusionScope)
 	require.NotNil(t, bySlug[string(authz.ScopeRiskPolicyEvaluate)].ExclusionScope)
 	require.Equal(t, string(authz.ScopeRiskPolicyBypass), *bySlug[string(authz.ScopeRiskPolicyEvaluate)].ExclusionScope)
 	require.Nil(t, bySlug[string(authz.ScopeRiskPolicyBypass)].ExclusionScope)
@@ -67,6 +84,39 @@ func TestService_ListScopes(t *testing.T) {
 	}
 	for _, scope := range []authz.Scope{authz.ScopeOrgAdmin, authz.ScopeOrgRead, authz.ScopeChatRead, authz.ScopeAgentWrite, authz.ScopeRiskPolicyBypass, authz.ScopeMCPBlockedConnect} {
 		require.False(t, bySlug[string(scope)].AgentEligible, scope)
+	}
+}
+
+// Every exclusion scope the catalog advertises must appear in the design's
+// exclusion_scope enum, or generated clients reject the listScopes response and
+// the roles page fails to load. The enum is a sixth place a new scope family has
+// to be added, and the count assertions above do not reach it.
+func TestService_ListScopes_ExclusionScopesAreInTheDesignEnum(t *testing.T) {
+	t.Parallel()
+
+	design, err := os.ReadFile(filepath.Join("..", "..", "design", "access", "design.go"))
+	require.NoError(t, err)
+
+	block := regexp.MustCompile(`(?s)Attribute\("exclusion_scope".*?Enum\((.*?)\)`).FindSubmatch(design)
+	require.NotNil(t, block, "could not find the exclusion_scope enum in the access design")
+
+	declared := make(map[string]bool)
+	for _, quoted := range regexp.MustCompile(`"([^"]+)"`).FindAllSubmatch(block[1], -1) {
+		declared[string(quoted[1])] = true
+	}
+	require.NotEmpty(t, declared)
+
+	ctx, ti := newTestAccessService(t)
+	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
+	require.NoError(t, err)
+
+	for _, scope := range result.Scopes {
+		if scope.ExclusionScope == nil {
+			continue
+		}
+		require.True(t, declared[*scope.ExclusionScope],
+			"scope %q advertises exclusion scope %q, which the design's exclusion_scope enum does not declare",
+			scope.Slug, *scope.ExclusionScope)
 	}
 }
 

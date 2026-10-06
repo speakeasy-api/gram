@@ -98,7 +98,7 @@ export function XaaConfirmFields({
             error={audienceInvalid}
           />
           <FieldDescription id="xaa-audience-help">
-            Open{" "}
+            Must match Issuer URL on the resource app in{" "}
             {applicationsUrl ? (
               <a
                 href={applicationsUrl}
@@ -110,14 +110,11 @@ export function XaaConfirmFields({
               </a>
             ) : (
               "Okta Applications"
-            )}{" "}
-            and select the resource app: the app you added from the Okta
-            Integration Network for the service this MCP server connects to,
-            which Speakeasy is being allowed to reach through Cross App Access.
-            It is not one of your Speakeasy apps. Go to Resource Server → Cross
-            App Access (XAA); if it is disabled there, enable it first. Copy
-            Issuer URL, not the separate Audience/tenant ID. Use the HTTPS
-            address from that field, not the MCP server URL.
+            )}
+            , under Resource Server → Cross-app access (XAA); enable it there
+            first if it is disabled. Prefilled with the server’s issuer when
+            known; change it if Okta differs. Not the Audience/tenant ID or the
+            MCP server URL.
           </FieldDescription>
           {audienceInvalid && (
             <p

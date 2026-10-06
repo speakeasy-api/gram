@@ -48,13 +48,20 @@ function ScopeGatedTopLevelItem({
   item,
   scope = ["project:read"],
   resourceId,
+  projectId,
 }: {
   item: AppRoute;
   scope?: Scope | Scope[];
   resourceId?: string;
+  projectId?: string;
 }) {
   return (
-    <RequireScope scope={scope} resourceId={resourceId} level="section">
+    <RequireScope
+      scope={scope}
+      resourceId={resourceId}
+      projectId={projectId}
+      level="section"
+    >
       <SidebarMenuItem>
         <NavButton
           title={item.title}
@@ -105,12 +112,13 @@ export function AppSidebar({
   const activeRoute = allNavRoutes.find((entry) => entry.route.active)?.route;
   const accessFor = (
     route: AppRoute,
-  ): { scope?: Scope[]; resourceId?: string } => {
+  ): { scope?: Scope[]; resourceId?: string; projectId?: string } => {
     const entry = navAccess.get(route.url);
     return entry
       ? {
           scope: entry.scope.length > 0 ? entry.scope : undefined,
           resourceId: entry.resourceId,
+          projectId: entry.projectId,
         }
       : { scope: ["project:read"] };
   };

@@ -26,6 +26,17 @@ type Service interface {
 	UpdateRole(context.Context, *UpdateRolePayload) (res *Role, err error)
 	// Delete a custom role (system roles cannot be deleted).
 	DeleteRole(context.Context, *DeleteRolePayload) (err error)
+	// List the organization's directory groups and attribute values, and the roles
+	// mapped to them.
+	ListDirectoryRoleMappings(context.Context, *ListDirectoryRoleMappingsPayload) (res *ListDirectoryRoleMappingsResult, err error)
+	// Fetch the organization's directory groups from WorkOS and save any that are
+	// new or changed.
+	SyncDirectoryGroups(context.Context, *SyncDirectoryGroupsPayload) (res *SyncDirectoryGroupsResult, err error)
+	// Map a directory group or attribute value to a role, replacing any role it
+	// was mapped to before.
+	SetDirectoryRoleMapping(context.Context, *SetDirectoryRoleMappingPayload) (res *DirectoryRoleMapping, err error)
+	// Remove a directory role mapping.
+	DeleteDirectoryRoleMapping(context.Context, *DeleteDirectoryRoleMappingPayload) (err error)
 	// List all available scopes and their resource types.
 	ListScopes(context.Context, *ListScopesPayload) (res *ListScopesResult, err error)
 	// List all team members with their role assignments.
@@ -70,6 +81,14 @@ type Service interface {
 	// canonical identity. Requires project:read on the active project; the access
 	// decision on each row carries its state but not who recorded it, when, or why.
 	ListEmployeeAIDetections(context.Context, *ListEmployeeAIDetectionsPayload) (res *ListAIDetectionsResult, err error)
+	// List the enrolled users one detected AI tool was found for, each with their
+	// devices, signals, versions and first and last sightings: the evidence
+	// listEmployeeAIDetections gives per tool for one person, expanded the other
+	// way round. Org-scoped like listAIDetections and, like it, requires an
+	// authenticated session authorized for org:admin on the active organization.
+	// Linked alias emails are folded to the canonical identity, so one person is
+	// one row. A target with no detections in the organization is not_found.
+	ListAIDetectionUsers(context.Context, *ListAIDetectionUsersPayload) (res *ListAIDetectionUsersResult, err error)
 	// Record whether a detected AI tool may reach this organization's MCP gateway.
 	// The decision is organization-level and applies to every server: a blocked
 	// tool is refused when it authenticates, so its users see an error their
@@ -90,6 +109,14 @@ type Service interface {
 	// List the principals that can be given access: everyone, roles, people, and
 	// agents.
 	ListAudienceOptions(context.Context, *ListAudienceOptionsPayload) (res *ListAudienceOptionsResult, err error)
+	// Explain whether one organization member can connect to, view, and manage one
+	// resource, and which rules decide it. The decision comes from the same
+	// evaluation as runtime enforcement. A gateway is refused: nothing checks
+	// access on its own id, so check each server it fronts instead. Like
+	// listIdentityAccess it describes one person's access, so it takes a session
+	// only: API keys are not checked against grants and would see any member's
+	// rules.
+	ExplainResourceAccess(context.Context, *ExplainResourceAccessPayload) (res *ExplainResourceAccessResult, err error)
 	// Request access to a scope by sending an email notification to organization
 	// administrators.
 	RequestAccess(context.Context, *RequestAccessPayload) (res *RequestAccessResult, err error)
@@ -131,7 +158,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [26]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
+var MethodNames = [32]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "syncDirectoryGroups", "setDirectoryRoleMapping", "deleteDirectoryRoleMapping", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -162,6 +189,26 @@ type AIDetection struct {
 	// When this tool was most recently detected.
 	LastSeen string
 	Access   *AIToolAccessSummary
+}
+
+// One enrolled user a detection target was found for, with that user's share
+// of the organization's scan reports: the evidence AIDetection carries for the
+// whole organization, narrowed to one person.
+type AIDetectionUser struct {
+	// Canonical email of the enrolled user the detections are attributed to.
+	// Linked alias emails are folded into it.
+	UserEmail string
+	// Distinct devices, by hardware serial, this tool was detected on for this
+	// user. Devices that report no serial are not counted.
+	DeviceCount int64
+	// Detection signals observed for this user: installed and/or running.
+	Signals []string
+	// Unique non-empty detected versions for this user.
+	Versions []string
+	// When this tool was first detected for this user.
+	FirstSeen string
+	// When this tool was most recently detected for this user.
+	LastSeen string
 }
 
 // The enforcement verdict for one detected AI tool, computed server-side so a
@@ -205,8 +252,12 @@ type AccessMember struct {
 	Email string
 	// Avatar URL.
 	PhotoURL *string
-	// All role IDs assigned to this member.
+	// Role IDs assigned directly to this member.
 	RoleIds []string
+	// Role IDs this member holds through directory role mappings. They follow the
+	// member's directory groups and attributes, so updating the member's roles
+	// does not change them.
+	DirectoryRoleIds []string
 	// When the member joined the organization.
 	JoinedAt string
 	// Department name as reported by the identity provider.
@@ -392,6 +443,15 @@ type CreateRolePayload struct {
 	AgentIds []string
 }
 
+// DeleteDirectoryRoleMappingPayload is the payload type of the access service
+// deleteDirectoryRoleMapping method.
+type DeleteDirectoryRoleMappingPayload struct {
+	// The ID of the mapping to remove.
+	ID           string
+	ApikeyToken  *string
+	SessionToken *string
+}
+
 // DeleteRolePayload is the payload type of the access service deleteRole
 // method.
 type DeleteRolePayload struct {
@@ -399,6 +459,126 @@ type DeleteRolePayload struct {
 	ID           string
 	ApikeyToken  *string
 	SessionToken *string
+}
+
+type DirectoryAttributeOption struct {
+	// Directory attribute key, e.g. department_name.
+	Key string
+	// Directory attribute value.
+	Value string
+	// Number of directory users with this value.
+	MemberCount int64
+}
+
+type DirectoryGroupOption struct {
+	// Directory group identifier.
+	ID string
+	// Directory group name.
+	Name string
+	// Number of directory users in the group.
+	MemberCount int64
+}
+
+// DirectoryRoleMapping is the result type of the access service
+// setDirectoryRoleMapping method.
+type DirectoryRoleMapping struct {
+	// Unique mapping identifier.
+	ID string
+	// What the mapping matches: a directory group or an attribute value.
+	SourceKind string
+	// The mapped directory group. Set when source_kind is group.
+	DirectoryGroupID *string
+	// Display name of the mapped directory group.
+	DirectoryGroupName *string
+	// The directory attribute key. Set when source_kind is attribute.
+	AttributeKey *string
+	// The directory attribute value. Set when source_kind is attribute.
+	AttributeValue *string
+	// Principal URN of the role granted to matching members.
+	RoleUrn   string
+	CreatedAt string
+	UpdatedAt string
+}
+
+// ExplainResourceAccessPayload is the payload type of the access service
+// explainResourceAccess method.
+type ExplainResourceAccessPayload struct {
+	// The kind of resource to explain.
+	ResourceKind string
+	// The resource to explain.
+	ResourceID string
+	// The organization member whose access to explain.
+	UserID       string
+	SessionToken *string
+}
+
+// ExplainResourceAccessResult is the result type of the access service
+// explainResourceAccess method.
+type ExplainResourceAccessResult struct {
+	// Who may connect without a rule. public: connecting is not checked against
+	// rules. private: rules decide. disabled: nobody can connect.
+	Visibility string
+	// The decision for use, view and manage, in that order.
+	Levels []*ExplainedAccessLevel
+}
+
+type ExplainedAccessDirectorySource struct {
+	// Whether membership of a directory group or a directory attribute value
+	// mapped the role.
+	SourceKind string
+	// The directory group, for a group mapping.
+	DirectoryGroupName *string
+	// The directory attribute, for an attribute mapping.
+	AttributeKey *string
+	// The attribute value the member's profile matched, for an attribute mapping.
+	AttributeValue *string
+}
+
+type ExplainedAccessLevel struct {
+	// The access being explained.
+	Level string
+	// Whether the rules give the member this access.
+	Allowed bool
+	// For use: whether every tool, only some, or none are reachable.
+	ToolAccess *string
+	// Every rule matching this access, deciding rules first.
+	Rules []*ExplainedAccessRule
+}
+
+type ExplainedAccessRule struct {
+	// Canonical principal URN holding the rule.
+	PrincipalUrn string
+	// What the principal identifies.
+	Kind string
+	// Human-readable name for the principal.
+	DisplayName string
+	// The access the rule gives, or the access a "blocked_" rule takes away. "all"
+	// is a grant covering every permission.
+	Level string
+	// Whether the rule names this resource, every resource in its project, or
+	// every resource of its kind.
+	AppliesTo string
+	// Tool names the rule is narrowed to, when it is not the whole resource.
+	Tools []string
+	// Tool annotations the rule is narrowed to, when it is not the whole resource.
+	Dispositions []string
+	// How the rule shaped the decision. allows: proves the access. overrides: a
+	// rule made directly to the member that proves the access despite a block from
+	// a role or everyone. overridden: a block such a rule overrides. blocks: takes
+	// the access away. blocked: an allow that matches but that a block keeps from
+	// counting. limits: a block taking away some of the resource's tools.
+	Effect string
+	// Why a blocked rule made directly to the member did not override the block.
+	// wildcard_direct_grant: it covers every resource. narrower_direct_grant: it
+	// constrains something the tool does not carry. own_exclusion: the member's
+	// own block applies.
+	Reason *string
+	// Whether the member holds this role only through a directory role mapping.
+	ViaDirectoryMapping bool
+	// The directory role mappings giving the member this role, including when they
+	// also hold it directly. Returned only to organization administrators, because
+	// attribute values can carry personal data.
+	DirectorySources []*ExplainedAccessDirectorySource
 }
 
 // GetRolePayload is the payload type of the access service getRole method.
@@ -416,6 +596,26 @@ type GetShadowMCPInventoryServerPayload struct {
 	// Shadow MCP server slug to inspect.
 	ServerSlug   string
 	SessionToken *string
+}
+
+// ListAIDetectionUsersPayload is the payload type of the access service
+// listAIDetectionUsers method.
+type ListAIDetectionUsersPayload struct {
+	// Id of the detection target to expand. Accepted exactly as agents report it,
+	// under the same length bound the scan-report ingest stores it with, so every
+	// id in the inventory can be expanded.
+	TargetID     string
+	SessionToken *string
+}
+
+// ListAIDetectionUsersResult is the result type of the access service
+// listAIDetectionUsers method.
+type ListAIDetectionUsersResult struct {
+	// The target as the inventory lists it, so a page reached by link needs no
+	// second read for its name, category and access decision.
+	Detection *AIDetection
+	// Users the target was detected for, most recently seen first.
+	Users []*AIDetectionUser
 }
 
 // ListAIDetectionsPayload is the payload type of the access service
@@ -519,6 +719,24 @@ type ListChallengesResult struct {
 	Total int
 }
 
+// ListDirectoryRoleMappingsPayload is the payload type of the access service
+// listDirectoryRoleMappings method.
+type ListDirectoryRoleMappingsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// ListDirectoryRoleMappingsResult is the result type of the access service
+// listDirectoryRoleMappings method.
+type ListDirectoryRoleMappingsResult struct {
+	// Active directory groups in the organization.
+	Groups []*DirectoryGroupOption
+	// Distinct attribute values set on active directory users.
+	Attributes []*DirectoryAttributeOption
+	// Live directory role mappings.
+	Mappings []*DirectoryRoleMapping
+}
+
 // ListEmployeeAIDetectionsPayload is the payload type of the access service
 // listEmployeeAIDetections method.
 type ListEmployeeAIDetectionsPayload struct {
@@ -584,6 +802,12 @@ type ListRoleGrant struct {
 	SubScopes []string
 	// Selector constraints. Null means unrestricted.
 	Selectors []*Selector
+	// The subset of this scope's selectors granted to the calling user by name
+	// rather than through a role or everyone. For allow scopes it holds only
+	// selectors naming a concrete resource, which outrank blocks inherited from
+	// roles or everyone on that resource. For blocked scopes it holds the caller's
+	// own blocks, which always apply. Omitted when empty.
+	DirectSelectors []*Selector
 }
 
 // ListRolesPayload is the payload type of the access service listRoles method.
@@ -833,8 +1057,8 @@ type Selector struct {
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).
 	Tool *string
-	// Project filter (MCP scopes only). When set with resource_id='*', grants
-	// access to all servers in the project.
+	// Project filter (MCP, environment, and assistant scopes). When set with
+	// resource_id='*', grants access to every resource of the kind in the project.
 	ProjectID *string
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.
@@ -859,6 +1083,23 @@ type SetAIToolDecisionResult struct {
 	// The detection target the decision was recorded for.
 	TargetID string
 	Access   *AIToolAccessSummary
+}
+
+// SetDirectoryRoleMappingPayload is the payload type of the access service
+// setDirectoryRoleMapping method.
+type SetDirectoryRoleMappingPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// What the mapping matches.
+	SourceKind string
+	// Directory group to map. Required when source_kind is group.
+	DirectoryGroupID *string
+	// Attribute key to match. Required when source_kind is attribute.
+	AttributeKey *string
+	// Attribute value to match. Required when source_kind is attribute.
+	AttributeValue *string
+	// Principal URN of the role to grant, from Role.principal_urn.
+	RoleUrn string
 }
 
 type SetResourceAudienceEntry struct {
@@ -1035,6 +1276,20 @@ type ShadowMCPInventoryUser struct {
 type ShadowMCPInventoryUserSource struct {
 	Source           string
 	ObservedUseCount int
+}
+
+// SyncDirectoryGroupsPayload is the payload type of the access service
+// syncDirectoryGroups method.
+type SyncDirectoryGroupsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// SyncDirectoryGroupsResult is the result type of the access service
+// syncDirectoryGroups method.
+type SyncDirectoryGroupsResult struct {
+	// Number of groups WorkOS returned across the organization's directories.
+	GroupCount int
 }
 
 // UpdateMemberRolesPayload is the payload type of the access service

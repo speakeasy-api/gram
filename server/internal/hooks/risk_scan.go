@@ -64,6 +64,9 @@ func (s *Service) scanPermissionRequestForEnforcement(ctx context.Context, ev *h
 }
 
 func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents.Event, text string, messageType message.Type, toolName string) *risk.ScanResult {
+	ctx, span := s.tracer.Start(ctx, "hooks.scanHookEventForEnforcement")
+	defer span.End()
+
 	if s.riskScanner == nil {
 		return nil
 	}
@@ -220,6 +223,9 @@ const warnMatchMaxLen = 120
 // warn (challenge) match, so the retried call should be allowed. Only meaningful
 // when scanResult.Action == "warn".
 func (s *Service) warnAcknowledged(ctx context.Context, ev hookevents.Event, scanResult *risk.ScanResult, toolName string) bool {
+	ctx, span := s.tracer.Start(ctx, "hooks.warnAcknowledged")
+	defer span.End()
+
 	if s.riskScanner == nil || scanResult == nil {
 		return false
 	}
@@ -244,7 +250,14 @@ func (s *Service) warnAcknowledged(ctx context.Context, ev hookevents.Event, sca
 // user id) — the caller MUST fall back to a plain block (fail-safe): a warn must
 // never silently allow.
 func (s *Service) warnDenyReason(ctx context.Context, ev hookevents.Event, scanResult *risk.ScanResult, toolName string) (agentReason, userReason string, ok bool) {
-	if s.siteURL == nil || s.cache == nil || ev.Context.User.ID == "" {
+	ctx, span := s.tracer.Start(ctx, "hooks.warnDenyReason")
+	defer span.End()
+
+	if s.cache == nil || ev.Context.User.ID == "" {
+		return "", "", false
+	}
+	siteURL := s.orgSiteURL(ctx, ev.Context.OrganizationID)
+	if siteURL == nil {
 		return "", "", false
 	}
 	// Record the challenge (log-safe fields only — never the matched value).
@@ -254,7 +267,7 @@ func (s *Service) warnDenyReason(ctx context.Context, ev hookevents.Event, scanR
 	if toolName != "" {
 		toolPtr = &toolName
 	}
-	ackURL, _, err := risk.GeneratePolicyAckURL(ctx, s.cache, s.siteURL, risk.PolicyAckTokenInput{
+	ackURL, _, err := risk.GeneratePolicyAckURL(ctx, s.cache, siteURL, risk.PolicyAckTokenInput{
 		OrganizationID: ev.Context.OrganizationID,
 		ProjectID:      ev.Context.ProjectID.String(),
 		UserID:         ev.Context.User.ID,

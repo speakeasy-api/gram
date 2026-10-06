@@ -3,6 +3,7 @@ package remotesessions_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,6 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -53,7 +56,10 @@ func TestRotateClientRejectsIneligibleIdentityProviderLoginReplacement(t *testin
 	issuerID, clientID := seedTrustedIdentityProviderClient(t, ctx, ti.conn, "rotate-trusted-client")
 	createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "rotate-trusted-usi", issuerID, clientID)
 
-	n, err := repo.New(ti.conn).ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx, repo.ForceRemoteSessionIssuerRegistrationEndpointFixtureParams{
+	fixtureAuth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	n, err := testrepo.New(ti.conn).ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerRegistrationEndpointFixtureParams{
+		OrganizationID:       conv.ToPGText(fixtureAuth.ActiveOrganizationID),
 		RegistrationEndpoint: conv.ToPGText(registration.URL + "/register"),
 		ClientID:             clientID,
 	})
@@ -96,6 +102,8 @@ func TestRotateClientSerializesIssuerConfigurationUpdate(t *testing.T) {
 		_, _ = w.Write([]byte(`{"client_id":"rotated-cid","client_secret":"rotated-secret","token_endpoint_auth_method":"client_secret_basic"}`))
 	}))
 	t.Cleanup(registration.Close)
+	release := sync.OnceFunc(func() { close(allowRegistration) })
+	t.Cleanup(release)
 
 	issuerID := createRemoteIssuer(t, ctx, ti, "rotate-issuer-snapshot", registration.URL+"/register")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "rotate-issuer-snapshot-usi")
@@ -118,10 +126,11 @@ func TestRotateClientSerializesIssuerConfigurationUpdate(t *testing.T) {
 		})
 		updateDone <- err
 	}()
-	require.Never(t, func() bool { return len(updateDone) > 0 }, 500*time.Millisecond, 25*time.Millisecond,
-		"issuer configuration update completed while rotation was using its endpoint snapshot")
+	holderPID, err := testrepo.New(ti.conn).GetAdvisoryLockHolderFixture(ctx, issuerID)
+	require.NoError(t, err)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, uint32(holderPID), 1)
 
-	close(allowRegistration)
+	release()
 	require.Eventually(t, func() bool { return len(rotationDone) > 0 }, 30*time.Second, 25*time.Millisecond)
 	require.NoError(t, <-rotationDone)
 	require.Eventually(t, func() bool { return len(updateDone) > 0 }, 30*time.Second, 25*time.Millisecond)
@@ -338,7 +347,10 @@ func TestUpdateClient_NewSecretClearsUpstreamRejection(t *testing.T) {
 
 	rejectedAt := time.Now().Add(-time.Hour)
 	expiredAt := time.Now().Add(-time.Minute)
-	n, err := repo.New(ti.conn).ForceRemoteSessionClientRegistrationFixture(ctx, repo.ForceRemoteSessionClientRegistrationFixtureParams{
+	fixtureAuth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	n, err := testrepo.New(ti.conn).ForceRemoteSessionClientRegistrationFixture(ctx, testrepo.ForceRemoteSessionClientRegistrationFixtureParams{
+		ProjectID: conv.ToNullUUID(*fixtureAuth.ProjectID), OrganizationID: conv.ToPGText(fixtureAuth.ActiveOrganizationID),
 		ClientSecretExpiresAt: conv.ToPGTimestamptz(expiredAt),
 		UpstreamRejectedAt:    conv.ToPGTimestamptz(rejectedAt),
 		ID:                    clientUUID,

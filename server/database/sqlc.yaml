@@ -101,7 +101,11 @@ sql:
         omit_unused_structs: false
 
   - schema: schema.sql
-    queries: ../internal/testenv/queries.sql
+    queries:
+      - ../internal/testenv/queries.sql
+      - ../internal/testenv/role_distribution_source_queries.sql
+      - ../internal/testenv/role_distribution_pipeline_queries.sql
+      - ../internal/testenv/role_deletion_queries.sql
     engine: postgresql
     gen:
       go:
@@ -160,12 +164,12 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
   - schema: schema.sql
-    queries: ../internal/explore/queries.sql
+    queries: ../internal/widgets/queries.sql
     engine: postgresql
     gen:
       go:
         package: "repo"
-        out: "../internal/explore/repo"
+        out: "../internal/widgets/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -276,6 +280,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/oktaresourceconnections/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/oktaserversuggestions/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/oktaserversuggestions/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -889,6 +903,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/adminmcp/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/adminmcp/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/platformmcp/queries.sql
     engine: postgresql
     gen:
@@ -935,5 +959,59 @@ sql:
       go:
         package: "repo"
         out: "../internal/workloadidentity/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/workloadpolicy/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/workloadpolicy/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/mcpregistry/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/mcpregistry/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema:
+      - schema.sql
+      - ../internal/localaccounts/schema.sql
+    queries: ../internal/localaccounts/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/localaccounts/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema:
+      - schema.sql
+      - ../internal/localaccounts/schema.sql
+    queries: ../internal/localaccounts/fixtures/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "fixturerepo"
+        out: "../internal/localaccounts/fixtures/fixturerepo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/slackdirectoryconnections/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/slackdirectoryconnections/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true

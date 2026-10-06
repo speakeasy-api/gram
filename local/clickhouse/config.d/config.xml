@@ -2,6 +2,12 @@
     <logger>
         <level>warning</level>
         <console>true</console>
+        <!-- Docker already captures console output, so the file loggers only duplicate it.
+             A transient write failure permanently poisons Poco's log file stream, after
+             which every message throws and recurses through the async channel, pinning
+             the container at 100% CPU until it is recreated. -->
+        <log remove="remove"/>
+        <errorlog remove="remove"/>
     </logger>
     <query_thread_log remove="remove"/>
     <query_log remove="remove"/>

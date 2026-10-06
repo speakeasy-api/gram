@@ -96,12 +96,20 @@ type CreateMutation struct {
 	Actor              Actor
 }
 
+// AudienceDelta changes only named exact evaluation grants. It must not be
+// combined with AudienceChanged (a complete audience replacement).
+type AudienceDelta struct {
+	Add    []urn.Principal
+	Remove []urn.Principal
+}
+
 // UpdateMutation is a fully validated, normalized policy update command.
 type UpdateMutation struct {
 	Current              repo.RiskPolicy
 	Params               repo.UpdateRiskPolicyParams
 	AudiencePrincipals   []urn.Principal
 	AudienceChanged      bool
+	AudienceDelta        *AudienceDelta
 	AllowedURLs          []string
 	AllowedURLsSet       bool
 	BlockedURLs          []string
@@ -196,6 +204,9 @@ func (c *Core) CreatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input C
 }
 
 func (c *Core) createPolicyInTransaction(ctx context.Context, tx pgx.Tx, input CreateMutation, deps *MutationDependencies) (MutationResult, error) {
+	if err := validateStoredMCPScope(input.Params.McpScope, input.Params.Sources, input.Params.Action); err != nil {
+		return MutationResult{}, err
+	}
 	if err := shadowadmission.LockProject(ctx, tx, input.Params.ProjectID); err != nil {
 		return MutationResult{}, mutationError("lock shadow mcp admission project", err)
 	}
@@ -314,6 +325,9 @@ func (c *Core) UpdatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 }
 
 func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input UpdateMutation, deps *MutationDependencies) (MutationResult, error) {
+	if err := validateStoredMCPScope(input.Params.McpScope, input.Params.Sources, input.Params.Action); err != nil {
+		return MutationResult{}, err
+	}
 	if err := shadowadmission.LockProject(ctx, tx, input.Params.ProjectID); err != nil {
 		return MutationResult{}, mutationError("lock shadow mcp admission project", err)
 	}
@@ -339,6 +353,21 @@ func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 		}
 	}
 
+	if input.AudienceDelta != nil {
+		if input.AudienceChanged {
+			return MutationResult{}, mutationError("cannot combine audience replacement and delta", nil)
+		}
+		// Existing exact grants are locked against generic deletes/updates too.
+		// Do not lock the whole table or replace a snapshot: concurrent inserts
+		// by generic grant writers must survive this incremental mutation.
+		selector, err := authz.NewSelector(authz.ScopeRiskPolicyEvaluate, locked.ID.String()).MarshalJSON()
+		if err != nil {
+			return MutationResult{}, mutationError("encode audience selector", err)
+		}
+		if _, err := tx.Exec(ctx, `SELECT id FROM principal_grants WHERE organization_id = $1 AND scope = $2 AND selectors = $3 ORDER BY id FOR UPDATE`, locked.OrganizationID, string(authz.ScopeRiskPolicyEvaluate), selector); err != nil {
+			return MutationResult{}, mutationError("lock exact audience grants", err)
+		}
+	}
 	currentAudience, err := audiencePrincipalURNs(ctx, tx, locked.OrganizationID, locked.ID.String())
 	if err != nil {
 		return MutationResult{}, mutationError("load risk policy audience snapshot", err)
@@ -364,6 +393,30 @@ func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 	if input.AudienceChanged {
 		if err := replaceAudience(ctx, tx, row.OrganizationID, row.ID.String(), input.AudiencePrincipals); err != nil {
 			return MutationResult{}, mutationError("sync risk policy audience", err)
+		}
+	}
+
+	if input.AudienceDelta != nil {
+		grant := authz.ResourceGrant{Principals: nil, Resource: authz.Resource{OrganizationID: row.OrganizationID, Scope: authz.ScopeRiskPolicyEvaluate, ResourceID: row.ID.String()}, Selector: authz.NewSelector(authz.ScopeRiskPolicyEvaluate, row.ID.String())}
+		if len(input.AudienceDelta.Remove) > 0 {
+			grant.Principals = input.AudienceDelta.Remove
+			if err := authz.RevokeResourceFromPrincipals(ctx, tx, grant); err != nil {
+				return MutationResult{}, mutationError("remove exact audience grants", err)
+			}
+		}
+		if len(input.AudienceDelta.Add) > 0 {
+			grant.Principals = input.AudienceDelta.Add
+			if err := authz.GrantResourceToPrincipals(ctx, tx, grant); err != nil {
+				return MutationResult{}, mutationError("add exact audience grants", err)
+			}
+		}
+		audience, err := audiencePrincipalURNs(ctx, tx, row.OrganizationID, row.ID.String())
+		if err != nil {
+			return MutationResult{}, mutationError("read changed audience", err)
+		}
+		effectiveAudience, err = parsePrincipalURNs(audience)
+		if err != nil {
+			return MutationResult{}, mutationError("parse changed audience", err)
 		}
 	}
 
@@ -534,4 +587,13 @@ func optionalURLs(urls []string, set bool) []string {
 
 func mutationError(message string, cause error) error {
 	return &MutationError{Message: message, Cause: cause}
+}
+
+// validateStoredMCPScope guards callers that change constrained fields while
+// keeping a stored scope.
+func validateStoredMCPScope(rawScope []byte, sources []string, action string) error {
+	if err := ValidateMCPScope(unmarshalMCPScope(rawScope), sources, action); err != nil {
+		return &ValidationError{Message: err.Error(), Cause: err}
+	}
+	return nil
 }

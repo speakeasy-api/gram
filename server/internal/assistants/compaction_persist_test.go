@@ -2,6 +2,7 @@ package assistants
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -123,6 +124,9 @@ func TestRecordCompactedGenerationWritesNewGeneration(t *testing.T) {
 
 	outboxRows, err := testrepo.New(conn).ListPublishOutboxRows(ctx)
 	require.NoError(t, err)
+	outboxRows = slices.DeleteFunc(outboxRows, func(row testrepo.ListPublishOutboxRowsRow) bool {
+		return row.Topic != string(proto.MessageName(&meteringv1.MeterReading{}))
+	})
 	require.Len(t, outboxRows, len(compacted))
 	for _, row := range outboxRows {
 		reading := &meteringv1.MeterReading{}

@@ -52,6 +52,20 @@ WHERE id = @id
   AND (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id = @organization_id::text))
   AND deleted IS FALSE;
 
+-- name: GetSharedUserSessionIssuerByID :one
+-- Loads an issuer by id alone for its shared authorization server, served at
+-- <origin>/oauth/usi/{id}. That URL carries no project or organization, so
+-- the id is the only scope available; callers must confirm the issuer is in
+-- 'shared' mode before serving anything for it. The organization is resolved
+-- through the owning project for project-level issuers.
+SELECT
+    sqlc.embed(issuer),
+    COALESCE(issuer.organization_id, project.organization_id)::text AS resolved_organization_id
+FROM user_session_issuers AS issuer
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE issuer.id = @id
+  AND issuer.deleted IS FALSE;
+
 -- name: GetProjectUserSessionIssuerByID :one
 SELECT *
 FROM user_session_issuers
@@ -882,6 +896,7 @@ RETURNING issuer.*;
 --
 -- This endpoint only mutates project-owned issuers. Organization-owned rows
 -- have a separate org-admin API and cannot be deleted with project:write.
+WITH deleted_parent AS (
 UPDATE user_session_issuers AS issuer
 SET deleted_at = clock_timestamp()
 WHERE issuer.id = @id
@@ -910,7 +925,14 @@ WHERE issuer.id = @id
       AND meta_mcp_server.user_session_issuer_id = issuer.id
       AND meta_mcp_server.deleted IS FALSE
   )
-RETURNING issuer.*;
+RETURNING issuer.*
+), tombstones AS (
+ DELETE FROM remote_session_ema_bindings b USING deleted_parent p
+ WHERE b.user_session_issuer_id = p.id AND b.state = 'unlinked'
+ AND (p.project_id IS NULL OR b.project_id = p.project_id)
+ AND (p.project_id IS NOT NULL OR p.organization_id IS NULL OR b.organization_id = p.organization_id)
+)
+SELECT * FROM deleted_parent;
 
 -- name: UserSessionIssuerHasActiveOwner :one
 -- An issuer can be referenced by an MCP server, toolset, or meta MCP server.
@@ -1004,6 +1026,7 @@ WHERE issuer.id = @user_session_issuer_id
   AND session.refresh_expires_at > now();
 
 -- name: DeleteOrganizationUserSessionIssuer :one
+WITH deleted_parent AS (
 UPDATE user_session_issuers AS issuer
 SET deleted_at = clock_timestamp()
 WHERE issuer.id = @id
@@ -1029,7 +1052,14 @@ WHERE issuer.id = @id
       AND project.deleted IS FALSE
       AND project.organization_id = issuer.organization_id
   )
-RETURNING issuer.*;
+RETURNING issuer.*
+), tombstones AS (
+ DELETE FROM remote_session_ema_bindings b USING deleted_parent p
+ WHERE b.user_session_issuer_id = p.id AND b.state = 'unlinked'
+ AND (p.project_id IS NULL OR b.project_id = p.project_id)
+ AND (p.project_id IS NOT NULL OR p.organization_id IS NULL OR b.organization_id = p.organization_id)
+)
+SELECT * FROM deleted_parent;
 
 -- name: SoftDeleteUserSessionsByIssuerID :many
 -- Cascading soft-delete of user_sessions for an issuer being soft-deleted.
@@ -1328,6 +1358,12 @@ SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, 
        s.created_at, s.updated_at, s.deleted_at, s.deleted,
        iss.slug AS issuer_slug,
        c.client_name AS client_name,
+       -- A dashboard mint stores no user_session_clients row. The refresh-token
+       -- sentinel (sessiontokens.DashboardMintRefreshTokenHashPrefix) is the
+       -- only mark, and the view turns it into FirstPartyClientName. Real
+       -- refresh hashes are base64url and cannot contain ':', so the prefix
+       -- cannot match one of those.
+       COALESCE(s.refresh_token_hash LIKE 'dashboard-mint:%', false)::boolean AS dashboard_mint,
        c.client_id_metadata_uri AS client_id_metadata_uri,
        c.token_endpoint_auth_method AS client_token_endpoint_auth_method,
        -- Whether the client stores a secret, never the hash itself: the
@@ -1743,7 +1779,8 @@ INSERT INTO user_sessions (
     refresh_token_hash,
     refresh_expires_at,
     expires_at,
-    tool_selection
+    tool_selection,
+    resource
 )
 SELECT
     issuer.project_id,
@@ -1758,7 +1795,8 @@ SELECT
     @refresh_token_hash,
     @refresh_expires_at,
     @expires_at,
-    @tool_selection
+    @tool_selection,
+    sqlc.narg('resource')
 FROM issuer
 RETURNING *;
 

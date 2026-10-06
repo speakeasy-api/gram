@@ -16,7 +16,7 @@ import { STEP_AFFORDANCES } from "./checklistAffordances";
 import { ConnectionChecklist } from "./ConnectionChecklist";
 import { ConnectionSetupProgress } from "./ConnectionSetupProgress";
 import { ConnectionFacts, ConnectionScopes } from "./OktaConnectionDetails";
-import { ClientIdStep, CreateConnectionForm } from "./OktaConnectionForms";
+import { CreateConnectionForm } from "./OktaConnectionForms";
 import { RevokeConnectionButton } from "./RevokeConnectionButton";
 import {
   CONNECTION_STATUS,
@@ -34,7 +34,6 @@ import {
 } from "../../identityProviderQueries";
 import {
   CHECKLIST_SECTION_ID,
-  CLIENT_ID_SECTION_ID,
   CONNECTION_SECTION_ID,
   scrollToConnectionCard,
 } from "../../tabs";
@@ -171,16 +170,11 @@ function ConnectionCard({
           {step === "submit_client_id" && (
             <NextStepCallout
               title="Next: set up your Okta app"
-              body="Follow the Okta setup checklist, then paste the app's client ID to verify access."
+              body="Follow the Connect steps above. The last step takes the app's client ID and verifies access."
             >
-              <div className="flex flex-wrap gap-3">
-                <a className={SECTION_LINK} href={`#${CHECKLIST_SECTION_ID}`}>
-                  Open setup checklist
-                </a>
-                <a className={SECTION_LINK} href={`#${CLIENT_ID_SECTION_ID}`}>
-                  Enter client ID
-                </a>
-              </div>
+              <a className={SECTION_LINK} href={`#${CHECKLIST_SECTION_ID}`}>
+                Go to Connect steps
+              </a>
             </NextStepCallout>
           )}
           {(step === "verify" || step === "repair") && (
@@ -240,19 +234,12 @@ function ChecklistSection({
 }): JSX.Element {
   return (
     <SettingsSection id={CHECKLIST_SECTION_ID}>
-      <SettingsSection.Header>
-        <SettingsSection.Title>Okta setup checklist</SettingsSection.Title>
-        <SettingsSection.Description>
-          Follow these steps in the Okta Admin Console. Speakeasy marks steps
-          complete when it has evidence from the connection check. Review any
-          steps marked Not checked yourself.
-        </SettingsSection.Description>
-      </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
           <ConnectionChecklist
             connection={connection}
             affordances={STEP_AFFORDANCES}
+            groups={["connect"]}
           />
         </SettingsSection.Body>
       </SettingsSection.Panel>
@@ -273,9 +260,6 @@ export function OktaConnectionTab({
     <div className="flex flex-col gap-10">
       <ConnectionSetupProgress connection={connection} />
       <ChecklistSection connection={connection} />
-      {connectionStep(connection) === "submit_client_id" && (
-        <ClientIdStep connection={connection} />
-      )}
       <ConnectionCard connection={connection} />
     </div>
   );

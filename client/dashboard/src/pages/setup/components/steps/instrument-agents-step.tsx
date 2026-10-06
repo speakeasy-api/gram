@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Terminal } from "lucide-react";
 import {
   DeviceAgentInstallStep,
   DeviceAgentOsPicker,
@@ -25,11 +24,6 @@ export function InstrumentAgentsStep({
 
   return (
     <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <Terminal className="text-foreground h-6 w-6" />
-        </div>
-      }
       title="Set up observability in other platforms"
       description="Turn logging on, publish your plugin marketplace, install the Speakeasy device agent, and confirm events arrive. The agent enforces the observability plugin and MCP configuration across Cursor, Codex, and the other coding assistants on each machine. Claude Code and Claude Cowork are covered under Set up Anthropic observability."
       onContinue={onComplete}

@@ -1,4 +1,7 @@
 import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
+import { useProject } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { Badge } from "@/components/ui/Badge";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -30,6 +33,11 @@ import { TriggerInstance } from "@gram/client/models/components/triggerinstance.
 import { TriggerDefinition } from "@gram/client/models/components/triggerdefinition.js";
 import { CreateTriggerInstanceFormTargetKind as TargetKind } from "@gram/client/models/components/createtriggerinstanceform.js";
 import { useRoutes } from "@/routes";
+import { SlackReplyModeOptions } from "@/pages/assistants/onboarding/SlackReplyModeOptions";
+import {
+  SLACK_CONVERSATION_EVENT_TYPES,
+  isSlackReplyMode,
+} from "@/pages/assistants/onboarding/slackCapabilities";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
@@ -133,7 +141,13 @@ function WebhookUrlPill({ url }: { url: string }) {
   );
 }
 
-function TriggersEmptyState({ onCreate }: { onCreate: () => void }) {
+function TriggersEmptyState({
+  onCreate,
+  projectId,
+}: {
+  onCreate: () => void;
+  projectId: string;
+}) {
   return (
     <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
@@ -146,12 +160,19 @@ function TriggersEmptyState({ onCreate }: { onCreate: () => void }) {
         Triggers let you connect external events to your assistants. Set up a
         cron schedule or a webhook to get started.
       </Text>
-      <Button onClick={onCreate}>
-        <Button.LeftIcon>
-          <Icon name="plus" className="h-4 w-4" />
-        </Button.LeftIcon>
-        <Button.Text>Create Trigger</Button.Text>
-      </Button>
+      <RequireScope
+        scope="project:write"
+        resourceId={projectId}
+        level="component"
+        reason="You don't have permission to create triggers."
+      >
+        <Button onClick={onCreate}>
+          <Button.LeftIcon>
+            <Icon name="plus" className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Create Trigger</Button.Text>
+        </Button>
+      </RequireScope>
     </div>
   );
 }
@@ -167,7 +188,7 @@ function TriggersTable({
 }: {
   triggers: TriggerInstance[];
   definitions: TriggerDefinition[];
-  onEdit: (trigger: TriggerInstance) => void;
+  onEdit?: (trigger: TriggerInstance) => void;
 }) {
   const routes = useRoutes();
   const defMap = new Map(definitions.map((d) => [d.slug, d]));
@@ -334,6 +355,75 @@ function ConfigField({
   );
 }
 
+const SLACK_REPLY_MODE_FIELD = "routing";
+
+// The reply mode decides messages and mentions, so they leave the extra event
+// types once one is picked.
+function withoutConversationEventTypes(eventTypes: unknown): string[] {
+  if (!Array.isArray(eventTypes)) return [];
+  return eventTypes.filter(
+    (t): t is string =>
+      typeof t === "string" && !SLACK_CONVERSATION_EVENT_TYPES.includes(t),
+  );
+}
+
+// Once a reply mode is set it decides messages and mentions, so the extra
+// event types stop offering them.
+function withoutConversationEventOptions(
+  properties: Record<string, TriggerConfigSchemaProperty>,
+  config: TriggerConfig,
+): Record<string, TriggerConfigSchemaProperty> {
+  const eventTypes = properties.event_types;
+  if (!isSlackReplyMode(config[SLACK_REPLY_MODE_FIELD]) || !eventTypes?.items) {
+    return properties;
+  }
+  return {
+    ...properties,
+    event_types: {
+      ...eventTypes,
+      items: {
+        ...eventTypes.items,
+        enum: eventTypes.items.enum?.filter(
+          (t) => !SLACK_CONVERSATION_EVENT_TYPES.includes(t),
+        ),
+      },
+    },
+  };
+}
+
+function SlackReplyModeField({
+  config,
+  onChange,
+}: {
+  config: TriggerConfig;
+  onChange: (config: TriggerConfig) => void;
+}) {
+  const current = config[SLACK_REPLY_MODE_FIELD];
+  return (
+    <div>
+      <Text variant="body" className="mb-1 font-medium">
+        When should it reply?
+      </Text>
+      {!isSlackReplyMode(current) && (
+        <Text small muted className="mb-2">
+          Not set: the event types below decide which messages wake it up.
+        </Text>
+      )}
+      <SlackReplyModeOptions
+        idPrefix="trigger-slack-reply"
+        value={isSlackReplyMode(current) ? current : undefined}
+        onChange={(mode) =>
+          onChange({
+            ...config,
+            [SLACK_REPLY_MODE_FIELD]: mode,
+            event_types: withoutConversationEventTypes(config.event_types),
+          })
+        }
+      />
+    </div>
+  );
+}
+
 function TriggerConfigFields({
   definition,
   config,
@@ -354,7 +444,15 @@ function TriggerConfigFields({
     );
   }
 
-  const properties = schema.properties ?? {};
+  // The Slack reply mode gets its own plain-language picker instead of the
+  // generic field rendering.
+  const { [SLACK_REPLY_MODE_FIELD]: slackReplyModeProp, ...otherProperties } =
+    schema.properties ?? {};
+  const showSlackReplyMode =
+    definition.slug === "slack" && slackReplyModeProp !== undefined;
+  const properties = showSlackReplyMode
+    ? withoutConversationEventOptions(otherProperties, config)
+    : (schema.properties ?? {});
   const required: string[] = schema.required ?? [];
 
   const requiredEntries = Object.entries(properties).filter(([key]) =>
@@ -366,6 +464,9 @@ function TriggerConfigFields({
 
   return (
     <Stack gap={3}>
+      {showSlackReplyMode && (
+        <SlackReplyModeField config={config} onChange={onChange} />
+      )}
       {requiredEntries.map(([key, prop]) => (
         <ConfigField
           key={key}
@@ -798,6 +899,9 @@ function TriggerDialog({
  * and embedded as a tab on the Assistants page.
  */
 export function TriggersPanel(): JSX.Element {
+  const project = useProject();
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("project:write", project.id);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState<TriggerInstance | null>(
     null,
@@ -838,12 +942,19 @@ export function TriggersPanel(): JSX.Element {
         </Page.Section.Description>
         <Page.Section.CTA>
           {triggers.length > 0 && (
-            <Button onClick={openCreate}>
-              <Button.LeftIcon>
-                <Icon name="plus" className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Create Trigger</Button.Text>
-            </Button>
+            <RequireScope
+              scope="project:write"
+              resourceId={project.id}
+              level="component"
+              reason="You don't have permission to create triggers."
+            >
+              <Button onClick={openCreate}>
+                <Button.LeftIcon>
+                  <Icon name="plus" className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Create Trigger</Button.Text>
+              </Button>
+            </RequireScope>
           )}
         </Page.Section.CTA>
         <Page.Section.Body>
@@ -855,37 +966,42 @@ export function TriggersPanel(): JSX.Element {
               />
             </Stack>
           ) : triggers.length === 0 ? (
-            <TriggersEmptyState onCreate={openCreate} />
+            <TriggersEmptyState onCreate={openCreate} projectId={project.id} />
           ) : (
             <TriggersTable
               triggers={triggers}
               definitions={definitions}
-              onEdit={openEdit}
+              onEdit={canWrite ? openEdit : undefined}
             />
           )}
         </Page.Section.Body>
       </Page.Section>
 
-      <TriggerDialog
-        open={dialogOpen}
-        onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) setEditingTrigger(null);
-        }}
-        editingTrigger={editingTrigger}
-      />
+      {canWrite && (
+        <TriggerDialog
+          open={dialogOpen}
+          onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) setEditingTrigger(null);
+          }}
+          editingTrigger={editingTrigger}
+        />
+      )}
     </>
   );
 }
 
 export default function TriggersIndex(): JSX.Element {
+  const project = useProject();
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <TriggersPanel />
+        <RequireScope scope="project:read" resourceId={project.id} level="page">
+          <TriggersPanel />
+        </RequireScope>
       </Page.Body>
     </Page>
   );

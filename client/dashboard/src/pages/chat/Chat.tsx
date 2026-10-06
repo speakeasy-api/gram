@@ -66,6 +66,8 @@ import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
 import { FALLBACK_TITLE } from "@/elements/components/activeChatTitle.helpers";
 import { useRoutes } from "@/routes";
+import { RequireScope } from "@/components/require-scope";
+import { useProject } from "@/contexts/Auth";
 
 // Shared square icon button used by the page chrome (back affordances).
 // bg-card so the button stays a solid chip when it sits on the brand mesh;
@@ -75,9 +77,14 @@ const ICON_BUTTON_CLASS =
 
 /** Layout route for `/chat`; renders the index (home) or a conversation. */
 export function ChatRoot(): ReactElement {
+  const project = useProject();
   // The page IS the chat, so hide the floating dock across the /chat subtree.
   useHideInsightsDock();
-  return <Outlet />;
+  return (
+    <RequireScope scope="assistant:read" projectId={project.id} level="page">
+      <Outlet />
+    </RequireScope>
+  );
 }
 
 /**
@@ -92,7 +99,12 @@ export function ChatHome(): ReactElement {
     // grain. Scrolling lives on an inner wrapper so the mesh (and the back
     // affordance) stay pinned to the viewport instead of scrolling away with
     // the content.
-    <div className={cn(BRAND_MESH_SURFACE_CLASS, "flex h-full flex-col")}>
+    <div
+      className={cn(
+        BRAND_MESH_SURFACE_CLASS,
+        "flex h-[calc(100vh-var(--banner-offset,0px))] flex-col",
+      )}
+    >
       <BrandMeshLayers />
       {/* Header row on the same --header-height grid as Page.Header, but with
           no rule below it — the mesh surface should read unbroken here. */}

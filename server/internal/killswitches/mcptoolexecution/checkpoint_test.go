@@ -47,12 +47,12 @@ func TestCheckpointEvaluatesEveryCoveredCallWithRealEvaluator(t *testing.T) {
 	require.NoError(t, err)
 
 	userID := "user_" + uuid.NewString()
-	insertUser(t, conn, userID, nil)
-	insertMembership(t, conn, orgID, userID, nil)
-	projectA := insertProject(t, conn, orgID, "checkpoint-a", nil)
-	projectB := insertProject(t, conn, orgID, "checkpoint-b", nil)
-	serverA := insertMCPServer(t, conn, orgID, projectA, nil)
-	serverB := insertMCPServer(t, conn, orgID, projectB, nil)
+	insertUser(t, conn, userID, false)
+	insertMembership(t, conn, orgID, userID, false)
+	projectA := insertProject(t, conn, orgID, "checkpoint-a", false)
+	projectB := insertProject(t, conn, orgID, "checkpoint-b", false)
+	serverA := insertMCPServer(t, conn, orgID, projectA, false)
+	serverB := insertMCPServer(t, conn, orgID, projectB, false)
 	ctx := testIdentityContext(t, mcpidentity.KindUserSession, userID)
 
 	evaluate := func(serverID uuid.UUID) killswitches.TransportDisposition {
@@ -115,8 +115,8 @@ func TestCheckpointPreservesUnsupportedIdentityAndFailsClosedOnCoverageFailure(t
 	checkpoint, err := newCheckpoint(registry, evaluation, time.Second)
 	require.NoError(t, err)
 
-	projectID := insertProject(t, conn, orgID, "unsupported-identity", nil)
-	serverID := insertMCPServer(t, conn, orgID, projectID, nil)
+	projectID := insertProject(t, conn, orgID, "unsupported-identity", false)
+	serverID := insertMCPServer(t, conn, orgID, projectID, false)
 
 	// API-key provenance is deliberately unsupported and never becomes a
 	// concrete user when the covered route has its canonical resource.
@@ -146,8 +146,8 @@ func TestCheckpointPreservesUnsupportedIdentityAndFailsClosedOnCoverageFailure(t
 	require.Zero(t, evaluation.calls)
 
 	userID := "user_" + uuid.NewString()
-	insertUser(t, conn, userID, nil)
-	insertMembership(t, conn, orgID, userID, nil)
+	insertUser(t, conn, userID, false)
+	insertMembership(t, conn, orgID, userID, false)
 	userCtx := testIdentityContext(t, mcpidentity.KindUserSession, userID)
 	disposition, err = checkpoint.Evaluate(userCtx, orgID, "")
 	require.Error(t, err)
@@ -156,8 +156,8 @@ func TestCheckpointPreservesUnsupportedIdentityAndFailsClosedOnCoverageFailure(t
 
 	otherOrgID := "org_" + uuid.NewString()
 	insertOrganization(t, conn, otherOrgID)
-	otherProject := insertProject(t, conn, otherOrgID, "other-org", nil)
-	otherServer := insertMCPServer(t, conn, otherOrgID, otherProject, nil)
+	otherProject := insertProject(t, conn, otherOrgID, "other-org", false)
+	otherServer := insertMCPServer(t, conn, otherOrgID, otherProject, false)
 	disposition, err = checkpoint.Evaluate(userCtx, orgID, otherServer.String())
 	require.Error(t, err)
 	require.Equal(t, killswitches.TransportDispositionInfrastructureRejection, disposition.Kind())
@@ -231,10 +231,10 @@ func TestCheckpointReturnsEvaluatorInfrastructureFailureWithoutMatch(t *testing.
 	require.NoError(t, err)
 
 	userID := "user_" + uuid.NewString()
-	insertUser(t, conn, userID, nil)
-	insertMembership(t, conn, orgID, userID, nil)
-	projectID := insertProject(t, conn, orgID, "evaluator-failure", nil)
-	serverID := insertMCPServer(t, conn, orgID, projectID, nil)
+	insertUser(t, conn, userID, false)
+	insertMembership(t, conn, orgID, userID, false)
+	projectID := insertProject(t, conn, orgID, "evaluator-failure", false)
+	serverID := insertMCPServer(t, conn, orgID, projectID, false)
 	ctx := testIdentityContext(t, mcpidentity.KindUserSession, userID)
 
 	disposition, err := checkpoint.Evaluate(ctx, orgID, serverID.String())

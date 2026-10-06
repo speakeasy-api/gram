@@ -18,6 +18,10 @@ const (
 	sessionQuarantineReassertWorkflowID = "v1:session-quarantine-reassert"
 	sessionQuarantineReassertScheduleID = "v1:session-quarantine-reassert-schedule"
 	sessionQuarantineReassertInterval   = 30 * time.Second
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	sessionQuarantineReassertCatchupWindow = sessionQuarantineReassertInterval - time.Second
+
 	// The activity pages through the durable active set. Two minutes gives each
 	// attempt enough time for large tenants; the workflow budget covers all
 	// three attempts plus retry backoff and queueing slack.
@@ -56,13 +60,7 @@ func AddSessionQuarantineReassertSchedule(ctx context.Context, temporalEnv *tenv
 			schedule := input.Description.Schedule
 			schedule.Spec = &options.Spec
 			schedule.Action = options.Action
-			if schedule.Policy == nil {
-				schedule.Policy = &client.SchedulePolicies{
-					Overlap:        enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-					CatchupWindow:  0,
-					PauseOnFailure: false,
-				}
-			}
+			setScheduleCatchup(&schedule, sessionQuarantineReassertCatchupWindow)
 			return &client.ScheduleUpdate{Schedule: &schedule, TypedSearchAttributes: nil}, nil
 		},
 	}); err != nil {
@@ -73,8 +71,9 @@ func AddSessionQuarantineReassertSchedule(ctx context.Context, temporalEnv *tenv
 
 func buildSessionQuarantineReassertScheduleOptions(temporalEnv *tenv.Environment) client.ScheduleOptions {
 	return client.ScheduleOptions{
-		ID:      sessionQuarantineReassertScheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		CatchupWindow: sessionQuarantineReassertCatchupWindow,
+		ID:            sessionQuarantineReassertScheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{{Every: sessionQuarantineReassertInterval}},
 		},

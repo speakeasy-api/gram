@@ -1874,6 +1874,48 @@ func (q *Queries) ListAssistants(ctx context.Context, projectID uuid.UUID) ([]Li
 	return items, nil
 }
 
+const listAttachmentTargetIDs = `-- name: ListAttachmentTargetIDs :many
+SELECT t.id
+FROM toolsets t
+WHERE t.project_id = $1
+  AND t.slug = ANY($2::TEXT[])
+  AND t.deleted IS FALSE
+UNION ALL
+SELECT ms.id
+FROM mcp_servers ms
+WHERE ms.project_id = $1
+  AND ms.slug = ANY($3::TEXT[])
+  AND ms.deleted IS FALSE
+`
+
+type ListAttachmentTargetIDsParams struct {
+	ProjectID      uuid.UUID
+	ToolsetSlugs   []string
+	McpServerSlugs []string
+}
+
+// Resolves the toolsets and MCP servers a write would attach so the handler
+// can authorize them first. Read-only: the write locks them itself.
+func (q *Queries) ListAttachmentTargetIDs(ctx context.Context, arg ListAttachmentTargetIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listAttachmentTargetIDs, arg.ProjectID, arg.ToolsetSlugs, arg.McpServerSlugs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatAttachmentAssets = `-- name: ListChatAttachmentAssets :many
 SELECT id, name, url, content_type, content_length
 FROM assets
@@ -3458,6 +3500,40 @@ type ResolveThreadCorrelationRow struct {
 func (q *Queries) ResolveThreadCorrelation(ctx context.Context, arg ResolveThreadCorrelationParams) (ResolveThreadCorrelationRow, error) {
 	row := q.db.QueryRow(ctx, resolveThreadCorrelation, arg.ThreadID, arg.ProjectID)
 	var i ResolveThreadCorrelationRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.AssistantID,
+		&i.CorrelationID,
+	)
+	return i, err
+}
+
+const resolveThreadCorrelationByChat = `-- name: ResolveThreadCorrelationByChat :one
+SELECT id, project_id, assistant_id, correlation_id
+FROM assistant_threads
+WHERE chat_id = $1
+  AND assistant_id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+`
+
+type ResolveThreadCorrelationByChatParams struct {
+	ChatID      uuid.UUID
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type ResolveThreadCorrelationByChatRow struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	AssistantID   uuid.UUID
+	CorrelationID string
+}
+
+func (q *Queries) ResolveThreadCorrelationByChat(ctx context.Context, arg ResolveThreadCorrelationByChatParams) (ResolveThreadCorrelationByChatRow, error) {
+	row := q.db.QueryRow(ctx, resolveThreadCorrelationByChat, arg.ChatID, arg.AssistantID, arg.ProjectID)
+	var i ResolveThreadCorrelationByChatRow
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,

@@ -5,13 +5,17 @@ import { AuthenticationSectionBody } from "./AuthenticationSection";
 import type { AuthTarget } from "./authTarget";
 
 const {
-  useProtectedResourceMetadata,
+  attachSheet,
+  remoteIdentitySection,
   useAllRemoteSessionClients,
+  useRemoteSessionIssuersByIds,
   useUserSessionIssuer,
   useEffectiveUserSessionIssuers,
 } = vi.hoisted(() => ({
-  useProtectedResourceMetadata: vi.fn(),
+  attachSheet: vi.fn(),
+  remoteIdentitySection: vi.fn(),
   useAllRemoteSessionClients: vi.fn(),
+  useRemoteSessionIssuersByIds: vi.fn(),
   useUserSessionIssuer: vi.fn(),
   useEffectiveUserSessionIssuers: vi.fn(),
 }));
@@ -42,61 +46,59 @@ vi.mock("./authTarget", () => ({
   useMcpServerAuthTarget: vi.fn(),
 }));
 
-vi.mock("./useAllRemoteSessionClients", () => ({
+vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
   useAllRemoteSessionClients: (...args: unknown[]) =>
     useAllRemoteSessionClients(...args),
 }));
 
-vi.mock("./useProtectedResourceMetadata", () => ({
-  useProtectedResourceMetadata: (...args: unknown[]) =>
-    useProtectedResourceMetadata(...args),
+vi.mock("@/lib/remote-identity/queries/useRemoteSessionIssuersByIds", () => ({
+  useRemoteSessionIssuersByIds: (...args: unknown[]) =>
+    useRemoteSessionIssuersByIds(...args),
 }));
 
 vi.mock("./AttachRemoteIdentityProviderSheet", () => ({
-  AttachRemoteIdentityProviderSheet: ({
-    open,
-    initialIssuerUrl,
-    initialScopes,
-  }: {
-    open: boolean;
-    initialIssuerUrl?: string;
-    initialScopes?: string[];
-  }) =>
-    open ? (
-      <output>
-        {initialIssuerUrl}|{initialScopes?.join(" ")}
-      </output>
-    ) : null,
+  AttachRemoteIdentityProviderSheet: (props: { open: boolean }) => {
+    attachSheet(props);
+    return props.open ? <output>Attach identity provider</output> : null;
+  },
+}));
+
+vi.mock("./RemoteMcpIdentitySection", () => ({
+  RemoteMcpIdentitySectionBody: ({ target }: { target: AuthTarget }) => {
+    remoteIdentitySection(target);
+    return <output>Remote MCP identity</output>;
+  },
 }));
 
 vi.mock("./RemoteIdentityProvidersField", () => ({
   RemoteIdentityProvidersField: ({
+    associatedIssuers,
+    isError,
     onAdd,
     readOnly,
   }: {
+    associatedIssuers: Array<{ id: string }>;
+    isError?: boolean;
     onAdd: () => void;
     readOnly?: boolean;
   }) => (
     <>
       <button onClick={onAdd}>Add provider</button>
       <output>providers-{readOnly ? "read-only" : "editable"}</output>
+      <output>
+        attached-{associatedIssuers.map(({ id }) => id).join(",")}
+      </output>
+      {isError && <output>attached-error</output>}
     </>
   ),
 }));
 
 vi.mock("./AuthenticationSetupActions", () => ({
   AuthenticationSetupActions: ({
-    onUseDiscovered,
     additionalAction,
   }: {
-    onUseDiscovered: () => void;
     additionalAction?: ReactNode;
-  }) => (
-    <>
-      <button onClick={onUseDiscovered}>Use Discovered</button>
-      {additionalAction}
-    </>
-  ),
+  }) => <>{additionalAction}</>,
 }));
 
 vi.mock("./DeleteRemoteIdentityProviderDialog", () => ({
@@ -142,6 +144,11 @@ vi.mock("./CimdCustomClientsField", () => ({
 }));
 
 beforeEach(() => {
+  useRemoteSessionIssuersByIds.mockImplementation((ids: string[]) => ({
+    items: ids.map((id) => ({ id })),
+    isLoading: false,
+    isError: false,
+  }));
   useEffectiveUserSessionIssuers.mockReturnValue({
     issuers: [],
     organizationIssuers: [],
@@ -164,70 +171,13 @@ afterEach(() => {
 });
 
 describe("AuthenticationSectionBody", () => {
-  it("preserves scopes when a remote server has a session issuer but no upstream client", () => {
-    useAllRemoteSessionClients.mockReturnValue({
-      items: [],
-      isLoading: false,
-    });
-    useProtectedResourceMetadata.mockReturnValue({
-      status: "available",
-      metadata: {
-        authorizationServers: ["https://auth.example.com"],
-        scopesSupported: ["resource.read", "resource.write"],
-      },
-    });
+  it("isolates Remote MCP from the standard attach orchestration", () => {
+    render(<AuthenticationSectionBody target={remoteMcpTarget} />);
 
-    render(
-      <AuthenticationSectionBody target={remoteTargetWithSessionIssuer} />,
-    );
-
-    expect(useEffectiveUserSessionIssuers).toHaveBeenCalledWith({
-      mcpResourceId: "mcp-server-1",
-    });
-    expect(useProtectedResourceMetadata).toHaveBeenCalledWith(
-      "remote-mcp-server",
-      true,
-    );
-
-    fireEvent.click(screen.getByText("Add provider"));
-
-    expect(
-      screen.getByText("https://auth.example.com|resource.read resource.write"),
-    ).toBeDefined();
-  });
-
-  it("preserves scopes during first-time setup without a session issuer", () => {
-    useUserSessionIssuer.mockReturnValue({
-      data: null,
-      isLoading: false,
-      isError: false,
-    });
-    useAllRemoteSessionClients.mockReturnValue({
-      items: [],
-      isLoading: false,
-    });
-    useProtectedResourceMetadata.mockReturnValue({
-      status: "available",
-      metadata: {
-        authorizationServers: ["https://auth.example.com"],
-        scopesSupported: ["resource.read", "resource.write"],
-      },
-    });
-
-    render(
-      <AuthenticationSectionBody target={remoteTargetWithoutSessionIssuer} />,
-    );
-
-    expect(useProtectedResourceMetadata).toHaveBeenCalledWith(
-      "remote-mcp-server",
-      true,
-    );
-
-    fireEvent.click(screen.getByText("Use Discovered"));
-
-    expect(
-      screen.getByText("https://auth.example.com|resource.read resource.write"),
-    ).toBeDefined();
+    expect(screen.getByText("Remote MCP identity")).toBeDefined();
+    expect(remoteIdentitySection).toHaveBeenCalledWith(remoteMcpTarget);
+    expect(attachSheet).not.toHaveBeenCalled();
+    expect(useUserSessionIssuer).not.toHaveBeenCalled();
   });
 
   it("includes a target-specific setup action before a session issuer is configured", () => {
@@ -240,14 +190,9 @@ describe("AuthenticationSectionBody", () => {
       items: [],
       isLoading: false,
     });
-    useProtectedResourceMetadata.mockReturnValue({
-      status: "idle",
-      metadata: null,
-    });
-
     render(
       <AuthenticationSectionBody
-        target={remoteTargetWithoutSessionIssuer}
+        target={standardTargetWithoutSessionIssuer}
         additionalSetupAction={<button>Configure External OAuth</button>}
       />,
     );
@@ -255,83 +200,39 @@ describe("AuthenticationSectionBody", () => {
     expect(screen.getByText("Configure External OAuth")).toBeDefined();
   });
 
-  it("does not probe configured remote servers that already have a client", () => {
+  it("renders an attached provider the issuer listing does not contain", () => {
+    // The listing mock above returns no issuers at all, standing in for an
+    // attached issuer pushed past the first page by the platform catalog.
     useAllRemoteSessionClients.mockReturnValue({
-      items: [{ id: "remote-session-client" }],
+      items: [{ id: "client-1", remoteSessionIssuerId: "issuer-far" }],
       isLoading: false,
     });
-    useProtectedResourceMetadata.mockReturnValue({
-      status: "idle",
-      metadata: null,
-    });
-
     render(
-      <AuthenticationSectionBody target={remoteTargetWithSessionIssuer} />,
+      <AuthenticationSectionBody target={standardTargetWithSessionIssuer} />,
     );
 
-    expect(useProtectedResourceMetadata).toHaveBeenCalledWith(
-      "remote-mcp-server",
-      false,
+    expect(useRemoteSessionIssuersByIds).toHaveBeenLastCalledWith(
+      ["issuer-far"],
+      { enabled: true },
     );
+    expect(screen.getByText("attached-issuer-far")).toBeDefined();
   });
 
-  it("keeps organization-owned issuer settings read-only", () => {
-    useUserSessionIssuer.mockReturnValue({
-      data: {
-        id: "organization-user-session-issuer",
-        projectId: "",
-        clientIdMetadataAdmissionMode: "reporting",
-      },
+  it("reports a failed provider lookup instead of an empty provider list", () => {
+    useAllRemoteSessionClients.mockReturnValue({
+      items: [{ id: "client-1", remoteSessionIssuerId: "issuer-gone" }],
       isLoading: false,
-      isError: false,
     });
-    useAllRemoteSessionClients.mockReturnValue({ items: [], isLoading: false });
-    useProtectedResourceMetadata.mockReturnValue({
-      status: "idle",
-      metadata: null,
+    useRemoteSessionIssuersByIds.mockReturnValue({
+      items: [],
+      isLoading: false,
+      isError: true,
     });
-
     render(
-      <AuthenticationSectionBody target={remoteTargetWithSessionIssuer} />,
+      <AuthenticationSectionBody target={standardTargetWithSessionIssuer} />,
     );
 
-    expect(screen.getByText("duration-read-only")).toBeDefined();
-    expect(screen.getByText("cimd-read-only")).toBeDefined();
-    expect(screen.getByText("providers-read-only")).toBeDefined();
-    expect(screen.queryByText("cimd-custom-clients")).toBeNull();
-  });
-
-  it("excludes organization issuers for targets whose backend cannot bind them", () => {
-    useUserSessionIssuer.mockReturnValue({
-      data: null,
-      isLoading: false,
-      isError: false,
-    });
-    useEffectiveUserSessionIssuers.mockReturnValue({
-      issuers: [
-        { id: "project-issuer", projectId: "project-1" },
-        { id: "organization-issuer", projectId: "" },
-      ],
-      organizationIssuers: [{ id: "organization-issuer", projectId: "" }],
-      isLoading: false,
-      isError: false,
-    });
-    useAllRemoteSessionClients.mockReturnValue({ items: [], isLoading: false });
-    useProtectedResourceMetadata.mockReturnValue({
-      status: "idle",
-      metadata: null,
-    });
-
-    render(
-      <AuthenticationSectionBody
-        target={{
-          ...remoteTargetWithoutSessionIssuer,
-          supportsOrganizationIssuers: false,
-        }}
-      />,
-    );
-
-    expect(screen.getByText("issuers-project-issuer")).toBeDefined();
+    expect(screen.getByText("attached-error")).toBeDefined();
   });
 
   it.each(["presets", "reporting"])(
@@ -349,13 +250,8 @@ describe("AuthenticationSectionBody", () => {
         items: [],
         isLoading: false,
       });
-      useProtectedResourceMetadata.mockReturnValue({
-        status: "idle",
-        metadata: null,
-      });
-
       render(
-        <AuthenticationSectionBody target={remoteTargetWithSessionIssuer} />,
+        <AuthenticationSectionBody target={standardTargetWithSessionIssuer} />,
       );
 
       expect(screen.getByText("cimd-admission-mode")).toBeDefined();
@@ -373,13 +269,8 @@ describe("AuthenticationSectionBody", () => {
       isError: false,
     });
     useAllRemoteSessionClients.mockReturnValue({ items: [], isLoading: false });
-    useProtectedResourceMetadata.mockReturnValue({
-      status: "idle",
-      metadata: null,
-    });
-
     render(
-      <AuthenticationSectionBody target={remoteTargetWithSessionIssuer} />,
+      <AuthenticationSectionBody target={standardTargetWithSessionIssuer} />,
     );
 
     // Staging the URLs that "Known clients" enforces has to be possible
@@ -401,13 +292,8 @@ describe("AuthenticationSectionBody", () => {
       isError: false,
     });
     useAllRemoteSessionClients.mockReturnValue({ items: [], isLoading: false });
-    useProtectedResourceMetadata.mockReturnValue({
-      status: "idle",
-      metadata: null,
-    });
-
     render(
-      <AuthenticationSectionBody target={remoteTargetWithSessionIssuer} />,
+      <AuthenticationSectionBody target={standardTargetWithSessionIssuer} />,
     );
 
     expect(screen.getByText("cimd-custom-clients")).toBeDefined();
@@ -430,13 +316,8 @@ describe("AuthenticationSectionBody", () => {
         items: [],
         isLoading: false,
       });
-      useProtectedResourceMetadata.mockReturnValue({
-        status: "idle",
-        metadata: null,
-      });
-
       render(
-        <AuthenticationSectionBody target={remoteTargetWithSessionIssuer} />,
+        <AuthenticationSectionBody target={standardTargetWithSessionIssuer} />,
       );
 
       expect(screen.getByText("cimd-admission-mode")).toBeDefined();
@@ -445,17 +326,23 @@ describe("AuthenticationSectionBody", () => {
   );
 });
 
-const remoteTargetWithSessionIssuer: AuthTarget = {
-  slug: "remote-server",
+const standardTargetWithSessionIssuer: AuthTarget = {
+  kind: "standard",
+  slug: "standard-server",
   projectId: "project-1",
   permissionResourceId: "mcp-server-1",
   supportsOrganizationIssuers: true,
   userSessionIssuerId: "user-session-issuer",
-  remoteMcpServerId: "remote-mcp-server",
   invalidate: vi.fn(),
 };
 
-const remoteTargetWithoutSessionIssuer: AuthTarget = {
-  ...remoteTargetWithSessionIssuer,
+const remoteMcpTarget: AuthTarget = {
+  ...standardTargetWithSessionIssuer,
+  kind: "remote-mcp",
+  remoteMcpServerId: "remote-mcp-server",
+};
+
+const standardTargetWithoutSessionIssuer: AuthTarget = {
+  ...standardTargetWithSessionIssuer,
   userSessionIssuerId: null,
 };

@@ -203,6 +203,19 @@ export function MigrationReview({
                 </ul>
               </div>
             )}
+            {data.emaBindingCount > 0 && (
+              <p role="alert" className="text-destructive text-sm">
+                {data.emaBindingCount} active identity-chaining{" "}
+                {data.emaBindingCount === 1
+                  ? "binding blocks"
+                  : "bindings block"}{" "}
+                consolidation. Explicitly unlink{" "}
+                {data.emaBindingCount === 1 ? "this binding" : "these bindings"}{" "}
+                before consolidating, then prepare{" "}
+                {data.emaBindingCount === 1 ? "a new binding" : "new bindings"}{" "}
+                for the target provider.
+              </p>
+            )}
             {data.endpointMismatches.length > 0 && (
               <section>
                 <h3 className="font-medium">

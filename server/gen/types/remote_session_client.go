@@ -10,6 +10,9 @@ package types
 // RemoteSessionClient is the result type of the
 // organizationRemoteSessionClients service getClient method.
 type RemoteSessionClient struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string
 	// The owning project id. Empty for organization-level and global clients.
@@ -51,7 +54,14 @@ type RemoteSessionClient struct {
 	Scope []string
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string
-	CreatedAt string
-	UpdatedAt string
+	Audience *string
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string
+	CreatedAt   string
+	UpdatedAt   string
 }

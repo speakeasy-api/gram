@@ -40,6 +40,10 @@ const (
 	ScopeSkillBlockedWrite       Scope = "skill:blocked_write"
 	ScopePluginWrite             Scope = "plugin:write"
 	ScopePluginBlockedWrite      Scope = "plugin:blocked_write"
+	ScopeAssistantRead           Scope = "assistant:read"
+	ScopeAssistantBlockedRead    Scope = "assistant:blocked_read"
+	ScopeAssistantWrite          Scope = "assistant:write"
+	ScopeAssistantBlockedWrite   Scope = "assistant:blocked_write"
 	ScopeRiskPolicyEvaluate      Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass        Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
 	ScopeRiskPolicyBlock         Scope = "risk_policy:block"
@@ -49,6 +53,20 @@ const (
 	ScopeAgentWrite              Scope = "agent:write"
 	ScopeAgentAuthorize          Scope = "agent:authorize"
 	ScopeAgentTransfer           Scope = "agent:transfer"
+
+	// Managing an organization's workload identity trust policy: its issuers, its
+	// admitted subjects, and which agent each inherits its policy from. Presence in
+	// the admitted set is itself the grant of machine access, so it gets a
+	// permission that says so rather than riding a project or issuer scope whose
+	// product meaning is something else.
+	//
+	// "workload" here names the resource being configured, not
+	// urn.PrincipalTypeWorkload, which is also "workload" and names the machine
+	// principal itself. See ResourceKindWorkload.
+	ScopeWorkloadRead         Scope = "workload:read"
+	ScopeWorkloadBlockedRead  Scope = "workload:blocked_read"
+	ScopeWorkloadWrite        Scope = "workload:write"
+	ScopeWorkloadBlockedWrite Scope = "workload:blocked_write"
 	// Device-agent sync and hook ingestion for agent-principal keys. Human
 	// callers reach these routes through transport scopes, not these grants.
 	ScopeOrgDeviceAgentSync Scope = "org:device_agent_sync"
@@ -79,11 +97,21 @@ var adminScopes = []Scope{
 	ScopeEnvironmentWrite,
 	ScopeSkillRead,
 	ScopeSkillWrite,
+	ScopeAssistantRead,
+	ScopeAssistantWrite,
 	ScopePluginWrite,
 	ScopeAgentRead,
 	ScopeAgentWrite,
 	ScopeAgentAuthorize,
 	ScopeAgentTransfer,
+	// Configuring workload identity is an administrator's job, and it sits
+	// beside agent:authorize deliberately: assigning an agent to a workload is
+	// the same delegation as issuing that agent a credential. Neither is a
+	// member default — workload:read alone discloses which machines an
+	// organization recognises, which is its trust policy, so a member who needs
+	// to see it gets an explicit grant through a custom role.
+	ScopeWorkloadRead,
+	ScopeWorkloadWrite,
 	// chat:read and chat:write are intentionally NOT defaults for any system
 	// role: reading other members' session transcripts is sensitive, and
 	// mutating them (rename, feedback, delete) is destructive, so both must be
@@ -124,6 +152,10 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeSkillBlockedWrite:       scopeVisibilityInternal,
 	ScopePluginWrite:             scopeVisibilityUserVisible,
 	ScopePluginBlockedWrite:      scopeVisibilityInternal,
+	ScopeAssistantRead:           scopeVisibilityUserVisible,
+	ScopeAssistantBlockedRead:    scopeVisibilityInternal,
+	ScopeAssistantWrite:          scopeVisibilityUserVisible,
+	ScopeAssistantBlockedWrite:   scopeVisibilityInternal,
 	ScopeRiskPolicyEvaluate:      scopeVisibilityUserVisible,
 	ScopeRiskPolicyBypass:        scopeVisibilityUserVisible,
 	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
@@ -133,6 +165,10 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeAgentWrite:              scopeVisibilityUserVisible,
 	ScopeAgentAuthorize:          scopeVisibilityUserVisible,
 	ScopeAgentTransfer:           scopeVisibilityUserVisible,
+	ScopeWorkloadRead:            scopeVisibilityUserVisible,
+	ScopeWorkloadBlockedRead:     scopeVisibilityInternal,
+	ScopeWorkloadWrite:           scopeVisibilityUserVisible,
+	ScopeWorkloadBlockedWrite:    scopeVisibilityInternal,
 	ScopeOrgDeviceAgentSync:      scopeVisibilityUserVisible,
 	ScopeOrgHooksIngest:          scopeVisibilityUserVisible,
 }
@@ -143,6 +179,7 @@ var memberScopes = []Scope{
 	ScopeMCPRead,
 	ScopeMCPConnect,
 	ScopeSkillRead,
+	ScopeAssistantRead,
 	// environment:read is intentionally NOT a default for members: environment
 	// values include secrets, so viewing them must be granted explicitly via a
 	// custom role. Admins retain environment:read/write via adminScopes.
@@ -236,6 +273,10 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeSkillBlockedWrite:       {ScopeSkillBlockedRead},
 	ScopePluginWrite:             nil,
 	ScopePluginBlockedWrite:      nil,
+	ScopeAssistantRead:           {ScopeAssistantWrite},
+	ScopeAssistantBlockedRead:    nil,
+	ScopeAssistantWrite:          nil,
+	ScopeAssistantBlockedWrite:   {ScopeAssistantBlockedRead},
 	ScopeRiskPolicyEvaluate:      nil,
 	ScopeRiskPolicyBypass:        nil,
 	ScopeRiskPolicyBlock:         nil,
@@ -245,6 +286,10 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeAgentWrite:              nil,
 	ScopeAgentAuthorize:          nil,
 	ScopeAgentTransfer:           nil,
+	ScopeWorkloadRead:            {ScopeWorkloadWrite},
+	ScopeWorkloadBlockedRead:     nil,
+	ScopeWorkloadWrite:           nil,
+	ScopeWorkloadBlockedWrite:    {ScopeWorkloadBlockedRead},
 	ScopeOrgDeviceAgentSync:      {ScopeOrgAdmin},
 	ScopeOrgHooksIngest:          {ScopeOrgAdmin},
 }
@@ -278,6 +323,10 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeSkillBlockedWrite:       "",
 	ScopePluginWrite:             ScopePluginBlockedWrite,
 	ScopePluginBlockedWrite:      "",
+	ScopeAssistantRead:           ScopeAssistantBlockedRead,
+	ScopeAssistantBlockedRead:    "",
+	ScopeAssistantWrite:          ScopeAssistantBlockedWrite,
+	ScopeAssistantBlockedWrite:   "",
 	ScopeRiskPolicyEvaluate:      ScopeRiskPolicyBypass,
 	ScopeRiskPolicyBypass:        "",
 	ScopeRiskPolicyBlock:         "",
@@ -287,6 +336,10 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeAgentWrite:              "",
 	ScopeAgentAuthorize:          "",
 	ScopeAgentTransfer:           "",
+	ScopeWorkloadRead:            ScopeWorkloadBlockedRead,
+	ScopeWorkloadBlockedRead:     "",
+	ScopeWorkloadWrite:           ScopeWorkloadBlockedWrite,
+	ScopeWorkloadBlockedWrite:    "",
 	ScopeOrgDeviceAgentSync:      "",
 	ScopeOrgHooksIngest:          "",
 }

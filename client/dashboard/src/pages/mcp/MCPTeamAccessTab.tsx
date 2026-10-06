@@ -1,11 +1,6 @@
 import { IdentityLink } from "@/components/identity-link";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/Tooltip";
 import { Heading } from "@/components/ui/Heading";
 import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
@@ -17,15 +12,10 @@ import type { ResourceAudienceEntry } from "@gram/client/models/components/resou
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { useMemo, type ReactElement } from "react";
+import { CheckAccess } from "./access/CheckAccess";
 import { ManageAccess } from "./access/ManageAccess";
 import { RoleLink } from "./access/RoleLink";
-import {
-  blockingRules,
-  effectiveReach,
-  LEVEL_VERB,
-  type AudienceLevel,
-  type EffectiveReach,
-} from "./access/serverAudience";
+import { blockingRules } from "./access/serverAudience";
 
 /** The annotations a tool carries, in the vocabulary selectors store. */
 function toolAnnotations(tool: Tool): ToolAnnotation[] {
@@ -48,11 +38,6 @@ function getInitials(name: string) {
     .slice(0, 2);
 }
 
-interface MemberAccess {
-  member: AccessMember;
-  reach: EffectiveReach;
-}
-
 /** A rule named on a row, linked when it is a role someone can go and edit. */
 interface NamedRule {
   principalUrn: string;
@@ -61,8 +46,9 @@ interface NamedRule {
 
 /**
  * Someone two rules disagree about: a role gives them the server and another
- * role they are also in takes it away. A block outranks every grant, so the
- * grant does nothing — which is invisible from either role's own page.
+ * role they are also in takes it away. A role's block outranks every grant
+ * except one made to the person by name for this server, so the role's grant
+ * does nothing — which is invisible from either role's own page.
  */
 interface MemberConflict {
   member: AccessMember;
@@ -78,11 +64,17 @@ export function MCPTeamAccessTab({
   resourceId,
   serverName,
   tools,
+  checkAccess = true,
 }: {
   resourceId: string;
   serverName?: string;
   /** The server's tools, when the backend exposes a catalogue for it. */
   tools?: Tool[];
+  /**
+   * Whether to offer Check access. A gateway turns it off: nothing checks
+   * access on a gateway's own id, each server it fronts is checked instead.
+   */
+  checkAccess?: boolean;
 }): ReactElement | null {
   const {
     data: audienceData,
@@ -95,7 +87,7 @@ export function MCPTeamAccessTab({
     // not treat an unread audience as an empty one.
     { throwOnError: false },
   );
-  const { data: membersData, isLoading: membersLoading } = useMembers();
+  const { data: membersData } = useMembers();
 
   const entries = useMemo(
     () => audienceData?.entries ?? [],
@@ -113,39 +105,9 @@ export function MCPTeamAccessTab({
     [tools],
   );
 
-  // Who the rules actually reach. The server resolves each rule to the members
-  // it currently covers, so a directory attribute like job_title reaches
-  // whoever carries that value today. This is a lookup, not a guess.
-  const people = useMemo((): MemberAccess[] => {
-    const members = membersData?.members ?? [];
-    // Every rule that names a person, not just the first: grants add, so what
-    // someone can do here is their union, and a rule that looks narrow on the
-    // Access list may be doing nothing at all.
-    const reaching = new Map<string, ResourceAudienceEntry[]>();
-    for (const entry of entries) {
-      for (const memberId of entry.memberIds ?? []) {
-        reaching.set(memberId, [...(reaching.get(memberId) ?? []), entry]);
-      }
-    }
-
-    return members
-      .map((member) => {
-        // effectiveReach returns null when every capability this server
-        // offered has been blocked away, which is what "does not reach" is.
-        const reach = effectiveReach(
-          reaching.get(member.id) ?? [],
-          toolCatalog ?? [],
-        );
-        if (!reach) return null;
-        return { member, reach };
-      })
-      .filter((row): row is MemberAccess => row !== null)
-      .sort((a, b) => a.member.name.localeCompare(b.member.name));
-  }, [membersData?.members, entries, toolCatalog]);
-
-  // The people two rules disagree about. They are not in the list above —
-  // nothing they were given survives — and an absence explains nothing, so
-  // they get a section that names both rules and says how to resolve it.
+  // The people two rules disagree about. Nothing they were given survives,
+  // and nothing on the rules list says why, so they get a section that names
+  // both rules and says how to resolve it.
   const conflicts = useMemo((): MemberConflict[] => {
     const members = membersData?.members ?? [];
     const reaching = new Map<string, ResourceAudienceEntry[]>();
@@ -169,7 +131,7 @@ export function MCPTeamAccessTab({
     return members
       .map((member) => {
         const rules = reaching.get(member.id) ?? [];
-        const blocks = blockingRules(rules);
+        const blocks = blockingRules(rules, `user:${member.id}`);
         // A grant they never had is not a conflict, it is just no access.
         if (blocks.length === 0) return null;
         const blockedBy = named(blocks);
@@ -191,51 +153,6 @@ export function MCPTeamAccessTab({
       .filter((row): row is MemberConflict => row !== null)
       .sort((a, b) => a.member.name.localeCompare(b.member.name));
   }, [membersData?.members, entries]);
-
-  const memberColumns: Column<MemberAccess>[] = [
-    {
-      key: "member",
-      header: "Person",
-      width: "300px",
-      render: (row) => <PersonCell member={row.member} />,
-    },
-    {
-      key: "platform",
-      header: "Platform access",
-      width: "230px",
-      // What they can do with the server in Gram, as opposed to through it.
-      // Connecting belongs to the next column, since how far it reaches is
-      // the whole of that answer.
-      render: (row) => (
-        <Text variant="body" className="text-sm">
-          {platformAccess(row.reach.capabilities)}
-        </Text>
-      ),
-    },
-    {
-      key: "tools",
-      header: "MCP access",
-      width: "1fr",
-      // The rule that reaches someone may cover the whole server or a slice of
-      // it, and that is the part a reader cannot infer from the level alone.
-      // Tool access is about connect: view and manage are server-level, and
-      // both satisfy a connect check, so an unnarrowed rule at any level
-      // reaches every tool.
-      render: (row) => <MCPAccessCell reach={row.reach} />,
-    },
-    {
-      key: "via",
-      header: "Granted by",
-      width: "200px",
-      // Roles wrap rather than truncate: which role opened a server is the
-      // answer someone came to this table for.
-      render: (row) => (
-        <Text variant="body" className="text-sm break-words">
-          {row.reach.grantedBy.join(", ")}
-        </Text>
-      ),
-    },
-  ];
 
   const conflictColumns: Column<MemberConflict>[] = [
     {
@@ -266,6 +183,15 @@ export function MCPTeamAccessTab({
         this server only.
       </Page.Section.Description>
       <Page.Section.Body>
+        {checkAccess && (
+          <div className="mb-8">
+            <CheckAccess
+              resourceId={resourceId}
+              serverName={serverName ?? "this server"}
+            />
+          </div>
+        )}
+
         {audienceFailed ? (
           <Text muted small>
             Access rules could not be loaded, so they cannot be changed here
@@ -282,40 +208,9 @@ export function MCPTeamAccessTab({
           />
         )}
 
-        <div className="mt-10 mb-4">
-          <Heading variant="h4">People this reaches</Heading>
-          <Text muted small className="mt-1">
-            {audienceFailed
-              ? "Unavailable while the access rules cannot be read"
-              : membersLoading
-                ? "Resolving members"
-                : `${people.length} team member${people.length === 1 ? "" : "s"} can reach this server`}
-          </Text>
-        </div>
-        {/* Without the rules, nobody resolves — which is not the same as
-            nobody having access, and must not read as it. */}
-        {audienceFailed ? null : (
-          <Table columns={memberColumns}>
-            <Table.Header columns={memberColumns} />
-            {people.length === 0 ? (
-              <Table.NoResultsMessage>
-                <div className="text-center">
-                  No team members can reach this server.
-                </div>
-              </Table.NoResultsMessage>
-            ) : (
-              <Table.Body
-                columns={memberColumns}
-                data={people}
-                rowKey={(row) => row.member.id}
-              />
-            )}
-          </Table>
-        )}
-
-        {/* Two rules disagreeing about the same person. They are missing from
-            the list above and nothing there says why, so the pair is named
-            here along with the only place either can be changed. */}
+        {/* Two rules disagreeing about the same person. Nothing on the rules
+            list says why they lost access, so the pair is named here along
+            with the only place either can be changed. */}
         {!audienceFailed && conflicts.length > 0 && (
           <>
             <div className="mt-10 mb-4">
@@ -331,10 +226,12 @@ export function MCPTeamAccessTab({
               </div>
               <Text muted small className="mt-1">
                 These people are granted access through one rule and blocked by
-                another. A block outranks every grant, so they cannot reach this
-                server. To fix it, remove the block: on the blocking
-                role&rsquo;s page, or from the list above when it names the
-                person directly.
+                another, so they cannot reach this server. To fix it, remove the
+                block: on the blocking role&rsquo;s page, or from the list above
+                when it names the person directly. When the block comes from a
+                role or everyone, giving them access to this server by name also
+                works, since that outranks it; a block on the person themselves
+                still applies.
               </Text>
             </div>
             <Table columns={conflictColumns}>
@@ -396,52 +293,4 @@ function RuleNames({ rules }: { rules: NamedRule[] }): ReactElement {
       ))}
     </Text>
   );
-}
-
-/** How far one person's connect access reaches inside the server. */
-function MCPAccessCell({ reach }: { reach: EffectiveReach }): ReactElement {
-  return (
-    <div className="min-w-0 space-y-0.5">
-      {reach.reachableTools.length > 0 ? (
-        // The count is the answer; the names are what someone hovers to
-        // check, and there is no room for them in the cell.
-        <Tooltip delayDuration={0}>
-          <TooltipTrigger asChild>
-            <Text
-              variant="body"
-              className="cursor-help text-sm underline decoration-dotted underline-offset-4"
-            >
-              {reach.toolsLabel}
-            </Text>
-          </TooltipTrigger>
-          <TooltipContent>{reach.reachableTools.join(", ")}</TooltipContent>
-        </Tooltip>
-      ) : (
-        <Text variant="body" className="text-sm">
-          {reach.toolsLabel}
-        </Text>
-      )}
-      {reach.scopedLevels.map((scoped) => (
-        <Text key={scoped.id} muted small>
-          {scoped.label}
-        </Text>
-      ))}
-      {reach.excluded.map((excluded) => (
-        <Text key={excluded.id} muted small>
-          except {excluded.label}
-        </Text>
-      ))}
-    </div>
-  );
-}
-
-/**
- * What someone can do with this server inside Gram: see it in the catalogue,
- * and change its settings. Connecting is left out — it is about calling the
- * server's tools, which the MCP access column answers in full.
- */
-function platformAccess(capabilities: AudienceLevel[]): string {
-  const can = capabilities.filter((capability) => capability !== "use");
-  if (can.length === 0) return "None";
-  return `Can ${can.map((capability) => LEVEL_VERB[capability]).join(" & ")}`;
 }

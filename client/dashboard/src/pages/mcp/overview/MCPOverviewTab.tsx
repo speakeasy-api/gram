@@ -1,23 +1,28 @@
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
-import { RankedBarList } from "@/components/chart/RankedBarList";
-import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
-import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
-import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { Text } from "@/components/ui/Text";
-import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
-import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
-import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
-import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
-import { useGramContext } from "@gram/client/react-query/_context";
-import { unwrapAsync } from "@gram/client/types/fp";
-import { Stack } from "@/components/ui/Stack";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+
+import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
+import { MemberWorkflowCTA } from "@/components/platform-mcp/member-workflow-cta";
+import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
 import { PluginStatusBanner } from "./PluginStatusBanner";
+import { RankedBarList } from "@/components/chart/RankedBarList";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Stack } from "@/components/ui/Stack";
+import { Text } from "@/components/ui/Text";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
 import { TopUsersTable } from "./TopUsersTable";
+import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { overviewScope } from "./overview-scope";
+import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
+import { unwrapAsync } from "@gram/client/types/fp";
+import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
+import { useGramContext } from "@gram/client/react-query/_context";
+import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
+import { useProject } from "@/contexts/Auth";
+import { useObserveLogsLink } from "@/components/observe/observeDeepLink";
+import type { ParsedTargetFilter } from "@/components/observe/observeTargetFilters";
 
 // Both variants share the dashboard, but overview telemetry must use the
 // variant's own scope: toolset slug or remote MCP server ID.
@@ -38,10 +43,14 @@ function errorRate(summary: ObservabilitySummary): number {
 
 export function MCPOverviewTab({
   server,
+  logsTarget,
 }: {
   server: HostedServerRef;
+  logsTarget?: ParsedTargetFilter | null;
 }): React.JSX.Element {
   const client = useGramContext();
+  const project = useProject();
+  const observeLogsLink = useObserveLogsLink();
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
 
   const {
@@ -89,35 +98,54 @@ export function MCPOverviewTab({
   const summary = data?.summary;
   const comparison = data?.comparison;
   const timeSeries = useMemo(() => data?.timeSeries ?? [], [data]);
+  const toolLogsTarget =
+    server.kind === "toolset"
+      ? ({ type: "hosted", id: server.slug } satisfies ParsedTargetFilter)
+      : logsTarget;
 
-  const topByCount = useMemo(
-    () =>
-      (data?.topToolsByCount ?? []).map((tool) => ({
+  const topByCount = (data?.topToolsByCount ?? []).map((tool) => {
+    const toolName = toolLabelFromUrn(tool.gramUrn);
+    return {
+      key: tool.gramUrn,
+      label: toolName,
+      value: tool.callCount,
+      href: toolLogsTarget
+        ? observeLogsLink({ target: toolLogsTarget, toolName })
+        : undefined,
+    };
+  });
+
+  const topByFailureRate = (data?.topToolsByFailureRate ?? [])
+    .filter((tool) => tool.failureCount > 0)
+    .map((tool) => {
+      const toolName = toolLabelFromUrn(tool.gramUrn);
+      return {
         key: tool.gramUrn,
-        label: toolLabelFromUrn(tool.gramUrn),
-        value: tool.callCount,
-      })),
-    [data],
-  );
-
-  const topByFailureRate = useMemo(
-    () =>
-      (data?.topToolsByFailureRate ?? [])
-        .filter((tool) => tool.failureCount > 0)
-        .map((tool) => ({
-          key: tool.gramUrn,
-          label: toolLabelFromUrn(tool.gramUrn),
-          value: tool.failureRate * 100,
-          valueLabel: `${(tool.failureRate * 100).toFixed(1)}%`,
-        })),
-    [data],
-  );
+        label: toolName,
+        value: tool.failureRate * 100,
+        valueLabel: `${(tool.failureRate * 100).toFixed(1)}%`,
+        href: toolLogsTarget
+          ? observeLogsLink({ target: toolLogsTarget, toolName })
+          : undefined,
+      };
+    });
 
   return (
     // Container queries, not viewport ones: the side panel narrows this column
     // without narrowing the window, and `lg:`/`xl:` would not notice.
     <Stack gap={6} className="@container mb-4">
       <PluginStatusBanner server={server} />
+      {!isLoading && !isLogsDisabled && (
+        <MemberWorkflowCTA
+          workflow="mcp_diagnostics"
+          label="Troubleshoot in your agent"
+          description="Investigate this server's recent failures with Platform MCP."
+          scope="project:read"
+          resourceId={project.id}
+          projectSlug={project.slug}
+          prompt={`Using Platform MCP, investigate recent failures for the MCP server ${JSON.stringify(server.name)} in project ${JSON.stringify(project.slug)}. Start with the project overview, then inspect this server's diagnostics and recent call summaries. Explain what the evidence supports and suggest next steps. Do not change configuration.`}
+        />
+      )}
 
       <div className="flex justify-end">
         <TimeRangePicker

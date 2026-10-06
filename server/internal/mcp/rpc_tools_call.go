@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
@@ -104,7 +105,7 @@ func handleToolsCall(
 	auditLogger *audit.Logger,
 	platformExtras []platformtools.ExternalTool,
 	clientInfoStore sessionClientInfoStore,
-	scan mcpriskscan.Evaluator,
+	scan *mcpriskscan.Evaluator,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -192,6 +193,32 @@ func handleToolsCall(
 	toolsetID, err := uuid.Parse(toolset.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, logger)
+	}
+
+	// Legacy /mcp/<toolset slug> calls do not carry the wrapper server id in
+	// their route payload. Attribute only when exactly one enabled wrapper
+	// exists. Disabled wrappers do not serve, and choosing among multiple live
+	// wrappers would apply an arbitrary server's policy and telemetry identity.
+	// Keep the payload unchanged because its nil server id still identifies the
+	// legacy authorization path.
+	attributedMCPServerID := payload.mcpServerID
+	if attributedMCPServerID == nil {
+		servers, lookupErr := mcpservers_repo.New(db).ListEnabledMCPServersByToolsetID(ctx, mcpservers_repo.ListEnabledMCPServersByToolsetIDParams{
+			ToolsetID: toolsetID,
+			ProjectID: uuid.UUID(projectID),
+		})
+		if lookupErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, lookupErr, "resolve MCP server for toolset").LogError(ctx, logger)
+		}
+		switch len(servers) {
+		case 0:
+		case 1:
+			serverID := servers[0].ID
+			attributedMCPServerID = &serverID
+		default:
+			// Ambiguous wrappers leave the call unattributed rather than failing it.
+			logger.WarnContext(ctx, "multiple enabled MCP servers wrap the legacy toolset; skipping server attribution", attr.SlogToolsetID(toolsetID.String()))
+		}
 	}
 
 	executor := externalmcp.BuildProxyToolExecutor(logger, guardianPolicy, toolset.Tools)
@@ -414,8 +441,8 @@ func handleToolsCall(
 			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
 		}
 		logAttrs.RecordToolsetSlug(payload.toolset)
-		if payload.mcpServerID != nil {
-			logAttrs[attr.McpServerIDKey] = payload.mcpServerID.String()
+		if attributedMCPServerID != nil {
+			logAttrs[attr.McpServerIDKey] = attributedMCPServerID.String()
 		}
 		if payload.metaMcpServerID != "" {
 			logAttrs[attr.MetaMcpServerIDKey] = payload.metaMcpServerID
@@ -440,25 +467,33 @@ func handleToolsCall(
 	}()
 
 	serverID := ""
-	if payload.mcpServerID != nil {
-		serverID = payload.mcpServerID.String()
+	if attributedMCPServerID != nil {
+		serverID = attributedMCPServerID.String()
 	}
 	toolName := descriptor.Name
 	if plan.Kind == gateway.ToolKindExternalMCP {
 		toolName = descriptor.URN.Name
 	}
-	scan.Scan(ctx, bytes.NewReader(params.Arguments), mcpriskscan.Event{
-		Surface:        mcpriskscan.SurfaceHostedMCP,
-		Method:         mcpriskscan.MethodToolsCall,
-		OrganizationID: descriptor.OrganizationID,
-		ProjectID:      descriptor.ProjectID,
-		ServerID:       serverID,
-		ToolsetID:      toolset.ID,
-		ToolName:       toolName,
-		ResourceURI:    "",
-		PromptName:     "",
-		Phase:          mcpriskscan.PhaseBeforeExecution,
-	})
+	requestSubject := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+		Surface:         mcpriskscan.SurfaceHostedMCP,
+		Method:          mcpriskscan.MethodToolsCall,
+		OrganizationID:  descriptor.OrganizationID,
+		ProjectID:       descriptor.ProjectID,
+		ServerID:        serverID,
+		MetaServerID:    payload.metaMcpServerID,
+		ToolsetID:       toolset.ID,
+		ToolName:        toolName,
+		ResourceURI:     "",
+		PromptName:      "",
+		ChatID:          payload.chatID,
+		ToolAnnotations: nil,
+	}, mcpriskscan.BorrowPayload(params.Arguments))
+	decision := scan.Scan(ctx, requestSubject)
+	if decision.Denied() {
+		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
+	}
 	err = toolProxy.Do(ctx, rw, bytes.NewReader(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
 		if rejected, ok := toolCallRejection(ctx, logger, err, attr.SlogToolName(params.Name)); ok {
@@ -502,6 +537,17 @@ func handleToolsCall(
 
 	// External MCP tools and MCP passthrough tools already return properly formatted responses
 	if plan.Kind == gateway.ToolKindExternalMCP || isMCPPassthrough(meta) {
+		responsePayload, parseErr := mcpriskscan.ParseToolResultPayload(rw.body.Bytes())
+		if parseErr != nil {
+			responsePayload = mcpriskscan.Payload{}
+		}
+		decision = scan.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
+		if decision.Denied() {
+			discardWithheldBody(rw.body)
+			failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+			recordToolCallErrorStatus(ctx, rw, failure)
+			return nil, failure
+		}
 		bs, err := json.Marshal(result[json.RawMessage]{
 			ID:             req.ID,
 			Result:         json.RawMessage(rw.body.Bytes()),
@@ -519,11 +565,25 @@ func handleToolsCall(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed format tool call result").LogError(ctx, logger)
 	}
+	responseContent := []json.RawMessage{chunk}
+	if plan.Kind != gateway.ToolKindPrompt {
+		responsePayload, parseErr := mcpriskscan.ToolResultPayload(responseContent, structured)
+		if parseErr != nil {
+			responsePayload = mcpriskscan.Payload{}
+		}
+		decision = scan.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
+		if decision.Denied() {
+			discardWithheldBody(rw.body)
+			failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+			recordToolCallErrorStatus(ctx, rw, failure)
+			return nil, failure
+		}
+	}
 
 	bs, err := json.Marshal(result[toolCallResult]{
 		ID: req.ID,
 		Result: toolCallResult{
-			Content:           []json.RawMessage{chunk},
+			Content:           responseContent,
 			StructuredContent: structured,
 			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
@@ -725,6 +785,10 @@ func (w *toolCallResponseWriter) Write(p []byte) (int, error) {
 	}
 
 	return n, nil
+}
+
+func discardWithheldBody(body *bytes.Buffer) {
+	body.Reset()
 }
 
 // formatResult turns a tool's raw HTTP response body into an MCP content

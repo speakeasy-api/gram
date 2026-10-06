@@ -216,7 +216,7 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("getOnboardingStatus", func() {
-		Description("Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.")
+		Description("Get the onboarding status for the active organization by checking WorkOS domain verification, SSO connections, and directory sync state.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -364,6 +364,28 @@ var _ = Service("organizations", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "updateSetupTask")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateSetupTask"}`)
 	})
+
+	Method("submitOnboardingSurvey", func() {
+		Description("Record the onboarding survey result. The server picks the use case's default playbook, which decides the setup tasks the wizard walks; progress and assignments are kept.")
+
+		Payload(func() {
+			Attribute("use_case", String, "Use case the survey answers resolved to.")
+			Required("use_case")
+			security.SessionPayload()
+		})
+
+		Result(ListSetupTasksResult)
+
+		HTTP(func() {
+			POST("/rpc/organizations.submitOnboardingSurvey")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "submitOnboardingSurvey")
+		Meta("openapi:extension:x-speakeasy-name-override", "submitOnboardingSurvey")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SubmitOnboardingSurvey"}`)
+	})
 })
 
 // OrganizationInvitation is a non-sensitive admin view (no invitation token or accept URL).
@@ -468,8 +490,10 @@ var GenerateWorkOSAdminPortalLinkResult = Type("GenerateWorkOSAdminPortalLinkRes
 var OnboardingStatusResult = Type("OnboardingStatusResult", func() {
 	Attribute("sso_configured", Boolean, "Whether the organization has at least one active SSO connection in WorkOS.")
 	Attribute("dsync_configured", Boolean, "Whether the organization has at least one linked directory sync in WorkOS.")
+	Attribute("domain_verified", Boolean, "Whether the organization has at least one verified domain in WorkOS. Single sign-on cannot be set up until one is verified.")
+	Attribute("verified_domains", ArrayOf(String), "Domains WorkOS has verified for the organization. Single sign-on only works for users on these domains.")
 
-	Required("sso_configured", "dsync_configured")
+	Required("sso_configured", "dsync_configured", "domain_verified", "verified_domains")
 })
 
 var OnboardingHookEvent = Type("OnboardingHookEvent", func() {
@@ -527,10 +551,12 @@ var SetupTask = Type("SetupTask", func() {
 	Attribute("assignee", SetupTaskAssignee, "Current resolved user or email assignee.")
 	Attribute("blocked_by", ArrayOf(String), "Incomplete prerequisite task keys.")
 	Attribute("hidden", Boolean, "Whether a platform administrator hid the task.")
-	Required("key", "title", "description", "status", "completed_by_fact", "blocked_by", "hidden")
+	Attribute("parent_key", String, "Key of the group this card sits under. Absent for a top-level card or a group.")
+	Attribute("group", Boolean, "True for a group that nests cards. A group has no card of its own: it is hidden when every card under it is, done when every visible card is, and cannot be assigned or marked by hand.")
+	Required("key", "title", "description", "status", "completed_by_fact", "blocked_by", "hidden", "group")
 })
 
 var ListSetupTasksResult = Type("ListSetupTasksResult", func() {
-	Attribute("tasks", ArrayOf(SetupTask), "Setup tasks in catalog order.")
+	Attribute("tasks", ArrayOf(SetupTask), "Setup tasks in catalog order. A group precedes the cards under it.")
 	Required("tasks")
 })

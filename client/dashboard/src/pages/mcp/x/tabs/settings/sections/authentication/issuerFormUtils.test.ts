@@ -2,9 +2,22 @@ import { CreateRemoteSessionClientFormTokenEndpointAuthMethod as AuthMethod } fr
 import { describe, expect, it } from "vitest";
 
 import {
+  availableClientTypes,
   clientSecretUpdateValue,
   dynamicClientRegistrationAvailability,
+  legacyCallbackURL,
 } from "./issuerFormUtils";
+
+describe("legacyCallbackURL", () => {
+  it("shares the origin of the client's current callback", () => {
+    expect(
+      legacyCallbackURL("https://app.example.com/mcp/remote_login_callback"),
+    ).toBe("https://app.example.com/oauth/callback");
+    expect(
+      legacyCallbackURL("https://ai.example.com/mcp/remote_login_callback"),
+    ).toBe("https://ai.example.com/oauth/callback");
+  });
+});
 
 describe("clientSecretUpdateValue", () => {
   it("does not rotate an unsaved secret for private_key_jwt", () => {
@@ -52,5 +65,28 @@ describe("dynamicClientRegistrationAvailability", () => {
         isPlatformAdmin: true,
       }),
     ).toEqual({ available: true, permissionRestricted: false });
+  });
+});
+
+describe("availableClientTypes", () => {
+  it.each([
+    {
+      capabilities: { cimdAvailable: true, dcrAvailable: true },
+      expected: ["cimd", "dcr", "manual"],
+    },
+    {
+      capabilities: { cimdAvailable: true, dcrAvailable: false },
+      expected: ["cimd", "manual"],
+    },
+    {
+      capabilities: { cimdAvailable: false, dcrAvailable: true },
+      expected: ["dcr", "manual"],
+    },
+    {
+      capabilities: { cimdAvailable: false, dcrAvailable: false },
+      expected: ["manual"],
+    },
+  ])("orders $expected for $capabilities", ({ capabilities, expected }) => {
+    expect(availableClientTypes(capabilities)).toEqual(expected);
   });
 });

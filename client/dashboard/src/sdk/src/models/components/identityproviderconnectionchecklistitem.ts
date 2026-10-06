@@ -57,7 +57,7 @@ export type IdentityProviderConnectionChecklistItem = {
    */
   description: string;
   /**
-   * Sub-steps, in order. Empty when the description says it all.
+   * Supporting lines under the description: ordered sub-steps for the public-key step, otherwise notes or the values to enter. Empty when the description says it all.
    */
   details: Array<string>;
   /**

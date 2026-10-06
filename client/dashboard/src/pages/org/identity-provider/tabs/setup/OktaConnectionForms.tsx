@@ -39,6 +39,7 @@ export function CreateConnectionForm(): JSX.Element {
 
   const createConnection = () => {
     if (create.isPending || normalizedOrgUrl === undefined) return;
+    setOrgUrl(normalizedOrgUrl);
     create.mutate({
       security: SESSION_SECURITY,
       request: {
@@ -82,6 +83,9 @@ export function CreateConnectionForm(): JSX.Element {
               }
               value={orgUrl}
               onChange={setOrgUrl}
+              onBlur={() => {
+                if (normalizedOrgUrl !== undefined) setOrgUrl(normalizedOrgUrl);
+              }}
               placeholder="https://example.okta.com"
               className="font-mono"
               autoComplete="off"
@@ -90,8 +94,8 @@ export function CreateConnectionForm(): JSX.Element {
             />
             <FieldDescription id="okta-org-url-help">
               Use your organization’s address starting with https:// and ending
-              in .okta.com, .oktapreview.com, .okta-emea.com, or .okta.mil. Do
-              not include a page address after the domain.
+              in .okta.com, .oktapreview.com, .okta-emea.com, or .okta.mil. You
+              can also paste your Okta Admin Console address.
             </FieldDescription>
             {trimmed !== "" && normalizedOrgUrl === undefined && (
               <p
@@ -99,8 +103,8 @@ export function CreateConnectionForm(): JSX.Element {
                 role="alert"
                 className="text-destructive text-sm"
               >
-                Enter an HTTPS Okta organization URL, such as
-                https://example.okta.com, with nothing after the domain.
+                Enter an HTTPS Okta organization or Admin Console URL, such as
+                https://example.okta.com.
               </p>
             )}
           </Field>
@@ -125,7 +129,7 @@ export function CreateConnectionForm(): JSX.Element {
   );
 }
 
-export function ClientIdStep({
+export function ClientIdForm({
   connection,
 }: {
   connection: OktaIdentityProviderConnection;
@@ -164,68 +168,53 @@ export function ClientIdStep({
   };
 
   return (
-    <SettingsSection id={CLIENT_ID_SECTION_ID}>
-      <SettingsSection.Header>
-        <SettingsSection.Title>Paste the client ID</SettingsSection.Title>
-        <SettingsSection.Description>
-          Complete the Connect section of the checklist, then paste the client
-          ID of the Okta API Services app. Speakeasy checks the connection right
-          away. You can save this ID only once. To change it, revoke this
-          connection and connect again.
-        </SettingsSection.Description>
-      </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <SettingsSection.Body>
-          <Field className="max-w-xl">
-            <FieldLabel htmlFor="okta-client-id">Client ID</FieldLabel>
-            <Input
-              id="okta-client-id"
-              disabled={submit.isPending}
-              onEnter={submitClientId}
-              aria-invalid={showClientIdError}
-              aria-describedby={`okta-client-id-help${showClientIdError ? " okta-client-id-error" : ""}`}
-              error={showClientIdError}
-              value={clientId}
-              onChange={setClientId}
-              placeholder="0oa..."
-              className="font-mono"
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <FieldDescription id="okta-client-id-help">
-              Found under Applications, in the API Services app&apos;s General
-              tab. Use this app&apos;s client ID, not the single sign-on (SSO)
-              app or AI agent ID.
-            </FieldDescription>
-            {showClientIdError && (
-              <p
-                id="okta-client-id-error"
-                role="alert"
-                className="text-destructive text-sm"
-              >
-                Enter an Okta client ID starting with 0oa followed by at least
-                17 letters or numbers.
-              </p>
-            )}
-          </Field>
-          <ApiErrorAlert error={submit.error} />
-        </SettingsSection.Body>
-        <SettingsSection.Footer>
-          <SettingsSection.FooterHint>
-            Speakeasy checks that it can connect securely to Okta and read
-            applications, users, and groups.
-          </SettingsSection.FooterHint>
-          <SettingsSection.FooterActions>
-            <Button
-              disabled={!validClientId || submit.isPending}
-              onClick={submitClientId}
-            >
-              {submit.isPending ? "Verifying..." : "Submit and verify"}
-            </Button>
-          </SettingsSection.FooterActions>
-        </SettingsSection.Footer>
-      </SettingsSection.Panel>
-    </SettingsSection>
+    <section
+      id={CLIENT_ID_SECTION_ID}
+      aria-label="Submit the Okta client ID"
+      className="flex max-w-3xl flex-col gap-4"
+    >
+      <Field className="max-w-xl">
+        <FieldLabel htmlFor="okta-client-id">Client ID</FieldLabel>
+        <Input
+          id="okta-client-id"
+          disabled={submit.isPending}
+          onEnter={submitClientId}
+          aria-invalid={showClientIdError}
+          aria-describedby={`okta-client-id-help${showClientIdError ? " okta-client-id-error" : ""}`}
+          error={showClientIdError}
+          value={clientId}
+          onChange={setClientId}
+          placeholder="0oa..."
+          className="font-mono"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <FieldDescription id="okta-client-id-help">
+          Use the API Services app&apos;s client ID, not the single sign-on
+          (SSO) app or AI agent ID. You can save this ID only once. To change
+          it, revoke this connection and connect again.
+        </FieldDescription>
+        {showClientIdError && (
+          <p
+            id="okta-client-id-error"
+            role="alert"
+            className="text-destructive text-sm"
+          >
+            Enter an Okta client ID starting with 0oa followed by at least 17
+            letters or numbers.
+          </p>
+        )}
+      </Field>
+      <ApiErrorAlert error={submit.error} />
+      <div>
+        <Button
+          disabled={!validClientId || submit.isPending}
+          onClick={submitClientId}
+        >
+          {submit.isPending ? "Verifying..." : "Submit and verify"}
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -303,10 +292,11 @@ export function AgentSetupForm({
       <ApiErrorAlert error={record.error} />
       <FieldDescription id="okta-agent-help">
         The agent ID is the wlp... value in the Okta agent page URL, and it
-        drives the deep links on the Cross App Access tab. The bound application
-        ID is the Client ID of the app Okta created with the agent; with it,
-        Speakeasy can check that app after each applications sync. Okta does not
-        expose either through its API. Leave a field empty to clear it.
+        drives the Okta deep links in the Server connections table below. The
+        bound application ID is the 0oa... value in the page URL of the app Okta
+        created with the agent, not its Client ID; with it, Speakeasy can check
+        that app after each applications sync. Okta does not expose either
+        through its API. Leave a field empty to clear it.
       </FieldDescription>
       <a
         href="https://help.okta.com/oie/en-us/content/topics/ai-agents/ai-agent-add-manually.htm"

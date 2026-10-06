@@ -166,6 +166,7 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
     id: mocks.organizationId,
     slug: "example",
+    name: "Example Org",
     projects: [{ id: "project_one", name: "Project one", slug: "project-one" }],
   }),
   useSession: () => ({

@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 func TestDerive(t *testing.T) {
@@ -29,6 +29,12 @@ func TestDerive(t *testing.T) {
 		{"agent first", with(func(i *Inputs) { i.AgentRecorded = false; i.Confirmed = false }), StateNeedsAgent},
 		{"unconfirmed connection", with(func(i *Inputs) { i.Confirmed = false }), StateNeedsConnection},
 		{"confirmation is connected", ready, StateConnected},
+		{"exchange success is verified", with(func(i *Inputs) { i.Observed = ResultVerified }), StateVerified},
+		{"missing connection overrides confirmation", with(func(i *Inputs) { i.Observed = ResultConnectionMissing }), StateNeedsConnection},
+		{"scope not allowed is broken", with(func(i *Inputs) { i.Observed = ResultScopeNotAllowed }), StateBroken},
+		{"client auth failure is broken", with(func(i *Inputs) { i.Observed = ResultClientAuthFailed }), StateBroken},
+		{"downstream rejection is broken", with(func(i *Inputs) { i.Observed = ResultDownstreamRejected }), StateBroken},
+		{"agent still first", with(func(i *Inputs) { i.AgentRecorded = false; i.Observed = ResultVerified }), StateNeedsAgent},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -38,15 +44,17 @@ func TestDerive(t *testing.T) {
 	}
 	require.Equal(t, ReasonNoIDJAG, NotApplicableReason(with(func(i *Inputs) { i.AdvertisesIDJAG = false })))
 	require.Empty(t, NotApplicableReason(ready))
+	require.Equal(t, string(ResultScopeNotAllowed), BrokenReason(with(func(i *Inputs) { i.Observed = ResultScopeNotAllowed })))
+	require.Empty(t, BrokenReason(with(func(i *Inputs) { i.Observed = ResultVerified })))
 }
 
 func TestStatePending(t *testing.T) {
 	t.Parallel()
 
-	for _, s := range []State{StateNeedsAgent, StateNeedsConnection} {
+	for _, s := range []State{StateNeedsAgent, StateNeedsConnection, StateBroken} {
 		require.True(t, s.Pending(), string(s))
 	}
-	for _, s := range []State{StateNotApplicable, StateConnected} {
+	for _, s := range []State{StateNotApplicable, StateConnected, StateVerified} {
 		require.False(t, s.Pending(), string(s))
 	}
 }
@@ -69,6 +77,10 @@ func TestNormalizeAudience(t *testing.T) {
 	got, err = normalizeAudience("https://auth.example.com/oauth2/default")
 	require.NoError(t, err)
 	require.Equal(t, "https://auth.example.com/oauth2/default", got)
+	// Only the ends are trimmed; the catalog's invisible-character rule does not apply.
+	got, err = normalizeAudience("https://auth.example.com/a\u00a0b")
+	require.NoError(t, err)
+	require.Equal(t, "https://auth.example.com/a\u00a0b", got)
 	for _, bad := range []string{"", "auth.linear.com", "http://auth.linear.com", "https://auth.linear.com/?x=1", "https://auth.linear.com/#f", "https://auth.linear.com/?", "https://auth.linear.com#", "https://user@auth.linear.com"} {
 		_, err := normalizeAudience(bad)
 		require.Error(t, err, bad)

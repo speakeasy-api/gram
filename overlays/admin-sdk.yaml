@@ -94,6 +94,48 @@ actions:
   - target: $.paths.*[?@.operationId=='adminGetOrganizationFeatures']
     update:
       x-speakeasy-name-override: getOrganizationFeatures
+  - target: $.paths.*[?@.operationId=='adminListOnboardingUseCases']
+    update:
+      x-speakeasy-name-override: listOnboardingUseCases
+  - target: $.paths.*[?@.operationId=='adminCreateOnboardingUseCase']
+    update:
+      x-speakeasy-name-override: createOnboardingUseCase
+  - target: $.paths.*[?@.operationId=='adminUpdateOnboardingUseCase']
+    update:
+      x-speakeasy-name-override: updateOnboardingUseCase
+  - target: $.paths.*[?@.operationId=='adminDeleteOnboardingUseCase']
+    update:
+      x-speakeasy-name-override: deleteOnboardingUseCase
+  - target: $.paths.*[?@.operationId=='adminListOnboardingPlaybooks']
+    update:
+      x-speakeasy-name-override: listOnboardingPlaybooks
+  - target: $.paths.*[?@.operationId=='adminCreateOnboardingPlaybook']
+    update:
+      x-speakeasy-name-override: createOnboardingPlaybook
+  - target: $.paths.*[?@.operationId=='adminUpdateOnboardingPlaybook']
+    update:
+      x-speakeasy-name-override: updateOnboardingPlaybook
+  - target: $.paths.*[?@.operationId=='adminDeleteOnboardingPlaybook']
+    update:
+      x-speakeasy-name-override: deleteOnboardingPlaybook
+  - target: $.paths.*[?@.operationId=='adminCloneOnboardingPlaybook']
+    update:
+      x-speakeasy-name-override: cloneOnboardingPlaybook
+  - target: $.paths.*[?@.operationId=='adminGetOrganizationOnboardingPlaybook']
+    update:
+      x-speakeasy-name-override: getOrganizationOnboardingPlaybook
+  - target: $.paths.*[?@.operationId=='adminAssignOrganizationOnboardingPlaybook']
+    update:
+      x-speakeasy-name-override: assignOrganizationOnboardingPlaybook
+  - target: $.paths.*[?@.operationId=='adminGetOrganizationOnboardingStack']
+    update:
+      x-speakeasy-name-override: getOrganizationOnboardingStack
+  - target: $.paths.*[?@.operationId=='adminGetOnboardingStackOptions']
+    update:
+      x-speakeasy-name-override: getOnboardingStackOptions
+  - target: $.paths.*[?@.operationId=='adminListOnboardingSteps']
+    update:
+      x-speakeasy-name-override: listOnboardingSteps
   - target: $.paths.*[?@.operationId=='adminGetOrganizationStats']
     update:
       x-speakeasy-name-override: getOrganizationStats
@@ -112,6 +154,9 @@ actions:
   - target: $.paths.*[?@.operationId=='adminGetStripeSubscription']
     update:
       x-speakeasy-name-override: getStripeSubscription
+  - target: $.paths.*[?@.operationId=='adminGetStripeSubscriptionCandidate']
+    update:
+      x-speakeasy-name-override: getStripeSubscriptionCandidate
   - target: $.paths.*[?@.operationId=='adminListOrganizationActivity']
     update:
       x-speakeasy-name-override: listOrganizationActivity
@@ -121,6 +166,15 @@ actions:
   - target: $.paths.*[?@.operationId=='adminListOrganizationProjects']
     update:
       x-speakeasy-name-override: listOrganizationProjects
+  - target: $.paths.*[?@.operationId=='adminListProjectMcpServers']
+    update:
+      x-speakeasy-name-override: listProjectMcpServers
+  - target: $.paths.*[?@.operationId=='adminListUsers']
+    update:
+      x-speakeasy-name-override: listUsers
+  - target: $.paths.*[?@.operationId=='adminListUserOrganizations']
+    update:
+      x-speakeasy-name-override: listUserOrganizations
   - target: $.paths.*[?@.operationId=='adminListOrganizations']
     update:
       x-speakeasy-name-override: listOrganizations
@@ -145,9 +199,15 @@ actions:
   - target: $.paths.*[?@.operationId=='adminStartTrial']
     update:
       x-speakeasy-name-override: startTrial
+  - target: $.paths.*[?@.operationId=='adminSetOrganizationOnboardingStack']
+    update:
+      x-speakeasy-name-override: setOrganizationOnboardingStack
   - target: $.paths.*[?@.operationId=='adminSetStripeCustomer']
     update:
       x-speakeasy-name-override: setStripeCustomer
+  - target: $.paths.*[?@.operationId=='adminSetStripeSubscription']
+    update:
+      x-speakeasy-name-override: setStripeSubscription
   - target: $.paths.*[?@.operationId=='adminTriggerOrganizationChatAnalysis']
     update:
       x-speakeasy-name-override: triggerOrganizationChatAnalysis

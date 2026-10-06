@@ -1,3 +1,4 @@
+import { IdentitySyncCallout } from "@/components/setup-empty-state";
 import {
   buildEmployees,
   type Employee,
@@ -614,6 +615,16 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     ],
   );
 
+  // Only the people count survives main's tally: the stat tiles it fed were
+  // removed because each table already states its own count. The sync callout
+  // still needs to know whether this org has a directory behind it.
+  const peopleCount = useMemo(
+    () =>
+      identities.filter((identity) => identityKindOf(identity) === "person")
+        .length,
+    [identities],
+  );
+
   const kindKey = (values.kind ?? []).join(",");
   const hasLegacyKindFilter =
     !!kindKey && !KIND_OPTIONS.some((option) => option.value === kindKey);
@@ -967,6 +978,9 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       <Page.Section.Body>
         {/* The section stacks its body children at 8px, which reads as one
             block: the tiles, the controls and the table are three things. */}
+        {!rosterLoading && !rosterFailed && peopleCount <= 1 && (
+          <IdentitySyncCallout />
+        )}
         {/* The table is as tall as its rows, up to the room left under the
             controls. Past that it scrolls itself rather than the page: a short
             roster no longer leaves a band of empty table under the last row. */}

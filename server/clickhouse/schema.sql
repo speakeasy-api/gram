@@ -735,6 +735,7 @@ WITH
     ) AS is_litellm_usage_row,
     -- Rows that carry token usage: the sumIf guard for every token/cost sum.
     (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row) AS is_usage_row,
+    (gram_urn = 'chat:transcript:observed') AS is_transcript_row,
     -- Codex/Cursor/opencode/openclaw/Pi tool calls arrive as hook rows, one
     -- PostToolUse/PostToolUseFailure row per completed call (Codex raw OTEL
     -- tool events are deliberately not counted — hook rows stay the sole
@@ -791,7 +792,7 @@ SELECT
     arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)')) AS groups,
 
     -- Cardinality
-    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND is_usage_row) AS total_chats,
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '' AND (is_usage_row OR is_transcript_row)) AS total_chats,
 
     -- Token sums. total_tokens is input + output + cache WRITES — cache reads
     -- are excluded, matching the tokens-under-management measure (a cache
@@ -857,8 +858,10 @@ FROM telemetry_logs
 -- and cost rows, opencode/openclaw unified-ingest usage rows, and
 -- Codex/Cursor/opencode/openclaw completed tool-call hook rows. Tool rows carry no
 -- token/cost fields, so they only contribute to the tool-call counts.
-WHERE time_unix_nano >= attribute_metrics_cutoff_unix_nano
-  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row OR is_agent_tool_call OR is_work_units_score)
+-- Transcript observations may retain historical message times. The cutoff
+-- fences usage replay, not newly observed session evidence.
+WHERE (is_transcript_row OR time_unix_nano >= attribute_metrics_cutoff_unix_nano)
+  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row OR is_agent_tool_call OR is_transcript_row OR is_work_units_score)
 GROUP BY
     gram_project_id,
     time_bucket,
@@ -1129,6 +1132,7 @@ WITH
     ) AS is_agent_tool_call,
     (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
     (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row) AS is_usage_row,
+    (gram_urn = 'chat:transcript:observed') AS is_transcript_row,
     -- A counted tool call that failed: Claude tool_result rows carry
     -- success="false", Codex/Cursor hook rows report PostToolUseFailure or an
     -- HTTP error status.
@@ -1147,6 +1151,7 @@ WITH
     -- gen_ai.response.id), so they fall back to the row id (count-per-row).
     -- LiteLLM keys turns by call ID, then response ID, then row ID.
     multiIf(
+        is_transcript_row, toString(attributes.gram.chat.message.id),
         is_claude_api_request, toString(attributes.prompt.id),
         is_litellm_usage_row AND toString(attributes.gram.litellm.call_id) != '', toString(attributes.gram.litellm.call_id),
         is_litellm_usage_row AND toString(attributes.gen_ai.response.id) != '', toString(attributes.gen_ai.response.id),
@@ -1212,9 +1217,10 @@ SELECT
     -- guard keeps other rows from contributing an all-empty tuple.
     groupUniqArrayIf((toString(attributes.query_source), toString(attributes.skill.name), toString(attributes.agent.name), toString(attributes.mcp_server.name), toString(attributes.mcp_tool.name)), is_claude_api_request) AS attribution_tuples
 FROM telemetry_logs
-WHERE time_unix_nano >= chat_session_cutoff_unix_nano
+-- Historical transcript evidence is independent of the usage replay cutoff.
+WHERE (is_transcript_row OR time_unix_nano >= chat_session_cutoff_unix_nano)
   AND chat_id != ''
-  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row OR is_agent_tool_call)
+  AND (is_claude_api_request OR is_claude_tool_result OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row OR is_agent_tool_call OR is_transcript_row)
 GROUP BY gram_project_id, time_bucket, chat_id;
 
 CREATE TABLE IF NOT EXISTS attribute_keys (
@@ -1569,6 +1575,36 @@ CREATE INDEX IF NOT EXISTS idx_authz_challenges_api_key_id ON authz_challenges (
 CREATE INDEX IF NOT EXISTS idx_authz_challenges_scope ON authz_challenges (scope) TYPE set(0) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_authz_challenges_reason ON authz_challenges (reason) TYPE set(0) GRANULARITY 4;
 
+CREATE TABLE IF NOT EXISTS mcp_network_traffic_hourly_summaries (
+    gram_project_id UUID COMMENT 'Project that received the inbound MCP request.',
+    hour DateTime COMMENT 'UTC hour containing the observed request.',
+    server_kind LowCardinality(String) COMMENT 'MCP server kind: mcp or meta.',
+    server_id String COMMENT 'ID of the MCP server or meta MCP server.',
+    surface LowCardinality(String) COMMENT 'Network surface: public or private.',
+    request_count SimpleAggregateFunction(sum, UInt64),
+    last_seen SimpleAggregateFunction(max, DateTime64(9))
+) ENGINE = AggregatingMergeTree
+PARTITION BY toYYYYMM(hour)
+ORDER BY (gram_project_id, server_kind, server_id, surface, hour)
+TTL hour + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Hourly counts of observed inbound MCP HTTP requests by server and network surface';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS mcp_network_traffic_hourly_summaries_mv TO mcp_network_traffic_hourly_summaries AS
+SELECT
+    gram_project_id,
+    toStartOfHour(observed_timestamp, 'UTC') AS hour,
+    if(mcp_server_id != '', 'mcp', 'meta') AS server_kind,
+    if(mcp_server_id != '', mcp_server_id, meta_mcp_server_id) AS server_id,
+    toLowCardinality(toString(attributes.gram.network.surface)) AS surface,
+    toUInt64(count()) AS request_count,
+    max(observed_timestamp) AS last_seen
+FROM telemetry_logs
+WHERE event_urn = 'urn:telemetry:gram_service:log:mcp_network_request'
+  AND (mcp_server_id != '' OR meta_mcp_server_id != '')
+  AND surface IN ('public', 'private')
+GROUP BY gram_project_id, hour, server_kind, server_id, surface;
+
 CREATE TABLE IF NOT EXISTS authz_challenge_bucket_summaries (
     challenge_date Date COMMENT 'UTC date of the summarized challenge rows.',
 
@@ -1740,7 +1776,14 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     mcp_method LowCardinality(String) DEFAULT '' COMMENT 'MCP method or equivalent mediated operation, such as tools/call.',
     principal_kind LowCardinality(String) DEFAULT '' COMMENT 'Credential class established exclusively by mcpidentity. Empty when unstamped.',
     identity_stamped Bool DEFAULT false COMMENT 'Whether validated principal provenance was present, including validated anonymous sessions.',
-    enforcement_outcome Enum8('' = 0, 'logged' = 1, 'denied' = 2, 'withheld' = 3, 'warned_pending' = 4, 'warned_acknowledged' = 5, 'warned_abandoned' = 6, 'quarantined' = 7) DEFAULT '' COMMENT 'Enforcement action taken, independent of detection. Empty when unspecified or legacy.'
+    enforcement_outcome Enum8('' = 0, 'logged' = 1, 'denied' = 2, 'withheld' = 3, 'warned_pending' = 4, 'warned_acknowledged' = 5, 'warned_abandoned' = 6, 'quarantined' = 7) DEFAULT '' COMMENT 'Enforcement action taken, independent of detection. Empty when unspecified or legacy.',
+
+    -- Engine-comparison marker. Rows the LLM analyzer produced under the
+    -- shadow risk engine mode coexist with the legacy engines' rows for the
+    -- same message (deterministic finding ids include the source) and are
+    -- read only by the comparison query. Declared last for append-only
+    -- migration parity with the columns above.
+    shadow UInt8 DEFAULT 0 COMMENT 'Set to 1 on findings the LLM analyzer produced while the organization ran the shadow risk engine mode, recorded to compare the model with the legacy engines per message and never enforced. Every user-facing read path filters shadow = 0, so shadow rows are hidden from Risk Events, the overview, signals, the Watchdog and reveal by default. 0 on every enforcing finding and on rows written before this column existed.'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(created_at)
 ORDER BY (organization_id, project_id, created_at, id)
@@ -1757,6 +1800,7 @@ CREATE INDEX IF NOT EXISTS idx_risk_findings_risk_policy_id ON risk_findings (ri
 CREATE INDEX IF NOT EXISTS idx_risk_findings_rule_id ON risk_findings (rule_id) TYPE set(0) GRANULARITY 4;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_assistant_id ON risk_findings (assistant_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_risk_findings_mcp_server_id ON risk_findings (mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_risk_findings_execution_id ON risk_findings (execution_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 
 CREATE TABLE IF NOT EXISTS skill_efficacy_scores (
     id UUID COMMENT 'Producer-supplied score identifier.',

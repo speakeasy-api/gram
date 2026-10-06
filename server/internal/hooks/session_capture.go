@@ -16,7 +16,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -31,6 +30,28 @@ import (
 // ErrChatNotFound indicates the chat (conversation) does not exist.
 var ErrChatNotFound = errors.New("chat not found")
 
+// errChatProjectMismatch is returned when a hook write names a chat that
+// already exists under a different project. Session ids hash to chat ids with
+// no project in the derivation, so an org-scoped key can otherwise stamp
+// messages onto a sibling project's chat.
+var errChatProjectMismatch = errors.New("chat belongs to another project")
+
+// logHookPersistFailure reports a failed hook write for one of the async
+// ingest paths. A cross-project refusal is a deliberate outcome rather than a
+// server fault — an org-scoped key can name a session that already lives in a
+// sibling project — so it is logged as a warning under one event every adapter
+// shares, instead of as an error indistinguishable from a database failure.
+func (s *Service) logHookPersistFailure(ctx context.Context, subject string, err error, attrs ...any) {
+	if errors.Is(err, errChatProjectMismatch) {
+		s.logger.WarnContext(ctx, "refusing to persist "+subject+" for a session bound to another project",
+			append([]any{attr.SlogEvent("hooks_ingest_chat_project_mismatch"), attr.SlogError(err)}, attrs...)...)
+		return
+	}
+
+	s.logger.ErrorContext(ctx, "failed to persist "+subject,
+		append([]any{attr.SlogError(err)}, attrs...)...)
+}
+
 // isForeignKeyViolation checks if the error is a PostgreSQL foreign key constraint violation.
 // This indicates that the referenced chat does not exist.
 func isForeignKeyViolation(err error) bool {
@@ -38,6 +59,58 @@ func isForeignKeyViolation(err error) bool {
 		return pgErr.Code == pgerrcode.ForeignKeyViolation
 	}
 	return false
+}
+
+func (s *Service) ensureHookChat(
+	ctx context.Context,
+	queries *repo.Queries,
+	metadata *SessionMetadata,
+	chatID uuid.UUID,
+	projectID uuid.UUID,
+	title string,
+) error {
+	if queries == nil {
+		queries = s.repo
+	}
+
+	existing, err := queries.GetChatProjectID(ctx, chatID)
+	switch {
+	case err == nil:
+		if existing != projectID {
+			return errChatProjectMismatch
+		}
+		if metadata.SessionID != "" && sessionIDToUUID(metadata.SessionID) == chatID {
+			if err := queries.RecordCapturedSessionID(ctx, repo.RecordCapturedSessionIDParams{ChatID: chatID, ProjectID: projectID, SessionID: metadata.SessionID}); err != nil {
+				return fmt.Errorf("record captured session id: %w", err)
+			}
+		}
+		return nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("get chat project: %w", err)
+	}
+
+	_, err = queries.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      projectID,
+		OrganizationID: metadata.GramOrgID,
+		UserID:         conv.ToPGTextEmpty(metadata.UserID),
+		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
+		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
+		Title:          conv.ToPGText(title),
+		Cwd:            conv.ToPGTextEmpty(metadata.Cwd),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return errChatProjectMismatch
+	case err != nil:
+		return fmt.Errorf("upsert claude code session: %w", err)
+	}
+	if metadata.SessionID != "" && sessionIDToUUID(metadata.SessionID) == chatID {
+		if err := queries.RecordCapturedSessionID(ctx, repo.RecordCapturedSessionIDParams{ChatID: chatID, ProjectID: projectID, SessionID: metadata.SessionID}); err != nil {
+			return fmt.Errorf("record captured session id: %w", err)
+		}
+	}
+	return nil
 }
 
 // isConversationEvent returns true if the event is a conversation capture event (not a tool call).
@@ -59,11 +132,11 @@ func isConversationEvent(eventName string) bool {
 func (s *Service) defaultChatTitleForSession(ctx context.Context, metadata *SessionMetadata) string {
 	switch s.claudeSessionSurface(ctx, metadata) {
 	case agentVariantCowork:
-		return activities.DefaultCoworkChatTitle
+		return chat.DefaultCoworkChatTitle
 	case agentVariantClaudeCode, surfaceClaudeCodeDesktop:
-		return activities.DefaultClaudeChatTitle
+		return chat.DefaultClaudeChatTitle
 	default:
-		return activities.DefaultClaudeAmbiguous
+		return chat.DefaultClaudeAmbiguous
 	}
 }
 
@@ -188,8 +261,12 @@ func (s *Service) sessionAgentVariant(ctx context.Context, sessionID string) str
 	if sessionID == "" {
 		return ""
 	}
+	projectID := s.mcpListProjectID(ctx, sessionID)
+	if projectID == "" {
+		return ""
+	}
 	var variant string
-	if err := s.cache.Get(ctx, sessionAgentVariantCacheKey(sessionID), &variant); err != nil {
+	if err := s.cache.Get(ctx, sessionAgentVariantCacheKey(projectID, sessionID), &variant); err != nil {
 		return ""
 	}
 	return variant
@@ -405,7 +482,12 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 		return n, nil
 	}
 
-	// Try to insert the message (the writer handles notification on success).
+	// Pin the session to this project (or create the chat) before writing so a
+	// sibling-project header cannot stamp messages onto an existing chat.
+	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, defaultTitle); err != nil {
+		return false, err
+	}
+
 	n, err := writeMessage()
 	if err == nil {
 		return n > 0, nil
@@ -419,19 +501,10 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 		return false, fmt.Errorf("insert chat message: %w", err)
 	}
 
-	// Create the chat and retry.
-	_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
-		ID:             chatID,
-		ProjectID:      projectID,
-		OrganizationID: metadata.GramOrgID,
-		UserID:         conv.ToPGTextEmpty(metadata.UserID),
-		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
-		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
-		Title:          conv.ToPGText(defaultTitle),
-		Cwd:            conv.ToPGTextEmpty(metadata.Cwd),
-	})
-	if upsertErr != nil {
-		return false, fmt.Errorf("upsert claude code session after missing chat: %w", upsertErr)
+	// Create the chat and retry. A concurrent first-writer in another project
+	// loses here the same way UpsertChat does: no returned row.
+	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, defaultTitle); err != nil {
+		return false, fmt.Errorf("upsert claude code session after missing chat: %w", err)
 	}
 
 	n, err = writeMessage()
@@ -511,6 +584,17 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 		}
 	}
 
+	writes := []chat.MessageWrite{{
+		Params:         msgParams,
+		BillingUserID:  metadata.UserID,
+		AssistantID:    uuid.Nil,
+		WorkloadSource: metering.WorkloadSourceHook,
+		UserEmail:      metadata.UserEmail,
+		Provider:       metadata.Provider,
+		HookHostname:   metadata.Hostname,
+		AccountType:    metadata.AccountType,
+		BillingMode:    metadata.BillingMode,
+	}}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin prompt correlation transaction: %w", err)
@@ -539,30 +623,9 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 	// lock, keep both rows rather than guessing from prompt text and losing or
 	// misattributing a legitimate repeated native turn.
 
-	_, err = repo.New(tx).UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
-		ID:             msgParams.ChatID,
-		ProjectID:      projectID,
-		OrganizationID: metadata.GramOrgID,
-		UserID:         conv.ToPGTextEmpty(metadata.UserID),
-		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
-		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
-		Title:          conv.ToPGText(defaultTitle),
-		Cwd:            conv.ToPGTextEmpty(metadata.Cwd),
-	})
-	if err != nil {
-		return false, fmt.Errorf("upsert claude code session: %w", err)
+	if err := s.ensureHookChat(ctx, repo.New(tx), metadata, msgParams.ChatID, projectID, defaultTitle); err != nil {
+		return false, err
 	}
-	writes := []chat.MessageWrite{{
-		Params:         msgParams,
-		BillingUserID:  metadata.UserID,
-		AssistantID:    uuid.Nil,
-		WorkloadSource: metering.WorkloadSourceHook,
-		UserEmail:      metadata.UserEmail,
-		Provider:       metadata.Provider,
-		HookHostname:   metadata.Hostname,
-		AccountType:    metadata.AccountType,
-		BillingMode:    metadata.BillingMode,
-	}}
 	n, err := s.writer.WriteInTx(ctx, tx, writes)
 	if err != nil {
 		return false, fmt.Errorf("insert uncorrelated agent prompt: %w", err)

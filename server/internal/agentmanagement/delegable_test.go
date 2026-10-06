@@ -416,6 +416,92 @@ func TestListDelegableGrantsScopedToolset(t *testing.T) {
 	}
 }
 
+func TestListDelegableGrantsBatchedToolsets(t *testing.T) {
+	t.Parallel()
+	f := newDelegableFixture(t)
+	first := f.toolset(t, "org-delegable", "first")
+	second := f.toolset(t, "org-delegable", "second")
+	blocked := f.toolset(t, "org-delegable", "blocked")
+	for _, principal := range []string{"agent", "owner", "caller"} {
+		f.grant(t, principal, authz.ScopeMCPWrite, authz.NewSelector(authz.ScopeMCPWrite, "*"))
+	}
+	f.grant(t, "owner", authz.ScopeMCPBlockedConnect, authz.NewSelector(authz.ScopeMCPBlockedConnect, blocked.ID.String()))
+	ctx := validatedHumanContext(t, "org-delegable", "caller")
+
+	var want []*gen.AgentPolicyGrantForm
+	for _, id := range []string{first.ID.String(), second.ID.String(), blocked.ID.String()} {
+		grants, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{AgentID: f.agentID.String(), ToolsetID: new(id)})
+		require.NoError(t, err)
+		want = append(want, grants...)
+	}
+	require.NotEmpty(t, want)
+
+	// The legacy single field and the batch field combine, and repeats collapse.
+	grants, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+		AgentID:    f.agentID.String(),
+		ToolsetID:  new(first.ID.String()),
+		ToolsetIds: []string{first.ID.String(), second.ID.String(), blocked.ID.String()},
+	})
+	require.NoError(t, err)
+	require.ElementsMatch(t, want, grants)
+	for _, grant := range grants {
+		require.NotEqual(t, blocked.ID.String(), grant.Selector.ResourceID)
+	}
+}
+
+func TestListDelegableGrantsBatchOmitsUnavailableResources(t *testing.T) {
+	t.Parallel()
+	f := newDelegableFixture(t)
+	live := f.toolset(t, "org-delegable", "live")
+	deleted := f.toolset(t, "org-delegable", "deleted")
+	// A live inventory wrapper can still refer to a deleted toolset.
+	f.modernServer(t, deleted.ProjectID, uuid.NullUUID{UUID: deleted.ID, Valid: true})
+	_, err := toolsetsrepo.New(f.db).DeleteToolset(t.Context(), toolsetsrepo.DeleteToolsetParams{
+		Slug: deleted.Slug, ProjectID: deleted.ProjectID,
+	})
+	require.NoError(t, err)
+	seedOrganization(t, f.db, "org-other-delegable")
+	foreign := f.toolset(t, "org-other-delegable", "foreign")
+	for _, principal := range []string{"agent", "owner", "caller"} {
+		f.grant(t, principal, authz.ScopeMCPConnect, authz.NewSelector(authz.ScopeMCPConnect, "*"))
+	}
+	ctx := validatedHumanContext(t, "org-delegable", "caller")
+	want, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+		AgentID: f.agentID.String(), ToolsetID: new(live.ID.String()),
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, want)
+	for _, tc := range []struct{ name, id string }{
+		{name: "deleted backing toolset", id: deleted.ID.String()},
+		{name: "foreign organization", id: foreign.ID.String()},
+		{name: "missing resource", id: uuid.NewString()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			unavailable := tc.id
+			grants, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+				AgentID: f.agentID.String(), ToolsetIds: []string{unavailable, live.ID.String()},
+			})
+			require.NoError(t, err)
+			require.ElementsMatch(t, want, grants)
+			grants, err = f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+				AgentID: f.agentID.String(), ToolsetIds: []string{unavailable},
+			})
+			require.NoError(t, err)
+			require.Empty(t, grants, "an empty resolved batch must never become unscoped discovery")
+			_, err = f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+				AgentID: f.agentID.String(), ToolsetID: &unavailable, ToolsetIds: []string{live.ID.String()},
+			})
+			requireOopsCode(t, err, oops.CodeNotFound)
+		})
+	}
+	grants, err := f.service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{
+		AgentID: f.agentID.String(), ToolsetIds: []string{live.ID.String(), "invalid"},
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.Nil(t, grants)
+}
+
 func TestListDelegableGrantsScopedToolsetRejectsInvalidResources(t *testing.T) {
 	t.Parallel()
 	f := newDelegableFixture(t)

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/inv"
 )
 
 var ErrRiskCursorInvalid = errors.New("invalid platform mcp risk cursor")
@@ -28,12 +30,11 @@ type riskCursorCodec struct {
 	key []byte
 }
 
-func newRiskCursorCodec(keyMaterial string) (*riskCursorCodec, error) {
-	if keyMaterial == "" {
-		return nil, ErrRiskCursorInvalid
-	}
+func newRiskCursorCodec(keyMaterial string) *riskCursorCodec {
+	inv.Require("platform mcp risk cursor codec", "key material is configured", keyMaterial != "")
+
 	key := sha256.Sum256([]byte("platform-mcp-risk-read-cursor:" + keyMaterial))
-	return &riskCursorCodec{key: key[:]}, nil
+	return &riskCursorCodec{key: key[:]}
 }
 
 func (c *riskCursorCodec) Encode(cursor riskCursor) (string, error) {

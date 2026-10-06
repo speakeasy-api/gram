@@ -19,6 +19,21 @@ import (
 // an OAuth client of a remote_session_issuer. client_secret_encrypted is never
 // returned.
 type Service interface {
+	// Explicit, tenant-scoped identity-chaining configuration. Mutations require
+	// project-write authorization; reads require project-read authorization. Does
+	// not exchange tokens or establish provider verification, trust, consent, or
+	// user access.
+	PrepareEMA(context.Context, *PrepareEMAPayload) (res *IdentityChainingPreparation, err error)
+	// Explicit, tenant-scoped identity-chaining configuration. Mutations require
+	// project-write authorization; reads require project-read authorization. Does
+	// not exchange tokens or establish provider verification, trust, consent, or
+	// user access.
+	ReadEMA(context.Context, *ReadEMAPayload) (res *IdentityChainingPreparation, err error)
+	// Explicit, tenant-scoped identity-chaining configuration. Mutations require
+	// project-write authorization; reads require project-read authorization. Does
+	// not exchange tokens or establish provider verification, trust, consent, or
+	// user access.
+	UnlinkEMA(context.Context, *UnlinkEMAPayload) (res *IdentityChainingPreparation, err error)
 	// Register a remote_session_client by supplying a client_id and optional
 	// client_secret obtained out-of-band from the upstream issuer.
 	CreateRemoteSessionClient(context.Context, *CreateRemoteSessionClientPayload) (res *types.RemoteSessionClient, err error)
@@ -50,6 +65,9 @@ type Service interface {
 	DetachKeySet(context.Context, *DetachKeySetPayload) (res *types.RemoteSessionClient, err error)
 	// List remote_session_clients in the caller's project.
 	ListRemoteSessionClients(context.Context, *ListRemoteSessionClientsPayload) (res *ListRemoteSessionClientsResult, err error)
+	// Get the redirect URI a remote_session_client created now in the caller's
+	// project registers with its upstream provider.
+	GetNewClientCallbackURL(context.Context, *GetNewClientCallbackURLPayload) (res *NewClientCallbackURLResult, err error)
 	// Get a remote_session_client by id.
 	GetRemoteSessionClient(context.Context, *GetRemoteSessionClientPayload) (res *types.RemoteSessionClient, err error)
 	// Soft-delete a remote_session_client. Cascades to remote_sessions rows
@@ -77,7 +95,7 @@ const ServiceName = "remoteSessionClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"createRemoteSessionClient", "createCimd", "updateRemoteSessionClient", "attachUserSessionIssuer", "detachUserSessionIssuer", "attachKeySet", "detachKeySet", "listRemoteSessionClients", "getRemoteSessionClient", "deleteRemoteSessionClient"}
+var MethodNames = [14]string{"prepareEMA", "readEMA", "unlinkEMA", "createRemoteSessionClient", "createCimd", "updateRemoteSessionClient", "attachUserSessionIssuer", "detachUserSessionIssuer", "attachKeySet", "detachKeySet", "listRemoteSessionClients", "getNewClientCallbackUrl", "getRemoteSessionClient", "deleteRemoteSessionClient"}
 
 // AttachKeySetPayload is the payload type of the remoteSessionClients service
 // attachKeySet method.
@@ -192,6 +210,14 @@ type DetachUserSessionIssuerPayload struct {
 	UserSessionIssuerID string
 }
 
+// GetNewClientCallbackURLPayload is the payload type of the
+// remoteSessionClients service getNewClientCallbackUrl method.
+type GetNewClientCallbackURLPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // GetRemoteSessionClientPayload is the payload type of the
 // remoteSessionClients service getRemoteSessionClient method.
 type GetRemoteSessionClientPayload struct {
@@ -200,6 +226,30 @@ type GetRemoteSessionClientPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+// IdentityChainingPreparation is the result type of the remoteSessionClients
+// service prepareEMA method.
+type IdentityChainingPreparation struct {
+	// Preparation state; readiness never proves user access.
+	State string
+	Stage string
+	// Safe next action without provider bodies or credentials.
+	Remediation string
+	Retryable   bool
+	BindingID   *string
+	Generation  int64
+	// Exact selected remote_session_client row ID, when available.
+	ClientID *string
+	// Public OAuth client identifier, never a secret.
+	ExternalClientID *string
+	Issuer           *string
+	Resource         string
+	// Null means unknown; an empty array means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
+	Scopes     []string
+	// Provenance of recorded grants, not provider trust.
+	GrantSource string
 }
 
 // ListRemoteSessionClientsPayload is the payload type of the
@@ -226,6 +276,70 @@ type ListRemoteSessionClientsResult struct {
 	NextCursor *string
 }
 
+// NewClientCallbackURLResult is the result type of the remoteSessionClients
+// service getNewClientCallbackUrl method.
+type NewClientCallbackURLResult struct {
+	// The redirect URI to register on the upstream provider's OAuth app.
+	CallbackURL string
+}
+
+// PrepareEMAPayload is the payload type of the remoteSessionClients service
+// prepareEMA method.
+type PrepareEMAPayload struct {
+	SessionToken          *string
+	ApikeyToken           *string
+	ProjectSlugInput      *string
+	UserSessionIssuerID   string
+	RemoteSessionIssuerID string
+	// Canonical intended resource URI.
+	Resource string
+	// Explicit selected client row ID; never inferred.
+	ClientID *string
+	// Requested scope tokens.
+	Scopes    []string
+	Mechanism string
+	// Explicit DCR authentication method.
+	TokenEndpointAuthMethod *string
+	// Optional caller-declared resource/authorization-server consistency hints,
+	// not provider-verified RFC 9728 discovery evidence. May be omitted for
+	// explicit manual configuration. Matching values do not establish trust,
+	// consent, or user access.
+	ResourceMetadata *struct {
+		Resource             string
+		AuthorizationServers []string
+	}
+	// Administrator-declared grants, not provider verification.
+	ConfirmGrants []string
+	// Optimistic binding generation.
+	ExpectedGeneration int64
+}
+
+// ReadEMAPayload is the payload type of the remoteSessionClients service
+// readEMA method.
+type ReadEMAPayload struct {
+	SessionToken          *string
+	ApikeyToken           *string
+	ProjectSlugInput      *string
+	UserSessionIssuerID   string
+	RemoteSessionIssuerID string
+	// Canonical intended resource URI.
+	Resource string
+}
+
+// UnlinkEMAPayload is the payload type of the remoteSessionClients service
+// unlinkEMA method.
+type UnlinkEMAPayload struct {
+	SessionToken          *string
+	ApikeyToken           *string
+	ProjectSlugInput      *string
+	UserSessionIssuerID   string
+	RemoteSessionIssuerID string
+	// Canonical intended resource URI.
+	Resource string
+	// Optimistic binding generation.
+	ExpectedGeneration int64
+}
+
 // UpdateRemoteSessionClientPayload is the payload type of the
 // remoteSessionClients service updateRemoteSessionClient method.
 type UpdateRemoteSessionClientPayload struct {
@@ -247,6 +361,11 @@ type UpdateRemoteSessionClientPayload struct {
 	// Replace the upstream OAuth audience sent for this client. Omit to leave
 	// unchanged.
 	Audience *string
+	// Platform admins only. Set true to run the client in compatibility mode with
+	// the legacy callback URL, or false to migrate it to the current callback URL
+	// once that URL is registered with the identity provider. Omit to leave
+	// unchanged.
+	LegacyCallbackURL *bool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

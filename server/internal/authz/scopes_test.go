@@ -104,6 +104,8 @@ func TestScopeExclusionsCoversKnownScopes(t *testing.T) {
 		{scope: ScopeEnvironmentWrite, expected: ScopeEnvironmentBlockedWrite},
 		{scope: ScopeSkillRead, expected: ScopeSkillBlockedRead},
 		{scope: ScopeSkillWrite, expected: ScopeSkillBlockedWrite},
+		{scope: ScopeAssistantRead, expected: ScopeAssistantBlockedRead},
+		{scope: ScopeAssistantWrite, expected: ScopeAssistantBlockedWrite},
 		{scope: ScopeRiskPolicyEvaluate, expected: ScopeRiskPolicyBypass},
 	}
 
@@ -130,6 +132,7 @@ func TestBlocklistScopeExpansions(t *testing.T) {
 	require.Nil(t, scopeExpansions[ScopeMCPBlockedWrite])
 	require.Equal(t, []Scope{ScopeEnvironmentBlockedRead}, scopeExpansions[ScopeEnvironmentBlockedWrite])
 	require.Equal(t, []Scope{ScopeSkillBlockedRead}, scopeExpansions[ScopeSkillBlockedWrite])
+	require.Equal(t, []Scope{ScopeAssistantBlockedRead}, scopeExpansions[ScopeAssistantBlockedWrite])
 }
 
 func TestCalculateSubScopesExcludesInternalBlocklistScopes(t *testing.T) {
@@ -203,6 +206,38 @@ func TestSystemRolesIncludeSkillScopes(t *testing.T) {
 	}
 	require.Contains(t, member, string(ScopeSkillRead))
 	require.NotContains(t, member, string(ScopeSkillWrite))
+}
+
+func TestSystemRolesIncludeAssistantScopes(t *testing.T) {
+	t.Parallel()
+
+	admin := make([]string, 0, len(SystemRoleGrants[SystemRoleAdmin]))
+	for _, grant := range SystemRoleGrants[SystemRoleAdmin] {
+		admin = append(admin, grant.Scope)
+	}
+	require.Contains(t, admin, string(ScopeAssistantRead))
+	require.Contains(t, admin, string(ScopeAssistantWrite))
+
+	member := make([]string, 0, len(SystemRoleGrants[SystemRoleMember]))
+	for _, grant := range SystemRoleGrants[SystemRoleMember] {
+		member = append(member, grant.Scope)
+	}
+	require.Contains(t, member, string(ScopeAssistantRead))
+	require.NotContains(t, member, string(ScopeAssistantWrite))
+}
+
+func TestGrantsSatisfy_assistantWriteSatisfiesAssistantRead(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{NewGrant(ScopeAssistantWrite, "assistant_1")}
+	require.True(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")))
+}
+
+func TestGrantsSatisfy_assistantReadDoesNotSatisfyAssistantWrite(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{NewGrant(ScopeAssistantRead, "assistant_1")}
+	require.False(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")))
 }
 
 func TestCheckExpand_orgRead(t *testing.T) {
@@ -486,6 +521,8 @@ func TestCalculateSubScopes(t *testing.T) {
 		{scope: string(ScopeEnvironmentWrite), want: []string{string(ScopeEnvironmentRead)}},
 		{scope: string(ScopeSkillRead), want: []string{}},
 		{scope: string(ScopeSkillWrite), want: []string{string(ScopeSkillRead)}},
+		{scope: string(ScopeAssistantRead), want: []string{}},
+		{scope: string(ScopeAssistantWrite), want: []string{string(ScopeAssistantRead)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.scope, func(t *testing.T) {
@@ -511,4 +548,51 @@ func TestCalculateSubScopes_inverseOfScopeExpansions(t *testing.T) {
 				"higher scope %q should imply lower scope %q", h, lower)
 		}
 	}
+}
+
+// The workload scope governs configuring an organization's trust policy: which
+// issuers it trusts, which subjects are admitted, and which agent each inherits
+// its policy from. Admitting a subject is itself the grant of machine access, so
+// these pin the shape rather than leaving it to the scope-count assertions in
+// the access package, which would pass for a scope wired up wrongly.
+func TestWorkloadScopeShape(t *testing.T) {
+	t.Parallel()
+
+	// write satisfies read, as in the mcp and skill families, so a holder of
+	// workload:write never needs workload:read granted alongside it.
+	require.Equal(t, []Scope{ScopeWorkloadWrite}, scopeExpansions[ScopeWorkloadRead])
+	require.Nil(t, scopeExpansions[ScopeWorkloadWrite])
+	require.Equal(t, []Scope{ScopeWorkloadBlockedRead}, scopeExpansions[ScopeWorkloadBlockedWrite])
+
+	// Each verb has a blocklist twin, so an exception can be carved out of a
+	// wildcard grant the same way it can for every other resource.
+	blockedRead, ok := ExclusionScopeFor(ScopeWorkloadRead)
+	require.True(t, ok)
+	require.Equal(t, ScopeWorkloadBlockedRead, blockedRead)
+	blockedWrite, ok := ExclusionScopeFor(ScopeWorkloadWrite)
+	require.True(t, ok)
+	require.Equal(t, ScopeWorkloadBlockedWrite, blockedWrite)
+
+	// The selector kind is its own, not org or project: a grant of
+	// workload:write is about the trust policy rather than the organization at
+	// large. It is deliberately the same string as urn.PrincipalTypeWorkload,
+	// which names the machine principal; the two never meet, because a
+	// selector's resource_kind is never compared against a principal type.
+	require.Equal(t, ResourceKindWorkload, ResourceKindForScope(ScopeWorkloadWrite))
+	require.Equal(t, ResourceKindWorkload, ResourceKindForScope(ScopeWorkloadRead))
+}
+
+func TestWorkloadScopeIsAdminDefaultAndNotMemberDefault(t *testing.T) {
+	t.Parallel()
+
+	// Administrators configure workload identity, beside agent:authorize: both
+	// hand a machine an agent's authority.
+	require.True(t, slices.Contains(adminScopes, ScopeWorkloadRead))
+	require.True(t, slices.Contains(adminScopes, ScopeWorkloadWrite))
+
+	// Not a member default in either direction. Read alone discloses which
+	// machines the organization recognises, which is its trust policy, so a
+	// member who needs it gets an explicit grant through a custom role.
+	require.False(t, slices.Contains(memberScopes, ScopeWorkloadRead))
+	require.False(t, slices.Contains(memberScopes, ScopeWorkloadWrite))
 }

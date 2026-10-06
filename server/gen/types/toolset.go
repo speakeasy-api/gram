@@ -54,6 +54,8 @@ type Toolset struct {
 	McpIsPublic *bool
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool
+	// The hosted MCP network access mode; public_only by default
+	NetworkAccessMode *NetworkAccessMode
 	// The mode to use for tool selection
 	ToolSelectionMode string
 	// The ID of the custom domain to use for the toolset

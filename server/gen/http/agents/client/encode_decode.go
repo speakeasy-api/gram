@@ -1464,6 +1464,9 @@ func EncodeListDelegableGrantsRequest(encoder func(*http.Request) goahttp.Encode
 		if p.ToolsetID != nil {
 			values.Add("toolset_id", *p.ToolsetID)
 		}
+		for _, value := range p.ToolsetIds {
+			values.Add("toolset_ids", value)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -4021,6 +4024,7 @@ func unmarshalManagedAgentResponseBodyToAgentsManagedAgent(v *ManagedAgentRespon
 		OwnerReassignmentRequiredAt: v.OwnerReassignmentRequiredAt,
 		OwnerReassignmentReason:     v.OwnerReassignmentReason,
 		Name:                        *v.Name,
+		ProjectID:                   v.ProjectID,
 		Lifecycle:                   agents.AgentLifecycle(*v.Lifecycle),
 		CreatedAt:                   *v.CreatedAt,
 		UpdatedAt:                   *v.UpdatedAt,

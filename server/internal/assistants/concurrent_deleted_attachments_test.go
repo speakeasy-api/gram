@@ -12,7 +12,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/assistants"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -31,10 +30,7 @@ func TestServiceConcurrentDeletedAttachments(t *testing.T) {
 				svc, ctx, projectID, conn := newRBACServiceWithConn(t, "concurrent_deleted_"+kind+"_"+mutation)
 				ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 				defer cancel()
-				ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-					Scope:    authz.ScopeProjectWrite,
-					Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String()),
-				})
+				ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
 				ts, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 					OrganizationID: "org-test", ProjectID: projectID, Name: "Example tools", Slug: "example-tools",
 					McpSlug: pgtype.Text{String: "example-tools-endpoint", Valid: true}, McpEnabled: true,
@@ -115,7 +111,7 @@ func TestServiceConcurrentDeletedAttachments(t *testing.T) {
 						finished <- err
 					}
 				}()
-				testenv.WaitForBlockedBackend(t, ctx, conn)
+				testenv.WaitForBackendsBlockedBy(t, ctx, conn, testenv.BackendPID(tx), 1)
 				require.NoError(t, tx.Commit(ctx))
 				select {
 				case err := <-finished:
@@ -158,10 +154,7 @@ func TestServiceMixedAttachmentsConcurrentMCPBackendUpdate(t *testing.T) {
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "mixed_attachments_backend_update")
 	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope:    authz.ScopeProjectWrite,
-		Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String()),
-	})
+	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
 	toolsets := toolsetsrepo.New(conn)
 	original, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: "org-test", ProjectID: projectID, Name: "Original tools", Slug: "original-tools",
@@ -205,7 +198,7 @@ func TestServiceMixedAttachmentsConcurrentMCPBackendUpdate(t *testing.T) {
 		finished <- err
 	}()
 	// The assistant has locked the target toolset and now waits on this server.
-	testenv.WaitForBlockedBackend(t, ctx, conn)
+	testenv.WaitForBackendsBlockedBy(t, ctx, conn, testenv.BackendPID(tx), 1)
 	updateCtx, cancelUpdate := context.WithTimeout(ctx, 5*time.Second)
 	defer cancelUpdate()
 	// Switching from a distinct backend forces the FK's KEY SHARE check on

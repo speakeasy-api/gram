@@ -10,6 +10,20 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
+ * Present when state is broken. audience_mismatch: legacy value, no longer emitted; the administrator-confirmed Okta audience may differ from the server's authorization server issuer; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app's client authentication; downstream_rejected: the identity provider issued the assertion but the server's authorization server refused it.
+ */
+export const BrokenReason = {
+  AudienceMismatch: "audience_mismatch",
+  ScopeNotAllowed: "scope_not_allowed",
+  ClientAuthFailed: "client_auth_failed",
+  DownstreamRejected: "downstream_rejected",
+} as const;
+/**
+ * Present when state is broken. audience_mismatch: legacy value, no longer emitted; the administrator-confirmed Okta audience may differ from the server's authorization server issuer; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app's client authentication; downstream_rejected: the identity provider issued the assertion but the server's authorization server refused it.
+ */
+export type BrokenReason = ClosedEnum<typeof BrokenReason>;
+
+/**
  * bound: an explicit identity chaining binding selects the client; single: the one client attached to the authorization server; ambiguous: more than one candidate and no single binding; missing: no client registered yet.
  */
 export const ClientBinding = {
@@ -35,16 +49,33 @@ export const NotApplicableReason = {
 export type NotApplicableReason = ClosedEnum<typeof NotApplicableReason>;
 
 /**
- * Derived readiness. not_applicable: see not_applicable_reason; needs_agent: no AI agent recorded on the connection; needs_connection: the agent-to-resource connection has not been confirmed for this server's upstream; connected: the administrator confirmed it. Whether the exchange works is not known here.
+ * What the latest identity chaining exchange since confirmation showed. connection_missing is inferred from the identity provider's invalid_target error.
+ */
+export const ObservedResult = {
+  Verified: "verified",
+  DownstreamRejected: "downstream_rejected",
+  ConnectionMissing: "connection_missing",
+  ScopeNotAllowed: "scope_not_allowed",
+  ClientAuthFailed: "client_auth_failed",
+} as const;
+/**
+ * What the latest identity chaining exchange since confirmation showed. connection_missing is inferred from the identity provider's invalid_target error.
+ */
+export type ObservedResult = ClosedEnum<typeof ObservedResult>;
+
+/**
+ * Derived readiness. not_applicable: see not_applicable_reason; needs_agent: no AI agent recorded on the connection; needs_connection: the agent-to-resource connection has not been confirmed for this server's upstream, or an exchange since confirmation found it missing; broken: confirmed but known not to work, see broken_reason; connected: the administrator confirmed it and no conclusive exchange has run since; verified: an exchange since confirmation succeeded.
  */
 export const OktaResourceConnectionServerState = {
   NotApplicable: "not_applicable",
   NeedsAgent: "needs_agent",
   NeedsConnection: "needs_connection",
+  Broken: "broken",
   Connected: "connected",
+  Verified: "verified",
 } as const;
 /**
- * Derived readiness. not_applicable: see not_applicable_reason; needs_agent: no AI agent recorded on the connection; needs_connection: the agent-to-resource connection has not been confirmed for this server's upstream; connected: the administrator confirmed it. Whether the exchange works is not known here.
+ * Derived readiness. not_applicable: see not_applicable_reason; needs_agent: no AI agent recorded on the connection; needs_connection: the agent-to-resource connection has not been confirmed for this server's upstream, or an exchange since confirmation found it missing; broken: confirmed but known not to work, see broken_reason; connected: the administrator confirmed it and no conclusive exchange has run since; verified: an exchange since confirmation succeeded.
  */
 export type OktaResourceConnectionServerState = ClosedEnum<
   typeof OktaResourceConnectionServerState
@@ -58,6 +89,14 @@ export type OktaResourceConnectionServer = {
    * The resource app's Cross App Access issuer URL as configured in the identity provider; the audience of the identity assertion. Present once confirmed.
    */
   audience?: string | undefined;
+  /**
+   * The server's authorization server issuer; the Issuer URL to enter when enabling Cross App Access on a resource app. Omitted when unknown.
+   */
+  authorizationServerIssuer?: string | undefined;
+  /**
+   * Present when state is broken. audience_mismatch: legacy value, no longer emitted; the administrator-confirmed Okta audience may differ from the server's authorization server issuer; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app's client authentication; downstream_rejected: the identity provider issued the assertion but the server's authorization server refused it.
+   */
+  brokenReason?: BrokenReason | undefined;
   /**
    * bound: an explicit identity chaining binding selects the client; single: the one client attached to the authorization server; ambiguous: more than one candidate and no single binding; missing: no client registered yet.
    */
@@ -86,6 +125,14 @@ export type OktaResourceConnectionServer = {
    * no_idjag: the server's authorization server metadata does not advertise the identity assertion grant.
    */
   notApplicableReason?: NotApplicableReason | undefined;
+  /**
+   * When the exchange behind observed_result started.
+   */
+  observedAt?: Date | undefined;
+  /**
+   * What the latest identity chaining exchange since confirmation showed. connection_missing is inferred from the identity provider's invalid_target error.
+   */
+  observedResult?: ObservedResult | undefined;
   /**
    * The identity provider app instance the administrator picked for this upstream, when recorded.
    */
@@ -117,10 +164,14 @@ export type OktaResourceConnectionServer = {
   serverName: string;
   serverSlug: string;
   /**
-   * Derived readiness. not_applicable: see not_applicable_reason; needs_agent: no AI agent recorded on the connection; needs_connection: the agent-to-resource connection has not been confirmed for this server's upstream; connected: the administrator confirmed it. Whether the exchange works is not known here.
+   * Derived readiness. not_applicable: see not_applicable_reason; needs_agent: no AI agent recorded on the connection; needs_connection: the agent-to-resource connection has not been confirmed for this server's upstream, or an exchange since confirmation found it missing; broken: confirmed but known not to work, see broken_reason; connected: the administrator confirmed it and no conclusive exchange has run since; verified: an exchange since confirmation succeeded.
    */
   state: OktaResourceConnectionServerState;
 };
+
+/** @internal */
+export const BrokenReason$inboundSchema: z.ZodMiniEnum<typeof BrokenReason> = z
+  .enum(BrokenReason);
 
 /** @internal */
 export const ClientBinding$inboundSchema: z.ZodMiniEnum<typeof ClientBinding> =
@@ -130,6 +181,11 @@ export const ClientBinding$inboundSchema: z.ZodMiniEnum<typeof ClientBinding> =
 export const NotApplicableReason$inboundSchema: z.ZodMiniEnum<
   typeof NotApplicableReason
 > = z.enum(NotApplicableReason);
+
+/** @internal */
+export const ObservedResult$inboundSchema: z.ZodMiniEnum<
+  typeof ObservedResult
+> = z.enum(ObservedResult);
 
 /** @internal */
 export const OktaResourceConnectionServerState$inboundSchema: z.ZodMiniEnum<
@@ -143,6 +199,8 @@ export const OktaResourceConnectionServer$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     audience: z.optional(z.string()),
+    authorization_server_issuer: z.optional(z.string()),
+    broken_reason: z.optional(BrokenReason$inboundSchema),
     client_binding: ClientBinding$inboundSchema,
     client_id: z.optional(z.string()),
     confirmed_at: z.optional(
@@ -152,6 +210,10 @@ export const OktaResourceConnectionServer$inboundSchema: z.ZodMiniType<
     issuer_id: z.optional(z.string()),
     mcp_server_id: z.string(),
     not_applicable_reason: z.optional(NotApplicableReason$inboundSchema),
+    observed_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
+    observed_result: z.optional(ObservedResult$inboundSchema),
     okta_application_id: z.optional(z.string()),
     okta_application_label: z.optional(z.string()),
     pending: z.boolean(),
@@ -165,6 +227,8 @@ export const OktaResourceConnectionServer$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "authorization_server_issuer": "authorizationServerIssuer",
+      "broken_reason": "brokenReason",
       "client_binding": "clientBinding",
       "client_id": "clientId",
       "confirmed_at": "confirmedAt",
@@ -172,6 +236,8 @@ export const OktaResourceConnectionServer$inboundSchema: z.ZodMiniType<
       "issuer_id": "issuerId",
       "mcp_server_id": "mcpServerId",
       "not_applicable_reason": "notApplicableReason",
+      "observed_at": "observedAt",
+      "observed_result": "observedResult",
       "okta_application_id": "oktaApplicationId",
       "okta_application_label": "oktaApplicationLabel",
       "project_id": "projectId",

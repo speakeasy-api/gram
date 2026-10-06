@@ -82,6 +82,10 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeProjectRead, authCtx.ProjectID.String()),
+		authz.NewGrant(authz.ScopeProjectWrite, authCtx.ProjectID.String()),
+	)
 
 	envRow, err := environmentsrepo.New(conn).CreateEnvironment(ctx, environmentsrepo.CreateEnvironmentParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -109,6 +113,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		serverURL,
 		nil,
 		nil,
+		nil,
+		cache.NoopCache,
 	)
 
 	svc := triggers.NewService(

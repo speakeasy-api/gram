@@ -1,3 +1,4 @@
+import { ShadowAISetupEmptyState } from "@/components/setup-empty-state";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import {
   defineFilters,
@@ -12,6 +13,7 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
 import { Text } from "@/components/ui/Text";
+import { useRoutes } from "@/routes";
 import type { AIDetection } from "@gram/client/models/components/aidetection.js";
 import { useAiDetections } from "@gram/client/react-query/aiDetections.js";
 import { useMemo, useState } from "react";
@@ -82,17 +84,7 @@ function AIToolStatusCell({ detection }: { detection: AIDetection }) {
 }
 
 function AIToolsEmptyState({ noun }: { noun: string }) {
-  return (
-    <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
-      <Text variant="body" className="font-medium">
-        No {noun} detected yet
-      </Text>
-      <Text muted small className="max-w-md">
-        Tools appear here once enrolled devices report a scan. Check back after
-        the device agent’s first run.
-      </Text>
-    </div>
-  );
+  return <ShadowAISetupEmptyState heading={`No ${noun} detected yet`} />;
 }
 
 export function AIToolsTable({
@@ -103,12 +95,20 @@ export function AIToolsTable({
   // rather than fetching the whole inventory and hiding half of it.
   category: "harness" | "assistant" | "local_model";
   // False on the Local Models tab: a local model never connects to the
-  // gateway,
-  // so a decision about it would have nothing behind it. Everyone who reaches
-  // this table is an organization admin (the section is gated on org:admin,
-  // as the read behind it requires), so this is about the tab, not the viewer.
+  // gateway, so a decision about it would have nothing behind it. Everyone
+  // who reaches this table is an organization admin (the section is gated on
+  // org:admin, as the read behind it requires), so this is about the tab, not
+  // the viewer. It governs the row's context-menu action; opening a row shows
+  // who runs the tool on every tab.
   canDecide: boolean;
 }): JSX.Element {
+  const routes = useRoutes();
+  // The tool page is nested under the tab it is opened from.
+  const tabRoute = {
+    harness: routes.shadowAI.harnesses,
+    assistant: routes.shadowAI.assistants,
+    local_model: routes.shadowAI.models,
+  }[category];
   const detectionsQuery = useAiDetections({ category });
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortDescriptor | null>({
@@ -286,7 +286,11 @@ export function AIToolsTable({
           columns={columns}
           data={sorted}
           noResultsMessage={noResultsMessage}
-          onRowClick={canDecide ? (row) => setDecideTarget(row) : undefined}
+          // Ids are stored as agents report them, so one may carry a URL
+          // delimiter; encoded, it stays one path segment.
+          onRowClick={(row) =>
+            tabRoute.detail.goTo(encodeURIComponent(row.targetId))
+          }
           rowKey={(row) => row.targetId}
           className="min-h-0 content-start overflow-y-auto"
           renderRow={(row, rowElement) =>

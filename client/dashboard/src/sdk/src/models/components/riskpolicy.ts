@@ -12,13 +12,14 @@ import {
   RiskDetectionScope,
   RiskDetectionScope$inboundSchema,
 } from "./riskdetectionscope.js";
+import { RiskMCPScope, RiskMCPScope$inboundSchema } from "./riskmcpscope.js";
 import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$inboundSchema,
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).
+ * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
  */
 export const RiskPolicyAction = {
   Flag: "flag",
@@ -27,7 +28,7 @@ export const RiskPolicyAction = {
   Quarantine: "quarantine",
 } as const;
 /**
- * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).
+ * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
  */
 export type RiskPolicyAction = ClosedEnum<typeof RiskPolicyAction>;
 
@@ -71,7 +72,7 @@ export type RiskPolicyShadowMcpDisposition = ClosedEnum<
 
 export type RiskPolicy = {
   /**
-   * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).
+   * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
    */
   action: RiskPolicyAction;
   /**
@@ -114,6 +115,7 @@ export type RiskPolicy = {
    * The risk policy ID.
    */
   id: string;
+  mcpScope?: RiskMCPScope | undefined;
   modelConfig?: RiskPolicyModelConfig | undefined;
   /**
    * The policy name.
@@ -218,6 +220,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       disabled_rules: z.optional(z.array(z.string())),
       enabled: z.boolean(),
       id: z.string(),
+      mcp_scope: z.optional(RiskMCPScope$inboundSchema),
       model_config: z.optional(RiskPolicyModelConfig$inboundSchema),
       name: z.string(),
       pending_messages: z.optional(z.int()),
@@ -250,6 +253,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "custom_rule_ids": "customRuleIds",
         "detection_scopes": "detectionScopes",
         "disabled_rules": "disabledRules",
+        "mcp_scope": "mcpScope",
         "model_config": "modelConfig",
         "pending_messages": "pendingMessages",
         "policy_type": "policyType",

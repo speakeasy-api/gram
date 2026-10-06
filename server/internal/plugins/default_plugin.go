@@ -273,6 +273,7 @@ func AttachToExistingPluginAudited(ctx context.Context, tx pgx.Tx, auditLogger *
 		ServerSortOrder:   attached.Server.SortOrder,
 		ToolsetURN:        nil,
 		McpServerURN:      &mcpServerURN,
+		MetaMcpServerURN:  nil,
 	}); err != nil {
 		return nil, fmt.Errorf("audit existing default plugin server add: %w", err)
 	}
@@ -413,12 +414,27 @@ func backendIDSuffix(params AttachToDefaultPluginParams) string {
 // marketplace publish for it, but only after their own transaction commits,
 // since this runs pre-commit and the DB writes could still roll back.
 func AttachToDefaultPluginAudited(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams) (bool, error) {
+	outcome, err := AttachToDefaultPluginAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, params)
+	return outcome.PluginCreated, err
+}
+
+// DefaultPluginAttachOutcome reports what AttachToDefaultPluginAuditedWithOutcome
+// actually did, so a caller can tell people who now receives a server rather
+// than inferring it from the inputs.
+type DefaultPluginAttachOutcome struct {
+	Attached      bool
+	PluginCreated bool
+}
+
+// AttachToDefaultPluginAuditedWithOutcome is AttachToDefaultPluginAudited for a
+// caller that must report whether the server really joined the Default plugin.
+func AttachToDefaultPluginAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams) (DefaultPluginAttachOutcome, error) {
 	attached, err := AttachToDefaultPlugin(ctx, dbtx, params)
 	if err != nil {
-		return false, fmt.Errorf("attach server to default plugin: %w", err)
+		return DefaultPluginAttachOutcome{}, fmt.Errorf("attach server to default plugin: %w", err)
 	}
 	if attached == nil {
-		return false, nil
+		return DefaultPluginAttachOutcome{Attached: false, PluginCreated: false}, nil
 	}
 
 	if attached.PluginCreated {
@@ -432,7 +448,7 @@ func AttachToDefaultPluginAudited(ctx context.Context, dbtx pgx.Tx, auditLogger 
 			PluginName:       attached.PluginName,
 			PluginSlug:       attached.PluginSlug,
 		}); err != nil {
-			return false, fmt.Errorf("audit log default plugin create: %w", err)
+			return DefaultPluginAttachOutcome{}, fmt.Errorf("audit log default plugin create: %w", err)
 		}
 	}
 
@@ -464,9 +480,10 @@ func AttachToDefaultPluginAudited(ctx context.Context, dbtx pgx.Tx, auditLogger 
 		ServerSortOrder:   attached.Server.SortOrder,
 		ToolsetURN:        toolsetURN,
 		McpServerURN:      mcpServerURN,
+		MetaMcpServerURN:  nil,
 	}); err != nil {
-		return false, fmt.Errorf("audit log default plugin server add: %w", err)
+		return DefaultPluginAttachOutcome{}, fmt.Errorf("audit log default plugin server add: %w", err)
 	}
 
-	return attached.PluginCreated, nil
+	return DefaultPluginAttachOutcome{Attached: true, PluginCreated: attached.PluginCreated}, nil
 }

@@ -59,6 +59,7 @@ var _ = Service("remoteSessionClients", func() {
 		Scope("producer")
 	})
 	shared.DeclareErrorResponses()
+	identityChainingMethods()
 
 	Method("createRemoteSessionClient", func() {
 		Description("Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.")
@@ -301,6 +302,30 @@ var _ = Service("remoteSessionClients", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoteSessionClients"}`)
 	})
 
+	Method("getNewClientCallbackUrl", func() {
+		Description("Get the redirect URI a remote_session_client created now in the caller's project registers with its upstream provider.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(NewClientCallbackURLResult)
+
+		HTTP(func() {
+			GET("/rpc/remoteSessionClients.newClientCallbackUrl")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getNewRemoteSessionClientCallbackUrl")
+		Meta("openapi:extension:x-speakeasy-name-override", "getNewClientCallbackUrl")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "NewRemoteSessionClientCallbackUrl"}`)
+	})
+
 	Method("getRemoteSessionClient", func() {
 		Description("Get a remote_session_client by id.")
 
@@ -429,6 +454,26 @@ var _ = Service("organizationRemoteSessionClients", func() {
 		Meta("openapi:operationId", "getOrganizationRemoteSessionClient")
 		Meta("openapi:extension:x-speakeasy-name-override", "get")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionClient"}`)
+	})
+
+	Method("getClientDelegationStatus", func() {
+		Security(security.Session)
+		Description("Read sanitized delegation observations for the current upstream configuration in the last 30 days. Requires org:admin. Never exercises credentials; presence is not proof of future refresh success.")
+		Payload(func() {
+			Attribute("id", String, "The remote_session_client id.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+		})
+		Result(OrganizationClientDelegationStatus)
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionClients.getDelegationStatus")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getOrganizationRemoteSessionClientDelegationStatus")
+		Meta("openapi:extension:x-speakeasy-name-override", "getDelegationStatus")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionClientDelegationStatus"}`)
 	})
 
 	Method("getClientDeletePreflight", func() {
@@ -777,6 +822,7 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 		ScopeAttribute("Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.")
 	})
 	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.", AudienceAttribute)
+	Attribute("legacy_callback_url", Boolean, "Platform admins only. Set true to run the client in compatibility mode with the legacy callback URL, or false to migrate it to the current callback URL once that URL is registered with the identity provider. Omit to leave unchanged.")
 
 	Required("id")
 })
@@ -830,6 +876,9 @@ var DetachUserSessionIssuerForm = Type("DetachUserSessionIssuerForm", func() {
 })
 
 var RemoteSessionClient = Type("RemoteSessionClient", func() {
+	Attribute("grant_types", ArrayOf(String), "Recorded effective registration grants. Null means unknown; an empty array means no recorded grants.", func() {
+		Meta("struct:tag:json", "grant_types")
+	})
 	Meta("struct:pkg:path", "types")
 
 	Description("A remote_session_client record. client_secret_encrypted is never returned.")
@@ -873,6 +922,10 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 	})
 	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.")
 	Attribute("audience", String, "Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.")
+	Attribute("legacy_callback_url", Boolean, "Whether the client was registered upstream with the legacy callback URL. The authorize leg then sends that URL and a JSON state instead of the current callback. Cleared when the client is rotated.")
+	Attribute("callback_url", String, "The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients.", func() {
+		Format(FormatURI)
+	})
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -880,7 +933,17 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "organization_id", "remote_session_issuer_id", "user_session_issuer_ids", "client_id", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "remote_session_issuer_id", "user_session_issuer_ids", "client_id", "legacy_callback_url", "created_at", "updated_at")
+})
+
+var NewClientCallbackURLResult = Type("NewClientCallbackUrlResult", func() {
+	Description("The redirect URI a newly created remote_session_client registers.")
+
+	Attribute("callback_url", String, "The redirect URI to register on the upstream provider's OAuth app.", func() {
+		Format(FormatURI)
+	})
+
+	Required("callback_url")
 })
 
 var ListRemoteSessionClientsResult = Type("ListRemoteSessionClientsResult", func() {

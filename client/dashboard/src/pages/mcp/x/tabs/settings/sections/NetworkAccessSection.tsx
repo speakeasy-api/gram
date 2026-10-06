@@ -15,31 +15,45 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
+import { Stack } from "@/components/ui/Stack";
 import { useOrganization } from "@/contexts/Auth";
 import {
   endpointUsesPrivateIngress,
   privateMcpEndpointUrls,
 } from "@/hooks/usePrivateMcpServerUrls";
 import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
+import { useProductTier } from "@/hooks/useProductTier";
+import { useOrgRoutes } from "@/routes";
 import { customDomainMcpEndpointUrl } from "@/hooks/useToolsetUrl";
+import type { Toolset } from "@/lib/toolTypes";
 
+import { BOOK_DEMO_URL } from "@/lib/constants";
 import { getServerURL } from "@/lib/utils";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
+import { invalidateAllGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
+import { invalidateAllMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
+import { useUpdateMetaMcpServerMutation } from "@gram/client/react-query/updateMetaMcpServer.js";
 import {
   McpServerNetworkAccessMode,
   type McpServer,
 } from "@gram/client/models/components/mcpserver.js";
 import type { UpdateMcpServerFormNetworkAccessMode } from "@gram/client/models/components/updatemcpserverform.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useNetworkIngress } from "@gram/client/react-query/networkIngress.js";
 import { useListDomains } from "@gram/client/react-query/listDomains.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
+import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
+
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { NetworkTrafficPanel } from "./NetworkTrafficPanel";
 
 const NETWORK_ACCESS_LABELS: Record<
   UpdateMcpServerFormNetworkAccessMode,
@@ -50,50 +64,121 @@ const NETWORK_ACCESS_LABELS: Record<
   private_only: "Private only",
 };
 
+type NetworkAccessProps =
+  | {
+      mcpServer: McpServer;
+      metaMcpServer?: never;
+      endpoints: McpEndpoint[];
+      toolset?: never;
+    }
+  | {
+      mcpServer?: never;
+      metaMcpServer: MetaMcpServer;
+      endpoints: McpEndpoint[];
+      toolset?: never;
+    }
+  | {
+      mcpServer?: never;
+      metaMcpServer?: never;
+      endpoints?: never;
+      toolset: Toolset & {
+        networkAccessMode?: UpdateMcpServerFormNetworkAccessMode;
+      };
+    };
+
 export function NetworkAccessSection({
   mcpServer,
+  metaMcpServer,
   endpoints,
-}: {
-  mcpServer: McpServer;
-  endpoints: McpEndpoint[];
-}): JSX.Element | null {
+  toolset,
+}: NetworkAccessProps): JSX.Element | null {
   const { status: rolloutStatus, canManageIngress } =
     useNetworkIngressRollout();
   const hasStoredPrivateMode =
-    mcpServer.networkAccessMode !== McpServerNetworkAccessMode.PublicOnly;
+    (mcpServer ?? metaMcpServer ?? toolset)?.networkAccessMode !== undefined &&
+    (mcpServer ?? metaMcpServer ?? toolset)?.networkAccessMode !==
+      McpServerNetworkAccessMode.PublicOnly;
 
-  if (rolloutStatus === "disabled" && !hasStoredPrivateMode) {
+  if (
+    rolloutStatus === "disabled" &&
+    !canManageIngress &&
+    !hasStoredPrivateMode
+  ) {
     return null;
   }
 
-  return (
+  const section = (
     <NetworkAccessSectionContent
+      server={mcpServer ?? metaMcpServer}
       mcpServer={mcpServer}
-      endpoints={endpoints}
+      metaMcpServer={metaMcpServer}
+      toolset={toolset}
+      endpoints={endpoints ?? hostedToolsetEndpoint(toolset)}
       canReadIngress={canManageIngress}
     />
   );
+
+  if (toolset) {
+    return (
+      <Stack gap={0} className="mb-8">
+        {section}
+      </Stack>
+    );
+  }
+
+  return section;
+}
+
+function hostedToolsetEndpoint(
+  toolset: (Toolset & { customDomainId?: string }) | undefined,
+): McpEndpoint[] {
+  if (!toolset?.mcpSlug) return [];
+  return [
+    {
+      id: toolset.id,
+      projectId: toolset.projectId,
+      slug: toolset.mcpSlug,
+      customDomainId: toolset.customDomainId,
+      mcpServerId: toolset.id,
+      isDomainRoot: false,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    },
+  ];
 }
 
 function NetworkAccessSectionContent({
+  server,
   mcpServer,
+  metaMcpServer,
+  toolset,
   endpoints,
   canReadIngress,
 }: {
-  mcpServer: McpServer;
+  server?: McpServer | MetaMcpServer;
+  mcpServer?: McpServer;
+  metaMcpServer?: MetaMcpServer;
+  toolset?: Toolset & {
+    networkAccessMode?: UpdateMcpServerFormNetworkAccessMode;
+  };
   endpoints: McpEndpoint[];
   canReadIngress: boolean;
 }): JSX.Element {
   const organization = useOrganization();
+  const orgRoutes = useOrgRoutes();
+  const enterprise = useProductTier() === "enterprise";
   const queryClient = useQueryClient();
-  const [draft, setDraft] = useState<UpdateMcpServerFormNetworkAccessMode>(
-    mcpServer.networkAccessMode,
-  );
+  const currentMode =
+    toolset?.networkAccessMode ??
+    server?.networkAccessMode ??
+    McpServerNetworkAccessMode.PublicOnly;
+  const [draft, setDraft] =
+    useState<UpdateMcpServerFormNetworkAccessMode>(currentMode);
   const [confirmPrivateOnlyOpen, setConfirmPrivateOnlyOpen] = useState(false);
 
   useEffect(() => {
-    setDraft(mcpServer.networkAccessMode);
-  }, [mcpServer.id, mcpServer.networkAccessMode]);
+    setDraft(currentMode);
+  }, [server?.id, toolset?.id, currentMode]);
 
   const features = useProductFeatures(
     { organizationId: organization.id },
@@ -196,6 +281,10 @@ function NetworkAccessSectionContent({
     [endpoints, ingress, ingressQuerySuccessful, ingressResult.isFetching],
   );
 
+  const onError = (error: Error) => {
+    setConfirmPrivateOnlyOpen(false);
+    toast.error(error.message || "Failed to update network access");
+  };
   const update = useUpdateMcpServerMutation({
     onSuccess: async () => {
       setConfirmPrivateOnlyOpen(false);
@@ -205,15 +294,25 @@ function NetworkAccessSectionContent({
       ]);
       toast.success("Network access updated");
     },
-    onError: (error) => {
-      setConfirmPrivateOnlyOpen(false);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to update network access",
-      );
-    },
+    onError,
   });
+  const updateHostedToolset = useUpdateToolsetMutation();
+  const updateGateway = useUpdateMetaMcpServerMutation({
+    onSuccess: async () => {
+      setConfirmPrivateOnlyOpen(false);
+      await Promise.all([
+        invalidateAllGetMetaMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllMetaMcpServers(queryClient, { refetchType: "all" }),
+      ]);
+      toast.success("Network access updated");
+    },
+    onError,
+  });
+  const isUpdating = toolset
+    ? updateHostedToolset.isPending
+    : mcpServer
+      ? update.isPending
+      : updateGateway.isPending;
 
   const save = () => {
     if (
@@ -225,24 +324,63 @@ function NetworkAccessSectionContent({
       return;
     }
 
-    update.mutate({
-      request: {
-        updateMcpServerForm: {
-          id: mcpServer.id,
-          networkAccessMode: draft,
-          remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
-          tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
-          toolsetId: mcpServer.toolsetId ?? undefined,
-          unproxiedMcpServerId: mcpServer.unproxiedMcpServerId ?? undefined,
-          environmentId: mcpServer.environmentId ?? undefined,
-          toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
-          visibility: mcpServer.visibility,
+    if (toolset) {
+      updateHostedToolset.mutate(
+        {
+          request: {
+            slug: toolset.slug,
+            updateToolsetRequestBody: {
+              networkAccessMode: draft,
+            },
+          },
         },
-      },
-    });
+        {
+          onSuccess: () => {
+            setConfirmPrivateOnlyOpen(false);
+            void Promise.all([
+              invalidateAllToolset(queryClient, { refetchType: "all" }),
+              invalidateAllListToolsets(queryClient, { refetchType: "all" }),
+              invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
+              invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+            ])
+              .then(() => {
+                toast.success("Network access updated");
+              })
+              .catch(onError);
+          },
+          onError,
+        },
+      );
+    } else if (metaMcpServer) {
+      updateGateway.mutate({
+        request: {
+          updateMetaMcpServerForm: {
+            id: metaMcpServer.id,
+            name: metaMcpServer.name,
+            networkAccessMode: draft,
+          },
+        },
+      });
+    } else if (mcpServer) {
+      update.mutate({
+        request: {
+          updateMcpServerForm: {
+            id: mcpServer.id,
+            networkAccessMode: draft,
+            remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
+            tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
+            toolsetId: mcpServer.toolsetId ?? undefined,
+            unproxiedMcpServerId: mcpServer.unproxiedMcpServerId ?? undefined,
+            environmentId: mcpServer.environmentId ?? undefined,
+            toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
+            visibility: mcpServer.visibility,
+          },
+        },
+      });
+    }
   };
 
-  const dirty = draft !== mcpServer.networkAccessMode;
+  const dirty = draft !== currentMode;
   const draftAllowed =
     draft === McpServerNetworkAccessMode.PublicOnly ||
     (draft === McpServerNetworkAccessMode.Dual
@@ -252,9 +390,11 @@ function NetworkAccessSectionContent({
     entitled,
     ingressOnline,
     hasEligibleEndpoint: eligibleEndpoints.length > 0,
+    endpointNamespaceKind: ingress?.endpointNamespaceKind,
+    isGateway: !!metaMcpServer,
     privateStatusPending,
     privateStatusUnavailable,
-    currentMode: mcpServer.networkAccessMode,
+    currentMode,
   });
 
   return (
@@ -277,7 +417,7 @@ function NetworkAccessSectionContent({
               onValueChange={(value) =>
                 setDraft(value as UpdateMcpServerFormNetworkAccessMode)
               }
-              disabled={update.isPending}
+              disabled={isUpdating}
             >
               <SelectTrigger
                 id="mcp-network-access-mode"
@@ -314,8 +454,14 @@ function NetworkAccessSectionContent({
               entitled and its private ingress is online.
             </FieldDescription>
           </Field>
-          {mcpServer.networkAccessMode !==
-            McpServerNetworkAccessMode.PublicOnly &&
+          {canReadIngress && (
+            <Button asChild variant="secondary" size="sm">
+              <orgRoutes.domains.Link>
+                Configure organization network access
+              </orgRoutes.domains.Link>
+            </Button>
+          )}
+          {currentMode !== McpServerNetworkAccessMode.PublicOnly &&
             privateEndpointUrls.length > 0 && (
               <Field>
                 <FieldLabel>Private endpoint URLs</FieldLabel>
@@ -339,18 +485,43 @@ function NetworkAccessSectionContent({
                 </FieldDescription>
               </Field>
             )}
+          {currentMode !== McpServerNetworkAccessMode.PublicOnly && (
+            <NetworkTrafficPanel
+              mcpServerId={mcpServer?.id ?? toolset?.id}
+              metaMcpServerId={metaMcpServer?.id}
+            />
+          )}
         </SettingsSection.Body>
         <SettingsSection.Footer>
-          <SettingsSection.FooterHint>{footerHint}</SettingsSection.FooterHint>
+          <SettingsSection.FooterHint>
+            {!enterprise &&
+            featureQuerySuccessful &&
+            !entitled &&
+            currentMode === McpServerNetworkAccessMode.PublicOnly ? (
+              <>
+                Tailscale private access is available on the Enterprise plan.{" "}
+                <a
+                  href={BOOK_DEMO_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  Talk to our team about upgrading
+                </a>
+              </>
+            ) : (
+              footerHint
+            )}
+          </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope
               scope="mcp:write"
-              resourceId={mcpServer.projectId}
+              resourceId={toolset?.projectId ?? server?.projectId}
               level="component"
             >
               <FooterSaveButton
-                pending={update.isPending}
-                disabled={!dirty || !draftAllowed || update.isPending}
+                pending={isUpdating}
+                disabled={!dirty || !draftAllowed || isUpdating}
                 onClick={() => {
                   if (draft === McpServerNetworkAccessMode.PrivateOnly) {
                     setConfirmPrivateOnlyOpen(true);
@@ -370,24 +541,31 @@ function NetworkAccessSectionContent({
       >
         <Dialog.Content className="max-w-lg">
           <Dialog.Header>
-            <Dialog.Title>Make this server private only?</Dialog.Title>
+            <Dialog.Title>
+              Make this {metaMcpServer ? "gateway" : "server"} private only?
+            </Dialog.Title>
             <Dialog.Description>
-              This changes how every client reaches this MCP server.
+              This changes how every client reaches this{" "}
+              {metaMcpServer ? "gateway" : "MCP server"}.
             </Dialog.Description>
           </Dialog.Header>
           <ul className="text-muted-foreground list-disc space-y-2 pl-5 text-sm">
             <li>
-              Public routes stop serving this MCP server. There is no public
+              Public routes stop serving this{" "}
+              {metaMcpServer ? "gateway" : "MCP server"}. There is no public
               fallback.
             </li>
             <li>
               If the tailnet or private ingress loses connectivity, this MCP
-              server is unavailable until service returns or you switch back to
-              public access.
+              {metaMcpServer ? "gateway" : "server"} is unavailable until
+              service returns or you switch back to public access.
             </li>
             <li>
-              Marketplace and device-agent URLs are not rewritten to the private
-              address. Update those clients separately.
+              {metaMcpServer
+                ? "Existing client URLs"
+                : "Marketplace and device-agent URLs"}{" "}
+              are not rewritten to the private address. Update those clients
+              separately.
             </li>
           </ul>
           {publicEndpointUrls.length > 0 && (
@@ -417,17 +595,17 @@ function NetworkAccessSectionContent({
           <Dialog.Footer>
             <Button
               variant="secondary"
-              disabled={update.isPending}
+              disabled={isUpdating}
               onClick={() => setConfirmPrivateOnlyOpen(false)}
             >
               <Button.Text>Cancel</Button.Text>
             </Button>
             <Button
               variant="destructive-primary"
-              disabled={update.isPending || !privateOnlyAvailable}
+              disabled={isUpdating || !privateOnlyAvailable}
               onClick={save}
             >
-              {update.isPending && (
+              {isUpdating && (
                 <Button.LeftIcon>
                   <Loader2 aria-hidden="true" className="size-4 animate-spin" />
                 </Button.LeftIcon>
@@ -445,6 +623,8 @@ function networkAccessHint({
   entitled,
   ingressOnline,
   hasEligibleEndpoint,
+  endpointNamespaceKind,
+  isGateway,
   privateStatusPending,
   privateStatusUnavailable,
   currentMode,
@@ -452,9 +632,13 @@ function networkAccessHint({
   entitled: boolean;
   ingressOnline: boolean;
   hasEligibleEndpoint: boolean;
+  endpointNamespaceKind?: "platform" | "custom_domain";
+  isGateway: boolean;
   privateStatusPending: boolean;
   privateStatusUnavailable: boolean;
-  currentMode: McpServer["networkAccessMode"];
+  currentMode:
+    | McpServer["networkAccessMode"]
+    | MetaMcpServer["networkAccessMode"];
 }): string {
   if (privateStatusPending) {
     return "Checking private network availability…";
@@ -466,7 +650,7 @@ function networkAccessHint({
   }
   if (!entitled) {
     return currentMode === McpServerNetworkAccessMode.PublicOnly
-      ? "Private network access is not enabled for this organization."
+      ? "Private network access is not enabled for this organization. Contact support to enable it."
       : "Private network access is no longer enabled. You can still switch to public only.";
   }
   if (!ingressOnline) {
@@ -475,9 +659,14 @@ function networkAccessHint({
       : "Private ingress is offline. You can still switch to public only.";
   }
   if (!hasEligibleEndpoint) {
+    const address =
+      endpointNamespaceKind === "custom_domain"
+        ? "Custom Address on the domain configured for your private network"
+        : "Hosted Address";
+    const section = isGateway ? "Gateway URL" : "Server URL";
     return currentMode === McpServerNetworkAccessMode.PublicOnly
-      ? "Add an MCP endpoint in the private ingress's pinned namespace before enabling private access."
-      : "No live endpoint remains in the pinned namespace. You can still switch to public only.";
+      ? `In ${section}, add a ${address} so clients can reach this ${isGateway ? "gateway" : "server"} through your private network.`
+      : `This ${isGateway ? "gateway" : "server"} no longer has a ${address} in ${section}, so clients cannot reach it through your private network. You can still switch to public only.`;
   }
   return "Changes apply to new connections.";
 }

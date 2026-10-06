@@ -51,9 +51,10 @@ export function ShadowMCPServerLegacyRedirect(): JSX.Element {
   );
 }
 
-// ShadowAISection is the shell all four tab pages render inside. A server
-// detail page lives under the MCP tab and renders its own page chrome, so the
-// shell is used by the tab index routes and not by that page.
+// ShadowAISection is the shell all four tab pages render inside. The detail
+// pages under the tabs (a server under MCPs, a tool under the other three)
+// render their own page chrome, so the shell is used by the tab index routes
+// and not by them.
 export function ShadowAISection({
   activeTab,
   children,

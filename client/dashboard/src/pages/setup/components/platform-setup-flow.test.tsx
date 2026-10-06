@@ -56,7 +56,7 @@ describe("PlatformSetupFlow", () => {
     expect(mocks.ensure).not.toHaveBeenCalled();
   });
 
-  it("stacks every step and mints the API key once", () => {
+  it("stacks Cursor steps without requesting an unused API key", () => {
     render(
       <PlatformSetupFlow
         platformId="cursor"
@@ -64,14 +64,15 @@ describe("PlatformSetupFlow", () => {
         onStatusChange={() => {}}
       />,
     );
+    fireEvent.click(screen.getByRole("button", { name: "Yes" }));
 
     expect(
-      screen.getByText("Step 1: Open your Cursor team dashboard"),
+      screen.getByText("Step 2: Open your Cursor team dashboard"),
     ).toBeTruthy();
     expect(
-      screen.getByText("Step 2: Import the Speakeasy marketplace"),
+      screen.getByText("Step 3: Import the Speakeasy marketplace"),
     ).toBeTruthy();
-    expect(mocks.ensure).toHaveBeenCalledOnce();
+    expect(mocks.ensure).not.toHaveBeenCalled();
   });
 
   it("shows nothing past the eligibility question until it is answered", () => {
@@ -97,7 +98,7 @@ describe("PlatformSetupFlow", () => {
     expect(mocks.ensure).toHaveBeenCalledOnce();
   });
 
-  it("explains why an ineligible org is stuck instead of listing steps", () => {
+  it("swaps in the per-user steps for a personal plan", () => {
     const onStatusChange = vi.fn();
     render(
       <PlatformSetupFlow
@@ -109,12 +110,90 @@ describe("PlatformSetupFlow", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "No" }));
 
-    expect(onStatusChange).toHaveBeenCalledWith("blocked");
-    expect(screen.getByText("Per-user setup flow coming soon")).toBeTruthy();
+    expect(onStatusChange).toHaveBeenCalledWith("not_started");
+    expect(mocks.ensure).toHaveBeenCalledOnce();
+    expect(
+      screen.getByText(
+        "Step 2: Add the settings to each developer's Claude Code",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Open Claude Code managed settings/)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Mark Claude Code as connected" }),
+    ).toBeTruthy();
+  });
+
+  it("holds back only the org rollout when the repo has no collaborator", () => {
+    const { unmount } = render(
+      <PlatformSetupFlow
+        platformId="cursor"
+        status="not_started"
+        onStatusChange={() => {}}
+        orgHeldBack="Add a collaborator first."
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Yes" }));
+
+    expect(screen.getByText("Add a collaborator first.")).toBeTruthy();
+    expect(mocks.ensure).not.toHaveBeenCalled();
     expect(screen.queryByText(/Step 2:/)).toBeNull();
     expect(
-      screen.queryByRole("button", { name: /Mark Claude Code/ }),
+      screen.queryByRole("button", { name: "Mark Cursor as connected" }),
     ).toBeNull();
+    unmount();
+
+    render(
+      <PlatformSetupFlow
+        platformId="cursor"
+        status="not_started"
+        onStatusChange={() => {}}
+        orgHeldBack="Add a collaborator first."
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "No" }));
+
+    expect(screen.queryByText("Add a collaborator first.")).toBeNull();
+    expect(
+      screen.getByText("Step 2: Download the observability plugin"),
+    ).toBeTruthy();
+  });
+
+  it("does not request a Cowork key while organization setup is blocked", () => {
+    render(
+      <PlatformSetupFlow
+        platformId="claude-cowork"
+        status="not_started"
+        onStatusChange={() => {}}
+        orgHeldBack="Add a collaborator first."
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Yes" }));
+    expect(screen.getByText("Add a collaborator first.")).toBeTruthy();
+    expect(screen.queryByText(/Enable OTEL export/)).toBeNull();
+    expect(mocks.ensure).not.toHaveBeenCalled();
+  });
+
+  it("requests a Cowork key only after switching to organization setup", () => {
+    render(
+      <PlatformSetupFlow
+        platformId="claude-cowork"
+        status="not_started"
+        onStatusChange={() => {}}
+      />,
+    );
+    expect(mocks.ensure).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "No" }));
+    expect(
+      screen.getByText("Step 2: Download the observability plugin"),
+    ).toBeTruthy();
+    expect(mocks.ensure).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Yes" }));
+    expect(screen.getByText(/Enable OTEL export/)).toBeTruthy();
+    expect(mocks.ensure).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "No" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yes" }));
+    expect(mocks.ensure).toHaveBeenCalledOnce();
   });
 
   it("marks the platform connected, and lets that be taken back", () => {
@@ -126,6 +205,7 @@ describe("PlatformSetupFlow", () => {
         onStatusChange={(next) => void onStatusChange(next)}
       />,
     );
+    fireEvent.click(screen.getByRole("button", { name: "Yes" }));
 
     fireEvent.click(
       screen.getByRole("button", { name: "Mark Cursor as connected" }),

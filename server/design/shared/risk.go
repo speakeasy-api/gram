@@ -129,6 +129,31 @@ var RiskDetectionScope = Type("RiskDetectionScope", func() {
 	Required("category")
 })
 
+var RiskMCPServerScope = Type("RiskMCPServerScope", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("mcp_server_id", String, "The selected MCP server or gateway ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("tools", ArrayOf(String), "Custom tool names for this server. Omit to follow the policy tool rule; an empty list matches every tool on this server, unconditionally.")
+
+	Required("mcp_server_id")
+})
+
+var RiskMCPScope = Type("RiskMCPScope", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("all_servers", Boolean, "Apply to every MCP server, including servers added later.", func() {
+		Default(false)
+	})
+	Attribute("tool_annotations", ArrayOf(String, func() {
+		Enum("destructiveHint", "readOnlyHint", "idempotentHint", "openWorldHint")
+	}), "Tool annotation hints matched by the policy-level rule. Empty matches all tools.")
+	Attribute("servers", ArrayOf(RiskMCPServerScope), "Selected MCP servers and gateways, or custom per-server tool overrides when all_servers is true.")
+
+	Required("servers")
+})
+
 var RiskPolicy = Type("RiskPolicy", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -156,7 +181,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
 	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
-	Attribute("action", String, "Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).", func() {
+	Attribute("action", String, "Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.", func() {
 		RiskPolicyActionEnum()
 		Default("flag")
 	})
@@ -165,6 +190,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 		Default("everyone")
 	})
 	Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs the policy applies to. Contains user:all when audience_type is everyone.")
+	Attribute("mcp_scope", RiskMCPScope, "Optional MCP server and tool restriction. Null applies the policy to every MCP server. When set, the action must be flag or block.")
 	Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.", func() {
 		RiskPolicyShadowMCPDispositionEnum()
 	})
@@ -250,6 +276,24 @@ var RiskExclusion = Type("RiskExclusion", func() {
 	Required("id", "project_id", "match_type", "match_value", "rule_id_filter", "source_filter", "enabled", "created_at", "updated_at")
 })
 
+// riskExecutionAttributes describes mediated execution metadata without
+// implying that a finding has a durable chat anchor or revealable payload.
+func riskExecutionAttributes() {
+	Attribute("execution_id", String, "Identity of the concrete mediated execution.")
+	Attribute("mcp_server_id", String, "Concrete MCP server that executed the operation.")
+	Attribute("meta_mcp_server_id", String, "Outer gateway that routed the execution, when present.")
+	Attribute("toolset_id", String, "Toolset serving the execution, when present.")
+	Attribute("tool_name", String, "Name of the concrete tool, when applicable.")
+	Attribute("phase", String, "Execution phase inspected by risk.")
+	Attribute("mediation_surface", String, "Concrete mediation surface where the execution was observed.")
+	Attribute("mcp_method", String, "MCP method or equivalent mediated operation.")
+	Attribute("principal_kind", String, "Credential provenance class resolved by MCP identity.")
+	Attribute("identity_stamped", Boolean, "Whether MCP identity stamped validated principal provenance.")
+	Attribute("enforcement_outcome", String, "Recorded enforcement outcome, independent of policy configuration.", func() {
+		Enum("logged", "denied", "withheld", "warned_pending", "warned_acknowledged", "warned_abandoned", "quarantined")
+	})
+}
+
 var RiskResult = Type("RiskResult", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -260,6 +304,7 @@ var RiskResult = Type("RiskResult", func() {
 		Format(FormatUUID)
 	})
 	Attribute("policy_version", Int64, "Policy version when this result was produced.")
+	riskExecutionAttributes()
 	Attribute("block_id", String, "ID of the durable tool call block recorded for this finding's message, when one exists. Links to the block page at /blocks/:id.", func() {
 		Format(FormatUUID)
 	})
@@ -350,6 +395,7 @@ var RiskResultRedacted = Type("RiskResultRedacted", func() {
 		Format(FormatUUID)
 	})
 	Attribute("policy_version", Int64, "Policy version when this result was produced.")
+	riskExecutionAttributes()
 	Attribute("chat_message_id", String, "The chat message that was scanned, when the finding is anchored to a message.", func() {
 		Format(FormatUUID)
 	})

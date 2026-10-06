@@ -11,19 +11,18 @@ import {
 } from "@/components/ui/Sidebar";
 import { useIsPlatformAdmin, useOrganization } from "@/contexts/Auth";
 
+import { DevSidebarSlot } from "@/dev/sidebar-slot";
 import { Icon } from "@/components/ui/Icon";
 import { RequireScope } from "@/components/require-scope";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
 import { SidebarBrandHeader } from "./sidebar-brand-header";
-import { DevSidebarSlot } from "@/dev/sidebar-slot";
 import { SidebarFooterAction } from "./sidebar-footer-action";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { TrialStatusCard } from "./trial-status-card";
 import { Wrench } from "lucide-react";
 import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
-import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -58,22 +57,21 @@ export function OrgSidebar({
 }: React.ComponentProps<typeof Sidebar>): React.JSX.Element {
   const orgRoutes = useOrgRoutes();
   const organization = useOrganization();
-  const { isLoading: rbacLoading } = useRBAC();
+  const { isLoading: rbacLoading, hasScope } = useRBAC();
+  const canReadFeatures = !rbacLoading && hasScope("org:read", organization.id);
   const canSetUpOrg = useCanSetUpOrg();
   const telemetry = useTelemetry();
-  const { data: productFeatures } = useProductFeatures(
+  const { data: featuresData } = useProductFeatures(
     { organizationId: organization.id },
     undefined,
     {
+      enabled: canReadFeatures,
       staleTime: 30_000,
       throwOnError: false,
     },
   );
+  const productFeatures = canReadFeatures ? featuresData : undefined;
   const isPlatformAdmin = useIsPlatformAdmin();
-  const { status: networkIngressRolloutStatus, canManageIngress } =
-    useNetworkIngressRollout();
-  const showNetworkAccess =
-    canManageIngress && networkIngressRolloutStatus !== "disabled";
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
 
@@ -103,9 +101,11 @@ export function OrgSidebar({
     (route) => route.active,
   );
 
-  const secureActive = [orgRoutes.auditLogs, orgRoutes.deviceAgent].some(
-    (r) => r.active,
-  );
+  const secureActive = [
+    orgRoutes.workloadIssuers,
+    orgRoutes.auditLogs,
+    orgRoutes.deviceAgent,
+  ].some((r) => r.active);
 
   const platformAdminActive = [
     orgRoutes.platformAdminOverview,
@@ -137,6 +137,7 @@ export function OrgSidebar({
     orgRoutes.encryptionKeys,
     orgRoutes.data,
     orgRoutes.dataExports,
+    orgRoutes.workloadIssuers,
     orgRoutes.auditLogs,
     orgRoutes.deviceAgent,
     orgRoutes.access,
@@ -187,7 +188,7 @@ export function OrgSidebar({
                   {
                     item: orgRoutes.domains,
                     scope: orgReadOrAdmin,
-                    label: showNetworkAccess ? "Network Access" : undefined,
+                    label: "Network Access",
                   },
                   { item: orgRoutes.logs, scope: orgReadOrAdmin },
                   { item: orgRoutes.skills, scope: "org:admin" },
@@ -228,6 +229,10 @@ export function OrgSidebar({
                 Icon={(p) => <Icon {...p} name="shield-check" />}
                 items={[
                   { item: orgRoutes.auditLogs, scope: orgReadOrAdmin },
+                  {
+                    item: orgRoutes.workloadIssuers,
+                    scope: ["workload:read", "workload:write"],
+                  },
                   ...(isDeviceAgentEnabled
                     ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
                     : []),

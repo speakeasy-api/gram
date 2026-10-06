@@ -15,16 +15,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
-// unmaskFinding is one ClickHouse risk_findings fixture row for the reveal
-// tests, carrying the reveal metadata columns (surface/field/path/tool_call_id)
-// that chrepo.InsertRiskFindings does not yet write (the live write path for
-// them is a parallel change). Inserted via a direct INSERT in insertUnmaskFinding.
+// unmaskFinding is one ClickHouse risk_findings fixture row for reveal tests.
+// It carries surface, mediation_surface, field, path, and tool_call_id because
+// chrepo.InsertRiskFindings does not yet write every reveal column. The fixture
+// uses a direct INSERT in insertUnmaskFinding.
 type unmaskFinding struct {
 	id               uuid.UUID
 	orgID            string
@@ -39,12 +39,19 @@ type unmaskFinding struct {
 	matchLen         uint32
 	matchRedacted    string
 	surface          string
+	mediationSurface string
 	field            string
 	path             string
 	toolCallID       string
 	deadLetterReason string
 	excludedAt       *time.Time
 	falsePositiveAt  *time.Time
+	// shadow marks an engine-comparison row (shadow = 1), hidden from reveal.
+	shadow bool
+	// exclusionID is the retro exclusion a held row is attributed to.
+	exclusionID *uuid.UUID
+	// riskPolicyID defaults to a fresh live policy in the fixture's project.
+	riskPolicyID string
 }
 
 // insertUnmaskFinding writes the fixture straight into risk_findings. Raw SQL
@@ -62,11 +69,20 @@ func insertUnmaskFinding(t *testing.T, ti *testInstance, f unmaskFinding) uuid.U
 	if f.ruleID == "" {
 		f.ruleID = "secret.test_rule"
 	}
+	if f.riskPolicyID == "" {
+		f.riskPolicyID = seedUnmaskPolicy(t, ti, uuid.MustParse(f.projectID), f.orgID, true).String()
+	}
 	// Relative timestamps: the table's 90-day created_at TTL would silently
 	// expire hardcoded dates once the calendar catches up.
 	createdAt := time.Now().UTC().AddDate(0, 0, -2)
 
 	nullableTime := func(v *time.Time) any {
+		if v == nil {
+			return nil
+		}
+		return *v
+	}
+	nullableUUID := func(v *uuid.UUID) any {
 		if v == nil {
 			return nil
 		}
@@ -81,18 +97,34 @@ func insertUnmaskFinding(t *testing.T, ti *testInstance, f unmaskFinding) uuid.U
 			start_pos, end_pos, dead_letter_reason,
 			match_len, match_redacted,
 			excluded_at, false_positive_at, message_created_at,
-			surface, field, path, tool_call_id
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			surface, mediation_surface, field, path, tool_call_id, shadow, exclusion_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		f.id, createdAt, f.orgID, f.projectID,
 		f.chatMessageID, f.contentPartID, f.chatID,
-		uuid.NewString(), int64(1), f.ruleID, f.source, "secrets", 1.0, []string{},
+		f.riskPolicyID, int64(1), f.ruleID, f.source, "secrets", 1.0, []string{},
 		f.startPos, f.endPos, f.deadLetterReason,
 		f.matchLen, f.matchRedacted,
 		nullableTime(f.excludedAt), nullableTime(f.falsePositiveAt), createdAt,
-		f.surface, f.field, f.path, f.toolCallID,
+		f.surface, f.mediationSurface, f.field, f.path, f.toolCallID, f.shadow, nullableUUID(f.exclusionID),
 	))
 	return f.id
+}
+
+func seedUnmaskPolicy(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, enabled bool) uuid.UUID {
+	t.Helper()
+	policy, err := riskrepo.New(ti.conn).CreateRiskPolicy(t.Context(), riskrepo.CreateRiskPolicyParams{
+		ID:             uuid.New(),
+		ProjectID:      projectID,
+		OrganizationID: orgID,
+		Name:           "Unmask fixture",
+		Sources:        []string{"gitleaks"},
+		Enabled:        enabled,
+		Action:         "flag",
+		AudienceType:   "everyone",
+	})
+	require.NoError(t, err)
+	return policy.ID
 }
 
 func TestUnmaskRiskResult_ClickHouseContentSurface(t *testing.T) {
@@ -100,7 +132,6 @@ func TestUnmaskRiskResult_ClickHouseContentSurface(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
@@ -143,10 +174,11 @@ func TestUnmaskRiskResult_ClickHouseContentSurface(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, rowID.String(), res.ID)
 	require.Equal(t, secret, res.Match)
+	require.Equal(t, "available", res.RevealState)
 
 	after, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionRiskResultUnmask)
 	require.NoError(t, err)
-	require.Equal(t, before+1, after, "clickhouse-served reveal records the same audit event as the postgres path")
+	require.Equal(t, before+1, after, "unmasking a result records an audit event")
 
 	rec, err := audittest.LatestAuditLogByAction(t.Context(), ti.conn, audit.ActionRiskResultUnmask)
 	require.NoError(t, err)
@@ -154,15 +186,114 @@ func TestUnmaskRiskResult_ClickHouseContentSurface(t *testing.T) {
 	require.Equal(t, chatID.String(), rec.SubjectSlug, "audit records which chat the revealed value came from")
 }
 
-// TestUnmaskRiskResult_ClickHouseForbiddenWithoutChatRead mirrors the Postgres
-// Forbidden test: org:admin alone (able to browse the redacted listing) must
+func TestUnmaskRiskResult_MCPUsesStoredEvidenceWithWildcardChatRead(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	chatID := uuid.New()
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+	)
+
+	rowID := insertUnmaskFinding(t, ti, unmaskFinding{
+		orgID:            orgID,
+		projectID:        projectID.String(),
+		chatID:           chatID.String(),
+		matchLen:         uint32(len("raw MCP credential")),
+		matchRedacted:    "<redacted len=18>",
+		mediationSurface: "hosted_mcp",
+	})
+	require.NoError(t, ti.findingEvidence.Store(ctx, risk.MCPFindingEvidenceBatch{
+		OrganizationID: orgID,
+		ProjectID:      projectID,
+		CreatedAt:      time.Now().UTC(),
+		Findings:       []risk.MCPFindingEvidence{{ID: rowID, Match: "raw MCP credential"}},
+	}))
+
+	before, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionRiskResultUnmask)
+	require.NoError(t, err)
+	res, err := ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: rowID.String()})
+	require.NoError(t, err)
+	require.Equal(t, rowID.String(), res.ID)
+	require.Equal(t, "raw MCP credential", res.Match)
+	require.Equal(t, "available", res.RevealState)
+	after, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionRiskResultUnmask)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after)
+	rec, err := audittest.LatestAuditLogByAction(t.Context(), ti.conn, audit.ActionRiskResultUnmask)
+	require.NoError(t, err)
+	require.Equal(t, chatID.String(), rec.SubjectSlug)
+}
+
+func TestUnmaskRiskResult_MCPWithoutStoredEvidenceReturnsAvailability(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+	)
+
+	rowID := insertUnmaskFinding(t, ti, unmaskFinding{
+		orgID:            orgID,
+		projectID:        projectID.String(),
+		chatID:           "not-a-uuid",
+		matchLen:         uint32(len("legacy MCP credential")),
+		matchRedacted:    "<redacted len=21>",
+		mediationSurface: "hosted_mcp",
+	})
+	before, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionRiskResultUnmask)
+	require.NoError(t, err)
+
+	res, err := ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: rowID.String()})
+	require.NoError(t, err)
+	require.Equal(t, rowID.String(), res.ID)
+	require.Equal(t, "evidence_not_stored", res.RevealState)
+
+	after, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionRiskResultUnmask)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+}
+
+func TestUnmaskRiskResult_MCPForbiddenWithoutChatRead(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeOrgAdmin, orgID),
+	)
+
+	rowID := insertUnmaskFinding(t, ti, unmaskFinding{
+		orgID:            orgID,
+		projectID:        projectID.String(),
+		chatID:           "not-a-uuid",
+		matchLen:         uint32(len("raw MCP credential")),
+		matchRedacted:    "<redacted len=18>",
+		mediationSurface: "hosted_mcp",
+	})
+
+	_, err := ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: rowID.String()})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+// TestUnmaskRiskResult_ClickHouseForbiddenWithoutChatRead: org:admin alone (able to browse the redacted listing) must
 // not unlock a ClickHouse-served reveal.
 func TestUnmaskRiskResult_ClickHouseForbiddenWithoutChatRead(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
@@ -199,7 +330,6 @@ func TestUnmaskRiskResult_ClickHouseScanSurface(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
@@ -256,7 +386,6 @@ func TestUnmaskRiskResult_ClickHouseToolArgsAndJSONPath(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
@@ -330,7 +459,6 @@ func TestUnmaskRiskResult_ClickHouseToolArgsMultiCallFallback(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
@@ -392,7 +520,6 @@ func TestUnmaskRiskResult_ClickHouseDerivedSources(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
@@ -476,14 +603,13 @@ func TestUnmaskRiskResult_ClickHouseDerivedSources(t *testing.T) {
 }
 
 // TestUnmaskRiskResult_ClickHouseHiddenRowsNotFound: the point read applies
-// the same gates as every other risk_findings read — excluded, dismissed,
+// the same gates as every other risk_findings read: excluded, dismissed,
 // dead-letter and foreign-tenant rows all read as absent.
 func TestUnmaskRiskResult_ClickHouseHiddenRowsNotFound(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
@@ -521,9 +647,14 @@ func TestUnmaskRiskResult_ClickHouseHiddenRowsNotFound(t *testing.T) {
 
 	foreign := base
 	foreign.projectID = uuid.NewString()
+	foreign.riskPolicyID = uuid.NewString()
 	foreignID := insertUnmaskFinding(t, ti, foreign)
 
-	for _, id := range []uuid.UUID{excludedID, falsePositiveID, deadLetterID, foreignID} {
+	shadow := base
+	shadow.shadow = true
+	shadowID := insertUnmaskFinding(t, ti, shadow)
+
+	for _, id := range []uuid.UUID{excludedID, falsePositiveID, deadLetterID, foreignID, shadowID} {
 		_, err := ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: id.String()})
 		require.Error(t, err, "row %s must read as absent", id)
 		var oopsErr *oops.ShareableError
@@ -533,7 +664,7 @@ func TestUnmaskRiskResult_ClickHouseHiddenRowsNotFound(t *testing.T) {
 }
 
 // TestUnmaskRiskResult_ClickHouseLengthMismatchRefused: the match-length gate
-// is the reveal's integrity check — a reconstruction whose byte length
+// is the reveal's integrity check. A reconstruction whose byte length
 // disagrees with the recorded match_len (edited content shifting offsets, or
 // offsets past the end of the stored text) is refused, not served.
 func TestUnmaskRiskResult_ClickHouseLengthMismatchRefused(t *testing.T) {
@@ -541,7 +672,6 @@ func TestUnmaskRiskResult_ClickHouseLengthMismatchRefused(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
@@ -600,14 +730,13 @@ func TestUnmaskRiskResult_ClickHouseLengthMismatchRefused(t *testing.T) {
 
 // TestUnmaskRiskResult_ClickHouseEmptySurfaceRefused: the table is truncated
 // and fully re-backfilled with stamped surfaces before this path serves
-// traffic, so an empty surface is treated like an unknown one — refused
+// traffic, so an empty surface is treated like an unknown one and refused
 // rather than guessed at.
 func TestUnmaskRiskResult_ClickHouseEmptySurfaceRefused(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
@@ -657,7 +786,6 @@ func TestUnmaskRiskResult_ClickHouseNoMatchContentRefused(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
@@ -687,42 +815,6 @@ func TestUnmaskRiskResult_ClickHouseNoMatchContentRefused(t *testing.T) {
 	require.Contains(t, oopsErr.Error(), "no revealable match content")
 }
 
-// TestUnmaskRiskResult_FlagOffIgnoresClickHouse: with the listing flag off the
-// unmask path is byte-for-byte the Postgres lookup — a row that exists only in
-// ClickHouse must NOT resolve.
-func TestUnmaskRiskResult_FlagOffIgnoresClickHouse(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	projectID := *authCtx.ProjectID
-	orgID := authCtx.ActiveOrganizationID
-
-	secret := "FLAG_OFF_SECRET_VALUE"
-	chatID, msgID := seedChatMessage(t, ti, projectID, orgID)
-	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, orgID)},
-		authz.NewGrant(authz.ScopeChatRead, chatID.String()),
-	)
-
-	rowID := insertUnmaskFinding(t, ti, unmaskFinding{
-		orgID:         orgID,
-		projectID:     projectID.String(),
-		chatMessageID: msgID.String(),
-		chatID:        chatID.String(),
-		startPos:      0,
-		endPos:        int32(len(secret)),
-		matchLen:      uint32(len(secret)),
-		surface:       "content",
-	})
-
-	_, err := ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: rowID.String()})
-	require.Error(t, err)
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeNotFound, oopsErr.Code, "flag off must resolve against postgres only")
-}
-
 // TestUnmaskRiskResult_ClickHouseDismissedAfterLiveRowNotFound pins the
 // state-gate ordering in the point-read: a finding whose newest event marks it
 // excluded (or a false positive) must not be revealable just because its
@@ -732,7 +824,6 @@ func TestUnmaskRiskResult_ClickHouseDismissedAfterLiveRowNotFound(t *testing.T) 
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
@@ -788,7 +879,6 @@ func TestUnmaskRiskResult_ClickHouseForeignChatAnchorNotFound(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
@@ -843,7 +933,6 @@ func TestUnmaskRiskResult_ClickHouseCustomDerivedFieldScoped(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
@@ -899,4 +988,56 @@ func TestUnmaskRiskResult_ClickHouseCustomDerivedFieldScoped(t *testing.T) {
 	res, err = ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: functionRow.String()})
 	require.NoError(t, err)
 	require.Equal(t, function, res.Match, "a tool.function finding reveals the function half")
+}
+
+// TestUnmaskRiskResult_ClickHouseDeletedPolicyNotFound: a deleted policy's
+// rows linger in ClickHouse until TTL and must not be revealable, while a
+// disabled policy's findings stay revealable.
+func TestUnmaskRiskResult_ClickHouseDeletedPolicyNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	secret := "secret"
+	chatID, msgID := seedChatMessage(t, ti, projectID, orgID)
+	start := strings.Index("test message with a secret", secret)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, orgID)},
+		authz.NewGrant(authz.ScopeChatRead, chatID.String()),
+	)
+
+	disabledPolicyID := seedUnmaskPolicy(t, ti, projectID, orgID, false)
+	deletedPolicyID := seedUnmaskPolicy(t, ti, projectID, orgID, true)
+
+	base := unmaskFinding{
+		orgID:         orgID,
+		projectID:     projectID.String(),
+		chatMessageID: msgID.String(),
+		chatID:        chatID.String(),
+		startPos:      int32(start),
+		endPos:        int32(start + len(secret)),
+		matchLen:      uint32(len(secret)),
+		matchRedacted: "se**et",
+		surface:       "content",
+	}
+	disabled := base
+	disabled.riskPolicyID = disabledPolicyID.String()
+	disabledRowID := insertUnmaskFinding(t, ti, disabled)
+	deleted := base
+	deleted.riskPolicyID = deletedPolicyID.String()
+	deletedRowID := insertUnmaskFinding(t, ti, deleted)
+
+	require.NoError(t, ti.service.DeleteRiskPolicy(ctx, &gen.DeleteRiskPolicyPayload{ID: deletedPolicyID.String()}))
+
+	res, err := ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: disabledRowID.String()})
+	require.NoError(t, err)
+	require.Equal(t, secret, res.Match)
+
+	_, err = ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: deletedRowID.String()})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }

@@ -16,7 +16,6 @@ export function PlatformMCPSetupStep({
 }: PlatformMCPSetupStepProps): JSX.Element {
   return (
     <StepContainer
-      icon={null}
       title="Platform MCP"
       description="Manage MCPs, Risk Policies and explore logs in your favorite agent."
       onContinue={onComplete}

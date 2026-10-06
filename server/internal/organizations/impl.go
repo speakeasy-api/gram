@@ -48,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	telemrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -128,8 +129,8 @@ type Service struct {
 	trialBundleSeeder auth.EnterpriseTrialBundleSeeder
 	posthog           onboardingTelemetry
 	growth            *growthsignals.Emitter
-	serverURL         string // API server URL; used to build invite links
-	siteURL           string // frontend URL; used for post-callback browser redirects
+	siteURL           string            // frontend URL; used for post-callback browser redirects
+	orgHosts          *orghost.Resolver // resolves the host of links sent by email
 	audit             *audit.Logger
 	svix              *svix.Svix
 }
@@ -138,7 +139,7 @@ var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService EmailSender, trialNotifier trialemails.Notifier, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, posthog onboardingTelemetry, growthEmitter *growthsignals.Emitter, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService EmailSender, trialNotifier trialemails.Notifier, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, posthog onboardingTelemetry, growthEmitter *growthsignals.Emitter, siteURL string, orgHosts *orghost.Resolver, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 	if trialNotifier == nil {
 		trialNotifier = trialemails.NoopNotifier{}
@@ -160,8 +161,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		trialBundleSeeder: trialBundleSeeder,
 		posthog:           posthog,
 		growth:            growthEmitter,
-		serverURL:         serverURL,
 		siteURL:           siteURL,
+		orgHosts:          orgHosts,
 		audit:             auditLogger,
 		svix:              svix,
 	}
@@ -337,7 +338,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 
 	inviteLink := ""
 	if s.email != nil {
-		inviteURL, err := url.Parse(s.serverURL + inviteCallbackPath)
+		inviteURL, err := url.Parse(s.orgHosts.ServerURL(org.DefaultHost).String() + inviteCallbackPath)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build invite link").LogError(ctx, logger)
 		}
@@ -981,7 +982,12 @@ func (s *Service) GetOnboardingStatus(ctx context.Context, payload *gen.GetOnboa
 
 	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
 	if workosOrgID == "" {
-		return &gen.OnboardingStatusResult{SsoConfigured: false, DsyncConfigured: false}, nil
+		return &gen.OnboardingStatusResult{SsoConfigured: false, DsyncConfigured: false, DomainVerified: false, VerifiedDomains: []string{}}, nil
+	}
+
+	verifiedDomains, err := s.refreshVerifiedDomains(ctx, org.ID, workosOrgID, org.VerifiedDomains)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to check domain verification").LogError(ctx, s.logger)
 	}
 
 	connections, err := s.orgs.ListConnections(ctx, workosOrgID)
@@ -997,7 +1003,35 @@ func (s *Service) GetOnboardingStatus(ctx context.Context, payload *gen.GetOnboa
 	return &gen.OnboardingStatusResult{
 		SsoConfigured:   workos.HasActiveConnection(connections),
 		DsyncConfigured: workos.HasActiveDirectory(directories),
+		DomainVerified:  len(verifiedDomains) > 0,
+		VerifiedDomains: verifiedDomains,
 	}, nil
+}
+
+// refreshVerifiedDomains returns the organization's verified domains. An empty
+// stored list is re-checked against WorkOS, so it is correct right after the
+// Admin Portal and for orgs verified before the event sync tracked domains.
+// The live result only fills a list that is still empty: a non-empty list is
+// kept current by the event sync, which may have written a newer list since
+// stored was read, so the save never overwrites it.
+func (s *Service) refreshVerifiedDomains(ctx context.Context, organizationID, workosOrgID string, stored []string) ([]string, error) {
+	if len(stored) > 0 {
+		return stored, nil
+	}
+
+	policy, err := s.orgs.GetOrganizationDomainPolicy(ctx, workosOrgID)
+	if err != nil {
+		return nil, fmt.Errorf("get workos organization domains: %w", err)
+	}
+	verified := policy.VerifiedDomains()
+	if len(verified) == 0 {
+		return []string{}, nil
+	}
+
+	if err := orgrepo.New(s.db).SetVerifiedDomains(ctx, orgrepo.SetVerifiedDomainsParams{ID: organizationID, VerifiedDomains: verified}); err != nil {
+		return nil, fmt.Errorf("save verified domains: %w", err)
+	}
+	return verified, nil
 }
 
 const verifyOnboardingHooksLimit = 50
@@ -1088,10 +1122,11 @@ func (s *Service) VerifyOnboardingHooksSetup(ctx context.Context, payload *gen.V
 
 // handleSetupCallback is the backend handler that WorkOS's success_url redirects to
 // after portal completion. It authenticates the session, verifies the setup
-// state with WorkOS, and 302-redirects to the appropriate wizard step.
+// state with WorkOS, and redirects to a visible configured wizard task.
 //
 // Query params:
-//   - intent: "sso" or "dsync"
+//   - intent: "domain_verification", "sso", or "dsync"
+//   - task: optional originating identity task, matched to the portal intent
 func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	ctx, span := s.tracer.Start(r.Context(), "organizations.handleSetupCallback")
 	defer span.End()
@@ -1100,6 +1135,14 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	if intent == "" {
 		span.SetStatus(codes.Error, "missing intent")
 		http.Error(w, "missing intent parameter", http.StatusBadRequest)
+		return
+	}
+	originTask := r.URL.Query().Get("task")
+	validOrigin := originTask == "" ||
+		((intent == "domain_verification" || intent == "sso" || intent == "dsync") && originTask == "identity-provider")
+	if !validOrigin {
+		span.SetStatus(codes.Error, "invalid originating task")
+		http.Error(w, "invalid originating task", http.StatusBadRequest)
 		return
 	}
 
@@ -1129,6 +1172,12 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		span.SetStatus(codes.Error, "forbidden")
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "setup callback: read org", attr.SlogError(err))
@@ -1140,29 +1189,32 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
 	orgSlug := org.Slug
 
-	// Determine the next step based on what was just completed and what's verified.
-	var nextStepSlug string
-	switch intent {
-	case "sso":
-		if workosOrgID != "" {
-			connections, err := s.orgs.ListConnections(ctx, workosOrgID)
-			if err != nil {
-				s.logger.ErrorContext(ctx, "setup callback: list connections", attr.SlogError(err))
-			}
-			if workos.HasActiveConnection(connections) {
-				// Directory sync lives on the same card as single sign-on.
-				nextStepSlug = "identity-provider"
-			}
+	tasks, err := projectSetupTasks(ctx, orgrepo.New(s.db), org.ID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "setup callback: project setup tasks", attr.SlogError(err))
+		span.SetStatus(codes.Error, "project setup tasks failed")
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	visible := make(map[string]bool, len(tasks))
+	for _, task := range tasks {
+		visible[task.Key] = !task.Hidden
+	}
+	// All identity setup steps belong to the combined card. Refresh domains even
+	// when DNS is still pending, but never navigate to a hidden or absent task.
+	if intent == "domain_verification" && workosOrgID != "" {
+		if _, err := s.refreshVerifiedDomains(ctx, org.ID, workosOrgID, org.VerifiedDomains); err != nil {
+			s.logger.ErrorContext(ctx, "setup callback: check domain verification", attr.SlogError(err))
 		}
-	case "dsync":
-		// Directory sync may take time to become "linked" after portal setup.
-		// Completing the portal is sufficient to advance — DSYNC is also skippable.
-		nextStepSlug = "anthropic-observability"
+	}
+	nextTask := ""
+	if visible["identity-provider"] {
+		nextTask = "identity-provider"
 	}
 
 	redirectURL := fmt.Sprintf("%s/%s/setup", s.siteURL, orgSlug)
-	if nextStepSlug != "" {
-		redirectURL += fmt.Sprintf("?step=%s", nextStepSlug)
+	if nextTask != "" {
+		redirectURL += fmt.Sprintf("?task=%s", nextTask)
 	}
 
 	http.Redirect(w, r, redirectURL, http.StatusTemporaryRedirect)
@@ -1187,7 +1239,7 @@ func (s *Service) SendEnterpriseAdminOnboardingEmail(ctx context.Context, payloa
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").LogError(ctx, s.logger)
 	}
 
-	setupLink := fmt.Sprintf("%s/%s/setup", strings.TrimRight(s.siteURL, "/"), org.Slug)
+	setupLink := fmt.Sprintf("%s/%s/setup", strings.TrimRight(s.orgHosts.SiteURL(org.DefaultHost).String(), "/"), org.Slug)
 
 	tmpl := email.EnterpriseAdminOnboarding{SetupLink: setupLink}
 

@@ -15,8 +15,9 @@ import (
 // CreateRequestBody is the type of the "identityProviderConnections" service
 // "create" endpoint HTTP request body.
 type CreateRequestBody struct {
-	// Okta org URL, for example https://example.okta.com. Must be https with no
-	// path; the host must be an Okta-owned domain.
+	// Okta org URL, for example https://example.okta.com. Must be https on an
+	// Okta-owned domain with no path, except an Admin Console URL with an /admin
+	// path, which resolves to its org.
 	OrgURL string `form:"org_url" json:"org_url" xml:"org_url"`
 	// Checklist template. Defaults to custom_app.
 	ListingMode *string `form:"listing_mode,omitempty" json:"listing_mode,omitempty" xml:"listing_mode,omitempty"`
@@ -2270,7 +2271,9 @@ type IdentityProviderConnectionChecklistItemResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// What to do in the console, including any value copied from this connection.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Sub-steps, in order. Empty when the description says it all.
+	// Supporting lines under the description: ordered sub-steps for the public-key
+	// step, otherwise notes or the values to enter. Empty when the description
+	// says it all.
 	Details []string `form:"details,omitempty" json:"details,omitempty" xml:"details,omitempty"`
 	// Whether the last verification observed this step done. Omitted for steps the
 	// server cannot observe; the administrator tracks those.

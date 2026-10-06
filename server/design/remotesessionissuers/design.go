@@ -120,11 +120,20 @@ var _ = Service("remoteSessionIssuers", func() {
 	})
 
 	Method("listRemoteSessionIssuers", func() {
-		Description("List remote_session_issuers in the caller's project.")
+		Description("List the remote_session_issuers the caller's project can use: its own, plus those inherited from its organization and from the platform catalog. Newest first; the search, upstream_host and tier filters narrow the listing without changing its order or cursor.")
 
 		Payload(func() {
 			Attribute("cursor", String, "Pagination cursor.")
 			Attribute("limit", Int, "Page size (default 50, max 100).")
+			Attribute("search", String, "Only issuers whose name, slug or issuer URL contains this text, ignoring case.", func() {
+				MaxLength(256)
+			})
+			Attribute("upstream_host", String, "Only issuers that could sign users in to an upstream at this host (e.g. mcp.linear.app): those whose issuer URL host equals it or is one of its parent domains (linear.app). Host only, optionally with a port; no scheme or path.", func() {
+				MaxLength(260)
+			})
+			Attribute("tier", String, "Only issuers from one tier: the project's own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.", func() {
+				Enum("project", "organization", "platform")
+			})
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -136,6 +145,9 @@ var _ = Service("remoteSessionIssuers", func() {
 			GET("/rpc/remoteSessionIssuers.list")
 			Param("cursor")
 			Param("limit")
+			Param("search")
+			Param("upstream_host")
+			Param("tier")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -289,6 +301,9 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		Payload(func() {
 			Attribute("cursor", String, "Pagination cursor.")
 			Attribute("limit", Int, "Page size (default 50, max 100).")
+			Attribute("tier", String, "Only issuers from one tier: organizational (organization), project-specific (project), or from the platform catalog (platform). Omitted lists all three.", func() {
+				Enum("organization", "project", "platform")
+			})
 			security.SessionPayload()
 			security.ByKeyPayload()
 		})
@@ -299,6 +314,7 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 			GET("/rpc/organizationRemoteSessionIssuers.list")
 			Param("cursor")
 			Param("limit")
+			Param("tier")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			Response(StatusOK)
@@ -600,6 +616,7 @@ var CreateRemoteSessionIssuerForm = Type("CreateRemoteSessionIssuerForm", func()
 	Attribute("op_tos_uri", String, "RFC 8414 op_tos_uri; the issuer's terms of service. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.")
 	Attribute("scopes_supported", ArrayOf(String), "Scopes advertised by the issuer.")
 	Attribute("grant_types_supported", ArrayOf(String), "Grant types advertised by the issuer.")
+	Attribute("authorization_grant_profiles_supported", ArrayOf(String), "Advertised grant profiles; metadata evidence is not client authorization or user access.")
 	Attribute("response_types_supported", ArrayOf(String), "Response types advertised by the issuer.")
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String), "Token endpoint auth methods advertised by the issuer.")
 	Attribute("code_challenge_methods_supported", ArrayOf(String), "PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Omitting the field stores null (\"not captured\"), distinct from an empty array (\"the issuer advertises no methods\").")
@@ -646,6 +663,7 @@ var UpdateRemoteSessionIssuerForm = Type("UpdateRemoteSessionIssuerForm", func()
 	Attribute("op_tos_uri", String, "Set or clear RFC 8414 op_tos_uri. An empty string clears it to NULL; any other value must be an absolute http(s) URL.")
 	Attribute("scopes_supported", ArrayOf(String))
 	Attribute("grant_types_supported", ArrayOf(String))
+	Attribute("authorization_grant_profiles_supported", ArrayOf(String), "Advertised grant profiles; metadata evidence is not client authorization or user access.")
 	Attribute("response_types_supported", ArrayOf(String))
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String))
 	Attribute("code_challenge_methods_supported", ArrayOf(String), "PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises no methods.")
@@ -706,6 +724,7 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	Attribute("op_tos_uri", String, "RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.")
 	Attribute("scopes_supported", ArrayOf(String))
 	Attribute("grant_types_supported", ArrayOf(String))
+	Attribute("authorization_grant_profiles_supported", ArrayOf(String), "Advertised grant profiles; metadata evidence is not client authorization or user access.")
 	Attribute("response_types_supported", ArrayOf(String))
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String))
 	Attribute("code_challenge_methods_supported", ArrayOf(String), "PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Null when neither discovery nor an operator has captured the field for this issuer yet; an empty array means the field was captured and the issuer advertises no methods.", func() {
@@ -755,6 +774,7 @@ var RemoteSessionIssuerDraft = Type("RemoteSessionIssuerDraft", func() {
 	Attribute("op_tos_uri", String, "RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised or when the advertised value is not an absolute http(s) URL.")
 	Attribute("scopes_supported", ArrayOf(String))
 	Attribute("grant_types_supported", ArrayOf(String))
+	Attribute("authorization_grant_profiles_supported", ArrayOf(String), "Advertised grant profiles; metadata evidence is not client authorization or user access.")
 	Attribute("response_types_supported", ArrayOf(String))
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String))
 	Attribute("code_challenge_methods_supported", ArrayOf(String), "PKCE code challenge methods advertised in the discovery document (RFC 8414 code_challenge_methods_supported). Null when the document omits the field.", func() {

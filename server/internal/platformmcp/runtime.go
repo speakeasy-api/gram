@@ -110,10 +110,12 @@ type ReadinessRecorder interface {
 type Runtime struct {
 	// registrar holds every tool this deployment composed, so an admitted
 	// audience can be served from the same pass that built the endpoint.
-	registrar            *Registrar
-	authenticator        Authenticator
-	gate                 Gate
-	authorizer           Authorizer
+	registrar     *Registrar
+	authenticator Authenticator
+	gate          Gate
+	authorizer    Authorizer
+	// protectedResourceURL is the RFC 9728 metadata URL advertised when a
+	// request carries no platform origin. Empty disables the challenge hint.
 	protectedResourceURL string
 	readiness            ReadinessRecorder
 	telemetry            OAuthTelemetry
@@ -133,14 +135,14 @@ func NewRuntimeWithFeedback(logger *slog.Logger, authenticator Authenticator, ga
 // identities and declared configuration fields, never an arbitrary endpoint or
 // provider credential.
 func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) *Runtime {
-	return NewRuntimeWithRiskMutations(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, nil, candidate, nil, nil)
+	return NewRuntimeWithRiskMutations(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, onboarding, distributions, skills, diagnostics, nil, plugins, sessionRecall, nil, candidate, nil, nil)
 }
 
-func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessReads *AccessReadService, accessRoleMutations *AccessRoleMutationService) *Runtime {
+func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessReads *AccessReadService, accessRoleMutations *AccessRoleMutationService, connectionMutations ...*MCPConnectionMutationService) *Runtime {
 	if postgresReader, ok := reader.(*PostgresReader); ok {
 		postgresReader.setInventoryCursorKey(cursorKeyMaterial)
 	}
-	server, registrar := newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, riskMutations, candidate, accessReads, accessRoleMutations)
+	server, registrar := newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, workflowRun, plugins, sessionRecall, riskMutations, candidate, accessReads, accessRoleMutations, connectionMutations...)
 	registrar.withExternalAuthorizer(authorizer)
 	runtime := &Runtime{
 		authenticator:        authenticator,
@@ -290,7 +292,13 @@ func (r *Runtime) Handler() http.Handler {
 			}
 			r.recordAuthOutcome(req.Context(), "unauthorized", "")
 			if r.protectedResourceURL != "" {
-				w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+r.protectedResourceURL+`"`)
+				// The metadata lives on the platform host the request arrived
+				// on, which is also the only host its tokens are valid for.
+				resourceMetadata := r.protectedResourceURL
+				if base := requestPlatformBaseURL(req.Context()); base != nil {
+					resourceMetadata = platformProtectedResourceMetadataURL(base)
+				}
+				w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+resourceMetadata+`"`)
 			}
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return

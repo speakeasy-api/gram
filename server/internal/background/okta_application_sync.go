@@ -31,6 +31,9 @@ const (
 	// oktaapplications.SyncInterval decides when a connection is due.
 	oktaApplicationSyncCoordinatorInterval = 15 * time.Minute
 
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	oktaApplicationSyncCoordinatorCatchupWindow = oktaApplicationSyncCoordinatorInterval - time.Second
+
 	oktaApplicationSyncCoordinatorRunTimeout = 8 * time.Hour
 
 	// oktaApplicationSyncChildConcurrency caps children started per batch;
@@ -178,13 +181,7 @@ func AddOktaApplicationSyncCoordinatorSchedule(ctx context.Context, temporalEnv 
 			schedule := input.Description.Schedule
 			schedule.Spec = &options.Spec
 			schedule.Action = options.Action
-			if schedule.Policy == nil {
-				schedule.Policy = &client.SchedulePolicies{
-					Overlap:        enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-					CatchupWindow:  0,
-					PauseOnFailure: false,
-				}
-			}
+			setScheduleCatchup(&schedule, oktaApplicationSyncCoordinatorCatchupWindow)
 			return &client.ScheduleUpdate{Schedule: &schedule, TypedSearchAttributes: nil}, nil
 		},
 	}); err != nil {
@@ -196,8 +193,9 @@ func AddOktaApplicationSyncCoordinatorSchedule(ctx context.Context, temporalEnv 
 func buildOktaApplicationSyncScheduleOptions(temporalEnv *tenv.Environment) client.ScheduleOptions {
 	queue := string(temporalEnv.Queue())
 	return client.ScheduleOptions{
-		ID:      oktaApplicationSyncCoordinatorScheduleID(queue),
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		CatchupWindow: oktaApplicationSyncCoordinatorCatchupWindow,
+		ID:            oktaApplicationSyncCoordinatorScheduleID(queue),
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{{Every: oktaApplicationSyncCoordinatorInterval}},
 		},

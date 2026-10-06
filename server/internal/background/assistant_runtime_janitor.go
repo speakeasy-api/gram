@@ -25,6 +25,9 @@ const (
 	// covering up to 4800 rows/day on the steady state.
 	AssistantRuntimeJanitorInterval = time.Hour
 
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	assistantRuntimeJanitorCatchupWindow = AssistantRuntimeJanitorInterval - time.Second
+
 	// AssistantRuntimeJanitorBatchSize caps rows reaped per sweep. Each row
 	// makes one or two Fly Machines API calls; per-call timeouts bound each
 	// call so the sweep can never wedge on a single row.
@@ -146,8 +149,9 @@ func AssistantRuntimeJanitorWorkflow(ctx workflow.Context, params AssistantRunti
 }
 
 func AddAssistantRuntimeJanitorSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
-	_, err := temporalEnv.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
-		ID: assistantRuntimeJanitorScheduleID,
+	_, err := createScheduleWithCatchup(ctx, temporalEnv.Client().ScheduleClient(), client.ScheduleOptions{
+		CatchupWindow: assistantRuntimeJanitorCatchupWindow,
+		ID:            assistantRuntimeJanitorScheduleID,
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{{Every: AssistantRuntimeJanitorInterval}},
 		},

@@ -35,28 +35,82 @@ const (
 	setupTaskStatusDone            = "done"
 )
 
+// setupTaskCompletion says how a task's effective status reaches done.
+type setupTaskCompletion string
+
+const (
+	// setupTaskCompletionManual: an admin marks the task done.
+	setupTaskCompletionManual setupTaskCompletion = "manual"
+	// setupTaskCompletionFact: organization facts force the task done.
+	setupTaskCompletionFact setupTaskCompletion = "fact"
+	// setupTaskCompletionChildren: a group is done once every visible card
+	// under it is done. Groups are never marked by hand.
+	setupTaskCompletionChildren setupTaskCompletion = "children"
+)
+
 type setupTaskDefinition struct {
 	Key           string
 	Title         string
 	Description   string
 	Prerequisites []string
-	// HiddenByDefault keeps a task off the board unless a platform admin asks
-	// to see hidden tasks. The guided journey is identity and observability;
-	// these are real setup work an org may never reach for, and they crowd out
-	// the ones that matter on a first run.
+	// HiddenByDefault preserves legacy selection until staff explicitly save
+	// visibility. New tasks must not expand untouched organizations' boards.
 	HiddenByDefault bool
+
+	// Parent is the setupTaskGroups key this card sits under, or empty for a
+	// top-level card. Cards of one group are contiguous in the catalog.
+	Parent string
+
+	// Methods are the support matrix integration method slugs the card
+	// configures. A card with none, such as identity, applies to every stack.
+	Methods []string
+
+	// Completion is manual or fact; groups derive theirs from their cards.
+	Completion setupTaskCompletion
 }
 
+// setupTaskGroup nests cards one level. A group has no card of its own: it is
+// hidden when every card under it is, done when every visible card is, and
+// it cannot be assigned or marked by hand.
+type setupTaskGroup struct {
+	Key         string
+	Title       string
+	Description string
+}
+
+// setupTaskGroups lists the groups cards may name as Parent. A group appears
+// in the wizard where its first card does.
+var setupTaskGroups = []setupTaskGroup{
+	{Key: "agent-observability", Title: "Set up agent observability", Description: "Connect coding agents to Speakeasy hook telemetry and confirm traffic arrives."},
+	{Key: "mcp-distribution", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it."},
+}
+
+// setupTaskCatalog lists every setup card in wizard order. To add a card:
+//  1. Add an entry here, under a group if it belongs to one and next to that
+//     group's other cards. Only an optional card is HiddenByDefault.
+//  2. Add its content to SETUP_CARDS in client/dashboard/src/pages/setup/setup-cards.tsx.
+//  3. Add it to the playbooks that should walk it, from the admin dashboard.
+//  4. Optionally mark it done from organization facts in projectSetupTasks.
+//
+// Tests on both sides fail if the catalog, SETUP_CARDS, groups, and presets
+// disagree. The catalog is mirrored into onboarding_steps at start-up.
 var setupTaskCatalog = []setupTaskDefinition{
-	{Key: "identity-provider", Title: "Set up identity provider", Description: "Connect single sign-on and sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "anthropic-observability", Title: "Set up Anthropic observability", Description: "Turn on Anthropic inference hooks in Claude.ai so Claude conversations reach Speakeasy, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "anthropic-admin-controls", Title: "Set up Anthropic admin controls", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true},
-	{Key: "instrument-agents", Title: "Set up observability in other platforms", Description: "Connect Cursor, Codex, and other coding agents to Speakeasy hook telemetry and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "litellm", Title: "Set up LiteLLM", Description: "Point a LiteLLM proxy at Speakeasy so its traffic is scanned by risk policies and lands in observability, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true},
-	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Add optional provider integrations for agent activity.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it.", Prerequisites: nil, HiddenByDefault: true},
-	{Key: "configure-policies", Title: "Configure policies", Description: "Choose the organization's initial risk policies.", Prerequisites: nil, HiddenByDefault: true},
-	{Key: "platform-mcp", Title: "Set up Platform MCP", Description: "Connect Platform MCP and distribute its catalog.", Prerequisites: nil, HiddenByDefault: true},
+	// Identity
+	{Key: "identity-provider", Title: "Set up identity provider", Description: "Verify a domain, connect single sign-on, and sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: nil, Completion: setupTaskCompletionFact},
+	// Observe
+	{Key: "enable-logging", Title: "Enable logging", Description: "Record tool calls, I/O, and agent sessions.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: nil, Completion: setupTaskCompletionFact},
+	{Key: "anthropic-observability", Title: "Set up Anthropic observability", Description: "Turn on Anthropic inference hooks in Claude.ai so Claude conversations reach Speakeasy, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: []string{"inference"}, Completion: setupTaskCompletionManual},
+	{Key: "instrument-agents", Title: "Set up observability in other platforms", Description: "Connect Cursor, Codex, and other coding agents to Speakeasy hook telemetry and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false, Parent: "agent-observability", Methods: nil, Completion: setupTaskCompletionManual},
+	{Key: "confirm-traffic", Title: "Confirm traffic", Description: "Verify that instrumented agents are sending hook events.", Prerequisites: []string{"instrument-agents"}, HiddenByDefault: false, Parent: "agent-observability", Methods: nil, Completion: setupTaskCompletionManual},
+	{Key: "litellm", Title: "Set up LiteLLM", Description: "Point a LiteLLM proxy at Speakeasy so its traffic is scanned by risk policies and lands in observability, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true, Parent: "", Methods: []string{"litellm"}, Completion: setupTaskCompletionManual},
+	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Add optional provider integrations for agent activity.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: []string{"anthropic-api", "cursor-api", "openai-api", "conversations"}, Completion: setupTaskCompletionManual},
+	// Distribute
+	{Key: "create-marketplace", Title: "Create marketplace", Description: "Publish the organization's default project marketplace.", Prerequisites: nil, HiddenByDefault: false, Parent: "mcp-distribution", Methods: []string{"plugins"}, Completion: setupTaskCompletionFact},
+	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Distribute approved MCP servers through the plugin marketplace.", Prerequisites: []string{"create-marketplace"}, HiddenByDefault: false, Parent: "mcp-distribution", Methods: []string{"plugins"}, Completion: setupTaskCompletionManual},
+	{Key: "platform-mcp", Title: "Set up Platform MCP", Description: "Connect Platform MCP and distribute its catalog.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: nil, Completion: setupTaskCompletionManual},
+	// Secure
+	{Key: "anthropic-admin-controls", Title: "Set up Anthropic admin controls", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: []string{"settings", "plugins"}, Completion: setupTaskCompletionManual},
+	{Key: "configure-policies", Title: "Configure policies", Description: "Choose the organization's initial risk policies.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: nil, Completion: setupTaskCompletionManual},
 }
 
 var validSetupTaskStatuses = []string{
@@ -75,9 +129,10 @@ func (s *Service) ListSetupTasks(ctx context.Context, payload *gen.ListSetupTask
 		return nil, err
 	}
 
-	tasks, err := s.projectSetupTasks(ctx, orgrepo.New(s.db), ac.ActiveOrganizationID)
+	repo := orgrepo.New(s.db)
+	tasks, err := projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "project setup tasks").LogError(ctx, s.logger)
 	}
 	includeHidden := payload.IncludeHidden != nil && *payload.IncludeHidden && ac.IsAdmin
 	if !includeHidden {
@@ -130,9 +185,9 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock organization setup tasks").LogError(ctx, s.logger)
 	}
-	beforeTasks, err := s.projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
+	beforeTasks, err := projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "project setup tasks before update").LogError(ctx, s.logger)
 	}
 	before := setupTaskByKey(beforeTasks, payload.TaskKey)
 	if before == nil {
@@ -163,6 +218,8 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 		stored = row
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeUnexpected, err, "get setup task state").LogError(ctx, s.logger)
+	} else if before.Hidden {
+		stored.HiddenAt = pgtype.Timestamptz{Time: time.Now().UTC(), InfinityModifier: pgtype.Finite, Valid: true}
 	}
 
 	if payload.Status != nil {
@@ -202,9 +259,9 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 		return nil, oops.E(oops.CodeUnexpected, err, "update setup task").LogError(ctx, s.logger)
 	}
 
-	afterTasks, err := s.projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
+	afterTasks, err := projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "project setup tasks after update").LogError(ctx, s.logger)
 	}
 	after := setupTaskByKey(afterTasks, payload.TaskKey)
 	if err := s.audit.LogOrganizationSetupTaskUpdated(ctx, tx, audit.LogOrganizationSetupTaskUpdatedEvent{
@@ -224,14 +281,14 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 		go func() {
 			emailCtx, cancel := context.WithTimeout(detached, 10*time.Second)
 			defer cancel()
-			s.sendSetupTaskAssignmentEmail(emailCtx, ac, organization.Name, organization.Slug, after, updated.UpdatedAt.Time)
+			s.sendSetupTaskAssignmentEmail(emailCtx, ac, organization, after, updated.UpdatedAt.Time)
 		}()
 	}
 
 	return after, nil
 }
 
-func (s *Service) sendSetupTaskAssignmentEmail(ctx context.Context, ac *contextvalues.AuthContext, organizationName, organizationSlug string, task *gen.SetupTask, assignmentTime time.Time) {
+func (s *Service) sendSetupTaskAssignmentEmail(ctx context.Context, ac *contextvalues.AuthContext, organization orgrepo.OrganizationMetadatum, task *gen.SetupTask, assignmentTime time.Time) {
 	if s.email == nil || task == nil || task.Assignee == nil || strings.TrimSpace(task.Assignee.Email) == "" {
 		return
 	}
@@ -246,12 +303,12 @@ func (s *Service) sendSetupTaskAssignmentEmail(ctx context.Context, ac *contextv
 	}
 
 	recipient := conv.NormalizeEmail(task.Assignee.Email)
-	setupLink := fmt.Sprintf("%s/%s/setup?step=%s", strings.TrimRight(s.siteURL, "/"), organizationSlug, task.Key)
+	setupLink := fmt.Sprintf("%s/%s/setup?task=%s", strings.TrimRight(s.orgHosts.SiteURL(organization.DefaultHost).String(), "/"), organization.Slug, task.Key)
 	idempotencyMaterial := fmt.Sprintf("%s\x00%s\x00%s\x00%s", ac.ActiveOrganizationID, task.Key, assignmentTime.UTC().Format(time.RFC3339Nano), recipient)
 	idempotencyKey := fmt.Sprintf("setup-task-assignment:%x", sha256.Sum256([]byte(idempotencyMaterial)))
 	tmpl := email.SetupTaskAssignment{
 		AssignerName:     assignerName,
-		OrganizationName: organizationName,
+		OrganizationName: organization.Name,
 		TaskTitle:        task.Title,
 		TaskDescription:  task.Description,
 		SetupLink:        setupLink,
@@ -271,23 +328,33 @@ func sameSetupTaskAssignee(before, after *gen.SetupTaskAssignee) bool {
 	return conv.NormalizeEmail(before.Email) == conv.NormalizeEmail(after.Email)
 }
 
-func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, organizationID string) ([]*gen.SetupTask, error) {
+func projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, organizationID string) ([]*gen.SetupTask, error) {
 	rows, err := repo.ListOrganizationSetupTasks(ctx, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list setup task state").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list setup task state")
 	}
 	members, err := repo.ListOrganizationUsers(ctx, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list setup task assignees").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list setup task assignees")
 	}
 	facts, err := repo.GetSetupTaskCompletionFacts(ctx, organizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get setup task completion facts").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get setup task completion facts")
 	}
 
 	stateByKey := make(map[string]orgrepo.OrganizationSetupTask, len(rows))
 	for _, row := range rows {
 		stateByKey[row.TaskKey] = row
+	}
+	// An assigned playbook decides what the wizard walks and in what order;
+	// without one, the saved visibility and the catalog defaults do.
+	playbookOrder, followPlaybook, err := assignedPlaybookOrder(ctx, repo, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	selected := make(map[string]bool, len(playbookOrder))
+	for _, key := range playbookOrder {
+		selected[key] = true
 	}
 	membersByID := make(map[string]orgrepo.ListOrganizationUsersRow, len(members))
 	membersByEmail := make(map[string]orgrepo.ListOrganizationUsersRow, len(members))
@@ -322,12 +389,7 @@ func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, 
 	for _, definition := range setupTaskCatalog {
 		state, persisted := stateByKey[definition.Key]
 		status := setupTaskStatusTodo
-		// The catalog default only applies until the organization has a row of
-		// its own; from then on the row decides, in both directions, so a
-		// default-hidden task a platform admin restores stays restored. That
-		// also means a row written for a status or an assignee reveals the
-		// task, which is the trade for Restore working at all: nothing gets
-		// hidden unexpectedly, and a revealed task can be hidden again.
+		// Persisted visibility overrides the catalog default in both directions.
 		hidden := definition.HiddenByDefault
 		var assignee *gen.SetupTaskAssignee
 		if persisted {
@@ -335,14 +397,14 @@ func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, 
 			hidden = state.HiddenAt.Valid
 			assignee = setupTaskAssigneeView(state, membersByID, membersByEmail)
 		}
-		// The identity provider card covers both single sign-on and directory
-		// sync, so it only completes by fact once both are configured; an admin
-		// who skips directory sync marks the card done by hand.
-		completedByFact := definition.Key == "identity-provider" && facts.SsoConfigured && facts.DsyncConfigured
+		if followPlaybook {
+			hidden = !selected[definition.Key]
+		}
+		completedByFact := definition.Completion == setupTaskCompletionFact && setupTaskFact(definition.Key, facts)
 		if completedByFact {
 			status = setupTaskStatusDone
 		}
-		tasks = append(tasks, &gen.SetupTask{Key: definition.Key, Title: definition.Title, Description: definition.Description, Status: status, CompletedByFact: completedByFact, Assignee: assignee, BlockedBy: []string{}, Hidden: hidden})
+		tasks = append(tasks, &gen.SetupTask{Key: definition.Key, Title: definition.Title, Description: definition.Description, Status: status, CompletedByFact: completedByFact, Assignee: assignee, BlockedBy: []string{}, Hidden: hidden, ParentKey: conv.PtrEmpty(definition.Parent), Group: false})
 	}
 
 	for index, definition := range setupTaskCatalog {
@@ -355,7 +417,118 @@ func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, 
 		}
 	}
 
-	return tasks, nil
+	if followPlaybook {
+		tasks = inPlaybookOrder(tasks, playbookOrder)
+	}
+	return withSetupTaskGroups(tasks), nil
+}
+
+// assignedPlaybookOrder returns the cards of the organization's playbook in
+// walking order, and whether a playbook is assigned at all.
+func assignedPlaybookOrder(ctx context.Context, repo *orgrepo.Queries, organizationID string) ([]string, bool, error) {
+	assignment, err := repo.GetOrganizationOnboardingPlaybookID(ctx, organizationID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, false, nil
+		}
+		return nil, false, oops.E(oops.CodeUnexpected, err, "load onboarding playbook assignment")
+	}
+	if !assignment.PlaybookID.Valid {
+		return nil, false, nil
+	}
+	topLevel, err := repo.ListOrganizationOnboardingPlaybookSteps(ctx, organizationID)
+	if err != nil {
+		return nil, false, oops.E(oops.CodeUnexpected, err, "list onboarding playbook steps")
+	}
+	if len(topLevel) == 0 {
+		// The playbook was retired: back to the saved selection.
+		return nil, false, nil
+	}
+	return playbookCards(topLevel), true, nil
+}
+
+// inPlaybookOrder puts the playbook's cards first, in its order, and the rest
+// after in catalog order.
+func inPlaybookOrder(cards []*gen.SetupTask, order []string) []*gen.SetupTask {
+	sorted := make([]*gen.SetupTask, 0, len(cards))
+	for _, key := range order {
+		if card := setupTaskByKey(cards, key); card != nil {
+			sorted = append(sorted, card)
+		}
+	}
+	for _, card := range cards {
+		if !slices.Contains(order, card.Key) {
+			sorted = append(sorted, card)
+		}
+	}
+	return sorted
+}
+
+// setupTaskFact reports whether organization facts complete a fact-completed
+// card.
+func setupTaskFact(key string, facts orgrepo.GetSetupTaskCompletionFactsRow) bool {
+	switch key {
+	case "identity-provider":
+		// The identity provider card covers domain verification, single
+		// sign-on and directory sync, so it only completes by fact once single
+		// sign-on and directory sync are configured; an admin who skips
+		// directory sync marks the card done by hand.
+		return facts.SsoConfigured && facts.DsyncConfigured
+	case "create-marketplace":
+		return facts.MarketplacePublished
+	case "enable-logging":
+		return facts.LoggingEnabled
+	default:
+		return false
+	}
+}
+
+// withSetupTaskGroups places each group ahead of its first card and derives
+// the group's state from its cards: hidden when every card is, done when
+// every visible card is, and complete by fact only when every visible card is.
+func withSetupTaskGroups(cards []*gen.SetupTask) []*gen.SetupTask {
+	tasks := make([]*gen.SetupTask, 0, len(cards)+len(setupTaskGroups))
+	placed := make(map[string]bool, len(setupTaskGroups))
+	for _, card := range cards {
+		parent := conv.PtrValOr(card.ParentKey, "")
+		if parent != "" && !placed[parent] {
+			placed[parent] = true
+			tasks = append(tasks, setupTaskGroupView(parent, cards))
+		}
+		tasks = append(tasks, card)
+	}
+	return tasks
+}
+
+func setupTaskGroupView(key string, cards []*gen.SetupTask) *gen.SetupTask {
+	group := setupTaskGroupForKey(key)
+	hidden, done, byFact := true, true, true
+	for _, card := range cards {
+		if conv.PtrValOr(card.ParentKey, "") != key || card.Hidden {
+			continue
+		}
+		hidden = false
+		if card.Status != setupTaskStatusDone {
+			done = false
+		}
+		if !card.CompletedByFact {
+			byFact = false
+		}
+	}
+	status := setupTaskStatusTodo
+	if !hidden && done {
+		status = setupTaskStatusDone
+	}
+	return &gen.SetupTask{Key: group.Key, Title: group.Title, Description: group.Description, Status: status, CompletedByFact: !hidden && byFact, Assignee: nil, BlockedBy: []string{}, Hidden: hidden, ParentKey: nil, Group: true}
+}
+
+func setupTaskGroupForKey(key string) *setupTaskGroup {
+	for index := range setupTaskGroups {
+		if setupTaskGroups[index].Key == key {
+			return &setupTaskGroups[index]
+		}
+	}
+	return nil
 }
 
 func setupTaskDefinitionForKey(key string) *setupTaskDefinition {
@@ -438,4 +611,37 @@ func setupTaskAuditSnapshot(task *gen.SetupTask) *audit.OrganizationSetupTaskSna
 		Key: task.Key, Title: task.Title, Description: task.Description, Status: task.Status,
 		Assignee: assignee, BlockedBy: task.BlockedBy, Hidden: task.Hidden,
 	}
+}
+
+// SubmitOnboardingSurvey assigns the default playbook of the survey's use
+// case, checked against the recorded stack like any assignment. Callers
+// never pick steps.
+func (s *Service) SubmitOnboardingSurvey(ctx context.Context, payload *gen.SubmitOnboardingSurveyPayload) (*gen.ListSetupTasksResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	queries := orgrepo.New(s.db)
+	useCase, err := queries.GetOnboardingUseCaseBySlug(ctx, payload.UseCase)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "unknown onboarding use case").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "load onboarding use case").LogError(ctx, s.logger)
+	}
+	playbook, err := queries.GetOnboardingDefaultPlaybook(ctx, conv.ToNullUUID(useCase.ID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "use case %q has no default playbook yet", payload.UseCase).LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "load default onboarding playbook").LogError(ctx, s.logger)
+	}
+	actor := urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)
+	if _, err := AssignOrganizationOnboardingPlaybook(ctx, s.db, s.audit, ac.ActiveOrganizationID, &playbook.ID, actor, ac.Email); err != nil {
+		return nil, fmt.Errorf("save onboarding survey result: %w", err)
+	}
+	return s.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{IncludeHidden: nil, SessionToken: payload.SessionToken})
 }

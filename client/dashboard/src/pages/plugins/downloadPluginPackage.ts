@@ -1,6 +1,9 @@
 import { useRef, useState } from "react";
 
-import type { QueryParamPlatform } from "@gram/client/models/operations/downloadpluginpackage.js";
+import type {
+  DownloadPluginPackageRequest,
+  QueryParamPlatform,
+} from "@gram/client/models/operations/downloadpluginpackage.js";
 import { Gram } from "@gram/client";
 import { toast } from "sonner";
 import {
@@ -10,6 +13,10 @@ import {
 } from "@/lib/download";
 
 export type PluginPackagePlatform = QueryParamPlatform;
+type PluginPackageScope = Pick<
+  DownloadPluginPackageRequest,
+  "gramProject" | "gramSession"
+>;
 
 export async function downloadResponse(
   response: Response,
@@ -30,8 +37,10 @@ export async function downloadPluginPackage(
   client: Gram,
   pluginId: string,
   platform: PluginPackagePlatform,
+  scope: PluginPackageScope,
 ): Promise<void> {
   const { headers, result } = await client.plugins.downloadPluginPackage({
+    ...scope,
     pluginId,
     platform,
   });
@@ -48,6 +57,7 @@ export function usePluginPackageDownload(
   client: Gram,
   pluginId: string,
   onMenuOpenChange: (open: boolean) => void,
+  scope: PluginPackageScope,
 ): {
   isDownloading: boolean;
   download: (platform: PluginPackagePlatform) => Promise<void>;
@@ -67,7 +77,7 @@ export function usePluginPackageDownload(
     onMenuOpenChange(false);
     setDownloadingPluginId(pluginId);
     try {
-      await downloadPluginPackage(client, pluginId, platform);
+      await downloadPluginPackage(client, pluginId, platform, scope);
     } catch (_err) {
       toast.error("Failed to download plugin package");
     } finally {

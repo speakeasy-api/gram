@@ -15,21 +15,25 @@ import (
 
 // Client is the "remoteSessions" service client.
 type Client struct {
-	ListBindingsEndpoint        goa.Endpoint
-	AttachBindingEndpoint       goa.Endpoint
-	DetachBindingEndpoint       goa.Endpoint
-	ListRemoteSessionsEndpoint  goa.Endpoint
-	RevokeRemoteSessionEndpoint goa.Endpoint
+	ListBindingsEndpoint                      goa.Endpoint
+	AttachBindingEndpoint                     goa.Endpoint
+	DetachBindingEndpoint                     goa.Endpoint
+	CommitServerIdentityConfigurationEndpoint goa.Endpoint
+	ListRemoteSessionsEndpoint                goa.Endpoint
+	CountRemoteSessionsEndpoint               goa.Endpoint
+	RevokeRemoteSessionEndpoint               goa.Endpoint
 }
 
 // NewClient initializes a "remoteSessions" service client given the endpoints.
-func NewClient(listBindings, attachBinding, detachBinding, listRemoteSessions, revokeRemoteSession goa.Endpoint) *Client {
+func NewClient(listBindings, attachBinding, detachBinding, commitServerIdentityConfiguration, listRemoteSessions, countRemoteSessions, revokeRemoteSession goa.Endpoint) *Client {
 	return &Client{
-		ListBindingsEndpoint:        listBindings,
-		AttachBindingEndpoint:       attachBinding,
-		DetachBindingEndpoint:       detachBinding,
-		ListRemoteSessionsEndpoint:  listRemoteSessions,
-		RevokeRemoteSessionEndpoint: revokeRemoteSession,
+		ListBindingsEndpoint:                      listBindings,
+		AttachBindingEndpoint:                     attachBinding,
+		DetachBindingEndpoint:                     detachBinding,
+		CommitServerIdentityConfigurationEndpoint: commitServerIdentityConfiguration,
+		ListRemoteSessionsEndpoint:                listRemoteSessions,
+		CountRemoteSessionsEndpoint:               countRemoteSessions,
+		RevokeRemoteSessionEndpoint:               revokeRemoteSession,
 	}
 }
 
@@ -98,6 +102,29 @@ func (c *Client) DetachBinding(ctx context.Context, p *DetachBindingPayload) (er
 	return
 }
 
+// CommitServerIdentityConfiguration calls the
+// "commitServerIdentityConfiguration" endpoint of the "remoteSessions" service.
+// CommitServerIdentityConfiguration may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CommitServerIdentityConfiguration(ctx context.Context, p *CommitServerIdentityConfigurationPayload) (res *CommitServerIdentityConfigurationResult, err error) {
+	var ires any
+	ires, err = c.CommitServerIdentityConfigurationEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*CommitServerIdentityConfigurationResult), nil
+}
+
 // ListRemoteSessions calls the "listRemoteSessions" endpoint of the
 // "remoteSessions" service.
 // ListRemoteSessions may return the following errors:
@@ -119,6 +146,29 @@ func (c *Client) ListRemoteSessions(ctx context.Context, p *ListRemoteSessionsPa
 		return
 	}
 	return ires.(*ListRemoteSessionsResult), nil
+}
+
+// CountRemoteSessions calls the "countRemoteSessions" endpoint of the
+// "remoteSessions" service.
+// CountRemoteSessions may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CountRemoteSessions(ctx context.Context, p *CountRemoteSessionsPayload) (res *CountRemoteSessionsResult, err error) {
+	var ires any
+	ires, err = c.CountRemoteSessionsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*CountRemoteSessionsResult), nil
 }
 
 // RevokeRemoteSession calls the "revokeRemoteSession" endpoint of the

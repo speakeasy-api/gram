@@ -1,4 +1,4 @@
-import { getServerURL } from "@/lib/utils";
+import { getServerURL, isProdHost } from "@/lib/utils";
 import posthog from "posthog-js";
 import { type ReactNode, useEffect } from "react";
 import { datadogRum } from "@datadog/browser-rum";
@@ -39,6 +39,10 @@ export function failOpenMissingFlags(telemetry: Telemetry): Telemetry {
       const result = telemetry.isFeatureEnabled(flag, options);
       return result === undefined ? true : result;
     }) as Telemetry["isFeatureEnabled"],
+    // Variants pass through untouched: a missing multivariate key stays
+    // undefined so callers fall back to the boolean read above rather than
+    // inventing a variant.
+    getFeatureFlag: telemetry.getFeatureFlag.bind(telemetry),
     onFeatureFlags: telemetry.onFeatureFlags.bind(telemetry),
     capture: telemetry.capture.bind(telemetry),
     identify: telemetry.identify.bind(telemetry),
@@ -48,11 +52,20 @@ export function failOpenMissingFlags(telemetry: Telemetry): Telemetry {
   };
 }
 
+// Gram's own hosts: getgram.ai, ai.speakeasy.com and their subdomains. Matched
+// on label boundaries so lookalikes such as mygetgram.ai do not qualify.
+export function isGramHost(serverURL: string): boolean {
+  const host = new URL(serverURL).hostname;
+  return ["getgram.ai", "ai.speakeasy.com"].some(
+    (domain) => host === domain || host.endsWith(`.${domain}`),
+  );
+}
+
 export const TelemetryProvider = (props: {
   children: ReactNode;
 }): JSX.Element => {
   const serverURL = getServerURL();
-  const isProd = serverURL.includes("app.getgram.ai");
+  const isProd = isProdHost(serverURL);
   const ph = isPublicSharePath()
     ? null
     : posthog.init(
@@ -82,8 +95,8 @@ export const TelemetryProvider = (props: {
     }
 
     const serverURL = getServerURL();
-    if (serverURL.includes("getgram.ai")) {
-      const env = serverURL.includes("app.getgram.ai") ? "prod" : "dev";
+    if (isGramHost(serverURL)) {
+      const env = isProdHost(serverURL) ? "prod" : "dev";
       datadogRum.init({
         applicationId: "93afb64a-dd15-490c-a749-51b4c5c5a171",
         clientToken: "pub8358667232c624e2f91e1eaa0bd380fd",

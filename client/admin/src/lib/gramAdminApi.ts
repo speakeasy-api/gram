@@ -1,3 +1,5 @@
+import { GramError } from "@gram/admin-client/models/errors/gramerror";
+
 import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/gramAdminClient";
 
 export { isRedirectingToLogin } from "@/lib/gramAdminClient";
@@ -30,6 +32,10 @@ export class GramAdminError extends Error {
 // verb phrase the handler passed to oops.E, such as "list organizations"
 // (server/internal/admin/impl.go:343, surfaced by pp.go:83), which reads worse
 // than the status line. So trust the body below 500 and nowhere else.
+//
+// Generated ServiceError puts that verb on Error.message for every status, so
+// a 5xx from the SDK has to be rewritten to the status line the handwritten
+// client already used.
 export function errorMessage(e: unknown): string {
   if (
     e instanceof GramAdminError &&
@@ -39,6 +45,9 @@ export function errorMessage(e: unknown): string {
   ) {
     const message = (e.body as { message?: unknown }).message;
     if (typeof message === "string" && message) return message;
+  }
+  if (e instanceof GramError && e.statusCode >= 500) {
+    return `gram admin ${e.statusCode} ${e.rawResponse.statusText || "Internal Server Error"}`;
   }
   return e instanceof Error ? e.message : String(e);
 }
@@ -253,6 +262,9 @@ export type AdminOrganization = {
   slug: string;
   account_type: string;
   workos_id?: string;
+  // Absent unless the organization is linked to WorkOS and the deployment knows
+  // its WorkOS environment.
+  workos_dashboard_url?: string;
   stripe_customer_id?: string;
   stripe_subscription_id?: string;
   whitelisted: boolean;
@@ -550,6 +562,42 @@ export function listOrganizationProjects(
   );
 }
 
+export type AdminMcpServerSource =
+  | "toolset"
+  | "remote"
+  | "tunneled"
+  | "unproxied"
+  | "toolset_only";
+
+export type AdminMcpServer = {
+  // The mcp_servers row id, or the toolset id for a toolset-only server.
+  id: string;
+  name: string;
+  // Omitted when the server has no routable address, such as an mcp_servers
+  // row with no endpoint.
+  url?: string;
+  visibility: "disabled" | "private" | "public";
+  source: AdminMcpServerSource;
+  created_at: string;
+};
+
+export type ListProjectMcpServersResult = {
+  mcp_servers: AdminMcpServer[];
+};
+
+export function listProjectMcpServers(
+  organizationID: string,
+  projectID: string,
+): Promise<ListProjectMcpServersResult> {
+  const qs = toSearchParams({
+    organization_id: organizationID,
+    project_id: projectID,
+  });
+  return gramAdminFetch<ListProjectMcpServersResult>(
+    `/admin/project.mcpServers?${qs}`,
+  );
+}
+
 export type AdminOrganizationMember = {
   id: string;
   email: string;
@@ -779,5 +827,49 @@ export function resumeStripeSubscription(
   return updateStripeSubscription(
     "/admin/organization.resumeStripeSubscription",
     organizationID,
+  );
+}
+
+export type AdminUserOrganization = {
+  id: string;
+  name: string;
+  slug: string;
+  disabled_at?: string;
+};
+export type AdminUser = {
+  id: string;
+  display_name: string;
+  email: string;
+  last_login?: string;
+  organizations: AdminUserOrganization[];
+  organization_count: number;
+};
+export type AdminListUsersResult = {
+  users: AdminUser[];
+  total: number;
+  page: number;
+  limit: number;
+};
+export type AdminListUserOrganizationsResult = {
+  organizations: AdminUserOrganization[];
+  total: number;
+  page: number;
+  limit: number;
+};
+export function listUsers(
+  params: { q?: string; page?: number; limit?: number },
+  signal?: AbortSignal,
+): Promise<AdminListUsersResult> {
+  return gramAdminFetch(`/admin/users.list?${toSearchParams(params)}`, {
+    signal,
+  });
+}
+export function listUserOrganizations(
+  params: { user_id: string; page?: number; limit?: number },
+  signal?: AbortSignal,
+): Promise<AdminListUserOrganizationsResult> {
+  return gramAdminFetch(
+    `/admin/users.organizations.list?${toSearchParams(params)}`,
+    { signal },
   );
 }

@@ -1,4 +1,3 @@
-//nolint:glint // This test exercises raw feedback retention state that has no dedicated fixture helper.
 package platformmcp
 
 import (
@@ -52,6 +51,7 @@ func TestFeedbackServicePersistsBoundedLocalFeedbackAndReplaysExactRetries(t *te
 		DeliveryState        string
 		ExpiresAt            time.Time
 	}
+	//nolint:glint // notestingrawsql: reads stored feedback columns that no production query returns
 	err = conn.QueryRow(ctx, `
 SELECT organization_id, connection_id, connection_generation, rating, note, delivery_state, expires_at
 FROM platform_mcp_feedback
@@ -75,14 +75,19 @@ WHERE id = $1`, created.TrackingID).Scan(
 	require.Equal(t, feedbackDeliveryQueued, stored.DeliveryState)
 	require.WithinDuration(t, created.ExpiresAt, stored.ExpiresAt, time.Second)
 
+	//nolint:glint // notestingrawsql: backdates expires_at to simulate retention expiry
 	_, err = conn.Exec(ctx, `UPDATE platform_mcp_feedback SET expires_at = clock_timestamp() - interval '1 second' WHERE id = $1`, created.TrackingID)
 	require.NoError(t, err)
 	_, err = service.Submit(ctx, principal, FeedbackInput{Category: "other", Note: "Fresh", IdempotencyKey: "feedback-after-expiry"})
 	require.NoError(t, err)
-	var expiredCount int
-	err = conn.QueryRow(ctx, `SELECT COUNT(*) FROM platform_mcp_feedback WHERE id = $1`, created.TrackingID).Scan(&expiredCount)
-	require.NoError(t, err)
-	require.Zero(t, expiredCount)
+	// The idempotency key identifies the created row (the replay above returned
+	// its tracking ID), so its absence proves the retention purge removed it.
+	_, err = platformrepo.New(conn).GetPlatformMCPFeedbackByIdempotencyKey(ctx, platformrepo.GetPlatformMCPFeedbackByIdempotencyKeyParams{
+		OrganizationID: principal.OrganizationID,
+		SubjectUrn:     userSubjectURN(principal.UserID),
+		IdempotencyKey: "feedback-replay",
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestFeedbackServiceEnforcesConnectionLimitAndRejectsReplacedGeneration(t *testing.T) {
@@ -131,6 +136,7 @@ func TestFeedbackServiceRejectsCrossTenantConnectionBinding(t *testing.T) {
 	_, err = NewFeedbackService(conn).Submit(ctx, foreignPrincipal, FeedbackInput{Category: "other", Note: "Note", IdempotencyKey: "feedback-cross-tenant"})
 	require.ErrorIs(t, err, ErrFeedbackForbidden)
 
+	//nolint:glint // notestingrawsql: SELECT 1 proves the pooled connection is still healthy after the rejected submit
 	_, err = conn.Exec(ctx, `SELECT 1`)
 	require.NoError(t, err)
 	_, err = platformrepo.New(conn).GetPlatformMCPFeedbackByIdempotencyKey(ctx, platformrepo.GetPlatformMCPFeedbackByIdempotencyKeyParams{

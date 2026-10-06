@@ -46,8 +46,18 @@ export function PlaygroundProxiedChat({
     return () => window.removeEventListener("focus", onFocus);
   }, [needsAuth, refetch]);
 
-  if (needsAuth) {
+  if (needsAuth && connectUrl) {
     return <ProxiedConnectPrompt connectUrl={connectUrl} />;
+  }
+
+  if (needsAuth) {
+    return (
+      <ProxiedStatusNotice message="This server has no identity provider configured, so there's no Connect flow to start. Set one up in the server's authentication settings.">
+        <Button variant="secondary" onClick={refetch}>
+          Try again
+        </Button>
+      </ProxiedStatusNotice>
+    );
   }
 
   if (isError) {

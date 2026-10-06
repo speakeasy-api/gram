@@ -18,6 +18,8 @@ import (
 type Client struct {
 	CreateRiskPolicyEndpoint               goa.Endpoint
 	ListRiskPoliciesEndpoint               goa.Endpoint
+	ListMCPPlatformToolsetsEndpoint        goa.Endpoint
+	ListRiskPoliciesForMcpServerEndpoint   goa.Endpoint
 	ListBuiltinExclusionsEndpoint          goa.Endpoint
 	GetRiskPolicyEndpoint                  goa.Endpoint
 	UpdateRiskPolicyEndpoint               goa.Endpoint
@@ -37,6 +39,7 @@ type Client struct {
 	GetRiskUserBreakdownEndpoint           goa.Endpoint
 	GetRiskRuleBreakdownEndpoint           goa.Endpoint
 	GetRiskSignalsEndpoint                 goa.Endpoint
+	GetRiskMcpServerCountsEndpoint         goa.Endpoint
 	GetRiskAnalysisStatusEndpoint          goa.Endpoint
 	GetRiskPolicyStatusEndpoint            goa.Endpoint
 	CreateRiskPolicyBypassRequestEndpoint  goa.Endpoint
@@ -69,10 +72,12 @@ type Client struct {
 }
 
 // NewClient initializes a "risk" service client given the endpoints.
-func NewClient(createRiskPolicy, listRiskPolicies, listBuiltinExclusions, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listSessionQuarantines, releaseSessionQuarantine, listRiskResults, listRiskResultsForAgent, unmaskRiskResult, listRiskResultsByChat, markRiskResultsFalsePositive, unmarkRiskResultsFalsePositive, listDismissedRiskResults, getRiskOverview, listRiskCategories, compileExpr, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskSignals, getRiskAnalysisStatus, getRiskPolicyStatus, createRiskPolicyBypassRequest, acknowledgeRiskPolicyChallenge, getRiskPolicyChallenge, declineRiskPolicyChallenge, getRiskBlock, submitRiskBlockFeedback, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, suggestExclusion, testDetectionRule, evaluatePromptGuardrail, saveRiskEvalReview, listRiskEvalReviews, deleteRiskEvalReview goa.Endpoint) *Client {
+func NewClient(createRiskPolicy, listRiskPolicies, listMCPPlatformToolsets, listRiskPoliciesForMcpServer, listBuiltinExclusions, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listSessionQuarantines, releaseSessionQuarantine, listRiskResults, listRiskResultsForAgent, unmaskRiskResult, listRiskResultsByChat, markRiskResultsFalsePositive, unmarkRiskResultsFalsePositive, listDismissedRiskResults, getRiskOverview, listRiskCategories, compileExpr, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskSignals, getRiskMcpServerCounts, getRiskAnalysisStatus, getRiskPolicyStatus, createRiskPolicyBypassRequest, acknowledgeRiskPolicyChallenge, getRiskPolicyChallenge, declineRiskPolicyChallenge, getRiskBlock, submitRiskBlockFeedback, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, suggestExclusion, testDetectionRule, evaluatePromptGuardrail, saveRiskEvalReview, listRiskEvalReviews, deleteRiskEvalReview goa.Endpoint) *Client {
 	return &Client{
 		CreateRiskPolicyEndpoint:               createRiskPolicy,
 		ListRiskPoliciesEndpoint:               listRiskPolicies,
+		ListMCPPlatformToolsetsEndpoint:        listMCPPlatformToolsets,
+		ListRiskPoliciesForMcpServerEndpoint:   listRiskPoliciesForMcpServer,
 		ListBuiltinExclusionsEndpoint:          listBuiltinExclusions,
 		GetRiskPolicyEndpoint:                  getRiskPolicy,
 		UpdateRiskPolicyEndpoint:               updateRiskPolicy,
@@ -92,6 +97,7 @@ func NewClient(createRiskPolicy, listRiskPolicies, listBuiltinExclusions, getRis
 		GetRiskUserBreakdownEndpoint:           getRiskUserBreakdown,
 		GetRiskRuleBreakdownEndpoint:           getRiskRuleBreakdown,
 		GetRiskSignalsEndpoint:                 getRiskSignals,
+		GetRiskMcpServerCountsEndpoint:         getRiskMcpServerCounts,
 		GetRiskAnalysisStatusEndpoint:          getRiskAnalysisStatus,
 		GetRiskPolicyStatusEndpoint:            getRiskPolicyStatus,
 		CreateRiskPolicyBypassRequestEndpoint:  createRiskPolicyBypassRequest,
@@ -162,6 +168,52 @@ func (c *Client) CreateRiskPolicy(ctx context.Context, p *CreateRiskPolicyPayloa
 func (c *Client) ListRiskPolicies(ctx context.Context, p *ListRiskPoliciesPayload) (res *ListRiskPoliciesResult, err error) {
 	var ires any
 	ires, err = c.ListRiskPoliciesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListRiskPoliciesResult), nil
+}
+
+// ListMCPPlatformToolsets calls the "listMCPPlatformToolsets" endpoint of the
+// "risk" service.
+// ListMCPPlatformToolsets may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListMCPPlatformToolsets(ctx context.Context, p *ListMCPPlatformToolsetsPayload) (res *ListMCPPlatformToolsetsResult, err error) {
+	var ires any
+	ires, err = c.ListMCPPlatformToolsetsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListMCPPlatformToolsetsResult), nil
+}
+
+// ListRiskPoliciesForMcpServer calls the "listRiskPoliciesForMcpServer"
+// endpoint of the "risk" service.
+// ListRiskPoliciesForMcpServer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListRiskPoliciesForMcpServer(ctx context.Context, p *ListRiskPoliciesForMcpServerPayload) (res *ListRiskPoliciesResult, err error) {
+	var ires any
+	ires, err = c.ListRiskPoliciesForMcpServerEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
@@ -583,6 +635,29 @@ func (c *Client) GetRiskSignals(ctx context.Context, p *GetRiskSignalsPayload) (
 		return
 	}
 	return ires.(*RiskSignalsResult), nil
+}
+
+// GetRiskMcpServerCounts calls the "getRiskMcpServerCounts" endpoint of the
+// "risk" service.
+// GetRiskMcpServerCounts may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetRiskMcpServerCounts(ctx context.Context, p *GetRiskMcpServerCountsPayload) (res *RiskMcpServerCountsResult, err error) {
+	var ires any
+	ires, err = c.GetRiskMcpServerCountsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RiskMcpServerCountsResult), nil
 }
 
 // GetRiskAnalysisStatus calls the "getRiskAnalysisStatus" endpoint of the

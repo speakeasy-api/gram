@@ -587,6 +587,59 @@ func BuildGetObservabilityOverviewPayload(telemetryGetObservabilityOverviewBody 
 	return v, nil
 }
 
+// BuildGetMcpNetworkTrafficPayload builds the payload for the telemetry
+// getMcpNetworkTraffic endpoint from CLI flags.
+func BuildGetMcpNetworkTrafficPayload(telemetryGetMcpNetworkTrafficBody string, telemetryGetMcpNetworkTrafficApikeyToken string, telemetryGetMcpNetworkTrafficSessionToken string, telemetryGetMcpNetworkTrafficProjectSlugInput string) (*telemetry.GetMcpNetworkTrafficPayload, error) {
+	var err error
+	var body GetMcpNetworkTrafficRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetMcpNetworkTrafficBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"window\": \"7d\"\n   }'")
+		}
+		if body.McpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+		}
+		if body.MetaMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+		}
+		if !(body.Window == "24h" || body.Window == "7d") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.window", body.Window, []any{"24h", "7d"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetMcpNetworkTrafficApikeyToken != "" {
+			apikeyToken = &telemetryGetMcpNetworkTrafficApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetMcpNetworkTrafficSessionToken != "" {
+			sessionToken = &telemetryGetMcpNetworkTrafficSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetMcpNetworkTrafficProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetMcpNetworkTrafficProjectSlugInput
+		}
+	}
+	v := &telemetry.GetMcpNetworkTrafficPayload{
+		McpServerID:     body.McpServerID,
+		MetaMcpServerID: body.MetaMcpServerID,
+		Window:          body.Window,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetMetaMcpServerUsagePayload builds the payload for the telemetry
 // getMetaMcpServerUsage endpoint from CLI flags.
 func BuildGetMetaMcpServerUsagePayload(telemetryGetMetaMcpServerUsageBody string, telemetryGetMetaMcpServerUsageApikeyToken string, telemetryGetMetaMcpServerUsageSessionToken string, telemetryGetMetaMcpServerUsageProjectSlugInput string) (*telemetry.GetMetaMcpServerUsagePayload, error) {
@@ -917,7 +970,7 @@ func BuildQueryPayload(telemetryQueryBody string, telemetryQuerySessionToken str
 	{
 		err = json.Unmarshal([]byte(telemetryQueryBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"filters\": [\n         {\n            \"dimension\": \"job_title\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"granularity_seconds\": 1,\n      \"group_by\": \"department_name\",\n      \"sort_by\": \"total_tokens\",\n      \"to\": \"2025-12-26T10:00:00Z\",\n      \"top_n\": 2\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"filters\": [\n         {\n            \"dimension\": \"job_title\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"granularity_seconds\": 1,\n      \"group_by\": \"department_name\",\n      \"include_dimension_values\": false,\n      \"sort_by\": \"total_tokens\",\n      \"to\": \"2025-12-26T10:00:00Z\",\n      \"top_n\": 2\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -950,12 +1003,13 @@ func BuildQueryPayload(telemetryQueryBody string, telemetryQuerySessionToken str
 		}
 	}
 	v := &telemetry.QueryPayload{
-		From:               body.From,
-		To:                 body.To,
-		GroupBy:            body.GroupBy,
-		GranularitySeconds: body.GranularitySeconds,
-		TopN:               body.TopN,
-		SortBy:             body.SortBy,
+		From:                   body.From,
+		To:                     body.To,
+		GroupBy:                body.GroupBy,
+		GranularitySeconds:     body.GranularitySeconds,
+		IncludeDimensionValues: body.IncludeDimensionValues,
+		TopN:                   body.TopN,
+		SortBy:                 body.SortBy,
 	}
 	if body.Filters != nil {
 		v.Filters = make([]*telemetry.QueryFilter, len(body.Filters))
@@ -965,6 +1019,12 @@ func BuildQueryPayload(telemetryQueryBody string, telemetryQuerySessionToken str
 				continue
 			}
 			v.Filters[i] = marshalQueryFilterRequestBodyToTelemetryQueryFilter(val)
+		}
+	}
+	{
+		var zero bool
+		if v.IncludeDimensionValues == zero {
+			v.IncludeDimensionValues = true
 		}
 	}
 	{

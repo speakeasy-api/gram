@@ -115,6 +115,7 @@ async function $do(
     "external_user_ids": payload?.external_user_ids,
     "from": payload?.from,
     "limit": payload?.limit,
+    "mcp_server_id": payload?.mcp_server_id,
     "non_assistant": payload?.non_assistant,
     "policy_id": payload?.policy_id,
     "rule_id": payload?.rule_id,

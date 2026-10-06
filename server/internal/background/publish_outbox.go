@@ -19,10 +19,20 @@ const (
 	publishOutboxScheduleID = "v1:publish-outbox-schedule"
 	publishOutboxWorkflowID = publishOutboxScheduleID + "/scheduled"
 	// The schedule is a watchdog, not the poll loop. The workflow polls
-	// internally and runs continuously until ContinueAsNew; this interval only
-	// restarts it if it exits or exhausts its retry budget.
+	// internally; this interval restarts it after its bounded lifetime or a
+	// failure. The database outbox retains progress between executions.
 	publishOutboxWatchdogInterval = 1 * time.Minute
-	publishOutboxIdleInterval     = 5 * time.Second
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	publishOutboxCatchupWindow = publishOutboxWatchdogInterval - time.Second
+
+	publishOutboxIdleInterval = 5 * time.Second
+	// Exit at a batch boundary; the watchdog starts a fresh execution. The run
+	// timeout leaves room for five 90s activity attempts plus their backoffs.
+	publishOutboxMaxLifetime         = time.Hour
+	publishOutboxMaxBatches          = 1000
+	publishOutboxRunTimeout          = 75 * time.Minute
+	publishOutboxBoundedLoopChangeID = "publish-outbox-bounded-loop"
 	// publishOutboxDrainTimeout bounds one batch. The publish phase cannot
 	// outlast the 30s PublishSettings.Timeout the outbox publisher is built with
 	// (see deps.go), which leaves the claim and the settlement statements; 90s is
@@ -52,8 +62,16 @@ func PublishOutboxWorkflow(ctx workflow.Context) (PublishOutboxResult, error) {
 
 	var a *Activities
 
-	for {
+	bounded := workflow.GetVersion(ctx, publishOutboxBoundedLoopChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion
+	started := workflow.Now(ctx)
+	for batches := 0; ; batches++ {
+		if bounded && (batches >= publishOutboxMaxBatches || workflow.Now(ctx).Sub(started) >= publishOutboxMaxLifetime) {
+			return PublishOutboxResult{}, nil
+		}
 		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
+			if bounded {
+				return PublishOutboxResult{}, nil
+			}
 			return PublishOutboxResult{}, workflow.NewContinueAsNewError(ctx, PublishOutboxWorkflow)
 		}
 
@@ -79,16 +97,18 @@ func AddPublishOutboxSchedule(ctx context.Context, temporalEnv *tenv.Environment
 		Intervals: []client.ScheduleIntervalSpec{{Every: publishOutboxWatchdogInterval}},
 	}
 	action := &client.ScheduleWorkflowAction{
-		ID:        publishOutboxWorkflowID,
-		Workflow:  PublishOutboxWorkflow,
-		TaskQueue: string(temporalEnv.Queue()),
+		ID:                 publishOutboxWorkflowID,
+		Workflow:           PublishOutboxWorkflow,
+		TaskQueue:          string(temporalEnv.Queue()),
+		WorkflowRunTimeout: publishOutboxRunTimeout,
 	}
 
 	_, err := sc.Create(ctx, client.ScheduleOptions{
-		ID:      publishOutboxScheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-		Spec:    spec,
-		Action:  action,
+		CatchupWindow: publishOutboxCatchupWindow,
+		ID:            publishOutboxScheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		Spec:          spec,
+		Action:        action,
 	})
 	switch {
 	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
@@ -99,6 +119,7 @@ func AddPublishOutboxSchedule(ctx context.Context, temporalEnv *tenv.Environment
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &spec
 				input.Description.Schedule.Action = action
+				setScheduleCatchup(&input.Description.Schedule, publishOutboxCatchupWindow)
 				return &client.ScheduleUpdate{
 					Schedule:              &input.Description.Schedule,
 					TypedSearchAttributes: nil,

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	remotesessionissuers "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	types "github.com/speakeasy-api/gram/server/gen/types"
@@ -994,6 +995,9 @@ func DecodeListRemoteSessionIssuersRequest(mux goahttp.Muxer, decoder func(*http
 		var (
 			cursor           *string
 			limit            *int
+			search           *string
+			upstreamHost     *string
+			tier             *string
 			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
@@ -1015,6 +1019,33 @@ func DecodeListRemoteSessionIssuersRequest(mux goahttp.Muxer, decoder func(*http
 				limit = &pv
 			}
 		}
+		searchRaw := qp.Get("search")
+		if searchRaw != "" {
+			search = &searchRaw
+		}
+		if search != nil {
+			if utf8.RuneCountInString(*search) > 256 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 256, false))
+			}
+		}
+		upstreamHostRaw := qp.Get("upstream_host")
+		if upstreamHostRaw != "" {
+			upstreamHost = &upstreamHostRaw
+		}
+		if upstreamHost != nil {
+			if utf8.RuneCountInString(*upstreamHost) > 260 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("upstream_host", *upstreamHost, utf8.RuneCountInString(*upstreamHost), 260, false))
+			}
+		}
+		tierRaw := qp.Get("tier")
+		if tierRaw != "" {
+			tier = &tierRaw
+		}
+		if tier != nil {
+			if !(*tier == "project" || *tier == "organization" || *tier == "platform") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("tier", *tier, []any{"project", "organization", "platform"}))
+			}
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -1030,7 +1061,7 @@ func DecodeListRemoteSessionIssuersRequest(mux goahttp.Muxer, decoder func(*http
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRemoteSessionIssuersPayload(cursor, limit, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListRemoteSessionIssuersPayload(cursor, limit, search, upstreamHost, tier, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1947,6 +1978,12 @@ func marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v *types.R
 		res.GrantTypesSupported = make([]string, len(v.GrantTypesSupported))
 		for i, val := range v.GrantTypesSupported {
 			res.GrantTypesSupported[i] = val
+		}
+	}
+	if v.AuthorizationGrantProfilesSupported != nil {
+		res.AuthorizationGrantProfilesSupported = make([]string, len(v.AuthorizationGrantProfilesSupported))
+		for i, val := range v.AuthorizationGrantProfilesSupported {
+			res.AuthorizationGrantProfilesSupported[i] = val
 		}
 	}
 	if v.ResponseTypesSupported != nil {

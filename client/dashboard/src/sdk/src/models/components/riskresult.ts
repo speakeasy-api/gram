@@ -11,6 +11,23 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { RiskSpan, RiskSpan$inboundSchema } from "./riskspan.js";
 
 /**
+ * Recorded enforcement outcome, independent of policy configuration.
+ */
+export const EnforcementOutcome = {
+  Logged: "logged",
+  Denied: "denied",
+  Withheld: "withheld",
+  WarnedPending: "warned_pending",
+  WarnedAcknowledged: "warned_acknowledged",
+  WarnedAbandoned: "warned_abandoned",
+  Quarantined: "quarantined",
+} as const;
+/**
+ * Recorded enforcement outcome, independent of policy configuration.
+ */
+export type EnforcementOutcome = ClosedEnum<typeof EnforcementOutcome>;
+
+/**
  * Why the result is suppressed: 'rule' (an exclusion rule, see exclusion_id), 'manual' (dismissed by a user), or 'automated' (the automated false-positive sweep). Null when not suppressed.
  */
 export const SuppressedReason = {
@@ -61,9 +78,17 @@ export type RiskResult = {
    */
   endPos?: number | undefined;
   /**
+   * Recorded enforcement outcome, independent of policy configuration.
+   */
+  enforcementOutcome?: EnforcementOutcome | undefined;
+  /**
    * The exclusion rule that suppressed this result. Only set when suppressed_reason is 'rule'.
    */
   exclusionId?: string | undefined;
+  /**
+   * Identity of the concrete mediated execution.
+   */
+  executionId?: string | undefined;
   /**
    * Deprecated: mirror of suppressed_at, kept while clients migrate to the suppressed_* fields. Null when not suppressed.
    */
@@ -73,6 +98,10 @@ export type RiskResult = {
    */
   id: string;
   /**
+   * Whether MCP identity stamped validated principal provenance.
+   */
+  identityStamped?: boolean | undefined;
+  /**
    * The matched secret or sensitive data. Null when the caller isn't authorized to see raw match content for this result's chat (see match_redacted).
    */
   match?: string | undefined;
@@ -81,6 +110,26 @@ export type RiskResult = {
    */
   matchRedacted?: string | undefined;
   /**
+   * MCP method or equivalent mediated operation.
+   */
+  mcpMethod?: string | undefined;
+  /**
+   * Concrete MCP server that executed the operation.
+   */
+  mcpServerId?: string | undefined;
+  /**
+   * Concrete mediation surface where the execution was observed.
+   */
+  mediationSurface?: string | undefined;
+  /**
+   * Outer gateway that routed the execution, when present.
+   */
+  metaMcpServerId?: string | undefined;
+  /**
+   * Execution phase inspected by risk.
+   */
+  phase?: string | undefined;
+  /**
    * The risk policy ID.
    */
   policyId: string;
@@ -88,6 +137,10 @@ export type RiskResult = {
    * Policy version when this result was produced.
    */
   policyVersion: number;
+  /**
+   * Credential provenance class resolved by MCP identity.
+   */
+  principalKind?: string | undefined;
   /**
    * The matched rule identifier.
    */
@@ -121,10 +174,23 @@ export type RiskResult = {
    */
   tags?: Array<string> | undefined;
   /**
+   * Name of the concrete tool, when applicable.
+   */
+  toolName?: string | undefined;
+  /**
+   * Toolset serving the execution, when present.
+   */
+  toolsetId?: string | undefined;
+  /**
    * The user who owns the chat session.
    */
   userId?: string | undefined;
 };
+
+/** @internal */
+export const EnforcementOutcome$inboundSchema: z.ZodMiniEnum<
+  typeof EnforcementOutcome
+> = z.enum(EnforcementOutcome);
 
 /** @internal */
 export const SuppressedReason$inboundSchema: z.ZodMiniEnum<
@@ -147,15 +213,24 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
       ),
       description: z.optional(z.string()),
       end_pos: z.optional(z.int()),
+      enforcement_outcome: z.optional(EnforcementOutcome$inboundSchema),
       exclusion_id: z.optional(z.string()),
+      execution_id: z.optional(z.string()),
       false_positive_at: z.optional(
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
       ),
       id: z.string(),
+      identity_stamped: z.optional(z.boolean()),
       match: z.optional(z.string()),
       match_redacted: z.optional(z.string()),
+      mcp_method: z.optional(z.string()),
+      mcp_server_id: z.optional(z.string()),
+      mediation_surface: z.optional(z.string()),
+      meta_mcp_server_id: z.optional(z.string()),
+      phase: z.optional(z.string()),
       policy_id: z.string(),
       policy_version: z.int(),
+      principal_kind: z.optional(z.string()),
       rule_id: z.optional(z.string()),
       source: z.string(),
       spans: z.optional(z.array(RiskSpan$inboundSchema)),
@@ -166,6 +241,8 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
       suppressed_detail: z.optional(z.string()),
       suppressed_reason: z.optional(SuppressedReason$inboundSchema),
       tags: z.optional(z.array(z.string())),
+      tool_name: z.optional(z.string()),
+      toolset_id: z.optional(z.string()),
       user_id: z.optional(z.string()),
     }),
     z.transform((v) => {
@@ -177,16 +254,26 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
         "chat_title": "chatTitle",
         "created_at": "createdAt",
         "end_pos": "endPos",
+        "enforcement_outcome": "enforcementOutcome",
         "exclusion_id": "exclusionId",
+        "execution_id": "executionId",
         "false_positive_at": "falsePositiveAt",
+        "identity_stamped": "identityStamped",
         "match_redacted": "matchRedacted",
+        "mcp_method": "mcpMethod",
+        "mcp_server_id": "mcpServerId",
+        "mediation_surface": "mediationSurface",
+        "meta_mcp_server_id": "metaMcpServerId",
         "policy_id": "policyId",
         "policy_version": "policyVersion",
+        "principal_kind": "principalKind",
         "rule_id": "ruleId",
         "start_pos": "startPos",
         "suppressed_at": "suppressedAt",
         "suppressed_detail": "suppressedDetail",
         "suppressed_reason": "suppressedReason",
+        "tool_name": "toolName",
+        "toolset_id": "toolsetId",
         "user_id": "userId",
       });
     }),

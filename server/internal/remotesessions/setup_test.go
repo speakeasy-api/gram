@@ -75,6 +75,7 @@ func TestMain(m *testing.M) {
 	}
 
 	infra = res
+	remotesessions.DelegationTestDatabase = res.CloneTestDatabase
 
 	code := m.Run()
 
@@ -103,6 +104,7 @@ type testInstance struct {
 type testServiceConfig struct {
 	tunnelRouting bool
 	maxDBConns    int32
+	lockTimeout   time.Duration
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -129,6 +131,10 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		conn, err = pgxpool.NewWithConfig(ctx, poolConfig)
 		require.NoError(t, err)
 		t.Cleanup(conn.Close)
+	}
+
+	if cfg.lockTimeout > 0 {
+		conn = testenv.NewLockTimeoutPool(t, conn, cfg.lockTimeout)
 	}
 
 	redisClient, err := infra.NewRedisClient(t, 0)
@@ -167,6 +173,7 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		tunnels,
 		audit.NewLogger(),
 		serverURL,
+		remotesessions.NewIdentityCommitter(logger, conn, enc, audit.NewLogger(), serverURL, guardianPolicy, tunnels, nil),
 		remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), conn, enc, guardianPolicy, tunnels, redisCache),
 		features,
 	)
@@ -888,7 +895,7 @@ func revokeJsonWebKey(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org
 func forceTokenEndpointAuthMethod(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientID uuid.UUID, projectID uuid.UUID, method string) {
 	t.Helper()
 
-	rows, err := repo.New(conn).ForceRemoteSessionClientAuthMethodFixture(ctx, repo.ForceRemoteSessionClientAuthMethodFixtureParams{
+	rows, err := testrepo.New(conn).ForceRemoteSessionClientAuthMethodFixture(ctx, testrepo.ForceRemoteSessionClientAuthMethodFixtureParams{
 		TokenEndpointAuthMethod: conv.ToPGText(method),
 		ID:                      clientID,
 		ProjectID:               conv.ToNullUUID(projectID),

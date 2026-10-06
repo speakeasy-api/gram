@@ -194,14 +194,12 @@ func TestHandleRemoteLoginCallback_ConcurrentIssuerDeleteSweepsTheStoredGrant(t 
 	spy := &revocationSpy{}
 	ctx, fx := seedRemoteLoginInFlight(t, "cb-race", spy)
 
-	tx, err := fx.ti.conn.Begin(ctx) //nolint:glint // the raw-SQL rule catches tx.Exec with a query string; this transaction only ever runs SQLc-generated methods, and it exists to replay an issuer delete around the live callback
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	tx := testenv.BeginTx(t, ctx, fx.ti.conn)
 
 	// The issuer delete's first lock, taken while the user is still at the
 	// provider and held for the whole callback.
 	txIssuers := usersessionsrepo.New(tx)
-	_, err = txIssuers.LockUserSessionIssuer(ctx, usersessionsrepo.LockUserSessionIssuerParams{
+	_, err := txIssuers.LockUserSessionIssuer(ctx, usersessionsrepo.LockUserSessionIssuerParams{
 		ID:        fx.userIssuer,
 		ProjectID: fx.projectID,
 	})
@@ -274,8 +272,7 @@ func TestHandleRemoteLoginCallback_WaitsForIssuerMigrationThenRejectsRetiredIssu
 	go func() {
 		done <- fx.mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callbackRequest(ctx, fx, "migrate-code"))
 	}()
-	testenv.WaitForBlockedBackend(t, ctx, fx.ti.conn)
-	require.Never(t, func() bool { return len(done) > 0 }, 250*time.Millisecond, 10*time.Millisecond, "the callback waits behind the migration's issuer lock instead of writing under it")
+	testenv.WaitForBackendsBlockedBy(t, ctx, fx.ti.conn, testenv.BackendPID(tx), 1)
 
 	// The migration retires the source and commits.
 	_, err = txIssuers.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{

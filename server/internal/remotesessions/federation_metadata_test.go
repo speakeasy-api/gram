@@ -68,6 +68,68 @@ func TestFederatedEndpointHostPolicy(t *testing.T) {
 	require.ErrorIs(t, m.validateFederatedMetadataHosts(t.Context(), p.issuer, p.metadata), ErrFederatedConfiguration, "browser redirect does not use tunnel")
 }
 
+func TestFederatedMetadataScopePresenceCache(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, scopes string
+		enabled      bool
+	}{
+		{"omitted", "", true},
+		{"null", `null`, false},
+		{"empty", `[]`, false},
+		{"excluded", `["openid","email"]`, false},
+		{"advertised", `["openid","email","offline_access"]`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			mr := miniredis.RunT(t)
+			rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+			t.Cleanup(func() { require.NoError(t, rc.Close()) })
+			p := federatedFixture(t)
+			m := &ChallengeManager{policy: federatedPublicPolicy(t), locks: cache.NewRedisCacheAdapter(rc)}
+			body, err := json.Marshal(p.metadata)
+			require.NoError(t, err)
+			var fields map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(body, &fields))
+			// Omit absent optional arrays: JSON null is not valid discovery evidence.
+			for name, value := range fields {
+				if string(value) == "null" {
+					delete(fields, name)
+				}
+			}
+			delete(fields, "scopes_supported")
+			if tc.scopes != "" {
+				fields["scopes_supported"] = json.RawMessage(tc.scopes)
+			}
+			body, err = json.Marshal(fields)
+			require.NoError(t, err)
+			calls := 0
+			doer := federatedHTTPDoerFunc(func(*http.Request) (*http.Response, error) {
+				calls++
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(string(body)))}, nil
+			})
+			if tc.scopes == "null" {
+				// Strict discovery rejects explicit null rather than enabling offline access.
+				_, err := m.loadFederatedMetadata(t.Context(), p.organizationID, p.issuer, doer)
+				require.ErrorIs(t, err, ErrFederatedConfiguration)
+				require.Equal(t, 1, calls)
+				var shared rfc8414Document
+				require.NoError(t, json.Unmarshal(body, &shared))
+				require.Nil(t, shared.ScopesSupported, "shared JSON decoding semantics remain unchanged")
+				return
+			}
+			for range 2 {
+				p.metadata, err = m.loadFederatedMetadata(t.Context(), p.organizationID, p.issuer, doer)
+				require.NoError(t, err)
+				policy, err := p.OfflinePolicy()
+				require.NoError(t, err)
+				require.Equal(t, tc.enabled, policy.Enabled)
+			}
+			require.Equal(t, 1, calls, "second resolution must use the serialized cache entry")
+		})
+	}
+}
+
 func TestFederatedMetadataCache(t *testing.T) {
 	t.Parallel()
 	mr := miniredis.RunT(t)
@@ -85,10 +147,20 @@ func TestFederatedMetadataCache(t *testing.T) {
 		// Unrecognized raw provider extensions must never enter the metadata cache.
 		var fields map[string]any
 		require.NoError(t, json.Unmarshal(encoded, &fields))
+		// Omit absent optional arrays: JSON null is not valid discovery evidence.
+		for name, value := range fields {
+			if value == nil {
+				delete(fields, name)
+			}
+		}
 		fields["client_secret"] = "not-cacheable"
 		encoded, err = json.Marshal(fields)
 		require.NoError(t, err)
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(string(encoded)))}, nil
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": {"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(string(encoded))),
+		}, nil
 	})
 	for range 2 {
 		doc, err := m.loadFederatedMetadata(t.Context(), p.organizationID, p.issuer, doer)

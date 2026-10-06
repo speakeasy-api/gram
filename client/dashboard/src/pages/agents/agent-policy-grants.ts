@@ -91,6 +91,20 @@ export const AGENT_POLICY_SCOPES: ScopeDefinition[] = [
     agentEligible: true,
   },
   {
+    slug: "assistant:read",
+    resourceType: "assistant",
+    visibility: "user_visible",
+    description: "View and interact with assistants within the project.",
+    agentEligible: true,
+  },
+  {
+    slug: "assistant:write",
+    resourceType: "assistant",
+    visibility: "user_visible",
+    description: "Create and modify assistants within the project.",
+    agentEligible: true,
+  },
+  {
     slug: "risk_policy:evaluate",
     resourceType: "risk_policy",
     visibility: "user_visible",
@@ -125,6 +139,12 @@ export const AGENT_POLICY_SCOPE_GROUPS: ScopeGroup[] = [
     scopes: AGENT_POLICY_SCOPES.filter((s) => s.resourceType === "skill"),
   },
   {
+    label: "Assistants",
+    resourceType: "assistant",
+    description: "Assistants available within projects.",
+    scopes: AGENT_POLICY_SCOPES.filter((s) => s.resourceType === "assistant"),
+  },
+  {
     label: "Risk Policies",
     resourceType: "risk_policy",
     description: "Risk policy evaluation for MCP traffic.",
@@ -151,7 +171,8 @@ export function isAgentPolicyNarrowable(resourceType: ResourceType): boolean {
   return (
     resourceType === "mcp" ||
     resourceType === "project" ||
-    resourceType === "skill"
+    resourceType === "skill" ||
+    resourceType === "assistant"
   );
 }
 
@@ -168,6 +189,7 @@ const RESOURCE_KIND_BY_SCOPE_FAMILY: Record<
   mcp: "mcp",
   environment: "environment",
   skill: "skill",
+  assistant: "assistant",
   risk_policy: "risk_policy",
 };
 
@@ -188,6 +210,7 @@ const ALLOWED_SELECTOR_KEYS: Record<
 > = {
   mcp: ["projectId", "disposition", "tool"],
   environment: ["projectId"],
+  assistant: ["projectId"],
   risk_policy: ["serverUrl", "serverIdentity"],
 };
 
@@ -248,6 +271,7 @@ export function agentPolicyGrantsFromDraft(
 const DRAFT_DIMENSIONS: Record<string, readonly string[]> = {
   mcp: ["projectId", "disposition", "tool"],
   environment: ["projectId"],
+  assistant: ["projectId"],
 };
 
 /**
@@ -278,6 +302,14 @@ export function isAgentPolicyGrantRepresentable(
   grant: AgentPolicyGrant,
 ): boolean {
   if (grant.selector.resourceKind !== agentPolicyResourceKind(grant.scope)) {
+    return false;
+  }
+  // The editor's assistant picker selects projects, not single assistants, so
+  // a grant naming one assistant is kept exactly as stored.
+  if (
+    grant.selector.resourceKind === "assistant" &&
+    grant.selector.resourceId !== ANY_RESOURCE
+  ) {
     return false;
   }
   const carriable = new Set(

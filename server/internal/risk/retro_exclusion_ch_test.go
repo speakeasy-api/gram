@@ -102,9 +102,12 @@ func TestRetroExclusion_RuleIDApplyAndReverse(t *testing.T) {
 
 	otherRule := chOverviewFinding(t, projectID, orgID, chat, msg(), createdAt.Add(9*time.Minute), "gitleaks", "secret.aws_access_key", "alice@example.com")
 
+	shadowRow := chOverviewFinding(t, projectID, orgID, chat, msg(), createdAt.Add(10*time.Minute), "gitleaks", "secret.github_pat", "alice@example.com")
+	shadowRow.Shadow = true
+
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
-		live1, live2, fpMarked, deadLetter, heldByOther, ingestExcluded, otherRule,
+		live1, live2, fpMarked, deadLetter, heldByOther, ingestExcluded, otherRule, shadowRow,
 	}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
@@ -117,8 +120,9 @@ func TestRetroExclusion_RuleIDApplyAndReverse(t *testing.T) {
 		SourceFilter:       "",
 	}
 
-	// Apply: the two live rows plus the false-positive one; dead-letter and
-	// the row held by another exclusion stay untouched.
+	// Apply: the two live rows plus the false-positive one; dead-letter, the
+	// row held by another exclusion and the shadow engine-comparison row stay
+	// untouched.
 	count, err := chQueries.CountRetroExclusionApply(ctx, scope, predicate)
 	require.NoError(t, err)
 	require.Equal(t, uint64(3), count)
@@ -149,6 +153,9 @@ func TestRetroExclusion_RuleIDApplyAndReverse(t *testing.T) {
 
 	excluded, _, _ = latestExclusionState(t, ti, otherRule.ID)
 	require.False(t, excluded)
+
+	excluded, _, _ = latestExclusionState(t, ti, shadowRow.ID)
+	require.False(t, excluded, "shadow engine-comparison rows are never flagged")
 
 	// Idempotency: everything matching is already flagged.
 	count, err = chQueries.CountRetroExclusionApply(ctx, scope, predicate)
@@ -337,6 +344,21 @@ func TestRetroExclusion_RegexReconstruction(t *testing.T) {
 		ruleID:        "judge.verdict",
 		surface:       "none",
 	})
+	// A shadow engine-comparison row with the same reconstructable metadata:
+	// never a candidate, so the reconcile only ever counts rows users can see.
+	shadowCandidate := insertUnmaskFinding(t, ti, unmaskFinding{
+		orgID:         orgID,
+		projectID:     projectID.String(),
+		chatMessageID: msgID.String(),
+		chatID:        chatID.String(),
+		ruleID:        "secret.aws_access_key",
+		startPos:      int32(start),
+		endPos:        int32(start + len(secret)),
+		matchLen:      uint32(len(secret)),
+		matchRedacted: "AKIA**************LE",
+		surface:       "content",
+		shadow:        true,
+	})
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// The unmask fixture writes rows two days back.
@@ -354,6 +376,7 @@ func TestRetroExclusion_RegexReconstruction(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, candidates, 1, "only rows with reconstructable match metadata are candidates")
 	require.Equal(t, reconstructable, candidates[0].ID)
+	require.NotEqual(t, shadowCandidate, candidates[0].ID, "shadow rows are never regex candidates")
 
 	// Reconstruct and match exactly as the reconcile activity does: load the
 	// anchor, resolve the chat it is attributed to, hydrate, then gate the
@@ -410,12 +433,33 @@ func TestRetroExclusion_RegexReconstruction(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, candidates)
 
+	// A shadow row already attributed to this exclusion is never a reversal
+	// candidate either.
+	heldAt := now.Add(time.Microsecond)
+	shadowHeld := insertUnmaskFinding(t, ti, unmaskFinding{
+		orgID:         orgID,
+		projectID:     projectID.String(),
+		chatMessageID: msgID.String(),
+		chatID:        chatID.String(),
+		ruleID:        "secret.aws_access_key",
+		startPos:      int32(start),
+		endPos:        int32(start + len(secret)),
+		matchLen:      uint32(len(secret)),
+		matchRedacted: "AKIA**************LE",
+		surface:       "content",
+		excludedAt:    &heldAt,
+		exclusionID:   &exclusionID,
+		shadow:        true,
+	})
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
 	// The flagged row is now a REVERSAL candidate for this exclusion, and a
 	// by-id reversal un-hides it again.
 	held, err := chQueries.ListRetroRegexReversalCandidates(ctx, scope, exclusionID, uuid.Nil, 100)
 	require.NoError(t, err)
 	require.Len(t, held, 1)
 	require.Equal(t, c.ID, held[0].ID)
+	require.NotEqual(t, shadowHeld, held[0].ID, "shadow rows are never reversal candidates")
 
 	require.NoError(t, chQueries.AppendRetroExclusionReversalByIDs(ctx, scope, exclusionID,
 		chrepo.FormatCHTime(now.Add(2*time.Microsecond)), []uuid.UUID{c.ID}))

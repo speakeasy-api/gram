@@ -28,6 +28,11 @@ const testState = vi.hoisted(() => ({
 
 const handleAPIError = vi.hoisted(() => vi.fn());
 const invalidateAllProductFeatures = vi.hoisted(() => vi.fn());
+const invalidateOrganizationSetupTasks = vi.hoisted(() => vi.fn());
+
+vi.mock("@/hooks/useOrganizationSetupTasks", () => ({
+  invalidateOrganizationSetupTasks,
+}));
 
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) =>
@@ -88,6 +93,8 @@ beforeEach(() => {
   handleAPIError.mockReset();
   invalidateAllProductFeatures.mockReset();
   invalidateAllProductFeatures.mockResolvedValue(undefined);
+  invalidateOrganizationSetupTasks.mockReset();
+  invalidateOrganizationSetupTasks.mockResolvedValue(undefined);
 });
 
 afterEach(cleanup);
@@ -116,6 +123,10 @@ describe("EnableLoggingAndSessionCaptureSetting", () => {
     expect(testState.mutateAsync).toHaveBeenNthCalledWith(
       3,
       requestFor("session_capture", true),
+    );
+    expect(invalidateOrganizationSetupTasks).toHaveBeenCalledWith(
+      expect.anything(),
+      "org-active",
     );
   });
 
@@ -147,6 +158,10 @@ describe("EnableLoggingAndSessionCaptureSetting", () => {
     expect(testState.mutateAsync).toHaveBeenNthCalledWith(
       3,
       requestFor("logs", false),
+    );
+    expect(invalidateOrganizationSetupTasks).toHaveBeenCalledWith(
+      expect.anything(),
+      "org-active",
     );
   });
 
@@ -239,11 +254,17 @@ describe("EnableLoggingAndSessionCaptureSetting", () => {
     });
     expect(onEnabledChange).not.toHaveBeenCalled();
     expect(invalidateAllProductFeatures).not.toHaveBeenCalled();
+    expect(invalidateOrganizationSetupTasks).toHaveBeenCalledWith(
+      expect.anything(),
+      "org-active",
+    );
   });
 
   it("surfaces an error without marking the bundle enabled", async () => {
     const onEnabledChange = vi.fn();
-    testState.mutateAsync.mockRejectedValue(new Error("write failed"));
+    testState.mutateAsync
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("write failed"));
 
     render(
       <EnableLoggingAndSessionCaptureSetting
@@ -263,6 +284,10 @@ describe("EnableLoggingAndSessionCaptureSetting", () => {
     });
     expect(onEnabledChange).not.toHaveBeenCalled();
     expect(invalidateAllProductFeatures).toHaveBeenCalledOnce();
+    expect(invalidateOrganizationSetupTasks).toHaveBeenCalledWith(
+      expect.anything(),
+      "org-active",
+    );
   });
 
   it("reports busy while the bundle writes are in flight", async () => {

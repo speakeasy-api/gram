@@ -121,6 +121,10 @@ type Metrics struct {
 	// from the terminal oauth.flow.failed population.
 	oauthAuthorityUnavailableCounter metric.Int64Counter
 
+	// oauthResourceRejectedCounter counts RFC 8707 resource indicators a
+	// shared authorization server refused, by issuer, reason, and stage.
+	oauthResourceRejectedCounter metric.Int64Counter
+
 	// tunnelPublicRejectedCounter counts anonymous public tunnel requests the
 	// admission gate rejected with 429 before they reached the tunnel gateway.
 	tunnelPublicRejectedCounter metric.Int64Counter
@@ -142,7 +146,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 
 	mcpRequestDuration, err := meter.Float64Histogram(
 		"mcp.request.duration",
-		metric.WithDescription("Duration of mcp request in seconds"),
+		metric.WithDescription("Duration of MCP requests by server URL and public/private network surface"),
 		metric.WithUnit("s"),
 		metric.WithExplicitBucketBoundaries(0.1, 0.5, 1, 2, 5, 10, 20, 30, 60, 120, 240),
 	)
@@ -222,6 +226,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create oauth authority unavailable counter", attr.SlogError(err))
 	}
 
+	oauthResourceRejectedCounter, err := meter.Int64Counter(
+		"oauth.resource.rejected",
+		metric.WithDescription("RFC 8707 resource indicators a shared authorization server refused, by issuer, reason, and OAuth flow stage"),
+		metric.WithUnit("{request}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create oauth resource rejected counter", attr.SlogError(err))
+	}
+
 	mcpRequestRejectedCounter, err := meter.Int64Counter(
 		InstrumentMCPRequestRejected,
 		metric.WithDescription("MCP requests rejected by the Session OAuth authentication gate before dispatch, by failure reason, server URL, serving surface, and public/private network surface"),
@@ -265,6 +278,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		oauthFlowDeclinedCounter:             oauthFlowDeclinedCounter,
 		oauthRefreshTokenReplayServedCounter: oauthRefreshTokenReplayServedCounter,
 		oauthAuthorityUnavailableCounter:     oauthAuthorityUnavailableCounter,
+		oauthResourceRejectedCounter:         oauthResourceRejectedCounter,
 		tunnelPublicRejectedCounter:          tunnelPublicRejectedCounter,
 	}
 }
@@ -430,7 +444,9 @@ func (m *Metrics) RecordMCPRequestRejected(ctx context.Context, reason string, m
 // RecordMCPRequestDuration records one dispatched request's duration. The
 // method label is clamped to the known method set: it is client-supplied
 // JSON-RPC input, and unclamped it would let a client mint unbounded series
-// against a histogram that already carries a per-server URL dimension.
+// against a histogram that already carries a per-server URL dimension. The
+// histogram count by URL and network surface shows public/private traffic per
+// endpoint without another per-server counter.
 func (m *Metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string, mcpURL string, duration time.Duration) {
 	if m == nil || m.mcpRequestDuration == nil {
 		return
@@ -439,6 +455,7 @@ func (m *Metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string
 	kv := []attribute.KeyValue{
 		attr.McpMethod(mcprequests.ClampMethod(mcpMethod)),
 		attr.McpURL(mcpURL),
+		attr.NetworkSurface(NetworkSurfaceFromContext(ctx)),
 	}
 
 	m.mcpRequestDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(kv...))
@@ -508,6 +525,21 @@ func (m *Metrics) RecordOAuthAuthorityUnavailable(ctx context.Context, issuerID,
 	}
 	kv := append(oauthFlowDimensions(issuerID, mcpSlug), attr.OAuthFlowStage(string(stage)))
 	m.oauthAuthorityUnavailableCounter.Add(ctx, 1, metric.WithAttributes(kv...))
+}
+
+// RecordOAuthResourceRejected records an RFC 8707 resource indicator a shared
+// authorization server refused. reason is one of a closed set of rejection
+// reasons and issuerID is recorded only once the issuer has been resolved, so
+// both dimensions stay bounded.
+func (m *Metrics) RecordOAuthResourceRejected(ctx context.Context, issuerID, reason string, stage OAuthFlowStage) {
+	if m == nil || m.oauthResourceRejectedCounter == nil {
+		return
+	}
+	m.oauthResourceRejectedCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.UserSessionIssuerID(issuerID),
+		attr.OAuthFailureReason(reason),
+		attr.OAuthFlowStage(string(stage)),
+	))
 }
 
 // RecordOAuthRefreshTokenReplayServed records a successful response from the

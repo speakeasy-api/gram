@@ -36,6 +36,7 @@ var (
 	AiScanTargetV1                         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.device_agent_ai_scan_target_event_v1", "Emitted when an organization changes the Shadow AI scan targets its device agents probe for")
 	AIToolDecisionV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.ai_tool_decision_event_v1", "Emitted when an organization decides whether a detected AI tool may reach its MCP gateway")
 	DeviceIntegrationV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.device_integration_event_v1", "Emitted when changes to device integration configs are made")
+	DirectoryRoleMappingV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.directory_role_mapping_event_v1", "Emitted when changes to directory role mappings are made")
 	DeploymentV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.deployment_event_v1", "Emitted when changes to deployments are made")
 	EnvironmentV1                          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.environment_event_v1", "Emitted when changes to environments are made")
 	GcpIamCredentialV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.gcp_iam_credential_event_v1", "Emitted when changes to GCP IAM external credentials are made")
@@ -52,13 +53,16 @@ var (
 	MetaMcpServerV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.meta_mcp_server_event_v1", "Emitted when changes to meta MCP servers or their memberships are made")
 	ModelProviderKeyV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.model_provider_key_event_v1", "Emitted when changes to customer model provider keys are made")
 	NetworkIngressV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.network_ingress_event_v1", "Emitted when changes to private network ingress desired state are made")
-	OktaResourceConnectionV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.okta_resource_connection_event_v1", "Emitted when an organization confirms or resets a Cross App Access resource connection")
+	OktaResourceConnectionV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.okta_resource_connection_event_v1", "Emitted when an organization confirms or resets a Cross App Access resource connection, or an exchange changes its observed result")
+	OktaServerSuggestionV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.okta_server_suggestion_event_v1", "Emitted when an organization dismisses or restores an MCP server suggestion derived from its Okta applications")
 	OpenRouterAPIKeyV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.openrouter_api_key_event_v1", "Emitted when changes to the organization's platform OpenRouter key are made")
 	OrganizationHooksFailOpenV1            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_hooks_fail_open_event_v1", "Emitted when the organization's hooks fail-open setting is toggled")
+	OrganizationAccessV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_access_event_v1", "Emitted when staff enable or disable organization access, or change its demo-access whitelisting")
 	OrganizationBillingV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_billing_event_v1", "Emitted when the organization's billing state changes")
 	OrganizationDeviceAgentConfigurationV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_device_agent_configuration_event_v1", "Emitted when the organization's device-agent configuration is changed")
 	OrganizationEnterpriseTrialV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_enterprise_trial_event_v1", "Emitted when the organization's enterprise trial is armed, started, extended, given a new end date, demoted, re-armed, or converted")
 	OrganizationInviteV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_invite_event_v1", "Emitted when changes to organization invites are made")
+	OrganizationOnboardingV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_onboarding_event_v1", "Emitted when an organization's onboarding selection is saved")
 	OrganizationProductFeatureV1           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_product_feature_event_v1", "Emitted when an organization product feature flag is toggled")
 	OrganizationSetupTaskV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_setup_task_event_v1", "Emitted when an organization setup task is changed")
 	OrganizationWebhooksV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_webhooks_event_v1", "Emitted when changes to organization webhooks are made")
@@ -69,7 +73,8 @@ var (
 	UnproxiedMcpServerV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.unproxied_mcp_server_event_v1", "Emitted when changes to unproxied MCP servers are made")
 	PluginV1                               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.plugin_event_v1", "Emitted when changes to plugins are made")
 	ProjectV1                              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.project_event_v1", "Emitted when changes to projects are made")
-	QueryV1                                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.query_event_v1", "Emitted when changes to saved queries are made")
+	QueryV1                                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.query_event_v1", "Emitted when changes to saved queries are made") // Retired: saved queries were replaced by widgets; kept so the webhook contract keeps working.
+	WidgetV1                               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.widget_event_v1", "Emitted when changes to widgets are made")
 	RemoteMcpServerV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_mcp_server_event_v1", "Emitted when changes to remote MCP servers are made")
 	RemoteMcpServerHeaderV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_mcp_server_header_event_v1", "Emitted when changes to remote MCP server headers are made")
 	RemoteSessionClientV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_client_event_v1", "Emitted when changes to remote session clients are made")
@@ -95,6 +100,8 @@ var (
 	UserSessionIssuerV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.user_session_issuer_event_v1", "Emitted when changes to user session issuers are made")
 	UserSessionIssuerCimdClientV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.user_session_issuer_cimd_client_event_v1", "Emitted when the CIMD client URLs a user session issuer admits are changed")
 	VariationV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.variation_event_v1", "Emitted when changes to tool names and other properties are made")
+	WorkloadAdmissionV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.workload_admission_event_v1", "Emitted when a workload subject is admitted or withdrawn, which grants or revokes machine access")
+	WorkloadIssuerV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.workload_issuer_event_v1", "Emitted when the external issuers an organization trusts to vouch for its workloads are changed")
 )
 
 // AuditLogCreatedPayloadV1 is the webhook payload for audit_log.created events.
@@ -133,3 +140,7 @@ type AuditLogCreatedPayloadV1 struct {
 	// Omitted when the call carried no OAuth client.
 	ActingClientID string `json:"acting_client_id,omitzero"`
 }
+
+var SlackDirectoryConnectionV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.slack_directory_connection_event_v1", "An organization Slack workspace authorization changed or its directory was synced.")
+
+var SlackIdentityMappingV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.slack_identity_mapping_event_v1", "An administrator confirmed or removed a Slack identity association.")

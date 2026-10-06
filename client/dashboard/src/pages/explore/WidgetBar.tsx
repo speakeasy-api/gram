@@ -1,0 +1,236 @@
+import { Button } from "@/components/ui/Button";
+import { MoreActions } from "@/components/ui/MoreActions";
+import type { Widget } from "@gram/client/models/components/widget.js";
+import { useId, useState, type JSX } from "react";
+import type { ExploreSpec } from "./exploreModel";
+import { useCanEditWidget } from "./useCanEditWidget";
+import { useWidgetMutations } from "./useWidgetMutations";
+import {
+  DeleteWidgetDialog,
+  UnsavedDot,
+  WidgetDetailsDialog,
+  type WidgetDetails,
+} from "./WidgetDialogs";
+import { copyName } from "./widgetNames";
+import {
+  differsFromWidget,
+  specFromStoredWidget,
+  widgetFromSpec,
+} from "./widgetSpec";
+
+type Naming = "create" | "copy" | "rename";
+
+const RANGED_REASON = "Pick a window to save: a widget keeps a relative one";
+
+/**
+ * The widget the builder has open, above the builder: its name, whether the
+ * builder has moved on from it, and saving, renaming, duplicating and
+ * deleting it. With none open it offers to save the builder as a widget.
+ * Sharing what is on screen is the URL's job; sharing a widget is
+ * duplicating it.
+ */
+export function WidgetBar({
+  spec,
+  widgetId,
+  widgets,
+  listResolving,
+  onOpen,
+  confirmLeave,
+  onWidgetIdChange,
+}: {
+  spec: ExploreSpec;
+  /** The widget the builder has open, if any. */
+  widgetId: string | null;
+  /** The project's widgets, as listed. */
+  widgets: Widget[];
+  /** Whether the list is still catching up with the open widget. */
+  listResolving: boolean;
+  /** Restore a widget into the builder. */
+  onOpen: (widget: Widget) => void;
+  /** Run this once leaving the open widget's unsaved edits is confirmed. */
+  confirmLeave: (proceed: () => void) => void;
+  /** The builder now has this widget open, or none. */
+  onWidgetIdChange: (widgetId: string | null) => void;
+}): JSX.Element {
+  const open = widgetId
+    ? widgets.find((widget) => widget.id === widgetId)
+    : undefined;
+  // A widget the list has not caught up with yet — just created, or linked
+  // while the list loads — is not an unsaved one, so it cannot be saved
+  // again as new until it resolves.
+  const resolving = widgetId !== null && !open && listResolving;
+  const canEdit = useCanEditWidget();
+  const editable = open ? canEdit(open) : false;
+  const mutations = useWidgetMutations();
+
+  const [naming, setNaming] = useState<Naming | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const draft = (details: WidgetDetails) => ({
+    ...details,
+    dataset: spec.dataset,
+    ...widgetFromSpec(spec),
+  });
+  const submit = (details: WidgetDetails) => {
+    if (naming === "rename" && open) {
+      // Renaming changes the name and description alone, so edits not yet
+      // saved stay unsaved.
+      mutations.update(
+        open.id,
+        {
+          ...details,
+          dataset: open.dataset,
+          query: open.query,
+          visualization: open.visualization,
+        },
+        () => setNaming(null),
+      );
+      return;
+    }
+    mutations.create(draft(details), (created) => {
+      setNaming(null);
+      onWidgetIdChange(created.id);
+    });
+  };
+
+  // A widget the builder cannot read is not what the builder shows, so it
+  // has no edits to mark and saving would overwrite it with something else.
+  const readable = open ? specFromStoredWidget(open) !== null : false;
+  const changed = open && readable ? differsFromWidget(spec, open) : false;
+  // A widget keeps a relative window and follows you forward in time, so a
+  // query over an absolute range is shared by its link, not saved.
+  const ranged = spec.range !== undefined;
+  // A disabled button takes no focus and shows no tooltip, so the reason it
+  // is disabled is shown beside it and named as its description.
+  const rangedHintId = useId();
+  const rangedHint = ranged ? (
+    <span id={rangedHintId} className="text-muted-foreground text-xs">
+      {RANGED_REASON}
+    </span>
+  ) : null;
+
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      {open ? (
+        <>
+          {changed ? (
+            <UnsavedDot label="Unsaved changes" tooltip="Unsaved changes" />
+          ) : null}
+          {/* Someone else's widget without project write cannot be
+              changed, only copied. */}
+          {editable ? rangedHint : null}
+          {editable ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="save"
+              disabled={!readable || !changed || ranged || mutations.pending}
+              aria-describedby={ranged ? rangedHintId : undefined}
+              onClick={() =>
+                mutations.update(
+                  open.id,
+                  draft({ name: open.name, description: open.description }),
+                )
+              }
+            >
+              Save
+            </Button>
+          ) : null}
+          <MoreActions
+            triggerAriaLabel="Widget actions"
+            actions={[
+              ...(editable
+                ? [
+                    {
+                      label: "Rename",
+                      icon: "pencil" as const,
+                      onClick: () => setNaming("rename"),
+                    },
+                  ]
+                : []),
+              {
+                label: "Save as new widget",
+                icon: "file-plus",
+                description: ranged
+                  ? RANGED_REASON
+                  : "Keeps the builder's unsaved edits",
+                disabled: ranged,
+                onClick: () => setNaming("copy"),
+              },
+              {
+                label: "Duplicate",
+                icon: "copy",
+                description: "Copies the widget as it was saved",
+                onClick: () =>
+                  confirmLeave(() => mutations.duplicate(open.id, onOpen)),
+              },
+              ...(editable
+                ? [
+                    {
+                      label: "Delete",
+                      icon: "trash" as const,
+                      destructive: true,
+                      separatorBefore: true,
+                      onClick: () => setDeleting(true),
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        </>
+      ) : (
+        <>
+          <UnsavedDot label="Unsaved widget" tooltip="Not saved yet" />
+          {rangedHint}
+          <Button
+            variant="secondary"
+            size="sm"
+            icon="save"
+            disabled={resolving || ranged}
+            aria-describedby={ranged ? rangedHintId : undefined}
+            onClick={() => setNaming("create")}
+          >
+            Save widget
+          </Button>
+        </>
+      )}
+
+      <WidgetDetailsDialog
+        key={naming ?? "closed"}
+        open={naming !== null}
+        title={
+          naming === "rename"
+            ? "Rename widget"
+            : naming === "copy"
+              ? "Save as new widget"
+              : "Save widget"
+        }
+        confirm={naming === "rename" ? "Rename" : "Save"}
+        initial={
+          naming === "rename" && open
+            ? { name: open.name, description: open.description }
+            : naming === "copy" && open
+              ? { name: copyName(open.name), description: open.description }
+              : { name: "" }
+        }
+        pending={mutations.pending}
+        onCancel={() => setNaming(null)}
+        onSubmit={submit}
+      />
+      {open ? (
+        <DeleteWidgetDialog
+          name={open.name}
+          open={deleting}
+          pending={mutations.pending}
+          onCancel={() => setDeleting(false)}
+          onConfirm={() =>
+            mutations.remove(open.id, () => {
+              setDeleting(false);
+              onWidgetIdChange(null);
+            })
+          }
+        />
+      ) : null}
+    </div>
+  );
+}

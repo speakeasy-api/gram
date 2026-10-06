@@ -30,6 +30,7 @@ import (
 // There is deliberately no provider-wide current nonce or current secret.
 type federationToken struct {
 	nonce, email, issuer, secret, challenge string
+	subject                                 string
 	expectPKCERejection                     bool
 	verified                                bool
 }
@@ -40,13 +41,15 @@ type federationTokenRequest struct {
 
 type federationProvider struct {
 	*httptest.Server
-	signer   jose.Signer
-	jwks     jose.JSONWebKeySet
-	mu       sync.Mutex
-	codes    map[string]federationToken
-	issued   map[string]bool
-	requests []federationTokenRequest
-	errors   []error
+	signer                    jose.Signer
+	jwks                      jose.JSONWebKeySet
+	mu                        sync.Mutex
+	codes                     map[string]federationToken
+	issued                    map[string]bool
+	requests                  []federationTokenRequest
+	errors                    []error
+	metadataIssuer            string // Optional issuer override for live configuration drift tests.
+	unsupportedResponseIssuer bool
 }
 
 func newFederationProvider(t *testing.T) *federationProvider {
@@ -97,8 +100,15 @@ func (p *federationProvider) serveHTTP(issuer string, w http.ResponseWriter, r *
 	w.Header().Set("Content-Type", "application/json")
 	var response any
 	switch r.URL.Path {
-	case "/.well-known/openid-configuration":
-		response = map[string]any{"issuer": issuer, "authorization_endpoint": issuer + "/authorize", "token_endpoint": issuer + "/token", "jwks_uri": issuer + "/jwks", "response_types_supported": []string{"code"}, "subject_types_supported": []string{"public"}, "id_token_signing_alg_values_supported": []string{"ES256"}, "token_endpoint_auth_methods_supported": []string{"client_secret_basic"}, "code_challenge_methods_supported": []string{"S256"}, "authorization_response_iss_parameter_supported": true}
+	case "/.well-known/openid-configuration", "/changed/.well-known/openid-configuration":
+		p.mu.Lock()
+		metadataIssuer := p.metadataIssuer
+		supportsResponseIssuer := !p.unsupportedResponseIssuer
+		p.mu.Unlock()
+		if metadataIssuer == "" {
+			metadataIssuer = issuer
+		}
+		response = map[string]any{"issuer": metadataIssuer, "authorization_endpoint": issuer + "/authorize", "token_endpoint": issuer + "/token", "jwks_uri": issuer + "/jwks", "response_types_supported": []string{"code"}, "subject_types_supported": []string{"public"}, "id_token_signing_alg_values_supported": []string{"ES256"}, "token_endpoint_auth_methods_supported": []string{"client_secret_basic"}, "code_challenge_methods_supported": []string{"S256"}, "authorization_response_iss_parameter_supported": supportsResponseIssuer}
 	case "/jwks":
 		response = p.jwks
 	case "/token":
@@ -127,7 +137,11 @@ func (p *federationProvider) serveHTTP(issuer string, w http.ResponseWriter, r *
 			}
 			return
 		}
-		raw, err := jwt.Signed(p.signer).Claims(jwt.Claims{Issuer: token.issuer, Subject: "upstream-human", Audience: jwt.Audience{"selected-client"}, IssuedAt: jwt.NewNumericDate(time.Now()), Expiry: jwt.NewNumericDate(time.Now().Add(time.Minute))}).Claims(map[string]any{"nonce": token.nonce, "email": token.email, "email_verified": token.verified}).Serialize()
+		subject := token.subject
+		if subject == "" {
+			subject = "upstream-human"
+		}
+		raw, err := jwt.Signed(p.signer).Claims(jwt.Claims{Issuer: token.issuer, Subject: subject, Audience: jwt.Audience{"selected-client"}, IssuedAt: jwt.NewNumericDate(time.Now()), Expiry: jwt.NewNumericDate(time.Now().Add(time.Minute))}).Claims(map[string]any{"nonce": token.nonce, "email": token.email, "email_verified": token.verified}).Serialize()
 		if err != nil {
 			p.errors = append(p.errors, fmt.Errorf("sign token: %w", err))
 			http.Error(w, "sign token failed", http.StatusInternalServerError)

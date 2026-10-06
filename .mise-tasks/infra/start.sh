@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 #MISE description="Start up databases, caches and so on"
-
 # Warn when a cached image's architecture differs from the Docker host's.
 # `compose up` never re-pulls a tag that already exists locally, so an image
 # pulled while DOCKER_DEFAULT_PLATFORM=linux/amd64 was exported keeps running
@@ -81,26 +80,12 @@ if [ -n "$host_arch" ]; then
 fi
 
 # This worktree's own stack, first — with --remove-orphans. Pre-existing
-# worktrees can still run Temporal, Pub/Sub, or Presidio containers that
-# compose.yml no longer declares. Removing this worktree's copies before
+# worktrees can still run Pub/Sub containers that compose.yml no longer
+# declares. Removing this worktree's copies before
 # asserting the shared services frees fixed ports in the main tree and removes
 # obsolete remapped copies elsewhere. Profile-gated services (litellm,
 # local-registry) remain declared in compose.yml and are not treated as orphans.
 docker compose up -d --remove-orphans || exit 1
-
-# One-time migration: free host port 5050 for the shared analyzer. Before the
-# shared stack existed, the main tree ran its own gram-presidio bound to 5050
-# under its own compose project (the main tree never remaps PRESIDIO_PORT). The
-# --remove-orphans above only touches THIS worktree's project, so that stale
-# container would keep 5050 and block the shared `up` below. Remove ONLY the
-# non-`gram-shared` container that actually holds 5050 — scoping by the port
-# keeps this from touching a sibling worktree's still-in-use analyzer bound to
-# its own remapped port, which the sibling's app is still pointed at until it
-# runs `git:worksync`. Idempotent: once migrated there is nothing to remove.
-docker ps -a --filter "label=com.docker.compose.service=gram-presidio" --filter "publish=5050" \
-  --format '{{.Label "com.docker.compose.project"}} {{.ID}}' 2>/dev/null \
-  | awk '$1 != "gram-shared" { print $2 }' \
-  | xargs -r docker rm -f > /dev/null 2>&1 || true
 
 # One-time migration: the main tree previously bound its per-worktree Pub/Sub
 # emulator to the shared port. Remove only a non-shared emulator actually
@@ -111,72 +96,21 @@ docker ps -a --filter "label=com.docker.compose.service=pubsub-emulator" --filte
   | awk '$1 != "gram-shared" { print $2 }' \
   | xargs -r docker rm -f > /dev/null 2>&1 || true
 
-# One-time migration: Temporal now runs under the shared project too. Remove
-# only a non-shared Temporal container publishing the fixed gRPC port. Sibling
-# worktrees on remapped ports keep running until their next
-# git:worksync/infra:start migration.
-docker ps -a --filter "label=com.docker.compose.service=gram-temporal" --filter "publish=7233" \
-  --format '{{.Label "com.docker.compose.project"}} {{.ID}}' 2>/dev/null \
-  | awk '$1 != "gram-shared" { print $2 }' \
+# Temporal belongs to this worktree; leave legacy shared Temporal available
+# for branches that have not migrated yet (no shared --remove-orphans).
+docker compose up -d --wait --wait-timeout 30 gram-temporal || exit 1
+
+# One-time migration: the shared stack used to run grafana/otel-lgtm bound to
+# 4317/4318. That service is gone, but a leftover container still holds the
+# ports, and `restart: unless-stopped` brings it back after a stop. Remove it
+# before the sink binds them. Shared `--remove-orphans` would also drop the
+# legacy shared Temporal this comment leaves running.
+docker ps -a --filter "label=com.docker.compose.project=gram-shared" \
+  --filter "label=com.docker.compose.service=lgtm" -q 2>/dev/null \
   | xargs -r docker rm -f > /dev/null 2>&1 || true
 
-# Pub/Sub is required by the local streams processes, and Temporal is required
-# by seeding and every background worker. Wait for both healthchecks so a
-# container that starts and immediately exits cannot let infrastructure startup
-# report success.
 docker compose -f compose.shared.yml -p gram-shared up -d --wait --wait-timeout 30 \
-  pubsub-emulator gram-temporal || exit 1
-
-# The shared Temporal server starts with the main tree's `default` namespace.
-# Every worktree gets a distinct TEMPORAL_NAMESPACE from git:workinit; create it
-# idempotently before any seed or daemon can submit workflows. The second
-# describe handles two concurrent starts racing to create the same namespace.
-if ! docker compose -f compose.shared.yml -p gram-shared exec -T gram-temporal \
-     temporal operator namespace describe --namespace "$TEMPORAL_NAMESPACE" > /dev/null 2>&1; then
-  echo "Creating Temporal namespace ${TEMPORAL_NAMESPACE}..."
-  docker compose -f compose.shared.yml -p gram-shared exec -T gram-temporal \
-    temporal operator namespace create --namespace "$TEMPORAL_NAMESPACE" > /dev/null 2>&1 \
-    || docker compose -f compose.shared.yml -p gram-shared exec -T gram-temporal \
-      temporal operator namespace describe --namespace "$TEMPORAL_NAMESPACE" > /dev/null \
-    || exit 1
-fi
-
-# Presidio and LGTM are shared too, but neither is a synchronous startup
-# dependency. A transient image pull or cold model must not take down this
-# worktree's databases, so warn and continue.
-docker compose -f compose.shared.yml -p gram-shared up -d gram-presidio lgtm \
-  || echo "⚠️  Optional shared Presidio/LGTM services failed to start; continuing with degraded PII scanning or observability." >&2
-
-# Best-effort readiness for the shared analyzer. `up -d` returns once the
-# container is created, not once its ~1 GB spaCy model has loaded, so poll the
-# container's own healthcheck to keep infra:start's success signal honest. This
-# is deliberately NON-fatal and NOT a hard gate: nothing in the startup path
-# consumes Presidio synchronously (only background Temporal risk activities do,
-# and they already tolerate/retry an unavailable analyzer), so a cold model load
-# must not block the rest of the stack. Since Presidio is a long-lived shared
-# singleton, this returns instantly on every run after the first. Override the
-# bound with PRESIDIO_READINESS_TIMEOUT; <=0 or a non-integer skips the wait.
-PRESIDIO_READINESS_TIMEOUT="${PRESIDIO_READINESS_TIMEOUT:-90}"
-# Normalize to a plain decimal int before any arithmetic: a leading-zero
-# override (e.g. "08") would otherwise be misread as octal — "08"/"09" error and
-# "010" means 8 — so validate the digits, then re-base with 10# (matching
-# INFRA_READINESS_TIMEOUT below). A non-integer becomes 0, which skips the wait.
-if [[ "$PRESIDIO_READINESS_TIMEOUT" =~ ^[0-9]+$ ]]; then
-  PRESIDIO_READINESS_TIMEOUT=$((10#$PRESIDIO_READINESS_TIMEOUT))
-else
-  PRESIDIO_READINESS_TIMEOUT=0
-fi
-presidio_cid="$(docker compose -f compose.shared.yml -p gram-shared ps -q gram-presidio 2>/dev/null)"
-if [[ -n "$presidio_cid" && "$PRESIDIO_READINESS_TIMEOUT" -gt 0 ]]; then
-  presidio_deadline=$((SECONDS + PRESIDIO_READINESS_TIMEOUT))
-  until [ "$(docker inspect -f '{{.State.Health.Status}}' "$presidio_cid" 2>/dev/null)" = "healthy" ]; do
-    if ((SECONDS >= presidio_deadline)); then
-      echo "⚠️  Shared Presidio analyzer not healthy after ${PRESIDIO_READINESS_TIMEOUT}s; continuing (PII scanning catches up once it is ready)." >&2
-      break
-    fi
-    sleep 2
-  done
-fi
+  pubsub-emulator otlp-sink || exit 1
 
 # Maximum time (seconds) to wait for a service to accept queries before giving
 # up. Bounded so headless callers (e.g. `./zero --agent`) fail fast instead of

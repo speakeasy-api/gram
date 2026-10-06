@@ -128,6 +128,12 @@ func newRiskFindingRelayMessage(finding *riskv1.Finding, fail func(error)) (risk
 	if finding.GetDeadLetterReason() != "" {
 		return emptyMessage, relayReasonDeadLetter, false
 	}
+	// Shadow findings are engine-comparison records the LLM analyzer produced
+	// under the shadow risk engine mode: never enforced and hidden from every
+	// user-facing surface, so they never reach a customer collector either.
+	if finding.GetShadow() {
+		return emptyMessage, relayReasonShadow, false
+	}
 
 	switch finding.GetEventKind() {
 	case "finding":

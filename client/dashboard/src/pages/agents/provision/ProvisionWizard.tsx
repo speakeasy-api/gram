@@ -83,7 +83,10 @@ export function ProvisionWizard({
 
   const [step, setStep] = useState(0);
   const [name, setName] = useState(agent?.name ?? "");
-  const [scope, setScope] = useState<Scope>("project");
+  // null until the person picks, so the default can follow the project as it
+  // resolves. A useState initializer would run once, before useProject has an
+  // id, and strand the form on organization scope.
+  const [chosenScope, setChosenScope] = useState<Scope | null>(null);
   const [selected, setSelected] = useState<ServerSelection[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [provisioning, setProvisioning] = useState(false);
@@ -107,6 +110,11 @@ export function ProvisionWizard({
     onBusy?.(provisioning);
   }, [provisioning, onBusy]);
 
+  // Project leads once one is available; an explicit pick always wins. Until
+  // a project resolves, project scope would send an empty id, which the server
+  // reads as "omitted" — an organization-wide agent created on behalf of
+  // someone who asked for a project one.
+  const scope: Scope = chosenScope ?? (project.id ? "project" : "organization");
   const scopedProjectID = scope === "project" ? project.id : undefined;
 
   const gatewayURL = agentID ? agentGatewayURL(agentID) : "";
@@ -310,12 +318,18 @@ export function ProvisionWizard({
                 </Text>
                 <RadioCardGroup
                   value={scope}
-                  onValueChange={(value) => setScope(value as Scope)}
+                  onValueChange={(value) => setChosenScope(value as Scope)}
                   disabled={existing}
                   className="sm:grid-cols-2"
                 >
                   {/* One line each: the choice is a scope, not a paragraph. */}
-                  <RadioCard value="project" title="Project" className="p-3">
+                  <RadioCard
+                    value="project"
+                    title="Project"
+                    className="p-3"
+                    // Offered only once there is a project to bind to.
+                    disabled={!project.id}
+                  >
                     <Text muted small>
                       Servers in {project.name}.
                     </Text>

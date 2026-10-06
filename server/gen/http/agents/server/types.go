@@ -26,6 +26,10 @@ type RevokeSessionRequestBody struct {
 // request body.
 type CreateRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional project binding. Omit or send an empty string for an
+	// organization-wide agent; independent of policy grants and the Gram-Project
+	// header.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Eligible same-organization human owner; defaults to the caller
 	OwnerUserID *string `form:"owner_user_id,omitempty" json:"owner_user_id,omitempty" xml:"owner_user_id,omitempty"`
 	// Optional initial allow-only agent policy ceilings, created atomically with
@@ -149,12 +153,15 @@ type CreateResponseBody struct {
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
-	OwnerReassignmentReason *string                       `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
-	Name                    string                        `form:"name" json:"name" xml:"name"`
-	Lifecycle               string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions             *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt               string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt               string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	OwnerReassignmentReason *string `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    string  `form:"name" json:"name" xml:"name"`
+	// The optional project this agent is scoped to; absent for an
+	// organization-wide agent
+	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetResponseBody is the type of the "agents" service "get" endpoint HTTP
@@ -168,12 +175,15 @@ type GetResponseBody struct {
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
-	OwnerReassignmentReason *string                       `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
-	Name                    string                        `form:"name" json:"name" xml:"name"`
-	Lifecycle               string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions             *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt               string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt               string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	OwnerReassignmentReason *string `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    string  `form:"name" json:"name" xml:"name"`
+	// The optional project this agent is scoped to; absent for an
+	// organization-wide agent
+	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // RenameResponseBody is the type of the "agents" service "rename" endpoint
@@ -187,12 +197,15 @@ type RenameResponseBody struct {
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
-	OwnerReassignmentReason *string                       `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
-	Name                    string                        `form:"name" json:"name" xml:"name"`
-	Lifecycle               string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions             *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt               string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt               string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	OwnerReassignmentReason *string `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    string  `form:"name" json:"name" xml:"name"`
+	// The optional project this agent is scoped to; absent for an
+	// organization-wide agent
+	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListDelegableGrantsResponseBody is the type of the "agents" service
@@ -236,12 +249,15 @@ type TransferResponseBody struct {
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
-	OwnerReassignmentReason *string                       `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
-	Name                    string                        `form:"name" json:"name" xml:"name"`
-	Lifecycle               string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions             *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt               string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt               string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	OwnerReassignmentReason *string `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    string  `form:"name" json:"name" xml:"name"`
+	// The optional project this agent is scoped to; absent for an
+	// organization-wide agent
+	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ReassignResponseBody is the type of the "agents" service "reassign" endpoint
@@ -255,12 +271,15 @@ type ReassignResponseBody struct {
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
-	OwnerReassignmentReason *string                       `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
-	Name                    string                        `form:"name" json:"name" xml:"name"`
-	Lifecycle               string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions             *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt               string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt               string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	OwnerReassignmentReason *string `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    string  `form:"name" json:"name" xml:"name"`
+	// The optional project this agent is scoped to; absent for an
+	// organization-wide agent
+	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // SuspendResponseBody is the type of the "agents" service "suspend" endpoint
@@ -274,12 +293,15 @@ type SuspendResponseBody struct {
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
-	OwnerReassignmentReason *string                       `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
-	Name                    string                        `form:"name" json:"name" xml:"name"`
-	Lifecycle               string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions             *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt               string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt               string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	OwnerReassignmentReason *string `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    string  `form:"name" json:"name" xml:"name"`
+	// The optional project this agent is scoped to; absent for an
+	// organization-wide agent
+	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ResumeResponseBody is the type of the "agents" service "resume" endpoint
@@ -293,12 +315,15 @@ type ResumeResponseBody struct {
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
-	OwnerReassignmentReason *string                       `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
-	Name                    string                        `form:"name" json:"name" xml:"name"`
-	Lifecycle               string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions             *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt               string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt               string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	OwnerReassignmentReason *string `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    string  `form:"name" json:"name" xml:"name"`
+	// The optional project this agent is scoped to; absent for an
+	// organization-wide agent
+	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // RevokeResponseBody is the type of the "agents" service "revoke" endpoint
@@ -312,12 +337,15 @@ type RevokeResponseBody struct {
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
-	OwnerReassignmentReason *string                       `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
-	Name                    string                        `form:"name" json:"name" xml:"name"`
-	Lifecycle               string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions             *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt               string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt               string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	OwnerReassignmentReason *string `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    string  `form:"name" json:"name" xml:"name"`
+	// The optional project this agent is scoped to; absent for an
+	// organization-wide agent
+	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListSessionsUnauthorizedResponseBody is the type of the "agents" service
@@ -3427,12 +3455,15 @@ type ManagedAgentResponseBody struct {
 	// When owner loss durably blocked this agent
 	OwnerReassignmentRequiredAt *string `form:"owner_reassignment_required_at,omitempty" json:"owner_reassignment_required_at,omitempty" xml:"owner_reassignment_required_at,omitempty"`
 	// Stable reason that explicit reassignment is required
-	OwnerReassignmentReason *string                       `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
-	Name                    string                        `form:"name" json:"name" xml:"name"`
-	Lifecycle               string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
-	Permissions             *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	CreatedAt               string                        `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt               string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	OwnerReassignmentReason *string `form:"owner_reassignment_reason,omitempty" json:"owner_reassignment_reason,omitempty" xml:"owner_reassignment_reason,omitempty"`
+	Name                    string  `form:"name" json:"name" xml:"name"`
+	// The optional project this agent is scoped to; absent for an
+	// organization-wide agent
+	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
+	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
+	CreatedAt   string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // AgentOwnerProfileResponseBody is used to define fields on response body
@@ -3473,7 +3504,7 @@ type AgentPolicySelectorResponse struct {
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP scopes only).
+	// Project filter (MCP, environment, and assistant scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -3502,7 +3533,7 @@ type AgentPolicySelectorResponseBody struct {
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP scopes only).
+	// Project filter (MCP, environment, and assistant scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -3531,7 +3562,7 @@ type AgentPolicySelectorRequestBodyRequestBody struct {
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP scopes only).
+	// Project filter (MCP, environment, and assistant scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -3549,7 +3580,7 @@ type AgentPolicySelector struct {
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP scopes only).
+	// Project filter (MCP, environment, and assistant scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -3608,6 +3639,7 @@ func NewCreateResponseBody(res *agents.ManagedAgent) *CreateResponseBody {
 		OwnerReassignmentRequiredAt: res.OwnerReassignmentRequiredAt,
 		OwnerReassignmentReason:     res.OwnerReassignmentReason,
 		Name:                        res.Name,
+		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
@@ -3630,6 +3662,7 @@ func NewGetResponseBody(res *agents.ManagedAgent) *GetResponseBody {
 		OwnerReassignmentRequiredAt: res.OwnerReassignmentRequiredAt,
 		OwnerReassignmentReason:     res.OwnerReassignmentReason,
 		Name:                        res.Name,
+		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
@@ -3652,6 +3685,7 @@ func NewRenameResponseBody(res *agents.ManagedAgent) *RenameResponseBody {
 		OwnerReassignmentRequiredAt: res.OwnerReassignmentRequiredAt,
 		OwnerReassignmentReason:     res.OwnerReassignmentReason,
 		Name:                        res.Name,
+		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
@@ -3734,6 +3768,7 @@ func NewTransferResponseBody(res *agents.ManagedAgent) *TransferResponseBody {
 		OwnerReassignmentRequiredAt: res.OwnerReassignmentRequiredAt,
 		OwnerReassignmentReason:     res.OwnerReassignmentReason,
 		Name:                        res.Name,
+		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
@@ -3756,6 +3791,7 @@ func NewReassignResponseBody(res *agents.ManagedAgent) *ReassignResponseBody {
 		OwnerReassignmentRequiredAt: res.OwnerReassignmentRequiredAt,
 		OwnerReassignmentReason:     res.OwnerReassignmentReason,
 		Name:                        res.Name,
+		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
@@ -3778,6 +3814,7 @@ func NewSuspendResponseBody(res *agents.ManagedAgent) *SuspendResponseBody {
 		OwnerReassignmentRequiredAt: res.OwnerReassignmentRequiredAt,
 		OwnerReassignmentReason:     res.OwnerReassignmentReason,
 		Name:                        res.Name,
+		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
@@ -3800,6 +3837,7 @@ func NewResumeResponseBody(res *agents.ManagedAgent) *ResumeResponseBody {
 		OwnerReassignmentRequiredAt: res.OwnerReassignmentRequiredAt,
 		OwnerReassignmentReason:     res.OwnerReassignmentReason,
 		Name:                        res.Name,
+		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
@@ -3822,6 +3860,7 @@ func NewRevokeResponseBody(res *agents.ManagedAgent) *RevokeResponseBody {
 		OwnerReassignmentRequiredAt: res.OwnerReassignmentRequiredAt,
 		OwnerReassignmentReason:     res.OwnerReassignmentReason,
 		Name:                        res.Name,
+		ProjectID:                   res.ProjectID,
 		Lifecycle:                   string(res.Lifecycle),
 		CreatedAt:                   res.CreatedAt,
 		UpdatedAt:                   res.UpdatedAt,
@@ -6275,6 +6314,7 @@ func NewListPayload(cursor *string, limit int, search *string, nameOrder string,
 func NewCreatePayload(body *CreateRequestBody, sessionToken *string) *agents.CreatePayload {
 	v := &agents.CreatePayload{
 		Name:        *body.Name,
+		ProjectID:   body.ProjectID,
 		OwnerUserID: body.OwnerUserID,
 	}
 	if body.PolicyGrants != nil {
@@ -6314,10 +6354,11 @@ func NewRenamePayload(body *RenameRequestBody, sessionToken *string) *agents.Ren
 
 // NewListDelegableGrantsPayload builds a agents service listDelegableGrants
 // endpoint payload.
-func NewListDelegableGrantsPayload(agentID string, toolsetID *string, sessionToken *string) *agents.ListDelegableGrantsPayload {
+func NewListDelegableGrantsPayload(agentID string, toolsetID *string, toolsetIds []string, sessionToken *string) *agents.ListDelegableGrantsPayload {
 	v := &agents.ListDelegableGrantsPayload{}
 	v.AgentID = agentID
 	v.ToolsetID = toolsetID
+	v.ToolsetIds = toolsetIds
 	v.SessionToken = sessionToken
 
 	return v
@@ -6713,8 +6754,8 @@ func ValidateAgentPolicySelectorRequestBodyRequestBody(body *AgentPolicySelector
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
 	}
 	if body.ResourceKind != nil {
-		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "agent", "*"}))
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "*"}))
 		}
 	}
 	if body.Disposition != nil {
@@ -6738,8 +6779,8 @@ func ValidateAgentPolicySelector(body *AgentPolicySelector) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
 	}
 	if body.ResourceKind != nil {
-		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "agent", "*"}))
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "*"}))
 		}
 	}
 	if body.Disposition != nil {

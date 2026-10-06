@@ -267,8 +267,12 @@ type OrganizationUserSessionIssuerDeletePreflight struct {
 	McpServers []*OrganizationUserSessionIssuerReference
 	// Live toolsets that block deletion.
 	Toolsets []*OrganizationUserSessionIssuerReference
-	// True when no live MCP server or toolset references the issuer.
+	// True when no live MCP server, toolset, or active identity-chaining binding
+	// references the issuer.
 	CanDelete bool
+	// Active identity-chaining bindings that must be explicitly unlinked before
+	// deletion.
+	EmaBindingCount int64
 }
 
 // OrganizationUserSessionIssuerMigratePreflight is the result type of the

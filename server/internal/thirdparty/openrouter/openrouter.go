@@ -143,6 +143,8 @@ func (k KeyType) Validate() error {
 // Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
 // This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
+	"anthropic/claude-opus-5.5":     true,
+	"anthropic/claude-fable-5.1":    true,
 	"anthropic/claude-opus-5":       true,
 	"anthropic/claude-fable-5":      true,
 	"anthropic/claude-sonnet-5":     true,
@@ -153,6 +155,9 @@ var allowList = map[string]bool{
 	"anthropic/claude-opus-4.6":     true,
 	"anthropic/claude-opus-4.5":     true,
 	"anthropic/claude-haiku-4.5":    true,
+	"openai/gpt-6-astra":            true,
+	"openai/gpt-6-sol":              true,
+	"openai/gpt-6-luna":             true,
 	"openai/gpt-5.6-sol":            true,
 	"openai/gpt-5.6-terra":          true,
 	"openai/gpt-5.6-luna":           true,
@@ -164,19 +169,26 @@ var allowList = map[string]bool{
 	"openai/gpt-5.3-codex":          true,
 	"openai/gpt-5.1":                true,
 	"openai/gpt-5":                  true,
+	"google/gemini-3.8-flash":       true,
 	"google/gemini-3.5-flash-lite":  true,
 	"google/gemini-3.5-flash":       true,
 	"google/gemini-3.1-pro-preview": true,
 	"google/gemini-3.1-flash-lite":  true,
+	"deepseek/deepseek-v4.1-flash":  true,
 	"deepseek/deepseek-v4-pro":      true,
 	"deepseek/deepseek-v4-flash":    true,
 	"deepseek/deepseek-v3.2":        true,
 	"meta-llama/llama-4-maverick":   true,
+	"x-ai/grok-4.7":                 true,
 	"x-ai/grok-4.3":                 true,
 	"x-ai/grok-4.20":                true,
+	"qwen/qwen3.8-max-0902":         true,
+	"qwen/qwen3.8-flash":            true,
 	"qwen/qwen3.7-max":              true,
 	"qwen/qwen3-coder":              true,
+	"z-ai/glm-5.3":                  true,
 	"z-ai/glm-5.3-flash":            true,
+	"moonshotai/kimi-k3":            true,
 	"moonshotai/kimi-k2.6":          true,
 	"moonshotai/kimi-k2.5":          true,
 	"mistralai/mistral-medium-3-5":  true,
@@ -362,14 +374,21 @@ type Provisioner interface {
 	GetModelUsage(ctx context.Context, generationID string, orgID string, keyType KeyType) (*ModelUsage, error)
 }
 
+// ExistingKeyLookup reads an organization's already-provisioned platform key
+// without minting one. Read-only surfaces that must not create upstream keys
+// or spend on an organization's behalf, such as the command palette judge,
+// depend on this instead of Provisioner.
+type ExistingKeyLookup interface {
+	// LookupAPIKey returns the organization's key of the given type. ok is
+	// false, with no error, when no key has been provisioned yet. A disabled
+	// key fails with ErrPlatformKeyDisabled, as ProvisionAPIKey does.
+	LookupAPIKey(ctx context.Context, orgID string, keyType KeyType) (key string, ok bool, err error)
+}
+
 // DBTX is the database executor accepted by generated OpenRouter and
 // organization queries. It lets a caller that already owns a session-level
 // billing lock perform the associated reads and write on that same session.
 type DBTX = repo.DBTX
-
-type KeyRefresher interface {
-	ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType KeyType, limit *int) error
-}
 
 type OpenRouter struct {
 	provisioningKey string
@@ -379,7 +398,6 @@ type OpenRouter struct {
 	repo            *repo.Queries
 	orgRepo         *orgRepo.Queries
 	orClient        *guardian.HTTPClient
-	refresher       KeyRefresher
 	featureClient   *productfeatures.Client
 	enc             *encryption.Client
 	// baseURL is OpenRouterBaseURL outside of tests.
@@ -413,7 +431,7 @@ func WithTestBaseURL(baseURL string) (Option, error) {
 	}, nil
 }
 
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker, enc *encryption.Client, options ...Option) *OpenRouter {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, featureClient *productfeatures.Client, tracking billing.Tracker, enc *encryption.Client, options ...Option) *OpenRouter {
 	orClient := guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
 
 	openRouter := &OpenRouter{
@@ -424,7 +442,6 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolic
 		repo:            repo.New(db),
 		orgRepo:         orgRepo.New(db),
 		orClient:        orClient,
-		refresher:       refresher,
 		featureClient:   featureClient,
 		enc:             enc,
 		baseURL:         OpenRouterBaseURL,
@@ -497,6 +514,40 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 	return openrouterKey, nil
 }
 
+// LookupAPIKey resolves an existing key row exactly as ProvisionAPIKey does,
+// except that a missing row reports ok=false instead of minting a key.
+func (o *OpenRouter) LookupAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, bool, error) {
+	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return "", false, fmt.Errorf("lookup openrouter key: %w", err)
+	}
+	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", false, nil
+	case err != nil:
+		return "", false, oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+	}
+
+	if EffectiveDisabled(key.Disabled, key.DisableCauses) {
+		return "", false, fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
+	}
+	plaintext, err := o.keyMaterial(key)
+	if err != nil {
+		return "", false, oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+	}
+	// A row that decrypts to nothing is unusable: ProvisionAPIKey refuses the
+	// same state, so a lookup must not report it as provisioned and hand
+	// callers an empty credential to send upstream.
+	if plaintext == "" {
+		return "", false, nil
+	}
+	return plaintext, true, nil
+}
+
 // createAndStoreAPIKey mints an upstream OpenRouter key and records it,
 // serialized per (org, key type) with an advisory lock held across the
 // upstream call: concurrent first completions would otherwise both miss the
@@ -514,6 +565,13 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := o.repo.WithTx(dbtx)
+	// Hold the billing lock across the tier read, the upstream create and the
+	// insert. A billing change either commits first and is read here, or waits
+	// and then finds the stored key to update. Billing before provisioning is
+	// the order every caller that takes both locks uses.
+	if err := AcquireAPIKeyBillingTransactionLock(ctx, dbtx, orgID, keyType); err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "error locking openrouter key billing").LogError(ctx, o.logger)
+	}
 	if err := AcquireAPIKeyProvisioningTransactionLock(ctx, dbtx, orgID, keyType); err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "error locking openrouter key provisioning").LogError(ctx, o.logger)
 	}
@@ -582,12 +640,6 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to store openrouter key data").LogError(ctx, o.logger)
-	}
-
-	if o.refresher != nil {
-		if err := o.refresher.ScheduleOpenRouterKeyRefresh(ctx, orgID, keyType, nil); err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "error scheduling open router key refresh").LogError(ctx, o.logger)
-		}
 	}
 
 	return *keyResponse.Key, nil
@@ -1120,6 +1172,16 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 		return 0, 0, fmt.Errorf("read openrouter key for usage: %w", keyErr)
 	}
 
+	// OpenRouter rejects a disabled key's own credentials with 401, so its
+	// usage is read through the provisioning key instead.
+	if EffectiveDisabled(key.Disabled, key.DisableCauses) {
+		used, _, err := o.fetchKeyUsage(ctx, "/v1/keys/"+url.PathEscape(key.KeyHash), o.provisioningKey)
+		if err != nil {
+			return 0, limit, fmt.Errorf("read disabled key usage: %w", err)
+		}
+		return used, limit, nil
+	}
+
 	apiKey, err := o.keyMaterial(key)
 	if err != nil {
 		return 0, limit, fmt.Errorf("resolve openrouter key material: %w", err)
@@ -1141,13 +1203,20 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 // openrouter_api_keys in a single SQL query) can skip the org/key DB lookups
 // in GetCreditsUsed.
 func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, *int64, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+"/v1/key", nil)
+	return o.fetchKeyUsage(ctx, "/v1/key", apiKey)
+}
+
+// fetchKeyUsage reads a key's monthly usage and limit from path, which is
+// either `/v1/key` authorized by the key itself or `/v1/keys/:hash`
+// authorized by the provisioning key. Both return the same key object.
+func (o *OpenRouter) fetchKeyUsage(ctx context.Context, path string, bearer string) (float64, *int64, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+path, nil)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to build openrouter key usage request", attr.SlogError(err))
 		return 0, nil, fmt.Errorf("build key usage request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Authorization", "Bearer "+bearer)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := o.orClient.Do(req)
@@ -1513,12 +1582,20 @@ func (o *OpenRouter) GetModelUsage(ctx context.Context, generationID string, org
 	}, nil
 }
 
+// HasSignal reports whether the response carried a usage payload at all. The
+// zero Usage is indistinguishable from one the provider omitted, so a caller
+// that meters or measures tokens checks this before trusting a count.
+func (u Usage) HasSignal() bool {
+	return u.PromptTokens != 0 || u.CompletionTokens != 0 || u.TotalTokens != 0 ||
+		u.Cost != nil || u.CostDetails != nil || u.PromptTokensDetails != nil || u.CompletionTokensDetails != nil
+}
+
 // ToModelUsage projects the inline OpenRouter usage payload into the
 // billing-facing ModelUsage shape. Returns nil when the payload has no
 // signal (no tokens and no cost) — e.g. an aborted stream that never
 // reached the final usage chunk.
 func (u Usage) ToModelUsage(model string) *ModelUsage {
-	if u.PromptTokens == 0 && u.CompletionTokens == 0 && u.TotalTokens == 0 && u.Cost == nil && u.CostDetails == nil && u.PromptTokensDetails == nil && u.CompletionTokensDetails == nil {
+	if !u.HasSignal() {
 		return nil
 	}
 

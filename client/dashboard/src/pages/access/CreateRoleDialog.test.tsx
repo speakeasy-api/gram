@@ -7,6 +7,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -17,6 +18,13 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  scimEnabled: false,
+  members: [] as {
+    id: string;
+    name: string;
+    email: string;
+    roleIds: string[];
+  }[],
 }));
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetryContext: () => ({
@@ -25,9 +33,11 @@ vi.mock("@/contexts/Telemetry", () => ({
   }),
 }));
 vi.mock("@/contexts/Auth", () => ({
-  useOrganization: () => ({ projects: [] }),
+  useOrganization: () => ({ projects: [], scimEnabled: mocks.scimEnabled }),
 }));
-vi.mock("@/routes", () => ({ useOrgRoutes: () => ({}) }));
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
+}));
 vi.mock("@gram/client/react-query/agents.js", () => ({
   queryKeyAgents: () => ["agents"],
 }));
@@ -35,7 +45,7 @@ vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ agents: { list: mocks.list } }),
 }));
 vi.mock("@gram/client/react-query/members.js", () => ({
-  useMembers: () => ({ data: { members: [] } }),
+  useMembers: () => ({ data: { members: mocks.members } }),
   invalidateAllMembers: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/listScopes.js", () => ({
@@ -133,15 +143,17 @@ const role: Role = {
 };
 function renderEditor(editingRole?: Role, confirmAssignmentFor?: string) {
   return render(
-    <QueryClientProvider client={new QueryClient()}>
-      <CreateRoleDialog
-        open
-        onOpenChange={vi.fn<(open: boolean) => void>()}
-        editingRole={editingRole}
-        confirmAssignmentFor={confirmAssignmentFor}
-        presentation="page"
-      />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={new QueryClient()}>
+        <CreateRoleDialog
+          open
+          onOpenChange={vi.fn<(open: boolean) => void>()}
+          editingRole={editingRole}
+          confirmAssignmentFor={confirmAssignmentFor}
+          presentation="page"
+        />
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 }
 afterEach(cleanup);
@@ -149,9 +161,16 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.status = "ready";
   mocks.enabled = false;
+  mocks.scimEnabled = false;
+  mocks.members = [];
   // agents.list is paginated: it resolves to pages, which the dialog drains.
   mocks.list.mockResolvedValue([{ result: { items: [] } }]);
 });
+it("labels the permissions section as a section rather than an action", () => {
+  renderEditor();
+  expect(screen.getByText("Permissions", { exact: true })).toBeTruthy();
+});
+
 describe("role assignment confirmation", () => {
   function confirmAssignment() {
     const confirmation = screen.getByRole("checkbox", {
@@ -255,5 +274,39 @@ describe("agent management rollout", () => {
     expect(
       mocks.create.mock.calls[0]![0].request.createRoleForm,
     ).not.toHaveProperty("agentIds");
+  });
+});
+
+describe("member assignment under directory sync", () => {
+  beforeEach(() => {
+    mocks.scimEnabled = true;
+    mocks.members = [
+      {
+        id: "m-1",
+        name: "Enrolled Person",
+        email: "a@example.com",
+        roleIds: [role.id],
+      },
+      { id: "m-2", name: "Other Person", email: "b@example.com", roleIds: [] },
+    ];
+  });
+
+  it("lists only the members the directory enrolled", () => {
+    renderEditor(role);
+    fireEvent.click(screen.getByText("Assign Members"));
+    expect(screen.getByText("Enrolled Person")).toBeTruthy();
+    expect(screen.queryByText("Other Person")).toBeNull();
+    expect(
+      screen
+        .getByRole("checkbox", { name: /Enrolled Person/ })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("links to directory sync setup when nobody is enrolled", () => {
+    renderEditor();
+    const link = screen.getByRole("link", { name: "Configure directory sync" });
+    expect(link.getAttribute("href")).toBe("/org/identity");
+    expect(screen.queryByText("Enrolled Person")).toBeNull();
   });
 });

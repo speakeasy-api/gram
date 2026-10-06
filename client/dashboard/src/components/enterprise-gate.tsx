@@ -1,15 +1,17 @@
-import { Text } from "@/components/ui/Text";
-import { useProductTier } from "@/hooks/useProductTier";
+import { BOOK_DEMO_URL } from "@/lib/constants";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { IconName } from "@/components/ui/Icon/names";
 import React from "react";
+import { Text } from "@/components/ui/Text";
+import { useProductTier } from "@/hooks/useProductTier";
 
 interface EnterpriseGateProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   icon?: IconName;
   title?: string;
   description?: string;
+  allowed?: boolean;
 }
 
 export function EnterpriseGate({
@@ -17,10 +19,11 @@ export function EnterpriseGate({
   icon = "lock",
   title = "Enterprise Feature",
   description = "This feature is available on the Enterprise plan. Book a time to get started.",
+  allowed,
 }: EnterpriseGateProps): React.JSX.Element {
   const productTier = useProductTier();
 
-  if (productTier === "enterprise" || productTier === "payg") {
+  if (allowed ?? (productTier === "enterprise" || productTier === "payg")) {
     return <>{children}</>;
   }
 
@@ -36,11 +39,7 @@ export function EnterpriseGate({
         {description}
       </Text>
       <Button variant="brand" asChild>
-        <a
-          href="https://www.speakeasy.com/book-demo"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
+        <a href={BOOK_DEMO_URL} target="_blank" rel="noopener noreferrer">
           Talk to our team
         </a>
       </Button>

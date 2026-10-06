@@ -119,6 +119,7 @@ export function setListAgentDelegableGrantsData(
     parameters: {
       agentId: string;
       toolsetId?: string | undefined;
+      toolsetIds?: Array<string> | undefined;
       gramSession?: string | undefined;
     },
   ],
@@ -135,6 +136,7 @@ export function invalidateListAgentDelegableGrants(
     [parameters: {
       agentId: string;
       toolsetId?: string | undefined;
+      toolsetIds?: Array<string> | undefined;
       gramSession?: string | undefined;
     }]
   >,

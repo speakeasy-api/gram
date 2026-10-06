@@ -33,7 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
-	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	authsessions "github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -48,7 +48,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/roledistribution/requests"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
@@ -106,6 +109,14 @@ type AuthConfigurations struct {
 	GramServerURL     string
 	SignInRedirectURL string
 	Environment       string
+
+	// NewOrganizationDefaultHost is recorded as the default host of
+	// organizations this service creates. Null records none.
+	NewOrganizationDefaultHost pgtype.Text
+
+	// OrgHosts resolves the dashboard URL of the active organization's default
+	// host. Nil leaves the dashboard on whichever host it was loaded from.
+	OrgHosts *orghost.Resolver
 }
 
 // Service for gram dashboard authentication endpoints
@@ -118,7 +129,7 @@ type Service struct {
 	tracer               trace.Tracer
 	logger               *slog.Logger
 	db                   *pgxpool.Pool
-	sessions             *sessions.Manager
+	sessions             *authsessions.Manager
 	identity             *identity.Resolver
 	cfg                  AuthConfigurations
 	authz                *authz.Engine
@@ -137,6 +148,7 @@ type Service struct {
 	trialBundleSeeder    EnterpriseTrialBundleSeeder
 	auditLogger          *audit.Logger
 	trialNotifier        trialemails.Notifier
+	transferManager      *authsessions.TransferManager
 
 	// siteOrigin is the dashboard's "scheme://host", derived from
 	// cfg.SignInRedirectURL. It is the one absolute origin a post-login redirect
@@ -150,7 +162,7 @@ func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
-	sessions *sessions.Manager,
+	sessions *authsessions.Manager,
 	identityResolver *identity.Resolver,
 	cfg AuthConfigurations,
 	authzEngine *authz.Engine,
@@ -195,6 +207,7 @@ func NewService(
 		trialBundleSeeder:    trialBundleSeeder,
 		auditLogger:          auditLogger,
 		trialNotifier:        trialNotifier,
+		transferManager:      authsessions.NewTransferManager(nonceStore),
 		siteOrigin:           parseSiteOrigin(cfg.SignInRedirectURL),
 	}
 }
@@ -223,6 +236,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// Wrap Logout handler: have the browser drop the origin's cookies and
 	// client-side storage once the session has been invalidated server-side.
 	server.Logout = middleware.ClearSiteDataOnLogout(server.Logout)
+
+	// Wrap TransferIn: give it the browser's per-transfer nonce cookies, whose
+	// names Goa cannot know ahead of the request.
+	server.TransferIn = transferCookieMiddleware(server.TransferIn)
 
 	srv.Mount(mux, server)
 }
@@ -298,7 +315,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	redirectWithError := func(code authErr, err error) (*gen.CallbackResult, error) {
 		logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(code)))
 		return &gen.CallbackResult{
-			Location:      fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, err.Error()),
+			Location:      fmt.Sprintf("%s?signin_error=%s", s.platformHostURL(ctx, s.cfg.SignInRedirectURL), err.Error()),
 			SessionToken:  "",
 			SessionCookie: "",
 		}, nil
@@ -386,11 +403,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	userID := login.UserID
 	userInfo := login.UserInfo
 
-	sessionID, err := sessions.NewSessionID()
+	sessionID, err := authsessions.NewSessionID()
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
-	session := sessions.Session{
+	session := authsessions.Session{
 		SessionID:             sessionID,
 		UserID:                userID,
 		ActiveOrganizationID:  "",
@@ -531,11 +548,50 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 	}
 
+	// An organization that lives on another platform host gets this session
+	// handed over there, landing on the same destination. The session is
+	// stored above and its cookie is set on this same response, so
+	// transferOut on this host finds it. Impersonation sessions stay on the
+	// host that started them.
+	if idpUser.ImpersonatorEmail() == "" {
+		destination, movable := s.organizationDestination(payload, orgMetadata.Slug)
+		if move, ok := s.organizationHostMove(ctx, orgMetadata.DefaultHost); ok && movable {
+			return &gen.CallbackResult{
+				Location:      move.transferURL(destination),
+				SessionToken:  session.SessionID,
+				SessionCookie: session.SessionID,
+			}, nil
+		}
+	}
+
 	return &gen.CallbackResult{
 		Location:      s.callbackRedirectURL(ctx, payload),
 		SessionToken:  session.SessionID,
 		SessionCookie: session.SessionID,
 	}, nil
+}
+
+// organizationDestination is the post-login destination to carry to another
+// host for the organization with slug orgSlug: the sanitized destination from
+// state when it names that organization, and the organization's root when
+// there is none. Naming the organization means that if the transfer falls
+// back to a login on that host, the login selects the same organization and
+// does not move the browser again.
+//
+// ok is false for any other destination, and the login stays on this host.
+// Those are hand-offs that must finish where they started, such as the CLI
+// login ("/?from_cli=true&cli_callback_url=…") or pages that keep a token in
+// this host's session storage, and destinations naming an organization the
+// login did not select. The dashboard moves the browser later if it needs to.
+func (s *Service) organizationDestination(payload *gen.CallbackPayload, orgSlug string) (string, bool) {
+	destination := s.destinationFromState(payload)
+	if destination == "" {
+		return "/" + url.PathEscape(orgSlug), true
+	}
+	if s.organizationSlugFromDestinationURL(destination) != orgSlug {
+		return "", false
+	}
+	return destination, true
 }
 
 func (s *Service) acceptPendingInvitationForMember(ctx context.Context, organizationID, inviteeEmail, gramUserID, workosUserID string) error {
@@ -778,8 +834,8 @@ func (s *Service) organizationSlugFromState(payload *gen.CallbackPayload) string
 	return s.organizationSlugFromDestinationURL(state.FinalDestinationURL)
 }
 
-func (s *Service) activeOrganizationFromState(payload *gen.CallbackPayload, organizations []sessions.Organization) (sessions.Organization, bool) {
-	var empty sessions.Organization
+func (s *Service) activeOrganizationFromState(payload *gen.CallbackPayload, organizations []authsessions.Organization) (authsessions.Organization, bool) {
+	var empty authsessions.Organization
 
 	orgSlug := s.organizationSlugFromState(payload)
 	if orgSlug == "" {
@@ -795,8 +851,8 @@ func (s *Service) activeOrganizationFromState(payload *gen.CallbackPayload, orga
 	return empty, false
 }
 
-func activeOrganizationFromWorkOSID(workosOrgID string, organizations []sessions.Organization) (sessions.Organization, bool) {
-	var empty sessions.Organization
+func activeOrganizationFromWorkOSID(workosOrgID string, organizations []authsessions.Organization) (authsessions.Organization, bool) {
+	var empty authsessions.Organization
 
 	for _, org := range organizations {
 		if org.WorkosID != nil && *org.WorkosID == workosOrgID {
@@ -846,7 +902,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		selectedOrg = *payload.OrganizationID
 	}
 
-	var selected sessions.Organization
+	var selected authsessions.Organization
 	orgFound := false
 	for _, org := range userInfo.Organizations {
 		if org.ID == selectedOrg {
@@ -869,6 +925,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		// Switching into an organization says nothing about what created it,
 		// and null leaves whatever was recorded alone.
 		CreationSource: pgtype.Text{String: "", Valid: false},
+		DefaultHost:    s.cfg.NewOrganizationDefaultHost,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").LogError(ctx, s.logger)
 	}
@@ -941,7 +998,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 		return nil, oops.E(oops.CodeUnexpected, err, "error invalidating user").LogError(ctx, s.logger)
 	}
 
-	if err := s.sessions.ClearSession(ctx, sessions.Session{
+	if err := s.sessions.ClearSession(ctx, authsessions.Session{
 		SessionID:             *authCtx.SessionID,
 		ActiveOrganizationID:  authCtx.ActiveOrganizationID,
 		UserID:                authCtx.UserID,
@@ -988,7 +1045,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error loading demo organization").LogError(ctx, s.logger)
 		}
-		userInfo.Organizations = append(userInfo.Organizations, sessions.Organization{
+		userInfo.Organizations = append(userInfo.Organizations, authsessions.Organization{
 			ID:                 orgMeta.ID,
 			Name:               orgMeta.Name,
 			Slug:               orgMeta.Slug,
@@ -1004,7 +1061,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error loading support organization").LogError(ctx, s.logger)
 		}
-		userInfo.Organizations = []sessions.Organization{{
+		userInfo.Organizations = []authsessions.Organization{{
 			ID:                 orgMeta.ID,
 			Name:               orgMeta.Name,
 			Slug:               orgMeta.Slug,
@@ -1077,25 +1134,54 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		supportExpiresAt = session.SupportExpiresAt.UTC().Format(time.RFC3339)
 	}
 
+	// Support and impersonation sessions exist only on the host that started
+	// them, so moving their browser elsewhere would sign the operator out.
+	var dashboardURL *string
+	if !supportOverride && session.ImpersonatorEmail == "" {
+		dashboardURL, err = s.activeOrganizationDashboardURL(ctx, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error resolving organization host").LogError(ctx, s.logger)
+		}
+	}
+
 	return &gen.InfoResult{
-		SessionToken:                  *authCtx.SessionID,
-		SessionCookie:                 *authCtx.SessionID,
-		ActiveOrganizationID:          authCtx.ActiveOrganizationID,
-		GramAccountType:               authCtx.AccountType,
-		HasActiveSubscription:         authCtx.HasActiveSubscription,
-		Whitelisted:                   authCtx.Whitelisted,
-		Trial:                         trial,
-		UserID:                        userInfo.UserID,
-		UserEmail:                     userInfo.Email,
-		UserSignature:                 userInfo.UserPylonSignature,
-		UserDisplayName:               userInfo.DisplayName,
-		UserPhotoURL:                  userInfo.PhotoURL,
-		IsAdmin:                       userInfo.Admin,
-		ImpersonatorEmail:             conv.PtrEmpty(session.ImpersonatorEmail),
-		OrganizationOverride:          supportOverride,
-		OrganizationOverrideExpiresAt: conv.PtrEmpty(supportExpiresAt),
-		Organizations:                 organizations,
+		SessionToken:                   *authCtx.SessionID,
+		SessionCookie:                  *authCtx.SessionID,
+		ActiveOrganizationID:           authCtx.ActiveOrganizationID,
+		ActiveOrganizationDashboardURL: dashboardURL,
+		GramAccountType:                authCtx.AccountType,
+		HasActiveSubscription:          authCtx.HasActiveSubscription,
+		Whitelisted:                    authCtx.Whitelisted,
+		Trial:                          trial,
+		UserID:                         userInfo.UserID,
+		UserEmail:                      userInfo.Email,
+		UserSignature:                  userInfo.UserPylonSignature,
+		UserDisplayName:                userInfo.DisplayName,
+		UserPhotoURL:                   userInfo.PhotoURL,
+		IsAdmin:                        userInfo.Admin,
+		ImpersonatorEmail:              conv.PtrEmpty(session.ImpersonatorEmail),
+		OrganizationOverride:           supportOverride,
+		OrganizationOverrideExpiresAt:  conv.PtrEmpty(supportExpiresAt),
+		Organizations:                  organizations,
 	}, nil
+}
+
+// activeOrganizationDashboardURL returns the dashboard base URL of the
+// active organization's host when the dashboard, loaded on this request's
+// host, should move there. Organizations without one keep the dashboard put.
+func (s *Service) activeOrganizationDashboardURL(ctx context.Context, organizationID string) (*string, error) {
+	if organizationID == "" {
+		return nil, nil
+	}
+	org, err := s.orgRepo.GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("load organization metadata: %w", err)
+	}
+	move, ok := s.organizationHostMove(ctx, org.DefaultHost)
+	if !ok {
+		return nil, nil
+	}
+	return new(strings.TrimRight(move.siteURL.String(), "/")), nil
 }
 
 // loadTrial returns the organization's trial unless it converted, including
@@ -1131,7 +1217,7 @@ func loadTrial(
 // applySignupWhitelist keeps the book-a-demo gate off for a signup that
 // reused a Gram identity. Prefer an already-whitelisted membership; otherwise
 // whitelist the org the session is about to activate.
-func (s *Service) applySignupWhitelist(ctx context.Context, organizations []sessions.Organization, activeOrgID string, orgMetadata orgRepo.OrganizationMetadatum) (string, orgRepo.OrganizationMetadatum, error) {
+func (s *Service) applySignupWhitelist(ctx context.Context, organizations []authsessions.Organization, activeOrgID string, orgMetadata orgRepo.OrganizationMetadatum) (string, orgRepo.OrganizationMetadatum, error) {
 	if orgMetadata.Whitelisted {
 		return activeOrgID, orgMetadata, nil
 	}
@@ -1155,6 +1241,7 @@ func (s *Service) applySignupWhitelist(ctx context.Context, organizations []sess
 		// Whitelisting an existing organization is not creating one. Null so
 		// the source the creating flow recorded survives this write.
 		CreationSource: pgtype.Text{String: "", Valid: false},
+		DefaultHost:    s.cfg.NewOrganizationDefaultHost,
 	})
 	if err != nil {
 		return "", orgRepo.OrganizationMetadatum{}, fmt.Errorf("whitelist organization for signup: %w", err)
@@ -1265,7 +1352,7 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	return nil
 }
 
-func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sessions.CachedUserInfo, session *sessions.Session) (string, error) {
+func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *authsessions.CachedUserInfo, session *authsessions.Session) (string, error) {
 	orgName := generateLegibleOrgName()
 
 	// Assistants is a live product for users who never asked for a trial, so a
@@ -1349,6 +1436,7 @@ func (s *Service) persistProvisionedOrganization(
 		// Empty writes null rather than an empty string, so "nothing recorded a
 		// source" stays one value on the read side.
 		CreationSource: conv.ToPGTextEmpty(opts.CreationSource),
+		DefaultHost:    s.cfg.NewOrganizationDefaultHost,
 	})
 	if err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("create organization metadata: %w", err)
@@ -1401,7 +1489,7 @@ func (s *Service) persistProvisionedOrganization(
 func (s *Service) redirectSignupError(ctx context.Context, payload *gen.CallbackPayload, err error) (*gen.CallbackResult, error) {
 	s.logger.ErrorContext(ctx, "signup provisioning failed", attr.SlogError(err), attr.SlogReason(string(authErrInit)))
 
-	base := strings.TrimRight(s.cfg.SignInRedirectURL, "/")
+	base := strings.TrimRight(s.platformHostURL(ctx, s.cfg.SignInRedirectURL), "/")
 	location := fmt.Sprintf("%s/sign-up?signin_error=%s", base, authErrInit)
 	// Keep the destination on the retry: /sign-up threads ?redirect= back
 	// through the next login attempt, so a signup that arrived with one (e.g.
@@ -1516,17 +1604,31 @@ func (s *Service) getProjectsOrSetupDefaults(ctx context.Context, organizationID
 }
 
 func (s *Service) createDefaultProject(ctx context.Context, organizationID string) (projectsRepo.Project, error) {
-	project, err := s.projectsRepo.CreateProject(ctx, projectsRepo.CreateProjectParams{
+	var empty projectsRepo.Project
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return empty, oops.E(oops.CodeUnexpected, err, "error creating default project").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	project, err := s.projectsRepo.WithTx(tx).CreateProject(ctx, projectsRepo.CreateProjectParams{
 		OrganizationID: organizationID,
 		Name:           "Default",
 		Slug:           "default",
 	})
-	var empty projectsRepo.Project
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return empty, oops.E(oops.CodeConflict, nil, "project already exists")
 		}
+		return empty, oops.E(oops.CodeUnexpected, err, "error creating default project").LogError(ctx, s.logger)
+	}
+
+	if err := requests.PublishFirstProject(ctx, tx, organizationID, project.ID); err != nil {
+		return empty, oops.E(oops.CodeUnexpected, err, "error requesting role distribution").LogError(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
 		return empty, oops.E(oops.CodeUnexpected, err, "error creating default project").LogError(ctx, s.logger)
 	}
 
@@ -1668,12 +1770,30 @@ func (s *Service) validateAuthNonce(ctx context.Context, payload *gen.CallbackPa
 // user back to after authentication. Must match what Login passes to
 // BuildAuthorizationURL.
 func (s *Service) buildCallbackURL(ctx context.Context) string {
-	returnAddress := strings.TrimRight(s.cfg.GramServerURL, "/")
+	returnAddress := s.platformHostURL(ctx, strings.TrimRight(s.cfg.GramServerURL, "/"))
 	if s.cfg.Environment == "local" {
 		returnAddress = strings.TrimRight(s.cfg.SignInRedirectURL, "/")
 	}
 
 	return returnAddress + "/rpc/auth.callback"
+}
+
+// platformHostURL returns the base URL of the extra platform host (see
+// GRAM_PLATFORM_HOSTS) the request arrived on, and fallback for every other
+// request. Login cookies are host-only, so a login started on such a host has
+// to call back and land on that same host. Only hosts the custom-domains
+// middleware classified as platform qualify, never the raw Host header, and
+// the configured server host keeps using fallback, so its behaviour and the
+// local site URL override are unchanged.
+func (s *Service) platformHostURL(ctx context.Context, fallback string) string {
+	origin, ok := requestorigin.FromContext(ctx)
+	if !ok || origin.Surface != requestorigin.SurfacePlatform || origin.BaseURL == "" {
+		return fallback
+	}
+	if origin.BaseURL == strings.TrimRight(s.cfg.GramServerURL, "/") {
+		return fallback
+	}
+	return origin.BaseURL
 }
 
 // callbackRedirectURL determines the redirect location after authentication.
@@ -1694,7 +1814,7 @@ func (s *Service) callbackRedirectURL(
 		return location
 	}
 
-	return s.cfg.SignInRedirectURL
+	return s.platformHostURL(ctx, s.cfg.SignInRedirectURL)
 }
 
 // destinationFromState extracts the sanitized post-login destination carried

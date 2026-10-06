@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -21,12 +23,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -132,6 +141,14 @@ func seedAgentGateway(t *testing.T, ctx context.Context, ti *testInstance) agent
 // otherwise read as the recorder's default 200.
 func serveAgentGatewayHTTP(t *testing.T, ti *testInstance, agentID, token string, body []byte) (*httptest.ResponseRecorder, error) {
 	t.Helper()
+	return serveAgentGatewayHTTPOn(t, t.Context(), ti, agentID, token, body)
+}
+
+// serveAgentGatewayHTTPOn is serveAgentGatewayHTTP with the request context
+// chosen by the caller, for the ingress-surface and custom-domain cases where
+// what is in that context is the thing under test.
+func serveAgentGatewayHTTPOn(t *testing.T, ctx context.Context, ti *testInstance, agentID, token string, body []byte) (*httptest.ResponseRecorder, error) {
+	t.Helper()
 
 	r := httptest.NewRequest(http.MethodPost, "/agent-mcp/"+agentID, bytes.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
@@ -140,7 +157,7 @@ func serveAgentGatewayHTTP(t *testing.T, ti *testInstance, agentID, token string
 	}
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("agentID", agentID)
-	r = r.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+	r = r.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
 
 	w := httptest.NewRecorder()
 	err := ti.service.ServeAgentGateway(w, r)
@@ -199,6 +216,59 @@ func TestServeAgentGateway_Initialize(t *testing.T) {
 	require.NotEmpty(t, envelope.Result)
 }
 
+func TestServeAgentGateway_PrivateTunnelReceivesAgentAssertion(t *testing.T) {
+	t.Parallel()
+	issuer, publicKey := callerIssuerForTest(t)
+	ctx, ti := newTestMCPServiceWithCallerAssertions(t, issuer)
+	fx := seedAgentGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.Email, "the agent's owner has a human profile")
+	projectID := *authCtx.ProjectID
+	resource := "https://mcp.internal.example.com/agent/"
+	serverID := mcpServerBySlug(t, ctx, ti, projectID, fx.granted)
+	tunnel, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: fx.granted,
+		KeyHash: "hash-" + fx.granted, KeyPrefix: "test", ResourceIdentifier: conv.ToPGText(resource),
+	})
+	require.NoError(t, err)
+	// Keep the granted wrapper identity and its delegated policy, but serve
+	// this member through a tunnel instead of its remote backend.
+	_, err = mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
+		ID: serverID, ProjectID: projectID,
+		Name: conv.ToPGText(fx.granted), Slug: conv.ToPGText(fx.granted),
+		TunneledMcpServerID: conv.ToNullUUID(tunnel.ID), Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "test-agent", backendSessionID: "backend-session", mu: sync.Mutex{}}
+	upstream := httptest.NewServer(gateway)
+	t.Cleanup(upstream.Close)
+	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnel.ID.String(), upstream.URL, time.Hour))
+	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": "execute_tool",
+		"arguments": map[string]any{
+			"name": fx.grantedProject + "." + fx.granted + "--ping", "arguments": map[string]any{},
+		},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.Code)
+	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
+	require.False(t, isError, text)
+	require.Contains(t, text, "pong through the tunnel")
+	headers, _ := tunnelForwards(gateway)
+	require.GreaterOrEqual(t, len(headers), 3)
+	for _, header := range headers {
+		token, err := jwt.Parse(header.Get(mcpauthz.Header), func(*jwt.Token) (any, error) { return publicKey, nil }, jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer("https://gram.example"), jwt.WithAudience(resource), jwt.WithExpirationRequired())
+		require.NoError(t, err)
+		claims, ok := token.Claims.(jwt.MapClaims)
+		require.True(t, ok)
+		require.Equal(t, urn.NewAgentSubject(fx.agent.ID).String(), claims["sub"])
+		require.NotContains(t, claims, "email")
+		require.NotContains(t, claims, "email_verified")
+		require.NotContains(t, claims, "user_id")
+	}
+}
+
 func TestServeAgentGateway_RejectsMissingAndForeignCredentials(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
@@ -252,4 +322,156 @@ func TestServeAgentGateway_QualifiesMemberSlugsByProject(t *testing.T) {
 	body := w.Body.String()
 	require.Contains(t, body, second.Slug+"."+fx.granted)
 	require.Contains(t, body, fx.grantedProject+"."+fx.granted)
+}
+
+// An org that pins its MCP traffic to a custom domain with an IP allowlist
+// enforces that allowlist at its own ingress, so reaching the same servers on
+// the platform hostname is exactly the bypass the lockdown exists to close. A
+// valid agent key is not an exemption from it.
+func TestServeAgentGateway_CustomDomainLockdownBlocksPlatformHost(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	domain, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         "agent-lockdown-" + uuid.NewString()[:8] + ".example.com",
+		IpAllowlist:    []string{"203.0.113.0/24"},
+	})
+	require.NoError(t, err)
+
+	_, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, makeInitializeBody())
+	requireAgentGatewayCode(t, err, oops.CodeForbidden)
+
+	// Arriving on the custom domain, the allowlist has already been applied at
+	// the edge, so the app must not block a second time.
+	domainCtx := customdomains.WithContext(t.Context(), &customdomains.Context{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         domain.Domain,
+		DomainID:       domain.ID,
+	})
+	w, err := serveAgentGatewayHTTPOn(t, domainCtx, ti, fx.agent.ID.String(), fx.token, makeInitializeBody())
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	// Another organization's domain proves only that organization's allowlist
+	// was applied, so it is not an exemption from this one's lockdown.
+	foreignCtx := customdomains.WithContext(t.Context(), &customdomains.Context{
+		OrganizationID: "org_" + uuid.NewString(),
+		Domain:         "foreign-" + uuid.NewString()[:8] + ".example.com",
+		DomainID:       uuid.New(),
+	})
+	_, err = serveAgentGatewayHTTPOn(t, foreignCtx, ti, fx.agent.ID.String(), fx.token, makeInitializeBody())
+	requireAgentGatewayCode(t, err, oops.CodeForbidden)
+}
+
+// A custom domain with no allowlist is the ordinary dual-serve case and must
+// not lock the platform host down.
+func TestServeAgentGateway_CustomDomainWithoutAllowlistStillServes(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         "agent-open-" + uuid.NewString()[:8] + ".example.com",
+		IpAllowlist:    []string{},
+	})
+	require.NoError(t, err)
+
+	w, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, makeInitializeBody())
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
+// A member marked private_only is served on the private ingress and nowhere
+// else. The gateway is mounted on both listeners, so membership has to be
+// matched against the surface the request actually arrived on — otherwise the
+// public gateway both advertises and dispatches to a server whose whole point
+// is that it is unreachable from there.
+func TestServeAgentGateway_ExcludesPrivateOnlyMembersOnPublicIngress(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	qualified := fx.grantedProject + "." + fx.granted
+
+	setMode := func(mode pgtype.Text) {
+		t.Helper()
+		rows, err := testrepo.New(ti.conn).SetMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMCPServerNetworkAccessModeFixtureParams{
+			NetworkAccessMode: mode,
+			ID:                mcpServerBySlug(t, ctx, ti, *authCtx.ProjectID, fx.granted),
+			ProjectID:         *authCtx.ProjectID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), rows)
+	}
+
+	listBody := makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      "list_servers",
+		"arguments": map[string]any{},
+	})
+
+	setMode(pgtype.Text{String: string(networkaccess.ModePrivateOnly), Valid: true})
+
+	w, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, listBody)
+	require.NoError(t, err)
+	require.NotContains(t, w.Body.String(), qualified, "a private_only member must not be listed on the public ingress")
+
+	// Not merely hidden: drill-down must miss identically, or the listing would
+	// be the only thing enforcing the mode.
+	w, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      "describe_server",
+		"arguments": map[string]any{"server": qualified},
+	}))
+	require.NoError(t, err)
+	require.Contains(t, w.Body.String(), "unknown server")
+
+	// dual serves both surfaces, so the same member reappears: the filter keys
+	// on the mode, not on the column merely being set.
+	setMode(pgtype.Text{String: string(networkaccess.ModeDual), Valid: true})
+
+	w, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, listBody)
+	require.NoError(t, err)
+	require.Contains(t, w.Body.String(), qualified)
+}
+
+// The inverse of the public case: on the private ingress a private_only member
+// is exactly what should be reachable.
+func TestServeAgentGateway_ListsPrivateOnlyMembersOnPrivateIngress(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	rows, err := testrepo.New(ti.conn).SetMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMCPServerNetworkAccessModeFixtureParams{
+		NetworkAccessMode: pgtype.Text{String: string(networkaccess.ModePrivateOnly), Valid: true},
+		ID:                mcpServerBySlug(t, ctx, ti, *authCtx.ProjectID, fx.granted),
+		ProjectID:         *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), rows)
+
+	privateCtx := requestorigin.WithContext(t.Context(), requestorigin.Origin{
+		Surface:          requestorigin.SurfacePrivateNetwork,
+		BaseURL:          "https://gram.internal.example",
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		NetworkIngressID: uuid.New(),
+		NetworkIdentity:  nil,
+	})
+	w, err := serveAgentGatewayHTTPOn(t, privateCtx, ti, fx.agent.ID.String(), fx.token, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      "list_servers",
+		"arguments": map[string]any{},
+	}))
+	require.NoError(t, err)
+	require.Contains(t, w.Body.String(), fx.grantedProject+"."+fx.granted)
+	// public_only members are the ones excluded here.
+	require.NotContains(t, w.Body.String(), fx.open)
 }

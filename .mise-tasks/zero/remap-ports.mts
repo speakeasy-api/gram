@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env node
 
 //MISE dir="{{ config_root }}"
 //MISE hide=true
@@ -44,22 +44,14 @@ import { checkPort } from "get-port-please";
  * Ports of services that are shared across ALL worktrees (see
  * compose.shared.yml). These must NOT be remapped: every worktree reaches the
  * single shared stack on the same default host port. Skipping a port here also
- * skips any env var that depends on it (e.g. PRESIDIO_ANALYZER_URL), so those
+ * skips any env var that depends on it (e.g. PUBSUB_EMULATOR_HOST), so those
  * keep their mise.toml defaults too.
  */
 const SHARED_PORT_ENV_VARS = new Set([
-  "PRESIDIO_PORT",
   "PUBSUB_EMULATOR_PORT",
-  "TEMPORAL_PORT",
-  "TEMPORAL_WEB_PORT",
-  // Temporal and the LGTM stack are shared, so every worktree must reach them
-  // on the same default host ports. TEMPORAL_ADDRESS and
-  // OTEL_EXPORTER_OTLP_ENDPOINT are derived from skipped ports and therefore
-  // keep their mise.toml defaults too.
-  "GRAFANA_PORT",
-  "TEMPO_HTTP_PORT",
-  "LOKI_HTTP_PORT",
-  "PROMETHEUS_PORT",
+  // The OTLP sink is shared, so every worktree must reach it on the
+  // same default host ports. OTEL_EXPORTER_OTLP_ENDPOINT is derived
+  // from these and therefore keeps its mise.toml default too.
   "OTLP_GRPC_PORT",
   "OTLP_HTTP_PORT",
 ]);

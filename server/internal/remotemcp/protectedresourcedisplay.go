@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -121,7 +122,7 @@ func (s *Service) claimProtectedResource(ctx context.Context, dbtx pgx.Tx, authC
 	}
 
 	if s.beforeClaim != nil {
-		s.beforeClaim(previousURL)
+		s.beforeClaim(dbtx.Conn().PgConn().PID(), previousURL)
 	}
 	claim := claimOn(resourceURL)
 	claimed := make([]resourceClient, 0, len(clients))
@@ -167,15 +168,25 @@ func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *s
 		return
 	}
 
+	projectID := *authCtx.ProjectID
 	doc, _, err := wellknown.DiscoverProtectedResourceMetadata(ctx, s.policy, resourceURL)
-	switch {
-	case err != nil:
+	if err != nil {
 		logger.WarnContext(ctx, "re-probe protected resource metadata", attr.SlogError(err))
-		return
-	case !doc.IdentifiesResource(resourceURL):
-		logger.WarnContext(ctx, "protected resource metadata names another resource", attr.SlogURLFull(resourceURL))
+		if typed, ok := errors.AsType[*wellknown.ProtectedResourceDiscoveryError](err); ok {
+			if err := recordProtectedResourceFetchError(ctx, s.db, projectID, authCtx.ActiveOrganizationID, resourceURL, typed); err != nil {
+				logger.ErrorContext(ctx, "record protected resource fetch error", attr.SlogError(err))
+			}
+		}
 		return
 	}
+	if err := recordProtectedResource(ctx, s.db, projectID, authCtx.ActiveOrganizationID, resourceURL, doc); err != nil {
+		logger.ErrorContext(ctx, "record protected resource", attr.SlogError(err))
+	}
+	if !doc.ValidForResource(resourceURL) {
+		logger.WarnContext(ctx, "protected resource metadata resource or location mismatch", attr.SlogURLFull(urls.DiagnosticURL(resourceURL)))
+		return
+	}
+	logScopeComparison(ctx, logger, projectID, serverID, resourceURL, doc, clients)
 	display := displayFromDocument(resourceURL, doc)
 
 	for _, rc := range clients {
@@ -237,8 +248,26 @@ func (s *Service) writeDiscoveredDisplay(ctx context.Context, authCtx *contextva
 
 // recordResourceDisplay writes display onto the client and audits the change.
 func (s *Service) recordResourceDisplay(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, existing remotesessionsrepo.GetRemoteSessionClientByIDRow, display resourceDisplay) error {
-	before := existing.RemoteSessionClient
-	updated, err := remotesessionsrepo.New(dbtx).UpdateRemoteSessionClientResourceDisplay(ctx, remotesessionsrepo.UpdateRemoteSessionClientResourceDisplayParams{
+	q := remotesessionsrepo.New(dbtx)
+	// This writer also moves resource_identifier, not just cosmetic fields.
+	// Serialize with first EMA binding creation, then compare the locked row.
+	before, err := q.LockEMAClient(ctx, remotesessionsrepo.LockEMAClientParams{ID: existing.RemoteSessionClient.ID, ProjectID: conv.ToNullUUID(*authCtx.ProjectID), OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID)})
+	if err != nil {
+		return fmt.Errorf("lock client resource identity: %w", err)
+	}
+	if before.ResourceIdentifier != existing.RemoteSessionClient.ResourceIdentifier {
+		return fmt.Errorf("client resource identity changed: %w", pgx.ErrNoRows)
+	}
+	if conv.FromPGTextOrEmpty[string](before.ResourceIdentifier) != display.identifier {
+		count, err := q.CountActiveEMABindingsForClient(ctx, remotesessionsrepo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(before.ID), ProjectID: before.ProjectID.UUID, OrganizationID: authCtx.ActiveOrganizationID})
+		if err != nil {
+			return fmt.Errorf("check resource identity bindings: %w", err)
+		}
+		if count > 0 {
+			return oops.E(oops.CodeConflict, nil, "explicitly unlink identity-chaining bindings before changing the client resource")
+		}
+	}
+	updated, err := q.UpdateRemoteSessionClientResourceDisplay(ctx, remotesessionsrepo.UpdateRemoteSessionClientResourceDisplayParams{
 		ResourceIdentifier:    conv.ToPGTextEmpty(display.identifier),
 		ResourceName:          display.name,
 		ResourceDocumentation: display.documentation,

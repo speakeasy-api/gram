@@ -163,6 +163,7 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 		McpServerID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		FinalRedirectURI:    descriptor.ProviderSetupCompletionURL,
+		ConsentURL:          "",
 		Resource:            descriptor.Resource,
 		AutoRefresh:         nil,
 		Authority: networkingress.Authority{
@@ -173,6 +174,8 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 			NamespaceKind:    "",
 			CustomDomainID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		},
+		BrowserCookieID: "",
+		BrowserHash:     "",
 	}, client)
 	if err != nil {
 		return platformmcp.ProviderSetupResult{}, fmt.Errorf("build reviewed provider authorization URL: %w", err)

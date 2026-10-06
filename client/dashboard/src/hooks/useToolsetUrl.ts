@@ -78,10 +78,33 @@ function useMcpEndpointUrl(endpoint: McpEndpoint | undefined): {
   return { mcpUrl, installPageUrl: `${mcpUrl}/install` };
 }
 
+// Slug registered on the Gram origin. Custom-domain endpoints share the slug
+// column but live in another namespace, so using one of those slugs on
+// getServerURL() 404s — including the first-party connect route.
+export function platformEndpointSlug(
+  endpoints: Array<Pick<McpEndpoint, "slug" | "customDomainId">>,
+): string | undefined {
+  return endpoints.find((endpoint) => endpoint.slug && !endpoint.customDomainId)
+    ?.slug;
+}
+
+// Gateway install pages are session-gated and the session cookie is host-only,
+// so they open on the Gram origin; ?domain=custom resolves a custom-domain slug there.
+export function gatewayInstallPageUrl(
+  endpoints: Array<Pick<McpEndpoint, "slug" | "customDomainId">>,
+): string | undefined {
+  const platformSlug = platformEndpointSlug(endpoints);
+  if (platformSlug) return `${getServerURL()}/mcp/${platformSlug}/install`;
+  const customSlug = endpoints.find((endpoint) => endpoint.slug)?.slug;
+  if (!customSlug) return undefined;
+  return `${getServerURL()}/mcp/${customSlug}/install?domain=custom`;
+}
+
 // useResolvedMcpServerUrl resolves the runtime MCP URL for an mcp_server from
-// its endpoints, preferring a custom-domain endpoint. While the custom domain
-// is still resolving it falls back to the Gram-hosted `/mcp/<slug>` path so
-// callers always have a usable URL once a slug exists.
+// its endpoints, preferring a custom-domain endpoint. While that domain is
+// unresolved, it falls back only to a separately registered platform endpoint;
+// custom-domain slugs are not valid on the Gram origin. First-party connect
+// still needs a platform slug directly — use platformEndpointSlug.
 export function useResolvedMcpServerUrl(
   endpoints: McpEndpoint[],
   isLoadingEndpoints: boolean,
@@ -90,15 +113,17 @@ export function useResolvedMcpServerUrl(
   installPageUrl: string | undefined;
   loading: boolean;
 } {
-  const endpoint = useMemo(
-    () => endpoints.find((e) => e.customDomainId) ?? endpoints[0],
+  const customEndpoint = useMemo(
+    () => endpoints.find((endpoint) => endpoint.customDomainId),
     [endpoints],
   );
-  const { mcpUrl: resolvedUrl } = useMcpEndpointUrl(endpoint);
-  const fallbackUrl = endpoint?.slug
-    ? `${getServerURL()}/mcp/${endpoint.slug}`
-    : undefined;
-  const mcpUrl = resolvedUrl ?? fallbackUrl;
+  const platformEndpoint = useMemo(
+    () => endpoints.find((endpoint) => !endpoint.customDomainId),
+    [endpoints],
+  );
+  const { mcpUrl: customUrl } = useMcpEndpointUrl(customEndpoint);
+  const { mcpUrl: platformUrl } = useMcpEndpointUrl(platformEndpoint);
+  const mcpUrl = customUrl ?? platformUrl;
 
   return {
     mcpUrl,

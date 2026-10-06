@@ -33,6 +33,16 @@ func MCPCheck(scope Scope, resourceID, projectID string) Check {
 	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal}
 }
 
+// AssistantCheck builds a Check for an assistant scope. resourceID is the
+// assistant ID for operations on one assistant, or the project ID for
+// project-level operations such as creating an assistant. projectID is injected
+// as a dimension, so a project-wide grant ({"resource_id":"*","project_id":P})
+// covers every assistant in P, while a grant naming one assistant
+// ({"resource_id":A}) covers only that assistant.
+func AssistantCheck(scope Scope, resourceID, projectID string) Check {
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal}
+}
+
 func expressionForCheck(check Check) GrantExpression {
 	exclusion, ok := ExclusionScopeFor(check.Scope)
 	if !ok {

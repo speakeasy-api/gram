@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -49,19 +50,41 @@ type sessionCacheDeadlineRecorder struct {
 	remaining chan time.Duration
 }
 
-func (r *sessionCacheDeadlineRecorder) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
-	if strings.HasPrefix(key, "session:metadata:") {
-		deadline, ok := ctx.Deadline()
-		if ok {
-			r.remaining <- time.Until(deadline)
-		} else {
-			r.remaining <- 0
-		}
+// record sends a session metadata write's remaining deadline, dropping it when
+// the channel is full: an update writes twice under one deadline.
+func (r *sessionCacheDeadlineRecorder) record(ctx context.Context, key string) {
+	if !strings.HasPrefix(key, "session:metadata:") {
+		return
 	}
+	var remaining time.Duration
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining = time.Until(deadline)
+	}
+	select {
+	case r.remaining <- remaining:
+	default:
+	}
+}
+
+func (r *sessionCacheDeadlineRecorder) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	r.record(ctx, key)
 	if err := r.Cache.Set(ctx, key, value, ttl); err != nil {
 		return fmt.Errorf("set cache: %w", err)
 	}
 	return nil
+}
+
+func (r *sessionCacheDeadlineRecorder) SetIfAbsent(ctx context.Context, key string, value any, ttl time.Duration) (bool, error) {
+	r.record(ctx, key)
+	conditional, ok := r.Cache.(cache.ConditionalCache)
+	if !ok {
+		return false, errors.New("underlying cache does not support conditional writes")
+	}
+	stored, err := conditional.SetIfAbsent(ctx, key, value, ttl)
+	if err != nil {
+		return false, fmt.Errorf("set if absent: %w", err)
+	}
+	return stored, nil
 }
 
 func (s ingestUserScopedShadowMCPScanner) ScanForEnforcement(_ context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
@@ -1081,6 +1104,7 @@ func TestIngest_NonUUIDSessionIDStampsResolvedChatID(t *testing.T) {
 	// The transcript lands under the mapped UUID.
 	persisted, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
+	require.Equal(t, sessionID, persisted.ExternalChatID.String)
 
 	var logs []telemetryrepo.TelemetryLog
 	require.Eventually(t, func() bool {
@@ -2141,7 +2165,7 @@ func TestIngest_ShadowMCPResolvesCodexMetaToolAgainstInventory(t *testing.T) {
 
 			sessionID := "codex-meta-inventory-" + tc.name
 			require.NoError(t, ti.service.cache.Set(ctx,
-				sessionMCPListCacheKey(sessionID), []MCPServerEntry{tc.entry}, sessionMCPListTTL))
+				sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), []MCPServerEntry{tc.entry}, sessionMCPListTTL))
 
 			toolName := "read_mcp_resource"
 			callID := "call-1"
@@ -2202,7 +2226,7 @@ func TestIngestStoresExplicitEmptyMCPInventory(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	sessionID := uuid.NewString()
 	stale := []MCPServerEntry{{Name: "stale-server", URL: "https://stale.example.test/mcp"}}
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), stale, sessionMCPListTTL))
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), stale, sessionMCPListTTL))
 
 	payload := canonicalIngestPayload("claude", "mcp.inventory", sessionID)
 	payload.Data = &gen.HookIngestData{
@@ -2300,7 +2324,7 @@ func TestIngestStoresCollectedEmptyMCPInventory(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	sessionID := uuid.NewString()
 	stale := []MCPServerEntry{{Name: "stale-server", URL: "https://stale.example.test/mcp"}}
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), stale, sessionMCPListTTL))
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), stale, sessionMCPListTTL))
 
 	payload := canonicalIngestPayload("claude", "session.updated", sessionID)
 	payload.Data = &gen.HookIngestData{McpInventoryCollected: new(true)}

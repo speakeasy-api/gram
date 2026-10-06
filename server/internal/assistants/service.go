@@ -414,6 +414,10 @@ type ServiceCore struct {
 	dashboardIngestor DashboardIngestor
 	featureFlags      feature.Provider
 	turnClassified    metric.Int64Counter
+	// outboundOrigin is the pinned origin of the MCP auth CIMD client_id and
+	// redirect_uri. Authorization servers store both, so it stays fixed when
+	// the server URL moves. Set by SetOutboundCallbackOrigin.
+	outboundOrigin *url.URL
 }
 
 func NewServiceCore(
@@ -464,6 +468,7 @@ func NewServiceCore(
 		dashboardIngestor: nil,
 		featureFlags:      nil,
 		turnClassified:    turnClassified,
+		outboundOrigin:    nil,
 	}
 }
 
@@ -510,6 +515,27 @@ func (s *ServiceCore) SetFeatureProvider(p feature.Provider) {
 // from served documents.
 func (s *ServiceCore) SetSiteURL(u *url.URL) {
 	s.siteURL = u
+}
+
+// SetOutboundCallbackOrigin pins the MCP auth CIMD client_id and redirect_uri
+// to origin instead of the server URL. A nil origin keeps the server URL.
+func (s *ServiceCore) SetOutboundCallbackOrigin(origin *url.URL) {
+	if origin != nil {
+		s.outboundOrigin = origin
+	}
+}
+
+// mcpAuthOrigin is the origin of the MCP auth CIMD client_id and redirect_uri.
+func (s *ServiceCore) mcpAuthOrigin() *url.URL {
+	if s.outboundOrigin != nil {
+		return s.outboundOrigin
+	}
+	return s.serverURL
+}
+
+// mcpAuthRedirectURI is the redirect_uri of an assistant's MCP auth client.
+func (s *ServiceCore) mcpAuthRedirectURI(assistantID uuid.UUID) string {
+	return s.mcpAuthOrigin().JoinPath("rpc", "assistantMcpAuth", assistantID.String(), "oauth", "callback").String()
 }
 
 // resolveAssistantContextWindow returns the smallest context_length the gram
@@ -856,6 +882,37 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 	return out, nil
 }
 
+// AttachmentTargetIDs resolves the toolset and MCP server slugs a create or
+// update would attach to their IDs, so the caller can authorize them before
+// the write. Unknown slugs are skipped; the write itself rejects them.
+func (s *ServiceCore) AttachmentTargetIDs(ctx context.Context, projectID uuid.UUID, toolsets []*types.AssistantToolsetRef, mcpServers []*types.AssistantMCPServerRef) ([]uuid.UUID, error) {
+	toolsetSlugs := make([]string, 0, len(toolsets))
+	for _, ref := range toolsets {
+		if ref != nil {
+			toolsetSlugs = append(toolsetSlugs, ref.ToolsetSlug)
+		}
+	}
+	serverSlugs := make([]string, 0, len(mcpServers))
+	for _, ref := range mcpServers {
+		if ref != nil {
+			serverSlugs = append(serverSlugs, ref.McpServerSlug)
+		}
+	}
+	if len(toolsetSlugs) == 0 && len(serverSlugs) == 0 {
+		return nil, nil
+	}
+
+	ids, err := assistantrepo.New(s.db).ListAttachmentTargetIDs(ctx, assistantrepo.ListAttachmentTargetIDsParams{
+		ProjectID:      projectID,
+		ToolsetSlugs:   toolsetSlugs,
+		McpServerSlugs: serverSlugs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve assistant attachment targets: %w", err)
+	}
+	return ids, nil
+}
+
 // resolvedMcpServerInsert captures the FK values we need to write one row in
 // assistant_mcp_servers for a single (mcp_server_slug, environment_slug?) ref.
 type resolvedMcpServerInsert struct {
@@ -1122,6 +1179,19 @@ func writeAssistantToolsets(
 		ProjectID:  projectID,
 	}); err != nil {
 		return fmt.Errorf("enable mcp for assistant toolsets: %w", err)
+	}
+	// A hosted MCP wrapper mirrors the toolset's enabled state. Assistant
+	// attachment can enable the toolset outside the toolset update API.
+	if _, err := tx.Exec(ctx, `UPDATE mcp_servers AS server
+		SET visibility = CASE WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END,
+			updated_at = clock_timestamp()
+		FROM toolsets AS toolset
+		WHERE server.id = toolset.id AND server.toolset_id = toolset.id
+			AND server.project_id = $2 AND toolset.project_id = $2
+			AND toolset.id = ANY($1::uuid[]) AND toolset.mcp_enabled IS TRUE
+			AND toolset.deleted IS FALSE AND server.deleted IS FALSE
+			AND server.visibility = 'disabled'`, toolsetIDs, projectID); err != nil {
+		return fmt.Errorf("enable hosted mcp wrappers for assistant toolsets: %w", err)
 	}
 	return nil
 }

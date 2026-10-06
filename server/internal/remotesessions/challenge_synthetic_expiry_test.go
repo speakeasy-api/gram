@@ -182,6 +182,10 @@ type syntheticExpiryEnv struct {
 	// issuerMetadata and issuerMetadataReader are set by withIssuerMetadataRefresh.
 	issuerMetadata       *remotesessions.IssuerMetadataRefresher
 	issuerMetadataReader *sdkmetric.ManualReader
+	// registrationTelemetryReader is set by withRegistrationTelemetry and reads
+	// the meter the manager (and the rotator it builds) records registration
+	// failures on.
+	registrationTelemetryReader *sdkmetric.ManualReader
 }
 
 // callback drives HandleRemoteLoginCallback with the given query string, as
@@ -200,6 +204,7 @@ func (env syntheticExpiryEnv) callback(t *testing.T, rawQuery string) (*httptest
 // syntheticLoginOptions shapes the issuer, client, and callback of a
 // synthetic login; the zero value is the plain AIS-115 fixture.
 type syntheticLoginOptions struct {
+	legacyCallbackURL          bool
 	issuerScopes               []string
 	clientScope                []string
 	scopeOverride              []string
@@ -218,6 +223,9 @@ type syntheticLoginOptions struct {
 	idTokenIssuer *idTokenIssuer
 	// wrapVerifier, when set, decorates the verifier so a test can act mid-verification.
 	wrapVerifier func(remotesessions.IDTokenVerifier) remotesessions.IDTokenVerifier
+	// registrationTelemetry gives the manager a readable meter so a test can
+	// assert on recorded client-registration failures.
+	registrationTelemetry bool
 	// keyCache, when set, backs the key resolver so a test can seed key-set state.
 	keyCache jwks.Cache
 	// signingAlgs is the issuer row's id_token_signing_alg_values_supported.
@@ -240,6 +248,12 @@ type syntheticLoginOptions struct {
 	tunnels *tunnelrouting.HTTPClient
 	// maxDBConns constrains the fixture pool for connection-ownership tests.
 	maxDBConns int32
+	// serverURL is the manager's server URL; empty uses http://localhost.
+	serverURL string
+	// callbackOrigins, when set, replaces the manager's default origins.
+	callbackOrigins *remotesessions.CallbackOrigins
+	// clientCallbackBaseURL is the client's recorded callback origin; empty stores NULL.
+	clientCallbackBaseURL string
 }
 
 type syntheticLoginOption func(*syntheticLoginOptions)
@@ -250,6 +264,10 @@ func withTunnels(tunnels *tunnelrouting.HTTPClient) syntheticLoginOption {
 
 func withMaxDBConns(maxConns int32) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.maxDBConns = maxConns }
+}
+
+func withRegistrationTelemetry() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.registrationTelemetry = true }
 }
 
 func withIssuerScopes(scopes ...string) syntheticLoginOption {
@@ -402,6 +420,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	var refreshOptions []remotesessions.RefreshOption
 	var issuerMetadata *remotesessions.IssuerMetadataRefresher
 	var issuerMetadataReader *sdkmetric.ManualReader
+	if options.callbackOrigins != nil {
+		managerOptions = append(managerOptions, remotesessions.WithCallbackOrigins(*options.callbackOrigins))
+	}
 	if options.issuerMetadataRefresh {
 		issuerMetadataReader = sdkmetric.NewManualReader()
 		issuerMetadata = remotesessions.NewIssuerMetadataRefresher(logger, sdkmetric.NewMeterProvider(sdkmetric.WithReader(issuerMetadataReader)), ti.conn, policy, options.tunnels, audit.NewLogger())
@@ -432,16 +453,22 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		managerOptions = append(managerOptions, remotesessions.WithSessionEnricher(enricher))
 		refreshOptions = append(refreshOptions, remotesessions.WithRefreshSessionEnricher(enricher))
 	}
+	managerMeterProvider := testenv.NewMeterProvider(t)
+	var registrationTelemetryReader *sdkmetric.ManualReader
+	if options.registrationTelemetry {
+		registrationTelemetryReader = sdkmetric.NewManualReader()
+		managerMeterProvider = sdkmetric.NewMeterProvider(sdkmetric.WithReader(registrationTelemetryReader))
+	}
 	mgr := remotesessions.NewChallengeManager(
 		logger,
 		testenv.NewTracerProvider(t),
-		testenv.NewMeterProvider(t),
+		managerMeterProvider,
 		ti.conn,
 		enc,
 		policy,
 		options.tunnels,
 		cache.NewRedisCacheAdapter(redisClient),
-		mustURL(t, "http://localhost"),
+		mustURL(t, conv.Default(options.serverURL, "http://localhost")),
 		managerOptions...,
 	)
 	refresher := remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), ti.conn, enc, policy, options.tunnels, cache.NewRedisCacheAdapter(redisClient), refreshOptions...)
@@ -507,6 +534,8 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		TokenEndpointAuthMethod: conv.ToPGText("none"),
 		Scope:                   options.clientScope,
+		LegacyCallbackUrl:       options.legacyCallbackURL,
+		CallbackBaseUrl:         conv.ToPGTextEmpty(options.clientCallbackBaseURL),
 	})
 	require.NoError(t, err)
 
@@ -572,6 +601,8 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 
 		issuerMetadata:       issuerMetadata,
 		issuerMetadataReader: issuerMetadataReader,
+
+		registrationTelemetryReader: registrationTelemetryReader,
 	}
 	cbW, callbackErr := env.callback(t, cbQuery.Encode())
 

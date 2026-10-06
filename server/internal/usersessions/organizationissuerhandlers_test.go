@@ -3,7 +3,6 @@ package usersessions_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -23,6 +22,7 @@ import (
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -301,7 +301,7 @@ func TestOrganizationUserSessionIssuerTrustedPairValidation(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	deletedClientID := seedTrustedRemoteSessionClientTarget(t, ctx, ti, remoteIssuerID, "trusted-validation-deleted-client", uuid.NullUUID{}, organizationID, []string{"openid", "email"})
-	deletedClientRows, err := remotesessionsrepo.New(ti.conn).SoftDeleteRemoteSessionClientFixture(ctx, deletedClientID)
+	deletedClientRows, err := testrepo.New(ti.conn).SoftDeleteRemoteSessionClientFixture(ctx, testrepo.SoftDeleteRemoteSessionClientFixtureParams{ID: deletedClientID, OrganizationID: organizationID})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, deletedClientRows)
 	deletedClientIDString := deletedClientID.String()
@@ -316,7 +316,7 @@ func TestOrganizationUserSessionIssuerTrustedPairValidation(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	deletedIssuerID := seedTrustedRemoteSessionIssuerTarget(t, ctx, ti, "trusted-validation-deleted-issuer", uuid.NullUUID{}, organizationID)
-	deletedIssuerRows, err := remotesessionsrepo.New(ti.conn).SoftDeleteRemoteSessionIssuerFixture(ctx, deletedIssuerID)
+	deletedIssuerRows, err := testrepo.New(ti.conn).SoftDeleteRemoteSessionIssuerFixture(ctx, testrepo.SoftDeleteRemoteSessionIssuerFixtureParams{ID: deletedIssuerID, OrganizationID: organizationID})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, deletedIssuerRows)
 	deletedIssuerIDString := deletedIssuerID.String()
@@ -421,20 +421,14 @@ func TestOrganizationUserSessionIssuerUpdateSerializesWithOwnerBinding(t *testin
 	require.NoError(t, usersessionsrepo.New(tx).LockUserSessionIssuerForOwnerBinding(ctx, issuerID))
 
 	mode := "interactive"
-	blockedCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
-	_, err = ti.service.UpdateIssuer(blockedCtx, &orggen.UpdateIssuerPayload{
-		ID:                 created.ID,
-		AuthnChallengeMode: &mode,
-	})
-	cancel()
-	require.ErrorIs(t, err, context.DeadlineExceeded, "update must wait for the owner-binding lock")
-
+	done := make(chan error, 1)
+	go func() {
+		_, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{ID: created.ID, AuthnChallengeMode: &mode})
+		done <- err
+	}()
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), 1)
 	require.NoError(t, tx.Rollback(ctx))
-	_, err = ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
-		ID:                 created.ID,
-		AuthnChallengeMode: &mode,
-	})
-	require.NoError(t, err, "update must complete after the owner-binding lock is released")
+	require.NoError(t, <-done, "update must complete after the owner-binding lock is released")
 }
 
 func TestProjectIssuerMutationsRejectOrganizationOwnedIssuer(t *testing.T) {

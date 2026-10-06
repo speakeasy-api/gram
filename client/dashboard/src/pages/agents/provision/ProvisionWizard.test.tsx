@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   mcpServers: vi.fn(),
   toolsets: vi.fn(),
   fetch: vi.fn(),
+  projectId: "project_one",
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -31,7 +32,7 @@ vi.mock("@/contexts/Auth", () => ({
     projects: [{ id: "project_one", name: "Project one", slug: "project-one" }],
   }),
   useProject: () => ({
-    id: "project_one",
+    id: mocks.projectId,
     name: "Project one",
     slug: "project-one",
   }),
@@ -106,6 +107,7 @@ async function reachCredentialStep() {
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.projectId = "project_one";
   vi.stubGlobal("fetch", mocks.fetch);
   mocks.mcpServers.mockResolvedValue({
     mcpServers: [
@@ -227,4 +229,64 @@ describe("Provisioning a new agent", () => {
       ).toBeTruthy();
     },
   );
+});
+
+describe("Agent scope", () => {
+  it("defaults to the active project and binds the agent to it", async () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Project bound" },
+    });
+    // Checked before the step is left behind: the control only exists here.
+    expect(
+      screen.getByRole("radio", { name: /Project/ }).getAttribute("data-state"),
+    ).toBe("checked");
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+
+    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
+    const form = mocks.createAgent.mock.calls[0]![0].createAgentForm;
+    expect(form.projectId).toBe("project_one");
+  });
+
+  it("sends no project binding when organization scope is chosen", async () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Org wide" },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: /Organization/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+
+    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
+    const form = mocks.createAgent.mock.calls[0]![0].createAgentForm;
+    // Omitted rather than blank: the server reads a missing binding as
+    // organization-wide.
+    expect("projectId" in form).toBe(false);
+  });
+
+  it("withholds project scope until a project resolves", () => {
+    // useProject yields an empty id before a project resolves. Binding to it
+    // would send an empty id, which the server reads as "omitted" — silently
+    // creating an organization-wide agent after the user asked for a project
+    // one.
+    mocks.projectId = "";
+    setup();
+
+    const projectOption = screen.getByRole("radio", { name: /Project/ });
+    expect(projectOption.getAttribute("data-disabled")).not.toBeNull();
+    expect(
+      screen
+        .getByRole("radio", { name: /Organization/ })
+        .getAttribute("data-state"),
+    ).toBe("checked");
+  });
 });

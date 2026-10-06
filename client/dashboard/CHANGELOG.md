@@ -1,5 +1,211 @@
 # dashboard
 
+## 0.131.0
+
+### Minor Changes
+
+- cf3bdc7: Add a Findings page to each identity, listing the person's risk findings with filters by category and rule. Clicking a category or rule on the Security tab opens it filtered. An identity's Open in Risk Events link now filters on every identifier the person reports. Without chat:read, a locked match now says which permission it needs.
+
+### Patch Changes
+
+- 1cad72d: Add ChatGPT Desktop as an MCP client on the hosted install page and in
+  `gram install chatgpt-desktop`, with Developer mode and custom connector steps
+  matched to the server's authentication.
+- e97ebb8: Pin the OAuth redirect URI and client identity URLs that remote session clients register with upstream providers. `GRAM_OUTBOUND_CALLBACK_URL` fixes the origin for existing clients so a server URL change cannot move them, and `GRAM_REGISTRATION_CALLBACK_URL` records a new origin on organization-owned clients created from now on. Remote session clients now report their `callback_url`, and `remoteSessionClients.getNewClientCallbackUrl` returns the redirect URI a new client will register; the dashboard shows these instead of deriving the URL from the server URL.
+- c52cc0b: Keep project favorites when a logged-out visit is sent to the login page. The session-expiry cleanup now snapshots theme and favorites after auth confirms there is no session, instead of deleting them because that document was never classified.
+- 2878e60: Fix Slack previews of platform links showing a broken Speakeasy image. The preview now uses the opaque sticker logo, which Slack can decode and which stays visible in dark mode.
+
+## 0.130.0
+
+### Minor Changes
+
+- cd0189b: The Access Hub is now an organization-wide page at `/<org>/access-hub`, listed in the organization sidebar under Secure for anyone holding `workload:read` or `workload:write`. Old project URLs, including a trusted platform's page, redirect there. The `workloadIdentities` API no longer needs a project when called from a dashboard session, which reads and writes the organization tier; API-key callers still name a project, and `project_scoped` requires one.
+- a2f90fc: Allowed access in the Access Hub can now be edited. Each machine on a platform's page has an Edit action that opens the access form prefilled, where you can change the machine's label, tags and assigned agent. The subject and its match kind stay fixed once access is allowed. Reassigning the agent also applies to the same subject's access at the other tier, since that assignment is shared. Each edit is recorded in the audit log with the machine's state before and after.
+- 53ed86a: A trusted platform in the Access Hub can now be edited. The platform page has an Edit action that opens the registration form prefilled, where you can change the platform's name, description, tags and JWKS URI. The issuer URL and the wildcard admission setting stay fixed once a platform is registered. Each edit is recorded in the audit log with the platform's state before and after.
+- 1f7f43a: Findings from MCP tool calls can now be revealed. Findings recorded before this change show "Evidence not stored" instead of an error.
+- d4567e4: Cross App Access readiness now reflects what identity chaining exchanges observe. A confirmed server reads Verified once an exchange succeeds, returns to Not confirmed when Okta rejects the target, and reads Not working when Okta refuses the scopes or the agent app's authentication, or the server's authorization server refuses Okta's assertion. A confirmation whose issuer URL does not match the server's authorization server now reads Not working until the mismatch is corrected, including existing confirmations and rows with an earlier successful exchange. Result changes are recorded in the audit log as okta-resource-connection:observe, and confirming again clears an earlier result.
+
+### Patch Changes
+
+- a566fab: The Access Hub reads more plainly. The page opens with a one-line summary of what it is for, and each platform card shows only its name, description (or issuer URL) and tags. On a platform's page the issuer and keys URLs sit on labeled lines of their own, machine tags get their own column, and the machines table shows ten rows a page. Allowing a machine is now "Allow access", withdrawing one is now "Remove", and "Stop trusting" moves out of the header into a danger-zone section below the machines.
+- 8d48ab4: The IDP and SSO page now has an Identity providers tab in place of Enterprise Managed Auth, since providers such as Okta are connected first and Enterprise Managed Auth is one use of the connection. On the Okta page the Setup tab keeps only the connection checklist, and the Enterprise Managed Auth steps (register the agent, connect it to servers) moved to the Cross App Access tab above the server readiness table.
+- b74ea45: Organization administrators with an Okta connection can list MCP servers suggested from their synced Okta applications, based on the catalog Okta mapping, and dismiss or restore each suggestion. Suggestions flag app instances whose sign-on mode does not support Cross App Access and mark servers the organization already runs. Gated by the okta-connections rollout.
+- d66209e: Suggest catalog MCP servers from the Okta applications snapshot on the Okta Applications tab, with add, dismiss, and restore actions.
+- ce4f3bd: Remove the redundant "Skip for now" button from the catalog install's Guardrails step; switching the recommended policy off and adding the server already installs it without one.
+- d8f2d7b: Choosing scopes for a manually configured identity provider client is now a multi-select. It lists the scopes the server and provider advertise, and a scope that is not listed can still be typed in and added.
+- 4ee99fd: Organizations that staff have enabled for Tailscale private access can use it on any plan, instead of the dashboard warning that private access is no longer enabled after a move off Enterprise. Enterprise organizations without the feature are now pointed to support.
+- dfe104d: Onboarding use cases and playbooks in the admin dashboard. Staff create use cases and playbooks on a new Use Cases & Playbooks page: a playbook is ordered top-level steps that belong to a use case, shared and possibly its default, or to one customer, never both, and every playbook is checked for prerequisites. An organization's Overview page shows its assigned playbook and links to the page scoped to that organization, where staff write it a playbook of its own or assign it a shared one, refused when the recorded stack does not support a step. A shared playbook is a template: assigning it gives the organization a copy of its own, so later edits to the shared playbook never reach an organization already on it. The onboarding survey assigns a use case's default playbook and the customer setup wizard walks the assigned one. The preset selection editor and its Admin API are gone, the Admin MCP diagnostics tool reports the assigned playbook instead, and the Admin MCP's onboarding write proposal assigns a playbook, by ID or by use case, in place of setting task visibility. Enable it with the `assign_organization_onboarding_playbook` write operation.
+- a49b065: Onboarding stack and step catalog in the admin dashboard. Staff record an organization's stack, meaning the vendors it uses with the organizational plan it is on for each and its device management, on the organization's Overview page; the vendor, plan and product lists come from the support matrix catalog, which now carries plans and files every product under its real vendor. Setup steps can nest one level under a group, whose status follows its cards: observability in other platforms and MCP distribution become groups over their cards. The catalog is mirrored into the database at start-up and shown read-only on a new Steps page, where a prerequisite links to its own row.
+
+## 0.129.0
+
+### Minor Changes
+
+- 8adb1c6: Show and edit a remote identity provider's scope override, warn wherever a client's scopes are edited that the override makes them inert, and let platform admins see, toggle and migrate remote session clients that run in compatibility mode with the legacy callback URL.
+- 0119db3: Add an Organization values card to the Device Agent Setup tab with copy buttons for `org_slug` and `org_token`, so admins can get both without opening a platform walkthrough. Once an agent token exists, the button to mint one now reads "Re-generate token" and creates an additional token instead of rotating: tokens already deployed to devices keep working until they are revoked under Settings → API Keys.
+- c5bf7c0: Add a Ranked chart type to Explore: whole-window results drawn as the horizontal bars used on MCP & Tools, one bar per group, largest first, ranked by the ordered measure.
+- 1afaeeb: Risk Events and Watchdog show findings from MCP tool calls with their server, tool, outcome and user instead of an untitled session.
+- c52d7b8: Let admins configure MCP-scoped guardrails where servers are created and edited: an opt-in Guardrails section when adding a remote or tunneled server, a skippable Guardrails step in the catalog install, and a Guardrails tab on the MCP server page listing scoped and inherited policies and recent risk events. Gated behind the MCP-scoped policies flag.
+- e0aa320: MCP-scoped risk policies can now target Gram's built-in Platform MCP toolsets and their tools.
+- b0e113c: Add an MCP server filter with per-server finding counts to Risk Events and Watchdog, a Server group-by mode and server/tool line on Watchdog signals, and show the tool and enforcement outcome on Risk Events rows. Gated behind the MCP-scoped policies flag, except the MCP server filter now being pinned on Risk Events.
+
+### Patch Changes
+
+- 053f3be: The Access Hub's forms and lists read more easily. Registering a platform and allowing a machine now open in a side pane instead of a dialog, and the machine pane admits under the platform whose page opened it rather than asking for an issuer. Both lists gain a full-width search in place of tag buttons, so a platform or machine is found by typing part of its name, URL, subject, label, tag or agent. Withdrawing a machine or stopping trust in a platform now asks the operator to type the subject or issuer URL first, and says what the action does and does not revoke. The platform tab is renamed Custom, the organization badge and Admitted by column are gone now that platforms are organization-wide, and a machine's label leads its row.
+- 3aec030: MCP server settings no longer show an attached identity provider as missing when the platform catalog is large. The identity provider picker now searches on the server and loads more on demand, and the issuer listing accepts `search` and `upstream_host` filters.
+- 4d02f1b: The Identity provider menu on remote MCP server settings is searchable and lists each tier (project, organization, platform) with its own "more" row, so every provider can be picked however large the platform catalog grows. The Remote Identity Providers page lists the organization's own providers in full and pages the platform catalog separately. Both issuer listings accept a `tier` filter.
+- 053f3be: Registering a workload issuer no longer asks whether wildcard admission is allowed. The contract defaults it to on, and the admit dialog states the consequence where a wildcard is actually written instead — naming the subjects the rule admits and the agent they would inherit. Whether a wildcard is sound is a judgement about the operator's own platform, and it is better served at the point of decision than by a setup-time question asked before they have a rule in mind. The issuer field remains in the API, where clearing it still makes every wildcard rule under that issuer inert immediately.
+- 68b61fb: Organization admins can save the device agent fleet configuration again after a Speakeasy administrator has set the update channel or blocked versions. Saving previously failed with "update_channel can only be set by a platform administrator".
+- 053f3be: Admitting a workload is now a single field. Neither dialog asks about wildcards: registering an issuer no longer offers a permission switch, and admitting a subject no longer offers a Match control. A subject ending in `*` is a wildcard rule, anything else is exact, and the dialog states what a wildcard would admit — which subjects, and the agent each would inherit — at the point it is written. Lossless, because an exact subject may never contain a `*`, so there is no value this could misread. Where an issuer has wildcard admission turned off, a rule stating one is refused with the reason under the field.
+- 7e67148: MCP-scoped risk policies now support flag and block actions only. The policy editor prevents unsupported actions before save.
+- bebb567: Private network cleanup keeps retrying through longer outages, and shows "Cleanup blocked" with next steps when Tailscale rejects the saved OAuth client instead of staying on "Cleaning up" indefinitely.
+- e8e8f96: Gram now works end to end on extra platform hosts such as `ai.speakeasy.com`. Platform MCP advertises, issues, and accepts tokens for the host it is used on. The MCP install page login, the Stripe billing portal, and Polar checkout return to that host. Tunneled MCP agent setup shows the real tunnel gateway, the explore demo link stays on the current host, and the custom domain CNAME fallback points at the right target.
+- b385d01: More of Gram now follows the platform host you use it on, such as `ai.speakeasy.com`. Stripe Checkout returns you to the host you started on. Slack unfurls dashboard links on every platform host, and new Slack apps register all first-party hosts as unfurl domains. Agent setup copy (OTLP endpoints and domain allowlists) names the host you are on, and allowlists keep `app.getgram.ai` where plugin hooks and the device agent still send.
+- 61161fd: Risk Events now keeps showing findings from disabled policies, marked inactive, so turning a policy off no longer empties the page. Findings from MCP-scoped policies now always appear, including locally.
+- a9660cf: Add Observability plugin credential rotation. Organization admins can mint a replacement hooks-scoped ingest key from the Plugins page, choosing whether the previous key is revoked immediately or kept valid for a 7-day grace window, without re-downloading the plugin or deleting keys on the Keys page. Rotation republishes the marketplace's observability plugin when the organization is eligible, and leaves consumer MCP keys untouched.
+- 5e3fd6b: Remote MCP servers that clients connect to directly can be saved without first passing the connectivity check, since those servers are often unreachable from our infrastructure.
+- 053f3be: Allowed machines can carry tags. The Allow a machine pane takes optional tags, stored on the admission with the same limits as a trusted platform's tags, and the platform page shows them under each machine. Searching and filtering by tag will follow.
+- 053f3be: Trusted platforms in the Access Hub can carry a description. Registering a platform takes an optional description of up to 500 characters, and each platform card shows it in place of the issuer URL, which moves down beside the signing keys. A URL rarely tells an administrator which platform they are looking at; a sentence in their own words does.
+
+## 0.128.0
+
+### Minor Changes
+
+- ecf54b8: Choose when a Slack assistant replies: only when @-mentioned, when @-mentioned and then for the rest of that thread, or to any message in its channels. Slack setup asks this in plain terms, and it can be changed later from the chat or the trigger settings. An assistant following a thread can step out once it is no longer needed, and an @-mention brings it back caught up on what it missed. It never replies to its own messages, and when it starts a new thread it can keep the replies in its current conversation.
+- 7181521: A grant made directly to a person for a specific resource now outranks a block they inherit from a role or from everyone. Administrators can block an MCP server for a role, including a directory-synced one, and still give individual members of that role access to it by name without changing role membership. A person's own blocks still apply, grants covering every resource do not outrank blocks, and agent grants never outrank blocks. The rule applies to every blockable permission (the organization, projects, MCP servers, environments, skills, plugins, and workloads). `access.listGrants` now reports each scope's `direct_selectors`, and the MCP server access page shows who keeps access through their own rules before a role or everyone is removed from a server.
+- 679c03b: Redesign how a remote MCP server's User Identity client is shown and changed. A connected client reads as "Connected" with how many people are signed in and its scopes, plus an Advanced link to the client. Clearing it offers an existing client, Auto-Configure or Manual credentials. Auto-Configure can choose between CIMD and DCR when the provider supports both, Manual can set scopes, and replacing a client asks first because everyone has to sign in again.
+
+### Patch Changes
+
+- 35621c4: Set the command palette's intent-resolved verbs apart under an "Actions" heading, and run reversible ones on the first Enter with an Undo in the toast. Only actions that cannot be undone, such as publishing the plugin marketplace, still ask for a second Enter.
+- 679c03b: Add `remoteSessions.count`, which returns how many distinct people hold a live session through one remote session client. The dashboard's User Identity row will use it to show how many people are signed in.
+- 0fb637f: Show members who hold a role through a directory role mapping on the Team page, the Roles & Permissions page, role filters, and role member counts. Members now report mapped roles in a separate `directory_role_ids` field, and the Team page marks them as coming from the directory because they cannot be removed there.
+- 7fef8b5: Enable hook fail-open during control-plane outages for newly created organizations. Existing organization settings and explicit fail-closed choices are preserved.
+- 679c03b: `remoteSessions.commitServerIdentityConfiguration` accepts an optional `registration_method` in auto client mode. `cimd`, the default, prefers a Client ID Metadata Document and falls back to dynamic client registration; `dcr` always registers dynamically.
+- f143e71: An MCP-scoped risk policy no longer requires at least one tool per selected server. An empty tool list (or unchecking every tool in the dashboard scope picker) is now normalized to "every tool on this server," matching what happens when no tool selection is made at all, instead of being rejected or silently dropping the server from the policy's scope.
+- f143e71: Fix the MCP scope picker losing focus on the server a user just deselected, jumping to whichever server happens to be first in the list instead. This made it look like individual tools could no longer be picked after unchecking a server with many tools.
+- 0be1824: Okta setup checklist: order the public-key steps the way the Okta console requires (save the key URL first, then switch client authentication), list the required API scopes and admin roles one per line, submit the client ID from its checklist step instead of a separate section, and make the group headings easier to see.
+- 2aa7341: Use a tunneled server's saved resource identifier as the audience of signed caller assertions. When the setting is empty, use `tunneled-mcp-server:<ID>`. Preserve trailing slashes and escaped characters when saving the identifier, and explain the audience setting in the dashboard. Show the organization ID that caller assertions carry in `organization_id` on tunneled MCP server settings.
+
+## 0.127.0
+
+### Minor Changes
+
+- 7f9ba34: Show observed public versus private traffic in an MCP server's or gateway's Network access panel, so admins can check which route clients still use before switching to private only or back to public.
+  
+  Each resolved inbound MCP request to a hosted, remote, tunneled or stored gateway endpoint now writes one `mcp_network_request` telemetry log carrying the server id and network surface. Rows carry no tool URN, so they never count as tool calls. A new `mcp_network_traffic_hourly_summaries` table keeps hourly totals for 90 days, and `telemetry.getMcpNetworkTraffic` returns zero-filled hourly points for a 24h or 7d window plus the last time each route was seen. Counts only cover requests observed while telemetry logs are enabled, and the panel says so.
+
+### Patch Changes
+
+- 5d1d293: The Inspect Connect button no longer opens a first-party route that returns not found. Connect is offered only for issuer-gated servers on a Gram-hosted address; other servers point at authentication settings.
+
+## 0.126.0
+
+### Minor Changes
+
+- 8636862: Add the Workload Identities page: trust an external issuer, admit the subjects it asserts, and assign the agent each admitted workload inherits its policy from. Admitting a subject and assigning its agent happen in one action, and withdrawing an issuer withdraws the subjects admitted under it. Wildcard admission is offered only where the issuer permits it, and a rule that would match nothing — a `*` in an exact subject, a missing or misplaced terminator, a stem ending in whitespace — is flagged next to the field in the destructive color rather than refused on submit. Issuer and JWKS URLs are checked against the server's https and fully-qualified-domain rules before submit. Only active agents are offered, since a suspended or revoked one contributes no policy, and an organization whose agents are all inactive is told to reactivate one rather than create another. The page stays usable where agent management is not rolled out: the agent lookup returns `404` there, so listing and withdrawing still work and only the admit action is disabled, with the reason. `workload:read` to view, `workload:write` to change.
+- d621b76: The setup board now has a single "Set up identity provider" task with three steps: verify a domain, connect single sign-on, and sync the directory. The separate "Verify your domain" task, and the legacy "Connect identity provider" and "Set up directory sync" tasks, are gone, so nothing on the board is blocked behind another identity task. The security onboarding preset and the demo organization show the combined task. The single sign-on step stays disabled until a domain is verified, and a blocked portal popup now shows an error on every step.
+- 3552233: Allow risk policies to target selected MCP servers, gateways, and tools while restricting those policies to tool traffic.
+- e251e57: Add User, Agent, and No Identity modes for Remote MCP servers, including identity selection during creation, managed Authorization credentials, and editable Remote Identity Provider setup.
+- 4769ce6: Manage directory role mappings on the IDP and SSO page. Every directory group is listed with its own role picker, unmapped groups first, and picking a role saves it. Attribute values are available as a collapsed fallback, and "Create role…" opens the role editor and maps the new role on return. The role editor no longer fails when the agents service is unavailable, the active navigation item drops its box border, and Team rows no longer show the killswitch status icon.
+- 8a4657e: Add organization Slack workspace authorization. Organization administrators can connect and disconnect multiple workspaces from Identity; connecting a listed workspace again reauthorizes it. Credentials remain encrypted and workspace changes are audited. Shared Explore Demo shows read-only workspace history. Directory sync and identity mapping are not included.
+- 662c2d9: Sync organization Slack directories after connection or on an administrator's request. Show workspace sync history, member counts, and a searchable read-only directory across workspaces. Complete snapshots preserve identity mappings and retained members; failed fetches leave the prior directory intact.
+  
+  Shared Explore Demo shows saved directories without allowing sync. Disconnecting a workspace deletes its synced members. Connected workspaces sync every 30 minutes, refreshing rotating Slack tokens as needed, and admins can still sync now.
+- 0d17f90: Let organization administrators map Slack memberships to existing personnel from an inline picker, reassign or remove mappings, and review directory changes without granting new permissions. Syncs map members whose email matches exactly one person.
+  
+  The shared demo shows synthetic mappings with read-only controls. Disconnecting a workspace removes its mappings.
+
+### Patch Changes
+
+- c4e433b: Serve the full product on extra first-party hosts listed in `GRAM_PLATFORM_HOSTS` (such as `ai.speakeasy.com`) alongside the server URL's host. Login started on such a host calls back and lands on that same host, and the dashboard reports telemetry for `ai.speakeasy.com` to the production projects.
+- ada7519: Make API key scopes readable at a glance. Creating a key now opens in a side pane rather than a modal, so the form is no longer boxed in by a fixed height, and each scope is a card that leads with the integration it exists for — calling MCP servers at runtime, setup automation, plugin telemetry, device agent rollout — with its exact grants and exclusions one click away instead of crowding the page. The descriptions were also corrected against what the API enforces: a Consumer key does not reach the toolsets service, a Producer key covers everything a Consumer key can do, and the Agent key's setup instructions are now separate from its permissions. The Chat scope is no longer offered, since nothing is provisioned against it any more; keys that already carry it keep working. The project binding list is now alphabetical rather than newest-first.
+- 068e1bf: Configure Remote MCP server identity through one atomic provider and client setup operation.
+- 52cbebd: Rank command palette (⌘K) results by intent. On every keystroke the palette sends the typed text and a short list of prefiltered candidates to `launcher.judge`, re-orders the list from Jev's probability distributions, and shows a green ↵ on the top row when the intent is settled. Jev can also pick a verb per row: open, enable or disable an MCP server, or publish the plugin marketplace; mutating verbs always require a second Enter inside the palette. Without a resolvable OpenRouter key the palette behaves as before.
+- c5b9863: Let organization admins turn off the device agent's Shadow AI scan from the fleet configuration.
+- d192f03: Add management API and SDK operations to prepare, inspect, and unlink downstream identity-chaining client registrations with explicit grant evidence and generation checks. Readiness fails closed on missing grant evidence, and uncertain registration persistence requires reconciliation rather than replay.
+- 1bae108: Gate the MCP scope picker in the risk policy editor behind the `gram-mcp-scoped-policies` rollout flag. Policies that already have an MCP scope keep the picker.
+- 35060d1: Protect active identity-chaining bindings during issuer lifecycle changes. Block unsafe issuer deletion and consolidation, and show binding counts and explicit unlinking guidance in the dashboard and admin migration review.
+- bcc9952: In the MCP scope picker for risk policies, unchecking "All MCP servers" now clears the selection, and tools can be picked on a server that is not yet in scope.
+- 0e155d1: Make the setup wizard the only onboarding view at /setup, and derive the tasks it walks from the onboarding survey result recorded through a new submitOnboardingSurvey endpoint. Onboarding presets and setup cards are each defined in one registry.
+- 1edb857: Add the latest OpenRouter models to the playground, chat, and assistant model pickers: Claude Opus 5.5, Claude Fable 5.1, GPT-6 Astra, GPT-6 Sol, GPT-6 Luna, Gemini 3.8 Flash, DeepSeek V4.1 Flash, Grok 4.7, Qwen3.8 Max, Qwen3.8 Flash, GLM-5.3, and Kimi K3.
+- 632cdc4: Show mapped Slack workspace accounts under Work identities on a person's Accounts & devices page. Employees can read their own mappings and contact an administrator for corrections. Organization administrators can review an active person's exact membership in the organization directory. Reads require a browser session and active membership; mappings grant no additional permissions.
+
+## 0.125.0
+
+### Minor Changes
+
+- 0dd4657: Platform admins get a Support Coverage page under Platform Admin that compares integration-method capability coverage across Claude Chat, Claude Code, Cowork, Cursor, Codex, and other recognized agents. It shows 30-day aggregate telemetry and current device-agent health for the organization, and reports evidence that is loading, unavailable, or unknown as such rather than as zero coverage. The `telemetry.query` endpoint gains an optional `include_dimension_values` flag, defaulting to true, so callers that only need aggregates can omit per-row dimension values.
+- 3884bcb: Shadow AI tools open onto the people who run them. A new `access.listAIDetectionUsers` read expands one detected tool into the enrolled users it was found for, each with their devices, signals, versions and first and last sightings, with linked alias emails folded to one person. On the Harnesses, Assistants and Local Models tabs, opening a row now shows that list, the identity page's Shadow AI table turned around; each user links to their identity page. Access decisions move to the row's context menu and a button on the tool page.
+
+### Patch Changes
+
+- ee613dc: Preserve onboarding task visibility and verified completion across guided setup, and support focused identity, marketplace, logging, and traffic tasks without changing existing task selections.
+
+## 0.124.0
+
+### Minor Changes
+
+- 1c9ceab: Jump into a project from Cmd+K. The palette now carries a Projects group that matches on a project's name, slug, or id — offered from the moment the palette opens at the organization level, where picking a project is its main job, and once you start typing inside a project, where it doubles as the fastest way to switch.
+
+### Patch Changes
+
+- 85734c6: Load delegable API key permissions for all of an agent's MCP servers in one request instead of one per server, so the create API key dialog no longer fails with lock timeouts on agents with many servers.
+- fce61bb: Serialize project-bound agent creation with project deletion. Show the agent creation empty state when a project has no visible agents, and align settings headings with their visible controls.
+
+## 0.123.0
+
+### Minor Changes
+
+- 36cee24: Create agent keys with a server-scoped permission wizard and manage agent access to MCP servers.
+- 5757d84: Show agent identities and their attached upstream accounts in session management.
+- 6efa45c: Adds the Okta page to organization settings: the connection card with the console checklist, client ID and verification steps, the applications snapshot with on-demand sync, and the Cross App Access readiness checklist with bulk confirmation.
+- 1768893: Offer permission-aware Platform MCP setup and task prompts to non-admin members from MCP troubleshooting, skill workflows, Plugins and organisation home.
+- 40279e9: Organizations now verify a domain before setting up single sign-on. WorkOS refuses to start an SSO connection until a domain is verified, so the IdP and SSO page gains a Domain verification card that opens the WorkOS Admin Portal. Once verified, the card lists every verified domain, because SSO only applies to users on those domains. Until a domain is verified, the Single Sign-On and Directory Sync cards are dimmed, their Configure buttons are disabled, and an amber warning explains why. The setup board adds a "Verify your domain" task that the identity provider task now depends on. Organizations that already have an active SSO connection are treated as verified and are not blocked.
+  
+  The verified domains are kept in sync from WorkOS events: `organization_domain.verified` adds a domain, `organization_domain.deleted` removes one, and `organization.created` / `organization.updated` replace the list from the organization's full domain set. Onboarding status reports `domain_verified` and `verified_domains`.
+- 11c951b: Scope agent MCP credentials to live delegable access, support agent-owned upstream account bindings, and preserve agent identity in sessions and usage views.
+- 8794f71: MCP servers can select an existing organization- or project-owned user session issuer during creation or from authentication settings. Interactive creation prefers a sole organization issuer, requires a choice when several exist, and keeps project-specific issuer creation as an explicit fallback. Organization-owned issuer settings remain read-only from project pages.
+- 391d796: Open your own profile from the sidebar account menu. The avatar and name in the sidebar footer are now the menu's only trigger — the separate dots button is gone — and the menu carries a "View user profile" item that opens your identity page. The item appears only for readers who can open that page.
+
+### Patch Changes
+
+- 8df3dad: Agent API keys can now poll `agent.getPlugins` when the agent holds the new `org:device_agent_sync` grant. The response includes the agent's principal, and plugins resolve for the agent, its roles, and the org wildcard. Adds the agent-runtime-safe `org:device_agent_sync` and `org:hooks_ingest` scopes in registry and delegated-policy version 2.
+- e23ba04: Adds audit feed phrases for Cross App Access readiness confirmations and resets.
+- 5db7eef: Dashboard pages scroll with the browser's own scrollbar. The page header, mode switcher, and assistant composer stay pinned with `position: sticky` / `fixed` instead of living inside an inner `overflow-y: auto` container.
+- de55aca: Allow MCP gateways to use private network ingress from their dashboard settings.
+- 6efa45c: Make the applications list footer an explicit, centered expand/collapse button and keep empty snapshots within their container. Correct Okta admin-console links and verification guidance without presenting unrelated edits as verification times. Describe an existing Okta connection without prompting the admin to connect again. Group Cross App Access configuration into compact labelled rows with consistent spacing, aligned copy controls, and quieter confirmation metadata. Long values remain available in full on hover and copy without breaking the table layout. Correct small copy-button padding and accessible labels. Highlight the entire copied value line when its copy button is hovered or keyboard-focused.
+  
+  Distinguish saved Cross App Access confirmations from actual Okta connections. Guide admins to review and reuse existing connections before creating new ones, edit saved settings without clearing them first, and recover cleared confirmations with Undo while staying on the page. Preserve recorded application references when editing without a replacement. Vertically center Cross App Access row content alongside the multi-line Okta configuration.
+  
+  Link issuer-URL guidance directly to Okta Applications and include the Resource Server → Cross App Access navigation path, distinguishing Issuer URL from Okta’s separate Audience/tenant ID.
+  
+  Clarify that saved confirmations do not verify Okta configuration or access, without implying that Okta has no connection API.
+  
+  Complete the Connect checklist from existing authentication and API-read verification results. Distinguish unchecked steps from those needing attention, and show fully verified setup as six of six complete without claiming specific Okta role assignments were inspected.
+  
+  Simplify setup, application updates, and Cross App Access wording for organization administrators. Explain permissions and token protection, retain exact Okta field names, and distinguish unverified settings from successful access checks.
+  
+  Organize Enterprise Managed Auth under Team → IDP and SSO, separate from employee single sign-on. Add a provider overview and an Okta workspace for Setup, Applications, and Cross App Access and independent provider-specific setup flows.
+  
+  Clarify that the AI Agent setup registers Speakeasy in Okta rather than creating a Speakeasy assistant. Restrict Okta console links to HTTPS on supported tenant domains, keep Undo independent across upstream issuer identities, and use consistent application-update labels. Strengthen checklist evidence, provider delegation, and tab navigation regression coverage.
+  
+  Keep initial Okta onboarding focused on adding the organization URL. Hide workspace tabs, setup progress, and Cross App Access instructions until a connection exists, and offer only the custom-app creation path until catalog availability is verified.
+  
+  Move the AI agent ID fields and Save action into the agent-creation checklist step, preserving draft edits when collapsed and opening the step for existing agent setup links.
+  
+  Replace obsolete agent Delegations instructions with the current registration, permanent user-access app binding, Client registration, User access, and Resource connections sequence. Explicitly distinguish the API Services management credential from agent authentication, require separate runtime configuration before activation, and clarify that recorded IDs do not provision or verify delegated access.
+  
+  Replace the non-actionable agent registration checklist with optional existing-agent ID recording. State that this setup does not connect agent authentication, and remove prompts to configure unsupported client registration or user access settings.
+- 6efa45c: Show seven applications initially with expand and collapse controls. Clarify Okta setup next steps and verification recovery, validate client IDs before submission, and preserve unfinished Cross App Access confirmations for retry after partial failures.
+- 6efa45c: Splits the Okta AI agent setup into separate checklist steps, ending with setting up a first Cross App Access connection. Speakeasy now ticks the linked app steps from the applications sync, flags a linked app that is inactive or has nobody assigned, and collapses the checklist once setup is complete. The checklist moves above the connection details.
+  
+  The checklist item `key` is now an enumerated value in the API. The Okta settings code is reorganized by tab with no change in behavior, and links to settings URLs that were never released are removed.
+- 6efa45c: Okta readiness dashboard: gate the applications snapshot on a clean verification and explain a degraded connection inline, scroll to the connection card after verifying, show when a degraded check ran, confirm before resetting a Cross App Access confirmation, surface confirmed rows under the Needs action filter, fit the readiness table at 1440px, disambiguate duplicate app instances, say Speakeasy consistently in the console checklist, move Sync now feedback to a toast, and fold the Okta page into the Identity page as concern tabs (`identity?tab=sso|provider|applications|cross-app-access`; `/okta` and `identity?tab=okta` redirect there) with a vendor-neutral provider picker. The console checklist is now two groups, Connect and Cross App Access setup, with the steps a verification can observe ticked automatically, the per-app steps left to the Cross App Access tab, and the agent credential step deferred until the token exchange consumes it.
+- 7ce576e: Open your identity overview by clicking your name inside the sidebar account menu.
+- 9a08893: Risk Events can be filtered by MCP server, and findings from MCP tool calls now show up there with their server, tool and enforcement outcome even when no chat is attached.
+- 1d2bc0f: Watchdog evidence cards can now show the message behind a finding. In the signal drawer, a chevron after each card's session title shows the full message the finding was flagged in, clicking the title opens the session transcript scrolled to that finding, and a link opens the session in Agent Sessions. Flagged secrets and PII stay masked in the expanded message. These controls only appear for users with the `chat:read` scope.
+
 ## 0.122.0
 
 ### Minor Changes

@@ -44,6 +44,18 @@ WHERE toolset_id = @toolset_id::uuid AND project_id = @project_id AND deleted IS
 ORDER BY created_at, id
 LIMIT 1;
 
+-- name: ListEnabledMCPServersByToolsetID :many
+-- At most two rows are needed: zero means the legacy route has no attributable
+-- wrapper, one is unambiguous, and two means callers must reject attribution.
+SELECT *
+FROM mcp_servers
+WHERE toolset_id = @toolset_id::uuid
+  AND project_id = @project_id
+  AND deleted IS FALSE
+  AND visibility <> 'disabled'
+ORDER BY created_at, id
+LIMIT 2;
+
 -- name: LockMCPServerByIDAndProjectID :one
 SELECT *
 FROM mcp_servers
@@ -344,6 +356,172 @@ WHERE mcp_server_id = @mcp_server_id
   AND (@include_deleted::boolean OR deleted IS FALSE)
 ORDER BY tool_name, created_at;
 
+-- name: ListEffectiveMCPServerToolAnnotations :many
+WITH target_server AS (
+  SELECT s.toolset_id, s.tool_variations_group_id
+  FROM mcp_servers s
+  WHERE s.id = @mcp_server_id
+    AND s.project_id = @project_id
+    AND s.deleted IS FALSE
+),
+effective_variation_group AS (
+  SELECT COALESCE(
+    s.tool_variations_group_id,
+    t.tool_variations_group_id,
+    (
+      SELECT ptv.group_id
+      FROM project_tool_variations ptv
+      JOIN tool_variations_groups ptvg
+        ON ptvg.id = ptv.group_id
+       AND ptvg.project_id = @project_id
+       AND ptvg.deleted IS FALSE
+      WHERE ptv.project_id = @project_id
+      ORDER BY ptv.id DESC
+      LIMIT 1
+    )
+  ) AS group_id
+  FROM target_server s
+  LEFT JOIN toolsets t
+    ON t.id = s.toolset_id
+   AND t.project_id = @project_id
+   AND t.deleted IS FALSE
+),
+latest_toolset_version AS (
+  SELECT tv.tool_urns
+  FROM target_server s
+  JOIN toolsets t
+    ON t.id = s.toolset_id
+   AND t.project_id = @project_id
+   AND t.deleted IS FALSE
+  JOIN LATERAL (
+    SELECT version.tool_urns
+    FROM toolset_versions version
+    WHERE version.toolset_id = t.id
+      AND version.deleted IS FALSE
+    ORDER BY version.version DESC
+    LIMIT 1
+  ) tv ON TRUE
+),
+active_deployment AS (
+  SELECT d.id
+  FROM deployments d
+  JOIN deployment_statuses ds ON ds.deployment_id = d.id
+  WHERE d.project_id = @project_id
+    AND ds.status = 'completed'
+  ORDER BY d.seq DESC
+  LIMIT 1
+),
+http_source_deployments AS (
+  SELECT ad.id
+  FROM active_deployment ad
+  UNION ALL
+  SELECT pv.deployment_id
+  FROM active_deployment ad
+  JOIN deployments_packages dp ON dp.deployment_id = ad.id
+  JOIN package_versions pv
+    ON pv.id = dp.version_id
+   AND pv.package_id = dp.package_id
+   AND pv.deleted IS FALSE
+  JOIN packages p
+    ON p.id = pv.package_id
+   AND p.project_id = @project_id
+   AND p.deleted IS FALSE
+  JOIN deployments package_deployment
+    ON package_deployment.id = pv.deployment_id
+   AND package_deployment.project_id = @project_id
+),
+source_annotations AS (
+  SELECT
+    h.tool_urn,
+    h.name AS tool_name,
+    h.read_only_hint,
+    h.destructive_hint,
+    h.idempotent_hint,
+    h.open_world_hint
+  FROM latest_toolset_version tv
+  JOIN http_tool_definitions h ON h.tool_urn = ANY(tv.tool_urns)
+  JOIN http_source_deployments sd ON sd.id = h.deployment_id
+  WHERE h.project_id = @project_id
+    AND h.deleted IS FALSE
+  UNION ALL
+  SELECT
+    f.tool_urn,
+    f.name AS tool_name,
+    f.read_only_hint,
+    f.destructive_hint,
+    f.idempotent_hint,
+    f.open_world_hint
+  FROM latest_toolset_version tv
+  JOIN function_tool_definitions f ON f.tool_urn = ANY(tv.tool_urns)
+  JOIN active_deployment ad ON ad.id = f.deployment_id
+  WHERE f.project_id = @project_id
+    AND f.deleted IS FALSE
+  UNION ALL
+  SELECT
+    e.tool_urn,
+    e.name AS tool_name,
+    e.read_only_hint,
+    e.destructive_hint,
+    e.idempotent_hint,
+    e.open_world_hint
+  FROM latest_toolset_version tv
+  JOIN external_mcp_tool_definitions e ON e.tool_urn = ANY(tv.tool_urns)
+  JOIN external_mcp_attachments a ON a.id = e.external_mcp_attachment_id
+  JOIN active_deployment ad ON ad.id = a.deployment_id
+  WHERE e.deleted IS FALSE
+    AND a.deleted IS FALSE
+    AND e.type <> 'proxy'
+    AND e.name IS NOT NULL
+),
+varied_annotations AS (
+  SELECT
+    COALESCE(v.name, source.tool_name) AS tool_name,
+    COALESCE(v.read_only_hint, source.read_only_hint) AS read_only_hint,
+    COALESCE(v.destructive_hint, source.destructive_hint) AS destructive_hint,
+    COALESCE(v.idempotent_hint, source.idempotent_hint) AS idempotent_hint,
+    COALESCE(v.open_world_hint, source.open_world_hint) AS open_world_hint
+  FROM source_annotations source
+  LEFT JOIN effective_variation_group variation_group ON TRUE
+  LEFT JOIN tool_variations_groups owned_variation_group
+    ON owned_variation_group.id = variation_group.group_id
+   AND owned_variation_group.project_id = @project_id
+   AND owned_variation_group.deleted IS FALSE
+  LEFT JOIN tool_variations v
+    ON v.group_id = owned_variation_group.id
+   AND v.src_tool_urn = source.tool_urn
+   AND v.deleted IS FALSE
+),
+effective_annotations AS (
+  SELECT
+    m.tool_name,
+    m.read_only_hint,
+    m.destructive_hint,
+    m.idempotent_hint,
+    m.open_world_hint,
+    0 AS source_priority
+  FROM mcp_server_tool_metadata m
+  WHERE m.mcp_server_id = @mcp_server_id
+    AND m.project_id = @project_id
+    AND m.deleted IS FALSE
+  UNION ALL
+  SELECT
+    tool_name,
+    read_only_hint,
+    destructive_hint,
+    idempotent_hint,
+    open_world_hint,
+    1 AS source_priority
+  FROM varied_annotations
+)
+SELECT DISTINCT ON (tool_name)
+  tool_name,
+  read_only_hint,
+  destructive_hint,
+  idempotent_hint,
+  open_world_hint
+FROM effective_annotations
+ORDER BY tool_name, source_priority;
+
 -- name: UpdateMCPServerToolMetadata :one
 UPDATE mcp_server_tool_metadata
 SET title = @title,
@@ -366,6 +544,17 @@ WHERE mcp_server_id = @mcp_server_id
   AND tool_name = @tool_name
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListMCPServerIDsByUserSessionIssuerID :many
+-- Every live MCP server in the project bound to one user session issuer.
+-- A user session issuer is not unique per MCP server, so an operation that
+-- mutates the issuer's client binding reaches every server listed here.
+SELECT id
+FROM mcp_servers
+WHERE project_id = @project_id
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND deleted IS FALSE
+ORDER BY id;
 
 -- name: ResyncMCPServerRemoteSessionIssuers :execrows
 -- Recomputes mcp_servers.remote_session_issuer_id from the live client
@@ -441,7 +630,9 @@ WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id;
 -- slugless legacy rows are excluded — so a server invisible to the stored
 -- serving path is invisible to a derived one too. Carries the same backend
 -- and dispatch columns that path needs, plus each member's project, since
--- members no longer share one. Ordered by project then slug: a derived
+-- members no longer share one, and each member's network access mode, which
+-- the caller matches against the request's ingress surface so a private_only
+-- server stays invisible on the public one. Ordered by project then slug: a derived
 -- gateway has no operator-authored order, and slugs are unique only within a
 -- project, so the pair is what makes the listing stable.
 SELECT
@@ -451,6 +642,7 @@ SELECT
     s.name AS mcp_server_name,
     s.slug AS mcp_server_slug,
     s.visibility AS mcp_server_visibility,
+    s.network_access_mode AS mcp_server_network_access_mode,
     s.toolset_id AS mcp_server_toolset_id,
     s.remote_mcp_server_id AS mcp_server_remote_mcp_server_id,
     s.tunneled_mcp_server_id AS mcp_server_tunneled_mcp_server_id,

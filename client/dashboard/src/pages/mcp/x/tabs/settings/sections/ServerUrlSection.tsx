@@ -36,6 +36,7 @@ import {
   McpServerNetworkAccessMode,
   type McpServer,
 } from "@gram/client/models/components/mcpserver.js";
+import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { RequireScope } from "@/components/require-scope";
 import { SettingsInlineEmptyState } from "../SettingsInlineEmptyState";
 import { SettingsSection } from "@/components/detail/settings-section";
@@ -87,7 +88,7 @@ export function ServerUrlSection({
   endpoints: McpEndpoint[];
   isLoadingEndpoints: boolean;
   subject?: "server" | "gateway";
-  mcpServer?: McpServer;
+  mcpServer?: McpServer | MetaMcpServer;
 }): JSX.Element {
   const { domains } = useCustomDomains();
   const orgRoutes = useOrgRoutes();

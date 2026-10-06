@@ -9,7 +9,6 @@ import {
 } from "@/components/member-facepile";
 import { RequireScope } from "@/components/require-scope";
 import { useRBAC } from "@/hooks/useRBAC";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import {
@@ -23,6 +22,7 @@ import { useOrgRoutes } from "@/routes";
 import { useNavigate } from "react-router";
 import type { SetResourceAudienceEntry } from "@gram/client/models/components/setresourceaudienceentry.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
+import { invalidateAllExplainResourceAccess } from "@gram/client/react-query/explainResourceAccess.js";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { useSetResourceAudienceMutation } from "@gram/client/react-query/setResourceAudience.js";
 import { useMembers } from "@gram/client/react-query/members.js";
@@ -44,7 +44,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { cn } from "@/lib/utils";
-import { useMemo, useState, type ComponentProps, type JSX } from "react";
+import { useMemo, useState, type JSX } from "react";
 import { toast } from "sonner";
 import { AddAudienceDialog } from "./AddAudienceDialog";
 import { RemoveAudienceDialog } from "./RemoveAudienceDialog";
@@ -54,6 +54,8 @@ import { pageCount, pageOf } from "./manageAccessState";
 import {
   accessSummary,
   buildAccessRows,
+  cappingBlocks,
+  keptIndividually,
   reachableTools,
   inheritedGrants,
   scopeState,
@@ -72,8 +74,9 @@ import {
   revokeScopeWrite,
   type AudienceWrite,
 } from "./accessWrites";
+import { PrincipalBadge } from "./PrincipalBadge";
 import { RoleLink } from "./RoleLink";
-import { ownRules, LEVEL_VERB } from "./serverAudience";
+import { isUnnarrowed, ownRules, LEVEL_VERB } from "./serverAudience";
 
 /** Narrowing the tool dialog is currently editing, and the row it belongs to. */
 interface NarrowingTarget {
@@ -150,21 +153,25 @@ export function ManageAccess({
 
   const direct = useMemo(() => ownRules(entries), [entries]);
   const rows = useMemo(() => buildAccessRows(entries), [entries]);
-  // People a block already reaches, named by the block itself rather than
-  // read off the rows: someone with no rule of their own here has no row,
-  // and granting them access would write a rule the block cancels.
-  const cancelled = useMemo(() => {
-    const byUser = new Map<string, string>();
+
+  // Agents a role's or everyone's unnarrowed connect block reaches. Unlike a
+  // person's, an agent's own rule here does not outrank that block, so the
+  // agent picker withholds them rather than writing a rule that does nothing.
+  const agentBlockedReason = useMemo(() => {
+    const byAgent = new Map<string, string>();
+    let everyone: string | undefined;
     for (const entry of entries) {
-      if (entry.level !== "blocked") continue;
-      if ((entry.tools ?? []).length || (entry.dispositions ?? []).length) {
-        continue;
-      }
-      for (const memberId of entry.memberIds ?? []) {
-        if (!byUser.has(memberId)) byUser.set(memberId, entry.displayName);
+      if (entry.level !== "blocked" || !isUnnarrowed(entry)) continue;
+      if (entry.kind === "agent") continue;
+      if (entry.kind === "everyone") everyone ??= entry.displayName;
+      for (const agentId of entry.agentIds ?? []) {
+        if (!byAgent.has(agentId)) byAgent.set(agentId, entry.displayName);
       }
     }
-    return byUser;
+    return (principalUrn: string): string | undefined => {
+      const by = byAgent.get(principalUrn.replace(/^agent:/, "")) ?? everyone;
+      return by ? `Blocked by ${by} on this server` : undefined;
+    };
   }, [entries]);
 
   // Rules covering every server, which a rule added here cannot narrow.
@@ -178,7 +185,11 @@ export function ManageAccess({
 
   const setAudience = useSetResourceAudienceMutation({
     onSuccess: async () => {
-      await invalidateAllResourceAudience(queryClient);
+      // Check access answers from the same rules, so an open answer is redone.
+      await Promise.all([
+        invalidateAllResourceAudience(queryClient),
+        invalidateAllExplainResourceAccess(queryClient),
+      ]);
       setAdding(null);
     },
     // The server refuses some writes for a reason worth reading — blocking
@@ -238,11 +249,7 @@ export function ManageAccess({
       ? new Set(reachableTools(cell, toolCatalog ?? []) ?? [])
       : null;
     const limitedBy = capped
-      ? cell.blocks.find(
-          (block) =>
-            block.principalUrn !== row.principalUrn ||
-            block.appliesTo !== "resource",
-        )?.displayName
+      ? cappingBlocks(row, cell)[0]?.displayName
       : undefined;
 
     setNarrowing({
@@ -268,7 +275,8 @@ export function ManageAccess({
 
   // Removing a rule this page owns is what the button says it is. Removing a
   // principal an organization-wide rule still reaches is not: it writes a
-  // block, which outranks every grant. Only that case is worth a dialog.
+  // block, which outranks every grant but the ones people were given here by
+  // name. Only that case is worth a dialog.
   const removeRow = (row: AccessRow) => {
     if (inheritedGrants(row).length === 0) {
       applyWrite(revokeRowWrite(direct, row, resourceName));
@@ -421,6 +429,9 @@ export function ManageAccess({
       {removing && (
         <RemoveAudienceDialog
           row={removing}
+          keptBy={keptIndividually(removing, rows, toolCatalog ?? []).map(
+            (row) => row.displayName,
+          )}
           serverName={resourceName}
           pending={setAudience.isPending}
           onConfirm={confirmRemove}
@@ -438,13 +449,12 @@ export function ManageAccess({
           }
           kinds={[adding]}
           alreadyAdded={direct.map((entry) => entry.principalUrn)}
+          blockedReason={adding === "agent" ? agentBlockedReason : undefined}
           // A principal an organization-wide rule already covers cannot be
           // narrowed by adding a rule here — grants add, they never subtract
-          // — so say what it already has instead of offering a no-op.
-          blockedFrom={[...cancelled].map(([userId, by]) => ({
-            principalUrn: `user:${userId}`,
-            reason: `Blocked by ${by} on this server`,
-          }))}
+          // — so say what it already has instead of offering a no-op. People
+          // a role's or everyone's block reaches stay on offer: their own rule
+          // here outranks that block.
           alreadyReaches={orgWide
             // A narrowed organization rule leaves room to grant more here, so
             // only unrestricted ones make a principal unaddable.
@@ -800,33 +810,6 @@ function ownDestructiveBlockOnly(row: AccessRow): boolean {
     (own.tools ?? []).length === 0 &&
     (own.dispositions ?? []).length === 1 &&
     (own.dispositions ?? []).includes("destructive")
-  );
-}
-
-/** What kind of thing a row names, so a role does not read as a person. */
-const PRINCIPAL_BADGE: Record<
-  string,
-  { label: string; variant: ComponentProps<typeof Badge>["variant"] }
-> = {
-  role: { label: "Role", variant: "warning" },
-  user: { label: "Person", variant: "information" },
-  agent: { label: "Agent", variant: "information" },
-  everyone: { label: "Everyone", variant: "neutral" },
-  directory_group: { label: "Group", variant: "neutral" },
-  directory_attribute: { label: "Attribute", variant: "neutral" },
-};
-
-function PrincipalBadge({
-  kind,
-}: {
-  kind: AccessRow["kind"];
-}): JSX.Element | null {
-  const badge = PRINCIPAL_BADGE[kind];
-  if (!badge) return null;
-  return (
-    <Badge variant={badge.variant} size="sm">
-      {badge.label}
-    </Badge>
   );
 }
 

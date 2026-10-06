@@ -27,7 +27,7 @@ type LogRiskExclusionCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskExclusionID uuid.UUID //nolint:glint // matches risk_policy precedent; URN migration tracked in AGE-1954
+	RiskExclusionID uuid.UUID //nolint:glint // auditeventurnnaming: matches risk_policy precedent; URN migration tracked in AGE-1954
 	DisplayName     string
 }
 
@@ -64,7 +64,7 @@ type LogRiskExclusionUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskExclusionID uuid.UUID //nolint:glint // matches risk_policy precedent; URN migration tracked in AGE-1954
+	RiskExclusionID uuid.UUID //nolint:glint // auditeventurnnaming: matches risk_policy precedent; URN migration tracked in AGE-1954
 	DisplayName     string
 
 	SnapshotBefore *types.RiskExclusion
@@ -116,7 +116,7 @@ type LogRiskExclusionDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskExclusionID uuid.UUID //nolint:glint // matches risk_policy precedent; URN migration tracked in AGE-1954
+	RiskExclusionID uuid.UUID //nolint:glint // auditeventurnnaming: matches risk_policy precedent; URN migration tracked in AGE-1954
 	DisplayName     string
 }
 

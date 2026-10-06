@@ -32,7 +32,7 @@ type ResetRequestBody struct {
 // endpoint HTTP response body.
 type ListResponseBody struct {
 	// Pending servers first, then by name. By default only servers with a step
-	// left; include_all adds connected and not-applicable ones.
+	// left; include_all adds connected, verified and not-applicable ones.
 	Servers []*OktaResourceConnectionServerResponseBody `form:"servers" json:"servers" xml:"servers"`
 	// Servers that still need a step.
 	PendingCount int `form:"pending_count" json:"pending_count" xml:"pending_count"`
@@ -73,18 +73,37 @@ type ResetResponseBody struct {
 	// Derived readiness. not_applicable: see not_applicable_reason; needs_agent:
 	// no AI agent recorded on the connection; needs_connection: the
 	// agent-to-resource connection has not been confirmed for this server's
-	// upstream; connected: the administrator confirmed it. Whether the exchange
-	// works is not known here.
+	// upstream, or an exchange since confirmation found it missing; broken:
+	// confirmed but known not to work, see broken_reason; connected: the
+	// administrator confirmed it and no conclusive exchange has run since;
+	// verified: an exchange since confirmation succeeded.
 	State string `form:"state" json:"state" xml:"state"`
 	// no_idjag: the server's authorization server metadata does not advertise the
 	// identity assertion grant.
 	NotApplicableReason *string `form:"not_applicable_reason,omitempty" json:"not_applicable_reason,omitempty" xml:"not_applicable_reason,omitempty"`
+	// Present when state is broken. audience_mismatch: legacy value, no longer
+	// emitted; the administrator-confirmed Okta audience may differ from the
+	// server's authorization server issuer; scope_not_allowed: the connection does
+	// not allow the requested scopes; client_auth_failed: the identity provider
+	// rejected the agent app's client authentication; downstream_rejected: the
+	// identity provider issued the assertion but the server's authorization server
+	// refused it.
+	BrokenReason *string `form:"broken_reason,omitempty" json:"broken_reason,omitempty" xml:"broken_reason,omitempty"`
+	// What the latest identity chaining exchange since confirmation showed.
+	// connection_missing is inferred from the identity provider's invalid_target
+	// error.
+	ObservedResult *string `form:"observed_result,omitempty" json:"observed_result,omitempty" xml:"observed_result,omitempty"`
+	// When the exchange behind observed_result started.
+	ObservedAt *string `form:"observed_at,omitempty" json:"observed_at,omitempty" xml:"observed_at,omitempty"`
 	// Whether the administrator still has a step to do for this server.
 	Pending bool `form:"pending" json:"pending" xml:"pending"`
 	// The upstream authorization server ID. Together with the resource indicator,
 	// identifies the shared readiness confirmation; independent of the confirmed
 	// identity assertion audience.
 	IssuerID *string `form:"issuer_id,omitempty" json:"issuer_id,omitempty" xml:"issuer_id,omitempty"`
+	// The server's authorization server issuer; the Issuer URL to enter when
+	// enabling Cross App Access on a resource app. Omitted when unknown.
+	AuthorizationServerIssuer *string `form:"authorization_server_issuer,omitempty" json:"authorization_server_issuer,omitempty" xml:"authorization_server_issuer,omitempty"`
 	// The resource indicator to enter on the connection: the server's RFC 9728
 	// resource identifier when known, otherwise its URL.
 	ResourceIndicator string `form:"resource_indicator" json:"resource_indicator" xml:"resource_indicator"`
@@ -785,18 +804,37 @@ type OktaResourceConnectionServerResponseBody struct {
 	// Derived readiness. not_applicable: see not_applicable_reason; needs_agent:
 	// no AI agent recorded on the connection; needs_connection: the
 	// agent-to-resource connection has not been confirmed for this server's
-	// upstream; connected: the administrator confirmed it. Whether the exchange
-	// works is not known here.
+	// upstream, or an exchange since confirmation found it missing; broken:
+	// confirmed but known not to work, see broken_reason; connected: the
+	// administrator confirmed it and no conclusive exchange has run since;
+	// verified: an exchange since confirmation succeeded.
 	State string `form:"state" json:"state" xml:"state"`
 	// no_idjag: the server's authorization server metadata does not advertise the
 	// identity assertion grant.
 	NotApplicableReason *string `form:"not_applicable_reason,omitempty" json:"not_applicable_reason,omitempty" xml:"not_applicable_reason,omitempty"`
+	// Present when state is broken. audience_mismatch: legacy value, no longer
+	// emitted; the administrator-confirmed Okta audience may differ from the
+	// server's authorization server issuer; scope_not_allowed: the connection does
+	// not allow the requested scopes; client_auth_failed: the identity provider
+	// rejected the agent app's client authentication; downstream_rejected: the
+	// identity provider issued the assertion but the server's authorization server
+	// refused it.
+	BrokenReason *string `form:"broken_reason,omitempty" json:"broken_reason,omitempty" xml:"broken_reason,omitempty"`
+	// What the latest identity chaining exchange since confirmation showed.
+	// connection_missing is inferred from the identity provider's invalid_target
+	// error.
+	ObservedResult *string `form:"observed_result,omitempty" json:"observed_result,omitempty" xml:"observed_result,omitempty"`
+	// When the exchange behind observed_result started.
+	ObservedAt *string `form:"observed_at,omitempty" json:"observed_at,omitempty" xml:"observed_at,omitempty"`
 	// Whether the administrator still has a step to do for this server.
 	Pending bool `form:"pending" json:"pending" xml:"pending"`
 	// The upstream authorization server ID. Together with the resource indicator,
 	// identifies the shared readiness confirmation; independent of the confirmed
 	// identity assertion audience.
 	IssuerID *string `form:"issuer_id,omitempty" json:"issuer_id,omitempty" xml:"issuer_id,omitempty"`
+	// The server's authorization server issuer; the Issuer URL to enter when
+	// enabling Cross App Access on a resource app. Omitted when unknown.
+	AuthorizationServerIssuer *string `form:"authorization_server_issuer,omitempty" json:"authorization_server_issuer,omitempty" xml:"authorization_server_issuer,omitempty"`
 	// The resource indicator to enter on the connection: the server's RFC 9728
 	// resource identifier when known, otherwise its URL.
 	ResourceIndicator string `form:"resource_indicator" json:"resource_indicator" xml:"resource_indicator"`
@@ -888,23 +926,27 @@ func NewConfirmResponseBody(res *oktaresourceconnections.ConfirmOktaResourceConn
 // "reset" endpoint of the "oktaResourceConnections" service.
 func NewResetResponseBody(res *oktaresourceconnections.OktaResourceConnectionServer) *ResetResponseBody {
 	body := &ResetResponseBody{
-		McpServerID:          res.McpServerID,
-		ProjectID:            res.ProjectID,
-		ProjectSlug:          res.ProjectSlug,
-		ServerName:           res.ServerName,
-		ServerSlug:           res.ServerSlug,
-		State:                res.State,
-		NotApplicableReason:  res.NotApplicableReason,
-		Pending:              res.Pending,
-		IssuerID:             res.IssuerID,
-		ResourceIndicator:    res.ResourceIndicator,
-		ClientID:             res.ClientID,
-		ClientBinding:        res.ClientBinding,
-		DeepLink:             res.DeepLink,
-		Audience:             res.Audience,
-		OktaApplicationID:    res.OktaApplicationID,
-		OktaApplicationLabel: res.OktaApplicationLabel,
-		ConfirmedAt:          res.ConfirmedAt,
+		McpServerID:               res.McpServerID,
+		ProjectID:                 res.ProjectID,
+		ProjectSlug:               res.ProjectSlug,
+		ServerName:                res.ServerName,
+		ServerSlug:                res.ServerSlug,
+		State:                     res.State,
+		NotApplicableReason:       res.NotApplicableReason,
+		BrokenReason:              res.BrokenReason,
+		ObservedResult:            res.ObservedResult,
+		ObservedAt:                res.ObservedAt,
+		Pending:                   res.Pending,
+		IssuerID:                  res.IssuerID,
+		AuthorizationServerIssuer: res.AuthorizationServerIssuer,
+		ResourceIndicator:         res.ResourceIndicator,
+		ClientID:                  res.ClientID,
+		ClientBinding:             res.ClientBinding,
+		DeepLink:                  res.DeepLink,
+		Audience:                  res.Audience,
+		OktaApplicationID:         res.OktaApplicationID,
+		OktaApplicationLabel:      res.OktaApplicationLabel,
+		ConfirmedAt:               res.ConfirmedAt,
 	}
 	if res.Scopes != nil {
 		body.Scopes = make([]string, len(res.Scopes))

@@ -16,6 +16,7 @@ import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
 import {
   useIsPlatformAdmin,
   useOrganization,
+  useProject,
   useSession,
 } from "@/contexts/Auth";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
@@ -172,8 +173,16 @@ function AgentList({
 }) {
   // Ownership is an independent authorization path. Do not gate this query on RBAC.
   const agents = useReadableAgents(true);
+  const project = useProject();
   const [search, setSearch] = useState("");
-  const rows = (agents.data ?? []).filter((agent) =>
+  const visibleAgents = (agents.data ?? []).filter(
+    (agent) =>
+      // An agent bound to another project is that project's to manage, so
+      // showing it here reads as a listing bug. Organization-wide agents have
+      // no home project and belong in every project's list.
+      !agent.projectId || agent.projectId === project.id,
+  );
+  const rows = visibleAgents.filter((agent) =>
     agent.name.toLowerCase().includes(search.trim().toLowerCase()),
   );
   const columns: Column<ManagedAgent>[] = [
@@ -231,6 +240,7 @@ function AgentList({
     <ResourceListPage
       title="Agents"
       description={`${rows.length} of ${(agents.data ?? []).length} — every agent identity this organization knows about, provisioned here or not.`}
+      stage="preview"
       primaryAction={<Button onClick={onCreate}>New agent identity</Button>}
       search={{
         value: search,
@@ -238,7 +248,7 @@ function AgentList({
         placeholder: "Search agents",
       }}
       isLoading={agents.isLoading}
-      isEmpty={!agents.isError && (agents.data ?? []).length === 0}
+      isEmpty={!agents.isError && visibleAgents.length === 0 && !search.trim()}
       empty={{
         icon: "bot",
         heading: "No agents yet",
@@ -280,6 +290,25 @@ function AgentOwner({ agent }: { agent: ManagedAgent }) {
       <span>{name}</span>
     </span>
   );
+}
+
+/**
+ * Names the project an agent belongs to, or says it belongs to none. An agent
+ * bound to another project can still be reached by id, so this reports the
+ * binding rather than assuming it is the project being viewed.
+ */
+function AgentScopeLabel({ agent }: { agent: ManagedAgent }) {
+  const organization = useOrganization();
+  if (!agent.projectId) {
+    return <Text>{organization.name} (all projects)</Text>;
+  }
+  // Named from the organization's own project list rather than the active
+  // project, so an agent reached by id from elsewhere still says where it
+  // belongs. A project the caller cannot see falls back to its id.
+  const bound = organization.projects?.find(
+    (candidate) => candidate.id === agent.projectId,
+  );
+  return <Text>{bound?.name ?? agent.projectId}</Text>;
 }
 
 function AgentSettings({
@@ -438,6 +467,10 @@ function AgentIdentityPanel({ agent }: { agent: ManagedAgent }) {
             (agent.ownerUserId === user.id
               ? user.displayName || user.email
               : "Unavailable")}
+        </dd>
+        <dt className="text-muted-foreground">Scope</dt>
+        <dd>
+          <AgentScopeLabel agent={agent} />
         </dd>
         <dt className="text-muted-foreground">Lifecycle</dt>
         <dd>

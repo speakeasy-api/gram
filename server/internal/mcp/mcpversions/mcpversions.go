@@ -53,8 +53,8 @@ const DefaultInEffect = Version20250326
 // The remote MCP proxy has no entry here by design: it never answers a
 // version, it relays whatever the client and the upstream negotiate between
 // themselves. Gram's outbound remote-URL verification probe is also absent —
-// that is Gram acting as a client, so the version it sends is a requested one
-// rather than a served one, and it lives with the probe.
+// that is Gram acting as a client, so the versions it requests are chosen by
+// the MCP SDK client it connects with rather than served by Gram.
 var (
 	supportedHostedToolset   = []string{Version20241105, Version20250326, Version20250618, Version20251125}
 	supportedPlatformToolset = []string{Version20241105, Version20250326, Version20250618, Version20251125}
@@ -102,25 +102,39 @@ func SupportedConsentToolset() []string {
 }
 
 // Negotiate applies the MCP version-negotiation rule to an `initialize`
-// request: a supported requested revision is echoed, an absent one resolves to
-// [DefaultInEffect], and anything else — unknown, unrecognized, or known
-// but unsupported — is answered with the newest supported revision. The
-// absent case deliberately does not fall through to the ceiling: a client
-// that omitted the field entirely is the cohort likeliest to break on a new
-// revision, and the spec's omitted-version rule points at 2025-03-26.
+// request. Only supported revisions that define `initialize` (those before
+// 2026-07-28, which removes it) are candidates: a candidate requested
+// revision is echoed, an absent one resolves to [DefaultInEffect] when that is
+// a candidate, and anything else — unknown, unrecognized, or known but not a
+// candidate — is answered with the newest candidate. The absent case
+// deliberately does not fall through to the ceiling: a client that omitted
+// the field entirely is the cohort likeliest to break on a new revision, and
+// the spec's omitted-version rule points at 2025-03-26.
+//
+// It reports false when supported holds no candidate, in which case
+// `initialize` is not available on the surface and there is no revision to
+// answer with.
 //
 // requested may be raw client input; it is bounded by [Sanitize] first.
-// supported must be non-empty and ordered oldest first, as the Supported*
-// functions return.
-func Negotiate(requested string, supported []string) string {
+// supported must be ordered oldest first, as the Supported* functions return.
+func Negotiate(requested string, supported []string) (string, bool) {
+	candidates := make([]string, 0, len(supported))
+	for _, version := range supported {
+		if DefinesMethod(MethodInitialize, version) {
+			candidates = append(candidates, version)
+		}
+	}
+	if len(candidates) == 0 {
+		return "", false
+	}
 	requested = Sanitize(requested)
 	switch {
-	case requested == "":
-		return DefaultInEffect
-	case slices.Contains(supported, requested):
-		return requested
+	case requested == "" && slices.Contains(candidates, DefaultInEffect):
+		return DefaultInEffect, true
+	case slices.Contains(candidates, requested):
+		return requested, true
 	default:
-		return supported[len(supported)-1]
+		return candidates[len(candidates)-1], true
 	}
 }
 

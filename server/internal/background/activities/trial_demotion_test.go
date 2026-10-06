@@ -13,7 +13,10 @@ import (
 	"testing"
 	"time"
 
+	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
+
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -23,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	activitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/localaccounts"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -87,38 +91,6 @@ type trialTestInstance struct {
 	provisioner     *trialProvisioner
 	notifier        *recordingTrialNotifier
 	activity        *activities.DemoteExpiredTrials
-}
-
-func newTrialTestInstance(t *testing.T) (context.Context, *trialTestInstance) {
-	t.Helper()
-
-	ctx := t.Context()
-
-	conn, err := infra.CloneTestDatabase(t, "trialdemotion")
-	require.NoError(t, err)
-
-	provisioner := &trialProvisioner{Development: openrouter.NewDevelopment(""), local: new(openrouter.OpenRouter)}
-	notifier := &recordingTrialNotifier{inactive: nil}
-	redisClient, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-	productFeatures := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, redisClient)
-
-	return ctx, &trialTestInstance{
-		conn:            conn,
-		trials:          trialsrepo.New(conn),
-		orgs:            orgrepo.New(conn),
-		productFeatures: productFeatures,
-		provisioner:     provisioner,
-		notifier:        notifier,
-		activity: activities.NewDemoteExpiredTrials(
-			testenv.NewLogger(t),
-			conn,
-			provisioner,
-			audit.NewLogger(),
-			notifier,
-			productFeatures,
-		),
-	}
 }
 
 // newTrialOrg creates an enterprise organization that is whitelisted for the
@@ -426,11 +398,10 @@ func TestDemoteExpiredTrials_ProductionOpenRouterPatchesOnlyChangedKeys(t *testi
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	production := openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, ti.conn, "test", "provisioning_key_placeholder",
-		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, ti.conn, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
 	)
 	ti.activity = activities.NewDemoteExpiredTrials(
-		testenv.NewLogger(t), ti.conn, production, audit.NewLogger(), ti.notifier, ti.productFeatures,
+		testenv.NewLogger(t), ti.conn, production, audit.NewLogger(), ti.notifier, ti.productFeatures, nil,
 	)
 
 	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
@@ -529,13 +500,7 @@ func TestDemoteExpiredTrials_LocksLifecycleBeforeAllKeysAndRows(t *testing.T) {
 
 	waitCtx, cancelWait := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelWait()
-	requireCondition(t, waitCtx, func() (bool, error) {
-		blocked, err := testrepo.New(ti.conn).IsQueryBlockedOnLockFixture(waitCtx, "%UPDATE trials%")
-		if err != nil {
-			return false, fmt.Errorf("check blocked trial demotion query: %w", err)
-		}
-		return blocked, nil
-	}, "demotion did not block on the trial row")
+	testenv.WaitForBackendsBlockedBy(t, waitCtx, ti.conn, testenv.BackendPID(rowLock), 1)
 
 	probe, err := ti.conn.Acquire(ctx)
 	require.NoError(t, err)
@@ -568,25 +533,13 @@ func TestDemoteExpiredTrials_LocksLifecycleBeforeAllKeysAndRows(t *testing.T) {
 
 	chatHeldCtx, cancelChatHeld := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelChatHeld()
-	requireCondition(t, chatHeldCtx, func() (bool, error) {
-		acquired, err := testrepo.New(probe).TryAcquireOpenRouterKeyBillingLockFixture(chatHeldCtx, testrepo.TryAcquireOpenRouterKeyBillingLockFixtureParams{
-			KeyType: string(openrouter.KeyTypeChat), OrganizationID: orgID,
-		})
-		if err != nil {
-			return false, fmt.Errorf("probe chat billing lock: %w", err)
-		}
-		if !acquired {
-			return true, nil
-		}
-		unlocked, unlockErr := activitiesrepo.New(probe).ReleaseOpenRouterKeyBillingLock(chatHeldCtx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat)})
-		if unlockErr != nil {
-			return false, fmt.Errorf("release chat billing lock probe: %w", unlockErr)
-		}
-		if !unlocked {
-			return false, errors.New("probe chat lock was not released")
-		}
-		return false, nil
-	}, "chat lock was not acquired before the blocked internal lock")
+	testenv.WaitForBackendsBlockedBy(t, chatHeldCtx, ti.conn, internalLockConn.Conn().PgConn().PID(), 1)
+	chatProbe := testenv.BeginTx(t, ctx, ti.conn)
+	// probeTimeout bounds the server's wait on the chat advisory lock.
+	const probeTimeout = 100 * time.Millisecond
+	testenv.SetLockTimeout(t, ctx, chatProbe, probeTimeout)
+	testenv.RequireLockNotAvailable(t, usagerepo.New(chatProbe).AcquireOpenRouterBillingLock(ctx, usagerepo.AcquireOpenRouterBillingLockParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat)}))
+	require.NoError(t, chatProbe.Rollback(ctx))
 
 	keyProbe := testenv.BeginTx(t, ctx, ti.conn)
 	causesByKey, err := testrepo.New(keyProbe).ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture(ctx, orgID)
@@ -621,21 +574,151 @@ func TestDemoteExpiredTrials_LocksLifecycleBeforeAllKeysAndRows(t *testing.T) {
 	require.Equal(t, "free", organization.GramAccountType)
 }
 
-func requireCondition(t *testing.T, ctx context.Context, condition func() (bool, error), message string) {
-	t.Helper()
-
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		met, err := condition()
-		require.NoError(t, err)
-		if met {
-			return
-		}
-		select {
-		case <-ctx.Done():
-			require.FailNow(t, message, ctx.Err().Error())
-		case <-ticker.C:
-		}
+func TestDemoteExpiredTrials_LocalFixtures(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTrialTestInstance(t)
+	orgID := newTrialOrg(t, ctx, ti, time.Now().Add(-time.Hour))
+	for _, keyType := range openrouter.AllKeyTypes {
+		materializeTrialKey(t, ctx, ti, orgID, keyType, []string{})
 	}
+	applyElapsedTrialFixture(t, ctx, ti, orgID)
+	ti.activity = activities.NewDemoteExpiredTrials(
+		testenv.NewLogger(t), ti.conn, ti.provisioner, audit.NewLogger(), ti.notifier, ti.productFeatures,
+		func(ctx context.Context, orgID string) (bool, error) {
+			return localaccounts.HandleTrialFixture(ctx, ti.conn, ti.productFeatures, orgID)
+		},
+	)
+	before, err := ti.trials.GetTrial(ctx, orgID)
+	require.NoError(t, err)
+	listed, err := ti.activity.List(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []string{orgID}, listed)
+	afterList, err := ti.trials.GetTrial(ctx, orgID)
+	require.NoError(t, err)
+	require.Equal(t, before, afterList, "listing must never project fixture expiry")
+	// Includes queued work and reconciliation after a completed local projection.
+	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
+	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
+	after, err := ti.trials.GetTrial(ctx, orgID)
+	require.NoError(t, err)
+	require.True(t, after.DemotedAt.Valid)
+	require.Equal(t, before.EndsAt, after.EndsAt)
+	require.Equal(t, before.CreatedAt, after.CreatedAt)
+	require.Equal(t, before.UpdatedAt, after.UpdatedAt)
+	require.Empty(t, ti.provisioner.reconciled)
+	require.Empty(t, ti.notifier.inactive)
+	for _, keyType := range openrouter.AllKeyTypes {
+		require.False(t, trialKey(t, ctx, ti, orgID, keyType).Disabled)
+	}
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		enabled, err := ti.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, err)
+		require.False(t, enabled)
+	}
+
+	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
+func TestDemoteExpiredTrials_LocalFixturesWithoutHandler(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTrialTestInstance(t)
+	orgID := newTrialOrg(t, ctx, ti, time.Now().Add(-time.Hour))
+	for _, keyType := range openrouter.AllKeyTypes {
+		materializeTrialKey(t, ctx, ti, orgID, keyType, []string{})
+	}
+	applyElapsedTrialFixture(t, ctx, ti, orgID)
+
+	before, err := ti.trials.GetTrial(ctx, orgID)
+	require.NoError(t, err)
+	listed, err := ti.activity.List(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []string{orgID}, listed)
+	afterList, err := ti.trials.GetTrial(ctx, orgID)
+	require.NoError(t, err)
+	require.Equal(t, before, afterList, "listing must never project fixture expiry")
+	// Includes queued work and reconciliation after a completed local projection.
+	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
+	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
+	after, err := ti.trials.GetTrial(ctx, orgID)
+	require.NoError(t, err)
+	require.True(t, after.DemotedAt.Valid)
+	require.Equal(t, before.EndsAt, after.EndsAt)
+	require.NotEmpty(t, ti.provisioner.reconciled)
+	require.NotEmpty(t, ti.notifier.inactive)
+}
+
+func TestDemoteExpiredTrials_LocalFixtureRetriesCacheAfterCommit(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTrialTestInstance(t)
+	orgID := newTrialOrg(t, ctx, ti, time.Now().Add(-time.Hour))
+	for _, keyType := range openrouter.AllKeyTypes {
+		materializeTrialKey(t, ctx, ti, orgID, keyType, []string{})
+	}
+	applyElapsedTrialFixture(t, ctx, ti, orgID)
+	redisServer, features := newTrialFeatureCache(t, ti.conn)
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		_, err := featurerepo.New(ti.conn).EnableFeature(ctx, featurerepo.EnableFeatureParams{OrganizationID: orgID, FeatureName: string(feature)})
+		require.NoError(t, err)
+		enabled, err := features.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, err)
+		require.True(t, enabled)
+	}
+	handledCalls := 0
+	ti.activity = activities.NewDemoteExpiredTrials(
+		testenv.NewLogger(t), ti.conn, ti.provisioner, audit.NewLogger(), ti.notifier, ti.productFeatures,
+		func(ctx context.Context, org string) (bool, error) {
+			handledCalls++
+			return localaccounts.HandleTrialFixture(ctx, ti.conn, features, org)
+		},
+	)
+	listed, err := ti.activity.List(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []string{orgID}, listed)
+	require.Zero(t, handledCalls)
+	// These are the actual per-org activity arguments retained by Temporal.
+	args := activities.DemoteExpiredTrialArgs{OrganizationID: listed[0]}
+	redisServer.SetError("ERR injected cache failure")
+	require.ErrorContains(t, ti.activity.Demote(ctx, args), "store feature cache")
+	trial, err := ti.trials.GetTrial(ctx, orgID)
+	require.NoError(t, err)
+	require.True(t, trial.DemotedAt.Valid, "projection committed before cache failure")
+	listed, err = ti.activity.List(ctx)
+	require.NoError(t, err)
+	require.Empty(t, listed, "retry cannot depend on relisting the demoted trial")
+	require.Equal(t, 1, handledCalls, "list must never invoke the mutation handler")
+	redisServer.SetError("")
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		enabled, err := features.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, err)
+		require.True(t, enabled, "failed post-commit refresh left a stale cache entry")
+	}
+	require.NoError(t, ti.activity.Demote(ctx, args))
+	require.Equal(t, 2, handledCalls)
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		enabled, err := features.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, err)
+		require.False(t, enabled, "activity retry repaired cache")
+	}
+	for _, keyType := range openrouter.AllKeyTypes {
+		require.False(t, trialKey(t, ctx, ti, orgID, keyType).Disabled)
+	}
+	require.Empty(t, ti.provisioner.reconciled)
+	require.Empty(t, ti.notifier.inactive)
+}
+
+// Use the feature service at an earlier clock to create an elapsed active fixture.
+func applyElapsedTrialFixture(t *testing.T, ctx context.Context, ti *trialTestInstance, orgID string) {
+	t.Helper()
+	result, err := localaccounts.Apply(ctx, ti.conn, ti.productFeatures, orgID, localaccounts.ActiveTrial, false, time.Now().AddDate(0, 0, -15), func(ctx context.Context, tx pgx.Tx) error {
+		_, err := orgrepo.New(tx).GetOrganizationMetadata(ctx, orgID)
+		if err != nil {
+			return fmt.Errorf("read trial fixture organization metadata: %w", err)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	require.True(t, result.Committed)
+	require.Empty(t, result.CacheRefreshError)
 }

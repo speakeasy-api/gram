@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
+import { Bot, CircleSlash, UserRound } from "lucide-react";
+
 import { RadioCard, RadioCardGroup } from ".";
 
 const meta: Meta<typeof RadioCardGroup> = {
@@ -28,6 +30,61 @@ export const Default: Story = {
         </RadioCard>
         <RadioCard value="pickup" title="Collect from a nearby location." />
       </RadioCardGroup>
+    );
+  },
+};
+
+export const Compact: Story = {
+  render: function Render() {
+    const [value, setValue] = useState("standard");
+
+    return (
+      <div className="flex flex-col gap-6">
+        <RadioCardGroup
+          aria-label="Delivery speed, default density"
+          value={value}
+          onValueChange={setValue}
+        >
+          <RadioCard
+            value="standard"
+            leading={<UserRound aria-hidden="true" className="size-4" />}
+            title="Standard delivery"
+          >
+            Arrives in three to five working days.
+          </RadioCard>
+          <RadioCard
+            value="express"
+            leading={<Bot aria-hidden="true" className="size-4" />}
+            title="Express delivery"
+          >
+            Arrives sooner with priority handling.
+          </RadioCard>
+        </RadioCardGroup>
+
+        {/* size="sm" is for a choice inside a dialog or form step, where the
+            full-size title competes with the step's own heading. */}
+        <RadioCardGroup
+          size="sm"
+          aria-label="Delivery speed, compact density"
+          value={value}
+          onValueChange={setValue}
+        >
+          <RadioCard
+            value="standard"
+            leading={<UserRound aria-hidden="true" className="size-4" />}
+            title="Standard delivery"
+          >
+            Arrives in three to five working days.
+          </RadioCard>
+          <RadioCard
+            value="express"
+            leading={<CircleSlash aria-hidden="true" className="size-4" />}
+            title="Express delivery"
+          >
+            Arrives sooner with priority handling.
+          </RadioCard>
+        </RadioCardGroup>
+      </div>
     );
   },
 };

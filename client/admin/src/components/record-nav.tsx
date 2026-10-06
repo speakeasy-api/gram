@@ -1,16 +1,16 @@
 import type { AriaAttributes, JSX } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Link, useMatchRoute } from "@tanstack/react-router";
 import {
   BuildingIcon,
   ChevronLeftIcon,
   CreditCardIcon,
   FolderIcon,
   HistoryIcon,
+  LayoutGridIcon,
+  ServerIcon,
   SlidersHorizontalIcon,
   UsersIcon,
 } from "lucide-react";
-
+import { Link, useMatchRoute } from "@tanstack/react-router";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -20,9 +20,11 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
-import { organizationProjectsQuery } from "@/lib/adminQueries";
+
 import type { AdminOrganization } from "@/lib/gramAdminApi";
 import { TRIAL_LABELS } from "@/lib/trialLabels";
+import { organizationProjectsQuery } from "@/lib/adminQueries";
+import { useQuery } from "@tanstack/react-query";
 
 // Indexed as a plain string record, for the reason `Trial` gives: the server
 // can send a state this build has never heard of.
@@ -99,6 +101,10 @@ export function RecordNav({
     to: "/organizations/$idOrSlug/activity",
     params: { idOrSlug },
   });
+  const onMcpServers = !!matchRoute({
+    to: "/organizations/$idOrSlug/mcp-servers",
+    params: { idOrSlug },
+  });
   const onBilling = !!matchRoute({
     to: "/organizations/$idOrSlug/billing",
     params: { idOrSlug },
@@ -109,6 +115,10 @@ export function RecordNav({
   });
   const onFeatures = !!matchRoute({
     to: "/organizations/$idOrSlug/features",
+    params: { idOrSlug },
+  });
+  const onCoverage = !!matchRoute({
+    to: "/organizations/$idOrSlug/coverage",
     params: { idOrSlug },
   });
 
@@ -228,6 +238,24 @@ export function RecordNav({
               )}
             </SidebarMenuItem>
 
+            {/* No count badge: the picker on the page counts per project. */}
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={onMcpServers}
+                tooltip="MCP Servers"
+              >
+                <Link
+                  to="/organizations/$idOrSlug/mcp-servers"
+                  params={{ idOrSlug }}
+                  {...currentProps(onMcpServers)}
+                >
+                  <ServerIcon />
+                  <span>MCP Servers</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
             <SidebarMenuItem>
               <SidebarMenuButton asChild isActive={onBilling} tooltip="Billing">
                 <Link
@@ -254,6 +282,23 @@ export function RecordNav({
                 >
                   <SlidersHorizontalIcon />
                   <span>Features</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={onCoverage}
+                tooltip="Coverage"
+              >
+                <Link
+                  to="/organizations/$idOrSlug/coverage"
+                  params={{ idOrSlug }}
+                  {...currentProps(onCoverage)}
+                >
+                  <LayoutGridIcon />
+                  <span>Coverage</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

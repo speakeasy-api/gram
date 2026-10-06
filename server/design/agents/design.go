@@ -24,6 +24,11 @@ var Permissions = Type("AgentPermissions", func() {
 
 var CreateForm = Type("CreateAgentForm", func() {
 	Attribute("name", String, func() { MinLength(1); MaxLength(120) })
+	// Deliberately unconstrained at the transport: a cleared form field arrives
+	// as "" and means organization-wide, which Format(FormatUUID) would reject
+	// before the service could read it that way. Non-empty values are parsed
+	// and rejected in the service.
+	Attribute("project_id", String, "Optional project binding. Omit or send an empty string for an organization-wide agent; independent of policy grants and the Gram-Project header.")
 	Attribute("owner_user_id", String, "Eligible same-organization human owner; defaults to the caller")
 	Attribute("policy_grants", ArrayOf(PolicyGrantForm), "Optional initial allow-only agent policy ceilings, created atomically with the agent. Effective credential permissions remain limited by the live owner and authorizer.")
 	Required("name")
@@ -44,14 +49,14 @@ var PolicySelector = Type("AgentPolicySelector", func() {
 	Description("A constraint that narrows which resources an agent grant applies to.")
 	Required("resource_kind", "resource_id")
 	Attribute("resource_kind", String, "The kind of resource this selector targets.", func() {
-		Enum("project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "agent", "*")
+		Enum("project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "*")
 	})
 	Attribute("resource_id", String, "The resource identifier, or '*' for all resources of this kind.")
 	Attribute("disposition", String, "Tool disposition filter (MCP scopes only).", func() {
 		Enum("read_only", "destructive", "idempotent", "open_world")
 	})
 	Attribute("tool", String, "Specific tool name filter (MCP scopes only).")
-	Attribute("project_id", String, "Project filter (MCP scopes only).")
+	Attribute("project_id", String, "Project filter (MCP, environment, and assistant scopes).")
 	Attribute("server_url", String, "Server URL filter (risk policy scopes only).", func() { Format(FormatURI) })
 	Attribute("server_identity", String, "Server identity filter (risk policy scopes only).")
 })
@@ -110,6 +115,7 @@ var Agent = Type("ManagedAgent", func() {
 	Attribute("owner_reassignment_required_at", String, "When owner loss durably blocked this agent", func() { Format(FormatDateTime) })
 	Attribute("owner_reassignment_reason", String, "Stable reason that explicit reassignment is required")
 	Attribute("name", String)
+	Attribute("project_id", String, "The optional project this agent is scoped to; absent for an organization-wide agent", func() { Format(FormatUUID) })
 	Attribute("lifecycle", Lifecycle)
 	Attribute("permissions", Permissions)
 	Attribute("created_at", String, func() { Format(FormatDateTime) })
@@ -236,12 +242,14 @@ var _ = Service("agents", func() {
 			security.SessionPayload()
 			Extend(AgentIDForm)
 			Attribute("toolset_id", String, "Optional MCP authorization resource identifier: the toolset ID when present, otherwise the MCP server ID. Narrows discovery to this server and its project before evaluating exclusions.", func() { Format(FormatUUID) })
+			Attribute("toolset_ids", ArrayOf(String, func() { Format(FormatUUID) }), "Optional MCP authorization resource identifiers, discovered in one request. Each narrows discovery like toolset_id; the result is the union of candidates across all of them.", func() { MaxLength(100) })
 		})
 		Result(ArrayOf(PolicyGrantForm))
 		HTTP(func() {
 			GET("/rpc/agents.listDelegableGrants")
 			Param("agent_id")
 			Param("toolset_id")
+			Param("toolset_ids")
 			security.SessionHeader()
 			Response(StatusOK)
 		})

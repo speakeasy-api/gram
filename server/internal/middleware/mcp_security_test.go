@@ -23,6 +23,7 @@ func newMCPSecurity(t *testing.T) func(http.Handler) http.Handler {
 	mw, err := MCPSecurity(
 		testenv.NewLogger(t),
 		[]string{gramOrigin, "https://localhost:5173"},
+		nil,
 	)
 	require.NoError(t, err)
 	return mw
@@ -199,6 +200,8 @@ func TestMCPSecurity_CoversEveryMCPJSONRPCRoute(t *testing.T) {
 		"/x/mcp/petstore",            // experimental runtime
 		"/platform/mcp/gram-billing", // platform toolsets
 		"/platform-mcp",              // Gram's own platform MCP server
+		// The per-agent gateway, addressed by agent id rather than slug.
+		"/agent-mcp/0e3b6b1a-0000-4000-8000-000000000001",
 	} {
 		t.Run(path, func(t *testing.T) {
 			t.Parallel()
@@ -231,6 +234,7 @@ func TestMCPSecurity_AllowsOAuthCallbackNavigation(t *testing.T) {
 	for _, path := range []string{
 		"/mcp/idp_callback",
 		"/mcp/remote_login_callback",
+		"/mcp/remote_login_bind",
 		"/x/mcp/idp_callback",
 		"/x/mcp/remote_login_callback",
 	} {
@@ -400,7 +404,7 @@ func TestMCPSecurity_CanonicalizesTrustedOrigins(t *testing.T) {
 		t.Run(configured, func(t *testing.T) {
 			t.Parallel()
 
-			mw, err := MCPSecurity(testenv.NewLogger(t), []string{configured})
+			mw, err := MCPSecurity(testenv.NewLogger(t), []string{configured}, nil)
 			require.NoError(t, err)
 
 			reached := false
@@ -425,7 +429,7 @@ func TestMCPSecurity_CanonicalizesTrustedOrigins(t *testing.T) {
 func TestMCPSecurity_RejectsInvalidTrustedOrigin(t *testing.T) {
 	t.Parallel()
 
-	_, err := MCPSecurity(testenv.NewLogger(t), []string{"app.getgram.ai"})
+	_, err := MCPSecurity(testenv.NewLogger(t), []string{"app.getgram.ai"}, nil)
 
 	require.Error(t, err, "an origin without a scheme must fail at construction, not silently at runtime")
 }
@@ -433,7 +437,7 @@ func TestMCPSecurity_RejectsInvalidTrustedOrigin(t *testing.T) {
 func TestMCPSecurity_SkipsEmptyTrustedOrigins(t *testing.T) {
 	t.Parallel()
 
-	_, err := MCPSecurity(testenv.NewLogger(t), []string{"", gramOrigin})
+	_, err := MCPSecurity(testenv.NewLogger(t), []string{"", gramOrigin}, nil)
 
 	require.NoError(t, err, "an unset server-url or site-url flag must not break startup")
 }

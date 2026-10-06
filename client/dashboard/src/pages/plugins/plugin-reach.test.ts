@@ -17,6 +17,7 @@ function member(
   id: string,
   email: string,
   roleIds: string[] = [],
+  directoryRoleIds: string[] = [],
 ): AccessMember {
   return {
     id,
@@ -24,6 +25,7 @@ function member(
     principalUrn: `user:${id}`,
     name: email,
     roleIds,
+    directoryRoleIds,
   } as AccessMember;
 }
 
@@ -77,6 +79,19 @@ describe("countPluginInstalls", () => {
   it("matches role assignments by canonical role URN", () => {
     const syncedUsers = [synced("member@corp.com")];
     const members = [member("u1", "member@corp.com", ["role-eng"])];
+    expect(
+      countPluginInstalls(
+        [assignment("role:organization:role-eng")],
+        syncedUsers,
+        members,
+        [engineering],
+      ),
+    ).toBe(1);
+  });
+
+  it("matches role assignments held through a directory mapping", () => {
+    const syncedUsers = [synced("member@corp.com")];
+    const members = [member("u1", "member@corp.com", [], ["role-eng"])];
     expect(
       countPluginInstalls(
         [assignment("role:organization:role-eng")],

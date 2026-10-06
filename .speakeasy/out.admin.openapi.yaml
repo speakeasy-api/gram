@@ -465,6 +465,835 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: logout
+  /admin/onboarding.playbooks:
+    get:
+      description: Read every playbook, or, when an organization is named, the shared ones and its own.
+      operationId: adminListOnboardingPlaybooks
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: organization_id
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOnboardingPlaybookList'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: listOnboardingPlaybooks admin
+      tags:
+        - admin
+      x-speakeasy-react-hook:
+        name: AdminOnboardingPlaybooks
+      x-speakeasy-name-override: listOnboardingPlaybooks
+  /admin/onboarding.playbooks.clone:
+    post:
+      description: Copy a playbook into a custom one for an organization, so staff can edit it for that organization alone.
+      operationId: adminCloneOnboardingPlaybook
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloneOnboardingPlaybookRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOnboardingPlaybook'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: cloneOnboardingPlaybook admin
+      tags:
+        - admin
+      x-speakeasy-react-hook:
+        name: CloneAdminOnboardingPlaybook
+      x-speakeasy-name-override: cloneOnboardingPlaybook
+  /admin/onboarding.playbooks.create:
+    post:
+      description: Create a playbook from top-level steps, for a use case or for one organization, not both. Every prerequisite of a step must be in the playbook, before it. Marking a default replaces the use case's previous default.
+      operationId: adminCreateOnboardingPlaybook
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOnboardingPlaybookRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOnboardingPlaybook'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: createOnboardingPlaybook admin
+      tags:
+        - admin
+      x-speakeasy-react-hook:
+        name: CreateAdminOnboardingPlaybook
+      x-speakeasy-name-override: createOnboardingPlaybook
+  /admin/onboarding.playbooks.delete:
+    post:
+      description: Retire a playbook. Organizations assigned it fall back to their setup task selection.
+      operationId: adminDeleteOnboardingPlaybook
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteOnboardingPlaybookRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOnboardingPlaybookList'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: deleteOnboardingPlaybook admin
+      tags:
+        - admin
+      x-speakeasy-react-hook:
+        name: DeleteAdminOnboardingPlaybook
+      x-speakeasy-name-override: deleteOnboardingPlaybook
+  /admin/onboarding.playbooks.update:
+    post:
+      description: Replace a playbook's name, description, default mark and steps. A custom playbook is also checked against its organization's stack.
+      operationId: adminUpdateOnboardingPlaybook
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOnboardingPlaybookRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOnboardingPlaybook'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: updateOnboardingPlaybook admin
+      tags:
+        - admin
+      x-speakeasy-react-hook:
+        name: UpdateAdminOnboardingPlaybook
+      x-speakeasy-name-override: updateOnboardingPlaybook
+  /admin/onboarding.stackOptions:
+    get:
+      description: Read the vendors, plans and platforms the stack form offers, from the support matrix catalog.
+      operationId: adminGetOnboardingStackOptions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOnboardingStackOptions'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getOnboardingStackOptions admin
+      tags:
+        - admin
+      x-speakeasy-react-hook:
+        name: AdminOnboardingStackOptions
+      x-speakeasy-name-override: getOnboardingStackOptions
+  /admin/onboarding.steps:
+    get:
+      description: Read the onboarding steps the code defines, mirrored into the database, with their groups, methods and prerequisites.
+      operationId: adminListOnboardingSteps
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOnboardingStepList'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: listOnboardingSteps admin
+      tags:
+        - admin
+      x-speakeasy-react-hook:
+        name: AdminOnboardingSteps
+      x-speakeasy-name-override: listOnboardingSteps
+  /admin/onboarding.useCases:
+    get:
+      description: Read the use cases staff defined, each with its default playbook.
+      operationId: adminListOnboardingUseCases
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOnboardingUseCaseList'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: listOnboardingUseCases admin
+      tags:
+        - admin
+      x-speakeasy-react-hook:
+        name: AdminOnboardingUseCases
+      x-speakeasy-name-override: listOnboardingUseCases
+  /admin/onboarding.useCases.create:
+    post:
+      description: Define a use case.
+      operationId: adminCreateOnboardingUseCase
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOnboardingUseCaseRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOnboardingUseCase'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: createOnboardingUseCase admin
+      tags:
+        - admin
+      x-speakeasy-react-hook:
+        name: CreateAdminOnboardingUseCase
+      x-speakeasy-name-override: createOnboardingUseCase
+  /admin/onboarding.useCases.delete:
+    post:
+      description: Retire a use case and its playbooks. Organizations assigned one of them fall back to their setup task selection.
+      operationId: adminDeleteOnboardingUseCase
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteOnboardingUseCaseRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOnboardingUseCaseList'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: deleteOnboardingUseCase admin
+      tags:
+        - admin
+      x-speakeasy-react-hook:
+        name: DeleteAdminOnboardingUseCase
+      x-speakeasy-name-override: deleteOnboardingUseCase
+  /admin/onboarding.useCases.update:
+    post:
+      description: Rename or describe a use case. The slug never changes.
+      operationId: adminUpdateOnboardingUseCase
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOnboardingUseCaseRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOnboardingUseCase'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: updateOnboardingUseCase admin
+      tags:
+        - admin
+      x-speakeasy-react-hook:
+        name: UpdateAdminOnboardingUseCase
+      x-speakeasy-name-override: updateOnboardingUseCase
   /admin/organization.activity:
     get:
       description: Lists activity belonging to an organization for admin operators.
@@ -1550,6 +2379,314 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: listOrganizationMembers
+  /admin/organization.onboardingPlaybook:
+    get:
+      description: Read the playbook assigned to an organization and how each of its steps fares against the recorded stack.
+      operationId: adminGetOrganizationOnboardingPlaybook
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganizationOnboardingPlaybook'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getOrganizationOnboardingPlaybook admin
+      tags:
+        - admin
+      x-speakeasy-react-hook:
+        name: AdminOrganizationOnboardingPlaybook
+      x-speakeasy-name-override: getOrganizationOnboardingPlaybook
+    post:
+      description: Assign a playbook to an organization, or clear it. Rejected when a step's methods do not apply to the recorded stack; the error names the steps.
+      operationId: adminAssignOrganizationOnboardingPlaybook
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignOrganizationOnboardingPlaybookRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganizationOnboardingPlaybook'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: assignOrganizationOnboardingPlaybook admin
+      tags:
+        - admin
+      x-speakeasy-react-hook:
+        name: AssignAdminOrganizationOnboardingPlaybook
+      x-speakeasy-name-override: assignOrganizationOnboardingPlaybook
+  /admin/organization.onboardingStack:
+    get:
+      description: 'Read the stack staff recorded for an organization: its vendors with plans and its device management.'
+      operationId: adminGetOrganizationOnboardingStack
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOnboardingStack'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getOrganizationOnboardingStack admin
+      tags:
+        - admin
+      x-speakeasy-react-hook:
+        name: AdminOrganizationOnboardingStack
+      x-speakeasy-name-override: getOrganizationOnboardingStack
+    post:
+      description: Replace the stack recorded for an organization. Vendors and plans must come from the catalog; other needs a name and none clears it.
+      operationId: adminSetOrganizationOnboardingStack
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetOrganizationOnboardingStackRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOnboardingStack'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: setOrganizationOnboardingStack admin
+      tags:
+        - admin
+      x-speakeasy-react-hook:
+        name: SetAdminOrganizationOnboardingStack
+      x-speakeasy-name-override: setOrganizationOnboardingStack
   /admin/organization.open-dashboard:
     post:
       tags:
@@ -2025,6 +3162,87 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: setStripeCustomer
+  /admin/organization.setStripeSubscription:
+    post:
+      tags:
+        - admin
+      summary: setStripeSubscription admin
+      description: Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.
+      operationId: adminSetStripeSubscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetStripeSubscriptionRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganization'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: setStripeSubscription
   /admin/organization.spendBreakdown:
     get:
       description: Returns exact current PAYG list-price estimates for an organization's three metered products over a maximum of three calendar months. Available for every organization regardless of account type or subscription state.
@@ -2297,6 +3515,96 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getStripeSubscription
+  /admin/organization.stripeSubscriptionCandidate:
+    get:
+      tags:
+        - admin
+      summary: getStripeSubscriptionCandidate admin
+      description: Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.
+      operationId: adminGetStripeSubscriptionCandidate
+      parameters:
+        - name: organization_id
+          in: query
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+        - name: stripe_subscription_id
+          in: query
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+            pattern: ^sub_[A-Za-z0-9_]+$
+            maxLength: 255
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStripeSubscriptionCandidate'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: getStripeSubscriptionCandidate
   /admin/organization.update:
     post:
       tags:
@@ -2899,6 +4207,862 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getProject
+  /admin/project.mcpServerHealth:
+    get:
+      description: 'Describes one MCP server''s health: authentication configuration and session counts (admin view, no auth scoping). Tool calls come from getMcpServerToolCalls.'
+      operationId: adminDescribeMcpServerHealth
+      parameters:
+        - allowEmptyValue: true
+          description: Organization the project must belong to. A project outside it is reported as not found.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: Organization the project must belong to. A project outside it is reported as not found.
+            type: string
+        - allowEmptyValue: true
+          description: Project ID.
+          in: query
+          name: project_id
+          required: true
+          schema:
+            description: Project ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The server id from listProjectMcpServers; the toolset ID for toolset-only servers.
+          in: query
+          name: mcp_server_id
+          required: true
+          schema:
+            description: The server id from listProjectMcpServers; the toolset ID for toolset-only servers.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Window in days for distinct_subjects_in_window.
+          in: query
+          name: window_days
+          schema:
+            default: 14
+            description: Window in days for distinct_subjects_in_window.
+            enum:
+              - 14
+              - 30
+              - 90
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMcpServerHealth'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: describeMcpServerHealth admin
+      tags:
+        - admin
+      x-speakeasy-name-override: describeMcpServerHealth
+      x-speakeasy-react-hook:
+        name: AdminDescribeMcpServerHealth
+  /admin/project.mcpServerToolCalls:
+    get:
+      description: Reads one MCP server's tool call outcomes and series over a window (admin view, no auth scoping). Returns logging:disabled without reading telemetry when the organization's logs are off.
+      operationId: adminGetMcpServerToolCalls
+      parameters:
+        - allowEmptyValue: true
+          description: Organization the project must belong to. A project outside it is reported as not found.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: Organization the project must belong to. A project outside it is reported as not found.
+            type: string
+        - allowEmptyValue: true
+          description: Project ID.
+          in: query
+          name: project_id
+          required: true
+          schema:
+            description: Project ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The server id from listProjectMcpServers; the toolset ID for toolset-only servers.
+          in: query
+          name: mcp_server_id
+          required: true
+          schema:
+            description: The server id from listProjectMcpServers; the toolset ID for toolset-only servers.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Window in days. 90 days is bucketed weekly, shorter windows daily.
+          in: query
+          name: window_days
+          schema:
+            default: 14
+            description: Window in days. 90 days is bucketed weekly, shorter windows daily.
+            enum:
+              - 14
+              - 30
+              - 90
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMcpServerToolCalls'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getMcpServerToolCalls admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getMcpServerToolCalls
+      x-speakeasy-react-hook:
+        name: AdminGetMcpServerToolCalls
+  /admin/project.mcpServers:
+    get:
+      tags:
+        - admin
+      summary: listProjectMcpServers admin
+      description: Lists the MCP servers in a project (admin view, no auth scoping).
+      operationId: adminListProjectMcpServers
+      parameters:
+        - name: organization_id
+          in: query
+          description: Organization the project must belong to. A project outside it is reported as not found.
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+            description: Organization the project must belong to. A project outside it is reported as not found.
+        - name: project_id
+          in: query
+          description: Project ID.
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+            description: Project ID.
+            format: uuid
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminListProjectMcpServersResult'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: listProjectMcpServers
+  /admin/registry.create:
+    post:
+      description: Staff-only registry administration.
+      operationId: adminCreateRegistryEntry
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRegistryEntryRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRegistryEntry'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: createRegistryEntry admin
+      tags:
+        - admin
+      x-speakeasy-name-override: createRegistryEntry
+  /admin/registry.get:
+    get:
+      description: Staff-only registry administration.
+      operationId: adminGetRegistryEntry
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRegistryEntry'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getRegistryEntry admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getRegistryEntry
+  /admin/registry.list:
+    get:
+      description: Staff-only registry administration.
+      operationId: adminListRegistryEntries
+      parameters:
+        - allowEmptyValue: true
+          description: Search query; at most 1024 UTF-8 bytes (enforced by the server).
+          in: query
+          name: query
+          schema:
+            description: Search query; at most 1024 UTF-8 bytes (enforced by the server).
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: published
+          schema:
+            type: boolean
+        - allowEmptyValue: true
+          description: Opaque continuation cursor from next_cursor; at most 8192 UTF-8 bytes (enforced by the server).
+          in: query
+          name: cursor
+          schema:
+            description: Opaque continuation cursor from next_cursor; at most 8192 UTF-8 bytes (enforced by the server).
+            type: string
+        - allowEmptyValue: true
+          description: Page size; zero uses the server default of 25.
+          in: query
+          name: limit
+          schema:
+            description: Page size; zero uses the server default of 25.
+            format: int32
+            maximum: 50
+            minimum: 0
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRegistryPage'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: listRegistryEntries admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listRegistryEntries
+  /admin/registry.oktaCandidates:
+    get:
+      description: 'Staff-only registry administration: Okta application names observed across synced tenants that plausibly belong to the entry, for confirmation in the editor.'
+      operationId: adminGetRegistryOktaCandidates
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRegistryOktaCandidates'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getRegistryOktaCandidates admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getRegistryOktaCandidates
+  /admin/registry.oktaUnmapped:
+    get:
+      description: 'Staff-only registry administration: observed Okta application names no entry claims yet, with the entry the heuristic would propose.'
+      operationId: adminListRegistryOktaUnmapped
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRegistryOktaUnmapped'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: listRegistryOktaUnmapped admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listRegistryOktaUnmapped
+  /admin/registry.save:
+    post:
+      description: Staff-only registry administration.
+      operationId: adminSaveRegistryEntry
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveRegistryEntryRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRegistryEntry'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: saveRegistryEntry admin
+      tags:
+        - admin
+      x-speakeasy-name-override: saveRegistryEntry
+  /admin/registry.setPublished:
+    post:
+      description: Staff-only registry administration.
+      operationId: adminSetRegistryEntryPublished
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetRegistryEntryPublishedRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRegistryEntry'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: setRegistryEntryPublished admin
+      tags:
+        - admin
+      x-speakeasy-name-override: setRegistryEntryPublished
   /admin/remote-session-issuers.createGlobalIssuer:
     post:
       description: Create a global remote_session_issuer (project_id NULL, organization_id NULL). Requires platform admin.
@@ -3927,6 +6091,97 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getSession
+  /admin/supportCoverage.get:
+    get:
+      description: 'Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.'
+      operationId: adminGetSupportCoverage
+      parameters:
+        - allowEmptyValue: true
+          description: Organization to report coverage for.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: Organization to report coverage for.
+            type: string
+        - allowEmptyValue: true
+          description: Observation window in days.
+          in: query
+          name: window_days
+          schema:
+            default: 30
+            description: Observation window in days.
+            format: int64
+            maximum: 90
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportCoverageResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getSupportCoverage admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getSupportCoverage
+      x-speakeasy-react-hook:
+        name: AdminGetSupportCoverage
   /admin/supportMatrix.get:
     get:
       description: Read the shared support catalog and product coverage.
@@ -4450,6 +6705,187 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: startTrial
+  /admin/users.list:
+    get:
+      tags:
+        - admin
+      summary: listUsers admin
+      description: Staff-only active user discovery.
+      operationId: adminListUsers
+      parameters:
+        - name: q
+          in: query
+          allowEmptyValue: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          allowEmptyValue: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: limit
+          in: query
+          allowEmptyValue: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminListUsersResult'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: listUsers
+  /admin/users.organizations.list:
+    get:
+      tags:
+        - admin
+      summary: listUserOrganizations admin
+      description: Staff-only active user discovery.
+      operationId: adminListUserOrganizations
+      parameters:
+        - name: user_id
+          in: query
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          allowEmptyValue: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: limit
+          in: query
+          allowEmptyValue: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminListUserOrganizationsResult'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'conflict: resource already exists'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      x-speakeasy-name-override: listUserOrganizations
 components:
   schemas:
     AdminBulkUpdateAccountTypeResult:
@@ -4609,6 +7045,541 @@ components:
       required:
         - organizations
         - total
+    AdminListProjectMcpServersResult:
+      type: object
+      properties:
+        mcp_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMcpServer'
+          description: The project's MCP servers, oldest first.
+      required:
+        - mcp_servers
+    AdminListUserOrganizationsResult:
+      type: object
+      properties:
+        limit:
+          type: integer
+          format: int64
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUserOrganization'
+        page:
+          type: integer
+          format: int64
+        total:
+          type: integer
+          format: int64
+      required:
+        - organizations
+        - total
+        - page
+        - limit
+    AdminListUsersResult:
+      type: object
+      properties:
+        limit:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int64
+        total:
+          type: integer
+          format: int64
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUser'
+      required:
+        - users
+        - total
+        - page
+        - limit
+    AdminMcpServer:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          description: The mcp_servers row ID, or the toolset ID for a toolset-only server.
+        name:
+          type: string
+          description: Display name of the server.
+        source:
+          type: string
+          description: What backs the server. toolset_only is a toolset with no mcp_servers row.
+          enum:
+            - toolset
+            - remote
+            - tunneled
+            - unproxied
+            - toolset_only
+        url:
+          type: string
+          description: The URL clients connect to. Omitted when the server has no routable address.
+        visibility:
+          type: string
+          description: The visibility of the server.
+          enum:
+            - disabled
+            - private
+            - public
+      description: 'MCP server surfaced to admin operators. Covers both server models: mcp_servers rows and mcp_enabled toolsets that no mcp_servers row points at.'
+      required:
+        - id
+        - name
+        - visibility
+        - source
+        - created_at
+    AdminMcpServerHealth:
+      type: object
+      properties:
+        correlation:
+          $ref: '#/components/schemas/AdminMcpServerHealthCorrelation'
+        legacy_auth:
+          type: string
+          description: Legacy authentication in force. Set only when the server has no user session issuer.
+          enum:
+            - external_oauth
+            - oauth_proxy
+            - gram_private
+        server:
+          $ref: '#/components/schemas/AdminMcpServerHealthServer'
+        user_session_issuer:
+          $ref: '#/components/schemas/AdminMcpServerHealthUserSessionIssuer'
+      description: 'Health of one MCP server: its authentication configuration and session counts. Tool calls are read separately through getMcpServerToolCalls. Never carries secrets, error text, subjects, users or emails.'
+      required:
+        - server
+        - correlation
+    AdminMcpServerHealthCorrelation:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The mcp_servers row ID stamped on proxied calls. Absent for toolset-only servers.
+        toolset_slug:
+          type: string
+          description: The toolset slug stamped on hosted calls. Absent when the server has no toolset or several live servers share it.
+        url_slug:
+          type: string
+          description: The slug in the server's /mcp/<slug> URL, matched against hook-observed calls. Absent when the server has no slug.
+      description: The identities telemetry is matched on for this server.
+    AdminMcpServerHealthRemoteSessionClient:
+      type: object
+      properties:
+        attachment_scope:
+          type: string
+          description: Where the row is attached. global is platform-wide.
+          enum:
+            - project
+            - organization
+            - global
+        grant_types:
+          type: array
+          items:
+            type: string
+          description: Grant types recorded for the client.
+        has_identity_provider_connection:
+          type: boolean
+          description: Whether the client is backed by an identity provider connection.
+        id:
+          type: string
+          description: The remote session client ID.
+        issuer:
+          $ref: '#/components/schemas/AdminMcpServerHealthRemoteSessionIssuer'
+        registration:
+          type: string
+          description: How the client was registered upstream.
+          enum:
+            - cimd
+            - dcr
+            - static
+        scope:
+          type: array
+          items:
+            type: string
+          description: Scopes recorded for the client.
+        sessions:
+          $ref: '#/components/schemas/AdminMcpServerHealthRemoteSessions'
+        token_endpoint_auth_method:
+          type: string
+          description: The client's token endpoint auth method. Absent when unset.
+          enum:
+            - client_secret_basic
+            - client_secret_post
+            - none
+            - private_key_jwt
+        upstream_rejected_at:
+          type: string
+          description: When the upstream last rejected the client's credentials.
+          format: date-time
+      description: A remote session client attached to the issuer, with its upstream issuer and session counts. Never carries secrets.
+      required:
+        - id
+        - registration
+        - scope
+        - grant_types
+        - has_identity_provider_connection
+        - attachment_scope
+        - issuer
+        - sessions
+    AdminMcpServerHealthRemoteSessionIssuer:
+      type: object
+      properties:
+        attachment_scope:
+          type: string
+          description: Where the row is attached. global is platform-wide.
+          enum:
+            - project
+            - organization
+            - global
+        cimd_supported:
+          type: boolean
+          description: Whether the issuer accepts a Client ID Metadata Document URL as client_id.
+        id:
+          type: string
+          description: The remote session issuer ID.
+        issuer:
+          type: string
+          description: The upstream issuer URL.
+        jwks_last_error_at:
+          type: string
+          description: Last failed JWK Set fetch.
+          format: date-time
+        metadata_fetched_at:
+          type: string
+          description: Last successful metadata discovery.
+          format: date-time
+        metadata_last_error_at:
+          type: string
+          description: Last failed metadata discovery.
+          format: date-time
+        name:
+          type: string
+          description: Display name of the issuer.
+        networking:
+          type: string
+          description: Whether Gram reaches the issuer over the public internet or a tunnel.
+          enum:
+            - public
+            - tunneled
+        oidc:
+          type: boolean
+          description: Whether the issuer is treated as an OpenID Connect provider.
+        passthrough:
+          type: boolean
+          description: Whether upstream tokens are passed through to the server.
+        pkce:
+          type: string
+          description: PKCE support classified from the issuer's advertised code challenge methods.
+          enum:
+            - supported
+            - unsupported
+            - none
+            - uncaptured
+        scope_override:
+          type: array
+          items:
+            type: string
+          description: Operator-pinned scopes sent in place of the discovered set. Absent when unset.
+        slug:
+          type: string
+          description: The issuer slug.
+      description: The upstream authorization server a remote session client is registered with. Error columns are exposed as timestamps only.
+      required:
+        - id
+        - slug
+        - issuer
+        - attachment_scope
+        - networking
+        - oidc
+        - passthrough
+        - pkce
+        - cimd_supported
+    AdminMcpServerHealthRemoteSessions:
+      type: object
+      properties:
+        first_linked_at:
+          type: string
+          description: When the first upstream session was linked.
+          format: date-time
+        linked_subjects:
+          type: integer
+          description: Distinct users holding a live upstream session.
+          format: int64
+        reauthorizations:
+          type: integer
+          description: Fresh authorizations beyond each session's first.
+          format: int64
+        validation_status_counts:
+          type: object
+          description: 'Live sessions per last validation status: valid, rejected_by_member, inactive or unknown. Sessions never validated are left out.'
+          additionalProperties:
+            type: integer
+            format: int64
+      description: Upstream sessions brokered through one remote session client, whichever issuer first linked them.
+      required:
+        - linked_subjects
+        - reauthorizations
+        - validation_status_counts
+    AdminMcpServerHealthServer:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          description: The mcp_servers row ID, or the toolset ID for a toolset-only server.
+        name:
+          type: string
+          description: Display name of the server.
+        source:
+          type: string
+          description: What backs the server. toolset_only is a toolset with no mcp_servers row.
+          enum:
+            - toolset
+            - remote
+            - tunneled
+            - unproxied
+            - toolset_only
+        visibility:
+          type: string
+          description: The visibility of the server.
+          enum:
+            - disabled
+            - private
+            - public
+      description: The server the health report describes, as listProjectMcpServers lists it.
+      required:
+        - id
+        - name
+        - source
+        - visibility
+        - created_at
+    AdminMcpServerHealthServerRef:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The mcp_servers row ID, or the toolset ID for a toolset-only server.
+        name:
+          type: string
+          description: Display name of the server.
+      description: Another server in the project that shares the issuer.
+      required:
+        - id
+        - name
+    AdminMcpServerHealthTrustedRemoteSession:
+      type: object
+      properties:
+        client_id:
+          type: string
+          description: The remote session client ID Gram uses with the trusted issuer.
+        issuer_id:
+          type: string
+          description: The trusted remote session issuer ID.
+      description: The external authorization server whose assertions the issuer trusts.
+      required:
+        - issuer_id
+        - client_id
+    AdminMcpServerHealthUserSessionIssuer:
+      type: object
+      properties:
+        attachment_scope:
+          type: string
+          description: Where the row is attached. global is platform-wide.
+          enum:
+            - project
+            - organization
+            - global
+        authn_challenge_mode:
+          type: string
+          description: How multi-remote authn challenges are presented.
+          enum:
+            - chain
+            - interactive
+        classification:
+          type: string
+          description: custom, or project_default_idp for the auto-provisioned issuer of private servers.
+          enum:
+            - custom
+            - project_default_idp
+        client_id_metadata_admission_mode:
+          type: string
+          description: The stored CIMD admission mode. Absent when unset, which admits as open.
+          enum:
+            - disabled
+            - presets
+            - reporting
+            - open
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          description: The user session issuer ID.
+        other_servers_using_issuer:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMcpServerHealthServerRef'
+          description: Other live servers in the project that share this issuer.
+        remote_session_clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMcpServerHealthRemoteSessionClient'
+          description: Remote session clients attached to the issuer.
+        session_duration_hours:
+          type: integer
+          description: How long a user session lasts, in whole hours.
+          format: int64
+        sessions:
+          $ref: '#/components/schemas/AdminMcpServerHealthUserSessions'
+        slug:
+          type: string
+          description: The issuer slug.
+        trusted_remote_session:
+          $ref: '#/components/schemas/AdminMcpServerHealthTrustedRemoteSession'
+        use_authentication_host:
+          type: boolean
+          description: Whether the issuer announces the authentication host as its origin.
+      description: The user session issuer that authenticates the server's users.
+      required:
+        - id
+        - slug
+        - classification
+        - authn_challenge_mode
+        - session_duration_hours
+        - attachment_scope
+        - use_authentication_host
+        - other_servers_using_issuer
+        - created_at
+        - sessions
+        - remote_session_clients
+    AdminMcpServerHealthUserSessions:
+      type: object
+      properties:
+        distinct_subjects_ever:
+          type: integer
+          description: Distinct users that ever received a session from the issuer.
+          format: int64
+        distinct_subjects_in_window:
+          type: integer
+          description: Distinct users that received a session inside the window.
+          format: int64
+        first_issued_at:
+          type: string
+          description: When the first session was issued.
+          format: date-time
+        last_issued_at:
+          type: string
+          description: When the latest session was issued or refreshed.
+          format: date-time
+        live:
+          type: integer
+          description: Sessions whose refresh deadline has not passed.
+          format: int64
+      description: User sessions the issuer has minted. A refresh replaces a session row, so last_issued_at includes refreshes. For an organization- or global-attached issuer the counts span every project using the issuer.
+      required:
+        - distinct_subjects_ever
+        - distinct_subjects_in_window
+        - live
+    AdminMcpServerToolCallBucket:
+      type: object
+      properties:
+        bucket_start:
+          type: string
+          format: date-time
+        failed:
+          type: integer
+          description: Failed tool calls in the bucket.
+          format: int64
+        total:
+          type: integer
+          description: Tool calls in the bucket.
+          format: int64
+      description: Tool calls in one bucket of the series.
+      required:
+        - bucket_start
+        - total
+        - failed
+    AdminMcpServerToolCallOutcomes:
+      type: object
+      properties:
+        blocked:
+          type: integer
+          format: int64
+        client_error:
+          type: integer
+          format: int64
+        failed:
+          type: integer
+          format: int64
+        server_error:
+          type: integer
+          format: int64
+        success:
+          type: integer
+          format: int64
+        unauthorized:
+          type: integer
+          format: int64
+        unknown:
+          type: integer
+          format: int64
+      description: Tool calls inside the window by outcome class. In-band tool errors (isError inside HTTP 200) count as success.
+      required:
+        - success
+        - unauthorized
+        - client_error
+        - server_error
+        - blocked
+        - failed
+        - unknown
+    AdminMcpServerToolCalls:
+      type: object
+      properties:
+        bucket_seconds:
+          type: integer
+          description: Width of each series bucket.
+          format: int64
+        daily:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMcpServerToolCallBucket'
+          description: Tool calls per bucket, oldest first.
+        outcomes:
+          $ref: '#/components/schemas/AdminMcpServerToolCallOutcomes'
+        type:
+          type: string
+          enum:
+            - logging:disabled
+            - logging:enabled
+        watermark:
+          type: string
+          description: Telemetry is complete up to this time.
+          format: date-time
+        window_days:
+          type: integer
+          description: Length of the window in days.
+          format: int64
+      description: 'One MCP server''s tool calls over a window, discriminated on type. logging:disabled carries nothing else: the organization''s logs are off, so calls were never recorded. logging:enabled carries every other field. Outcomes also count hook-observed calls; the daily series counts only calls that reached Gram directly.'
+      required:
+        - type
+    AdminMdmVendorOption:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+      required:
+        - slug
+        - name
     AdminMeterUsageBucket:
       type: object
       properties:
@@ -4671,6 +7642,245 @@ components:
         - buckets
         - queried_at
         - measurement_method
+    AdminOnboardingPlan:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+      required:
+        - slug
+        - name
+    AdminOnboardingPlatform:
+      type: object
+      properties:
+        family:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        surface:
+          type: string
+      required:
+        - slug
+        - name
+        - family
+        - surface
+    AdminOnboardingPlaybook:
+      type: object
+      properties:
+        description:
+          type: string
+        id:
+          type: string
+        is_default:
+          type: boolean
+          description: The default playbook of its use case. Only a shared playbook can be one.
+        name:
+          type: string
+        organization_id:
+          type: string
+          description: 'Set for a custom playbook: the one organization it belongs to. A playbook has a use case or an organization, never both.'
+        organization_name:
+          type: string
+          description: That organization's name.
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOnboardingPlaybookStep'
+          description: Top-level steps in walking order; a group brings its cards.
+        use_case_id:
+          type: string
+          description: 'Set for a shared playbook: the use case it belongs to.'
+        use_case_name:
+          type: string
+        use_case_slug:
+          type: string
+      required:
+        - id
+        - name
+        - description
+        - is_default
+        - steps
+    AdminOnboardingPlaybookList:
+      type: object
+      properties:
+        playbooks:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOnboardingPlaybook'
+      required:
+        - playbooks
+    AdminOnboardingPlaybookStep:
+      type: object
+      properties:
+        slug:
+          type: string
+        title:
+          type: string
+      required:
+        - slug
+        - title
+    AdminOnboardingStack:
+      type: object
+      properties:
+        mdm_vendor:
+          type: string
+          description: jamf, intune, iru, other or none. Absent until staff record the stack.
+        mdm_vendor_name:
+          type: string
+          description: The software's name when mdm_vendor is other.
+        organization_id:
+          type: string
+        vendors:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOnboardingStackVendor'
+          description: The vendors the organization uses. Empty until staff record the stack.
+      required:
+        - organization_id
+        - vendors
+    AdminOnboardingStackOptions:
+      type: object
+      properties:
+        mdm_vendors:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMdmVendorOption'
+          description: Device management software the form offers, ending with other.
+        vendors:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOnboardingVendorOption'
+          description: From the support matrix catalog, in catalog order.
+      required:
+        - vendors
+        - mdm_vendors
+    AdminOnboardingStackVendor:
+      type: object
+      properties:
+        plan_slug:
+          type: string
+          description: The plan the organization is on with this vendor. Absent for a vendor with no plans.
+        vendor:
+          type: string
+      required:
+        - vendor
+    AdminOnboardingStep:
+      type: object
+      properties:
+        completion:
+          type: string
+          description: 'How the step completes: manual, fact, or children for a group.'
+        description:
+          type: string
+        hidden_by_default:
+          type: boolean
+          description: Whether an organization that never saved a selection sees the step.
+        method_slugs:
+          type: array
+          items:
+            type: string
+          description: Support matrix integration methods the step configures. Empty means the step applies to every stack.
+        parent_slug:
+          type: string
+          description: The group this card sits under. Absent for a top-level step.
+        requires:
+          type: array
+          items:
+            type: string
+          description: Slugs of the steps that must be done before this one.
+        slug:
+          type: string
+        title:
+          type: string
+      required:
+        - slug
+        - title
+        - description
+        - completion
+        - hidden_by_default
+        - method_slugs
+        - requires
+    AdminOnboardingStepApplicability:
+      type: object
+      properties:
+        applies:
+          type: boolean
+          description: Whether the recorded stack supports the step.
+        reason:
+          type: string
+          description: Why not, when it does not.
+        slug:
+          type: string
+        title:
+          type: string
+      required:
+        - slug
+        - title
+        - applies
+        - reason
+    AdminOnboardingStepList:
+      type: object
+      properties:
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOnboardingStep'
+          description: Every step in wizard order; a group precedes its cards.
+      required:
+        - steps
+    AdminOnboardingUseCase:
+      type: object
+      properties:
+        default_playbook_id:
+          type: string
+          description: The default playbook, once one is marked.
+        description:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+          description: Stable name the onboarding survey uses.
+      required:
+        - id
+        - slug
+        - name
+        - description
+    AdminOnboardingUseCaseList:
+      type: object
+      properties:
+        use_cases:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOnboardingUseCase'
+      required:
+        - use_cases
+    AdminOnboardingVendorOption:
+      type: object
+      properties:
+        plans:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOnboardingPlan'
+          description: Plans the vendor sells. Empty for a vendor with no plans.
+        platforms:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOnboardingPlatform'
+          description: The vendor's products, all implied when the vendor is selected.
+        vendor:
+          type: string
+          description: Vendor name as the support matrix spells it.
+      required:
+        - vendor
+        - plans
+        - platforms
     AdminOrganization:
       type: object
       properties:
@@ -4739,6 +7949,10 @@ components:
         whitelisted:
           type: boolean
           description: Whether the organization is whitelisted for full access.
+        workos_dashboard_url:
+          type: string
+          description: Link to the organization in the WorkOS dashboard. Absent when the organization is not linked to WorkOS or the deployment has no WorkOS environment configured.
+          format: uri
         workos_id:
           type: string
           description: WorkOS organization ID, if linked.
@@ -4781,6 +7995,21 @@ components:
         - display_name
         - created_at
         - updated_at
+    AdminOrganizationOnboardingPlaybook:
+      type: object
+      properties:
+        applicability:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOnboardingStepApplicability'
+          description: Each step of the assigned playbook against the recorded stack.
+        organization_id:
+          type: string
+        playbook:
+          $ref: '#/components/schemas/AdminOnboardingPlaybook'
+      required:
+        - organization_id
+        - applicability
     AdminOrganizationStats:
       type: object
       properties:
@@ -4949,6 +8178,161 @@ components:
         - assistant_count
         - created_at
         - updated_at
+    AdminRegistryEntry:
+      type: object
+      properties:
+        created_at:
+          type: string
+        data_json:
+          type: string
+          description: Complete lossless registry record JSON
+        id:
+          type: string
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminRegistryIssue'
+        published:
+          type: boolean
+        updated_at:
+          type: string
+          description: Opaque write precondition; echo unchanged
+      required:
+        - id
+        - data_json
+        - published
+        - created_at
+        - updated_at
+        - issues
+    AdminRegistryIssue:
+      type: object
+      properties:
+        message:
+          type: string
+        path:
+          type: string
+      required:
+        - path
+        - message
+    AdminRegistryOktaCandidate:
+      type: object
+      properties:
+        integrator:
+          type: boolean
+          description: Whether the name comes from an integrator listing rather than Okta's public catalog; any integrator account can publish under a vendor-like key, so confirm with care.
+        mapped_by:
+          type: string
+          description: Name of the entry that already claims this key, when one does.
+        oin_name:
+          type: string
+          description: Okta application name, the OIN key.
+        organizations:
+          type: integer
+          description: How many organizations have the application.
+          format: int64
+        reason:
+          type: string
+          description: 'domain: the vendor token matches a remote or website host; title: it matches the entry title; label: a tenant''s label equals the entry title.'
+          enum:
+            - domain
+            - title
+            - label
+        sign_on_modes:
+          type: array
+          items:
+            type: string
+          description: Sign-on modes seen for the application.
+      description: An Okta application name observed across synced tenants that plausibly belongs to a catalog entry. A proposal for staff to confirm, never applied automatically.
+      required:
+        - oin_name
+        - organizations
+        - sign_on_modes
+        - reason
+        - integrator
+    AdminRegistryOktaCandidates:
+      type: object
+      properties:
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminRegistryOktaCandidate'
+          description: Strongest reason first, then by organizations.
+      required:
+        - candidates
+    AdminRegistryOktaUnmapped:
+      type: object
+      properties:
+        names:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminRegistryOktaUnmappedName'
+          description: By organizations, most first. Okta's own applications are left out.
+      required:
+        - names
+    AdminRegistryOktaUnmappedName:
+      type: object
+      properties:
+        integrator:
+          type: boolean
+          description: Whether the name comes from an integrator listing rather than Okta's public catalog.
+        oin_name:
+          type: string
+        organizations:
+          type: integer
+          format: int64
+        reason:
+          type: string
+          enum:
+            - domain
+            - title
+            - label
+        sign_on_modes:
+          type: array
+          items:
+            type: string
+        suggested_entry_id:
+          type: string
+          description: The entry the heuristic would map it to, when one matches.
+        suggested_entry_name:
+          type: string
+      description: An observed Okta application name no catalog entry claims.
+      required:
+        - oin_name
+        - organizations
+        - sign_on_modes
+        - integrator
+    AdminRegistryPage:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminRegistrySummary'
+        next_cursor:
+          type: string
+      required:
+        - entries
+    AdminRegistrySummary:
+      type: object
+      properties:
+        id:
+          type: string
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminRegistryIssue'
+        name:
+          type: string
+        published:
+          type: boolean
+        updated_at:
+          type: string
+      required:
+        - id
+        - name
+        - published
+        - updated_at
+        - issues
     AdminSession:
       type: object
       properties:
@@ -5055,6 +8439,64 @@ components:
         - current_period_end
         - cancel_at_period_end
         - payment_failed
+    AdminStripeSubscriptionCandidate:
+      type: object
+      properties:
+        customer_id:
+          type: string
+          description: Stripe customer that owns the subscription.
+        id:
+          type: string
+          description: Stripe subscription ID returned by Stripe.
+        status:
+          type: string
+          description: Stripe subscription status.
+      description: Live Stripe subscription details shown before recording the subscription on a PAYG organization.
+      required:
+        - id
+        - customer_id
+        - status
+    AdminUser:
+      type: object
+      properties:
+        display_name:
+          type: string
+        email:
+          type: string
+        id:
+          type: string
+        last_login:
+          type: string
+          format: date-time
+        organization_count:
+          type: integer
+          format: int64
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUserOrganization'
+      required:
+        - id
+        - display_name
+        - email
+        - organizations
+        - organization_count
+    AdminUserOrganization:
+      type: object
+      properties:
+        disabled_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+      required:
+        - id
+        - name
+        - slug
     Asset:
       type: object
       properties:
@@ -5095,6 +8537,16 @@ components:
         - content_length
         - created_at
         - updated_at
+    AssignOrganizationOnboardingPlaybookRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+        playbook_id:
+          type: string
+          description: Omit to clear the assignment.
+      required:
+        - organization_id
     AuditLog:
       type: object
       properties:
@@ -5189,6 +8641,55 @@ components:
       required:
         - id
         - ends_at
+    CloneOnboardingPlaybookRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Defaults to the source name.
+        organization_id:
+          type: string
+        playbook_id:
+          type: string
+      required:
+        - organization_id
+        - playbook_id
+    CreateOnboardingPlaybookRequestBody:
+      type: object
+      properties:
+        description:
+          type: string
+        is_default:
+          type: boolean
+        name:
+          type: string
+        organization_id:
+          type: string
+          description: The one organization a custom playbook belongs to.
+        step_slugs:
+          type: array
+          items:
+            type: string
+          description: Top-level step slugs in walking order.
+        use_case_id:
+          type: string
+          description: The use case a shared playbook belongs to.
+      required:
+        - name
+        - step_slugs
+    CreateOnboardingUseCaseRequestBody:
+      type: object
+      properties:
+        description:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+          description: Lowercase letters, digits and dashes.
+      required:
+        - slug
+        - name
     CreateOrganizationRequestBody:
       type: object
       properties:
@@ -5202,12 +8703,25 @@ components:
       required:
         - url
         - ownership_confirmed
+    CreateRegistryEntryRequestBody:
+      type: object
+      properties:
+        data_json:
+          type: string
+          description: Complete registry record JSON; at most 8388608 UTF-8 bytes (8 MiB), enforced by the server on incoming writes. Stored records remain readable for repair.
+      required:
+        - data_json
     CreateRemoteSessionIssuerForm:
       type: object
       properties:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_grant_profiles_supported:
+          type: array
+          items:
+            type: string
+          description: Advertised grant profiles; metadata evidence is not client authorization or user access.
         authorization_response_iss_parameter_supported:
           type: boolean
           description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field stores null ("not captured").
@@ -5322,6 +8836,20 @@ components:
       required:
         - slug
         - issuer
+    DeleteOnboardingPlaybookRequestBody:
+      type: object
+      properties:
+        playbook_id:
+          type: string
+      required:
+        - playbook_id
+    DeleteOnboardingUseCaseRequestBody:
+      type: object
+      properties:
+        use_case_id:
+          type: string
+      required:
+        - use_case_id
     DisableOrganizationRequestBody:
       type: object
       properties:
@@ -5400,6 +8928,10 @@ components:
     GlobalRemoteSessionIssuer:
       type: object
       properties:
+        ema_binding_count:
+          type: integer
+          description: Number of active identity-chaining bindings that block deletion and must be explicitly unlinked by their owning organizations. Included in the detail response; omitted from listings.
+          format: int64
         global_client_count:
           type: integer
           description: Number of non-deleted global remote_session_clients (project_id NULL, organization_id NULL) registered with this issuer. These block a delete and the platform admin can remove them here.
@@ -5483,7 +9015,7 @@ components:
       properties:
         can_migrate:
           type: boolean
-          description: 'TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
+          description: 'TRUE when the migration would succeed: no active identity-chaining bindings, endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
         client_count:
           type: integer
           description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
@@ -5493,6 +9025,10 @@ components:
           items:
             type: string
           description: Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.
+        ema_binding_count:
+          type: integer
+          description: Number of active identity-chaining bindings on the source. Non-zero blocks migration; explicitly unlink these bindings before migration, then prepare new bindings for the target.
+          format: int64
         endpoint_mismatches:
           type: array
           items:
@@ -5518,6 +9054,7 @@ components:
           description: Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
       description: 'Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: how many clients move, which MCP servers are affected, every blocker that would make the migration fail, and how many tenant-owned clients the target already carries.'
       required:
+        - ema_binding_count
         - client_count
         - mcp_server_names
         - endpoint_mismatches
@@ -5629,6 +9166,9 @@ components:
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
+        automatic_role_distribution:
+          type: boolean
+          description: Whether the staff rollout for automatic role plugin setup is enabled
         consent_tool_filtering_enabled:
           type: boolean
           description: Whether MCP consent screens offer the tool filtering picker for the organization
@@ -5703,6 +9243,7 @@ components:
         - consent_tool_filtering_enabled
         - session_portability_enabled
         - network_ingress_enabled
+        - automatic_role_distribution
         - device_agent
     RearmTrialRequestBody:
       type: object
@@ -5726,6 +9267,11 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_grant_profiles_supported:
+          type: array
+          items:
+            type: string
+          description: Advertised grant profiles; metadata evidence is not client authorization or user access.
         authorization_response_iss_parameter_supported:
           type: boolean
           description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Null until discovery captures the field.
@@ -5879,6 +9425,11 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_grant_profiles_supported:
+          type: array
+          items:
+            type: string
+          description: Advertised grant profiles; metadata evidence is not client authorization or user access.
         authorization_response_iss_parameter_supported:
           type: boolean
           description: Whether the discovery document advertises the RFC 9207 iss parameter in authorization responses; false when the document omits the field.
@@ -6062,6 +9613,21 @@ components:
           format: uuid
       required:
         - id
+    SaveRegistryEntryRequestBody:
+      type: object
+      properties:
+        data_json:
+          type: string
+          description: Complete registry record JSON; at most 8388608 UTF-8 bytes (8 MiB), enforced by the server on incoming writes. Stored records remain readable for repair.
+        id:
+          type: string
+          format: uuid
+        updated_at:
+          type: string
+      required:
+        - id
+        - updated_at
+        - data_json
     SetInferenceKeyMonthlyLimitRequestBody:
       type: object
       properties:
@@ -6130,6 +9696,7 @@ components:
             - consent_tool_filtering
             - session_portability
             - network_ingress
+            - automatic-role-distribution
           maxLength: 60
         organization_id:
           type: string
@@ -6137,6 +9704,40 @@ components:
         - organization_id
         - feature_name
         - enabled
+    SetOrganizationOnboardingStackRequestBody:
+      type: object
+      properties:
+        mdm_vendor:
+          type: string
+          description: jamf, intune, iru, other or none.
+        mdm_vendor_name:
+          type: string
+          description: Required when mdm_vendor is other, ignored otherwise.
+        organization_id:
+          type: string
+        vendors:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOnboardingStackVendor'
+          description: Complete explicit list; an empty array records no vendors.
+      required:
+        - organization_id
+        - vendors
+        - mdm_vendor
+    SetRegistryEntryPublishedRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        published:
+          type: boolean
+        updated_at:
+          type: string
+      required:
+        - id
+        - updated_at
+        - published
     SetStripeCustomerRequestBody:
       type: object
       properties:
@@ -6149,6 +9750,18 @@ components:
       required:
         - organization_id
         - stripe_customer_id
+    SetStripeSubscriptionRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+        stripe_subscription_id:
+          type: string
+          pattern: ^sub_[A-Za-z0-9_]+$
+          maxLength: 255
+      required:
+        - organization_id
+        - stripe_subscription_id
     SpendBucket:
       type: object
       properties:
@@ -6242,6 +9855,99 @@ components:
         - id
         - name
         - group
+    SupportCoverageCell:
+      type: object
+      properties:
+        capability:
+          type: string
+          description: Capability the cell reports on.
+          enum:
+            - session
+            - blocking
+            - identity
+            - cost
+            - shadow
+        detail:
+          type: string
+          description: Short qualifier rendered under the value. Empty when there is nothing to qualify.
+        last_seen:
+          type: string
+          description: RFC3339 timestamp of the most recent supporting evidence. Absent unless observed.
+          format: date-time
+        status:
+          type: string
+          description: Whether evidence was found, absent, or not answerable yet.
+          enum:
+            - observed
+            - none
+            - pending
+        surface:
+          type: string
+          description: Consuming surface the cell reports on.
+          enum:
+            - claude_code
+            - claude_chat
+            - cowork
+            - codex
+            - cursor
+            - other
+        value:
+          type: integer
+          description: 'Primary measure: sessions, tokens, blocks, attributed sessions or distinct shadow servers depending on the capability. Zero unless observed.'
+          format: int64
+      description: Observed evidence for one capability on one surface.
+      required:
+        - capability
+        - surface
+        - status
+        - value
+        - detail
+    SupportCoverageResult:
+      type: object
+      properties:
+        cells:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportCoverageCell'
+          description: One cell per (capability, surface) pair. Always fully populated.
+        from:
+          type: string
+          description: RFC3339 start of the observation window.
+          format: date-time
+        to:
+          type: string
+          description: RFC3339 end of the observation window.
+          format: date-time
+        unmapped:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportCoverageUnmapped'
+          description: Activity whose hook_source folded to no surface.
+        window_days:
+          type: integer
+          description: Length of the observation window in days.
+          format: int64
+      description: Observed support coverage for one organization over a fixed window.
+      required:
+        - cells
+        - unmapped
+        - window_days
+        - from
+        - to
+    SupportCoverageUnmapped:
+      type: object
+      properties:
+        hook_source:
+          type: string
+          description: The raw, unrecognized hook_source.
+        sessions:
+          type: integer
+          description: Sessions observed under it inside the window.
+          format: int64
+      description: A hook_source the surface fold did not recognize.
+      required:
+        - hook_source
+        - sessions
     SupportDraft:
       type: object
       properties:
@@ -6371,6 +10077,37 @@ components:
           type: string
       required:
         - organization_id
+    UpdateOnboardingPlaybookRequestBody:
+      type: object
+      properties:
+        description:
+          type: string
+        is_default:
+          type: boolean
+        name:
+          type: string
+        playbook_id:
+          type: string
+        step_slugs:
+          type: array
+          items:
+            type: string
+      required:
+        - playbook_id
+        - name
+        - step_slugs
+    UpdateOnboardingUseCaseRequestBody:
+      type: object
+      properties:
+        description:
+          type: string
+        name:
+          type: string
+        use_case_id:
+          type: string
+      required:
+        - use_case_id
+        - name
     UpdateOrganizationRequestBody:
       type: object
       properties:
@@ -6396,6 +10133,11 @@ components:
         authorization_endpoint:
           type: string
           description: Upstream authorization endpoint.
+        authorization_grant_profiles_supported:
+          type: array
+          items:
+            type: string
+          description: Advertised grant profiles; metadata evidence is not client authorization or user access.
         authorization_response_iss_parameter_supported:
           type: boolean
           description: Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field leaves the stored value unchanged.

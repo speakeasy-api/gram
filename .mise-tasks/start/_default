@@ -1,17 +1,53 @@
 #!/usr/bin/env bash
 
 #MISE description="Start all development processes with pitchfork"
+#MISE dir="{{ config_root }}"
+
+#USAGE flag "--lock-owner <pid>" hide=#true env="GRAM_STACK_LOCK_OWNER"
 
 set -e
+
+gitdir="$(git rev-parse --absolute-git-dir)"
+lock="$gitdir/gram-stack-lock"
+lock_identity="$$:unpause"
+lock_owner="${usage_lock_owner:-}"
+
+if [ -n "$lock_owner" ]; then
+  # Wake keeps ownership across infrastructure startup and a cold boot via zero.
+  if [ "$(readlink "$lock")" != "$lock_owner:unpause" ] || ! kill -0 "$lock_owner" 2>/dev/null; then
+    echo "The parent wake no longer owns the stack lock; refusing to start." >&2
+    exit 1
+  fi
+else
+  # Atomic with pause/wake: checking their state before starting is not enough.
+  if ! ln -s "$lock_identity" "$lock" 2>/dev/null; then
+    echo "Another lifecycle operation holds the stack lock; wait for it, then use \`mise run wake\`." >&2
+    exit 1
+  fi
+  release_lock() {
+    if [ "$(readlink "$lock")" = "$lock_identity" ]; then
+      rm -f "$lock"
+    fi
+  }
+  trap release_lock EXIT
+  if [ -f "$gitdir/gram-stack-paused" ]; then
+    echo "The stack is paused; use \`mise run wake\` to start its containers and daemons." >&2
+    exit 1
+  fi
+fi
+# The inherited owner is for this invocation, not subsequently launched daemons.
+unset GRAM_STACK_LOCK_OWNER
 
 if ! supervisor_output="$(pitchfork supervisor start 2>&1)"; then
   echo "$supervisor_output" >&2
   exit 1
 fi
 
-pitchfork stop --all-local
+pitchfork stop park
+pitchfork stop --group application
+pitchfork stop idle-pause
 pitchfork clean
-pitchfork start --all-local
+pitchfork start --group default
 
 gum style \
   --foreground 10 --border-foreground 10 --border rounded \

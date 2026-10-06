@@ -17,6 +17,10 @@ import (
 const (
 	networkIngressSweepScheduleIDPrefix = "v1:network-ingress-reconcile-sweep:"
 	networkIngressSweepInterval         = time.Hour
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	networkIngressSweepCatchupWindow = networkIngressSweepInterval - time.Second
+
 	networkIngressSweepJitter           = 5 * time.Minute
 	networkIngressSweepActivityTimeout  = 5 * time.Minute
 	networkIngressSweepActivityAttempts = 3
@@ -45,8 +49,9 @@ func NetworkIngressSweepWorkflow(ctx workflow.Context) error {
 func buildNetworkIngressSweepScheduleOptions(namespace, taskQueue string) client.ScheduleOptions {
 	id := networkIngressSweepScheduleIDPrefix + namespace
 	return client.ScheduleOptions{
-		ID:      id,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		CatchupWindow: networkIngressSweepCatchupWindow,
+		ID:            id,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{{Every: networkIngressSweepInterval}},
 			Jitter:    networkIngressSweepJitter,
@@ -75,7 +80,8 @@ func addNetworkIngressSweep(ctx context.Context, env *tenv.Environment) error {
 				}
 				input.Description.Schedule.Spec = &options.Spec
 				input.Description.Schedule.Action = options.Action
-				input.Description.Schedule.Policy = &client.SchedulePolicies{Overlap: options.Overlap, CatchupWindow: 0, PauseOnFailure: false}
+				input.Description.Schedule.Policy = &client.SchedulePolicies{Overlap: options.Overlap, CatchupWindow: networkIngressSweepCatchupWindow, PauseOnFailure: false}
+				setScheduleCatchup(&input.Description.Schedule, networkIngressSweepCatchupWindow)
 				return &client.ScheduleUpdate{
 					Schedule:              &input.Description.Schedule,
 					TypedSearchAttributes: nil,

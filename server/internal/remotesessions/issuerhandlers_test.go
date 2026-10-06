@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
@@ -532,6 +533,9 @@ func TestListRemoteSessionIssuers(t *testing.T) {
 	result, err := ti.service.ListRemoteSessionIssuers(ctx, &gen.ListRemoteSessionIssuersPayload{
 		Cursor:           nil,
 		Limit:            nil,
+		Search:           nil,
+		UpstreamHost:     nil,
+		Tier:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -563,6 +567,9 @@ func TestListRemoteSessionIssuers_PaginationTraversal(t *testing.T) {
 		result, err := ti.service.ListRemoteSessionIssuers(ctx, &gen.ListRemoteSessionIssuersPayload{
 			Cursor:           cursor,
 			Limit:            &pageSize,
+			Search:           nil,
+			UpstreamHost:     nil,
+			Tier:             nil,
 			SessionToken:     nil,
 			ApikeyToken:      nil,
 			ProjectSlugInput: nil,
@@ -593,6 +600,9 @@ func TestListRemoteSessionIssuers_RBACForbidden(t *testing.T) {
 	_, err := ti.service.ListRemoteSessionIssuers(ctx, &gen.ListRemoteSessionIssuersPayload{
 		Cursor:           nil,
 		Limit:            nil,
+		Search:           nil,
+		UpstreamHost:     nil,
+		Tier:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -1003,7 +1013,9 @@ func TestDeleteRemoteSessionIssuer(t *testing.T) {
 func TestDeleteRemoteSessionIssuer_SerializedAgainstClientBinding(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
+	// probeTimeout bounds the server lock probe, independently of goroutine scheduling.
+	const probeTimeout = 100 * time.Millisecond
+	ctx, ti := newTestServiceWithConfig(t, testServiceConfig{lockTimeout: probeTimeout})
 
 	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-delete-lock"))
 	require.NoError(t, err)
@@ -1014,24 +1026,21 @@ func TestDeleteRemoteSessionIssuer_SerializedAgainstClientBinding(t *testing.T) 
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, repo.New(tx).LockRemoteSessionIssuerForClientBinding(ctx, issuerID))
 
-	done := make(chan error, 1)
-	go func() {
-		done <- ti.service.DeleteRemoteSessionIssuer(ctx, &gen.DeleteRemoteSessionIssuerPayload{
-			ID:               created.ID,
-			SessionToken:     nil,
-			ApikeyToken:      nil,
-			ProjectSlugInput: nil,
-		})
-	}()
-
-	require.Never(t, func() bool { return len(done) > 0 }, 500*time.Millisecond, 25*time.Millisecond,
-		"delete completed while another transaction held the client-binding lock")
-
+	probeErr := ti.service.DeleteRemoteSessionIssuer(ctx, &gen.DeleteRemoteSessionIssuerPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	testenv.RequireLockNotAvailable(t, probeErr)
 	require.NoError(t, tx.Rollback(ctx))
-
-	require.Eventually(t, func() bool { return len(done) > 0 }, 30*time.Second, 25*time.Millisecond,
-		"delete did not complete after the client-binding lock was released")
-	require.NoError(t, <-done)
+	probeErr = ti.service.DeleteRemoteSessionIssuer(ctx, &gen.DeleteRemoteSessionIssuerPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, probeErr)
 }
 
 // TestDeleteRemoteSessionIssuer_NotFound proves deleting an issuer the project
@@ -1369,7 +1378,7 @@ func TestFetchRemoteSessionIssuerMetadata_OriginStyleFallbackStripsPath(t *testi
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"issuer":                 server.URL,
+			"issuer":                 server.URL + "/tenant",
 			"authorization_endpoint": server.URL + "/authorize",
 			"token_endpoint":         server.URL + "/token",
 			"jwks_uri":               server.URL + "/jwks",
@@ -1411,7 +1420,7 @@ func TestFetchRemoteSessionIssuerMetadata_SkipsCatchAll200WithoutEndpoints(t *te
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/.well-known/oauth-authorization-server" {
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"issuer":                 server.URL,
+				"issuer":                 server.URL + "/tenant",
 				"authorization_endpoint": server.URL + "/authorize",
 				"token_endpoint":         server.URL + "/token",
 				"jwks_uri":               server.URL + "/jwks",
@@ -1420,7 +1429,7 @@ func TestFetchRemoteSessionIssuerMetadata_SkipsCatchAll200WithoutEndpoints(t *te
 			return
 		}
 		// Catch-all: 200 with no authorization_endpoint / token_endpoint.
-		_ = json.NewEncoder(w).Encode(map[string]any{"issuer": server.URL})
+		_ = json.NewEncoder(w).Encode(map[string]any{"issuer": server.URL + "/tenant"})
 	}))
 	t.Cleanup(server.Close)
 
@@ -1455,7 +1464,7 @@ func TestFetchRemoteSessionIssuerMetadata_IncompleteDocReturnedAsLastResort(t *t
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		probedPaths = append(probedPaths, r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"issuer": server.URL})
+		_ = json.NewEncoder(w).Encode(map[string]any{"issuer": server.URL + "/tenant"})
 	}))
 	t.Cleanup(server.Close)
 
@@ -1866,6 +1875,9 @@ func TestListRemoteSessionIssuers_InheritsPlatformIssuer(t *testing.T) {
 	result, err := ti.service.ListRemoteSessionIssuers(ctx, &gen.ListRemoteSessionIssuersPayload{
 		Cursor:           nil,
 		Limit:            nil,
+		Search:           nil,
+		UpstreamHost:     nil,
+		Tier:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -2129,12 +2141,12 @@ func TestFetchRemoteSessionIssuerMetadata_DoesNotMergeAnotherIssuersDocument(t *
 		ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
-
-	require.Nil(t, draft.JwksURI)
-	require.Nil(t, draft.UserinfoEndpoint)
-	require.Nil(t, draft.ClaimsSupported)
-	require.False(t, draft.BackchannelLogoutSupported)
-	require.Contains(t, draft.DiscoveryWarnings, "jwks_uri missing from discovery document")
+	require.Equal(t, server.URL+"/authorize", *draft.AuthorizationEndpoint)
+	require.Equal(t, server.URL+"/token", *draft.TokenEndpoint)
+	require.Nil(t, draft.JwksURI, "the sibling issuer cannot supply a key URL")
+	require.Nil(t, draft.UserinfoEndpoint, "the sibling issuer cannot supply userinfo")
+	require.Empty(t, draft.ClaimsSupported, "the sibling issuer cannot supply claims")
+	require.False(t, draft.BackchannelLogoutSupported, "the sibling issuer cannot supply logout capabilities")
 }
 
 // A document naming no issuer cannot be tied to the primary, so it
@@ -2148,17 +2160,13 @@ func TestFetchRemoteSessionIssuerMetadata_DoesNotMergeDocumentWithoutIssuer(t *t
 		mutateOIDC:  func(doc map[string]any) { delete(doc, "issuer") },
 	})
 
-	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
+	_, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
-	require.NoError(t, err)
-
-	require.Nil(t, draft.JwksURI)
-	require.Nil(t, draft.UserinfoEndpoint)
-	require.Nil(t, draft.ClaimsSupported)
+	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
 // Enrichment endpoints are dialled with a bearer token, so a plaintext one
@@ -2230,15 +2238,13 @@ func TestFetchRemoteSessionIssuerMetadata_WarnsAboutDroppedPlaintextUserinfoEndp
 	require.NotNil(t, draft.JwksURI, "the rest of the OpenID document still merges")
 }
 
-// The merge gate compares issuers the way the rest of the package does,
-// ignoring a trailing slash, so an OpenID document that spells the issuer
-// with one still contributes.
-func TestFetchRemoteSessionIssuerMetadata_MergeMatchesIssuerIgnoringTrailingSlash(t *testing.T) {
+// Discovery must not adopt metadata for a different issuer spelling.
+func TestFetchRemoteSessionIssuerMetadata_RejectsTrailingSlashIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	var server *httptest.Server
-	server = metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
+	server = metadataServer(t, metadataServerOptions{mutateOAuth: func(doc map[string]any) { doc["issuer"] = server.URL + "/" }, mutateOIDC: func(doc map[string]any) {
 		doc["issuer"] = server.URL + "/"
 	}})
 
@@ -2248,9 +2254,38 @@ func TestFetchRemoteSessionIssuerMetadata_MergeMatchesIssuerIgnoringTrailingSlas
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
-	require.NoError(t, err)
-	require.NotNil(t, draft.JwksURI, "a trailing slash on the OpenID issuer does not block the merge")
-	require.Equal(t, server.URL+"/jwks", *draft.JwksURI)
+	require.ErrorContains(t, err, "requested issuer")
+	require.Nil(t, draft)
+}
+
+// An OIDC document with a different issuer spelling never contributes fields.
+func TestFetchRemoteSessionIssuerMetadata_RejectsOIDCTrailingSlashIssuer(t *testing.T) {
+	t.Parallel()
+	for _, status := range []int{http.StatusOK, http.StatusNotFound} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			var oauthStatus atomic.Int32
+			oauthStatus.Store(int32(status))
+			var server *httptest.Server
+			server = metadataServer(t, metadataServerOptions{
+				oauthStatus: &oauthStatus,
+				mutateOIDC:  func(doc map[string]any) { doc["issuer"] = server.URL + "/" },
+			})
+			draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{Issuer: server.URL})
+			if status == http.StatusNotFound {
+				require.ErrorContains(t, err, "requested issuer")
+				require.Nil(t, draft)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, server.URL+"/authorize", *draft.AuthorizationEndpoint)
+			require.Equal(t, server.URL+"/token", *draft.TokenEndpoint)
+			require.Nil(t, draft.JwksURI)
+			require.Nil(t, draft.UserinfoEndpoint)
+			require.Empty(t, draft.ClaimsSupported)
+		})
+	}
 }
 
 // A flag the RFC 8414 document states explicitly, even as false, is never
@@ -2288,9 +2323,34 @@ func TestDiscoverIssuerMetadata_OtherIssuersDocumentStaysOutOfMetadata(t *testin
 
 	discovered, err := remotesessions.DiscoverIssuerMetadata(t.Context(), policy, server.URL)
 	require.NoError(t, err)
+	require.Equal(t, server.URL, discovered.Issuer)
+	require.Empty(t, discovered.UserinfoEndpoint)
+	var document map[string]any
+	require.NoError(t, json.Unmarshal(discovered.Metadata, &document))
+	require.Equal(t, server.URL, document["issuer"])
+	require.Equal(t, "kept", document["oauth_only_extension"])
+	require.NotContains(t, document, "jwks_uri")
+	require.NotContains(t, document, "userinfo_endpoint")
+	require.NotContains(t, document, "claims_supported")
+}
 
-	var members map[string]any
-	require.NoError(t, json.Unmarshal(discovered.Metadata, &members))
-	require.NotContains(t, members, "claims_supported")
-	require.Equal(t, "kept", members["oauth_only_extension"])
+// Only operator input permits surrounding whitespace; the identifier itself is exact.
+func TestFetchRemoteSessionIssuerMetadata_OperatorInputPreservesSlash(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		assert.NoError(t, json.NewEncoder(w).Encode(map[string]string{
+			"issuer":                 server.URL + "/tenant/",
+			"authorization_endpoint": server.URL + "/authorize",
+			"token_endpoint":         server.URL + "/token",
+		}))
+	}))
+	defer server.Close()
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{Issuer: " \t" + server.URL + "/tenant/ \n"})
+	require.NoError(t, err)
+	require.Equal(t, server.URL+"/tenant/", draft.Issuer)
+	_, err = ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{Issuer: server.URL + "/tenant"})
+	require.ErrorContains(t, err, "trailing slash")
 }

@@ -14,6 +14,10 @@ export type UpdateRemoteSessionIssuerForm = {
    */
   authorizationEndpoint?: string | undefined;
   /**
+   * Advertised grant profiles; metadata evidence is not client authorization or user access.
+   */
+  authorizationGrantProfilesSupported?: Array<string> | undefined;
+  /**
    * Whether the issuer includes the RFC 9207 iss parameter in authorization responses. Omitting the field leaves the stored value unchanged.
    */
   authorizationResponseIssParameterSupported?: boolean | undefined;
@@ -124,6 +128,7 @@ export type UpdateRemoteSessionIssuerForm = {
 /** @internal */
 export type UpdateRemoteSessionIssuerForm$Outbound = {
   authorization_endpoint?: string | undefined;
+  authorization_grant_profiles_supported?: Array<string> | undefined;
   authorization_response_iss_parameter_supported?: boolean | undefined;
   backchannel_logout_supported?: boolean | undefined;
   claims_supported?: Array<string> | undefined;
@@ -164,6 +169,7 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     authorizationEndpoint: z.optional(z.string()),
+    authorizationGrantProfilesSupported: z.optional(z.array(z.string())),
     authorizationResponseIssParameterSupported: z.optional(z.boolean()),
     backchannelLogoutSupported: z.optional(z.boolean()),
     claimsSupported: z.optional(z.array(z.string())),
@@ -199,6 +205,8 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       authorizationEndpoint: "authorization_endpoint",
+      authorizationGrantProfilesSupported:
+        "authorization_grant_profiles_supported",
       authorizationResponseIssParameterSupported:
         "authorization_response_iss_parameter_supported",
       backchannelLogoutSupported: "backchannel_logout_supported",

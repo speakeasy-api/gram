@@ -11,14 +11,17 @@ import (
 
 // A legacy_callback_url client's upstream redirects to /oauth/callback; the
 // shim must forward the query string verbatim to /mcp/remote_login_callback so
-// the remote-session flow can finish the exchange. The forwarder only reads
-// serverURL, so a bare ChallengeManager is enough.
+// the remote-session flow can finish the exchange on the pinned outbound
+// origin, even after the server URL moves. The forwarder only reads the
+// callback origins, so a bare ChallengeManager is enough.
 func TestHandleLegacyProxyCallbackForwardsToRemoteLogin(t *testing.T) {
 	t.Parallel()
 
-	serverURL, err := url.Parse("https://api.example.com")
+	serverURL, err := url.Parse("https://moved.example.com")
 	require.NoError(t, err)
-	m := &ChallengeManager{serverURL: serverURL}
+	outbound, err := url.Parse("https://api.example.com")
+	require.NoError(t, err)
+	m := &ChallengeManager{serverURL: serverURL, origins: CallbackOrigins{Outbound: outbound, Registration: nil}}
 
 	req := httptest.NewRequest(http.MethodGet, "/oauth/callback?state=abc123&code=xyz789", nil)
 	rec := httptest.NewRecorder()
@@ -38,7 +41,7 @@ func TestHandleLegacyProxyCallbackForwardsError(t *testing.T) {
 
 	serverURL, err := url.Parse("https://api.example.com")
 	require.NoError(t, err)
-	m := &ChallengeManager{serverURL: serverURL}
+	m := &ChallengeManager{serverURL: serverURL, origins: DefaultCallbackOrigins(serverURL)}
 
 	req := httptest.NewRequest(http.MethodGet,
 		"/oauth/callback?state=s1&error=access_denied&error_description=nope", nil)

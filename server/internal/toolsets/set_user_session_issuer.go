@@ -13,8 +13,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	networkingressRepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
@@ -54,7 +56,12 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
+	if err := networkingressRepo.New(dbtx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock network ingress lifecycle")
+	}
+	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock project admission")
+	}
 	// Validate that the target USI is attachable in the caller's project or
 	// organization before writing the FK.
 	if usiID.Valid {
@@ -66,15 +73,46 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 		}
 	}
 
-	if _, err := s.repo.WithTx(dbtx).UpdateToolsetUserSessionIssuer(ctx, repo.UpdateToolsetUserSessionIssuerParams{
+	// The prior link is read under the row lock so a concurrent change cannot
+	// hide an OAuth transition this write makes.
+	locked, err := s.repo.WithTx(dbtx).GetToolsetForUpdate(ctx, repo.GetToolsetForUpdateParams{
+		Slug:      string(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock toolset").LogError(ctx, s.logger)
+	}
+
+	updatedToolset, err := s.repo.WithTx(dbtx).UpdateToolsetUserSessionIssuer(ctx, repo.UpdateToolsetUserSessionIssuerParams{
 		UserSessionIssuerID: usiID,
 		Slug:                string(payload.Slug),
 		ProjectID:           *authCtx.ProjectID,
-	}); err != nil {
+	})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update toolset user_session_issuer").LogError(ctx, s.logger)
+	}
+	if err := s.reconcileHostedNetworkAccess(ctx, dbtx, authCtx, updatedToolset, nil); err != nil {
+		return nil, err
+	}
+	// A package renders an OAuth server differently from a key-authenticated
+	// one, so only linking an issuer where none was, or unlinking it, changes it.
+	carried := false
+	if updatedToolset.McpEnabled && locked.UserSessionIssuerID.Valid != usiID.Valid {
+		carried, err = toolsetCarriedByPlugin(ctx, dbtx, authCtx, updatedToolset.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check toolset plugin membership").LogError(ctx, s.logger)
+		}
+	}
+	if carried {
+		if err := s.requestPluginPublication(ctx, dbtx, authCtx); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "enqueue toolset plugin publication").LogError(ctx, s.logger)
+		}
 	}
 
 	afterView, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
@@ -105,6 +143,10 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
+	}
+
+	if carried {
+		s.publishPluginsAfterToolsetChange(ctx, authCtx)
 	}
 
 	return afterView, nil

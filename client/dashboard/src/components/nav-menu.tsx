@@ -279,7 +279,7 @@ export function NavGroupProvider({
       >
         {highlightRect && (
           <motion.div
-            className="bg-card border-border pointer-events-none absolute border"
+            className="bg-card pointer-events-none absolute"
             animate={{
               top: highlightRect.top,
               left: highlightRect.left,

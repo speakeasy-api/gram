@@ -1,5 +1,66 @@
 # admin
 
+## 0.8.0
+
+### Minor Changes
+
+- 1da2e80: Add a health page for each MCP server in an organization's MCP servers list, showing its authentication setup, sign-ins, linked upstream accounts, tool call outcomes per day, a Platform MCP investigation prompt and Datadog log links.
+
+## 0.7.0
+
+### Minor Changes
+
+- dfe104d: Onboarding use cases and playbooks in the admin dashboard. Staff create use cases and playbooks on a new Use Cases & Playbooks page: a playbook is ordered top-level steps that belong to a use case, shared and possibly its default, or to one customer, never both, and every playbook is checked for prerequisites. An organization's Overview page shows its assigned playbook and links to the page scoped to that organization, where staff write it a playbook of its own or assign it a shared one, refused when the recorded stack does not support a step. A shared playbook is a template: assigning it gives the organization a copy of its own, so later edits to the shared playbook never reach an organization already on it. The onboarding survey assigns a use case's default playbook and the customer setup wizard walks the assigned one. The preset selection editor and its Admin API are gone, the Admin MCP diagnostics tool reports the assigned playbook instead, and the Admin MCP's onboarding write proposal assigns a playbook, by ID or by use case, in place of setting task visibility. Enable it with the `assign_organization_onboarding_playbook` write operation.
+- a49b065: Onboarding stack and step catalog in the admin dashboard. Staff record an organization's stack, meaning the vendors it uses with the organizational plan it is on for each and its device management, on the organization's Overview page; the vendor, plan and product lists come from the support matrix catalog, which now carries plans and files every product under its real vendor. Setup steps can nest one level under a group, whose status follows its cards: observability in other platforms and MCP distribution become groups over their cards. The catalog is mirrored into the database at start-up and shown read-only on a new Steps page, where a prerequisite links to its own row.
+
+### Patch Changes
+
+- b177711: Staff can map Okta Integration Network applications to Gram-owned MCP catalog entries through the `com.speakeasy.ai/okta` metadata namespace. The registry validates the mapping, keeps each OIN application name on at most one entry, and returns the mapping to registry consumers as public catalog data.
+- b34e9dc: The staff registry editor proposes Okta application names for a catalog entry from the names observed across synced tenants, matched by vendor domain, title or tenant label, and lists observed names no entry claims yet. Proposals are confirmed by hand; nothing is applied automatically.
+- 52bb406: Add a temporary staff-only control for enabling role-based plugin distribution per organization, with audited Admin MCP approval.
+
+## 0.6.2
+
+### Patch Changes
+
+- 27e22f1: Staff can record a Stripe subscription ID for a PAYG organization that does not have one yet. The admin API checks that the subscription belongs to the organization's Stripe customer, and stores the billing-cycle anchor Stripe returns, before saving it.
+
+## 0.6.1
+
+### Patch Changes
+
+- d0945f1: Add a Demo organization link to the admin sidebar that opens the explore demo org in a new tab.
+- d24e7a1: Add an "Open in WorkOS" link beside the WorkOS org ID on the admin organization record. It appears when the organization is linked to WorkOS and the admin API has `WORKOS_ENVIRONMENT_ID` set.
+
+## 0.6.0
+
+### Minor Changes
+
+- f480067: Add an MCP Servers view to the admin organization navigator that lists a project's MCP servers with their URL, visibility, source and creation date, and copies a server's URL in one click.
+- f01aad0: Add an observed support coverage matrix to the staff admin app, on each organization's record.
+  
+  A new `admin.getSupportCoverage` endpoint reports, per consuming surface, evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure. Policy enforcement joins `tool_call_blocks` to session summaries via `chat_id`; identity counts sessions bound to a named user separately from those bound only to a device hostname; shadow exposure is derived from `trace_summaries`, which already carries the MCP server URL and hook_source on the same trace.
+  
+  Every `(capability, surface)` pair is returned with an explicit status so evidence found and evidence absent stay distinct, and hook sources the fold does not recognize are reported rather than dropped. Folding a raw `hook_source` onto a surface now happens server-side in `internal/agentsurface`.
+  
+  The integration cards beside the matrix read from the operator-editable support matrix catalog, ranked by how much of that organization's missing coverage each method would close.
+
+### Patch Changes
+
+- 35060d1: Protect active identity-chaining bindings during issuer lifecycle changes. Block unsafe issuer deletion and consolidation, and show binding counts and explicit unlinking guidance in the dashboard and admin migration review.
+
+## 0.5.2
+
+### Patch Changes
+
+- 718a2e9: Add staff controls for onboarding presets and explicit task selection, with confirmation before replacing a draft. Seed a customized Security selection for the demo organization.
+
+## 0.5.1
+
+### Patch Changes
+
+- aa2f201: Records the flow that created an organization and shows it as "Created via" on the admin organization record, marking organizations created through the platform-admin prospect flow. Organizations with no recorded source read as "Not recorded".
+
 ## 0.5.0
 
 ### Minor Changes

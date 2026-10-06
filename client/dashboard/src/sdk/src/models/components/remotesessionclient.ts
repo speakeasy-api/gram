@@ -48,6 +48,10 @@ export type RemoteSessionClient = {
    */
   audience?: string | undefined;
   /**
+   * The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients.
+   */
+  callbackUrl?: string | undefined;
+  /**
    * The client_id used to identify this client at the issuer's token and authorization endpoints.
    */
   clientId: string;
@@ -62,6 +66,10 @@ export type RemoteSessionClient = {
   clientSecretExpiresAt?: Date | undefined;
   createdAt: Date;
   /**
+   * Recorded effective registration grants. Null means unknown; an empty array means no recorded grants.
+   */
+  grantTypes: Array<string> | null;
+  /**
    * The remote_session_client id.
    */
   id: string;
@@ -69,6 +77,10 @@ export type RemoteSessionClient = {
    * The organization JSON Web Key Set attached to this client, managed through attachKeySet and detachKeySet. Null when no key set is attached.
    */
   jsonWebKeySetId?: string | undefined;
+  /**
+   * Whether the client was registered upstream with the legacy callback URL. The authorize leg then sends that URL and a JSON state instead of the current callback. Cleared when the client is rotated.
+   */
+  legacyCallbackUrl: boolean;
   /**
    * The owning organization id. Empty for legacy rows not yet backfilled and global clients.
    */
@@ -124,6 +136,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     audience: z.optional(z.string()),
+    callback_url: z.optional(z.string()),
     client_id: z.string(),
     client_id_issued_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -136,8 +149,10 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    grant_types: z.nullable(z.array(z.string())),
     id: z.string(),
     json_web_key_set_id: z.optional(z.string()),
+    legacy_callback_url: z.boolean(),
     organization_id: z.string(),
     project_id: z.string(),
     remote_session_issuer_id: z.string(),
@@ -159,12 +174,15 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "callback_url": "callbackUrl",
       "client_id": "clientId",
       "client_id_issued_at": "clientIdIssuedAt",
       "client_id_metadata_uri": "clientIdMetadataUri",
       "client_secret_expires_at": "clientSecretExpiresAt",
       "created_at": "createdAt",
+      "grant_types": "grantTypes",
       "json_web_key_set_id": "jsonWebKeySetId",
+      "legacy_callback_url": "legacyCallbackUrl",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "remote_session_issuer_id": "remoteSessionIssuerId",

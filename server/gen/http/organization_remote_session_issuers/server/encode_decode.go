@@ -266,6 +266,7 @@ func DecodeListIssuersRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		var (
 			cursor       *string
 			limit        *int
+			tier         *string
 			sessionToken *string
 			apikeyToken  *string
 			err          error
@@ -286,6 +287,15 @@ func DecodeListIssuersRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 				limit = &pv
 			}
 		}
+		tierRaw := qp.Get("tier")
+		if tierRaw != "" {
+			tier = &tierRaw
+		}
+		if tier != nil {
+			if !(*tier == "organization" || *tier == "project" || *tier == "platform") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("tier", *tier, []any{"organization", "project", "platform"}))
+			}
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -297,7 +307,7 @@ func DecodeListIssuersRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListIssuersPayload(cursor, limit, sessionToken, apikeyToken)
+		payload = NewListIssuersPayload(cursor, limit, tier, sessionToken, apikeyToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2738,6 +2748,12 @@ func marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v *types.R
 		res.GrantTypesSupported = make([]string, len(v.GrantTypesSupported))
 		for i, val := range v.GrantTypesSupported {
 			res.GrantTypesSupported[i] = val
+		}
+	}
+	if v.AuthorizationGrantProfilesSupported != nil {
+		res.AuthorizationGrantProfilesSupported = make([]string, len(v.AuthorizationGrantProfilesSupported))
+		for i, val := range v.AuthorizationGrantProfilesSupported {
+			res.AuthorizationGrantProfilesSupported[i] = val
 		}
 	}
 	if v.ResponseTypesSupported != nil {

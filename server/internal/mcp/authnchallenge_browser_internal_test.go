@@ -24,7 +24,8 @@ func browserTestService(t *testing.T) *Service {
 	require.NoError(t, err)
 	return &Service{logger: logger, serverURL: serverURL,
 		authnChallengeCache: cache.NewTypedObjectCache[AuthnChallengeState](logger, store, cache.SuffixNone),
-		remoteLoginCache:    cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger, store, cache.SuffixNone)}
+		remoteLoginCache:    cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger, store, cache.SuffixNone),
+		remoteLoginHopCache: cache.NewTypedObjectCache[remoteLoginHop](logger, store, cache.SuffixNone)}
 }
 
 func browserTestState() AuthnChallengeState {
@@ -35,7 +36,7 @@ func browserTestState() AuthnChallengeState {
 
 func TestConsentRejectsTransferredBrowserState(t *testing.T) {
 	t.Parallel()
-	for _, action := range []string{"get", "approve", "deny", "connect", "disconnect", "validate", "set_auto_refresh"} {
+	for _, action := range []string{"get", "approve", "deny", "connect", "disconnect", "validate", "set_auto_refresh", "retry_delegation"} {
 		t.Run(action, func(t *testing.T) {
 			t.Parallel()
 			s := browserTestService(t)

@@ -12,8 +12,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	gentypes "github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // ErrLoadPolicy identifies a failure while loading the policy row, before
@@ -21,19 +23,60 @@ import (
 // established not-found mapping.
 var ErrLoadPolicy = errors.New("load risk policy")
 
+// ToolAnnotationsResolver resolves the effective hints for one called tool.
+type ToolAnnotationsResolver interface {
+	ToolAnnotations(ctx context.Context, mcpServerID, projectID uuid.UUID, toolName string) (*gentypes.ToolAnnotations, error)
+}
+
+// MCPTarget identifies one concrete policy-evaluation subject.
+type MCPTarget struct {
+	// ServerID is the persisted server ID or stable Platform MCP toolset ID.
+	ServerID uuid.UUID
+
+	// ToolName is empty when matching only at the server level.
+	ToolName string
+
+	// ToolAnnotations carries code-owned annotations when no database resolver applies.
+	ToolAnnotations *gentypes.ToolAnnotations
+
+	// PlatformToolset bypasses persisted server ownership and gateway lookup.
+	PlatformToolset bool
+
+	// Principal limits results to policies whose audience covers the caller.
+	// Nil lists policies for every audience; enforcement seams always set it.
+	Principal *MCPPrincipal
+}
+
+// MCPPrincipal is the caller an MCP-scoped policy is evaluated for. The zero
+// value is unattributed and matches only everyone-audience policies.
+type MCPPrincipal struct {
+	// UserID is set only for an authoritative acting user.
+	UserID string
+
+	// AgentID is set for an agent principal; its roles are resolved too.
+	AgentID string
+}
+
 // Core provides transport-neutral policy reads and projections. Authorization
 // remains the responsibility of the calling service.
 type Core struct {
-	db        repo.DBTX
-	queries   *repo.Queries
-	mutations *MutationDependencies
+	db              repo.DBTX
+	queries         *repo.Queries
+	mutations       *MutationDependencies
+	toolAnnotations ToolAnnotationsResolver
 }
 
 func New(db repo.DBTX, mutations ...MutationDependencies) *Core {
-	core := &Core{db: db, queries: repo.New(db), mutations: nil}
+	core := &Core{db: db, queries: repo.New(db), mutations: nil, toolAnnotations: nil}
 	if len(mutations) > 0 {
 		core.mutations = &mutations[0]
 	}
+	return core
+}
+
+func NewWithToolAnnotations(db repo.DBTX, resolver ToolAnnotationsResolver, mutations ...MutationDependencies) *Core {
+	core := New(db, mutations...)
+	core.toolAnnotations = resolver
 	return core
 }
 
@@ -65,6 +108,96 @@ func (c *Core) List(ctx context.Context, organizationID string, projectID uuid.U
 
 	policies := make([]Policy, 0, len(rows))
 	for _, row := range rows {
+		policies = append(policies, Project(row, audienceByPolicy[row.ID.String()], nil))
+	}
+	return policies, nil
+}
+
+// ListEnabledForMCP returns enabled MCP-scoped policies that apply to one
+// concrete MCP target. Policies without an MCP scope are excluded. Gateway
+// membership is resolved on every persisted-server call.
+func (c *Core) ListEnabledForMCP(
+	ctx context.Context,
+	organizationID string,
+	projectID uuid.UUID,
+	target MCPTarget,
+) ([]Policy, error) {
+	rows, err := c.queries.ListEnabledRiskPoliciesByProject(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list enabled risk policies: %w", err)
+	}
+	// Runs on every MCP call, so projects without scoped policies stop here.
+	scopedRows := make([]repo.RiskPolicy, 0, len(rows))
+	scopes := make([]*MCPScope, 0, len(rows))
+	needsAnnotations := false
+	for _, row := range rows {
+		scope := Project(row, nil, nil).MCPScope
+		if scope == nil {
+			continue
+		}
+		scopedRows = append(scopedRows, row)
+		scopes = append(scopes, scope)
+		needsAnnotations = needsAnnotations || len(scope.ToolAnnotations) > 0
+	}
+	if len(scopedRows) == 0 {
+		return []Policy{}, nil
+	}
+
+	var gatewayIDs []uuid.UUID
+	if target.ServerID != uuid.Nil && !target.PlatformToolset {
+		ownedIDs, err := c.queries.ListRiskPolicyMCPScopeServerIDs(ctx, repo.ListRiskPolicyMCPScopeServerIDsParams{
+			ProjectID:    projectID,
+			McpServerIds: []uuid.UUID{target.ServerID},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("validate MCP server project: %w", err)
+		}
+		if len(ownedIDs) == 0 {
+			return []Policy{}, nil
+		}
+
+		gatewayIDs, err = c.queries.ListMetaMCPServerIDsContainingMCPServer(ctx, repo.ListMetaMCPServerIDsContainingMCPServerParams{
+			ProjectID:   projectID,
+			McpServerID: target.ServerID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list MCP server gateways: %w", err)
+		}
+	}
+
+	annotations := target.ToolAnnotations
+	if annotations == nil && !target.PlatformToolset && needsAnnotations && target.ToolName != "" && c.toolAnnotations != nil {
+		annotations, err = c.toolAnnotations.ToolAnnotations(ctx, target.ServerID, projectID, target.ToolName)
+		if err != nil {
+			return nil, fmt.Errorf("resolve MCP tool annotations: %w", err)
+		}
+	}
+
+	matchedRows := make([]repo.RiskPolicy, 0, len(scopedRows))
+	policyIDs := make([]string, 0, len(scopedRows))
+	for i, row := range scopedRows {
+		if !scopes[i].Applies(target.ServerID, target.ToolName, annotations, gatewayIDs) {
+			continue
+		}
+		matchedRows = append(matchedRows, row)
+		policyIDs = append(policyIDs, row.ID.String())
+	}
+	if len(matchedRows) > 0 && target.Principal != nil {
+		matchedRows, policyIDs, err = c.filterByAudience(ctx, organizationID, *target.Principal, matchedRows)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(matchedRows) == 0 {
+		return []Policy{}, nil
+	}
+
+	audienceByPolicy, err := c.audienceURNsByPolicy(ctx, organizationID, policyIDs)
+	if err != nil {
+		return nil, fmt.Errorf("load risk policy audiences: %w", err)
+	}
+	policies := make([]Policy, 0, len(matchedRows))
+	for _, row := range matchedRows {
 		policies = append(policies, Project(row, audienceByPolicy[row.ID.String()], nil))
 	}
 	return policies, nil
@@ -164,6 +297,39 @@ func audiencePrincipalURNs(ctx context.Context, db repo.DBTX, organizationID, po
 	}
 	slices.Sort(principalURNs)
 	return slices.Compact(principalURNs), nil
+}
+
+// filterByAudience keeps the policies the principal's grants apply, using the
+// same rule as chat and hook enforcement.
+func (c *Core) filterByAudience(ctx context.Context, organizationID string, principal MCPPrincipal, rows []repo.RiskPolicy) ([]repo.RiskPolicy, []string, error) {
+	var principals []urn.Principal
+	var err error
+	if principal.AgentID != "" {
+		principals, err = authz.ResolveAgentPrincipals(ctx, c.db, organizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, principal.AgentID))
+	} else {
+		principals, err = authz.ResolveUserPrincipals(ctx, c.db, organizationID, principal.UserID)
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolve risk policy audience principals: %w", err)
+	}
+	grants, err := authz.LoadGrants(ctx, c.db, organizationID, principals)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load risk policy audience grants: %w", err)
+	}
+
+	applicable := make([]repo.RiskPolicy, 0, len(rows))
+	policyIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		application, err := authz.RiskPolicyApplies(row.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
+		if err != nil {
+			return nil, nil, fmt.Errorf("evaluate risk policy application: %w", err)
+		}
+		if application.Satisfied {
+			applicable = append(applicable, row)
+			policyIDs = append(policyIDs, row.ID.String())
+		}
+	}
+	return applicable, policyIDs, nil
 }
 
 func (c *Core) audienceURNsByPolicy(ctx context.Context, organizationID string, policyIDs []string) (map[string][]string, error) {

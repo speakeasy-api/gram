@@ -60,7 +60,8 @@ type PlatformContext struct {
 // meaning outside Gram.
 const platformOverview = "This session exposes a catalogue filtered to workflows supported by your current RBAC grants. Exact project or resource checks apply only when a call targets that project or resource. " +
 	"A workflow missing from the catalogue may be requestable; requestable_workflows names only broad categories and never reveals hidden resources. A denied admin-gated call names the required permission and, when safe, offers a request-access link; member reads may instead hide inaccessible resources or return a generic denial. " +
-	"A project is where MCP servers and skills are kept. A plugin is a bundle administrators share with people. MCP read access, MCP connection access, and skill permissions remain separate."
+	"A project is where MCP servers and skills are kept. A plugin is a bundle administrators share with people. MCP read access, MCP connection access, and skill permissions remain separate. " +
+	"Issuer migration and identity-chaining binding inspection, unlinking, and rebinding are not available through this server. Active identity-chaining bindings can block issuer configuration changes, deletion, and consolidation. Organization remote-session client deletion is also blocked when its management API deletion preflight reports blocking_reason=identity_chaining and ema_binding_count greater than zero (can_delete=false). An organization administrator must inspect that client preflight, identify affected projects, and have an authorized project administrator read each exact preparation binding and explicitly unlink or rebind it with its current generation before retrying deletion. Re-read the client preflight afterward; deleting an MCP connection does not remove this blocker. Client deletion and its live preflight are not exposed as Platform MCP tools; do not infer a live binding count or claim deletion is safe from this guidance. Ask an authorized administrator to inspect the issuer preflight in the dashboard or management API, explicitly unlink affected bindings using a supported management workflow before changing the issuer, and prepare new bindings for the target provider afterward. If that workflow is unavailable, stop and contact support; never bypass the binding safeguard or claim that an MCP connection operation unlinks these bindings."
 
 type ListProjectsInput struct {
 	Limit int `json:"limit,omitempty" jsonschema:"maximum number of projects to return; server clamps this to 100"`
@@ -108,8 +109,25 @@ type MCPReadiness struct {
 }
 
 type MCPDistribution struct {
-	PluginID         string `json:"plugin_id"`
-	State            string `json:"state"`
+	// PluginID identifies the plugin carrying this MCP.
+	PluginID string `json:"plugin_id"`
+
+	// PluginName is the plugin's display name, so naming the plugin needs no
+	// separate list_plugins call.
+	PluginName string `json:"plugin_name"`
+
+	// PluginSlug is the plugin's stable slug, the value to pass back to a tool
+	// that takes a plugin by slug.
+	PluginSlug string `json:"plugin_slug"`
+
+	// State is the lifecycle state of a membership this flow created. It is
+	// always present and empty for a membership created elsewhere, which has
+	// no lifecycle record; empty means unknown, never "not attached".
+	State string `json:"state"`
+
+	// PublicationState reports whether that membership has been published. It
+	// is always present and empty on the same terms as State, and empty never
+	// means "unpublished".
 	PublicationState string `json:"publication_state"`
 }
 
@@ -132,6 +150,14 @@ type MCP struct {
 	Distributions    []MCPDistribution `json:"distributions"`
 	Operations       []string          `json:"operations"`
 	DashboardPath    string            `json:"dashboard_path,omitempty"`
+
+	// ToolExposure is the tool list this server puts in front of people, and
+	// the version token add_tools_to_mcp and remove_tools_from_mcp take back.
+	// It is filled in by get_mcp only. find_mcp leaves it absent, and absent
+	// means "not read here" — never "this server exposes nothing". It is also
+	// absent on a server whose tools come from an upstream rather than from
+	// this project.
+	ToolExposure *MCPToolExposure `json:"tool_exposure,omitempty"`
 }
 
 type MCPRegistration struct {
@@ -168,11 +194,11 @@ type operationBudgetResult struct {
 // registrar alongside the server so another admitted audience — the project
 // assistant — can be composed from the same registration pass rather than from
 // a second list that would drift.
-func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
-	return newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, nil, candidate, nil, nil)
+func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
+	return newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, workflowRun, plugins, sessionRecall, nil, candidate, nil, nil)
 }
 
-func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessRead *AccessReadService, accessRoleMutations *AccessRoleMutationService) (*mcp.Server, *Registrar) {
+func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessRead *AccessReadService, accessRoleMutations *AccessRoleMutationService, connectionMutations ...*MCPConnectionMutationService) (*mcp.Server, *Registrar) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "platform-mcp",
 		Title:   "Platform MCP",
@@ -187,20 +213,62 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Do not volunteer an ID either. The exception is telling two things apart: when a name matches more than one plugin, assistant, or skill, show the IDs, because they are the only thing that distinguishes the candidates and the user cannot choose without them.",
 			"Keep the words that collide apart. \"Connect\" is linking an MCP server to its OAuth provider; \"add to a plugin\" is plugin membership; do not call either one attaching. Say an MCP server was \"added to the project\" rather than \"registered\", so it is not mistaken for OAuth dynamic client registration. When a diagnosis blames the calling MCP client, say \"the app making the calls\", never bare \"client\".",
 			"# Rules",
-			"Use this server to inspect the selected organization and manage reviewed MCP servers in an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately.",
+			"Risk policy audiences are positive user/role grants, not exclusions. Read the exact policy and obtain confirmation before changing its audience. Self-removal and effective exclusion are unavailable pending organization-scoped coordination of audience grants; remove_self_from_risk_policy always refuses before database transactions or receipt replay. Never infer a human from managed-assistant attribution. For self-removal requests, do not bypass the refusal with an audience replacement, policy disablement, role change, or risk exclusion. For approved incremental user/ROLE audience changes, external organization admins can use change_risk_policy_audience with confirmed bounded add_principals/remove_principals, a fresh expected_version and a stable idempotency_key. It refuses Everyone deltas and empty resulting audiences and only changes exact positive grants; it does not prove effective exclusion. Managed assistants cannot invoke it or read exact audiences. General audience replacements require confirmation of the complete desired audience and must not be presented as Everyone-except-one or role exceptions. Re-read the policy after a write; receipt replay is historical evidence, not proof of current state.",
+			"Use this server to inspect the selected organization and manage reviewed MCP servers in an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. When no listed project fits, or there is none yet, an organization administrator can create one here instead of leaving for the dashboard: ask for the exact name, confirm it, and create the project, which starts empty. Its slug is derived from the name and cannot be chosen; a rename changes only the display name and keeps the slug. Renaming a project needs only write access to that project, as in the dashboard, not organization administrator access. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately.",
 			"Use get_mcp_readiness with the returned registration ID to inspect persisted readiness. If readiness says an upstream identity provider is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action.",
 			"Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization.",
 			"Setup also decides which MCP clients may sign in to the new server: read get_mcp_client_admission, explain in plain words which apps that lets in, and only change it with set_mcp_client_admission after the user explicitly confirms.",
-			"Registration never distributes an MCP: use list_plugins to show the project's plugins, ask the user which one should carry it, then call distribute_mcp_to_plugin naming that plugin exactly. There is no implicit default.",
+			"Registration never distributes an MCP: use list_plugins to show the project's plugins, ask the user which one should carry it, then call distribute_mcp_to_plugin naming that plugin exactly. There is no implicit default. When no existing plugin fits, offer to create one: agree its name with the user, choose one idempotency key for this create and pass it on the unconfirmed preview and on the confirmed call: the preview returns the exact permanent install name it would use, show that to the user, and call it again confirmed once they agree, then distribute to the new plugin. A plugin created in the organization's default project is delivered to every member; elsewhere it reaches no one until people are assigned to it. rename_plugin changes only a plugin's display name, never its install name.",
+			"To change an existing MCP server or gateway address or network access, first read its exact connection settings in the selected project. Show the current and proposed address or mode, and wait for explicit confirmation before changing it. Re-read that same target afterwards. A publication request means the plugin update was requested, not that its packages or downstream users have converged; verify the publication evidence before reporting completion.",
+			"Before moving any MCP server or gateway to dual or private_only, call get_network_ingress. If ready_for_private_access is false, report its next_action and present its exact setup_url instead of attempting the change; Tailscale credentials are entered only in the dashboard, never in chat. Private access restricts who can reach the AI Control Plane endpoint over the organization's tailnet; it does not change where the upstream MCP server is hosted.",
+			"Which tools an MCP server puts in front of people is a separate decision from which plugin carries the server. Pushing a new tool to a project does not put it on any server. To expose one, list the project's tools, read the exact server, and then add the named tools to it after the user confirms the exact server and tools. Say before acting that everyone holding a plugin that carries the server gets the change immediately, and name those plugins. Removing a tool takes it away from those same people. Never guess a tool from its name; use the exact one the project's tool list returned, and if a tool is missing from that list, say the deployment that produces it has not finished rather than adding something else. When no existing server in the project fits, offer to create one from the project's function tools instead: ask unconfirmed first, show the project, the new server's name, what that unconfirmed call previews and the exact tools, wait for explicit confirmation, then create it. A new server reaches nobody until it is put into a plugin, except an organization's first server, which joins the project's Default plugin and reaches everyone holding it: say which from the preview before confirming and from the result afterwards.",
 			"Creating a data export is a mutation: first show the exact project, endpoint, data source, enabled state, and sensitive-data policy, then ask for explicit confirmation. Never request or accept authorization header values in chat; create the export without headers and send the user to the returned management URL to add authentication securely.",
+			"Pausing or resuming a data export changes only whether one route sends data; nothing about its destination or data source changes, and editing or deleting a destination or route stays in the dashboard. Name the exact project and route from the current data export list and wait for explicit confirmation. Before pausing, tell the user that data produced while the route is paused is dropped, not held back for later — resuming sends only new data — and that either change takes up to about a minute to reach every relay. Before resuming, show the user the route's data source and destination from the current data export list and pass exactly those back; if the route changed since that read the resume is refused, so read it again and confirm what it points at now. A route with no destination, a deleted destination, or a destination whose stored configuration can no longer be used cannot be resumed; say which and send the user to the dashboard. Gram does not record when a route last delivered, so do not state one.",
+			"Dismissing Watchdog findings as false positives, or restoring them, is a mutation: name the exact project and the exact findings, wait for explicit confirmation, then report which findings changed, which were already in that state, and which were not found in the project. A dismissal suppresses only the findings named; a risk exclusion is the tool for a whole class of findings.",
+			"Project-wide chat listings are metadata only: when a conversation was active, how long it ran, which app produced it, whether risk analysis found anything, and a masked participant. Never present a listed chat's title or what was said as known, and send the administrator to the dashboard to read a transcript. Personal session recall is separate: it may present the caller's own sessions by title and their own redacted handoff digest.",
 		}, "\n\n"),
 		PageSize: 32,
+		// Declared rather than inferred. Left unset, the SDK advertises
+		// listChanged for tools and resources because some are registered, which
+		// is a promise this runtime cannot keep: it serves POSTs statelessly, so
+		// every request is its own session and there is no session alive to
+		// receive a list_changed notification. A client that believes the promise
+		// opens a subscriptions/listen stream (protocol 2026-07-28, SEP-2575),
+		// which the SDK answers by blocking on the request context until the peer
+		// goes away — an idle connection the proxy eventually reads as an upstream
+		// timeout. Advertising false lets that stream return immediately instead.
+		Capabilities: &mcp.ServerCapabilities{
+			Tools:     &mcp.ToolCapabilities{ListChanged: false},
+			Resources: &mcp.ResourceCapabilities{ListChanged: false},
+			// Preserved because the SDK only supplies its logging default when
+			// Capabilities is nil, and this server advertised it before.
+			Logging: &mcp.LoggingCapabilities{},
+		},
 	})
 
 	reg := newRegistrar(server)
 
 	registerReadTools(reg, reader, cursorKeyMaterial)
+	var xaaReadiness *xaaReadinessService
 	if postgresReader, ok := reader.(*PostgresReader); ok {
+		xaaReadiness = postgresReader.xaaReadiness
+	}
+	registerXAAReadinessTool(reg, xaaReadiness)
+	var connectionMutationService *MCPConnectionMutationService
+	if len(connectionMutations) > 0 {
+		connectionMutationService = connectionMutations[0]
+	}
+	if postgresReader, ok := reader.(*PostgresReader); ok {
+		registerMCPConnectionSettingsTool(reg, NewMCPConnectionSettingsService(postgresReader.db))
+		registerMCPConnectionMutationTools(reg, connectionMutationService)
+		if postgresReader.networkIngress == nil {
+			registerUnavailableNetworkIngressTool(reg)
+		} else {
+			registerNetworkIngressTool(reg, postgresReader.networkIngress)
+		}
+		registerToolExposureTools(reg, postgresReader.toolExposure, reader)
+		registerCreateMCPFromFunctionsTool(reg, postgresReader.toolExposure)
+		registerProjectLifecycleTools(reg, postgresReader.projectLifecycle)
 		if postgresReader.reviewRequests == nil {
 			registerUnavailableReviewRequestTools(reg)
 		} else {
@@ -208,6 +276,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		}
 		registerRiskToolsWithMutations(reg, postgresReader.riskReads, postgresReader.riskAnalysisStatus, riskMutations)
 		registerRiskFindingsTool(reg, postgresReader.riskFindings)
+		registerRiskFindingListTools(reg, postgresReader.riskFindingList)
 		if postgresReader.dataExports == nil {
 			registerUnavailableDataExportTools(reg)
 		} else {
@@ -218,10 +287,16 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		} else {
 			registerDataExportMutationTool(reg, postgresReader)
 		}
+		registerDataExportRouteToggleTools(reg, postgresReader.dataExportRouteToggle)
 		if postgresReader.recentToolCalls == nil {
 			registerUnavailableRecentToolCallTools(reg)
 		} else {
 			registerRecentToolCallTools(reg, postgresReader)
+		}
+		if postgresReader.networkTraffic == nil || postgresReader.networkTrafficLogsEnabled == nil {
+			registerUnavailableMCPNetworkTrafficTool(reg)
+		} else {
+			registerMCPNetworkTrafficTool(reg, postgresReader)
 		}
 		if postgresReader.eventFeed == nil {
 			registerUnavailableOrganizationEventTools(reg)
@@ -232,13 +307,22 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerShadowDecisionTool(reg, postgresReader.shadowDecisions)
 		registerShadowAITools(reg, postgresReader.shadowAI)
 	} else {
+		registerUnavailableMCPConnectionSettingsTool(reg)
+		registerMCPConnectionMutationTools(reg, nil)
+		registerUnavailableNetworkIngressTool(reg)
+		registerToolExposureTools(reg, nil, reader)
+		registerCreateMCPFromFunctionsTool(reg, nil)
+		registerProjectLifecycleTools(reg, nil)
 		registerUnavailableReviewRequestTools(reg)
 		registerRiskAnalysisStatusTool(reg, nil)
 		registerRiskFindingsTool(reg, nil)
+		registerRiskFindingListTools(reg, nil)
 		registerUnavailableRiskToolsWithMutations(reg, riskMutations)
 		registerUnavailableDataExportTools(reg)
 		registerUnavailableDataExportMutationTool(reg)
+		registerDataExportRouteToggleTools(reg, nil)
 		registerUnavailableRecentToolCallTools(reg)
+		registerUnavailableMCPNetworkTrafficTool(reg)
 		registerUnavailableOrganizationEventTools(reg)
 		registerUnavailableShadowInventoryTools(reg)
 		registerShadowDecisionTool(reg, nil)
@@ -326,6 +410,21 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	} else {
 		registerDrilldownTools(reg, diagnostics)
 	}
+	if !diagnostics.toolUsageValid() {
+		registerUnavailableToolUsageSummaryTool(reg)
+	} else {
+		registerToolUsageSummaryTool(reg, diagnostics)
+	}
+	if !diagnostics.userSearchValid() {
+		registerUnavailableUserSearchTools(reg)
+	} else {
+		registerUserSearchTools(reg, diagnostics)
+	}
+	if !diagnostics.toolCallSearchValid() {
+		registerUnavailableToolCallSearchTools(reg)
+	} else {
+		registerToolCallSearchTools(reg, diagnostics)
+	}
 	if diagnostics == nil || !diagnostics.valid() || diagnostics.references == nil || !diagnostics.sensitiveBudget.valid() || !diagnostics.volume.valid() {
 		registerUnavailableSkillUsageTools(reg)
 	} else {
@@ -341,6 +440,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	} else {
 		registerPluginTools(reg, plugins)
 	}
+	registerPluginMetadataTools(reg, plugins)
 	if !accessRead.valid() {
 		registerUnavailableAccessReadTools(reg)
 	} else {
@@ -352,6 +452,19 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	} else {
 		registerSessionRecallTools(reg, sessionRecall)
 	}
+	// Registered beside session recall: recall serves a caller their own
+	// transcript as a digest, the listing serves an administrator every chat's
+	// metadata, and the two together are the whole of what this server says
+	// about conversations.
+	var chatMetadata *ChatMetadataService
+	if postgresReader, ok := reader.(*PostgresReader); ok {
+		chatMetadata = postgresReader.chatMetadata
+	}
+	if !chatMetadata.valid() {
+		registerUnavailableChatMetadataTools(reg)
+	} else {
+		registerChatMetadataTools(reg, chatMetadata)
+	}
 	if feedback == nil {
 		addTool(reg, &mcp.Tool{
 			Name:        "send_platform_mcp_feedback",
@@ -361,6 +474,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	} else {
 		registerFeedbackTool(reg, feedback)
 	}
+	registerWorkflowRunTool(reg, workflowRun)
 	return server, reg
 }
 
@@ -492,8 +606,6 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 		result = operationBudgetResult{Code: unavailableCode, Reason: "unsupported_lifecycle_target", Message: "This MCP server was not set up through this platform, so it cannot be turned on or off from here. Manage it in the dashboard instead."}
 	case errors.Is(err, ErrOperationBudgetUnavailable), errors.Is(err, ErrRegistrationUnavailable):
 		result = operationBudgetResult{Code: unavailableCode, Message: "That is temporarily unavailable. Try again shortly."}
-	case errors.Is(err, ErrRegistrationCap):
-		result = operationBudgetResult{Code: "conflict", Reason: "active_registration_cap", Message: "This project already holds as many MCP servers as it can. Remove one, or use another project."}
 	case errors.Is(err, ErrRegistrationConflict):
 		result = operationBudgetResult{Code: "conflict", Message: "That MCP server conflicts with something already set up in this project."}
 	case errors.Is(err, ErrTargetIneligible):

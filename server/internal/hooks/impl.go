@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
@@ -92,8 +93,11 @@ type Service struct {
 	// suggestion-analysis wake.
 	suggestionSignaler suggest.Signaler
 	serverURL          *url.URL
-	siteURL            *url.URL
-	jwtSecret          string
+	orgHosts           *orghost.Resolver
+	// orgHostCache keeps deny-link host lookups off the database on the deny
+	// hot path; nil disables caching.
+	orgHostCache *orgDefaultHostCache
+	jwtSecret    string
 	// nowFunc supplies the event timestamp for ingest paths that stamp
 	// server-side because the client sends none (the Cursor hook, and the
 	// Codex/OTEL fallbacks). Injectable so tests can pin telemetry event time
@@ -229,6 +233,9 @@ func (s *Service) signalIdentityMapRefresh(ctx context.Context) {
 // client disconnect must not drop it. Failures are logged and swallowed —
 // no hook decision, response or tool flow depends on a wake landing.
 func (s *Service) signalSkillEfficacy(ctx context.Context, projectID uuid.UUID) {
+	ctx, span := s.tracer.Start(ctx, "hooks.signalSkillEfficacy")
+	defer span.End()
+
 	if s.efficacySignaler == nil || projectID == uuid.Nil {
 		return
 	}
@@ -270,7 +277,7 @@ func NewService(
 	suggestionSignaler suggest.Signaler,
 	identityMapRefresh IdentityMapRefreshSignaler,
 	serverURL *url.URL,
-	siteURL *url.URL,
+	orgHosts *orghost.Resolver,
 	jwtSecret string,
 	riskRecorder *metering.RiskRecorder,
 ) *Service {
@@ -301,7 +308,8 @@ func NewService(
 		suggestionSignaler: suggestionSignaler,
 		identityMapRefresh: identityMapRefresh,
 		serverURL:          serverURL,
-		siteURL:            siteURL,
+		orgHosts:           orgHosts,
+		orgHostCache:       newOrgDefaultHostCache(),
 		jwtSecret:          jwtSecret,
 		nowFunc:            time.Now,
 	}

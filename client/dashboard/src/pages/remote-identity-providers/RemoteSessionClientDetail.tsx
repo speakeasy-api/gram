@@ -9,11 +9,19 @@ import {
   PageTabsList,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
-import { useOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
+import {
+  invalidateAllOrganizationRemoteSessionClient,
+  useOrganizationRemoteSessionClient,
+} from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
+import { useUpdateOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionClient.js";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Link, Navigate, useLocation, useParams } from "react-router";
-import { ScopeBadge } from "./ScopeBadge";
+import { ScopeBadge } from "@/lib/remote-identity";
+import { LegacyCallbackAlert } from "./clientAlerts";
 import { remoteSessionClientDisplayName } from "./clientDisplay";
 import { issuerDisplayName } from "./issuerDisplay";
 import { OverviewTab } from "./tabs/client/OverviewTab";
@@ -50,6 +58,23 @@ export default function RemoteSessionClientDetail(): JSX.Element {
     id: clientId,
   });
   const { data: issuer } = useOrganizationRemoteSessionIssuer({ id: issuerId });
+  const queryClient = useQueryClient();
+  // The organization update endpoint requires org:admin, which a platform
+  // admin browsing with org:read alone does not have.
+  const { hasAnyScope } = useRBAC();
+  const migrate = useUpdateOrganizationRemoteSessionClientMutation({
+    onSuccess: async () => {
+      await invalidateAllOrganizationRemoteSessionClient(queryClient, {
+        refetchType: "all",
+      });
+      toast.success("Client migrated to the new callback URL");
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to migrate client",
+      );
+    },
+  });
 
   const activeTab = activeDetailTab(location.pathname, CLIENT_TABS);
   const tabHref = (tab: ClientTab) =>
@@ -129,6 +154,25 @@ export default function RemoteSessionClientDetail(): JSX.Element {
             </div>
 
             <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+              {client && (
+                <LegacyCallbackAlert
+                  legacyCallbackUrl={client.legacyCallbackUrl}
+                  callbackUrl={client.callbackUrl}
+                  onMigrate={() =>
+                    migrate.mutate({
+                      request: {
+                        updateRemoteSessionClientForm: {
+                          id: client.id,
+                          legacyCallbackUrl: false,
+                        },
+                      },
+                    })
+                  }
+                  isMigrating={migrate.isPending}
+                  canMigrate={hasAnyScope(["org:admin"])}
+                  className="mb-6 max-w-3xl"
+                />
+              )}
               <TabsContent value="overview" className="mt-0">
                 {client && <OverviewTab client={client} />}
               </TabsContent>

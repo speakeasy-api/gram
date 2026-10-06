@@ -22,7 +22,7 @@ type userGrantQueryCounter struct {
 
 func (db *userGrantQueryCounter) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
 	db.queries++
-	rows, err := db.DBTX.Query(ctx, sql, args...)
+	rows, err := db.DBTX.Query(ctx, sql, args...) //nolint:glint // notestingrawsql: wrapper forwards SQLc-generated SQL while counting database round trips
 	if err != nil {
 		return nil, fmt.Errorf("counted query: %w", err)
 	}
@@ -31,7 +31,7 @@ func (db *userGrantQueryCounter) Query(ctx context.Context, sql string, args ...
 
 func (db *userGrantQueryCounter) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	db.queries++
-	return db.DBTX.QueryRow(ctx, sql, args...)
+	return db.DBTX.QueryRow(ctx, sql, args...) //nolint:glint // notestingrawsql: wrapper forwards SQLc-generated SQL while counting database round trips
 }
 
 func TestLoadUserGrants_matchesIndividualPolicies(t *testing.T) {

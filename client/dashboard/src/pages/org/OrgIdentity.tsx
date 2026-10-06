@@ -1,3 +1,4 @@
+import { SlackWorkspaces } from "./slack-workspaces/SlackWorkspaces";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 
 import { TabbedPage, type PageTab } from "@/components/page-templates";
@@ -11,24 +12,27 @@ import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
-import { useOrgRoutes } from "@/routes";
+import { cn } from "@/lib/utils";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
+import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { FolderSync, Loader2, Lock } from "lucide-react";
+import { ExternalLink, FolderSync, Globe, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 
-import { EnterpriseManagedAuth } from "./identity-provider/EnterpriseManagedAuth";
+import { DirectoryRoleMappings } from "./identity-provider/DirectoryRoleMappings";
+import { IdentityProviders } from "./identity-provider/IdentityProviders";
 import {
-  enterpriseManagedAuthHref,
+  identityProvidersHref,
   IDENTITY_TABS,
   type IdentityPageTab,
 } from "./identity-provider/tabs";
 
 const UPSELL_COPY = "Contact our team to setup SSO and Directory Sync";
 
-type IdentitySectionId = "sso" | "directory_sync";
+type IdentitySectionId = "domain_verification" | "sso" | "directory_sync";
 
 type IdentityCardProps = {
   sectionId: IdentitySectionId;
@@ -40,8 +44,15 @@ type IdentityCardProps = {
   learnMoreText: string;
   learnMoreHref: string;
   active?: boolean;
+  activeLabel?: string;
+  /** Dims the card and disables its control until a domain is verified. */
+  blocked?: boolean;
   configureButton?: React.ReactNode;
   children?: React.ReactNode;
+  /** Content below the card, outside its border, such as a table. */
+  below?: React.ReactNode;
+  /** Leaves out the provider card, for sections whose content replaces it. */
+  hideCard?: boolean;
 };
 
 /**
@@ -86,32 +97,25 @@ function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
   );
 }
 
-/**
- * Routes an admin into Gram's guided setup wizard at the relevant step instead
- * of bouncing them straight to the WorkOS admin portal. Used when SSO / Directory
- * Sync has not been configured yet so first-run setup happens in-product.
- */
-function SetupStepButton() {
-  const orgRoutes = useOrgRoutes();
-
-  return (
-    <RequireScope scope="org:admin" level="component">
-      <orgRoutes.setupTask.Link params={["idp"]}>
-        <Button variant="secondary" size="sm">
-          Configure
-        </Button>
-      </orgRoutes.setupTask.Link>
-    </RequireScope>
-  );
-}
-
-/** Launches the WorkOS admin portal to manage an existing SSO connection. */
-function SSOConfigureButton() {
+/** Launches the WorkOS admin portal for the given intent. */
+function WorkOSPortalButton({
+  intent,
+  errorFallback,
+  label = "Configure",
+  external = false,
+  variant = "secondary",
+}: {
+  intent: "sso" | "dsync" | "domain_verification";
+  errorFallback: string;
+  label?: string;
+  /** Adds an external-link icon, for spots where leaving Gram is not obvious. */
+  external?: boolean;
+  /** Primary when opening the portal is the card's first-run action. */
+  variant?: "primary" | "secondary";
+}) {
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to start SSO setup",
-      );
+      toast.error(error instanceof Error ? error.message : errorFallback);
     },
   });
 
@@ -120,7 +124,7 @@ function SSOConfigureButton() {
       {
         request: {
           generateWorkOSAdminPortalLinkRequestBody: {
-            intent: "sso",
+            intent,
           },
         },
       },
@@ -139,7 +143,7 @@ function SSOConfigureButton() {
   return (
     <RequireScope scope="org:admin" level="component">
       <Button
-        variant="secondary"
+        variant={variant}
         size="sm"
         onClick={launchPortal}
         disabled={generatePortalLink.isPending}
@@ -149,68 +153,21 @@ function SSOConfigureButton() {
             <Loader2 className="h-4 w-4 animate-spin" />
           </Button.LeftIcon>
         )}
-        Configure
-      </Button>
-    </RequireScope>
-  );
-}
-
-/** Launches the WorkOS admin portal to manage an existing Directory Sync link. */
-function DirectorySyncConfigureButton() {
-  const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
-    onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to start Directory Sync setup",
-      );
-    },
-  });
-
-  const launchPortal = () => {
-    generatePortalLink.mutate(
-      {
-        request: {
-          generateWorkOSAdminPortalLinkRequestBody: {
-            intent: "dsync",
-          },
-        },
-      },
-      {
-        onSuccess: (data) => {
-          if (openSafeExternalUrl(data.url)) {
-            toast.info("Continue setup in the WorkOS portal");
-          } else {
-            toast.error("Unable to open the WorkOS portal");
-          }
-        },
-      },
-    );
-  };
-
-  return (
-    <RequireScope scope="org:admin" level="component">
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={launchPortal}
-        disabled={generatePortalLink.isPending}
-      >
-        {generatePortalLink.isPending && (
-          <Button.LeftIcon>
-            <Loader2 className="h-4 w-4 animate-spin" />
-          </Button.LeftIcon>
+        {label}
+        {external && (
+          <Button.RightIcon>
+            <ExternalLink className="h-4 w-4" />
+          </Button.RightIcon>
         )}
-        Configure
       </Button>
     </RequireScope>
   );
 }
 
 /**
- * Picks the SSO configure control: upsell when the feature is not entitled, the
- * WorkOS portal launcher once a connection exists, otherwise the in-product
- * setup wizard for first-run configuration.
+ * Picks the SSO configure control: upsell when the feature is not entitled,
+ * otherwise the WorkOS portal launcher, as the primary action until a
+ * connection exists.
  */
 function SSOConfigureControl({
   featureEnabled,
@@ -220,13 +177,28 @@ function SSOConfigureControl({
   active: boolean;
 }) {
   if (!featureEnabled) return <ConfigureButton sectionId="sso" />;
-  if (active) return <SSOConfigureButton />;
-  return <SetupStepButton />;
+  if (active) {
+    return (
+      <WorkOSPortalButton
+        intent="sso"
+        errorFallback="Failed to start SSO setup"
+      />
+    );
+  }
+  return (
+    <WorkOSPortalButton
+      intent="sso"
+      errorFallback="Failed to start SSO setup"
+      variant="primary"
+    />
+  );
 }
 
 /**
- * Picks the Directory Sync configure control, mirroring {@link SSOConfigureControl}:
- * upsell, WorkOS portal launcher, or the in-product setup wizard.
+ * Picks the Directory Sync card control: upsell, or the WorkOS portal to
+ * connect a directory, as the card's primary action. A connected directory
+ * has none on the card; its connection is managed from the secondary button
+ * under the role mappings.
  */
 function DirectorySyncConfigureControl({
   featureEnabled,
@@ -235,9 +207,15 @@ function DirectorySyncConfigureControl({
   featureEnabled: boolean;
   active: boolean;
 }) {
+  if (active) return null;
   if (!featureEnabled) return <ConfigureButton sectionId="directory_sync" />;
-  if (active) return <DirectorySyncConfigureButton />;
-  return <SetupStepButton />;
+  return (
+    <WorkOSPortalButton
+      intent="dsync"
+      errorFallback="Failed to start Directory Sync setup"
+      variant="primary"
+    />
+  );
 }
 
 function IdentitySection({
@@ -250,9 +228,24 @@ function IdentitySection({
   learnMoreText,
   learnMoreHref,
   active,
+  activeLabel = "Connected",
+  blocked = false,
   configureButton,
   children,
+  below,
+  hideCard = false,
 }: IdentityCardProps) {
+  let control = configureButton ?? <ConfigureButton sectionId={sectionId} />;
+  // A blocked card replaces every control, including the upsell, so nothing
+  // starts setup that WorkOS would reject without a verified domain.
+  if (blocked) {
+    control = (
+      <Button variant="secondary" size="sm" disabled>
+        Configure
+      </Button>
+    );
+  }
+
   return (
     <section>
       <div className="flex flex-col">
@@ -262,33 +255,49 @@ function IdentitySection({
         <Text as="div" muted small className="mb-4">
           {description}
         </Text>
-        <div className="border-border overflow-hidden border">
-          <div className="flex items-center gap-4 p-4">
-            <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-full">
-              {providerIcon}
+        {blocked && (
+          <Alert variant="warning" className="mb-4">
+            <Text small className="text-inherit">
+              Verify a domain above before setting up {heading}.
+            </Text>
+          </Alert>
+        )}
+        {!hideCard && (
+          <div
+            aria-disabled={blocked || undefined}
+            className={cn(
+              "border-border overflow-hidden border",
+              blocked && "opacity-70",
+            )}
+          >
+            <div className="flex items-center gap-4 p-4">
+              <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-full">
+                {providerIcon}
+              </div>
+              <div className="min-w-0 flex-1">
+                <Text variant="body" className="font-medium">
+                  {providerTitle}
+                </Text>
+                <Text muted small>
+                  {providerSubtitle}
+                </Text>
+                {active && (
+                  <Badge variant="success" className="mt-1.5">
+                    <Badge.Text>{activeLabel}</Badge.Text>
+                  </Badge>
+                )}
+              </div>
+              {control}
             </div>
-            <div className="min-w-0 flex-1">
-              <Text variant="body" className="font-medium">
-                {providerTitle}
-              </Text>
-              <Text muted small>
-                {providerSubtitle}
-              </Text>
-              {active && (
-                <Badge variant="success" className="mt-1.5">
-                  <Badge.Text>Connected</Badge.Text>
-                </Badge>
-              )}
-            </div>
-            {configureButton ?? <ConfigureButton sectionId={sectionId} />}
+            {children}
           </div>
-          {children}
-        </div>
+        )}
+        {below}
         <a
           href={learnMoreHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-muted-foreground hover:text-foreground mt-4 ml-auto block text-sm underline underline-offset-4 transition-colors"
+          className="text-muted-foreground hover:text-foreground mt-2 ml-auto block text-sm underline underline-offset-4 transition-colors"
         >
           {learnMoreText}
         </a>
@@ -305,20 +314,33 @@ export default function OrgIdentity(): JSX.Element {
   // The only read of the rollout flag: without it (or org:admin) the tab does not exist.
   const providerFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
   const { hasScope } = useRBAC();
-  const showEnterpriseManagedAuth =
+  const showIdentityProviders =
     providerFlag.status === "enabled" && hasScope("org:admin");
 
-  const activeTab: IdentityPageTab =
-    requestedTab !== "sso" && !showEnterpriseManagedAuth ? "sso" : requestedTab;
+  const showSlack = hasScope("org:admin");
+  let activeTab: IdentityPageTab = requestedTab;
+  if (requestedTab === "identity-providers" && !showIdentityProviders)
+    activeTab = "sso";
+  if (requestedTab === "slack-workspaces" && !showSlack) activeTab = "sso";
 
   const tabs: PageTab[] = [
     { value: "sso", label: "Single sign-on", href: "?tab=sso" },
-    ...(showEnterpriseManagedAuth
+    ...(showSlack
       ? [
           {
-            value: "enterprise-managed-auth",
-            label: "Enterprise Managed Auth",
-            href: enterpriseManagedAuthHref(),
+            value: "slack-workspaces",
+            label: "Slack workspaces",
+            href: "?tab=slack-workspaces",
+            stage: "preview" as const,
+          },
+        ]
+      : []),
+    ...(showIdentityProviders
+      ? [
+          {
+            value: "identity-providers",
+            label: "Identity providers",
+            href: identityProvidersHref(),
             stage: "preview" as const,
           },
         ]
@@ -333,7 +355,9 @@ export default function OrgIdentity(): JSX.Element {
       activeTab={activeTab}
       tabs={tabs}
     >
-      {activeTab === "sso" ? <SingleSignOnTab /> : <EnterpriseManagedAuth />}
+      {activeTab === "sso" && <SingleSignOnTab />}
+      {activeTab === "identity-providers" && <IdentityProviders />}
+      {activeTab === "slack-workspaces" && <SlackWorkspaces />}
     </TabbedPage>
   );
 }
@@ -343,28 +367,92 @@ function SingleSignOnTab(): JSX.Element {
   const { data: features } = useProductFeatures({
     organizationId: organization.id,
   });
+  const { data: onboardingStatus } = useOnboardingStatus(undefined, undefined, {
+    throwOnError: false,
+  });
 
   const ssoFeatureEnabled = features?.ssoEnabled ?? false;
   const scimFeatureEnabled = features?.scimEnabled ?? false;
   const ssoActive = organization.ssoEnabled === true;
   const scimActive = organization.scimEnabled === true;
+  // Only org admins get the role mappings, which replace the SCIM card; every
+  // one else keeps the card so the section is never empty.
+  const { hasScope } = useRBAC();
+  const showRoleMappings = scimActive && hasScope("org:admin");
+  // Active SSO proves a domain was verified, even for orgs set up before
+  // verified domains were tracked. The server completes the setup task the
+  // same way.
+  const domainVerified =
+    !!onboardingStatus?.domainVerified || !!onboardingStatus?.ssoConfigured;
+  const verifiedDomains = onboardingStatus?.verifiedDomains ?? [];
+  // WorkOS needs a verified domain before either connection can be set up.
+  // Only a status response can say the domain is unverified: while loading or
+  // after an error nothing is blocked, and WorkOS still enforces the rule.
+  const domainUnverified = onboardingStatus !== undefined && !domainVerified;
+  const ssoBlocked = !ssoActive && domainUnverified;
+  const scimBlocked = !scimActive && domainUnverified;
+
+  let domainSubtitle = "Add a DNS record to verify your domain.";
+  if (verifiedDomains.length > 0)
+    domainSubtitle = "SSO applies to users on these domains.";
+  else if (domainVerified) domainSubtitle = "Your domain is verified.";
+
+  let ssoSubtitle = "Choose an identity provider to get started.";
+  if (ssoActive) ssoSubtitle = "Your identity provider is connected.";
+  else if (ssoBlocked) ssoSubtitle = "Verify a domain first.";
+
+  let scimSubtitle = "Choose an identity provider to get started.";
+  if (scimActive) scimSubtitle = "Your directory provider is connected.";
+  else if (scimBlocked) scimSubtitle = "Verify a domain first.";
 
   return (
-    <div className="flex max-w-4xl flex-col gap-8">
+    <div className="flex max-w-4xl flex-col gap-4">
+      <IdentitySection
+        sectionId="domain_verification"
+        heading="Domain verification"
+        description="Prove your organization owns its email domain. Single Sign-On needs a verified domain."
+        providerIcon={<Globe className="text-muted-foreground h-5 w-5" />}
+        providerTitle="Domain"
+        providerSubtitle={domainSubtitle}
+        learnMoreText="Learn more about domain verification"
+        learnMoreHref="https://www.speakeasy.com/docs/ai-control-plane/org-admin/identity"
+        active={domainVerified}
+        activeLabel="Verified"
+        configureButton={
+          <WorkOSPortalButton
+            intent="domain_verification"
+            errorFallback="Failed to start domain verification"
+            label={domainVerified ? "Manage" : "Verify domain"}
+          />
+        }
+      >
+        {verifiedDomains.length > 0 && (
+          <ul
+            aria-label="Verified domains"
+            className="border-border flex flex-wrap gap-2 border-t p-4"
+          >
+            {verifiedDomains.map((domain) => (
+              <li key={domain}>
+                <Badge variant="neutral" background>
+                  <Badge.Text>{domain}</Badge.Text>
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        )}
+      </IdentitySection>
+
       <IdentitySection
         sectionId="sso"
         heading="Single Sign-On"
         description="Set up Single Sign-On (SSO) to allow your team to sign in to Speakeasy with your identity provider."
         providerIcon={<Lock className="text-muted-foreground h-5 w-5" />}
         providerTitle="SSO"
-        providerSubtitle={
-          ssoActive
-            ? "Your identity provider is connected."
-            : "Choose an identity provider to get started."
-        }
+        providerSubtitle={ssoSubtitle}
         learnMoreText="Learn more about SSO"
-        learnMoreHref="https://www.speakeasy.com/docs"
+        learnMoreHref="https://www.speakeasy.com/docs/ai-control-plane/org-admin/identity"
         active={ssoActive}
+        blocked={ssoBlocked}
         configureButton={
           <SSOConfigureControl
             featureEnabled={ssoFeatureEnabled}
@@ -381,7 +469,9 @@ function SingleSignOnTab(): JSX.Element {
             Sync members and roles directly from your identity provider:
             <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
               <li>Members are provisioned automatically from your directory</li>
-              <li>Roles are assigned from your IDP group mappings</li>
+              <li>
+                Roles are assigned from the group and attribute mappings below
+              </li>
               <li>Members can&apos;t be invited manually</li>
               <li>Roles can&apos;t be assigned to members manually</li>
             </ul>
@@ -389,19 +479,37 @@ function SingleSignOnTab(): JSX.Element {
         }
         providerIcon={<FolderSync className="text-muted-foreground h-5 w-5" />}
         providerTitle="SCIM"
-        providerSubtitle={
-          scimActive
-            ? "Your directory provider is connected."
-            : "Choose an identity provider to get started."
-        }
+        providerSubtitle={scimSubtitle}
         learnMoreText="Learn more about SCIM Directory Sync"
-        learnMoreHref="https://www.speakeasy.com/docs"
+        learnMoreHref="https://www.speakeasy.com/docs/ai-control-plane/org-admin/identity"
         active={scimActive}
+        blocked={scimBlocked}
         configureButton={
           <DirectorySyncConfigureControl
             featureEnabled={scimFeatureEnabled}
             active={scimActive}
           />
+        }
+        // Once a directory is connected, an admin's section is the role
+        // mappings; the connection is managed from the button below them.
+        hideCard={showRoleMappings}
+        below={
+          scimActive && (
+            // "section" renders nothing for non-admins, so the admin-only
+            // listing is never requested.
+            <RequireScope scope="org:admin" level="section">
+              <DirectoryRoleMappings
+                footerAction={
+                  <WorkOSPortalButton
+                    intent="dsync"
+                    errorFallback="Failed to open the directory connection"
+                    label="Manage connection"
+                    external
+                  />
+                }
+              />
+            </RequireScope>
+          )
         }
       />
     </div>

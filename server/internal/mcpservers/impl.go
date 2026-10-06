@@ -58,6 +58,7 @@ import (
 	unproxiedmcprepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/lifecycle"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	variationsrepo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
@@ -77,6 +78,7 @@ type Service struct {
 	revoker                  *remotesessions.UpstreamRevoker
 	networkAccessEligibility networkaccess.EligibilityChecker
 	distributionAdmission    *admission.Guard
+	publicationRequests      plugins.PublicationRequests
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -112,7 +114,13 @@ func NewService(
 		revoker:                  revoker,
 		networkAccessEligibility: networkAccessEligibility,
 		distributionAdmission:    admission.NewGuard(nil, nil),
+		publicationRequests:      plugins.PublicationRequests{Enabled: false},
 	}
+}
+
+func (s *Service) WithPublicationRequests(enabled bool) *Service {
+	s.publicationRequests.Enabled = enabled
+	return s
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -182,15 +190,11 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
 		return nil, fmt.Errorf("finalize network access admission: %w", err)
 	}
-	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
-	}
-
 	if err := verifyTunneledPublicConsent(ctx, dbtx, *authCtx.ProjectID, ids.TunneledMcpServerID, string(payload.Visibility)); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
 	}
 
-	server, err := CreateMCPServerInTransaction(ctx, dbtx, s.audit, MCPServerTransactionInput{
+	server, err := CreateProjectMCPServerInTransaction(ctx, dbtx, s.audit, MCPServerTransactionInput{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		ProjectID:             *authCtx.ProjectID,
 		ActorUserID:           authCtx.UserID,
@@ -207,6 +211,9 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		ToolVariationsGroupID: ids.ToolVariationsGroupID,
 	})
 	if err != nil {
+		if errors.Is(err, ErrServerReferenceOutsideProject) {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
+		}
 		if errors.Is(err, usersessionbindings.ErrNotFound) {
 			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 		}
@@ -359,6 +366,10 @@ func vendorFaviconURL(scheme, host string) string {
 		"https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=%s&size=128",
 		url.QueryEscape(scheme+"://"+host),
 	)
+}
+
+func isCanonicalHostedWrapper(server repo.McpServer) bool {
+	return server.ToolsetID.Valid && server.ToolsetID.UUID == server.ID
 }
 
 // grantResourceID is the RBAC resource id for an mcp_servers row: the backing
@@ -650,6 +661,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	if err != nil {
 		return nil, err
 	}
+	if isCanonicalHostedWrapper(unlocked) || (ids.ToolsetID.Valid && ids.ToolsetID.UUID == serverID) {
+		return nil, oops.E(oops.CodeInvalid, nil, "manage hosted MCP network access through the toolset")
+	}
 	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)
 	if err != nil {
 		if payload.NetworkAccessMode == nil {
@@ -695,6 +709,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
 
+	if isCanonicalHostedWrapper(existing) {
+		return nil, oops.E(oops.CodeInvalid, nil, "manage hosted MCP network access through the toolset")
+	}
 	// Authorization keys on the row as it exists, not the backing the payload
 	// may switch it to.
 	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(existing.ID, existing.ToolsetID), authCtx.ProjectID.String())); err != nil {
@@ -849,6 +866,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		}
 	}
 
+	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue MCP server publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -866,12 +886,16 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 	afterView := mv.BuildMcpServerView(updated)
 
-	// A server that was already enabled is already a Default-plugin member, so
-	// renaming it (its display name is generated into the package) or disabling
-	// it (it drops out of the package) has to publish too — not just the
-	// enable transition this block attaches. A server disabled before and
-	// after contributes nothing either way and stays silent.
-	s.triggerPluginPublish(ctx, authCtx, attached || existing.Visibility != VisibilityDisabled, pluginCreated)
+	// A live server's mode, name or visibility can change generated package
+	// bytes; let the existing publisher coalesce and fingerprint unchanged ones.
+	if attached || existing.Visibility != VisibilityDisabled {
+		connected, connectionErr := pluginsrepo.New(s.db).HasPluginGithubConnectionForProject(ctx, *authCtx.ProjectID)
+		if connectionErr != nil {
+			logger.WarnContext(ctx, "check marketplace connection after MCP update", attr.SlogError(connectionErr))
+		} else {
+			s.triggerPluginPublish(ctx, authCtx, attached || connected, pluginCreated)
+		}
+	}
 	if err := s.reconcileMcpServerCustomDomains(ctx, clearedRootDomainIDs); err != nil {
 		return nil, err
 	}
@@ -993,8 +1017,12 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	if _, err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger); err != nil {
+	preexisting, err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger)
+	if err != nil {
 		return err
+	}
+	if isCanonicalHostedWrapper(preexisting) {
+		return oops.E(oops.CodeInvalid, nil, "delete the hosted MCP through the toolset")
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -1033,6 +1061,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 	}
 
+	if isCanonicalHostedWrapper(locked) {
+		return oops.E(oops.CodeInvalid, nil, "delete the hosted MCP through the toolset")
+	}
 	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(locked.ID, locked.ToolsetID), authCtx.ProjectID.String())); err != nil {
 		return err
 	}
@@ -1148,6 +1179,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 			ServerID:         pluginServer.ID,
 			ToolsetURN:       nil,
 			McpServerURN:     &deletedServerURN,
+			MetaMcpServerURN: nil,
 		}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "log mcp server plugin detachment").LogError(ctx, logger)
 		}
@@ -1184,6 +1216,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		}
 
 		if lockErr == nil && !hasActiveOwner {
+			if err := lifecycle.GuardEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, deleted.UserSessionIssuerID.UUID); err != nil {
+				return fmt.Errorf("guard orphan issuer identity-chaining bindings: %w", err)
+			}
 			deletedIssuer, err := userSessionsRepo.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
 				ID:        deleted.UserSessionIssuerID.UUID,
 				ProjectID: *authCtx.ProjectID,
@@ -1235,8 +1270,19 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeUnexpected, err, "log mcp server deletion").LogError(ctx, logger)
 	}
 
+	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "enqueue MCP server publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+	if len(detachedPluginServers) > 0 {
+		connected, connectionErr := pluginsrepo.New(s.db).HasPluginGithubConnectionForProject(ctx, *authCtx.ProjectID)
+		if connectionErr != nil {
+			logger.WarnContext(ctx, "check marketplace connection after MCP deletion", attr.SlogError(connectionErr))
+		} else {
+			s.triggerPluginPublish(ctx, authCtx, connected, false)
+		}
 	}
 
 	// Post-commit, best-effort: RFC 7009 for the orphaned grants.
@@ -1469,7 +1515,7 @@ func verifyServerReferenceOwnership(
 			ProjectID: projectID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("environment_id does not reference a resource in this project")
+				return fmt.Errorf("%w: environment_id does not reference a resource in this project", ErrServerReferenceOutsideProject)
 			}
 			return fmt.Errorf("check environment ownership: %w", err)
 		}
@@ -1481,7 +1527,7 @@ func verifyServerReferenceOwnership(
 			ProjectID: projectID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("remote_mcp_server_id does not reference a resource in this project")
+				return fmt.Errorf("%w: remote_mcp_server_id does not reference a resource in this project", ErrServerReferenceOutsideProject)
 			}
 			return fmt.Errorf("check remote mcp server ownership: %w", err)
 		}
@@ -1493,7 +1539,7 @@ func verifyServerReferenceOwnership(
 			ProjectID: projectID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("tunneled_mcp_server_id does not reference a resource in this project")
+				return fmt.Errorf("%w: tunneled_mcp_server_id does not reference a resource in this project", ErrServerReferenceOutsideProject)
 			}
 			return fmt.Errorf("check tunneled mcp server ownership: %w", err)
 		}
@@ -1505,7 +1551,7 @@ func verifyServerReferenceOwnership(
 			ProjectID: projectID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("toolset_id does not reference a resource in this project")
+				return fmt.Errorf("%w: toolset_id does not reference a resource in this project", ErrServerReferenceOutsideProject)
 			}
 			return fmt.Errorf("check toolset ownership: %w", err)
 		}
@@ -1517,7 +1563,7 @@ func verifyServerReferenceOwnership(
 			ProjectID: projectID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("unproxied_mcp_server_id does not reference a resource in this project")
+				return fmt.Errorf("%w: unproxied_mcp_server_id does not reference a resource in this project", ErrServerReferenceOutsideProject)
 			}
 			return fmt.Errorf("check unproxied mcp server ownership: %w", err)
 		}
@@ -1529,7 +1575,7 @@ func verifyServerReferenceOwnership(
 			ProjectID: projectID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("tool_variations_group_id does not reference a resource in this project")
+				return fmt.Errorf("%w: tool_variations_group_id does not reference a resource in this project", ErrServerReferenceOutsideProject)
 			}
 			return fmt.Errorf("check tool variations group ownership: %w", err)
 		}

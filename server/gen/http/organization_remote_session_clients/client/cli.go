@@ -101,6 +101,32 @@ func BuildGetClientPayload(organizationRemoteSessionClientsGetClientID string, o
 	return v, nil
 }
 
+// BuildGetClientDelegationStatusPayload builds the payload for the
+// organizationRemoteSessionClients getClientDelegationStatus endpoint from CLI
+// flags.
+func BuildGetClientDelegationStatusPayload(organizationRemoteSessionClientsGetClientDelegationStatusID string, organizationRemoteSessionClientsGetClientDelegationStatusSessionToken string) (*organizationremotesessionclients.GetClientDelegationStatusPayload, error) {
+	var err error
+	var id string
+	{
+		id = organizationRemoteSessionClientsGetClientDelegationStatusID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionClientsGetClientDelegationStatusSessionToken != "" {
+			sessionToken = &organizationRemoteSessionClientsGetClientDelegationStatusSessionToken
+		}
+	}
+	v := &organizationremotesessionclients.GetClientDelegationStatusPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildGetClientDeletePreflightPayload builds the payload for the
 // organizationRemoteSessionClients getClientDeletePreflight endpoint from CLI
 // flags.
@@ -319,7 +345,7 @@ func BuildUpdateClientPayload(organizationRemoteSessionClientsUpdateClientBody s
 	{
 		err = json.Unmarshal([]byte(organizationRemoteSessionClientsUpdateClientBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"legacy_callback_url\": false,\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.TokenEndpointAuthMethod != nil {
@@ -368,6 +394,7 @@ func BuildUpdateClientPayload(organizationRemoteSessionClientsUpdateClientBody s
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               body.LegacyCallbackURL,
 	}
 	if body.Scope != nil {
 		v.Scope = make([]string, len(body.Scope))

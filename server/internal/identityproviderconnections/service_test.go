@@ -134,7 +134,10 @@ func TestCreate_ProvisionsPendingConnection(t *testing.T) {
 	for _, item := range created.Checklist {
 		switch item.Key {
 		case "public_key_auth":
-			require.Contains(t, item.Details, "Enter this URL: "+created.JwksURL)
+			require.Len(t, item.Details, 3)
+			require.Contains(t, item.Details[0], "Public keys")
+			require.Contains(t, item.Details[1], "Use a URL to fetch keys dynamically")
+			require.Contains(t, item.Details[2], "Client Credentials")
 			require.Nil(t, item.Completed, "nothing observed before the first verification")
 		case "assign_admin_roles":
 			require.Contains(t, item.Description, "multi-factor authentication")
@@ -747,14 +750,14 @@ func TestCreate_ProvisionFailureLeavesOrgRetryable(t *testing.T) {
 
 	broken := si.build(provisiontest.NewProvisioner(t, si.conn.conn, func(context.Context, oauth2.TokenSource) (gcpkms.ProvisioningClient, error) {
 		return nil, errors.New("kms unreachable")
-	}, testServerURL, si.credentialID))
+	}, testServerURL, si.credentialID, ""))
 	_, err := broken.Create(ctx, &gen.CreatePayload{SessionToken: nil, OrgURL: fullOrgURL, ListingMode: nil})
 	requireOopsCode(t, err, oops.CodeUnexpected)
 
 	empty, err := si.svc.Get(ctx, &gen.GetPayload{SessionToken: nil, ID: nil})
 	require.NoError(t, err)
 	require.Nil(t, empty.Connection)
-	issuers, err := remotesessionsrepo.New(si.conn.conn).ListOrganizationRemoteSessionIssuers(ctx, remotesessionsrepo.ListOrganizationRemoteSessionIssuersParams{OrganizationID: conv.ToPGText(si.orgID), IncludeGlobal: false, Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, LimitValue: 10})
+	issuers, err := remotesessionsrepo.New(si.conn.conn).ListOrganizationRemoteSessionIssuers(ctx, remotesessionsrepo.ListOrganizationRemoteSessionIssuersParams{OrganizationID: conv.ToPGText(si.orgID), IncludeOrganizational: true, IncludeProjectSpecific: true, IncludeGlobal: false, Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, LimitValue: 10})
 	require.NoError(t, err)
 	require.Empty(t, issuers, "the abandoned issuer was tombstoned")
 
@@ -897,7 +900,22 @@ func TestNormalizeOktaOrgURL(t *testing.T) {
 		_, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
 		require.NoError(t, err, raw)
 	}
-	for _, raw := range []string{"https://okta.com", "https://okta.com.evil.com", "https://example.okta.com/path", "http://localhost", "https://[::1]", "https://example.okta.com.", "https://xn--exmple-cua.okta.com", "https://exämple.okta.com", "https://%zz.okta.com", "https://\u212Aexample.okta.com", "https://example.okta.com?", "https://example.okta.com#", "https://example.okta.com/#"} {
+	for raw, want := range map[string]string{
+		"https://acme-admin.okta.com":                    "https://acme.okta.com",
+		"https://acme-admin.oktapreview.com/":            "https://acme.oktapreview.com",
+		"https://acme-admin.okta-emea.com/admin":         "https://acme.okta-emea.com",
+		"https://acme-admin.okta.mil/admin/home":         "https://acme.okta.mil",
+		"https://Dev-1-Admin.okta.com/admin/apps/active": "https://dev-1.okta.com",
+		"https://myadmin-co.okta.com":                    "https://myadmin-co.okta.com",
+		"https://admin-team.okta.com":                    "https://admin-team.okta.com",
+		"https://acme-admin.sub.okta.com":                "https://acme-admin.sub.okta.com",
+		"https://sub.acme-admin.okta.com/admin/home":     "https://sub.acme.okta.com",
+	} {
+		got, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
+		require.NoError(t, err, raw)
+		require.Equal(t, want, got, raw)
+	}
+	for _, raw := range []string{"https://example.okta.com/admin/home", "https://acme-admin.okta.com/app/UserHome", "https://acme-admin.okta.com/admin/home?x=1", "https://acme-admin.okta.com/administrator", "https://-admin.okta.com", "https://acme-admin-admin.okta.com", "https://acme-admin.okta.com/%61dmin", "https://acme-admin.okta.com/admin%2Fx", "https://acme-admin.okta.com/admin/a b", "https://acme-admin.okta.com//admin", "https://okta.com", "https://okta.com.evil.com", "https://example.okta.com/path", "http://localhost", "https://[::1]", "https://example.okta.com.", "https://xn--exmple-cua.okta.com", "https://exämple.okta.com", "https://%zz.okta.com", "https://\u212Aexample.okta.com", "https://example.okta.com?", "https://example.okta.com#", "https://example.okta.com/#"} {
 		_, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
 		require.Error(t, err, raw)
 	}
@@ -920,7 +938,7 @@ func TestCreate_ConcurrentInstanceCannotAbandonProvisioning(t *testing.T) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
-	}, testServerURL, si.credentialID)
+	}, testServerURL, si.credentialID, "")
 	firstService := si.build(blocked)
 	secondService := si.build(si.provisioner)
 	first := make(chan error, 1)
@@ -1043,7 +1061,7 @@ func TestCreate_SmallPoolAdmissionPreventsCrossOrganizationStarvation(t *testing
 				case <-ctx.Done():
 					return nil, ctx.Err()
 				}
-			}, testServerURL, si.credentialID)
+			}, testServerURL, si.credentialID, "")
 			results := make(chan error, slots)
 			for i := range slots {
 				// Separate Service values deliberately share the same pool: admission

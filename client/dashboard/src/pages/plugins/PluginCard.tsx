@@ -24,6 +24,7 @@ import { Fragment, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
 import { usePluginPackageDownload } from "./downloadPluginPackage";
+import { usePluginQueryScope } from "./usePluginQueryScope";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 import { PluginInstallButton } from "./PluginInstallButton";
 
@@ -37,6 +38,7 @@ export function PluginCard({
   const routes = useRoutes();
   const navigate = useNavigate();
   const client = useSdkClient();
+  const scope = usePluginQueryScope();
   const detailHref = routes.plugins.detail.href(plugin.id);
   const serverCount = plugin.serverCount ?? 0;
   const skillCount = plugin.skillCount ?? 0;
@@ -49,6 +51,7 @@ export function PluginCard({
     client,
     plugin.id,
     setIsDownloadMenuOpen,
+    scope,
   );
   const installTarget =
     publishStatus?.connected &&

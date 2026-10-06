@@ -253,10 +253,18 @@ Directory: `<plugin-slug>-codex/`
   "name": "<plugin-slug>-codex",
   "version": "1.0.0",
   "description": "Plugin description",
-  "interface": "mcp",
-  "mcpServers": ["Display Name"]
+  "interface": {
+    "displayName": "Plugin name",
+    "shortDescription": "Plugin description",
+    "longDescription": "Plugin description"
+  },
+  "mcpServers": "./.mcp.json"
 }
 ```
+
+Codex descriptions fall back to `Tools and skills for <plugin-name>.` when blank.
+The short description is flattened to one line and capped at 240 Unicode characters;
+the long description retains line breaks and is capped at 4,000 characters.
 
 ### `.mcp.json`
 

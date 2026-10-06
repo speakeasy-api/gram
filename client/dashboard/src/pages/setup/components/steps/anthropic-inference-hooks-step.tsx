@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Link } from "@/components/ui/Link";
 import {
@@ -60,11 +59,6 @@ export function AnthropicInferenceHooksStep({
 
   return (
     <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <AgentProviderIcon source="claude" className="h-6 w-6" />
-        </div>
-      }
       title="Set up Anthropic observability"
       description="Anthropic inference hooks send every Claude conversation to Speakeasy before the model answers it. Nothing is installed on anyone's machine."
       onContinue={onComplete}

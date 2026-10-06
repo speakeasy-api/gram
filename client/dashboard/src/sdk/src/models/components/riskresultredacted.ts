@@ -5,12 +5,32 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
   RiskSpanRedacted,
   RiskSpanRedacted$inboundSchema,
 } from "./riskspanredacted.js";
+
+/**
+ * Recorded enforcement outcome, independent of policy configuration.
+ */
+export const RiskResultRedactedEnforcementOutcome = {
+  Logged: "logged",
+  Denied: "denied",
+  Withheld: "withheld",
+  WarnedPending: "warned_pending",
+  WarnedAcknowledged: "warned_acknowledged",
+  WarnedAbandoned: "warned_abandoned",
+  Quarantined: "quarantined",
+} as const;
+/**
+ * Recorded enforcement outcome, independent of policy configuration.
+ */
+export type RiskResultRedactedEnforcementOutcome = ClosedEnum<
+  typeof RiskResultRedactedEnforcementOutcome
+>;
 
 export type RiskResultRedacted = {
   /**
@@ -42,13 +62,45 @@ export type RiskResultRedacted = {
    */
   description?: string | undefined;
   /**
+   * Recorded enforcement outcome, independent of policy configuration.
+   */
+  enforcementOutcome?: RiskResultRedactedEnforcementOutcome | undefined;
+  /**
+   * Identity of the concrete mediated execution.
+   */
+  executionId?: string | undefined;
+  /**
    * The result ID.
    */
   id: string;
   /**
+   * Whether MCP identity stamped validated principal provenance.
+   */
+  identityStamped?: boolean | undefined;
+  /**
    * Opaque fingerprint of the original match in the form `<redacted len=N sha=XXXXXXXX>` where N is the byte length of the original match and XXXXXXXX is the first 8 hex characters of sha256(match). For shadow_mcp findings the original match value (a non-sensitive server URL or command identifier) is passed through verbatim.
    */
   matchRedacted: string;
+  /**
+   * MCP method or equivalent mediated operation.
+   */
+  mcpMethod?: string | undefined;
+  /**
+   * Concrete MCP server that executed the operation.
+   */
+  mcpServerId?: string | undefined;
+  /**
+   * Concrete mediation surface where the execution was observed.
+   */
+  mediationSurface?: string | undefined;
+  /**
+   * Outer gateway that routed the execution, when present.
+   */
+  metaMcpServerId?: string | undefined;
+  /**
+   * Execution phase inspected by risk.
+   */
+  phase?: string | undefined;
   /**
    * The risk policy ID.
    */
@@ -61,6 +113,10 @@ export type RiskResultRedacted = {
    * Whether the original finding carried byte-position information within the source message. Exact positions are intentionally not exposed to avoid reconstruction attacks.
    */
   positionKnown: boolean;
+  /**
+   * Credential provenance class resolved by MCP identity.
+   */
+  principalKind?: string | undefined;
   /**
    * The matched rule identifier.
    */
@@ -78,10 +134,23 @@ export type RiskResultRedacted = {
    */
   tags?: Array<string> | undefined;
   /**
+   * Name of the concrete tool, when applicable.
+   */
+  toolName?: string | undefined;
+  /**
+   * Toolset serving the execution, when present.
+   */
+  toolsetId?: string | undefined;
+  /**
    * The user who owns the chat session.
    */
   userId?: string | undefined;
 };
+
+/** @internal */
+export const RiskResultRedactedEnforcementOutcome$inboundSchema: z.ZodMiniEnum<
+  typeof RiskResultRedactedEnforcementOutcome
+> = z.enum(RiskResultRedactedEnforcementOutcome);
 
 /** @internal */
 export const RiskResultRedacted$inboundSchema: z.ZodMiniType<
@@ -99,15 +168,28 @@ export const RiskResultRedacted$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     description: z.optional(z.string()),
+    enforcement_outcome: z.optional(
+      RiskResultRedactedEnforcementOutcome$inboundSchema,
+    ),
+    execution_id: z.optional(z.string()),
     id: z.string(),
+    identity_stamped: z.optional(z.boolean()),
     match_redacted: z.string(),
+    mcp_method: z.optional(z.string()),
+    mcp_server_id: z.optional(z.string()),
+    mediation_surface: z.optional(z.string()),
+    meta_mcp_server_id: z.optional(z.string()),
+    phase: z.optional(z.string()),
     policy_id: z.string(),
     policy_version: z.int(),
     position_known: z.boolean(),
+    principal_kind: z.optional(z.string()),
     rule_id: z.optional(z.string()),
     source: z.string(),
     spans_redacted: z.optional(z.array(RiskSpanRedacted$inboundSchema)),
     tags: z.optional(z.array(z.string())),
+    tool_name: z.optional(z.string()),
+    toolset_id: z.optional(z.string()),
     user_id: z.optional(z.string()),
   }),
   z.transform((v) => {
@@ -117,12 +199,22 @@ export const RiskResultRedacted$inboundSchema: z.ZodMiniType<
       "chat_message_id": "chatMessageId",
       "chat_title": "chatTitle",
       "created_at": "createdAt",
+      "enforcement_outcome": "enforcementOutcome",
+      "execution_id": "executionId",
+      "identity_stamped": "identityStamped",
       "match_redacted": "matchRedacted",
+      "mcp_method": "mcpMethod",
+      "mcp_server_id": "mcpServerId",
+      "mediation_surface": "mediationSurface",
+      "meta_mcp_server_id": "metaMcpServerId",
       "policy_id": "policyId",
       "policy_version": "policyVersion",
       "position_known": "positionKnown",
+      "principal_kind": "principalKind",
       "rule_id": "ruleId",
       "spans_redacted": "spansRedacted",
+      "tool_name": "toolName",
+      "toolset_id": "toolsetId",
       "user_id": "userId",
     });
   }),

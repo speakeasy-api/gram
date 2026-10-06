@@ -148,6 +148,114 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteRole"}`)
 	})
 
+	Method("listDirectoryRoleMappings", func() {
+		Description("List the organization's directory groups and attribute values, and the roles mapped to them.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ListDirectoryRoleMappingsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listDirectoryRoleMappings")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listDirectoryRoleMappings")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDirectoryRoleMappings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryRoleMappings"}`)
+	})
+
+	Method("syncDirectoryGroups", func() {
+		Description("Fetch the organization's directory groups from WorkOS and save any that are new or changed.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(SyncDirectoryGroupsResult)
+
+		HTTP(func() {
+			POST("/rpc/access.syncDirectoryGroups")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "syncDirectoryGroups")
+		Meta("openapi:extension:x-speakeasy-name-override", "syncDirectoryGroups")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SyncDirectoryGroups", "type": "mutation"}`)
+	})
+
+	Method("setDirectoryRoleMapping", func() {
+		Description("Map a directory group or attribute value to a role, replacing any role it was mapped to before.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(SetDirectoryRoleMappingForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(DirectoryRoleMappingModel)
+
+		HTTP(func() {
+			POST("/rpc/access.setDirectoryRoleMapping")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setDirectoryRoleMapping")
+		Meta("openapi:extension:x-speakeasy-name-override", "setDirectoryRoleMapping")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetDirectoryRoleMapping", "type": "mutation"}`)
+	})
+
+	Method("deleteDirectoryRoleMapping", func() {
+		Description("Remove a directory role mapping.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the mapping to remove.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/access.deleteDirectoryRoleMapping")
+			Param("id")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "deleteDirectoryRoleMapping")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteDirectoryRoleMapping")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteDirectoryRoleMapping", "type": "mutation"}`)
+	})
+
 	Method("listScopes", func() {
 		Description("List all available scopes and their resource types.")
 		Security(security.ByKey, func() {
@@ -498,6 +606,33 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EmployeeAIDetections"}`)
 	})
 
+	Method("listAIDetectionUsers", func() {
+		Description("List the enrolled users one detected AI tool was found for, each with their devices, signals, versions and first and last sightings: the evidence listEmployeeAIDetections gives per tool for one person, expanded the other way round. Org-scoped like listAIDetections and, like it, requires an authenticated session authorized for org:admin on the active organization. Linked alias emails are folded to the canonical identity, so one person is one row. A target with no detections in the organization is not_found.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("target_id", String, "Id of the detection target to expand. Accepted exactly as agents report it, under the same length bound the scan-report ingest stores it with, so every id in the inventory can be expanded.", func() {
+				MinLength(1)
+				MaxLength(64)
+			})
+			Required("target_id")
+			security.SessionPayload()
+		})
+
+		Result(ListAIDetectionUsersResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAIDetectionUsers")
+			Param("target_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAIDetectionUsers")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAIDetectionUsers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AIDetectionUsers"}`)
+	})
+
 	Method("setAIToolDecision", func() {
 		Description("Record whether a detected AI tool may reach this organization's MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Gram can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization's scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.")
 		Security(security.Session)
@@ -613,6 +748,36 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "listAudienceOptions")
 		Meta("openapi:extension:x-speakeasy-name-override", "listAudienceOptions")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AudienceOptions"}`)
+	})
+
+	Method("explainResourceAccess", func() {
+		Description("Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead. Like listIdentityAccess it describes one person's access, so it takes a session only: API keys are not checked against grants and would see any member's rules.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("resource_kind", String, "The kind of resource to explain.", func() {
+				Enum("mcp")
+			})
+			Attribute("resource_id", String, "The resource to explain.")
+			Attribute("user_id", String, "The organization member whose access to explain.")
+			Required("resource_kind", "resource_id", "user_id")
+			security.SessionPayload()
+		})
+
+		Result(ExplainResourceAccessResult)
+
+		HTTP(func() {
+			GET("/rpc/access.explainResourceAccess")
+			Param("resource_kind")
+			Param("resource_id")
+			Param("user_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "explainResourceAccess")
+		Meta("openapi:extension:x-speakeasy-name-override", "explainResourceAccess")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ExplainResourceAccess"}`)
 	})
 
 	Method("requestAccess", func() {
@@ -817,7 +982,7 @@ var SelectorModel = Type("Selector", func() {
 
 	Attribute("resource_kind", String, func() {
 		Description("The kind of resource this selector targets.")
-		Enum("project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "agent", "*")
+		Enum("project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "workload", "*")
 	})
 	Attribute("resource_id", String, func() {
 		Description("The resource identifier, or '*' for all resources of this kind.")
@@ -830,7 +995,7 @@ var SelectorModel = Type("Selector", func() {
 		Description("Specific tool name filter (MCP scopes only).")
 	})
 	Attribute("project_id", String, func() {
-		Description("Project filter (MCP scopes only). When set with resource_id='*', grants access to all servers in the project.")
+		Description("Project filter (MCP, environment, and assistant scopes). When set with resource_id='*', grants access to every resource of the kind in the project.")
 	})
 	Attribute("server_url", String, func() {
 		Description("Server URL filter (risk policy scopes only). Include the URI scheme, for example https://api.example.com.")
@@ -843,7 +1008,7 @@ var RoleGrantModel = Type("RoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "org:device_agent_sync", "org:hooks_ingest")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
 	})
 
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
@@ -857,18 +1022,22 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "org:device_agent_sync", "org:hooks_ingest")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
 	})
 
 	Attribute("sub_scopes", ArrayOf(String), func() {
 		Description("The inherited scopes the primary scope grants.")
 		Elem(func() {
-			Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "org:device_agent_sync", "org:hooks_ingest")
+			Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
 		})
 	})
 
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
 		Description("Selector constraints. Null means unrestricted.")
+	})
+
+	Attribute("direct_selectors", ArrayOf(SelectorModel), func() {
+		Description("The subset of this scope's selectors granted to the calling user by name rather than through a role or everyone. For allow scopes it holds only selectors naming a concrete resource, which outrank blocks inherited from roles or everyone on that resource. For blocked scopes it holds the caller's own blocks, which always apply. Omitted when empty.")
 	})
 })
 
@@ -902,12 +1071,12 @@ var ScopeModel = Type("ScopeDefinition", func() {
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "org:device_agent_sync", "org:hooks_ingest")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest")
 	})
 	Attribute("description", String, "What this scope protects.")
 	Attribute("resource_type", String, func() {
 		Description("The type of resource this scope applies to.")
-		Enum("org", "project", "mcp", "environment", "skill", "risk_policy", "chat", "agent")
+		Enum("org", "project", "mcp", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "workload")
 	})
 	Attribute("visibility", String, func() {
 		Description("Whether this scope is a first-class permission or an internal storage/evaluation scope.")
@@ -916,7 +1085,7 @@ var ScopeModel = Type("ScopeDefinition", func() {
 	Attribute("agent_eligible", Boolean, "Whether an agent principal can hold this scope. Roles may carry scopes agents cannot hold; those are ignored for the role's agent members rather than granted.")
 	Attribute("exclusion_scope", String, func() {
 		Description("The scope used to store exception rules for this scope.")
-		Enum("org:blocked_read", "org:blocked_admin", "project:blocked_read", "project:blocked_write", "mcp:blocked_read", "mcp:blocked_write", "mcp:blocked_connect", "environment:blocked_read", "environment:blocked_write", "skill:blocked_read", "skill:blocked_write", "risk_policy:bypass")
+		Enum("org:blocked_read", "org:blocked_admin", "project:blocked_read", "project:blocked_write", "mcp:blocked_read", "mcp:blocked_write", "mcp:blocked_connect", "environment:blocked_read", "environment:blocked_write", "skill:blocked_read", "skill:blocked_write", "assistant:blocked_read", "assistant:blocked_write", "plugin:blocked_write", "risk_policy:bypass", "workload:blocked_read", "workload:blocked_write")
 	})
 })
 
@@ -1032,15 +1201,81 @@ var ListAudienceOptionsResult = Type("ListAudienceOptionsResult", func() {
 	Attribute("options", ArrayOf(AudienceOptionModel), "Principals that can be given access.")
 })
 
+var ExplainedAccessDirectorySourceModel = Type("ExplainedAccessDirectorySource", func() {
+	Required("source_kind")
+
+	Attribute("source_kind", String, "Whether membership of a directory group or a directory attribute value mapped the role.", func() {
+		Enum("group", "attribute")
+	})
+	Attribute("directory_group_name", String, "The directory group, for a group mapping.")
+	Attribute("attribute_key", String, "The directory attribute, for an attribute mapping.")
+	Attribute("attribute_value", String, "The attribute value the member's profile matched, for an attribute mapping.")
+})
+
+// One loaded grant that matched an access check, and how it shaped the
+// decision.
+var ExplainedAccessRuleModel = Type("ExplainedAccessRule", func() {
+	Required("principal_urn", "kind", "display_name", "level", "applies_to", "effect", "via_directory_mapping")
+
+	Attribute("principal_urn", String, "Canonical principal URN holding the rule.")
+	Attribute("kind", String, "What the principal identifies.", func() {
+		Enum("everyone", "role", "user", "unknown")
+	})
+	Attribute("display_name", String, "Human-readable name for the principal.")
+	Attribute("level", String, "The access the rule gives, or the access a \"blocked_\" rule takes away. \"all\" is a grant covering every permission.", func() {
+		Enum("use", "view", "manage", "blocked", "blocked_view", "blocked_manage", "all")
+	})
+	Attribute("applies_to", String, "Whether the rule names this resource, every resource in its project, or every resource of its kind.", func() {
+		Enum("resource", "project", "all_resources")
+	})
+	Attribute("tools", ArrayOf(String), "Tool names the rule is narrowed to, when it is not the whole resource.")
+	Attribute("dispositions", ArrayOf(String), "Tool annotations the rule is narrowed to, when it is not the whole resource.", func() {
+		Elem(func() {
+			Enum("read_only", "destructive", "idempotent", "open_world")
+		})
+	})
+	Attribute("effect", String, "How the rule shaped the decision. allows: proves the access. overrides: a rule made directly to the member that proves the access despite a block from a role or everyone. overridden: a block such a rule overrides. blocks: takes the access away. blocked: an allow that matches but that a block keeps from counting. limits: a block taking away some of the resource's tools.", func() {
+		Enum("allows", "overrides", "overridden", "blocks", "blocked", "limits")
+	})
+	Attribute("reason", String, "Why a blocked rule made directly to the member did not override the block. wildcard_direct_grant: it covers every resource. narrower_direct_grant: it constrains something the tool does not carry. own_exclusion: the member's own block applies.", func() {
+		Enum("wildcard_direct_grant", "narrower_direct_grant", "own_exclusion")
+	})
+	Attribute("via_directory_mapping", Boolean, "Whether the member holds this role only through a directory role mapping.")
+	Attribute("directory_sources", ArrayOf(ExplainedAccessDirectorySourceModel), "The directory role mappings giving the member this role, including when they also hold it directly. Returned only to organization administrators, because attribute values can carry personal data.")
+})
+
+var ExplainedAccessLevelModel = Type("ExplainedAccessLevel", func() {
+	Required("level", "allowed", "rules")
+
+	Attribute("level", String, "The access being explained.", func() {
+		Enum("use", "view", "manage")
+	})
+	Attribute("allowed", Boolean, "Whether the rules give the member this access.")
+	Attribute("tool_access", String, "For use: whether every tool, only some, or none are reachable.", func() {
+		Enum("all", "some", "none")
+	})
+	Attribute("rules", ArrayOf(ExplainedAccessRuleModel), "Every rule matching this access, deciding rules first.")
+})
+
+var ExplainResourceAccessResult = Type("ExplainResourceAccessResult", func() {
+	Required("visibility", "levels")
+
+	Attribute("visibility", String, "Who may connect without a rule. public: connecting is not checked against rules. private: rules decide. disabled: nobody can connect.", func() {
+		Enum("public", "private", "disabled")
+	})
+	Attribute("levels", ArrayOf(ExplainedAccessLevelModel), "The decision for use, view and manage, in that order.")
+})
+
 var MemberModel = Type("AccessMember", func() {
-	Required("id", "principal_urn", "name", "email", "role_ids", "joined_at")
+	Required("id", "principal_urn", "name", "email", "role_ids", "directory_role_ids", "joined_at")
 
 	Attribute("id", String, "User ID.")
 	Attribute("principal_urn", String, "Canonical principal URN for this member.")
 	Attribute("name", String, "Display name.")
 	Attribute("email", String, "Email address.")
 	Attribute("photo_url", String, "Avatar URL.")
-	Attribute("role_ids", ArrayOf(String), "All role IDs assigned to this member.")
+	Attribute("role_ids", ArrayOf(String), "Role IDs assigned directly to this member.")
+	Attribute("directory_role_ids", ArrayOf(String), "Role IDs this member holds through directory role mappings. They follow the member's directory groups and attributes, so updating the member's roles does not change them.")
 	Attribute("joined_at", String, func() {
 		Description("When the member joined the organization.")
 		Format(FormatDateTime)
@@ -1240,6 +1475,34 @@ var SetAIToolDecisionResult = Type("SetAIToolDecisionResult", func() {
 var ListAIDetectionsResult = Type("ListAIDetectionsResult", func() {
 	Required("detections")
 	Attribute("detections", ArrayOf(AIDetectionModel), "Detected AI tools aggregated per target, most recently seen first.")
+})
+
+var AIDetectionUserModel = Type("AIDetectionUser", func() {
+	Description("One enrolled user a detection target was found for, with that user's share of the organization's scan reports: the evidence AIDetection carries for the whole organization, narrowed to one person.")
+	Required("user_email", "device_count", "signals", "versions", "first_seen", "last_seen")
+
+	Attribute("user_email", String, "Canonical email of the enrolled user the detections are attributed to. Linked alias emails are folded into it.")
+	Attribute("device_count", Int64, "Distinct devices, by hardware serial, this tool was detected on for this user. Devices that report no serial are not counted.")
+	Attribute("signals", ArrayOf(String), "Detection signals observed for this user: installed and/or running.", func() {
+		Elem(func() {
+			Enum("installed", "running")
+		})
+	})
+	Attribute("versions", ArrayOf(String), "Unique non-empty detected versions for this user.")
+	Attribute("first_seen", String, func() {
+		Description("When this tool was first detected for this user.")
+		Format(FormatDateTime)
+	})
+	Attribute("last_seen", String, func() {
+		Description("When this tool was most recently detected for this user.")
+		Format(FormatDateTime)
+	})
+})
+
+var ListAIDetectionUsersResult = Type("ListAIDetectionUsersResult", func() {
+	Required("detection", "users")
+	Attribute("detection", AIDetectionModel, "The target as the inventory lists it, so a page reached by link needs no second read for its name, category and access decision.")
+	Attribute("users", ArrayOf(AIDetectionUserModel), "Users the target was detected for, most recently seen first.")
 })
 
 var ShadowMCPAccessSummaryModel = Type("ShadowMCPAccessSummary", func() {
@@ -1495,7 +1758,7 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope being requested.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "org:device_agent_sync", "org:hooks_ingest")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:write", "org:device_agent_sync", "org:hooks_ingest")
 	})
 	Attribute("resource_id", String, "Optional resource ID the scope applies to.")
 	Attribute("resource_name", String, "Optional human-readable name for the resource (e.g. project name, MCP server name).")
@@ -1548,4 +1811,78 @@ var ListIdentityAccessResult = Type("ListIdentityAccessResult", func() {
 	Required("servers", "skills")
 	Attribute("servers", ArrayOf(AccessibleMCPServerModel), "MCP servers accessible to this identity.")
 	Attribute("skills", ArrayOf(AccessibleSkillModel), "Skills accessible to this identity.")
+})
+
+var DirectoryRoleMappingModel = Type("DirectoryRoleMapping", func() {
+	Required("id", "source_kind", "role_urn", "created_at", "updated_at")
+
+	Attribute("id", String, "Unique mapping identifier.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("source_kind", String, "What the mapping matches: a directory group or an attribute value.", func() {
+		Enum("group", "attribute")
+	})
+	Attribute("directory_group_id", String, "The mapped directory group. Set when source_kind is group.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("directory_group_name", String, "Display name of the mapped directory group.")
+	Attribute("attribute_key", String, "The directory attribute key. Set when source_kind is attribute.")
+	Attribute("attribute_value", String, "The directory attribute value. Set when source_kind is attribute.")
+	Attribute("role_urn", String, "Principal URN of the role granted to matching members.")
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
+var DirectoryGroupOptionModel = Type("DirectoryGroupOption", func() {
+	Required("id", "name", "member_count")
+
+	Attribute("id", String, "Directory group identifier.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Directory group name.")
+	Attribute("member_count", Int64, "Number of directory users in the group.")
+})
+
+var DirectoryAttributeOptionModel = Type("DirectoryAttributeOption", func() {
+	Required("key", "value", "member_count")
+
+	Attribute("key", String, "Directory attribute key, e.g. department_name.")
+	Attribute("value", String, "Directory attribute value.")
+	Attribute("member_count", Int64, "Number of directory users with this value.")
+})
+
+var ListDirectoryRoleMappingsResult = Type("ListDirectoryRoleMappingsResult", func() {
+	Required("groups", "attributes", "mappings")
+
+	Attribute("groups", ArrayOf(DirectoryGroupOptionModel), "Active directory groups in the organization.")
+	Attribute("attributes", ArrayOf(DirectoryAttributeOptionModel), "Distinct attribute values set on active directory users.")
+	Attribute("mappings", ArrayOf(DirectoryRoleMappingModel), "Live directory role mappings.")
+})
+
+var SyncDirectoryGroupsResult = Type("SyncDirectoryGroupsResult", func() {
+	Required("group_count")
+
+	Attribute("group_count", Int, "Number of groups WorkOS returned across the organization's directories.")
+})
+
+var SetDirectoryRoleMappingForm = Type("SetDirectoryRoleMappingForm", func() {
+	Required("source_kind", "role_urn")
+
+	Attribute("source_kind", String, "What the mapping matches.", func() {
+		Enum("group", "attribute")
+	})
+	Attribute("directory_group_id", String, "Directory group to map. Required when source_kind is group.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("attribute_key", String, "Attribute key to match. Required when source_kind is attribute.", func() {
+		MinLength(1)
+	})
+	Attribute("attribute_value", String, "Attribute value to match. Required when source_kind is attribute.", func() {
+		MinLength(1)
+	})
+	Attribute("role_urn", String, "Principal URN of the role to grant, from Role.principal_urn.")
 })

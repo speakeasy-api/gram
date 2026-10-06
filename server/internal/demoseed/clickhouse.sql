@@ -75,6 +75,8 @@ DELETE FROM attribute_keys WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
 DELETE FROM shadow_mcp_inventory_urls WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
+DELETE FROM mcp_network_traffic_hourly_summaries WHERE gram_project_id IN
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 DELETE FROM ai_detections WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM ai_scan_receipts WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM authz_challenges WHERE organization_id = 'org_gram_demo_workspace';
@@ -102,6 +104,43 @@ SELECT throwIf(
   (SELECT count() FROM agent_events
    WHERE organization_id = 'org_gram_demo_workspace') != 0,
   'demo seed preflight: agent_events rows remain after the scoped delete');
+
+-- Transcript-only inference capture: counts as a chat without fabricating usage.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id)
+SELECT
+  toUnixTimestamp64Nano(now64(9) - toIntervalMinute(20 - number)),
+  toUnixTimestamp64Nano(now64(9)), 'INFO', '',
+  concat('{"gram.event.source":"hook","gram.hook.source":"claude-chat-web","gram.hook.event":"session.observed",',
+    '"gen_ai.conversation.id":"', chat_id, '",',
+    '"gram.chat.message.id":"', message_id, '",',
+    '"user.id":"user_demo_amara","user.email":"amara@demo.getgram.ai",',
+    '"gen_ai.response.model":"claude-sonnet-4-6","gen_ai.provider.name":"anthropic"}'),
+  '{"gram.deployment.id":"demo-seed"}', toUUID('dec0de00-0000-4000-a000-000000000001'),
+  'chat:transcript:observed', 'gram-server', chat_id
+FROM (
+  SELECT number,
+    lower(hex(MD5('gram-demo-anthropic-inference-chat'))) AS h,
+    lower(hex(MD5(arrayElement(['gram-demo-anthropic-inference-prompt',
+      'gram-demo-anthropic-inference-reply', 'gram-demo-anthropic-inference-followup'], number + 1)))) AS m,
+    concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8', substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
+    concat(substring(m, 1, 8), '-', substring(m, 9, 4), '-5', substring(m, 14, 3), '-8', substring(m, 18, 3), '-', substring(m, 21, 12)) AS message_id
+  FROM numbers(3)
+);
+
+INSERT INTO agent_events
+  (organization_id, project_id, occurred_at_unix_nano, observed_at_unix_nano,
+   record_id, session_id, event_id, raw_event_name, source, surface,
+   user_id, user_email, provider, model, attributes, resource_attributes, scope_attributes)
+SELECT 'org_gram_demo_workspace', toString(gram_project_id), time_unix_nano, observed_time_unix_nano,
+       concat('transcript:', toString(attributes.gram.chat.message.id)), chat_id,
+       concat('transcript:', toString(attributes.gram.chat.message.id)), 'session.observed',
+       'transcript', hook_source, user_id, user_email, 'anthropic',
+       toString(attributes.gen_ai.response.model), '{}', '{}', '{}'
+FROM telemetry_logs
+WHERE gram_project_id = toUUID('dec0de00-0000-4000-a000-000000000001')
+  AND gram_urn = 'chat:transcript:observed';
 
 -- Tool-execution rows: 3-12 per chat (hash-picked, so busy chats and quick
 -- ones both exist). gram.toolset.slug makes the Insights CTE's direct branch
@@ -1292,7 +1331,9 @@ FROM numbers(64);
 -- Beyond mirroring, this insert stamps the attribution columns the ingest
 -- pipeline denormalizes and the Watchdog reads without touching Postgres:
 -- chat_source (its App grouping), team (its Team grouping) and user_email
--- (its top-user display). Leaving them empty renders those groupings blank.
+-- (its top-user display). Tool-output findings additionally model the mediated
+-- response that produced that content, so the Risk Events MCP-server filter
+-- has representative data without misattributing user-message findings.
 INSERT INTO risk_findings
   (id, created_at, organization_id, project_id, chat_message_id, chat_id,
    user_id, external_user_id, user_email, team, chat_source,
@@ -1300,7 +1341,9 @@ INSERT INTO risk_findings
    description, source, confidence, category, tags, start_pos, end_pos,
    match_len, match_redacted, surface, field, message_created_at,
    excluded_at, exclusion_id, false_positive_at, excluded_reason,
-   excluded_detail)
+   excluded_detail, execution_id, mcp_server_id, toolset_id, tool_name,
+   phase, mediation_surface, mcp_method, principal_kind, identity_stamped,
+   enforcement_outcome)
 SELECT
   toUUID(concat(substring(hm, 1, 8), '-', substring(hm, 9, 4), '-5', substring(hm, 14, 3), '-8',
                 substring(hm, 18, 3), '-', substring(hm, 21, 12))),
@@ -1396,7 +1439,26 @@ SELECT
   if(supp IN (2, 3), chat_dt + toIntervalHour(3), NULL),
   arrayElement(['', 'rule', 'manual', 'automated'], 1 + supp),
   arrayElement(['', '', 'Known internal test fixture, not customer data',
-                'placeholder_value'], 1 + supp)
+                'placeholder_value'], 1 + supp),
+  if(k IN (2, 4, 5, 11), '',
+     concat(substring(hexec, 1, 8), '-', substring(hexec, 9, 4), '-5',
+            substring(hexec, 14, 3), '-8', substring(hexec, 18, 3), '-',
+            substring(hexec, 21, 12))),
+  if(k IN (2, 4, 5, 11), '',
+     concat(substring(hmcp, 1, 8), '-', substring(hmcp, 9, 4), '-5',
+            substring(hmcp, 14, 3), '-8', substring(hmcp, 18, 3), '-',
+            substring(hmcp, 21, 12))),
+  if(k IN (2, 4, 5, 11), '',
+     if(i % 5 = 0, 'dec0de00-0000-4000-a000-000000005e02',
+                     'dec0de00-0000-4000-a000-000000005e01')),
+  if(k IN (2, 4, 5, 11), '',
+     if(i % 5 = 0, 'check_health', 'get_customer')),
+  if(k IN (2, 4, 5, 11), '', 'response'),
+  if(k IN (2, 4, 5, 11), '', 'hosted_mcp'),
+  if(k IN (2, 4, 5, 11), '', 'tools/call'),
+  if(k IN (2, 4, 5, 11), '', 'user_session'),
+  k NOT IN (2, 4, 5, 11),
+  if(k IN (2, 4, 5, 11), '', 'logged')
 FROM (
   SELECT
     number + 1 AS i,
@@ -1427,6 +1489,11 @@ FROM (
     lower(hex(MD5(concat('gram-demo-risk-', toString(number + 1))))) AS hm,
     lower(hex(MD5(concat('gram-demo-msg-', toString(number + 1), '-',
                          if(k IN (2, 4, 5, 11), '1', '3'))))) AS hmsg,
+    lower(hex(MD5(concat('gram-demo-mcp-execution-', toString(number + 1))))) AS hexec,
+    -- Same chat-to-server rule as telemetry_logs (i % 5 = 0 is Acme Ops),
+    -- so the Risk Events MCP filter agrees with the call details.
+    lower(hex(MD5(if(i % 5 = 0, 'gram-demo-mcpserver-ops',
+                                   'gram-demo-mcpserver-support')))) AS hmcp,
     -- demo.chat_surface(i).
     if(i % 2 = 1, 'claude-code', if(i % 6 = 2, 'codex', 'cursor')) AS surface_slug,
     -- Byte offset of the match inside the message content: the length of the
@@ -1454,6 +1521,68 @@ FROM (
   FROM numbers(180)
 )
 WHERE k >= 0;
+
+-- One MCP-only blocked request with no chat anchor. This exercises the Risk
+-- Events and Watchdog fallback that shows execution context instead of an
+-- "Untitled" chat session.
+INSERT INTO risk_findings
+  (id, created_at, organization_id, project_id, chat_message_id, chat_id,
+   user_id, external_user_id, user_email, team, chat_source,
+   risk_policy_id, risk_policy_version, rule_id, description, source,
+   confidence, category, tags, start_pos, end_pos, match_len, match_redacted,
+   surface, field, message_created_at, execution_id, mcp_server_id, toolset_id,
+   tool_name, phase, mediation_surface, mcp_method, principal_kind,
+   identity_stamped, enforcement_outcome)
+SELECT
+  toUUID(concat(substring(hfinding, 1, 8), '-', substring(hfinding, 9, 4), '-5',
+                substring(hfinding, 14, 3), '-8', substring(hfinding, 18, 3),
+                '-', substring(hfinding, 21, 12))),
+  ts,
+  'org_gram_demo_workspace',
+  'dec0de00-0000-4000-a000-000000000001',
+  '',
+  '',
+  'user_demo_amara',
+  '',
+  'amara@demo.getgram.ai',
+  'Support Engineering',
+  'claude-code',
+  'dec0de00-0000-4000-a000-00000000f001',
+  1,
+  'secret.github_pat',
+  'GitHub access token in an MCP tool request',
+  'gitleaks',
+  0.98,
+  'secrets',
+  ['secret', 'github'],
+  24,
+  64,
+  40,
+  concat('ghp_', repeat('*', 32), 'demo'),
+  'tool.args',
+  'tool.args',
+  ts,
+  toUUID(concat(substring(hexecution, 1, 8), '-', substring(hexecution, 9, 4), '-5',
+                substring(hexecution, 14, 3), '-8', substring(hexecution, 18, 3),
+                '-', substring(hexecution, 21, 12))),
+  toUUID(concat(substring(hserver, 1, 8), '-', substring(hserver, 9, 4), '-5',
+                substring(hserver, 14, 3), '-8', substring(hserver, 18, 3),
+                '-', substring(hserver, 21, 12))),
+  'dec0de00-0000-4000-a000-000000005e01',
+  'get_customer',
+  'request',
+  'hosted_mcp',
+  'tools/call',
+  'user_session',
+  true,
+  'denied'
+FROM (
+  SELECT
+    lower(hex(MD5('gram-demo-risk-181'))) AS hfinding,
+    lower(hex(MD5('gram-demo-mcp-execution-181'))) AS hexecution,
+    lower(hex(MD5('gram-demo-mcpserver-support'))) AS hserver,
+    now64(9) - toIntervalHour(2) AS ts
+);
 
 -- Skill efficacy mappings: one skill_session_versions row per Postgres
 -- skill_observation (same det-uuid ids, same skill-per-chat formula
@@ -2115,6 +2244,26 @@ SELECT throwIf(
   )) = 0,
   'demo seed postflight: watchdog needs multi-user multi-client evidence');
 
+SELECT throwIf(
+  (SELECT count() FROM risk_findings
+   WHERE organization_id = 'org_gram_demo_workspace'
+     AND mcp_server_id != ''
+     AND (execution_id = '' OR toolset_id = '' OR tool_name = ''
+          OR phase NOT IN ('request', 'response')
+          OR mediation_surface != 'hosted_mcp'
+          OR mcp_method != 'tools/call' OR principal_kind != 'user_session'
+          OR identity_stamped = false
+          OR enforcement_outcome NOT IN ('logged', 'denied'))) > 0
+  OR
+  (SELECT count() FROM risk_findings
+   WHERE organization_id = 'org_gram_demo_workspace'
+     AND mcp_server_id != '') = 0
+  OR
+  (SELECT count() FROM risk_findings
+   WHERE organization_id = 'org_gram_demo_workspace'
+     AND mcp_server_id != '' AND chat_id = '') = 0,
+  'demo seed postflight: mediated risk findings missing complete MCP-only attribution');
+
 -- Fewer than four distinct rule clusters means the weighted type draw
 -- collapsed and the Watchdog list is a flat rotation again.
 SELECT throwIf(
@@ -2378,6 +2527,47 @@ WHERE t < turns
   AND NOT (kind = 'decision' AND NOT on_claude)
   AND NOT (kind = 'result' AND on_claude AND rejected);
 
+-- Dedicated source events for the inbound MCP HTTP traffic summary. Keep both
+-- server kinds and surfaces represented, with synthetic IDs matching existing
+-- demo MCP server and gateway fixtures.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name)
+SELECT
+  nano,
+  nano,
+  'INFO',
+  'Inbound MCP HTTP request',
+  lower(hex(MD5(concat('gram-demo-mcp-network-', server_kind, '-', surface)))),
+  concat(
+    '{"gram.event.urn":"urn:telemetry:gram_service:log:mcp_network_request"',
+    ',"gram.network.surface":"', surface, '"',
+    if(server_kind = 'mcp', concat(',"gram.mcp_server.id":"', server_id, '"'),
+       concat(',"gram.meta_mcp_server.id":"', server_id, '"')),
+    ',"gram.project.id":"', toString(proj), '"}') ,
+  '{"gram.deployment.id":"demo-seed"}',
+  proj,
+  'mcp_network_request',
+  'gram-mcp-gateway'
+FROM (
+  SELECT
+    toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
+    server_kind,
+    surface,
+    server_id,
+    toUnixTimestamp64Nano(now64(9) - toIntervalDay(1) + toIntervalHour(8 + number)) AS nano
+  FROM numbers(4)
+  ARRAY JOIN
+    ['mcp', 'mcp', 'meta', 'meta'] AS server_kind,
+    ['public', 'private', 'public', 'private'] AS surface,
+    [
+      concat(substring(lower(hex(MD5('gram-demo-mcpserver-support'))), 1, 8), '-', substring(lower(hex(MD5('gram-demo-mcpserver-support'))), 9, 4), '-5', substring(lower(hex(MD5('gram-demo-mcpserver-support'))), 14, 3), '-8', substring(lower(hex(MD5('gram-demo-mcpserver-support'))), 18, 3), '-', substring(lower(hex(MD5('gram-demo-mcpserver-support'))), 21, 12)),
+      concat(substring(lower(hex(MD5('gram-demo-mcpserver-ops'))), 1, 8), '-', substring(lower(hex(MD5('gram-demo-mcpserver-ops'))), 9, 4), '-5', substring(lower(hex(MD5('gram-demo-mcpserver-ops'))), 14, 3), '-8', substring(lower(hex(MD5('gram-demo-mcpserver-ops'))), 18, 3), '-', substring(lower(hex(MD5('gram-demo-mcpserver-ops'))), 21, 12)),
+      concat(substring(lower(hex(MD5('gram-demo-metamcp-1'))), 1, 8), '-', substring(lower(hex(MD5('gram-demo-metamcp-1'))), 9, 4), '-5', substring(lower(hex(MD5('gram-demo-metamcp-1'))), 14, 3), '-8', substring(lower(hex(MD5('gram-demo-metamcp-1'))), 18, 3), '-', substring(lower(hex(MD5('gram-demo-metamcp-1'))), 21, 12)),
+      concat(substring(lower(hex(MD5('gram-demo-metamcp-1'))), 1, 8), '-', substring(lower(hex(MD5('gram-demo-metamcp-1'))), 9, 4), '-5', substring(lower(hex(MD5('gram-demo-metamcp-1'))), 14, 3), '-8', substring(lower(hex(MD5('gram-demo-metamcp-1'))), 18, 3), '-', substring(lower(hex(MD5('gram-demo-metamcp-1'))), 21, 12))
+    ] AS server_id
+);
+
 -- Postflight: the Explore datasets have sessions and tool calls to collapse,
 -- every demo user and both harnesses are represented, and cost is only ever
 -- stated where the provider states it.
@@ -2390,8 +2580,8 @@ SELECT throwIf(
   (SELECT uniqExact(user_email) FROM agent_events
    WHERE organization_id = 'org_gram_demo_workspace') != 6
   OR (SELECT uniqExact(surface) FROM agent_events
-      WHERE organization_id = 'org_gram_demo_workspace') != 2,
-  'demo seed postflight: demo agent events must cover all six users and both harnesses');
+      WHERE organization_id = 'org_gram_demo_workspace') != 3,
+  'demo seed postflight: demo agent events must cover all six users, both harnesses, and inference capture');
 
 SELECT throwIf(
   (SELECT countIf(cost_usd > 0) FROM agent_events

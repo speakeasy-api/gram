@@ -12,7 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 )
 
 // Kind is the class of credential a client row requires.

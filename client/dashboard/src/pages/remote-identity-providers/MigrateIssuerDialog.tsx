@@ -137,6 +137,7 @@ export function MigrateIssuerDialog({
             isLoading={preflightLoading}
             hasFailed={preflightFailed}
             clientCount={preflight?.clientCount}
+            emaBindingCount={preflight?.emaBindingCount}
             mcpServerNames={preflight?.mcpServerNames}
             endpointMismatches={preflight?.endpointMismatches}
             conflictingMcpServerNames={preflight?.conflictingMcpServerNames}

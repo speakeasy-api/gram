@@ -52,6 +52,7 @@ type RiskPolicy struct {
 	Sources              []string
 	PresidioEntities     []string
 	AnalyzerConfig       []byte
+	McpScope             []byte
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string

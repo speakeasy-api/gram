@@ -478,22 +478,29 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 	}
 
 	searchParams := repo.SearchUsersParams{
-		ExcludedHookSources:  excludedHookSources,
-		GramProjectID:        params.projectID,
-		TimeStart:            params.timeStart,
-		TimeEnd:              params.timeEnd,
-		GramDeploymentID:     deploymentID,
-		EventSource:          conv.PtrValOr(filter.EventSource, ""),
-		HookSource:           conv.PtrValOr(filter.HookSource, ""),
-		AccountType:          conv.PtrValOr(filter.AccountType, ""),
-		ExternalOrgID:        conv.PtrValOr(filter.ExternalOrgID, ""),
-		GroupBy:              groupBy,
-		UserIDs:              userKeys,
-		SortOrder:            params.sortOrder,
-		Cursor:               params.cursor,
-		Limit:                params.limit + 1,
-		MetricsDetail:        metricsDetailFromPayload(payload.Metrics),
-		CanonicalIdentityOrg: canonicalOrg,
+		ExcludedHookSources: excludedHookSources,
+		GramProjectID:       params.projectID,
+		TimeStart:           params.timeStart,
+		TimeEnd:             params.timeEnd,
+		GramDeploymentID:    deploymentID,
+		EventSource:         conv.PtrValOr(filter.EventSource, ""),
+		HookSource:          conv.PtrValOr(filter.HookSource, ""),
+		AccountType:         conv.PtrValOr(filter.AccountType, ""),
+		ExternalOrgID:       conv.PtrValOr(filter.ExternalOrgID, ""),
+		GroupBy:             groupBy,
+		UserIDs:             userKeys,
+		IdentityContains:    "",
+		SortOrder:           params.sortOrder,
+		Cursor:              params.cursor,
+		// The dashboard's cursor is the group key alone, so the repository
+		// re-derives its boundary timestamp. That lookup ignores this query's
+		// window and its Gram-hosted exclusion, which can repeat a person
+		// across pages — tracked separately rather than changed here, because
+		// sealing the boundary is a cursor format change for a shipped surface.
+		CursorLastSeenUnixNano: 0,
+		Limit:                  params.limit + 1,
+		MetricsDetail:          metricsDetailFromPayload(payload.Metrics),
+		CanonicalIdentityOrg:   canonicalOrg,
 	}
 	items, err := s.chRepo.SearchUsers(ctx, searchParams)
 	if err != nil {
@@ -1154,22 +1161,24 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 		userKeys := s.expandUserSearchKeys(egCtx, params.organizationID, filter.UserIds)
 		var fetchErr error
 		items, fetchErr = s.chRepo.SearchUsers(egCtx, repo.SearchUsersParams{
-			ExcludedHookSources:  billing.GramHostedHookSourceNames(),
-			GramProjectID:        params.projectID,
-			TimeStart:            params.timeStart,
-			TimeEnd:              params.timeEnd,
-			GramDeploymentID:     deploymentID,
-			EventSource:          conv.PtrValOr(filter.EventSource, ""),
-			HookSource:           conv.PtrValOr(filter.HookSource, ""),
-			AccountType:          conv.PtrValOr(filter.AccountType, ""),
-			ExternalOrgID:        conv.PtrValOr(filter.ExternalOrgID, ""),
-			GroupBy:              "user_id",
-			UserIDs:              userKeys,
-			SortOrder:            "desc",
-			Cursor:               "",
-			Limit:                10001,                  // Upper bound; orgs rarely have >10k users
-			MetricsDetail:        repo.MetricsDetailFull, // role aggregation sums cost/tokens across the full metric set
-			CanonicalIdentityOrg: canonicalOrg,
+			ExcludedHookSources:    billing.GramHostedHookSourceNames(),
+			GramProjectID:          params.projectID,
+			TimeStart:              params.timeStart,
+			TimeEnd:                params.timeEnd,
+			GramDeploymentID:       deploymentID,
+			EventSource:            conv.PtrValOr(filter.EventSource, ""),
+			HookSource:             conv.PtrValOr(filter.HookSource, ""),
+			AccountType:            conv.PtrValOr(filter.AccountType, ""),
+			ExternalOrgID:          conv.PtrValOr(filter.ExternalOrgID, ""),
+			GroupBy:                "user_id",
+			UserIDs:                userKeys,
+			IdentityContains:       "",
+			SortOrder:              "desc",
+			Cursor:                 "",
+			CursorLastSeenUnixNano: 0,                      // Unpaginated: there is no boundary to seal.
+			Limit:                  10001,                  // Upper bound; orgs rarely have >10k users
+			MetricsDetail:          repo.MetricsDetailFull, // role aggregation sums cost/tokens across the full metric set
+			CanonicalIdentityOrg:   canonicalOrg,
 		})
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error searching users for role aggregation")
@@ -2555,14 +2564,25 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	eg, egCtx := errgroup.WithContext(ctx)
 
 	eg.Go(func() error {
-		var fetchErr error
+		hostedMCPMatchers, mcpServerMatchers, fetchErr := LoadToolUsageMatchers(egCtx, s.db, *authCtx.ProjectID)
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error listing MCP servers for project overview")
+		}
+		metaMCPMatchers, fetchErr := LoadMetaMCPMatchers(egCtx, s.db, *authCtx.ProjectID)
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error listing gateways for project overview")
+		}
+
 		clickHouseResult, fetchErr = overview.FetchClickHouse(egCtx, s.chRepo, overview.Params{
-			ProjectID:       projectID,
-			TimeStart:       timeStart,
-			TimeEnd:         timeEnd,
-			ComparisonStart: comparisonStart,
-			ComparisonEnd:   comparisonEnd,
-			SessionMode:     sessionMode,
+			ProjectID:         projectID,
+			TimeStart:         timeStart,
+			TimeEnd:           timeEnd,
+			ComparisonStart:   comparisonStart,
+			ComparisonEnd:     comparisonEnd,
+			SessionMode:       sessionMode,
+			HostedMCPMatchers: hostedMCPMatchers,
+			MCPServerMatchers: mcpServerMatchers,
+			MetaMCPMatchers:   metaMCPMatchers,
 		})
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving project overview ClickHouse data")
@@ -2654,7 +2674,6 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	}
 
 	// Resolve active counts and top lists now that every query has returned.
-	activeServersCount := int64(clickHouseResult.ActiveCounts.ActiveServersCount) //nolint:gosec // Bounded count that won't overflow int64
 	var activeUsersCount int64
 	var topUsers []*telem_gen.TopUser
 	var llmClientBreakdown []*telem_gen.LLMClientUsage
@@ -2674,8 +2693,13 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		overrideMap[override.RawServerName] = override.DisplayName
 	}
 
-	// Apply overrides to top servers
+	// Apply overrides before trimming so alternate reported names that fold to
+	// one server do not leave the ranked list artificially short.
 	topServersWithOverrides := applyServerNameOverrides(clickHouseResult.TopServers, overrideMap)
+	activeServersCount := int64(clickHouseResult.ActiveCounts.ActiveServersCount) //nolint:gosec // Bounded count that won't overflow int64
+	if len(topServersWithOverrides) > 10 {
+		topServersWithOverrides = topServersWithOverrides[:10]
+	}
 
 	// Convert to API types - build summaries with nested fields
 	return &telem_gen.GetProjectOverviewResult{
@@ -3807,19 +3831,25 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		MetaMCPMatchers:    metaMCPMatchers,
 		TargetTypes:        targetTypes,
 		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		MCPServerTargetIDs: nil,
 		ShadowServerNames:  payload.ShadowServerNames,
 		MetaMCPServerIDs:   payload.MetaMcpServerIds,
 		UserFilters:        userFilters,
-		HookSources:        payload.HookSources,
-		ClientKeys:         payload.ClientKeys,
-		AccountType:        conv.PtrValOr(payload.AccountType, ""),
-		Statuses:           statuses,
-		Query:              conv.PtrValOr(payload.Query, ""),
-		Filters:            toRepoAttributeFilters(payload.Filters),
-		SortOrder:          params.sortOrder,
-		CursorTimeUnixNano: cursorTimeUnixNano,
-		CursorID:           cursorID,
-		Limit:              params.limit + 1,
+		// Left literal: the Tool Logs page offers the user filter values this
+		// list produces (GetToolUsageFilterOptions), and those are unfolded, so
+		// folding only one side of that pair would make the page's own chips
+		// select rows it never listed.
+		CanonicalIdentityOrg: "",
+		HookSources:          payload.HookSources,
+		ClientKeys:           payload.ClientKeys,
+		AccountType:          conv.PtrValOr(payload.AccountType, ""),
+		Statuses:             statuses,
+		Query:                conv.PtrValOr(payload.Query, ""),
+		Filters:              toRepoAttributeFilters(payload.Filters),
+		SortOrder:            params.sortOrder,
+		CursorTimeUnixNano:   cursorTimeUnixNano,
+		CursorID:             cursorID,
+		Limit:                params.limit + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage traces").LogError(ctx, logger)
@@ -4074,6 +4104,7 @@ func LoadToolUsageMatchers(ctx context.Context, db *pgxpool.Pool, projectID uuid
 
 		serverMatchers = append(serverMatchers, repo.MCPServerMatcher{
 			SourceID:    sourceID,
+			MCPServerID: server.ID.String(),
 			TargetType:  targetType,
 			TargetID:    targetID,
 			TargetLabel: targetLabel,
@@ -4575,14 +4606,11 @@ func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHo
 
 // GetChatMetricsByIDs retrieves token and cost metrics for specific chat IDs.
 // This is used by the chat service to enrich chat overview data with metrics from ClickHouse.
-func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, chatIDs []string) (map[string]repo.ChatMetricsRow, error) {
-	if s.chRepo == nil {
-		return make(map[string]repo.ChatMetricsRow), nil
-	}
-
+func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, chatIDs []string, eventTimeFrom time.Time) (map[string]repo.ChatMetricsRow, error) {
 	result, err := s.chRepo.GetChatMetricsByIDs(ctx, repo.GetChatMetricsByIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       chatIDs,
+		EventTimeFrom: eventTimeFrom,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get chat metrics by ids: %w", err)
@@ -4593,13 +4621,6 @@ func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, cha
 // GetChatMetricsSummaryByIDs retrieves range-bounded token and cost totals for
 // a set of chats.
 func (s *Service) GetChatMetricsSummaryByIDs(ctx context.Context, params repo.GetChatMetricsSummaryByIDsParams) (repo.ChatMetricsSummary, error) {
-	if s.chRepo == nil {
-		return repo.ChatMetricsSummary{
-			TotalTokens: 0,
-			TotalCost:   0,
-		}, nil
-	}
-
 	result, err := s.chRepo.GetChatMetricsSummaryByIDs(ctx, params)
 	if err != nil {
 		return repo.ChatMetricsSummary{}, fmt.Errorf("get chat metrics summary by ids: %w", err)
@@ -4611,10 +4632,6 @@ func (s *Service) GetChatMetricsSummaryByIDs(ctx context.Context, params repo.Ge
 // analysis verdict per chat for one judge (e.g. work units). This is used by
 // the chat service to enrich chat responses from ClickHouse.
 func (s *Service) GetChatAnalysisVerdictsByChatIDs(ctx context.Context, organizationID string, projectID string, judge string, chatIDs []string) (map[string]repo.ChatAnalysisVerdict, error) {
-	if s.chRepo == nil {
-		return make(map[string]repo.ChatAnalysisVerdict), nil
-	}
-
 	result, err := s.chRepo.GetChatAnalysisVerdictsByChatIDs(ctx, repo.GetChatAnalysisVerdictsByChatIDsParams{
 		OrganizationID: organizationID,
 		ProjectID:      projectID,
@@ -4631,10 +4648,6 @@ func (s *Service) GetChatAnalysisVerdictsByChatIDs(ctx context.Context, organiza
 // verdict per chat for one judge across a scoring-time window, oldest first.
 // This is used by the chat service to build work-units trend aggregates.
 func (s *Service) ListChatAnalysisVerdicts(ctx context.Context, arg repo.ListChatAnalysisVerdictsParams) ([]repo.ChatAnalysisVerdict, error) {
-	if s.chRepo == nil {
-		return nil, nil
-	}
-
 	result, err := s.chRepo.ListChatAnalysisVerdicts(ctx, arg)
 	if err != nil {
 		return nil, fmt.Errorf("list chat analysis verdicts: %w", err)
@@ -4644,18 +4657,11 @@ func (s *Service) ListChatAnalysisVerdicts(ctx context.Context, arg repo.ListCha
 
 // GetClaudeTurnUsageByChatIDs retrieves per-turn Claude Code usage for specific chat IDs.
 // This is used by the chat service to enrich chat detail responses from ClickHouse.
-func (s *Service) GetClaudeTurnUsageByChatIDs(ctx context.Context, projectID string, chatIDs []string) (map[string][]repo.ClaudeTurnUsageRow, error) {
-	if s.chRepo == nil {
-		usageByChatID := make(map[string][]repo.ClaudeTurnUsageRow, len(chatIDs))
-		for _, chatID := range chatIDs {
-			usageByChatID[chatID] = []repo.ClaudeTurnUsageRow{}
-		}
-		return usageByChatID, nil
-	}
-
+func (s *Service) GetClaudeTurnUsageByChatIDs(ctx context.Context, projectID string, chatIDs []string, eventTimeFrom time.Time) (map[string][]repo.ClaudeTurnUsageRow, error) {
 	result, err := s.chRepo.GetClaudeTurnUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       chatIDs,
+		EventTimeFrom: eventTimeFrom,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get Claude turn usage by chat ids: %w", err)
@@ -4665,18 +4671,11 @@ func (s *Service) GetClaudeTurnUsageByChatIDs(ctx context.Context, projectID str
 
 // GetClaudeToolUsageByChatIDs retrieves per-tool Claude Code input/result byte sizes for specific chat IDs.
 // This is used by the chat service to enrich chat detail rows from ClickHouse.
-func (s *Service) GetClaudeToolUsageByChatIDs(ctx context.Context, projectID string, chatIDs []string) (map[string][]repo.ClaudeToolUsageRow, error) {
-	if s.chRepo == nil {
-		usageByChatID := make(map[string][]repo.ClaudeToolUsageRow, len(chatIDs))
-		for _, chatID := range chatIDs {
-			usageByChatID[chatID] = []repo.ClaudeToolUsageRow{}
-		}
-		return usageByChatID, nil
-	}
-
+func (s *Service) GetClaudeToolUsageByChatIDs(ctx context.Context, projectID string, chatIDs []string, eventTimeFrom time.Time) (map[string][]repo.ClaudeToolUsageRow, error) {
 	result, err := s.chRepo.GetClaudeToolUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       chatIDs,
+		EventTimeFrom: eventTimeFrom,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get Claude tool usage by chat ids: %w", err)

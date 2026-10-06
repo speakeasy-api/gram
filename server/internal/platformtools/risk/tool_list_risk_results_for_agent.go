@@ -26,6 +26,7 @@ type ListRiskResultsForAgent struct {
 type listRiskResultsForAgentInput struct {
 	PolicyID     *string `json:"policy_id,omitempty" jsonschema:"Restrict to results produced by this policy ID."`
 	ChatID       *string `json:"chat_id,omitempty" jsonschema:"Restrict to results from this chat ID."`
+	MCPServerID  *string `json:"mcp_server_id,omitempty" jsonschema:"Restrict to results from this concrete MCP server ID."`
 	Category     *string `json:"category,omitempty" jsonschema:"Rule category key (e.g. secrets, pii, financial)."`
 	RuleID       *string `json:"rule_id,omitempty" jsonschema:"Case-insensitive substring of the rule identifier."`
 	UserID       *string `json:"user_id,omitempty" jsonschema:"Case-insensitive substring matched against the chat's external user ID."`
@@ -51,6 +52,7 @@ func (s *ListRiskResultsForAgent) Descriptor() core.ToolDescriptor {
 		InputSchema: core.BuildInputSchema[listRiskResultsForAgentInput](
 			core.WithPropertyFormat("policy_id", "uuid"),
 			core.WithPropertyFormat("chat_id", "uuid"),
+			core.WithPropertyFormat("mcp_server_id", "uuid"),
 			core.WithPropertyFormat("assistant_id", "uuid"),
 			core.WithPropertyFormat("from", "date-time"),
 			core.WithPropertyFormat("to", "date-time"),
@@ -72,6 +74,7 @@ func (s *ListRiskResultsForAgent) Call(ctx context.Context, _ toolconfig.ToolCal
 	input := listRiskResultsForAgentInput{
 		PolicyID:     nil,
 		ChatID:       nil,
+		MCPServerID:  nil,
 		Category:     nil,
 		RuleID:       nil,
 		UserID:       nil,
@@ -103,6 +106,7 @@ func (s *ListRiskResultsForAgent) Call(ctx context.Context, _ toolconfig.ToolCal
 		ProjectSlugInput: nil,
 		PolicyID:         input.PolicyID,
 		ChatID:           input.ChatID,
+		McpServerID:      input.MCPServerID,
 		Category:         input.Category,
 		RuleID:           input.RuleID,
 		UserID:           input.UserID,

@@ -20,11 +20,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 // HandleAuthorize implements the OAuth 2.1 authorization endpoint (RFC 6749
@@ -139,8 +139,9 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// definition — the challenge below snapshots it — and the issuer derives
 	// from it, so both the error redirect below and every response built later
 	// in the flow agree on it. On the authentication host it is the platform
-	// origin.
-	baseURL := s.BaseURLForRequest(r)
+	// origin, and on a shared authorization server it is the origin of the
+	// resource the client named.
+	baseURL := s.resourceBaseURL(r, endpoint)
 
 	// The RFC 9207 `iss` on every authorization response, equal to the AS
 	// metadata issuer. It names the authentication host when the endpoint's
@@ -206,7 +207,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return oops.E(oops.CodeUnauthorized, err, "capture OAuth endpoint authority").LogError(ctx, logger)
 	}
 	agentTarget, _ := agentAuthorizationTarget(endpoint)
-	challengeState := AuthnChallengeState{
+	challengeState := AuthnChallengeState{FederatedBinding: nil, DelegationRetryUsed: false,
 		Browser:                  nil,
 		Federation:               nil,
 		ID:                       challengeID,
@@ -252,7 +253,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			http.Redirect(w, r, federatedURL.String(), http.StatusFound)
 			return nil
 		}
-		callbackURL, err := endpoint.IDPCallbackURL(s.serverURL.String())
+		callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 			return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").LogError(ctx, logger)
@@ -277,7 +278,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 
 	// Consent is an authorization server page, so it is served where the
 	// issuer lives.
-	consentURL, err := endpoint.ConsentURL(s.authorizationServerBaseURL(endpoint, baseURL), challengeID)
+	consentURL, err := s.consentURL(endpoint, s.authorizationServerBaseURL(endpoint, baseURL), challengeID)
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)

@@ -23,7 +23,7 @@ import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
 import { AssistantMarkdownLink } from "@/components/AssistantMarkdownLink";
 import { useAssistantLinkResolver } from "@/lib/assistantEntityLinks";
 import { useOrganization, useSession } from "@/contexts/Auth";
-import { useRBAC } from "@/hooks/useRBAC";
+import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
 import { emailsMatch, resolveChatOwner } from "@/lib/chat-owner";
 import {
   INSIGHTS_DOCK_CONTENT_VT_CLASS,
@@ -903,12 +903,28 @@ export function InsightsProvider({
   const suggestions =
     override?.suggestions ?? routeSuggestions ?? defaultSuggestions;
   const contextInfo = override?.contextInfo;
-  const hideTrigger =
+  const pageHidesTrigger =
     (override?.hideTrigger ?? false) || dockHiddenByPage || onAddFlowRoute;
   const noToolsetsConfigured = useNoToolsetsConfigured(mcpConfig.projectSlug);
+  const organization = useOrganization();
+  const targetProjectId = organization.projects.find(
+    (project) => project.slug === mcpConfig.projectSlug,
+  )?.id;
+  const { grants, isLoading: permissionsLoading, hasScope } = useRBAC();
+  const canReadSkills =
+    !permissionsLoading &&
+    !!targetProjectId &&
+    hasScopeInGrants(
+      grants ?? [],
+      "skill:read",
+      targetProjectId,
+      targetProjectId,
+    );
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
   const selectedSkillIdsRef = useRef(selectedSkillIds);
-  selectedSkillIdsRef.current = selectedSkillIds;
+  // The transport retains this callback across renders. Gate its ref immediately,
+  // rather than waiting for the effect that clears the composer's selection.
+  selectedSkillIdsRef.current = canReadSkills ? selectedSkillIds : [];
   const getSelectedSkillIds = useCallback(
     () => selectedSkillIdsRef.current,
     [],
@@ -922,7 +938,7 @@ export function InsightsProvider({
 
   useEffect(() => {
     setSelectedSkillIds([]);
-  }, [mcpConfig.projectSlug]);
+  }, [mcpConfig.projectSlug, canReadSkills]);
 
   // Server-side Project Assistant. Resolved lazily the first time the chat
   // panel is opened or a chat route is visited; once resolved it stays, so the
@@ -934,25 +950,30 @@ export function InsightsProvider({
     transport: serverTransport,
     assistantId: managedAssistantId,
     ready: assistantReady,
+    allowed: assistantAllowed,
     error: assistantError,
     needsAdmin: assistantNeedsAdmin,
   } = useServerAssistantTransport(mcpConfig.projectSlug, true, {
     getSkillIds: getSelectedSkillIds,
     onSkillIdsSent: handleSkillIdsSent,
   });
+  const hideTrigger = pageHidesTrigger || !assistantAllowed;
 
   const skillsQuery = useSkillsInfinite(
     { limit: 200, gramProject: mcpConfig.projectSlug },
     undefined,
     {
-      enabled: assistantReady,
+      enabled: assistantReady && canReadSkills,
       throwOnError: false,
     },
   );
-  useDrainInfiniteQuery(skillsQuery, assistantReady);
+  useDrainInfiniteQuery(skillsQuery, assistantReady && canReadSkills);
   const composerSkills = useMemo(
     () =>
-      (skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? [])
+      (canReadSkills
+        ? (skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? [])
+        : []
+      )
         .filter((skill) => skill.hasValidVersion)
         .map((skill) => ({
           id: skill.id,
@@ -960,7 +981,7 @@ export function InsightsProvider({
           displayName: skill.displayName,
           summary: skill.summary,
         })),
-    [skillsQuery.data?.pages],
+    [skillsQuery.data?.pages, canReadSkills],
   );
 
   // Derive "Continue chat" from the server: if the viewer's most recent
@@ -993,8 +1014,6 @@ export function InsightsProvider({
   // extra request, and avoids the cross-origin auth mismatch a direct fetch
   // from inside Elements would hit (its request headers are scoped to the
   // chat API, not `access.listMembers`).
-  const organization = useOrganization();
-  const { hasScope } = useRBAC();
   const canReadMembers = hasScope("org:read", organization.id);
   const { data: membersData } = useMembers(undefined, undefined, {
     enabled: canReadMembers,
@@ -1125,6 +1144,13 @@ export function InsightsProvider({
   const elementsConfig = useMemo<ElementsConfig>(
     () => ({
       ...mcpConfig,
+      // The server-side Project Assistant discovers and executes its own
+      // tools. Passing the project inventory to Elements also initializes
+      // every MCP in the browser, even with the dock closed, and retries the
+      // whole inventory when those unnecessary connections fail. Keep this
+      // runtime mounted for composer/history state without client discovery.
+      mcp: undefined,
+      mcps: [],
       variant: "standalone",
       // Route the conversation through the persistent server-side Project
       // Assistant. Its model and system prompt are owned server-side, so we
@@ -1189,8 +1215,10 @@ export function InsightsProvider({
           skills: composerSkills,
           selectedSkillIds,
           onSelectedSkillIdsChange: setSelectedSkillIds,
-          loading: skillsQuery.isPending || skillsQuery.isFetchingNextPage,
-          error: !!skillsQuery.error,
+          loading:
+            canReadSkills &&
+            (skillsQuery.isPending || skillsQuery.isFetchingNextPage),
+          error: canReadSkills && !!skillsQuery.error,
           maxSelected: 10,
         },
       },
@@ -1218,6 +1246,7 @@ export function InsightsProvider({
       managedAssistantId,
       composerSkills,
       selectedSkillIds,
+      canReadSkills,
       skillsQuery.isPending,
       skillsQuery.isFetchingNextPage,
       skillsQuery.error,
@@ -1540,10 +1569,11 @@ export function InsightsProvider({
     </div>
   );
 
-  // Page content (outlet) + the docked composer. Relative so the composer
-  // floats at the bottom-center of the content area.
+  // Page content (outlet) + the docked composer. The document scrolls, so the
+  // composer rides a zero-height sticky rail at the end of the content: it
+  // pins to the viewport bottom and spans the content area's width.
   const dockSurface = (
-    <div className="relative h-full w-full overflow-hidden">
+    <div className="relative flex w-full flex-1 flex-col">
       {children}
 
       {/* Backdrop overlay - closes the chat panel when clicked */}
@@ -1560,18 +1590,20 @@ export function InsightsProvider({
             Hidden on pages that opt out via hideTrigger, and while dismissed
             to the sidebar resume button. */}
       {!hideTrigger && !dockDismissed && (
-        <InsightsDock
-          suggestions={suggestions}
-          open={isExpanded}
-          focusKey={focusComposerKey}
-          onSubmitPrompt={handleDockSubmit}
-          onContinue={handleReopenChat}
-          continueMode={continueMode}
-          onDismiss={handleDockDismiss}
-          onOpenHistory={handleOpenHistory}
-          panel={panelContent}
-          runtimeReady={runtimeMounted}
-        />
+        <div className="pointer-events-none sticky bottom-0 z-30 h-0 shrink-0">
+          <InsightsDock
+            suggestions={suggestions}
+            open={isExpanded}
+            focusKey={focusComposerKey}
+            onSubmitPrompt={handleDockSubmit}
+            onContinue={handleReopenChat}
+            continueMode={continueMode}
+            onDismiss={handleDockDismiss}
+            onOpenHistory={handleOpenHistory}
+            panel={panelContent}
+            runtimeReady={runtimeMounted}
+          />
+        </div>
       )}
     </div>
   );
@@ -1580,12 +1612,10 @@ export function InsightsProvider({
     <InsightsContext.Provider value={contextValue}>
       <InsightsRainbowStyles />
       {/* The dock and the full-page chat share ONE runtime so an in-flight
-          conversation survives moving between them. The assistant id resolves
-          eagerly (for the "Continue chat" lookup), but the runtime only mounts
-          where chat is actually shown — the open dock or a chat route — to
-          avoid running MCP discovery on every page. It remounts (via
-          runtimeKey) only when a new conversation is started; PendingPromptBridge
-          appends any queued prompt to the fresh thread. */}
+          conversation survives moving between them. It mounts eagerly for
+          composer/history state, but does not run client-side MCP discovery.
+          It remounts (via runtimeKey) only when a new conversation is started;
+          PendingPromptBridge appends any queued prompt to the fresh thread. */}
       {runtimeMounted ? (
         <GramElementsProvider
           key={`${mcpConfig.projectSlug}:${runtimeKey}`}

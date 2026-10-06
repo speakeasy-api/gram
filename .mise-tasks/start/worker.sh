@@ -6,7 +6,7 @@
 
 set -e
 
-# Temporal schedules are hosted by the shared server, not by this process. If
+# Temporal schedules are hosted by the server, not by this process. If
 # the local worker stops, leaving them enabled keeps starting workflows that
 # nobody can consume (including a few schedules with seconds-scale cadence).
 # Keep their lifecycle attached to the worker as well as to pause/wake so a
@@ -22,5 +22,4 @@ if ! mise run temporal:schedules --state unpause --coalesce-with-lock; then
     echo "⚠️  Some Temporal schedules remain paused while the worker starts." >&2
 fi
 
-GIT_SHA=$(git rev-parse HEAD)
-go run -ldflags="-X github.com/speakeasy-api/gram/server/cmd/gram.GitSHA=${GIT_SHA} -X goa.design/clue/health.Version=${GIT_SHA}" main.go worker
+go run main.go worker

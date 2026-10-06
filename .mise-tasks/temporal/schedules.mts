@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env node
 
 //MISE description="Pause or resume this worktree's recurring Temporal schedules"
 //MISE dir="{{ config_root }}"
@@ -35,14 +35,12 @@ const LOCK_ATTEMPTS = 60;
 const temporal = [
   "docker",
   "compose",
-  "-f",
-  "compose.shared.yml",
-  "-p",
-  "gram-shared",
   "exec",
   "-T",
   "gram-temporal",
   "temporal",
+  "--command-timeout",
+  "15s",
 ];
 const capture = $({ stdio: ["ignore", "pipe", "inherit"] });
 const quiet = $({ stdio: ["ignore", "ignore", "inherit"] });

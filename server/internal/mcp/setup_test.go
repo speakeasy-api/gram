@@ -21,6 +21,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeatures_repo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -28,8 +30,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/toolcallobserver"
 	"github.com/stretchr/testify/require"
@@ -63,12 +67,12 @@ import (
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
@@ -144,7 +148,7 @@ func newTestMCPServiceWithoutTemporal(t *testing.T) (context.Context, *testInsta
 		false,
 		mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0, AutoVerifyWait: 0},
 		testenv.NewTracerProvider(t),
-		nil,
+		nil, nil,
 	)
 }
 
@@ -328,7 +332,7 @@ func newTestMCPServiceWithPoolConfig(
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithPoolConfigAndTemporal(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, true, metaRuntime, testenv.NewTracerProvider(t), nil, guardianOpts...)
+	return newTestMCPServiceWithPoolConfigAndTemporal(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, true, metaRuntime, testenv.NewTracerProvider(t), nil, nil, guardianOpts...)
 }
 
 func newTestMCPServiceWithPoolConfigAndTemporal(
@@ -343,11 +347,17 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	metaRuntime mcp.MetaRuntimeConfig,
 	tracerProvider trace.TracerProvider,
 	funcs functions.ToolCaller,
+	callerAssertions *mcpauthz.Issuer,
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
+	if callerAssertions == nil {
+		var err error
+		callerAssertions, err = sharedCallerIssuer()
+		require.NoError(t, err)
+	}
 
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, guardianOpts...)
 	require.NoError(t, err)
@@ -446,7 +456,8 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, conn, enc, guardianPolicy, nil, cacheAdapter, serverURL, remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(idTokenKeys)))
 	mcpToolExecutionCheckpoint, err := mcptoolexecution.NewCheckpoint(conn, mcptoolexecution.DefaultEvaluationTimeout, meterProvider, logger)
 	require.NoError(t, err)
-	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, conn, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()), mcpToolExecutionCheckpoint)
+	scanEvaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, logger)
+	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, conn, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()), mcpToolExecutionCheckpoint, scanEvaluator)
 	managedLogsTools := platformtoolsruntime.ManagedAssistantLogsTools(telemService)
 	efficacySignaler := background.NewThrottledSignaler(
 		&background.TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
@@ -466,7 +477,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 		// assistant audience, called directly by the adapter.
 		PlatformMCPReadTools: assistant_platform_mcp_adapter.ExternalTools(
 			platformmcp.NewRuntimeWithLifecycle(
-				logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine), "", "",
+				logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine), "", "test-cursor-key",
 				platformmcp.NewPostgresReader(logger, conn).WithAuthorization(authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 				platformmcp.CatalogDescriptor{},
 			).AssistantTools(),
@@ -475,8 +486,11 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	})
 	tunnelRoutes := route.NewRouteTable()
 	features := &feature.InMemory{}
-	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, authzEngine, assistantTokens, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, remoteProxyManager, tunnelRoutes, "", nil, redisClient, tunnelPublicConfig, metaRuntime)
+	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, authzEngine, assistantTokens, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime)
 	require.NoError(t, err)
+	// Identity chaining runs as in production, so gate tests without bindings
+	// prove it leaves their behavior unchanged.
+	svc.SetIdentityChainer(identitychaining.New(logger, conn, enc, remoteChallengeMgr, remotesessions.NewDelegationService(conn, enc, remoteChallengeMgr), idTokenKeys, cacheAdapter))
 
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
 
@@ -519,7 +533,7 @@ func newTestMCPServiceWithScanSpans(t *testing.T, callers ...functions.ToolCalle
 			MaxRequestLifetime: 0,
 		}, nil, nil, false, mcp.MetaRuntimeConfig{
 			MemberCallTimeout: 0, ValidationTimeout: 0, AutoVerifyWait: 0, RecheckInterval: 0,
-		}, provider, caller)
+		}, provider, caller, nil)
 	return ctx, ti, recorder
 }
 
@@ -736,4 +750,20 @@ func requireTelemetryRowCount(t *testing.T, where string, want uint64, args ...a
 		row := chConn.QueryRow(t.Context(), "SELECT count() FROM telemetry_logs WHERE "+where, args...)
 		return row.Scan(&count) == nil && count == want
 	}, 5*time.Second, 50*time.Millisecond, "telemetry_logs rows for %q: want %d, got %d", where, want, count)
+}
+
+func newTestMCPServiceWithCallerAssertions(t *testing.T, issuer *mcpauthz.Issuer) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, issuer)
+}
+
+// createTestUser stores a user so authentication can resolve its profile, as
+// it does for every caller of a private tunneled or meta endpoint.
+func createTestUser(t *testing.T, ctx context.Context, ti *testInstance, id string) urn.SessionSubject {
+	t.Helper()
+	_, err := usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID: id, Email: id + "@example.test", DisplayName: "Test user",
+	})
+	require.NoError(t, err)
+	return urn.NewUserSubject(id)
 }

@@ -1,3 +1,26 @@
+import type {
+  AdminSetRegistryEntryPublishedMutationData,
+  AdminSetRegistryEntryPublishedMutationError,
+  AdminSetRegistryEntryPublishedMutationVariables,
+} from "@gram/admin-client/react-query/adminSetRegistryEntryPublished";
+import type {
+  AdminSaveRegistryEntryMutationData,
+  AdminSaveRegistryEntryMutationError,
+  AdminSaveRegistryEntryMutationVariables,
+} from "@gram/admin-client/react-query/adminSaveRegistryEntry";
+import type {
+  AdminCreateRegistryEntryMutationData,
+  AdminCreateRegistryEntryMutationError,
+  AdminCreateRegistryEntryMutationVariables,
+} from "@gram/admin-client/react-query/adminCreateRegistryEntry";
+import type { AdminListRegistryEntriesRequest } from "@gram/admin-client/models/operations/adminlistregistryentries";
+import { buildAdminListRegistryEntriesQuery } from "@gram/admin-client/react-query/adminListRegistryEntries.core";
+import { buildAdminGetRegistryEntryQuery } from "@gram/admin-client/react-query/adminGetRegistryEntry.core";
+import { buildAdminGetRegistryOktaCandidatesQuery } from "@gram/admin-client/react-query/adminGetRegistryOktaCandidates.core";
+import { buildAdminListRegistryOktaUnmappedQuery } from "@gram/admin-client/react-query/adminListRegistryOktaUnmapped.core";
+import { buildAdminCreateRegistryEntryMutation } from "@gram/admin-client/react-query/adminCreateRegistryEntry";
+import { buildAdminSaveRegistryEntryMutation } from "@gram/admin-client/react-query/adminSaveRegistryEntry";
+import { buildAdminSetRegistryEntryPublishedMutation } from "@gram/admin-client/react-query/adminSetRegistryEntryPublished";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { AdminMeterUsageResponse } from "@gram/admin-client/models/components/adminmeterusageresponse";
 import { buildAdminGetMeterUsageQuery } from "@gram/admin-client/react-query/adminGetMeterUsage.core";
@@ -5,6 +28,8 @@ import type { AdminGetMeterUsageRequest } from "@gram/admin-client/models/operat
 import type { AdminSpendBreakdownResponse } from "@gram/admin-client/models/components/adminspendbreakdownresponse";
 import { buildAdminGetSpendBreakdownQuery } from "@gram/admin-client/react-query/adminGetSpendBreakdown.core";
 import type { AdminGetSpendBreakdownRequest } from "@gram/admin-client/models/operations/admingetspendbreakdown";
+import { buildAdminDescribeMcpServerHealthQuery } from "@gram/admin-client/react-query/adminDescribeMcpServerHealth.core";
+import { buildAdminGetMcpServerToolCallsQuery } from "@gram/admin-client/react-query/adminGetMcpServerToolCalls.core";
 import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
 import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
 import {
@@ -36,17 +61,23 @@ import {
   type AdminCreateGlobalIssuerMutationVariables,
 } from "@gram/admin-client/react-query/adminCreateGlobalIssuer";
 import { buildAdminServeImageQuery } from "@gram/admin-client/react-query/adminServeImage.core";
+import { adminGetStripeSubscriptionCandidate } from "@gram/admin-client/funcs/adminGetStripeSubscriptionCandidate";
 import { buildAdminDisableOrganizationMutation } from "@gram/admin-client/react-query/adminDisableOrganization";
 import { buildAdminEnableOrganizationMutation } from "@gram/admin-client/react-query/adminEnableOrganization";
 import { buildAdminExtendTrialMutation } from "@gram/admin-client/react-query/adminExtendTrial";
 import { buildAdminRearmTrialMutation } from "@gram/admin-client/react-query/adminRearmTrial";
+import { buildAdminSetStripeSubscriptionMutation } from "@gram/admin-client/react-query/adminSetStripeSubscription";
 import { buildAdminStartTrialMutation } from "@gram/admin-client/react-query/adminStartTrial";
 import type { AdminOrganization as SdkAdminOrganization } from "@gram/admin-client/models/components/adminorganization";
+import type { AdminStripeSubscriptionCandidate } from "@gram/admin-client/models/components/adminstripesubscriptioncandidate";
 import type { DisableOrganizationRequestBody } from "@gram/admin-client/models/components/disableorganizationrequestbody";
 import type { EnableOrganizationRequestBody } from "@gram/admin-client/models/components/enableorganizationrequestbody";
 import type { ExtendTrialRequestBody } from "@gram/admin-client/models/components/extendtrialrequestbody";
 import type { RearmTrialRequestBody } from "@gram/admin-client/models/components/rearmtrialrequestbody";
+import type { SetStripeSubscriptionRequestBody } from "@gram/admin-client/models/components/setstripesubscriptionrequestbody";
 import type { StartTrialRequestBody } from "@gram/admin-client/models/components/starttrialrequestbody";
+import type { AdminGetStripeSubscriptionCandidateRequest } from "@gram/admin-client/models/operations/admingetstripesubscriptioncandidate";
+import { unwrapAsync } from "@gram/admin-client/types/fp";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
 import { buildAdminGetGlobalIssuerMigratePreflightQuery } from "@gram/admin-client/react-query/adminGetGlobalIssuerMigratePreflight.core";
 import { buildAdminGetGlobalIssuerDuplicatePreflightQuery } from "@gram/admin-client/react-query/adminGetGlobalIssuerDuplicatePreflight.core";
@@ -69,6 +100,12 @@ import {
   type AdminListOrganizationActivityPageParams,
 } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
 import { buildAdminOrganizationFeaturesQuery } from "@gram/admin-client/react-query/adminOrganizationFeatures.core";
+import { buildAdminOnboardingStackOptionsQuery } from "@gram/admin-client/react-query/adminOnboardingStackOptions.core";
+import { buildAdminOrganizationOnboardingStackQuery } from "@gram/admin-client/react-query/adminOrganizationOnboardingStack.core";
+import { buildAdminOnboardingStepsQuery } from "@gram/admin-client/react-query/adminOnboardingSteps.core";
+import { buildSetAdminOrganizationOnboardingStackMutation } from "@gram/admin-client/react-query/setAdminOrganizationOnboardingStack";
+import type { AdminOnboardingStack } from "@gram/admin-client/models/components/adminonboardingstack";
+import type { SetOrganizationOnboardingStackRequestBody } from "@gram/admin-client/models/components/setorganizationonboardingstackrequestbody";
 import { buildSetAdminOrganizationFeatureMutation } from "@gram/admin-client/react-query/setAdminOrganizationFeature";
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
@@ -169,6 +206,129 @@ export function organizationSpendBreakdownQuery(
   });
 }
 
+// Keyed on the route's own address for the organization, id or slug as typed,
+// the way `projectQuery` is, so the name entry the breadcrumb watches can be
+// built from the route alone. A missing window is the default one.
+function mcpServerHealthKey(
+  organizationIdOrSlug: string,
+  projectId: string,
+  mcpServerId: string,
+  windowDays: 14 | 30 | 90 = 14,
+): readonly [string, string, string, string, number] {
+  return [
+    "gram-admin-mcp-server-health",
+    organizationIdOrSlug,
+    projectId,
+    mcpServerId,
+    windowDays,
+  ] as const;
+}
+
+// The server's name alone, with no window in the key, for the breadcrumb.
+// Every window's health read writes it as it lands, so changing the window
+// never empties the crumb while the new answer is on its way.
+export function mcpServerNameKey(
+  organizationIdOrSlug: string,
+  projectId: string,
+  mcpServerId: string,
+): readonly [string, string, string, string] {
+  return [
+    "gram-admin-mcp-server-name",
+    organizationIdOrSlug,
+    projectId,
+    mcpServerId,
+  ] as const;
+}
+
+type McpServerHealthRequest = {
+  organizationId: string;
+  projectId: string;
+  mcpServerId: string;
+  windowDays: 14 | 30 | 90;
+};
+
+export function mcpServerHealthQuery(
+  organizationIdOrSlug: string,
+  request: McpServerHealthRequest,
+): ReturnType<typeof createMcpServerHealthQuery> {
+  return createMcpServerHealthQuery(organizationIdOrSlug, request);
+}
+
+function createMcpServerHealthQuery(
+  organizationIdOrSlug: string,
+  request: McpServerHealthRequest,
+) {
+  const generated = buildAdminDescribeMcpServerHealthQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    queryKey: mcpServerHealthKey(
+      organizationIdOrSlug,
+      request.projectId,
+      request.mcpServerId,
+      request.windowDays,
+    ),
+    queryFn: async (context) => {
+      const health = await redirecting(generated.queryFn(context));
+      context.client.setQueryData(
+        mcpServerNameKey(
+          organizationIdOrSlug,
+          request.projectId,
+          request.mcpServerId,
+        ),
+        { name: health.server.name },
+      );
+      return health;
+    },
+    staleTime: 30_000,
+  });
+}
+
+// Tool call telemetry for the same server, keyed the same way so the two
+// queries for one page share every part of their key but the name.
+function mcpServerToolCallsKey(
+  organizationIdOrSlug: string,
+  projectId: string,
+  mcpServerId: string,
+  windowDays: 14 | 30 | 90 = 14,
+): readonly [string, string, string, string, number] {
+  return [
+    "gram-admin-mcp-server-tool-calls",
+    organizationIdOrSlug,
+    projectId,
+    mcpServerId,
+    windowDays,
+  ] as const;
+}
+
+export function mcpServerToolCallsQuery(
+  organizationIdOrSlug: string,
+  request: McpServerHealthRequest,
+): ReturnType<typeof createMcpServerToolCallsQuery> {
+  return createMcpServerToolCallsQuery(organizationIdOrSlug, request);
+}
+
+function createMcpServerToolCallsQuery(
+  organizationIdOrSlug: string,
+  request: McpServerHealthRequest,
+) {
+  const generated = buildAdminGetMcpServerToolCallsQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    queryKey: mcpServerToolCallsKey(
+      organizationIdOrSlug,
+      request.projectId,
+      request.mcpServerId,
+      request.windowDays,
+    ),
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    staleTime: 30_000,
+  });
+}
+
 function createOrganizationFeaturesQuery(organizationId: string) {
   const request: AdminGetOrganizationFeaturesRequest = { organizationId };
   const generated = buildAdminOrganizationFeaturesQuery(
@@ -185,6 +345,78 @@ export function organizationFeaturesQuery(
   organizationId: string,
 ): ReturnType<typeof createOrganizationFeaturesQuery> {
   return createOrganizationFeaturesQuery(organizationId);
+}
+
+import { buildAdminOnboardingUseCasesQuery } from "@gram/admin-client/react-query/adminOnboardingUseCases.core";
+import { buildCreateAdminOnboardingUseCaseMutation } from "@gram/admin-client/react-query/createAdminOnboardingUseCase";
+import { buildUpdateAdminOnboardingUseCaseMutation } from "@gram/admin-client/react-query/updateAdminOnboardingUseCase";
+import { buildDeleteAdminOnboardingUseCaseMutation } from "@gram/admin-client/react-query/deleteAdminOnboardingUseCase";
+import { buildAdminOnboardingPlaybooksQuery } from "@gram/admin-client/react-query/adminOnboardingPlaybooks.core";
+import { buildCreateAdminOnboardingPlaybookMutation } from "@gram/admin-client/react-query/createAdminOnboardingPlaybook";
+import { buildUpdateAdminOnboardingPlaybookMutation } from "@gram/admin-client/react-query/updateAdminOnboardingPlaybook";
+import { buildDeleteAdminOnboardingPlaybookMutation } from "@gram/admin-client/react-query/deleteAdminOnboardingPlaybook";
+import { buildCloneAdminOnboardingPlaybookMutation } from "@gram/admin-client/react-query/cloneAdminOnboardingPlaybook";
+import { buildAdminOrganizationOnboardingPlaybookQuery } from "@gram/admin-client/react-query/adminOrganizationOnboardingPlaybook.core";
+import { buildAssignAdminOrganizationOnboardingPlaybookMutation } from "@gram/admin-client/react-query/assignAdminOrganizationOnboardingPlaybook";
+
+// The stack form's options come from the support matrix catalog, which only
+// changes on deploy, so the list is fetched once per session.
+function createOnboardingStackOptionsQuery() {
+  const generated = buildAdminOnboardingStackOptionsQuery(redirectingClient);
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    staleTime: Infinity,
+  });
+}
+
+export function onboardingStackOptionsQuery(): ReturnType<
+  typeof createOnboardingStackOptionsQuery
+> {
+  return createOnboardingStackOptionsQuery();
+}
+
+function createOrganizationOnboardingStackQuery(organizationId: string) {
+  const generated = buildAdminOrganizationOnboardingStackQuery(
+    redirectingClient,
+    { organizationId },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+export function organizationOnboardingStackQuery(
+  organizationId: string,
+): ReturnType<typeof createOrganizationOnboardingStackQuery> {
+  return createOrganizationOnboardingStackQuery(organizationId);
+}
+
+const generatedOnboardingStackMutation =
+  buildSetAdminOrganizationOnboardingStackMutation(mutationClient);
+
+export function setAdminOrganizationOnboardingStack(
+  request: SetOrganizationOnboardingStackRequestBody,
+): Promise<AdminOnboardingStack> {
+  return generatedOnboardingStackMutation.mutationFn({ request });
+}
+
+// Steps are defined in code and mirrored at start-up, so they only change on
+// deploy.
+function createOnboardingStepsQuery() {
+  const generated = buildAdminOnboardingStepsQuery(redirectingClient);
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    staleTime: Infinity,
+  });
+}
+
+export function onboardingStepsQuery(): ReturnType<
+  typeof createOnboardingStepsQuery
+> {
+  return createOnboardingStepsQuery();
 }
 
 function createOrganizationActivityQuery(organizationId: string) {
@@ -250,6 +482,7 @@ export function organizationFromSdk(
     slug: org.slug,
     account_type: org.accountType,
     workos_id: org.workosId,
+    workos_dashboard_url: org.workosDashboardUrl,
     stripe_customer_id: org.stripeCustomerId,
     stripe_subscription_id: org.stripeSubscriptionId,
     whitelisted: org.whitelisted,
@@ -274,8 +507,31 @@ const disableOrganizationMutation =
   buildAdminDisableOrganizationMutation(redirectingClient);
 const enableOrganizationMutation =
   buildAdminEnableOrganizationMutation(redirectingClient);
+const setStripeSubscriptionMutation =
+  buildAdminSetStripeSubscriptionMutation(redirectingClient);
 const changeTrialEndDateMutation =
   buildAdminChangeTrialEndDateMutation(redirectingClient);
+
+// Preview is a one-shot confirmation read of live Stripe state, not a
+// typed-as-you-go query.
+export function getStripeSubscriptionCandidate(
+  request: AdminGetStripeSubscriptionCandidateRequest,
+): Promise<AdminStripeSubscriptionCandidate> {
+  return redirecting(
+    unwrapAsync(
+      adminGetStripeSubscriptionCandidate(redirectingClient, request),
+    ),
+  );
+}
+
+export async function setStripeSubscription(
+  request: SetStripeSubscriptionRequestBody,
+): Promise<AdminOrganization> {
+  return organizationFromSdk(
+    await redirecting(setStripeSubscriptionMutation.mutationFn({ request })),
+  );
+}
+
 export async function changeTrialEndDate(
   request: ChangeTrialEndDateRequestBody,
 ): Promise<AdminOrganization> {
@@ -544,4 +800,218 @@ export function adminIssuerImageQuery(
   id: string,
 ): ReturnType<typeof createAdminIssuerImageQuery> {
   return createAdminIssuerImageQuery(id);
+}
+
+// Use cases and playbooks are edited in the admin dashboard, so their lists
+// refetch like any other record.
+function createOnboardingUseCasesQuery() {
+  const generated = buildAdminOnboardingUseCasesQuery(redirectingClient);
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+export function onboardingUseCasesQuery(): ReturnType<
+  typeof createOnboardingUseCasesQuery
+> {
+  return createOnboardingUseCasesQuery();
+}
+
+const generatedCreateUseCase =
+  buildCreateAdminOnboardingUseCaseMutation(mutationClient);
+const generatedUpdateUseCase =
+  buildUpdateAdminOnboardingUseCaseMutation(mutationClient);
+const generatedDeleteUseCase =
+  buildDeleteAdminOnboardingUseCaseMutation(mutationClient);
+
+export function createAdminOnboardingUseCase(
+  request: Parameters<typeof generatedCreateUseCase.mutationFn>[0]["request"],
+): ReturnType<typeof generatedCreateUseCase.mutationFn> {
+  return generatedCreateUseCase.mutationFn({ request });
+}
+
+export function updateAdminOnboardingUseCase(
+  request: Parameters<typeof generatedUpdateUseCase.mutationFn>[0]["request"],
+): ReturnType<typeof generatedUpdateUseCase.mutationFn> {
+  return generatedUpdateUseCase.mutationFn({ request });
+}
+
+export function deleteAdminOnboardingUseCase(
+  request: Parameters<typeof generatedDeleteUseCase.mutationFn>[0]["request"],
+): ReturnType<typeof generatedDeleteUseCase.mutationFn> {
+  return generatedDeleteUseCase.mutationFn({ request });
+}
+
+function createOnboardingPlaybooksQuery(organizationId?: string) {
+  const generated = buildAdminOnboardingPlaybooksQuery(redirectingClient, {
+    organizationId,
+  });
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+/** The default playbooks, plus the organization's custom ones when named. */
+export function onboardingPlaybooksQuery(
+  organizationId?: string,
+): ReturnType<typeof createOnboardingPlaybooksQuery> {
+  return createOnboardingPlaybooksQuery(organizationId);
+}
+
+const generatedCreatePlaybook =
+  buildCreateAdminOnboardingPlaybookMutation(mutationClient);
+const generatedUpdatePlaybook =
+  buildUpdateAdminOnboardingPlaybookMutation(mutationClient);
+const generatedDeletePlaybook =
+  buildDeleteAdminOnboardingPlaybookMutation(mutationClient);
+const generatedClonePlaybook =
+  buildCloneAdminOnboardingPlaybookMutation(mutationClient);
+
+export function createAdminOnboardingPlaybook(
+  request: Parameters<typeof generatedCreatePlaybook.mutationFn>[0]["request"],
+): ReturnType<typeof generatedCreatePlaybook.mutationFn> {
+  return generatedCreatePlaybook.mutationFn({ request });
+}
+
+export function updateAdminOnboardingPlaybook(
+  request: Parameters<typeof generatedUpdatePlaybook.mutationFn>[0]["request"],
+): ReturnType<typeof generatedUpdatePlaybook.mutationFn> {
+  return generatedUpdatePlaybook.mutationFn({ request });
+}
+
+export function deleteAdminOnboardingPlaybook(
+  request: Parameters<typeof generatedDeletePlaybook.mutationFn>[0]["request"],
+): ReturnType<typeof generatedDeletePlaybook.mutationFn> {
+  return generatedDeletePlaybook.mutationFn({ request });
+}
+
+export function cloneAdminOnboardingPlaybook(
+  request: Parameters<typeof generatedClonePlaybook.mutationFn>[0]["request"],
+): ReturnType<typeof generatedClonePlaybook.mutationFn> {
+  return generatedClonePlaybook.mutationFn({ request });
+}
+
+function createOrganizationOnboardingPlaybookQuery(organizationId: string) {
+  const generated = buildAdminOrganizationOnboardingPlaybookQuery(
+    redirectingClient,
+    { organizationId },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+export function organizationOnboardingPlaybookQuery(
+  organizationId: string,
+): ReturnType<typeof createOrganizationOnboardingPlaybookQuery> {
+  return createOrganizationOnboardingPlaybookQuery(organizationId);
+}
+
+const generatedAssignPlaybook =
+  buildAssignAdminOrganizationOnboardingPlaybookMutation(mutationClient);
+
+export function assignAdminOrganizationOnboardingPlaybook(
+  request: Parameters<typeof generatedAssignPlaybook.mutationFn>[0]["request"],
+): ReturnType<typeof generatedAssignPlaybook.mutationFn> {
+  return generatedAssignPlaybook.mutationFn({ request });
+}
+
+function createRegistryEntriesQuery(params: AdminListRegistryEntriesRequest) {
+  const generated = buildAdminListRegistryEntriesQuery(
+    redirectingClient,
+    params,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+function createRegistryEntryQuery(id: string) {
+  const generated = buildAdminGetRegistryEntryQuery(redirectingClient, { id });
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    enabled: id !== "",
+  });
+}
+
+export function useCreateRegistryEntryMutation(): UseMutationResult<
+  AdminCreateRegistryEntryMutationData,
+  AdminCreateRegistryEntryMutationError,
+  AdminCreateRegistryEntryMutationVariables
+> {
+  return useMutation({
+    ...buildAdminCreateRegistryEntryMutation(redirectingClient),
+    retry: false,
+  });
+}
+
+export function useSaveRegistryEntryMutation(): UseMutationResult<
+  AdminSaveRegistryEntryMutationData,
+  AdminSaveRegistryEntryMutationError,
+  AdminSaveRegistryEntryMutationVariables
+> {
+  return useMutation({
+    ...buildAdminSaveRegistryEntryMutation(redirectingClient),
+    retry: false,
+  });
+}
+
+export function useSetRegistryEntryPublishedMutation(): UseMutationResult<
+  AdminSetRegistryEntryPublishedMutationData,
+  AdminSetRegistryEntryPublishedMutationError,
+  AdminSetRegistryEntryPublishedMutationVariables
+> {
+  return useMutation({
+    ...buildAdminSetRegistryEntryPublishedMutation(redirectingClient),
+    retry: false,
+  });
+}
+
+export function registryEntriesQuery(
+  params: AdminListRegistryEntriesRequest,
+): ReturnType<typeof createRegistryEntriesQuery> {
+  return createRegistryEntriesQuery(params);
+}
+
+export function registryEntryQuery(
+  id: string,
+): ReturnType<typeof createRegistryEntryQuery> {
+  return createRegistryEntryQuery(id);
+}
+
+function createRegistryOktaCandidatesQuery(id: string) {
+  const generated = buildAdminGetRegistryOktaCandidatesQuery(
+    redirectingClient,
+    { id },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    enabled: id !== "",
+  });
+}
+
+export function registryOktaCandidatesQuery(
+  id: string,
+): ReturnType<typeof createRegistryOktaCandidatesQuery> {
+  return createRegistryOktaCandidatesQuery(id);
+}
+
+function createRegistryOktaUnmappedQuery() {
+  const generated = buildAdminListRegistryOktaUnmappedQuery(redirectingClient);
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+export function registryOktaUnmappedQuery(): ReturnType<
+  typeof createRegistryOktaUnmappedQuery
+> {
+  return createRegistryOktaUnmappedQuery();
 }

@@ -16,7 +16,9 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/claudetag"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
@@ -307,6 +309,9 @@ type skillCaptureSignal struct {
 // from a nil capture signal, which only says the payload carried no usable raw
 // hash — so callers can tell a durable write apart from a no-op or a failure.
 func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, seenAt time.Time, blockReason string) (*skillCaptureSignal, bool, error) {
+	ctx, span := s.tracer.Start(ctx, "hooks.recordSkillActivation")
+	defer span.End()
+
 	if payload.Data == nil || payload.Data.Skill == nil {
 		return nil, false, nil
 	}
@@ -379,6 +384,9 @@ func normalizeRawSHA256(value string) string {
 // Best-effort: on lookup failure the effects are omitted and senders keep
 // their last-seen value.
 func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.IngestHookResult, capture *skillCaptureSignal) *gen.IngestHookResult {
+	ctx, span := s.tracer.Start(ctx, "hooks.withOrgSettings")
+	defer span.End()
+
 	if s.productFeatures == nil {
 		return res
 	}
@@ -455,6 +463,9 @@ type canonicalActor struct {
 // used as a fallback: an event from such a key with no self-reported email
 // stays unattributed rather than crediting every machine to the publisher.
 func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext) canonicalActor {
+	ctx, span := s.tracer.Start(ctx, "hooks.resolveCanonicalActor")
+	defer span.End()
+
 	// An agent key is the actor itself; it has no human identity to resolve.
 	if isAgentActor(ctx) {
 		return canonicalActor{UserID: "", Email: ""}
@@ -559,6 +570,9 @@ func isReservedAssistantAdapter(adapter string) bool {
 }
 
 func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time) (string, string) {
+	ctx, span := s.tracer.Start(ctx, "hooks.evaluateCanonicalHook")
+	defer span.End()
+
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
 	eventType := strings.TrimSpace(payload.Event.Type)
 
@@ -710,6 +724,9 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 // legacy per-provider handlers. Retried deliveries keep the deny but must not
 // mint a second row.
 func (s *Service) appendCanonicalBlockURL(ctx context.Context, authCtx *contextvalues.AuthContext, actor canonicalActor, payload *gen.IngestPayload, auditReason, toolName, policyID, userReason string) string {
+	ctx, span := s.tracer.Start(ctx, "hooks.appendCanonicalBlockURL")
+	defer span.End()
+
 	if s.isHookDuplicate(ctx) {
 		return userReason
 	}
@@ -792,6 +809,9 @@ func canonicalRiskEventType(payload *gen.IngestPayload) hookevents.EventType {
 }
 
 func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *contextvalues.AuthContext, actor canonicalActor, payload *gen.IngestPayload, rawToolName string, toolInput any) (string, string) {
+	ctx, span := s.tracer.Start(ctx, "hooks.evaluateCanonicalShadowMCP")
+	defer span.End()
+
 	policy := s.lookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID)
 	if policy == nil {
 		return "", ""
@@ -875,15 +895,19 @@ func (s *Service) resolveEvidenceFromSessionInventory(ctx context.Context, evide
 // resolve a later tool call's target to a configured server. Best-effort: a
 // cache miss downgrades a deny's detail, it never changes the decision.
 func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry, inventoryRead bool) {
-	if sessionID == "" {
+	ctx, span := s.tracer.Start(ctx, "hooks.cacheCanonicalMCPList")
+	defer span.End()
+
+	projectID := s.mcpListProjectID(ctx, sessionID)
+	if sessionID == "" || projectID == "" {
 		return
 	}
 
 	// Extend both keys on every event, as the legacy endpoints do for the
 	// snapshot: a session outliving its TTL loses the inventory, and losing the
 	// read status silently disables the guard for the rest of that session.
-	s.refreshMCPListTTL(ctx, sessionID)
-	if err := s.cache.Expire(ctx, sessionMCPInventoryReadCacheKey(sessionID), sessionMCPInventoryReadTTL); err != nil {
+	s.refreshMCPListTTL(ctx, projectID, sessionID)
+	if err := s.cache.Expire(ctx, sessionMCPInventoryReadCacheKey(projectID, sessionID), sessionMCPInventoryReadTTL); err != nil {
 		s.logger.DebugContext(ctx, "failed to extend MCP inventory read status",
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(sessionID),
@@ -898,10 +922,10 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 	// it while the entries write failed would leave the session claiming a read
 	// it cannot back up — and under block_all every later meta-tool call denies
 	// for the rest of the session.
-	if !inventoryRead || !s.claimMCPListSnapshot(ctx, sessionID) {
+	if !inventoryRead || !s.claimMCPListSnapshot(ctx, projectID, sessionID) {
 		return
 	}
-	if err := s.cache.Set(ctx, sessionMCPListCacheKey(sessionID), entries, sessionMCPListTTL); err != nil {
+	if err := s.cache.Set(ctx, sessionMCPListCacheKey(projectID, sessionID), entries, sessionMCPListTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
 			attr.SlogEvent("hook_mcp_list_cache_set_failed"),
 			attr.SlogError(err),
@@ -912,7 +936,7 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 
 	// Meta-tool calls arrive later carrying no inventory status, so the
 	// authoritative read status has to be held per session.
-	if err := s.cache.Set(ctx, sessionMCPInventoryReadCacheKey(sessionID), true, sessionMCPInventoryReadTTL); err != nil {
+	if err := s.cache.Set(ctx, sessionMCPInventoryReadCacheKey(projectID, sessionID), true, sessionMCPInventoryReadTTL); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache MCP inventory read status",
 			attr.SlogEvent("hook_mcp_list_read_cache_set_failed"),
 			attr.SlogError(err),
@@ -963,15 +987,19 @@ func (s *Service) canonicalCodexMetaTool(ctx context.Context, payload *gen.Inges
 // current behavior until they upgrade, rather than enforcement depending on a
 // server deploy and a hooks release landing in the right order.
 func (s *Service) canonicalClientReportsMCPInventory(ctx context.Context, payload *gen.IngestPayload) bool {
+	ctx, span := s.tracer.Start(ctx, "hooks.canonicalClientReportsMCPInventory")
+	defer span.End()
+
 	if canonicalMCPInventoryRead(payload) {
 		return true
 	}
 	sessionID := canonicalSessionID(payload)
-	if sessionID == "" {
+	projectID := s.mcpListProjectID(ctx, sessionID)
+	if sessionID == "" || projectID == "" {
 		return false
 	}
 	var read bool
-	if err := s.cache.Get(ctx, sessionMCPInventoryReadCacheKey(sessionID), &read); err != nil {
+	if err := s.cache.Get(ctx, sessionMCPInventoryReadCacheKey(projectID, sessionID), &read); err != nil {
 		return false
 	}
 	return read
@@ -1010,11 +1038,14 @@ func canonicalShadowMCPEvidence(payload *gen.IngestPayload, rawToolName string) 
 }
 
 func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time, blockReason string) {
+	ctx, span := s.tracer.Start(ctx, "hooks.recordCanonicalHook")
+	defer span.End()
+
 	// Resolve the session identity once, before the telemetry write, so the
 	// hook row and the chat persistence below stamp the same AI-account
 	// attribution.
 	metadata := s.canonicalSessionMetadata(ctx, payload, authCtx, actor)
-	if _, tag := claudeTagTitle(canonicalPromptText(payload)); tag && claudeServiceNameSpecificity(metadata.ServiceName) > 0 {
+	if claudeServiceNameSpecificity(metadata.ServiceName) > 0 && claudetag.Parse(canonicalPromptText(payload)).Detected {
 		metadata.ServiceName = "claude-tag"
 	}
 	// Resolve the product surface once per event: the OTEL-cached service.name
@@ -1030,7 +1061,7 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	if (strings.TrimSpace(payload.Event.Type) == "session.started" || metadata.ServiceName == "claude-tag") &&
 		metadata.SessionID != "" && !isAgentActor(ctx) && (metadata.ServiceName == "claude-tag" || metadata.UserID != "" || metadata.UserEmail != "" || metadata.Hostname != "") {
 		cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
-		err := s.cache.Set(cacheCtx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour)
+		err := s.cacheSessionMetadata(cacheCtx, metadata)
 		cancel()
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to cache canonical hook session identity",
@@ -1045,8 +1076,14 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	s.writeCanonicalTelemetry(ctx, payload, authCtx, &metadata, hookSource, timestamp, blockReason)
 	promptCaptured, err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, hookSource, timestamp)
 	if err != nil {
-		s.logger.WarnContext(ctx, "failed to persist canonical hook conversation event",
-			attr.SlogEvent("hooks_ingest_chat_persist_failed"),
+		event := "hooks_ingest_chat_persist_failed"
+		msg := "failed to persist canonical hook conversation event"
+		if errors.Is(err, errChatProjectMismatch) {
+			event = "hooks_ingest_chat_project_mismatch"
+			msg = "refusing to persist hook conversation event for a session bound to another project"
+		}
+		s.logger.WarnContext(ctx, msg,
+			attr.SlogEvent(event),
 			attr.SlogError(err),
 			attr.SlogHookSource(payload.Source.Adapter),
 			attr.SlogHookEvent(payload.Event.Type),
@@ -1057,8 +1094,14 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 		s.markNativePromptSession(ctx, authCtx.ProjectID.String(), canonicalSessionID(payload), payload.Source.Adapter)
 	}
 	if err := s.persistPromptAttachments(ctx, payload, authCtx, &metadata, timestamp); err != nil {
-		s.logger.WarnContext(ctx, "failed to persist prompt attachments",
-			attr.SlogEvent("hooks_ingest_prompt_attachment_persist_failed"),
+		event := "hooks_ingest_prompt_attachment_persist_failed"
+		msg := "failed to persist prompt attachments"
+		if errors.Is(err, errChatProjectMismatch) {
+			event = "hooks_ingest_chat_project_mismatch"
+			msg = "refusing to persist prompt attachments for a session bound to another project"
+		}
+		s.logger.WarnContext(ctx, msg,
+			attr.SlogEvent(event),
 			attr.SlogError(err),
 			attr.SlogHookSource(payload.Source.Adapter),
 			attr.SlogHookEvent(payload.Event.Type),
@@ -1192,7 +1235,7 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 				// event; this write-back exists for sessions whose started
 				// event was never seen.
 				cacheCtx, cancel := context.WithTimeout(ctx, canonicalSessionCacheWriteTimeout)
-				err := s.cache.Set(cacheCtx, sessionCacheKey(metadata.SessionID), metadata, 24*time.Hour)
+				err := s.cacheSessionMetadata(cacheCtx, metadata)
 				cancel()
 				if err != nil {
 					s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
@@ -1495,6 +1538,9 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	var titleContent string
 	uncorrelatedPrompt := false
 	nativePrompt := false
+	// Title generation is scheduled on assistant turns only, as the
+	// per-platform hook endpoints do; tool traffic says nothing about the topic.
+	assistantTurn := false
 	switch strings.TrimSpace(payload.Event.Type) {
 	case "prompt.submitted":
 		content := canonicalPromptText(payload)
@@ -1529,6 +1575,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 				return false, nil
 			}
 		}
+		assistantTurn = true
 		msg = baseMsg("assistant", content)
 		if len(outputToolCalls) > 0 {
 			toolCallsJSON, err := json.Marshal(outputToolCalls)
@@ -1559,7 +1606,9 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		msg = baseMsg("assistant", "")
 		msg.FinishReason = conv.ToPGText("tool_calls")
 		msg.ToolCalls = toolCallsJSON
-		titleContent = toolName
+		// A tool name is not message content, so a chat it opened could never be
+		// recognized as a stand-in; seed the surface placeholder instead.
+		titleContent = canonicalPlaceholderTitle(hookSource)
 	case "tool.completed", "tool.failed":
 		content := canonicalToolResultContent(payload)
 		if strings.TrimSpace(content) == "" {
@@ -1590,7 +1639,32 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			return false, fmt.Errorf("set Claude Tag chat title: %w", err)
 		}
 	}
+	if stored && assistantTurn {
+		s.scheduleCanonicalChatTitle(ctx, authCtx, msg.ChatID, hookSource)
+	}
 	return stored && msg.Role == "user", nil
+}
+
+// scheduleCanonicalChatTitle asks the title generator to replace the stand-in
+// a unified-ingest session was seeded with. Claude Tag sessions are skipped:
+// their title is the channel, rewritten on every wake.
+func (s *Service) scheduleCanonicalChatTitle(ctx context.Context, authCtx *contextvalues.AuthContext, chatID uuid.UUID, hookSource string) {
+	if s.chatTitleGenerator == nil || hookSource == "claude-tag" {
+		return
+	}
+	// WithoutCancel so a client that hangs up as soon as the hook is
+	// acknowledged still gets its session named.
+	if err := s.chatTitleGenerator.ScheduleChatTitleGeneration(
+		context.WithoutCancel(ctx),
+		chatID.String(),
+		authCtx.ActiveOrganizationID,
+		authCtx.ProjectID.String(),
+	); err != nil {
+		s.logger.WarnContext(ctx, "failed to schedule chat title generation",
+			attr.SlogError(err),
+			attr.SlogChatID(chatID.String()),
+		)
+	}
 }
 
 func (s *Service) markChatLiteLLMProxied(ctx context.Context, chatID, projectID uuid.UUID) {
@@ -1792,6 +1866,10 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		return nil
 	}
 
+	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))); err != nil {
+		return err
+	}
+
 	contents := make([][]byte, len(pending))
 	for i := range pending {
 		contents[i] = pending[i].content
@@ -1822,18 +1900,8 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 	} else if !isForeignKeyViolation(err) {
 		return fmt.Errorf("insert prompt attachment content parts: %w", err)
 	}
-	_, upsertErr := s.repo.UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
-		ID:             chatID,
-		ProjectID:      projectID,
-		OrganizationID: metadata.GramOrgID,
-		UserID:         conv.ToPGTextEmpty(metadata.UserID),
-		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
-		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
-		Title:          conv.ToPGText(canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))),
-		Cwd:            conv.ToPGTextEmpty(metadata.Cwd),
-	})
-	if upsertErr != nil {
-		return fmt.Errorf("upsert claude code session for prompt attachments: %w", upsertErr)
+	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))); err != nil {
+		return fmt.Errorf("upsert claude code session for prompt attachments: %w", err)
 	}
 	if _, err := queries.CreateChatContentPart(ctx, rows); err != nil {
 		return fmt.Errorf("insert prompt attachment content parts after creating chat: %w", err)
@@ -2150,6 +2218,8 @@ func canonicalSkillName(payload *gen.IngestPayload) string {
 // an empty string when the source is unknown. The claude-tag wake-envelope
 // rewrite is only applied to Claude-family sources to prevent non-Claude
 // adapters from being labelled as channel sessions.
+// Apart from a channel label the result is a stand-in that title generation
+// later replaces.
 func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) string {
 	title := canonicalPromptText(payload)
 	if title == "" {
@@ -2158,14 +2228,34 @@ func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) str
 	if claudeServiceNameSpecificity(source) > 0 {
 		if tagTitle, ok := claudeTagTitle(title); ok {
 			title = tagTitle
+		} else if delivery := claudetag.Parse(title); delivery.Detected {
+			if delivery.Sender != "" {
+				title = delivery.Text
+			} else {
+				title = "Claude Tag coordination"
+			}
 		}
 	}
-	title = strings.TrimSpace(title)
-	runes := []rune(title)
-	if len(runes) <= 80 {
-		return title
+	return chat.DerivedTitle(title)
+}
+
+// canonicalPlaceholderTitle is the stand-in for a chat opened by an event that
+// carries no text to derive a title from.
+func canonicalPlaceholderTitle(hookSource string) string {
+	switch hookSource {
+	case agentVariantCowork:
+		return chat.DefaultCoworkChatTitle
+	case agentVariantClaudeCode, surfaceClaudeCodeDesktop:
+		return chat.DefaultClaudeChatTitle
+	case "claude", "claude-tag":
+		return chat.DefaultClaudeAmbiguous
+	case "cursor":
+		return chat.DefaultCursorChatTitle
+	case "codex":
+		return chat.DefaultCodexChatTitle
+	default:
+		return chat.DefaultChatTitle
 	}
-	return string(runes[:80])
 }
 
 func canonicalToolCallData(payload *gen.IngestPayload) *gen.HookToolCallData {

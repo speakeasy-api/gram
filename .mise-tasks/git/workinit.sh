@@ -24,8 +24,7 @@ suffix=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 4)
 compose_project="gram-infra-${suffix}"
 mise set --file mise.local.toml "COMPOSE_PROJECT_NAME=${compose_project}"
 
-# Temporal runs once for the whole machine. A namespace per Compose project
-# isolates workflow IDs, schedules, and task queues across worktrees.
+# Keep a stable namespace for this worktree across server restarts.
 mise set --file mise.local.toml "TEMPORAL_NAMESPACE=${compose_project}"
 
 # Pub/Sub resource paths include the project ID. Giving each worktree its
@@ -33,7 +32,7 @@ mise set --file mise.local.toml "TEMPORAL_NAMESPACE=${compose_project}"
 # every worktree connects to one shared emulator.
 mise set --file mise.local.toml "GRAM_GCP_PROJECT_ID=${compose_project}"
 
-# Temporal, Pub/Sub, and LGTM are shared across every worktree
+# Pub/Sub and the OTLP sink are shared across every worktree
 # (compose.shared.yml). The namespace and project ID above isolate state; this
 # label keeps traces and metrics separate too. The OTel SDK reads it directly,
 # so nothing in the Go code has to know.
@@ -48,6 +47,10 @@ for line in $remap; do
 done
 
 echo ✅ Updated all port mappings for new worktree
+
+# The server refuses to start without a caller identity signing key. This is a
+# no-op when the key pair was copied from the main worktree above.
+mise run zero:tunnel-identity
 
 # Ports are randomized, so `wt list`'s URL column can't derive them from the
 # branch name. Store the dashboard port as a per-branch var for it to read.

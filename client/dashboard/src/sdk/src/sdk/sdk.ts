@@ -27,7 +27,6 @@ import { Deployments } from "./deployments.js";
 import { DeviceIntegrations } from "./deviceintegrations.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
-import { Explore } from "./explore.js";
 import { External } from "./external.js";
 import { ExternalCredentials } from "./externalcredentials.js";
 import { ExternalKeys } from "./externalkeys.js";
@@ -41,6 +40,7 @@ import { Integrations } from "./integrations.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
 import { Killswitches } from "./killswitches.js";
+import { Launcher } from "./launcher.js";
 import { Litellm } from "./litellm.js";
 import { McpApproval } from "./mcpapproval.js";
 import { McpEndpoints } from "./mcpendpoints.js";
@@ -51,6 +51,7 @@ import { MetaMcp } from "./metamcp.js";
 import { ModelKeys } from "./modelkeys.js";
 import { NetworkIngress } from "./networkingress.js";
 import { OktaResourceConnections } from "./oktaresourceconnections.js";
+import { OktaServerSuggestions } from "./oktaserversuggestions.js";
 import { OrganizationAssets } from "./organizationassets.js";
 import { OrganizationRemoteSessionClients } from "./organizationremotesessionclients.js";
 import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
@@ -63,6 +64,7 @@ import { PlatformKillswitches } from "./platformkillswitches.js";
 import { PlatformMcp } from "./platformmcp.js";
 import { Plugins } from "./plugins.js";
 import { Projects } from "./projects.js";
+import { RegistryDiscovery } from "./registrydiscovery.js";
 import { RemoteMcp } from "./remotemcp.js";
 import { RemoteSessionClients } from "./remotesessionclients.js";
 import { RemoteSessionIssuers } from "./remotesessionissuers.js";
@@ -71,6 +73,7 @@ import { Resources } from "./resources.js";
 import { Risk } from "./risk.js";
 import { SkillEfficacy } from "./skillefficacy.js";
 import { Skills } from "./skills.js";
+import { SlackDirectoryConnections } from "./slackdirectoryconnections.js";
 import { SpendRules } from "./spendrules.js";
 import { Telemetry } from "./telemetry.js";
 import { Templates } from "./templates.js";
@@ -87,6 +90,8 @@ import { UserSessionIssuers } from "./usersessionissuers.js";
 import { UserSessionIssuersCimdClients } from "./usersessionissuerscimdclients.js";
 import { UserSessions } from "./usersessions.js";
 import { Variations } from "./variations.js";
+import { Widgets } from "./widgets.js";
+import { WorkloadIdentities } from "./workloadidentities.js";
 
 export class Gram extends ClientSDK {
   private _otel?: Otel;
@@ -220,11 +225,6 @@ export class Gram extends ClientSDK {
     return (this._environments ??= new Environments(this._options));
   }
 
-  private _explore?: Explore;
-  get explore(): Explore {
-    return (this._explore ??= new Explore(this._options));
-  }
-
   private _external?: External;
   get external(): External {
     return (this._external ??= new External(this._options));
@@ -288,6 +288,11 @@ export class Gram extends ClientSDK {
     return (this._killswitches ??= new Killswitches(this._options));
   }
 
+  private _launcher?: Launcher;
+  get launcher(): Launcher {
+    return (this._launcher ??= new Launcher(this._options));
+  }
+
   private _litellm?: Litellm;
   get litellm(): Litellm {
     return (this._litellm ??= new Litellm(this._options));
@@ -336,6 +341,13 @@ export class Gram extends ClientSDK {
   private _oktaResourceConnections?: OktaResourceConnections;
   get oktaResourceConnections(): OktaResourceConnections {
     return (this._oktaResourceConnections ??= new OktaResourceConnections(
+      this._options,
+    ));
+  }
+
+  private _oktaServerSuggestions?: OktaServerSuggestions;
+  get oktaServerSuggestions(): OktaServerSuggestions {
+    return (this._oktaServerSuggestions ??= new OktaServerSuggestions(
       this._options,
     ));
   }
@@ -451,6 +463,13 @@ export class Gram extends ClientSDK {
     return (this._skills ??= new Skills(this._options));
   }
 
+  private _slackDirectoryConnections?: SlackDirectoryConnections;
+  get slackDirectoryConnections(): SlackDirectoryConnections {
+    return (this._slackDirectoryConnections ??= new SlackDirectoryConnections(
+      this._options,
+    ));
+  }
+
   private _spendRules?: SpendRules;
   get spendRules(): SpendRules {
     return (this._spendRules ??= new SpendRules(this._options));
@@ -532,5 +551,20 @@ export class Gram extends ClientSDK {
   private _variations?: Variations;
   get variations(): Variations {
     return (this._variations ??= new Variations(this._options));
+  }
+
+  private _widgets?: Widgets;
+  get widgets(): Widgets {
+    return (this._widgets ??= new Widgets(this._options));
+  }
+
+  private _workloadIdentities?: WorkloadIdentities;
+  get workloadIdentities(): WorkloadIdentities {
+    return (this._workloadIdentities ??= new WorkloadIdentities(this._options));
+  }
+
+  private _registryDiscovery?: RegistryDiscovery;
+  get registryDiscovery(): RegistryDiscovery {
+    return (this._registryDiscovery ??= new RegistryDiscovery(this._options));
   }
 }

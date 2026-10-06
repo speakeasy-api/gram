@@ -70,24 +70,23 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 	require.NoError(t, err2)
 
 	chatID, msgID := seedChatMessage(t, ti, projectID, orgID)
-	seedRiskResult(t, ti, projectID, orgID, policyID, 1, msgID, true)
+	resultUUID := seedRiskResultWith(t, ti, projectID, orgID, policyID, msgID, "gitleaks", "aws-access-key-id", "AKIAIOSFODNN7EXAMPLE")
+	resultID := resultUUID.String()
 
-	before, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{PolicyID: &policy.ID})
-	require.NoError(t, err)
-	require.Len(t, before.Results, 1)
-	resultID := before.Results[0].ID
-	resultUUID, err := uuid.Parse(resultID)
-	require.NoError(t, err)
-
-	// The dismissed listing reads ClickHouse while the mark/unmark RPCs write
-	// Postgres and enqueue the mirror on the transactional outbox. No relay
-	// runs in the harness, so each state change's ClickHouse copy is appended
-	// by hand — the same rows the relayed mirror messages would produce.
+	// Both listings read ClickHouse while the mark/unmark RPCs write Postgres
+	// and enqueue the mirror on the transactional outbox. No relay runs in the
+	// harness, so each state change's ClickHouse copy is appended by hand: the
+	// same rows the relayed mirror messages would produce.
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
 		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, time.Time{}, chrepo.EventKindFinding),
 	}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	before, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{PolicyID: &policy.ID})
+	require.NoError(t, err)
+	require.Len(t, before.Results, 1)
+	require.Equal(t, resultID, before.Results[0].ID)
 
 	dismissCountBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultDismiss)
 	require.NoError(t, err)
@@ -104,15 +103,15 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, dismissCountBefore+1, dismissCountAfter)
 
-	afterMark, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{PolicyID: &policy.ID})
-	require.NoError(t, err)
-	require.Empty(t, afterMark.Results, "dismissed result must not appear in listRiskResults")
-
 	dismissedAt := time.Now().UTC()
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
 		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, dismissedAt, chrepo.EventKindSuppression),
 	}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	afterMark, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{PolicyID: &policy.ID})
+	require.NoError(t, err)
+	require.Empty(t, afterMark.Results, "dismissed result must not appear in listRiskResults")
 
 	dismissed, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{})
 	require.NoError(t, err)
@@ -147,14 +146,15 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, restoreCountBefore+1, restoreCountAfter)
 
-	afterUnmark, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{PolicyID: &policy.ID})
-	require.NoError(t, err)
-	require.Len(t, afterUnmark.Results, 1)
-
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
 		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, time.Time{}, chrepo.EventKindUnsuppression),
 	}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	afterUnmark, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{PolicyID: &policy.ID})
+	require.NoError(t, err)
+	require.Len(t, afterUnmark.Results, 1)
+	require.Equal(t, resultID, afterUnmark.Results[0].ID)
 
 	dismissedAfterUnmark, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{})
 	require.NoError(t, err)
@@ -206,12 +206,7 @@ func TestMarkUnmarkRiskResultsFalsePositive_MirrorRidesTheTransaction(t *testing
 	require.NoError(t, err)
 
 	_, msgID := seedChatMessage(t, ti, projectID, orgID)
-	seedRiskResult(t, ti, projectID, orgID, policyID, 1, msgID, true)
-
-	listed, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{PolicyID: &policy.ID})
-	require.NoError(t, err)
-	require.Len(t, listed.Results, 1)
-	resultID := listed.Results[0].ID
+	resultID := seedRiskResultWith(t, ti, projectID, orgID, policyID, msgID, "gitleaks", "aws-access-key-id", "AKIAIOSFODNN7EXAMPLE").String()
 
 	err = ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{
 		ResultIds: []string{resultID},

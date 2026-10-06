@@ -227,7 +227,7 @@ func BuildCreatePayload(agentsCreateBody string, agentsCreateSessionToken string
 	{
 		err = json.Unmarshal([]byte(agentsCreateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\",\n      \"owner_user_id\": \"abc123\",\n      \"policy_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\"\n            }\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\",\n      \"owner_user_id\": \"abc123\",\n      \"policy_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\"\n            }\n         }\n      ],\n      \"project_id\": \"abc123\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
@@ -254,6 +254,7 @@ func BuildCreatePayload(agentsCreateBody string, agentsCreateSessionToken string
 	}
 	v := &agents.CreatePayload{
 		Name:        body.Name,
+		ProjectID:   body.ProjectID,
 		OwnerUserID: body.OwnerUserID,
 	}
 	if body.PolicyGrants != nil {
@@ -334,7 +335,7 @@ func BuildRenamePayload(agentsRenameBody string, agentsRenameSessionToken string
 
 // BuildListDelegableGrantsPayload builds the payload for the agents
 // listDelegableGrants endpoint from CLI flags.
-func BuildListDelegableGrantsPayload(agentsListDelegableGrantsAgentID string, agentsListDelegableGrantsToolsetID string, agentsListDelegableGrantsSessionToken string) (*agents.ListDelegableGrantsPayload, error) {
+func BuildListDelegableGrantsPayload(agentsListDelegableGrantsAgentID string, agentsListDelegableGrantsToolsetID string, agentsListDelegableGrantsToolsetIds string, agentsListDelegableGrantsSessionToken string) (*agents.ListDelegableGrantsPayload, error) {
 	var err error
 	var agentID string
 	{
@@ -354,6 +355,24 @@ func BuildListDelegableGrantsPayload(agentsListDelegableGrantsAgentID string, ag
 			}
 		}
 	}
+	var toolsetIds []string
+	{
+		if agentsListDelegableGrantsToolsetIds != "" {
+			err = json.Unmarshal([]byte(agentsListDelegableGrantsToolsetIds), &toolsetIds)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for toolsetIds, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]'")
+			}
+			if len(toolsetIds) > 100 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("toolset_ids", toolsetIds, len(toolsetIds), 100, false))
+			}
+			for _, e := range toolsetIds {
+				err = goa.MergeErrors(err, goa.ValidateFormat("toolset_ids[*]", e, goa.FormatUUID))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if agentsListDelegableGrantsSessionToken != "" {
@@ -363,6 +382,7 @@ func BuildListDelegableGrantsPayload(agentsListDelegableGrantsAgentID string, ag
 	v := &agents.ListDelegableGrantsPayload{}
 	v.AgentID = agentID
 	v.ToolsetID = toolsetID
+	v.ToolsetIds = toolsetIds
 	v.SessionToken = sessionToken
 
 	return v, nil

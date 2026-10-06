@@ -21,7 +21,7 @@ import {
  */
 export type OrganizationIssuerMigratePreflight = {
   /**
-   * TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.
+   * TRUE when the migration would succeed: no active identity-chaining bindings, endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.
    */
   canMigrate: boolean;
   /**
@@ -32,6 +32,10 @@ export type OrganizationIssuerMigratePreflight = {
    * Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.
    */
   conflictingMcpServerNames: Array<string>;
+  /**
+   * Number of active identity-chaining bindings on the source. Non-zero blocks migration; explicitly unlink these bindings before migration, then prepare new bindings for the target.
+   */
+  emaBindingCount: number;
   /**
    * The authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target, with both sides' values. Non-empty blocks the migration.
    */
@@ -59,6 +63,7 @@ export const OrganizationIssuerMigratePreflight$inboundSchema: z.ZodMiniType<
     can_migrate: z.boolean(),
     client_count: z.int(),
     conflicting_mcp_server_names: z.array(z.string()),
+    ema_binding_count: z.int(),
     endpoint_mismatches: z.array(IssuerFieldMismatch$inboundSchema),
     mcp_server_names: z.array(z.string()),
     trusted_user_session_issuers: z.array(
@@ -71,6 +76,7 @@ export const OrganizationIssuerMigratePreflight$inboundSchema: z.ZodMiniType<
       "can_migrate": "canMigrate",
       "client_count": "clientCount",
       "conflicting_mcp_server_names": "conflictingMcpServerNames",
+      "ema_binding_count": "emaBindingCount",
       "endpoint_mismatches": "endpointMismatches",
       "mcp_server_names": "mcpServerNames",
       "trusted_user_session_issuers": "trustedUserSessionIssuers",

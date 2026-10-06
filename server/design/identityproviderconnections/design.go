@@ -19,7 +19,7 @@ var ChecklistItem = Type("IdentityProviderConnectionChecklistItem", func() {
 	})
 	Attribute("title", String, "Short step title.")
 	Attribute("description", String, "What to do in the console, including any value copied from this connection.")
-	Attribute("details", ArrayOf(String), "Sub-steps, in order. Empty when the description says it all.")
+	Attribute("details", ArrayOf(String), "Supporting lines under the description: ordered sub-steps for the public-key step, otherwise notes or the values to enter. Empty when the description says it all.")
 	Attribute("completed", Boolean, "Whether the last verification observed this step done. Omitted for steps the server cannot observe; the administrator tracks those.")
 })
 
@@ -180,7 +180,7 @@ var _ = Service("identityProviderConnections", func() {
 		Payload(func() {
 			security.SessionPayload()
 			Meta("openapi:typename", "CreateIdentityProviderConnectionRequestBody")
-			Attribute("org_url", String, "Okta org URL, for example https://example.okta.com. Must be https with no path; the host must be an Okta-owned domain.")
+			Attribute("org_url", String, "Okta org URL, for example https://example.okta.com. Must be https on an Okta-owned domain with no path, except an Admin Console URL with an /admin path, which resolves to its org.")
 			Attribute("listing_mode", String, "Checklist template. Defaults to custom_app.", func() {
 				Enum("custom_app", "oin")
 			})

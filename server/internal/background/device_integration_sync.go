@@ -33,6 +33,9 @@ const (
 	// bounds pickup latency.
 	deviceIntegrationSyncCoordinatorInterval = 5 * time.Minute
 
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	deviceIntegrationSyncCoordinatorCatchupWindow = deviceIntegrationSyncCoordinatorInterval - time.Second
+
 	// deviceIntegrationSyncCoordinatorRunTimeout bounds one coordinator run,
 	// including the children it waits on. Batches run serially, so this must
 	// cover SEVERAL sequential child budgets (2h schedule-to-close each), or
@@ -200,13 +203,7 @@ func AddDeviceIntegrationSyncCoordinatorSchedule(ctx context.Context, temporalEn
 			schedule := input.Description.Schedule
 			schedule.Spec = &options.Spec
 			schedule.Action = options.Action
-			if schedule.Policy == nil {
-				schedule.Policy = &client.SchedulePolicies{
-					Overlap:        enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-					CatchupWindow:  0,
-					PauseOnFailure: false,
-				}
-			}
+			setScheduleCatchup(&schedule, deviceIntegrationSyncCoordinatorCatchupWindow)
 			return &client.ScheduleUpdate{Schedule: &schedule, TypedSearchAttributes: nil}, nil
 		},
 	}); err != nil {
@@ -217,8 +214,9 @@ func AddDeviceIntegrationSyncCoordinatorSchedule(ctx context.Context, temporalEn
 
 func buildDeviceIntegrationSyncScheduleOptions(temporalEnv *tenv.Environment) client.ScheduleOptions {
 	return client.ScheduleOptions{
-		ID:      deviceIntegrationSyncCoordinatorScheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		CatchupWindow: deviceIntegrationSyncCoordinatorCatchupWindow,
+		ID:            deviceIntegrationSyncCoordinatorScheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{{Every: deviceIntegrationSyncCoordinatorInterval}},
 		},

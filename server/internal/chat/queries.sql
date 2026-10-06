@@ -139,7 +139,35 @@ DO UPDATE SET
       ELSE COALESCE(EXCLUDED.title, chats.title)
     END
   , updated_at = GREATEST(chats.updated_at, EXCLUDED.updated_at)
-RETURNING id;
+RETURNING id, title;
+
+-- name: GetImportedSessionObservations :many
+-- Read current ownership at consumption time, so attribution repaired between
+-- capture and delivery is reflected in analytics. Never read transcript text.
+SELECT m.id, m.chat_id, m.created_at, m.source, m.model, c.external_chat_id,
+       COALESCE(m.external_user_id, c.external_user_id, '')::text AS external_user_id,
+       COALESCE(NULLIF(m.user_id, ''), c.user_id, '')::text AS user_id,
+       COALESCE(u.email,
+         CASE WHEN m.external_user_id LIKE '%@%' THEN m.external_user_id END,
+         CASE WHEN c.external_user_id LIKE '%@%' THEN c.external_user_id END, '')::text AS user_email,
+       c.organization_id
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+LEFT JOIN users u ON u.id = COALESCE(NULLIF(m.user_id, ''), c.user_id)
+WHERE m.project_id = @project_id
+  AND m.id = ANY(@message_ids::uuid[])
+  AND c.deleted IS FALSE;
+
+-- name: ListImportedSessionObservationReplay :many
+SELECT m.id, c.organization_id
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+WHERE m.project_id = @project_id AND c.deleted IS FALSE
+  AND m.external_message_id IS NOT NULL
+  AND m.created_at >= @from_time AND m.created_at < @to_time
+  AND m.id > @after_id
+ORDER BY m.id
+LIMIT @row_limit;
 
 -- name: LinkAIIntegrationConfigChat :one
 -- Links a chat to the AI integration config that imported it and returns the
@@ -241,6 +269,15 @@ VALUES (
   , @created_at
 );
 
+-- name: GetMessagesForPublication :many
+-- Read authoritative identity and attribution in the write transaction.
+-- Content is fetched by consumers, never serialized into these events.
+SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+WHERE m.project_id = @project_id::uuid AND m.id = ANY(@ids::uuid[])
+ORDER BY m.seq;
+
 -- name: UpsertCorrelatedChatMessage :one
 -- Returns persisted metering fields and distinguishes initial inserts from
 -- native-hook promotions, which must not emit another storage reading.
@@ -314,7 +351,7 @@ DO UPDATE SET
 WHERE chat_messages.project_id = EXCLUDED.project_id
   AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
   AND chat_messages.source = 'litellm'
-RETURNING id, content, tool_calls, model, user_id, external_user_id, source, (xmax = 0) AS inserted;
+RETURNING id, content, tool_calls, model, user_id, external_user_id, source, user_agent, (xmax = 0) AS inserted;
 
 -- name: AcquireChatPromptCorrelationLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended(
@@ -549,6 +586,7 @@ candidate_chats AS (
       OR EXISTS (
         SELECT 1 FROM assistant_threads at
         WHERE at.chat_id = c.id
+          AND at.project_id = @project_id
           AND at.assistant_id = @assistant_id::uuid
           AND at.deleted IS FALSE
           -- Optional source-kind dimension so setup/onboarding and runtime
@@ -585,20 +623,23 @@ candidate_chats AS (
       -- stream owns every transcript row (proxied rows are suppressed as
       -- duplicates, so the message-source probe alone would miss them).
       OR ('litellm' = ANY (@sources::text[]) AND c.litellm_proxied)
-      OR (
+      OR coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = @project_id::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
         WHERE cmsrc.chat_id = c.id
+          AND cmsrc.project_id = @project_id::uuid
           AND cmsrc.source IS NOT NULL
           AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
-      ) = ANY (@sources::text[])
+      )) = ANY (@sources::text[])
     )
 ),
 chat_activity AS (
-  -- Per-chat backward probe on chat_messages_chat_id_created_at_idx instead of
-  -- aggregating every candidate chat's full message history.
+  -- Per-chat backward probe on chat_messages_chat_id_project_id_created_at_idx
+  -- instead of aggregating every candidate chat's full message history.
+  -- project_id keeps a sibling-project stamp on the same chat_id from moving
+  -- the chat in the date-range filter.
   SELECT
     cc.id,
     cc.created_at,
@@ -608,6 +649,7 @@ chat_activity AS (
     SELECT MAX(cm.created_at) AS ts
     FROM chat_messages cm
     WHERE cm.chat_id = cc.id
+      AND cm.project_id = @project_id::uuid
   ) last_msg
 )
 SELECT COUNT(*) AS total
@@ -647,6 +689,7 @@ candidate_chats AS (
   SELECT
     c.id,
     c.title,
+    c.session_surface,
     c.user_id,
     c.external_user_id,
     c.created_at,
@@ -663,6 +706,7 @@ candidate_chats AS (
   -- Join users table to enable searching by resolved user identity
   LEFT JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
   WHERE c.project_id = @project_id
+    AND (sqlc.narg(chat_id)::uuid IS NULL OR c.id = sqlc.narg(chat_id)::uuid)
     AND c.deleted IS FALSE
     AND (@external_user_id = '' OR c.external_user_id = @external_user_id)
     AND (@user_id = '' OR c.user_id = @user_id)
@@ -685,6 +729,7 @@ candidate_chats AS (
       OR EXISTS (
         SELECT 1 FROM assistant_threads at
         WHERE at.chat_id = c.id
+          AND at.project_id = @project_id
           AND at.assistant_id = @assistant_id::uuid
           AND at.deleted IS FALSE
           -- Optional source-kind dimension so setup/onboarding and runtime
@@ -721,45 +766,56 @@ candidate_chats AS (
       -- stream owns every transcript row (proxied rows are suppressed as
       -- duplicates, so the message-source probe alone would miss them).
       OR ('litellm' = ANY (@sources::text[]) AND c.litellm_proxied)
-      OR (
+      OR coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = @project_id::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
         WHERE cmsrc.chat_id = c.id
+          AND cmsrc.project_id = @project_id::uuid
           AND cmsrc.source IS NOT NULL
           AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
-      ) = ANY (@sources::text[])
+      )) = ANY (@sources::text[])
     )
 ),
 chat_stats AS (
-  -- Per-chat probe on chat_messages_chat_id_created_at_idx (index-only count +
-  -- max) instead of aggregating every candidate chat's full message history.
+  -- Last-message time is a single backward probe per candidate chat on
+  -- chat_messages_chat_id_project_id_created_at_idx. The message count walks
+  -- the chat's whole index range, so it only runs before LIMIT when the
+  -- listing sorts by it; otherwise page_chats counts the returned rows only.
+  -- project_id keeps a sibling-project stamp on the same chat_id from
+  -- inflating either value.
   SELECT
     cc.id,
-    stats.num_messages,
-    COALESCE(stats.max_created_at, cc.created_at)::timestamptz AS last_message_timestamp
+    CASE WHEN @sort_by = 'num_messages' THEN (
+      -- COUNT(*) rather than COUNT(cm.id) so the probe stays index-only.
+      SELECT COUNT(*)::integer
+      FROM chat_messages cm
+      WHERE cm.chat_id = cc.id
+        AND cm.project_id = @project_id::uuid
+    ) END AS sort_num_messages,
+    COALESCE((
+      SELECT cm.created_at
+      FROM chat_messages cm
+      WHERE cm.chat_id = cc.id
+        AND cm.project_id = @project_id::uuid
+      ORDER BY cm.created_at DESC
+      LIMIT 1
+    ), cc.created_at)::timestamptz AS last_message_timestamp
   FROM candidate_chats cc
-  CROSS JOIN LATERAL (
-    -- COUNT(*) rather than COUNT(cm.id) so the probe stays index-only.
-    SELECT
-      COUNT(*)::integer AS num_messages,
-      MAX(cm.created_at) AS max_created_at
-    FROM chat_messages cm
-    WHERE cm.chat_id = cc.id
-  ) stats
 ),
 filtered_chats AS (
   SELECT
     cc.id,
     cc.title,
+    cc.session_surface,
     cc.user_id,
     cc.external_user_id,
     cc.created_at,
     cc.updated_at,
     cc.pinned_at,
     cc.litellm_proxied,
-    cs.num_messages,
+    cs.sort_num_messages,
     cs.last_message_timestamp,
     cc.account_type,
     cc.account_email
@@ -775,6 +831,8 @@ filtered_chats AS (
     AND (@to_time::timestamptz IS NULL OR cc.created_at <= @to_time)
 ),
 limited_chats AS (
+  -- Only ordering, paging and the total run over every filtered chat; the
+  -- per-chat lookups for display columns run for the page rows in page_chats.
   SELECT
     fc.id,
     fc.title,
@@ -784,34 +842,80 @@ limited_chats AS (
     fc.updated_at,
     fc.pinned_at,
     fc.litellm_proxied,
-    fc.num_messages,
-    (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1) AS source,
+    fc.sort_num_messages,
+    fc.session_surface,
     fc.last_message_timestamp,
     fc.account_type,
     fc.account_email,
-    at.assistant_id,
-    a.name AS assistant_name,
     -- Window count runs before LIMIT/OFFSET, so every returned row carries the
     -- total number of filtered chats.
-    COUNT(*) OVER ()::bigint AS total_count
+    COUNT(*) OVER ()::bigint AS total_count,
+    -- Carries the page order through the joins in page_chats.
+    ROW_NUMBER() OVER (
+      ORDER BY
+        -- Recency is pure message time. Hook rows persist at their occurred_at,
+        -- so a chat whose only new traffic is spool-replayed backlog keeps its
+        -- occurred-time position rather than jumping to the top on arrival —
+        -- deliberate: listings are a timeline of when conversations happened,
+        -- and folding in updated_at would let title renames and pin toggles
+        -- reorder recency.
+        CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+        CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+        CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'desc' THEN fc.sort_num_messages END DESC NULLS LAST,
+        CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'asc' THEN fc.sort_num_messages END ASC NULLS LAST,
+        fc.last_message_timestamp DESC,
+        fc.id DESC
+    ) AS page_position
   FROM filtered_chats fc
-  LEFT JOIN assistant_threads at ON at.chat_id = fc.id AND at.deleted IS FALSE
-  LEFT JOIN assistants a ON a.id = at.assistant_id AND a.deleted IS FALSE
-  ORDER BY
-    -- Recency is pure message time. Hook rows persist at their occurred_at,
-    -- so a chat whose only new traffic is spool-replayed backlog keeps its
-    -- occurred-time position rather than jumping to the top on arrival —
-    -- deliberate: listings are a timeline of when conversations happened,
-    -- and folding in updated_at would let title renames and pin toggles
-    -- reorder recency.
-    CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-    CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
-    CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'desc' THEN fc.num_messages END DESC NULLS LAST,
-    CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'asc' THEN fc.num_messages END ASC NULLS LAST,
-    fc.last_message_timestamp DESC,
-    fc.id DESC
+  ORDER BY page_position
   LIMIT @page_limit
   OFFSET @page_offset
+),
+page_chats AS (
+  SELECT
+    lc.id,
+    lc.title,
+    lc.user_id,
+    lc.external_user_id,
+    lc.created_at,
+    lc.updated_at,
+    lc.pinned_at,
+    lc.litellm_proxied,
+    COALESCE(lc.sort_num_messages, (
+      SELECT COUNT(*)::integer
+      FROM chat_messages cm
+      WHERE cm.chat_id = lc.id
+        AND cm.project_id = @project_id::uuid
+    ))::integer AS num_messages,
+    coalesce(lc.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = @project_id::uuid AND tag_link.child_chat_id = lc.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (SELECT source FROM chat_messages WHERE chat_id = lc.id AND project_id = @project_id::uuid AND source IS NOT NULL AND source <> '' ORDER BY created_at DESC LIMIT 1)) AS source,
+    lc.last_message_timestamp,
+    lc.account_type,
+    lc.account_email,
+    -- Both assistant columns come from the project-scoped assistants row, so a
+    -- thread here that points at another project's assistant reports neither
+    -- its id nor its name; assistant_threads has no composite (project_id,
+    -- assistant_id) key to rule that row out.
+    a.id AS assistant_id,
+    a.name AS assistant_name,
+    lc.total_count,
+    lc.page_position
+  FROM limited_chats lc
+  -- One thread per chat. The thread of the assistant the listing was narrowed
+  -- to wins; otherwise the most recently active one. The lateral picks only
+  -- the thread id: the columns come from the base tables below so they stay
+  -- nullable for a chat with no assistant thread. Every step is scoped to the
+  -- listed project, so a thread or assistant recorded under another project
+  -- can never be reported for a chat here even if the chat/thread
+  -- relationship is inconsistent.
+  LEFT JOIN LATERAL (
+    SELECT at.id AS thread_id
+    FROM assistant_threads at
+    WHERE at.chat_id = lc.id AND at.project_id = @project_id AND at.deleted IS FALSE
+    ORDER BY (@assistant_id <> '' AND at.assistant_id::text = @assistant_id) DESC, at.last_event_at DESC, at.id DESC
+    LIMIT 1
+  ) picked ON TRUE
+  LEFT JOIN assistant_threads thread ON thread.id = picked.thread_id AND thread.project_id = @project_id
+  LEFT JOIN assistants a ON a.id = thread.assistant_id AND a.project_id = @project_id AND a.deleted IS FALSE
 ),
 chat_attribution AS (
   SELECT
@@ -823,11 +927,12 @@ chat_attribution AS (
       END
       FROM chat_messages
       WHERE chat_id = lc.id
+        AND project_id = @project_id::uuid
         AND source = 'litellm'
       ORDER BY created_at DESC
       LIMIT 1
     ) END, '')::text AS originating_client
-  FROM limited_chats lc
+  FROM page_chats lc
 )
 SELECT
   lc.id,
@@ -860,7 +965,8 @@ SELECT
   lc.assistant_id,
   lc.assistant_name,
   lc.total_count
-FROM chat_attribution lc;
+FROM chat_attribution lc
+ORDER BY lc.page_position;
 
 -- name: GetAssistantSessionSummaryProjection :one
 -- Returns the range-bounded Postgres portion of the assistant activity
@@ -944,22 +1050,24 @@ LIMIT @page_limit;
 -- agent-type filter options on the Agent Sessions page so the list reflects the
 -- sources actually present in the data rather than a hardcoded catalog.
 -- Driven from chats with a per-chat probe on
--- chat_messages_chat_id_created_at_source_idx for the latest non-empty source,
--- instead of sorting the project's entire message history. The lateral join
--- drops chats with no sourced messages, matching the previous inner-join
--- semantics.
-SELECT DISTINCT latest.source
+-- chat_messages_chat_id_project_id_created_at_source_idx for the latest
+-- non-empty source, instead of sorting the project's entire message history.
+-- The optional message probe retains chats with captured surface evidence. project_id keeps a sibling-project stamp from
+-- advertising a source this project cannot load.
+SELECT DISTINCT coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = @project_id::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, latest.source) AS source
 FROM chats c
-CROSS JOIN LATERAL (
+LEFT JOIN LATERAL (
   SELECT cm.source
   FROM chat_messages cm
   WHERE cm.chat_id = c.id
+    AND cm.project_id = @project_id::uuid
     AND cm.source IS NOT NULL
     AND cm.source <> ''
   ORDER BY cm.created_at DESC
   LIMIT 1
-) latest
+) latest ON TRUE
 WHERE c.project_id = @project_id
+  AND (latest.source IS NOT NULL OR c.session_surface IS NOT NULL OR EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = @project_id::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag'))
   AND c.deleted IS FALSE
   AND (@external_user_id::text = '' OR c.external_user_id = @external_user_id::text)
   AND (@user_id::text = '' OR c.user_id = @user_id::text)
@@ -985,7 +1093,10 @@ ORDER BY source;
 -- '' for account_type/account_email when the chat has no linked account or it
 -- is unclassified.
 SELECT c.*, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
-  at.assistant_id, a.name AS assistant_name
+  at.assistant_id, a.name AS assistant_name,
+  coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links l
+    WHERE l.project_id = c.project_id AND l.child_chat_id = c.id AND l.kind = 'subagent'
+      AND l.source_surface = 'claude-tag') THEN 'claude-tag' END, '')::text AS captured_surface
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
 LEFT JOIN assistant_threads at ON at.chat_id = c.id AND at.deleted IS FALSE
@@ -997,6 +1108,17 @@ SELECT id, title FROM chats
 WHERE id = ANY(@ids::uuid[])
   AND project_id = ANY(@project_ids::uuid[])
   AND deleted IS FALSE;
+
+-- name: GetOldestChatCreatedAt :one
+-- Lowest chats.created_at for these ids in this project, including
+-- soft-deleted rows. Work-units verdicts outlive chat deletion, and
+-- GetChatMetricsByIDs still reads those ids, so dropping deleted created_at
+-- values would shift the ClickHouse bound later and omit earlier tokens.
+-- Tenancy only: project_id plus the caller-supplied id list.
+SELECT MIN(created_at)::timestamptz AS created_at
+FROM chats
+WHERE project_id = @project_id
+  AND id = ANY(@ids::uuid[]);
 
 -- name: SumMessageTokenStatsByDay :many
 -- Daily message-level token stats for the billing details table
@@ -1560,7 +1682,7 @@ WHERE id IN (
     JOIN chat_messages cm ON crm.message_id = cm.id
     WHERE cr.chat_id = @chat_id
       AND cr.project_id = @project_id
-      AND cm.project_id = @project_id
+      AND cm.project_id = @project_id::uuid
       AND (cm.created_at, cm.seq) > (
         SELECT created_at, seq FROM chat_messages
         WHERE chat_messages.id = @after_message_id
@@ -1776,6 +1898,10 @@ INSERT INTO risk_policies (project_id, organization_id, name, sources, enabled, 
 VALUES (@project_id, @organization_id, 'test-policy', '{}', TRUE, 'flag', TRUE, 1)
 RETURNING id;
 
+-- name: DisableRiskPoliciesForTest :exec
+-- Test fixture: retire findings by disabling the test project's risk policies.
+UPDATE risk_policies SET enabled = FALSE WHERE project_id = @project_id;
+
 -- name: SeedDisabledRiskPolicy :one
 -- Test fixture: insert a disabled risk policy and return its id. Findings under
 -- a disabled (or deleted) policy must drop out of every risk surface — the
@@ -1896,6 +2022,45 @@ UPDATE chats SET inference_accepted_checkpoint = @checkpoint
 WHERE project_id = @project_id AND external_chat_id = @external_chat_id
   AND inference_accepted_checkpoint IS NOT DISTINCT FROM sqlc.narg('expected_checkpoint')::bytea;
 
+-- name: FindInferenceChatsByNewestMessageIdentity :many
+-- The actor's live chats whose newest stored Anthropic inference message
+-- carries one of these chain identities, with the identity each matched. A
+-- match on a message that is not the chat's newest does not count. The
+-- caller ranks identities and treats several chats on one identity as
+-- ambiguous.
+SELECT cm.chat_id, cm.external_message_id
+FROM chat_messages cm
+JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id
+WHERE cm.project_id = @project_id
+  AND cm.external_message_id = ANY(@external_message_ids::text[])
+  AND cm.external_message_id IS NOT NULL
+  AND cm.origin = 'anthropic-inference'
+  AND c.inference_actor_key = @inference_actor_key
+  AND c.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1 FROM chat_messages newer
+    WHERE newer.chat_id = cm.chat_id AND newer.project_id = cm.project_id
+      AND newer.origin = 'anthropic-inference'
+      AND newer.external_message_id IS NOT NULL
+      AND newer.external_message_id NOT LIKE '%/block:%'
+      AND (newer.created_at, newer.seq) > (cm.created_at, cm.seq)
+  );
+
+-- name: InferenceChatExists :one
+-- Whether the live chat a session id names already exists, with the same
+-- visibility rule as GetChat and none of its joins.
+SELECT EXISTS (
+  SELECT 1 FROM chats
+  WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+);
+
+-- name: SetInferenceActorKey :exec
+-- Records the actor key on a conversation the first time it is seen. The
+-- key never changes for a chat, so an existing value is kept.
+UPDATE chats SET inference_actor_key = @inference_actor_key
+WHERE id = @id AND project_id = @project_id
+  AND inference_actor_key IS NULL;
+
 -- name: InferencePolicyRevision :one
 -- Include mutable exclusions and custom rules, which do not bump policy
 -- versions. Strict inference scans cannot accept in-scope prompt-policy
@@ -1912,3 +2077,111 @@ SELECT jsonb_build_object(
     'custom_rules', (SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY r.id), '[]'::jsonb)
       FROM risk_custom_detection_rules r WHERE r.project_id = @project_id AND r.deleted IS FALSE)
   )::text AS revision;
+
+-- name: RecordSlackMessageParticipant :exec
+-- Without a workspace hint, only a unique organization-local directory match
+-- is resolvable. Never select an arbitrary workspace or match profile email.
+WITH candidates AS (
+ SELECT d.slack_team_id, d.display_name, m.user_id
+ FROM slack_directory_memberships d
+ JOIN projects p ON p.organization_id = d.organization_id AND p.id = @project_id::uuid
+ LEFT JOIN slack_identity_mappings m ON m.organization_id = d.organization_id
+   AND m.slack_team_id = d.slack_team_id AND m.slack_user_id = d.slack_user_id AND m.revoked_at IS NULL
+ WHERE d.slack_user_id = @provider_user_id::text
+   AND (@team_id::text = '' OR d.slack_team_id = @team_id::text)
+), resolved AS (
+ SELECT * FROM candidates WHERE (SELECT count(*) FROM candidates) = 1
+)
+INSERT INTO chat_message_participants (
+ project_id, chat_id, message_id, provider, provider_user_id, provider_team_id, user_id, display_name
+)
+SELECT @project_id, cm.chat_id, cm.id, 'slack', @provider_user_id,
+ coalesce(r.slack_team_id, nullif(@team_id::text, '')), r.user_id, r.display_name
+FROM chat_messages cm
+LEFT JOIN resolved r ON true
+WHERE cm.id = @message_id::uuid AND cm.project_id = @project_id::uuid
+ON CONFLICT (project_id, message_id, provider, provider_user_id) DO NOTHING;
+
+-- name: ListChatParticipants :many
+SELECT DISTINCT p.chat_id, p.message_id, p.provider, p.provider_user_id,
+ p.provider_team_id, p.user_id, p.display_name
+FROM chat_message_participants p
+JOIN chats c ON c.id = p.chat_id AND c.project_id = p.project_id AND c.deleted IS FALSE
+WHERE p.project_id = @project_id AND p.chat_id = ANY(@chat_ids::uuid[])
+ORDER BY p.provider, p.provider_user_id;
+
+-- name: MarkClaudeTagMessages :exec
+UPDATE chats SET session_surface = 'claude-tag'
+WHERE project_id = @project_id AND id = @chat_id AND session_surface IS DISTINCT FROM 'claude-tag';
+
+-- name: LockSubsessionLinks :exec
+SELECT pg_advisory_xact_lock(hashtextextended('subsession:' || CAST(@project_id AS text), 0));
+
+-- name: InsertSubsessionLink :exec
+-- The project lock serializes competing evidence so two deliveries cannot
+-- give a child multiple parents or introduce a cycle.
+WITH RECURSIVE descendants AS (
+ SELECT child_chat_id AS descendant_id FROM chat_session_links WHERE project_id = @project_id AND parent_chat_id = @child_chat_id AND kind = 'subagent'
+ UNION
+ SELECT l.child_chat_id FROM chat_session_links l JOIN descendants d ON l.parent_chat_id = d.descendant_id
+ WHERE l.project_id = @project_id AND l.kind = 'subagent'
+)
+INSERT INTO chat_session_links (project_id, organization_id, parent_chat_id, child_chat_id,
+ parent_session_id, child_session_id, kind, target_harness, source_surface)
+SELECT p.id, p.organization_id, @parent_chat_id, @child_chat_id,
+ coalesce((SELECT external_chat_id FROM chats parent_chat WHERE parent_chat.id = @parent_chat_id AND parent_chat.project_id = @project_id), @parent_session_id::text), @child_session_id, 'subagent', 'claude-tag', 'claude-tag'
+FROM projects p WHERE p.id = @project_id
+ AND @parent_chat_id::uuid <> @child_chat_id::uuid
+ AND NOT EXISTS (SELECT 1 FROM descendants WHERE descendant_id = @parent_chat_id)
+ AND NOT EXISTS (SELECT 1 FROM chat_session_links WHERE project_id = @project_id AND child_chat_id = @child_chat_id AND kind = 'subagent')
+ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING;
+
+-- name: ListChatParticipantRollups :many
+-- One face per Slack identity; message snapshots retain their historical names.
+SELECT DISTINCT ON (p.chat_id, p.provider, coalesce(p.provider_team_id, ''), p.provider_user_id)
+ p.chat_id, p.provider, p.provider_user_id, p.provider_team_id, p.user_id, p.display_name
+FROM chat_message_participants p
+JOIN chats c ON c.id = p.chat_id AND c.project_id = p.project_id AND c.deleted IS FALSE
+WHERE p.project_id = @project_id AND p.chat_id = ANY(@chat_ids::uuid[])
+ORDER BY p.chat_id, p.provider, coalesce(p.provider_team_id, ''), p.provider_user_id, p.created_at DESC, p.id DESC;
+
+-- name: ListChatMessageParticipants :many
+SELECT p.message_id, p.provider, p.provider_user_id,
+ p.provider_team_id, p.user_id, p.display_name
+FROM chat_message_participants p
+JOIN chats c ON c.id = p.chat_id AND c.project_id = p.project_id AND c.deleted IS FALSE
+WHERE p.project_id = @project_id AND p.message_id = ANY(@message_ids::uuid[])
+ORDER BY p.provider, p.provider_user_id;
+
+-- name: RecordChatSlackChannel :exec
+UPDATE chats SET slack_team_id = coalesce(nullif(@team_id::text, ''), slack_team_id),
+ slack_channel_name = coalesce(nullif(@channel_name::text, ''), CASE WHEN slack_channel_id = @channel_id::text THEN slack_channel_name END),
+ slack_channel_id = @channel_id::text
+WHERE project_id = @project_id AND id = @chat_id;
+
+-- name: ListChatSlackChannels :many
+-- Take a complete channel record from the nearest visible ancestor. Never
+-- combine identifiers/names from different channels or cross hidden parents.
+WITH RECURSIVE ancestry AS (
+ SELECT c.id AS root_id, c.id, c.slack_team_id, c.slack_channel_id, c.slack_channel_name,
+  ARRAY[c.id] AS visited, 0 AS depth
+ FROM chats c WHERE c.project_id = @project_id AND c.id = ANY(@chat_ids::uuid[]) AND c.deleted IS FALSE
+ UNION ALL
+ SELECT a.root_id, parent.id, parent.slack_team_id, parent.slack_channel_id, parent.slack_channel_name,
+  a.visited || parent.id, a.depth + 1
+ FROM ancestry a
+ JOIN chat_session_links l ON l.project_id = @project_id AND l.child_chat_id = a.id AND l.kind = 'subagent'
+ JOIN chats parent ON parent.id = l.parent_chat_id AND parent.project_id = @project_id AND parent.deleted IS FALSE
+ WHERE a.slack_channel_id IS NULL AND NOT parent.id = ANY(a.visited)
+  AND (@external_user_id::text = '' OR parent.external_user_id = @external_user_id::text)
+  AND (@user_id::text = '' OR parent.user_id = @user_id::text)
+)
+SELECT DISTINCT ON (root_id) root_id AS id,
+ coalesce(slack_team_id, '')::text AS slack_team_id,
+ coalesce(slack_channel_id, '')::text AS slack_channel_id,
+ coalesce(slack_channel_name, '')::text AS slack_channel_name
+FROM ancestry ORDER BY root_id, (slack_channel_id IS NULL), depth;
+
+-- name: LockChatRowForTest :exec
+-- Test fixture: hold the lock an ordinary helper capture takes on its own row.
+SELECT id FROM chats WHERE id = @id AND project_id = @project_id FOR NO KEY UPDATE;

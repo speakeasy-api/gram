@@ -403,48 +403,41 @@ func TestRemoteLoginCallback_IssRequiredWhenIssuerAdvertisesIt(t *testing.T) {
 	require.NotEqual(t, uuid.Nil, env.session.ID)
 }
 
-// RFC 9207 compares against the issuer identifier the authorization server
-// advertises, which can differ from the URL an operator typed.
-func TestRemoteLoginCallback_IssComparesAgainstAdvertisedIssuerIdentifier(t *testing.T) {
+// Retained legacy metadata cannot replace the configured issuer in RFC 9207 checks.
+func TestRemoteLoginCallback_IssMetadataCannotOverrideStoredIdentifier(t *testing.T) {
 	t.Parallel()
-
 	advertised := withIssuerMetadata(`{"issuer":"` + syntheticIssuerURL + `/"}`)
-
-	_, env := newSyntheticExpiryEnv(t, "iss-advertised-match", scopelessToken,
-		withIssParameterSupported(true),
-		advertised,
-		withCallbackQuery(func(q url.Values) { q.Set("iss", syntheticIssuerURL+"/") }),
-	)
-	require.NotEqual(t, uuid.Nil, env.session.ID)
-
-	_, _, w, err := driveSyntheticLogin(t, "iss-advertised-mismatch", scopelessToken,
-		withIssParameterSupported(true),
-		advertised,
+	_, env := newSyntheticExpiryEnv(t, "iss-stored-match", scopelessToken,
+		withIssParameterSupported(true), advertised,
 		withCallbackQuery(func(q url.Values) { q.Set("iss", syntheticIssuerURL) }),
 	)
-	require.Error(t, err, "the stored URL is not the identifier once a document names one")
+	require.NotEqual(t, uuid.Nil, env.session.ID)
+	_, _, w, err := driveSyntheticLogin(t, "iss-legacy-mismatch", scopelessToken,
+		withIssParameterSupported(true), advertised,
+		withCallbackQuery(func(q url.Values) { q.Set("iss", syntheticIssuerURL+"/") }),
+	)
+	require.Error(t, err, "a legacy document cannot override the configured identifier")
 	require.NotEqual(t, http.StatusSeeOther, w.Code)
 }
 
-// Without a document the stored URL stands in for the identifier, and a
-// trailing slash an operator typed does not make a correct iss mismatch.
-func TestRemoteLoginCallback_IssFallbackIgnoresTrailingSlashOnStoredURL(t *testing.T) {
+// Without metadata, the stored identifier is still exact, including trailing slashes.
+func TestRemoteLoginCallback_IssPreservesTrailingSlashOnStoredURL(t *testing.T) {
 	t.Parallel()
-
-	_, env := newSyntheticExpiryEnv(t, "iss-fallback-slash", scopelessToken,
+	_, env := newSyntheticExpiryEnv(t, "iss-stored-slash", scopelessToken,
 		withIssuerURL(syntheticIssuerURL+"/"),
 		withIssParameterSupported(true),
-		withCallbackQuery(func(q url.Values) { q.Set("iss", syntheticIssuerURL) }),
+		withCallbackQuery(func(q url.Values) { q.Set("iss", syntheticIssuerURL+"/") }),
 	)
 	require.NotEqual(t, uuid.Nil, env.session.ID)
-
-	_, _, w, err := driveSyntheticLogin(t, "iss-fallback-slash-mismatch", scopelessToken,
-		withIssuerURL(syntheticIssuerURL+"/"),
-		withIssParameterSupported(true),
-		withCallbackQuery(func(q url.Values) { q.Set("iss", "https://attacker.example.com") }),
-	)
-	require.Error(t, err)
-	require.NotEqual(t, http.StatusSeeOther, w.Code)
+	for _, issuer := range []string{syntheticIssuerURL, "https://attacker.example.com"} {
+		_, _, w, err := driveSyntheticLogin(t, "iss-stored-slash-mismatch", scopelessToken,
+			withIssuerURL(syntheticIssuerURL+"/"),
+			withIssParameterSupported(true),
+			withCallbackQuery(func(q url.Values) { q.Set("iss", issuer) }),
+		)
+		require.Error(t, err)
+		require.NotEqual(t, http.StatusSeeOther, w.Code)
+	}
 }
 
 func TestRemoteLoginCallback_IssIgnoredWhenIssuerDoesNotAdvertiseIt(t *testing.T) {

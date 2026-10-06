@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -25,6 +26,8 @@ import (
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -44,7 +47,7 @@ func shapeGrantForKeepalive(t *testing.T, ctx context.Context, ti *testInstance,
 		ID:              sess.ID,
 		ProjectID:       conv.ToNullUUID(projectID),
 	}))
-	require.NoError(t, q.SetRemoteSessionValidationTrackingFixture(ctx, remotesessions_repo.SetRemoteSessionValidationTrackingFixtureParams{
+	require.NoError(t, testrepo.New(ti.conn).SetRemoteSessionValidationTrackingFixture(ctx, testrepo.SetRemoteSessionValidationTrackingFixtureParams{
 		LastValidatedAt:      pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 		LastRefreshAttemptAt: pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 		CreatedAt:            conv.ToPGTimestamptz(time.Now().Add(-age)),
@@ -66,7 +69,7 @@ func ageIntoRecheckWindow(t *testing.T, ctx context.Context, fx validationFixtur
 	t.Helper()
 	sess := storedSession(t, ctx, fx)
 	ago := conv.ToPGTimestamptz(time.Now().Add(-(recheckTestInterval + time.Hour)))
-	require.NoError(t, remotesessions_repo.New(fx.ti.conn).SetRemoteSessionValidationTrackingFixture(ctx, remotesessions_repo.SetRemoteSessionValidationTrackingFixtureParams{
+	require.NoError(t, testrepo.New(fx.ti.conn).SetRemoteSessionValidationTrackingFixture(ctx, testrepo.SetRemoteSessionValidationTrackingFixtureParams{
 		LastValidatedAt:      ago,
 		LastRefreshAttemptAt: ago,
 		CreatedAt:            pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
@@ -393,10 +396,14 @@ func createPrivateTunneledServer(t *testing.T, ctx context.Context, ti *testInst
 }
 
 // seedTunneledRecheckFixture: a private tunneled endpoint with a keepalive-shaped grant keyed by the tunnel's identifier.
-func seedTunneledRecheckFixture(t *testing.T, prefix, identifier string) (context.Context, validationFixture, uuid.UUID) {
+func seedTunneledRecheckFixture(t *testing.T, prefix, identifier string, callerIssuers ...*mcpauthz.Issuer) (context.Context, validationFixture, uuid.UUID) {
 	t.Helper()
 	reader, provider := newValidationMeterProvider()
-	ctx, ti := newTestMCPServiceWithMetaRuntime(t, provider, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: validationProbeTimeout, AutoVerifyWait: 0, RecheckInterval: recheckTestInterval})
+	var callerIssuer *mcpauthz.Issuer
+	if len(callerIssuers) > 0 {
+		callerIssuer = callerIssuers[0]
+	}
+	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), provider, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{ValidationTimeout: validationProbeTimeout, RecheckInterval: recheckTestInterval}, testenv.NewTracerProvider(t), nil, callerIssuer)
 	projectID, orgID := consentTestTenant(t, ctx)
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	serverID, tunnelID := createPrivateTunneledServer(t, ctx, ti, projectID, shared, prefix+"-server", identifier)

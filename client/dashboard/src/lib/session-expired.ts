@@ -50,6 +50,17 @@ export function safeRedirectPath(value: string | null): string | undefined {
 }
 
 /**
+ * Whether a same-origin path is served by the server rather than the
+ * dashboard. The MCP install page lives at /mcp/<slug>/install; a client-side
+ * route change to it never reaches the server, and the dashboard's org-slug
+ * routing then reads "mcp" as an organization and bounces to the org home.
+ * Such a return target has to be loaded with a full navigation.
+ */
+export function isServerRenderedPath(path: string): boolean {
+  return /^\/(?:x\/)?mcp\/[^/?#]+\/install([?#]|$)/.test(path);
+}
+
+/**
  * Bounce to /login after a query comes back 401, but only after auth.info
  * confirms the dashboard session itself is gone. Project-scoped endpoints can
  * also return 401 when the session is valid but the requested project context
@@ -62,7 +73,7 @@ export function safeRedirectPath(value: string | null): string | undefined {
 export function redirectToLoginOnUnauthorized(): Promise<void> {
   if (redirecting) return Promise.resolve();
 
-  const { pathname, search } = window.location;
+  const { pathname, search, hash } = window.location;
   if (UNAUTHENTICATED_PATHS.some((p) => pathname.startsWith(p))) {
     return Promise.resolve();
   }
@@ -90,8 +101,10 @@ export function redirectToLoginOnUnauthorized(): Promise<void> {
       if (response?.status !== 401) return;
 
       redirecting = true;
-      clearStorageForLogout();
-      const target = safeRedirectPath(pathname + search);
+      // auth.info 401 is the proof this document is logged out, not an
+      // impersonation load that has not classified yet.
+      clearStorageForLogout(undefined, { confirmedLoggedOut: true });
+      const target = safeRedirectPath(pathname + search + hash);
       if (!target) {
         window.location.assign("/login");
         return;

@@ -361,10 +361,12 @@ func TestHandle_SingleToolRequestRendersRequestToolCallID(t *testing.T) {
 	require.Contains(t, userPrompt, "README.md")
 }
 
-// TestHandle_ShadowRequestMetersWithoutPublishing pins the consumer half of
+// TestHandle_ShadowRequestPublishesMarkedFindings pins the consumer half of
 // the shadow engine mode: the model is called and metered exactly as for an
-// enforcing request, but its findings never reach the Finding topic.
-func TestHandle_ShadowRequestMetersWithoutPublishing(t *testing.T) {
+// enforcing request, and its findings reach the Finding topic carrying the
+// shadow marker so the findings store records them for comparison and hides
+// them from users.
+func TestHandle_ShadowRequestPublishesMarkedFindings(t *testing.T) {
 	t.Parallel()
 
 	pub, findings := capturingFindingsPub(t)
@@ -387,8 +389,12 @@ func TestHandle_ShadowRequestMetersWithoutPublishing(t *testing.T) {
 	request.SetExecutionPath("llm_shadow_stream")
 	require.NoError(t, h.Handle(t.Context(), request, gcp.MessageMetadata{}))
 
-	require.Empty(t, *findings, "shadow findings are withheld from the finding topic")
-	require.Len(t, stub.CallsSnapshot(), 1, "the model is still consulted")
+	require.Len(t, *findings, 1, "shadow findings are published")
+	published := (*findings)[0]
+	require.True(t, published.GetShadow(), "shadow findings carry the marker")
+	require.Equal(t, llmanalyzer.Source, published.GetSource())
+	require.Equal(t, testPolicyID, published.GetRiskPolicyId())
+	require.Len(t, stub.CallsSnapshot(), 1, "the model is consulted")
 	require.Len(t, *readings, 1, "shadow scans are metered like enforcing ones")
 	reading := (*readings)[0]
 	require.Equal(t, string(metering.MeterRiskLLMAnalyzer), reading.GetMeterId())
@@ -396,6 +402,6 @@ func TestHandle_ShadowRequestMetersWithoutPublishing(t *testing.T) {
 
 	data := collectMetrics(t, reader)
 	require.Equal(t, int64(1), counterValue(t, data, "risk.async_scan.handler_messages",
-		attr.Outcome(scanners.AsyncScanOutcomeShadowUnpublished), attribute.String("scanner", llmanalyzer.Source)))
+		attr.Outcome(scanners.AsyncScanOutcomeShadowPublished), attribute.String("scanner", llmanalyzer.Source)))
 	require.Equal(t, int64(0), counterValue(t, data, "risk.async_scan.handler_messages", attr.Outcome(scanners.AsyncScanOutcomeOK)))
 }

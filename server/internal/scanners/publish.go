@@ -26,10 +26,29 @@ type FindingMetadata struct {
 	OrganizationID    string
 	RiskPolicyID      string
 	RiskPolicyVersion int64
+
+	// Shadow marks every published finding as an engine-comparison record:
+	// the LLM analyzer's verdict under the shadow risk engine mode, never
+	// enforced, stored by the ClickHouse writer as shadow = 1 and hidden from
+	// every user-facing read path. False for the enforcing engines. Part of
+	// the deterministic finding id, so the marker is immutable per id.
+	Shadow bool
 }
 
-func PublishFindings(ctx context.Context, logger *slog.Logger, pub gcp.Publisher[*riskv1.Finding], meta FindingMetadata, findings []Finding, logPrefix string) (int, []string, error) {
-	results, ruleIDs := StartPublishFindings(ctx, pub, meta, findings)
+// FindingOption adds producer-specific metadata to a finding before publish.
+type FindingOption func(*riskv1.Finding)
+
+// WithFindingMCPContext attaches trusted MCP attribution and enforcement state.
+func WithFindingMCPContext(attribution *riskv1.Finding_Attribution, execution *riskv1.Finding_Execution, outcome riskv1.Finding_EnforcementOutcome) FindingOption {
+	return func(finding *riskv1.Finding) {
+		finding.SetAttribution(attribution)
+		finding.SetExecution(execution)
+		finding.SetEnforcementOutcome(outcome)
+	}
+}
+
+func PublishFindings(ctx context.Context, logger *slog.Logger, pub gcp.Publisher[*riskv1.Finding], meta FindingMetadata, findings []Finding, logPrefix string, options ...FindingOption) (int, []string, error) {
+	results, ruleIDs := StartPublishFindings(ctx, pub, meta, findings, options...)
 
 	published := 0
 	var publishErr error
@@ -53,31 +72,15 @@ func PublishFindings(ctx context.Context, logger *slog.Logger, pub gcp.Publisher
 // rule ids. Callers that run inside Temporal activities drain the results with
 // their own timeout/heartbeat discipline (see risk_analysis.drainPublishAcks)
 // instead of blocking on bare Get calls.
-func StartPublishFindings(ctx context.Context, pub gcp.Publisher[*riskv1.Finding], meta FindingMetadata, findings []Finding) ([]gcp.PublishResult, []string) {
+func StartPublishFindings(ctx context.Context, pub gcp.Publisher[*riskv1.Finding], meta FindingMetadata, findings []Finding, options ...FindingOption) ([]gcp.PublishResult, []string) {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	results := make([]gcp.PublishResult, 0, len(findings))
 	ruleIDs := make([]string, 0, len(findings))
 
-	// Occurrence counter per base id: a batch can legitimately carry findings
-	// whose id inputs are identical (e.g. two tool calls in one message hitting
-	// the same cli_destructive rule, or two calls to the same shadow MCP server
-	// — Match is the tool/server name and positions are zero). Without a
-	// discriminator they'd publish under one id and ClickHouse's uniqExact(id)
-	// would collapse distinct persisted findings. Suffixing only repeats keeps
-	// every previously-minted id stable while making re-publishes of the same
-	// finding set deterministic (finding order follows tool-call order, which
-	// is stable for a given message). Note this discriminator changed observed
-	// counts for the stream sources too (llm_judge, prompt_injection): colliding
-	// findings that previously collapsed to one ClickHouse row now count as N.
-	occurrences := make(map[uuid.UUID]int, len(findings))
+	ids := FindingIDs(meta, findings)
 
-	for _, finding := range findings {
-		baseID := deterministicFindingID(meta, finding)
-		id := baseID
-		if n := occurrences[baseID]; n > 0 {
-			id = duplicateFindingID(baseID, n)
-		}
-		occurrences[baseID]++
+	for i, finding := range findings {
+		id := ids[i]
 		startPos := conv.SafeInt32(finding.StartPos)
 		endPos := conv.SafeInt32(finding.EndPos)
 		surface := FindingSurface(finding.Source, finding.Field, finding.Path)
@@ -107,13 +110,39 @@ func StartPublishFindings(ctx context.Context, pub gcp.Publisher[*riskv1.Finding
 			// (suppression/unsuppression) are built elsewhere and never pass
 			// through here.
 			EventKind: new(chrepo.EventKindFinding),
+			Shadow:    &meta.Shadow,
 		}.Build()
+		for _, option := range options {
+			option(msg)
+		}
 
 		results = append(results, pub.Publish(ctx, msg))
 		ruleIDs = append(ruleIDs, finding.RuleID)
 	}
 
 	return results, ruleIDs
+}
+
+// FindingIDs returns the deterministic ClickHouse IDs for a finding batch.
+//
+// Repeats of the same base id (e.g. two tool calls hitting the same
+// cli_destructive rule, where Match is the tool name and positions are zero)
+// get an occurrence suffix so ClickHouse's uniqExact(id) does not collapse
+// them. Only repeats are suffixed, so previously minted ids stay stable and
+// re-publishing the same batch is deterministic.
+func FindingIDs(meta FindingMetadata, findings []Finding) []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(findings))
+	occurrences := make(map[uuid.UUID]int, len(findings))
+	for _, finding := range findings {
+		baseID := deterministicFindingID(meta, finding)
+		id := baseID
+		if n := occurrences[baseID]; n > 0 {
+			id = duplicateFindingID(baseID, n)
+		}
+		occurrences[baseID]++
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 // duplicateFindingID derives the id for the n-th repeat (n >= 1) of a finding
@@ -143,5 +172,13 @@ func deterministicFindingID(meta FindingMetadata, finding Finding) uuid.UUID {
 		strconv.Itoa(finding.EndPos),
 		finding.Match,
 	)
+	// The shadow marker is part of the identity so an organization moving
+	// between the llm and shadow modes (or a redelivery across that switch)
+	// never lands shadow = 1 and shadow = 0 copies under one id, which the
+	// read-time per-id dedup would otherwise collapse. Appended only when set
+	// so every previously minted enforcing id stays stable.
+	if meta.Shadow {
+		parts = append(parts, "shadow")
+	}
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:finding:"+strings.Join(parts, "\x00")))
 }

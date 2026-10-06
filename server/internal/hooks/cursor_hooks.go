@@ -14,7 +14,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -407,12 +407,12 @@ func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayl
 			return
 		}
 		if err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist Cursor conversation event", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Cursor conversation event", err)
 		}
 	} else {
 		// Tool call events: ClickHouse + PG
 		if err := s.persistCursorToolCallEvent(ctx, payload, metadata, blockReason, hookEvent); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist Cursor tool call event", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Cursor tool call event", err)
 		}
 	}
 }
@@ -806,7 +806,7 @@ func (s *Service) writeCursorToolCallRequestToPG(ctx context.Context, payload *g
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCursorChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, chat.DefaultCursorChatTitle)
 }
 
 // writeCursorToolCallResultToPG writes a Cursor tool call result (postToolUse/postToolUseFailure) to PostgreSQL.
@@ -877,7 +877,7 @@ func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *ge
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCursorChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, chat.DefaultCursorChatTitle)
 }
 
 // persistCursorAgentResponse writes the assistant's response text to PostgreSQL as a chat message.
@@ -927,7 +927,7 @@ func (s *Service) persistCursorAgentResponse(ctx context.Context, payload *gen.C
 		Generation:       0,
 	}
 
-	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCursorChatTitle); err != nil {
+	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, chat.DefaultCursorChatTitle); err != nil {
 		return err
 	}
 
@@ -993,5 +993,5 @@ func (s *Service) persistCursorUserPrompt(ctx context.Context, payload *gen.Curs
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, parsedProjectID, msgParams, activities.DefaultCursorChatTitle)
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, parsedProjectID, msgParams, chat.DefaultCursorChatTitle)
 }

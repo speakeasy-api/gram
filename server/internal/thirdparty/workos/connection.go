@@ -144,6 +144,57 @@ func (wc *Client) ListDirectoryUsers(ctx context.Context, directoryID string) ([
 	return all, nil
 }
 
+// DirectoryGroup represents a WorkOS Directory Sync group.
+type DirectoryGroup struct {
+	ID             string
+	DirectoryID    string
+	OrganizationID string
+	Name           string
+	RawAttributes  json.RawMessage
+	CreatedAt      string
+	UpdatedAt      string
+}
+
+// ListDirectoryGroups fetches all groups for a directory from WorkOS.
+// https://workos.com/docs/reference/directory-sync/directory-group/list
+func (wc *Client) ListDirectoryGroups(ctx context.Context, directoryID string) ([]DirectoryGroup, error) {
+	var all []DirectoryGroup
+	after := ""
+
+	for {
+		resp, err := wc.dsync.ListGroups(ctx, directorysync.ListGroupsOpts{
+			Directory: directoryID,
+			User:      "",
+			Limit:     100,
+			Order:     "",
+			Before:    "",
+			After:     after,
+		})
+		if err != nil {
+			return nil, wrapSDKError(err, "list directory groups")
+		}
+
+		for _, g := range resp.Data {
+			all = append(all, DirectoryGroup{
+				ID:             g.ID,
+				DirectoryID:    g.DirectoryID,
+				OrganizationID: g.OrganizationID,
+				Name:           g.Name,
+				RawAttributes:  g.RawAttributes,
+				CreatedAt:      g.CreatedAt,
+				UpdatedAt:      g.UpdatedAt,
+			})
+		}
+
+		if resp.ListMetadata.After == "" {
+			break
+		}
+		after = resp.ListMetadata.After
+	}
+
+	return all, nil
+}
+
 // HasActiveConnection returns true if the organization has at least one active SSO connection.
 func HasActiveConnection(connections []Connection) bool {
 	for _, c := range connections {
