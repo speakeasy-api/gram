@@ -36,7 +36,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
@@ -370,10 +370,6 @@ const (
 	// but a required upstream token could not be refreshed because the issuer
 	// or client configuration is broken, which only an administrator repairs.
 	issuerGateReasonRemoteSessionMisconfigured = "remote_session_misconfigured"
-
-	// issuerGateReasonExecutionPolicyDenied: an execution credential was
-	// rejected by execution admission policy.
-	issuerGateReasonExecutionPolicyDenied = "execution_policy_denied"
 )
 
 // The texts the issuer gate returns when the bearer token was accepted but a
@@ -899,53 +895,18 @@ func (s *Service) authenticateIssuerGate(
 	}
 
 	var (
-		newCtx        = ctx
+		newCtx        context.Context
 		subject       *urn.SessionSubject
 		toolSelection *toolfilter.SessionSelection
 		refreshable   bool
 		valErr        error
 	)
-	isExecution := assistanttokens.IsExecutionToken(authToken)
-	if !isExecution {
+	if principalcredential.IsToken(authToken) {
+		newCtx, subject, valErr = s.authenticateIssuerGatePrincipalCredential(ctx, authToken, endpoint)
+	} else {
 		newCtx, subject, toolSelection, refreshable, valErr = s.validateUserSessionToken(ctx, authToken, baseURL, endpoint)
 	}
 	refreshableUserSession := subject != nil && refreshable
-	if isExecution {
-		rejectExecution := func(err error) error {
-			var failure *oops.ShareableError
-			if !errors.As(err, &failure) || (failure.Code != oops.CodeForbidden && failure.Code != oops.CodeUnauthorized) {
-				endpoint.LogWith(s.logger).ErrorContext(ctx, "mcp execution admission unavailable", attr.SlogError(err))
-				return err
-			}
-			reason := issuerGateFailureReason(err)
-			if failure.Code == oops.CodeForbidden {
-				reason = issuerGateReasonExecutionPolicyDenied
-			}
-			s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, surface)
-			endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected execution credential", attr.SlogOAuthFailureReason(reason), attr.SlogError(err))
-			_ = WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
-			return err
-		}
-		if endpoint.MetaMcpServerID.Valid {
-			return ctx, nil, nil, rejectExecution(oops.C(oops.CodeUnauthorized))
-		}
-		executionCtx, err := s.assistantTokens.AuthorizeBusiness(ctx, authToken, endpoint.connectResourceID())
-		if err != nil {
-			return ctx, nil, nil, rejectExecution(fmt.Errorf("admit assistant business execution: %w", err))
-		}
-		ac, ok := contextvalues.GetAuthContext(executionCtx)
-		if !ok || ac == nil || ac.ProjectID == nil || *ac.ProjectID != endpoint.ProjectID || ac.ActiveOrganizationID != endpoint.OrganizationID {
-			return ctx, nil, nil, rejectExecution(oops.C(oops.CodeUnauthorized))
-		}
-		invoker, ok := contextvalues.AssistantInvoker(executionCtx)
-		if !ok {
-			return ctx, nil, nil, rejectExecution(oops.C(oops.CodeUnauthorized))
-		}
-		// The agent acts, but upstream credentials are the turn user's own.
-		selected := urn.NewUserSubject(invoker)
-		executionCtx = contextvalues.WithAssistantBusinessResource(executionCtx, endpoint.UpstreamResource)
-		newCtx, subject = s.identityValidator.StampAssistant(executionCtx), &selected
-	}
 	if subject == nil {
 		// Accept an assistant-runtime JWT, but only when the assistant
 		// belongs to the endpoint's project — otherwise a token minted

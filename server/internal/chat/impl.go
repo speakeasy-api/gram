@@ -1700,7 +1700,6 @@ func (s *Service) linkSetupAssistantThread(ctx context.Context, projectID *uuid.
 // HandleCompletion is a proxy to the OpenAI API that logs request and response data.
 func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error {
 	ctx, authCtx, keySlot, err := s.authorizeCompletion(r)
-
 	if err != nil {
 		return err
 	}
@@ -1816,7 +1815,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	}
 
 	chatIDHeader := r.Header.Get("Gram-Chat-ID")
-	if id, bound := assistanttokens.ExecutionChatID(ctx); bound {
+	if id, bound := assistanttokens.RuntimeChatID(ctx); bound {
 		if chatIDHeader != "" && chatIDHeader != id.String() {
 			return oops.C(oops.CodeForbidden)
 		}
@@ -1843,7 +1842,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// linking is idempotent (safe to fire on every completion for the chat) and
 	// best-effort (a failure must not fail the user's turn).
 	assistantIDHeader := r.Header.Get(constants.HeaderAssistantID)
-	if _, bound := assistanttokens.ExecutionChatID(ctx); bound {
+	if _, bound := assistanttokens.RuntimeChatID(ctx); bound {
 		principal, _ := contextvalues.GetAssistantPrincipal(ctx)
 		if assistantIDHeader != "" && assistantIDHeader != principal.AssistantID.String() {
 			return oops.C(oops.CodeForbidden)
@@ -3459,10 +3458,11 @@ func clampUint64ToInt64(value uint64) int64 {
 	return int64(value)
 }
 
-// authorizeCompletion keeps execution credentials confined to model work:
-// directAuthorize also serves transcript APIs, which remain legacy-only.
+// authorizeCompletion accepts an assistant turn's runtime credential for model
+// work only: directAuthorize also serves transcript APIs, which keep their own
+// authentication.
 func (s *Service) authorizeCompletion(r *http.Request) (context.Context, *contextvalues.AuthContext, billing.ModelUsageSource, error) {
-	if !assistanttokens.IsExecutionToken(r.Header.Get("Authorization")) {
+	if !assistanttokens.IsRuntimeCredential(r.Header.Get("Authorization")) {
 		return s.directAuthorize(r.Context(), r)
 	}
 	ctx, _, err := s.assistantTokens.AuthorizeRuntime(r.Context(), r.Header.Get("Authorization"))

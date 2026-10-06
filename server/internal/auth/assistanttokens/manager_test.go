@@ -2,20 +2,14 @@ package assistanttokens
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
 	"log"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -346,28 +340,4 @@ func requireUnauthorized(t *testing.T, err error) {
 	se := &oops.ShareableError{}
 	require.ErrorAs(t, err, &se)
 	require.Equal(t, oops.CodeUnauthorized, se.Code)
-}
-
-func TestMalformedTypeNeverEntersLegacyAuthorization(t *testing.T) {
-	t.Parallel()
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-	private, err := x509.MarshalPKCS8PrivateKey(key)
-	require.NoError(t, err)
-	public, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
-	require.NoError(t, err)
-	executionIssuer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: public})), "https://platform.example.invalid", false)
-	require.NoError(t, err)
-	manager := New("secret", nil, nil, executionIssuer, nil)
-	for _, typ := range []any{nil, 123, []string{"JWT"}, map[string]string{"typ": "JWT"}} {
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"iss": issuer})
-		token.Header["typ"] = typ
-		raw, err := token.SignedString([]byte("secret"))
-		require.NoError(t, err)
-		require.True(t, IsExecutionToken(raw))
-		_, err = manager.Validate(raw)
-		require.Error(t, err)
-		_, _, err = manager.AuthorizeRuntime(t.Context(), raw)
-		require.Error(t, err)
-	}
 }

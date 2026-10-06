@@ -39,7 +39,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -2934,7 +2933,7 @@ func (s *ServiceCore) processEventTurn(
 
 	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
 
-	actorUserID, agentBacked, err := s.turnUserID(ctx, assistant, thread, event)
+	identity, err := s.resolveTurnIdentity(ctx, assistant, thread, event)
 	if err != nil {
 		return nil, err
 	}
@@ -2965,10 +2964,10 @@ func (s *ServiceCore) processEventTurn(
 		return nil, err
 	}
 	var turnToken string
-	if agentBacked {
-		turnToken, err = s.mintExecutionToken(ctx, assistant, thread, event, actorUserID)
+	if identity.AgentBacked {
+		turnToken, err = s.mintTurnCredential(ctx, assistant, thread, event, identity)
 	} else {
-		turnToken, err = s.MintThreadScopedRuntimeToken(assistant, thread.ID, actorUserID)
+		turnToken, err = s.MintThreadScopedRuntimeToken(assistant, thread.ID, identity.UserID)
 	}
 	if err != nil {
 		return nil, err
@@ -3259,7 +3258,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 // enough that a leaked token ages out well before the thread retires. Fresh
 // tokens are pushed on /configure and on every /turn, so this is the upper
 // bound between refreshes for an idle runtime.
-const assistantRuntimeTokenTTL = mcpauthz.AssistantRuntimeTokenTTL
+const assistantRuntimeTokenTTL = 60 * time.Minute
 
 // mcpAuthAddendum is source-agnostic framing for MCP auth: who may see an
 // AuthURL, when auth events appear, and what each event carries. Per-source

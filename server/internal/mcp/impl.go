@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -173,6 +174,7 @@ type Service struct {
 	telemLogger            *tm.Logger
 	vectorToolStore        *rag.ToolsetVectorStore
 	assistantTokens        *assistanttokens.Manager
+	principalCredentials   *principalcredential.Issuer
 	sessions               *sessions.Manager
 	consentBindings        ConsentBindingService
 	identityResolver       IdentityResolver
@@ -413,6 +415,7 @@ func NewService(
 	triggerApp *bgtriggers.App,
 	authzEngine *authz.Engine,
 	assistantTokens *assistanttokens.Manager,
+	principalCredentials *principalcredential.Issuer,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
 	platformExtras []platformtools.ExternalTool,
@@ -507,6 +510,7 @@ func NewService(
 		telemLogger:            telemLogger,
 		vectorToolStore:        vectorToolStore,
 		assistantTokens:        assistantTokens,
+		principalCredentials:   principalCredentials,
 		sessions:               sessions,
 		chatSessionsManager:    chatSessionsManager,
 		enc:                    enc,
@@ -1154,29 +1158,6 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// - authToken: from Authorization header (for OAuth flows)
 	// - sessionToken: from Gram-Chat-Session header (for chat session fallback on non-OAuth endpoints)
 	authToken := httpheaders.AuthorizationBearerToken(r)
-	privateAuthResource := toolset.ID
-	isExecution := assistanttokens.IsExecutionToken(httpheaders.AuthorizationOrChatSessionToken(r))
-	if isExecution {
-		authToken = httpheaders.AuthorizationOrChatSessionToken(r)
-		privateAuthResource = cfg.rbacResourceID
-		// Execution tokens are never forwarded to an external OAuth upstream.
-		if toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid {
-			return oops.C(oops.CodeUnauthorized)
-		}
-		boundCtx, err := s.assistantTokens.AuthorizeBusiness(ctx, authToken, cfg.rbacResourceID)
-		if err != nil {
-			return fmt.Errorf("authorize business runtime request: %w", err)
-		}
-		ac, ok := contextvalues.GetAuthContext(boundCtx)
-		if !ok || ac == nil || ac.ProjectID == nil || *ac.ProjectID != toolset.ProjectID || ac.ActiveOrganizationID != toolset.OrganizationID {
-			return oops.C(oops.CodeForbidden)
-		}
-		isolated := *cfg
-		isolated.isPublic = false
-		cfg = &isolated
-		ctx = boundCtx
-		r = r.WithContext(ctx)
-	}
 
 	var tokenInputs []oauthTokenInputs
 
@@ -1258,7 +1239,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 				})
 			}
 		case !cfg.isPublic:
-			ctx, err = s.RequirePrivateIdentityAuth(ctx, w, r, false, privateAuthResource, oauthProtectedResourceURL)
+			ctx, err = s.RequirePrivateIdentityAuth(ctx, w, r, false, toolset.ID, oauthProtectedResourceURL)
 			if err != nil {
 				return err
 			}
@@ -1324,6 +1305,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 			}
 		}
 
+		if err := requirePrincipalCredentialProject(ctx, toolset.ProjectID); err != nil {
+			return err
+		}
 		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.APIKeyID != "" {
 			if authCtx.ProjectID != nil && *authCtx.ProjectID != toolset.ProjectID {
 				return oops.E(oops.CodeForbidden, nil, "api key project does not match toolset project")
@@ -1397,7 +1381,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// described toolset, unchanged.
 	var wrapperRBACResourceID string
 	var wrapperIsPublic *bool
-	if cfg.mcpServerID != nil || isExecution {
+	if cfg.mcpServerID != nil {
 		wrapperRBACResourceID = cfg.rbacResourceID.String()
 		isPublic := cfg.isPublic
 		wrapperIsPublic = &isPublic
@@ -1917,6 +1901,9 @@ func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, is
 // the resource is a toolset id; remote-backend callers pass false and the
 // id is decorative.
 //
+// Principal credentials are authenticated and admitted as their agent or
+// workload principal, like agent API keys.
+//
 // Each successful strategy stamps its mcpidentity provenance here, at the
 // point of credential validation: assistant tokens are KindAssistant, API
 // keys (either scope) are KindAPIKey, and chat-session tokens are
@@ -1930,12 +1917,8 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 
-	if assistanttokens.IsExecutionToken(token) {
-		authorizedCtx, err := s.assistantTokens.AuthorizeBusiness(ctx, token, oauthResourceID)
-		if err != nil {
-			return ctx, fmt.Errorf("authorize business credential: %w", err)
-		}
-		return s.identityValidator.StampAssistant(authorizedCtx), nil
+	if principalcredential.IsToken(token) {
+		return s.authenticatePrincipalCredential(ctx, token)
 	}
 
 	if authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token); err == nil {

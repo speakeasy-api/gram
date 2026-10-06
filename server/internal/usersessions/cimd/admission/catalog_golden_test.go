@@ -37,6 +37,7 @@ func TestCatalogMatchesTheCatalogAsShipped(t *testing.T) {
 		{VendorKey: "opencode", URL: "https://opencode.ai/oauth/opencode/client.json", DisplayName: "opencode", Enabled: true},
 		{VendorKey: "github", URL: "https://github.com/copilot/cli/client-metadata.json", DisplayName: "GitHub Copilot CLI", Enabled: true},
 		{VendorKey: "conductor", URL: "https://api.conductor.build/oauth/client-metadata.json", DisplayName: "Conductor", Enabled: true},
+		{VendorKey: "vercel", URL: "https://connect.vercel.com/connectors/*", DisplayName: "Vercel Connect (connectors)", Enabled: true},
 	}
 
 	require.Equal(t, expected, Catalog())

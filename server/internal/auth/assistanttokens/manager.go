@@ -13,12 +13,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -109,24 +109,25 @@ type Manager struct {
 	authz      *authz.Engine
 	revocation *revocationCache
 
-	// executionIssuer signs and verifies agent-backed execution tokens with
-	// the deployment's Gram platform key; identities resolves them live.
-	executionIssuer *mcpauthz.Issuer
-	identities      *assistantidentity.Service
+	// credentials mints and authenticates the principal credentials
+	// agent-backed turns run with; runtimeBindings records which assistant
+	// thread each one was minted for.
+	credentials     *principalcredential.Issuer
+	runtimeBindings cache.Cache
 }
 
-func New(jwtSecret string, db *pgxpool.Pool, authzEngine *authz.Engine, executionIssuer *mcpauthz.Issuer, identities *assistantidentity.Service) *Manager {
+func New(jwtSecret string, db *pgxpool.Pool, authzEngine *authz.Engine, credentials *principalcredential.Issuer, runtimeBindings cache.Cache) *Manager {
 	return &Manager{
-		jwtSecret:       jwtSecret,
+		credentials:     credentials,
+		runtimeBindings: runtimeBindings,
 		db:              db,
+		jwtSecret:       jwtSecret,
 		tokens:          tokenrepo.New(db),
 		orgs:            organizationsrepo.New(db),
 		projects:        projectsrepo.New(db),
 		users:           usersrepo.New(db),
 		authz:           authzEngine,
 		revocation:      newRevocationCache(revocationCacheTTL),
-		executionIssuer: executionIssuer,
-		identities:      identities,
 	}
 }
 
@@ -241,11 +242,6 @@ func (m *Manager) ValidateMCPAuthFlow(tokenString string) (*MCPAuthFlowClaims, e
 			ID:        "",
 		},
 	}, func(token *jwt.Token) (any, error) {
-		if typ, present := token.Header["typ"]; present {
-			if _, ok := typ.(string); !ok {
-				return nil, fmt.Errorf("invalid assistant token type")
-			}
-		}
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
@@ -290,12 +286,6 @@ func (m *Manager) Validate(tokenString string) (*Claims, error) {
 			ID:        "",
 		},
 	}, func(token *jwt.Token) (any, error) {
-		if typ, present := token.Header["typ"]; present {
-			if _, ok := typ.(string); !ok {
-				return nil, fmt.Errorf("invalid assistant token type")
-			}
-		}
-
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
@@ -322,10 +312,6 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 		return ctx, nil, err
 	}
 
-	return m.authorizeClaims(ctx, claims)
-}
-
-func (m *Manager) authorizeClaims(ctx context.Context, claims *Claims) (context.Context, *Claims, error) {
 	projectID, err := uuid.Parse(claims.ProjectID)
 	if err != nil {
 		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "invalid assistant token project")

@@ -4921,8 +4921,9 @@ WHERE r.organization_id = @organization_id
   AND r.remote_session_issuer_id = @remote_session_issuer_id
   AND r.resource = rtrim(@resource::text, '/');
 
--- name: GetDelegatedRemoteSession :one
--- Delegate only consent originating in this tenant and user-session issuer.
+-- name: GetTenantUserRemoteSession :one
+-- A user's own session, only when its consent originated in this tenant and
+-- user-session issuer and the user is still an active member.
 SELECT s.* FROM remote_sessions s
 JOIN remote_session_clients c ON c.id = s.remote_session_client_id AND NOT c.deleted
 JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND NOT i.deleted
