@@ -217,12 +217,20 @@ describe("review-first commands", () => {
 
   it("downloads to a fresh owner-only file, never an existing path", () => {
     expect(commands?.fetch).toBe(
-      `f=$(mktemp ./gram-device-agent.XXXXXX) && curl -fsSL 'https://gram.example.test/agent-mcp/install/code_1' -o "$f" && echo "Saved to $f"`,
+      `f=$(mktemp ./gram-device-agent.XXXXXX) && if curl -fsSL 'https://gram.example.test/agent-mcp/install/code_1' -o "$f"; then echo "Saved to $f"; else rm -f "$f"; fi`,
     );
   });
 
   it("removes the file whether or not the run succeeds, keeping its status", () => {
     expect(commands?.run).toBe(`(sh "$f"; rc=$?; rm -f "$f"; exit $rc)`);
+  });
+
+  it("offers nothing for a plaintext install URL", () => {
+    expect(
+      reviewCommands(
+        "curl -fsSL http://gram.example.test/agent-mcp/install/code_1 | sh",
+      ),
+    ).toBeNull();
   });
 
   it("offers nothing when the command holds no install URL", () => {

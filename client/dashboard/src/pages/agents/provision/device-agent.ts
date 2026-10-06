@@ -165,14 +165,17 @@ export function undelegableScopesMessage(missingScopes: string[]): string {
   return `You cannot delegate ${scopes} to this agent. Check the agent's policy, and that you and its owner hold these permissions.`;
 }
 
-/** The single-use script URL inside a one-line install command. */
-const INSTALL_URL = /^https?:\/\/[^\s']+\/agent-mcp\/install\/[A-Za-z0-9_-]+$/;
+/**
+ * The single-use script URL inside a one-line install command. HTTPS only, with
+ * no loopback exception: the script carries the key and runs on another host.
+ */
+const INSTALL_URL = /^https:\/\/[^\s']+\/agent-mcp\/install\/[A-Za-z0-9_-]+$/;
 
 /**
  * The one-line command as download-then-run, or null if it holds no install
  * URL. The script holds the key, so it goes to a fresh owner-only mktemp file
- * (no existing path is reused) and is removed after the run, keeping the exit
- * status. Both lines must run in the same shell, which holds `$f`.
+ * (no existing path is reused), which is removed if the download fails and
+ * after the run, keeping the exit status. Both lines run in the same shell.
  */
 export function reviewCommands(
   command: string,
@@ -180,7 +183,7 @@ export function reviewCommands(
   const url = command.split(" ").find((token) => INSTALL_URL.test(token));
   if (!url) return null;
   return {
-    fetch: `f=$(mktemp ./gram-device-agent.XXXXXX) && curl -fsSL '${url}' -o "$f" && echo "Saved to $f"`,
+    fetch: `f=$(mktemp ./gram-device-agent.XXXXXX) && if curl -fsSL '${url}' -o "$f"; then echo "Saved to $f"; else rm -f "$f"; fi`,
     run: `(sh "$f"; rc=$?; rm -f "$f"; exit $rc)`,
   };
 }

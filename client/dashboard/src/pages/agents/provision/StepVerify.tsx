@@ -29,11 +29,11 @@ function verifyCopy(purpose: AgentPurpose, gatewayURL: string): VerifyCopy {
   switch (purpose) {
     case "device-agent":
       return {
-        firstEvent: "First check-in",
+        firstEvent: "First checked in",
         waiting: "Waiting for the device agent to check in",
         waitingDetail:
           "Keep this page open while the setup runs. This updates when the device agent syncs; a sync in the first minute after the command was generated may not show.",
-        connected: "The device agent is live.",
+        connected: "Its key was accepted.",
         checks: [
           {
             title: "Device agent installed",

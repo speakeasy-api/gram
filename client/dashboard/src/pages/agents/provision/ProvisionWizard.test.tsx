@@ -83,6 +83,11 @@ vi.mock("@gram/client/react-query/listToolsetsForOrg.js", () => ({
       ...options,
     }),
 }));
+// A deployment serves the gateway over HTTPS; jsdom's origin is plain HTTP.
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  getServerURL: () => "https://gram.example.test",
+}));
 vi.mock("../agent-policy-grants", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../agent-policy-grants")>()),
   invalidateAgentPolicy: vi.fn(),
@@ -381,7 +386,9 @@ describe("Provisioning a device agent", () => {
     ).toBeTruthy();
     // The review-first form spends the same code without piping it to a shell.
     expect(
-      screen.getByText(/setup_code' -o "\$f" && echo "Saved to \$f"$/),
+      screen.getByText(
+        /setup_code' -o "\$f"; then echo "Saved to \$f"; else rm -f "\$f"; fi$/,
+      ),
     ).toBeTruthy();
   });
 
