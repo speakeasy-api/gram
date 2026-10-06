@@ -7628,6 +7628,7 @@ SELECT
     i.token_endpoint                       AS token_endpoint,
     i.scopes_supported                     AS scopes_supported,
     i.scope_override                       AS scope_override,
+    i.omit_scope_fallback                  AS omit_scope_fallback,
     i.code_challenge_methods_supported     AS code_challenge_methods_supported,
     i.resource_indicator_supported         AS resource_indicator_supported,
     i.authorization_response_iss_parameter_supported AS authorization_response_iss_parameter_supported,
@@ -7710,6 +7711,7 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	TokenEndpoint                              pgtype.Text
 	ScopesSupported                            []string
 	ScopeOverride                              []string
+	OmitScopeFallback                          pgtype.Bool
 	CodeChallengeMethodsSupported              []string
 	ResourceIndicatorSupported                 pgtype.Bool
 	AuthorizationResponseIssParameterSupported pgtype.Bool
@@ -7773,6 +7775,7 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.TokenEndpoint,
 			&i.ScopesSupported,
 			&i.ScopeOverride,
+			&i.OmitScopeFallback,
 			&i.CodeChallengeMethodsSupported,
 			&i.ResourceIndicatorSupported,
 			&i.AuthorizationResponseIssParameterSupported,

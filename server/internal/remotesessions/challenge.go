@@ -472,6 +472,9 @@ type Client struct {
 	// Empty when unset; set, it is requested verbatim.
 	IssuerScopeOverride []string
 
+	// IssuerOmitScopeFallback sends no scope where the catalogue would be the last resort.
+	IssuerOmitScopeFallback bool
+
 	// ResourceScopeOverride, ResourceChallengeScopes, and
 	// ResourceScopesSupported are the cached protected resource row for
 	// ResourceIdentifier, as it stood when the client was listed; nil when
@@ -622,8 +625,11 @@ func (c Client) RequestedScopes(resource ResourceScopes) ScopeResolution {
 }
 
 // issuerCatalogueScopes is the last resort: the issuer's whole
-// scopes_supported, or nothing when it advertises none.
+// scopes_supported, or nothing when it advertises none or is set to omit.
 func (c Client) issuerCatalogueScopes() ScopeResolution {
+	if c.IssuerOmitScopeFallback {
+		return ScopeResolution{Scopes: nil, Widened: nil, Source: remotesessionmetrics.ScopeSourceIssuerOmitted, Unadvertised: nil}
+	}
 	if len(c.IssuerScopesSupported) == 0 {
 		return ScopeResolution{Scopes: nil, Widened: nil, Source: remotesessionmetrics.ScopeSourceNone, Unadvertised: nil}
 	}
@@ -762,6 +768,7 @@ func (m *ChallengeManager) ListClients(
 			ClientScope:                      r.ClientScope,
 			IssuerScopesSupported:            r.ScopesSupported,
 			IssuerScopeOverride:              r.ScopeOverride,
+			IssuerOmitScopeFallback:          r.OmitScopeFallback.Valid && r.OmitScopeFallback.Bool,
 			ResourceScopeOverride:            r.ResourceScopeOverride,
 			ResourceChallengeScopes:          r.ResourceChallengeScopes,
 			ResourceScopesSupported:          r.ResourceScopesSupported,

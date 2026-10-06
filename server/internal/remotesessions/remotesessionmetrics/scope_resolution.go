@@ -38,6 +38,9 @@ const (
 	// ScopeSourceIssuerOverride: the operator's override on the issuer, sent verbatim.
 	ScopeSourceIssuerOverride ScopeSource = "issuer_override"
 
+	// ScopeSourceIssuerOmitted: the issuer is set to send no scope instead of its catalogue.
+	ScopeSourceIssuerOmitted ScopeSource = "issuer_omitted"
+
 	// ScopeSourceIssuerCatalogue: the issuer's whole scopes_supported.
 	ScopeSourceIssuerCatalogue ScopeSource = "issuer_catalogue"
 

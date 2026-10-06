@@ -36,6 +36,22 @@ func TestClientRequestedScopes(t *testing.T) {
 			wantSource:  remotesessionmetrics.ScopeSourceClientScope,
 		},
 		{
+			name:        "an issuer set to omit sends no scope instead of its catalogue",
+			client:      Client{IssuerScopesSupported: catalogue, IssuerOmitScopeFallback: true},
+			resource:    ResourceScopes{},
+			wantScopes:  nil,
+			wantWidened: nil,
+			wantSource:  remotesessionmetrics.ScopeSourceIssuerOmitted,
+		},
+		{
+			name:        "the issuer override still wins over an omit setting",
+			client:      Client{IssuerScopeOverride: []string{"custom"}, IssuerScopesSupported: catalogue, IssuerOmitScopeFallback: true},
+			resource:    ResourceScopes{},
+			wantScopes:  []string{"custom"},
+			wantWidened: nil,
+			wantSource:  remotesessionmetrics.ScopeSourceIssuerOverride,
+		},
+		{
 			name:        "challenge scopes beat the pin",
 			client:      Client{IssuerScopesSupported: catalogue},
 			resource:    discovered(ResourceScopes{Pin: []string{"files:read"}, ChallengeScopes: []string{"files:write"}, ScopesSupported: []string{"files:read", "files:write"}}),
