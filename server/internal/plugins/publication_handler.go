@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	publicationv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 )
 
@@ -24,15 +25,7 @@ func NewPublicationHandler(logger *slog.Logger, db *pgxpool.Pool, signal Publica
 	return &PublicationHandler{
 		logger: logger,
 		validate: func(ctx context.Context, organizationID string, projectID uuid.UUID) (bool, error) {
-			var connected bool
-			err := db.QueryRow(ctx, `SELECT EXISTS (
-				SELECT 1
-				FROM plugin_github_connections c
-				JOIN projects p ON p.id = c.project_id
-				WHERE c.project_id = $1
-				  AND p.organization_id = $2
-				  AND p.deleted IS FALSE
-			)`, projectID, organizationID).Scan(&connected)
+			connected, err := repo.New(db).HasProjectMarketplaceConnection(ctx, repo.HasProjectMarketplaceConnectionParams{ProjectID: projectID, OrganizationID: organizationID})
 			if err != nil {
 				return false, fmt.Errorf("check plugin marketplace connection: %w", err)
 			}

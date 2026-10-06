@@ -2901,14 +2901,13 @@ var ErrGitHubRepoConflict = errors.New("github repo already connected to a diffe
 func (s *Service) upsertGitHubConnection(ctx context.Context, tx pgx.Tx, params repo.UpsertGitHubConnectionParams) (repo.PluginGithubConnection, error) {
 	q := repo.New(tx)
 
-	const savepoint = "upsert_github_connection"
-	if _, err := tx.Exec(ctx, "SAVEPOINT "+savepoint); err != nil {
+	if err := q.BeginGitHubConnectionSavepoint(ctx); err != nil {
 		return repo.PluginGithubConnection{}, fmt.Errorf("begin savepoint: %w", err)
 	}
 
 	conn, err := q.UpsertGitHubConnection(ctx, params)
 	if err == nil {
-		if _, err := tx.Exec(ctx, "RELEASE SAVEPOINT "+savepoint); err != nil {
+		if err := q.ReleaseGitHubConnectionSavepoint(ctx); err != nil {
 			return repo.PluginGithubConnection{}, fmt.Errorf("release savepoint: %w", err)
 		}
 		return conn, nil
@@ -2919,7 +2918,7 @@ func (s *Service) upsertGitHubConnection(ctx context.Context, tx pgx.Tx, params 
 		return repo.PluginGithubConnection{}, fmt.Errorf("upsert github connection: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT "+savepoint); err != nil {
+	if err := q.RollbackGitHubConnectionSavepoint(ctx); err != nil {
 		return repo.PluginGithubConnection{}, fmt.Errorf("rollback savepoint after repo conflict: %w", err)
 	}
 
