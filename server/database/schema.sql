@@ -10485,8 +10485,10 @@ CREATE TABLE IF NOT EXISTS dashboards (
   organization_id TEXT NOT NULL,
   created_by_user_id TEXT,
 
-  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 200),
-  description TEXT CHECK (CHAR_LENGTH(description) <= 2000),
+  -- Name and description lengths are checked by the dashboards service, so
+  -- the limits can move without a migration.
+  name TEXT NOT NULL,
+  description TEXT,
   filters jsonb NOT NULL DEFAULT '{}'::jsonb,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -10513,11 +10515,12 @@ CREATE TABLE IF NOT EXISTS dashboard_widgets (
   dashboard_id uuid NOT NULL,
   widget_id uuid NOT NULL,
 
-  -- Grid position and size, in columns and rows.
-  x integer NOT NULL CHECK (x >= 0),
-  y integer NOT NULL CHECK (y >= 0),
-  w integer NOT NULL CHECK (w > 0),
-  h integer NOT NULL CHECK (h > 0),
+  -- Grid position and size, in columns and rows. The dashboards service
+  -- keeps them on the grid and above each chart type's minimum.
+  x integer NOT NULL,
+  y integer NOT NULL,
+  w integer NOT NULL,
+  h integer NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
