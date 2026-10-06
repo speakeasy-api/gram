@@ -89,6 +89,30 @@ func TestCreateDashboard(t *testing.T) {
 	})
 }
 
+func TestDashboardDetailsAreChecked(t *testing.T) {
+	t.Parallel()
+
+	t.Run("it refuses a blank or overlong name and an overlong description, on creation and on update", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+
+		_, err := ti.service.CreateDashboard(ctx, createPayload("   "))
+		require.ErrorContains(t, err, "a dashboard needs a name")
+		_, err = ti.service.CreateDashboard(ctx, createPayload(strings.Repeat("é", 201)))
+		require.ErrorContains(t, err, "a dashboard name is at most 200 characters")
+		long := strings.Repeat("é", 2001)
+		_, err = ti.service.CreateDashboard(ctx, &gen.CreateDashboardPayload{Name: "ok", Description: &long, SessionToken: nil, ProjectSlugInput: nil})
+		require.ErrorContains(t, err, "a dashboard description is at most 2000 characters")
+
+		created, err := ti.service.CreateDashboard(ctx, createPayload(strings.Repeat("é", 200)))
+		require.NoError(t, err)
+		_, err = ti.service.UpdateDashboard(ctx, &gen.UpdateDashboardPayload{ID: created.ID, Name: strings.Repeat("x", 201), Description: nil, SessionToken: nil, ProjectSlugInput: nil})
+		require.ErrorContains(t, err, "a dashboard name is at most 200 characters")
+		_, err = ti.service.UpdateDashboard(ctx, &gen.UpdateDashboardPayload{ID: created.ID, Name: "ok", Description: &long, SessionToken: nil, ProjectSlugInput: nil})
+		require.ErrorContains(t, err, "a dashboard description is at most 2000 characters")
+	})
+}
+
 func TestListAndGetDashboards(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

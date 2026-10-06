@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -35,9 +36,26 @@ import (
 	widgetsrepo "github.com/speakeasy-api/gram/server/internal/widgets/repo"
 )
 
-// maxNameLength is the longest a dashboard name may be: the API enforces it,
-// and a copy keeps its name within it.
-const maxNameLength = 200
+// maxNameLength and maxDescriptionLength are the longest a dashboard's name
+// and description may be. The API enforces them too; the table does not, so
+// they can move without a migration.
+const (
+	maxNameLength        = 200
+	maxDescriptionLength = 2000
+)
+
+// checkDetails returns why a name and description cannot be saved, or "".
+func checkDetails(name string, description *string) string {
+	switch {
+	case strings.TrimSpace(name) == "":
+		return "a dashboard needs a name"
+	case utf8.RuneCountInString(name) > maxNameLength:
+		return fmt.Sprintf("a dashboard name is at most %d characters", maxNameLength)
+	case description != nil && utf8.RuneCountInString(*description) > maxDescriptionLength:
+		return fmt.Sprintf("a dashboard description is at most %d characters", maxDescriptionLength)
+	}
+	return ""
+}
 
 // copySuffix marks a dashboard made by duplication.
 const copySuffix = " (copy)"
@@ -165,6 +183,9 @@ func (s *Service) CreateDashboard(ctx context.Context, payload *gen.CreateDashbo
 	if authCtx.UserID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "making a dashboard requires a user identity")
 	}
+	if reason := checkDetails(payload.Name, payload.Description); reason != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "%s", reason)
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -196,6 +217,9 @@ func (s *Service) CreateDashboard(ctx context.Context, payload *gen.CreateDashbo
 
 // UpdateDashboard renames a dashboard or changes its description.
 func (s *Service) UpdateDashboard(ctx context.Context, payload *gen.UpdateDashboardPayload) (*gen.Dashboard, error) {
+	if reason := checkDetails(payload.Name, payload.Description); reason != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "%s", reason)
+	}
 	return s.edit(ctx, payload.ID, "update", func(ctx context.Context, authCtx *contextvalues.AuthContext, queries *repo.Queries, before repo.Dashboard) (repo.Dashboard, error) {
 		row, err := queries.UpdateDashboard(ctx, repo.UpdateDashboardParams{
 			Name:        payload.Name,
