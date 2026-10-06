@@ -27,6 +27,15 @@ func (q *Queries) DeleteToolsetEmbeddings(ctx context.Context, toolsetID uuid.UU
 	return err
 }
 
+const enableFilteredVectorScan = `-- name: EnableFilteredVectorScan :exec
+SET LOCAL hnsw.iterative_scan = strict_order
+`
+
+func (q *Queries) EnableFilteredVectorScan(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, enableFilteredVectorScan)
+	return err
+}
+
 const insertToolsetEmbedding = `-- name: InsertToolsetEmbedding :one
 INSERT INTO toolset_embeddings (
     project_id,

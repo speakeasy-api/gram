@@ -214,3 +214,5 @@ WHERE project_id = @project_id
   AND entry_key LIKE 'tools:%'
   AND deleted IS FALSE
 ORDER BY tag;
+-- name: EnableFilteredVectorScan :exec
+SET LOCAL hnsw.iterative_scan = strict_order;
