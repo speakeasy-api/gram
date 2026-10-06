@@ -12,6 +12,8 @@ import (
 	publicationv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	plugingen "github.com/speakeasy-api/gram/server/gen/plugins"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
@@ -62,6 +64,13 @@ func TestService_SetResourceAudience_RoleDelivery(t *testing.T) {
 	f.read(t, ctx, 1)
 	f.saveAudience(t, ctx)
 	f.read(t, ctx, 0)
+	for _, action := range []audit.Action{audit.ActionPluginServerAdd, audit.ActionPluginServerRemove} {
+		record, err := audittest.LatestAuditLogByAction(ctx, f.ti.conn, action)
+		require.NoError(t, err)
+		require.Equal(t, "Gram", record.ActorDisplay, "actor label for %s", action)
+		require.Equal(t, "system", record.ActorType)
+		require.Equal(t, "automatic-role-distribution", record.ActorID)
+	}
 }
 
 func TestService_SetResourceAudience_RoleDeliveryRetainsOtherRole(t *testing.T) {

@@ -7,6 +7,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -39,6 +41,13 @@ func TestRoleDistributionSetup_PopulatesExistingGrants(t *testing.T) {
 	_, err = pluginsrepo.New(f.db).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{OrganizationID: org, PluginID: manual.ID, PrincipalUrn: f.roleURN})
 	require.NoError(t, err)
 	require.NoError(t, f.handler.HandleRoleDistributionSetupRequested(ctx, f.event, gcp.MessageMetadata{ID: "existing-grants"}))
+	for _, action := range []audit.Action{audit.ActionPluginCreate, audit.ActionPluginAssignmentsSet, audit.ActionPluginServerAdd} {
+		record, err := audittest.LatestAuditLogByAction(ctx, f.db, action)
+		require.NoError(t, err)
+		require.Equal(t, "Gram", record.ActorDisplay, "actor label for %s", action)
+		require.Equal(t, "system", record.ActorType)
+		require.Equal(t, "automatic-role-distribution", record.ActorID)
+	}
 	automatic, err := testrepo.New(f.db).PipelineEngineeringPlugin(ctx, f.project)
 	require.NoError(t, err)
 	for _, pluginID := range []uuid.UUID{automatic, manual.ID} {
