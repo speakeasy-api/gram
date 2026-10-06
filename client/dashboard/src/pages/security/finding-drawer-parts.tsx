@@ -71,7 +71,10 @@ export function RevealingNote({
   className?: string;
 }): JSX.Element {
   return (
-    <div className={cn("flex items-center gap-2 text-sm", className)}>
+    <div
+      role="status"
+      className={cn("flex items-center gap-2 text-sm", className)}
+    >
       <Loader2 className="size-4 animate-spin" />
       <span>Revealing…</span>
     </div>
