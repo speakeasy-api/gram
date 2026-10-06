@@ -6390,6 +6390,66 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS remote_mcp_servers_project_id_id_key
 ON remote_mcp_servers (project_id, id);
 
+-- RFC 9728 protected resource metadata, one row per resource identifier the
+-- project's remote MCP servers connect to. The resource's scopes are what a
+-- login requests when its client sets none. The resource_* display members on
+-- remote_session_clients predate this table and stay until a contract
+-- migration drops them.
+CREATE TABLE IF NOT EXISTS remote_protected_resources (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+
+  -- The document's resource value (RFC 9728 §3.3), matched exactly: /mcp and
+  -- /mcp/ may be different resources.
+  resource_identifier TEXT NOT NULL CHECK (resource_identifier <> ''),
+  -- The well-known URL the document was last read from.
+  metadata_url TEXT,
+
+  -- Array members are NULL when the document omits them, which is distinct
+  -- from an empty array: the former says nothing, the latter advertises none.
+  authorization_servers TEXT[],
+  scopes_supported TEXT[],
+  bearer_methods_supported TEXT[],
+  resource_name TEXT,
+  resource_documentation TEXT,
+  resource_policy_uri TEXT,
+  resource_tos_uri TEXT,
+  -- Token-binding requirements a client must honour. NULL when not advertised.
+  dpop_bound_access_tokens_required BOOLEAN,
+  dpop_signing_alg_values_supported TEXT[],
+  tls_client_certificate_bound_access_tokens BOOLEAN,
+
+  -- The scope parameter of the last WWW-Authenticate challenge the resource
+  -- answered with (RFC 6750 §3), and when. NULL until one is seen.
+  challenge_scopes TEXT[],
+  challenge_scopes_seen_at timestamptz,
+
+  -- The last document captured, verbatim.
+  metadata JSONB,
+  -- When discovery last wrote the columns above. NULL until captured.
+  metadata_fetched_at timestamptz,
+  -- The public-safe reason the most recent fetch went wrong and when; a
+  -- successful fetch clears both.
+  metadata_last_error TEXT,
+  metadata_last_error_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT remote_protected_resources_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_protected_resources_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_protected_resources_project_id_resource_identifier_key
+ON remote_protected_resources (project_id, resource_identifier)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_protected_resources_project_id_id_key
+ON remote_protected_resources (project_id, id);
+
 
 -- Headers sent to a remote MCP server when proxying requests. Either value
 -- (a static/system-defined value) or value_from_request_header (pass-through

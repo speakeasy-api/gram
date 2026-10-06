@@ -126,10 +126,24 @@ func preflightCIMDIssuer(issuer remotesessions_repo.RemoteSessionIssuer) error {
 	if !issuer.ClientIDMetadataDocumentSupported {
 		return fmt.Errorf("issuer %q does not advertise client_id_metadata_document_supported", issuer.Slug)
 	}
-	if methods := issuer.TokenEndpointAuthMethodsSupported; len(methods) > 0 && !slices.Contains(methods, string(TokenEndpointAuthMethodNone)) {
+	if !SupportsClientIDMetadataDocument(issuer.ClientIDMetadataDocumentSupported, issuer.TokenEndpointAuthMethodsSupported) {
 		return fmt.Errorf("issuer %q does not advertise the none token_endpoint_auth_method required for client id metadata documents", issuer.Slug)
 	}
 	return nil
+}
+
+// SupportsClientIDMetadataDocument reports whether an authorization server's
+// metadata lets Gram use a Client ID Metadata Document instead of dynamic
+// client registration: it must advertise client_id_metadata_document_supported
+// and, when it enumerates token endpoint auth methods, accept "none" (CIMD
+// clients are public). An empty method list means the issuer did not advertise
+// them, so it is not second-guessed. Every caller that chooses between CIMD,
+// dynamic registration and manual setup uses this one predicate.
+func SupportsClientIDMetadataDocument(clientIDMetadataDocumentSupported bool, tokenEndpointAuthMethodsSupported []string) bool {
+	if !clientIDMetadataDocumentSupported {
+		return false
+	}
+	return len(tokenEndpointAuthMethodsSupported) == 0 || slices.Contains(tokenEndpointAuthMethodsSupported, string(TokenEndpointAuthMethodNone))
 }
 
 // HandleClientMetadataDocument serves the public, unauthenticated CIMD document

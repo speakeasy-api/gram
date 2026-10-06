@@ -628,7 +628,7 @@ WITH issuer AS (
     SELECT issuer.id, issuer.project_id, COALESCE(issuer.organization_id, project.organization_id) AS organization_id
     FROM user_session_issuers AS issuer
     LEFT JOIN projects AS project ON project.id = issuer.project_id
-    WHERE issuer.id = $11
+    WHERE issuer.id = $12
       AND issuer.deleted IS FALSE
     FOR KEY SHARE OF issuer
 )
@@ -645,7 +645,8 @@ INSERT INTO user_sessions (
     refresh_token_hash,
     refresh_expires_at,
     expires_at,
-    tool_selection
+    tool_selection,
+    resource
 )
 SELECT
     issuer.project_id,
@@ -660,7 +661,8 @@ SELECT
     $7,
     $8,
     $9,
-    $10
+    $10,
+    $11
 FROM issuer
 RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, created_at, updated_at, deleted_at, deleted
 `
@@ -676,6 +678,7 @@ type CreateUserSessionParams struct {
 	RefreshExpiresAt       pgtype.Timestamptz
 	ExpiresAt              pgtype.Timestamptz
 	ToolSelection          []byte
+	Resource               pgtype.Text
 	UserSessionIssuerID    uuid.UUID
 }
 
@@ -702,6 +705,7 @@ func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionPa
 		arg.RefreshExpiresAt,
 		arg.ExpiresAt,
 		arg.ToolSelection,
+		arg.Resource,
 		arg.UserSessionIssuerID,
 	)
 	var i UserSession
@@ -1550,6 +1554,53 @@ func (q *Queries) GetProjectUserSessionIssuerByID(ctx context.Context, arg GetPr
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getSharedUserSessionIssuerByID = `-- name: GetSharedUserSessionIssuerByID :one
+SELECT
+    issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.use_authentication_host, issuer.authorization_server_mode, issuer.pinned_issuer_url, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted,
+    COALESCE(issuer.organization_id, project.organization_id)::text AS resolved_organization_id
+FROM user_session_issuers AS issuer
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE issuer.id = $1
+  AND issuer.deleted IS FALSE
+`
+
+type GetSharedUserSessionIssuerByIDRow struct {
+	UserSessionIssuer      UserSessionIssuer
+	ResolvedOrganizationID string
+}
+
+// Loads an issuer by id alone for its shared authorization server, served at
+// <origin>/oauth/usi/{id}. That URL carries no project or organization, so
+// the id is the only scope available; callers must confirm the issuer is in
+// 'shared' mode before serving anything for it. The organization is resolved
+// through the owning project for project-level issuers.
+func (q *Queries) GetSharedUserSessionIssuerByID(ctx context.Context, id uuid.UUID) (GetSharedUserSessionIssuerByIDRow, error) {
+	row := q.db.QueryRow(ctx, getSharedUserSessionIssuerByID, id)
+	var i GetSharedUserSessionIssuerByIDRow
+	err := row.Scan(
+		&i.UserSessionIssuer.ID,
+		&i.UserSessionIssuer.ProjectID,
+		&i.UserSessionIssuer.OrganizationID,
+		&i.UserSessionIssuer.AttachmentScope,
+		&i.UserSessionIssuer.Slug,
+		&i.UserSessionIssuer.AuthnChallengeMode,
+		&i.UserSessionIssuer.SessionDuration,
+		&i.UserSessionIssuer.Classification,
+		&i.UserSessionIssuer.ClientIDMetadataAdmissionMode,
+		&i.UserSessionIssuer.TrustedRemoteSessionIssuerID,
+		&i.UserSessionIssuer.TrustedRemoteSessionClientID,
+		&i.UserSessionIssuer.UseAuthenticationHost,
+		&i.UserSessionIssuer.AuthorizationServerMode,
+		&i.UserSessionIssuer.PinnedIssuerUrl,
+		&i.UserSessionIssuer.CreatedAt,
+		&i.UserSessionIssuer.UpdatedAt,
+		&i.UserSessionIssuer.DeletedAt,
+		&i.UserSessionIssuer.Deleted,
+		&i.ResolvedOrganizationID,
 	)
 	return i, err
 }
