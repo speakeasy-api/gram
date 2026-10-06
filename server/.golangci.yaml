@@ -66,6 +66,9 @@ linters:
       - path: cmd/|internal/dns/
         linters:
           - forbidigo
+        # Keep the existing tooling exemptions, but enforce GG015 (SQLc)
+        # in commands too.
+        text: "GG0(0[1-9]|1[0-4]):"
       # Bench commands and dev-mcp are developer CLIs (not part of the server
       # binary). Like test files, they favor terse partial structs and direct
       # error returns over production-grade hardening, so exempt them from the
@@ -196,6 +199,18 @@ linters:
         linters:
           - forbidigo
         text: GG006|GG008|GG009
+      # glint's notestingrawsql already enforces SQLc in tests, with its own
+      # fixture guidance and stricter transaction-setup restrictions.
+      - path: _test\.go
+        linters:
+          - forbidigo
+        text: GG015
+      # Demo seeding and its schema-wide safety helpers execute seed scripts
+      # and dynamically inspect tables rather than application queries.
+      - path: ^internal/demoseed/
+        linters:
+          - forbidigo
+        text: GG015
       # Production observability setup falls back to noop providers when
       # no exporter is configured.
       - path: internal/o11y/setup\.go
@@ -332,6 +347,19 @@ linters:
         - pattern: ^clickhouse\.With(Std)?Async$
           pkg: ^github\.com/ClickHouse/clickhouse-go/v2$
           msg: "GG014: clickhouse.WithAsync does not enable or disable async insert. It always sets async_insert=1 and its bool only picks wait_for_async_insert, so WithAsync(false) is fire-and-forget. State the posture explicitly with WithSettings instead: async_insert 0 for a synchronous insert, or async_insert 1 plus wait_for_async_insert 0 for fire-and-forget."
+        # SQLc-generated files are excluded by golangci-lint's generated-code
+        # filter. Transaction lifecycle methods remain available to callers.
+        - pattern: '^(pgx|pgxpool|pgconn)\..+\.(Exec|Query|QueryRow|Prepare|CopyFrom|CopyTo|SendBatch|Queue|ExecParams|ExecPrepared|ExecBatch|SendQueryParams|SendQueryPrepared)$'
+          pkg: '^github\.com/jackc/pgx/v5(/(pgxpool|pgconn))?$'
+          msg: "GG015: Use SQLc-generated methods from the relevant package's queries.sql instead of raw database queries."
+        - pattern: '^sql\.(DB|Conn|Tx|Stmt)\.(Exec|ExecContext|Query|QueryContext|QueryRow|QueryRowContext|Prepare|PrepareContext)$'
+          pkg: "^database/sql$"
+          msg: "GG015: Use SQLc-generated methods from the relevant package's queries.sql instead of raw database queries."
+        # Cover SQLc's DBTX and the application's named query wrappers too;
+        # forbidigo matches the static receiver type at each call site.
+        - pattern: '^.+\.(DBTX|LifecycleTransactionQueries|lifecycleTransactionQueries|queryRower|dbExecer)\.(Exec|Query|QueryRow|CopyFrom)$'
+          pkg: '^github\.com/speakeasy-api/gram/server/'
+          msg: "GG015: Use SQLc-generated methods from the relevant package's queries.sql instead of raw database queries."
     sloglint:
       no-mixed-args: true
       attr-only: true
