@@ -230,8 +230,8 @@ func (s *RefreshService) FallbackResourceForClient(ctx context.Context, clientID
 // connected through upstream, weighed against the other clients bound to the
 // same endpoint; see claimableUpstream. Siblings are only consulted when the
 // client's own attachments leave the claim open.
-func (s *RefreshService) ResourceForClientAtUpstream(ctx context.Context, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (string, error) {
-	attachments, err := s.attachmentsForClients(ctx, append([]uuid.UUID{clientID}, siblingIDs...))
+func (s *RefreshService) ResourceForClientAtUpstream(ctx context.Context, organizationID string, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (string, error) {
+	attachments, err := s.attachmentsForClients(ctx, organizationID, append([]uuid.UUID{clientID}, siblingIDs...))
 	if err != nil {
 		return "", err
 	}
@@ -241,8 +241,8 @@ func (s *RefreshService) ResourceForClientAtUpstream(ctx context.Context, client
 // ResourcesForClientsAtUpstream is ResourceForClientAtUpstream for every
 // client bound to one endpoint, each weighed against the others, from a
 // single load of their attachments.
-func (s *RefreshService) ResourcesForClientsAtUpstream(ctx context.Context, clientIDs []uuid.UUID, upstream string) (map[uuid.UUID]string, error) {
-	attachments, err := s.attachmentsForClients(ctx, clientIDs)
+func (s *RefreshService) ResourcesForClientsAtUpstream(ctx context.Context, organizationID string, clientIDs []uuid.UUID, upstream string) (map[uuid.UUID]string, error) {
+	attachments, err := s.attachmentsForClients(ctx, organizationID, clientIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -254,9 +254,12 @@ func (s *RefreshService) ResourcesForClientsAtUpstream(ctx context.Context, clie
 }
 
 // attachmentsForClients loads the MCP servers attached to each client in one
-// round trip. A client with no attachments has no entry.
-func (s *RefreshService) attachmentsForClients(ctx context.Context, clientIDs []uuid.UUID) (map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, error) {
-	rows, err := remotesessions_repo.New(s.db).ListOrganizationMcpServersForClients(ctx, clientIDs)
+// round trip, within organizationID. A client with no attachments has no entry.
+func (s *RefreshService) attachmentsForClients(ctx context.Context, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, error) {
+	rows, err := remotesessions_repo.New(s.db).ListOrganizationMcpServersForClients(ctx, remotesessions_repo.ListOrganizationMcpServersForClientsParams{
+		RemoteSessionClientIds: clientIDs,
+		OrganizationID:         organizationID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list mcp servers for bound clients: %w", err)
 	}

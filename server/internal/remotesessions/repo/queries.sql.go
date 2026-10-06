@@ -6635,9 +6635,15 @@ JOIN mcp_servers AS m ON m.user_session_issuer_id = link.user_session_issuer_id
 JOIN projects AS p ON p.id = m.project_id
 LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
 WHERE link.remote_session_client_id = ANY($1::uuid[])
+  AND p.organization_id = $2::text
   AND m.deleted IS FALSE
 ORDER BY link.remote_session_client_id ASC, m.id DESC
 `
+
+type ListOrganizationMcpServersForClientsParams struct {
+	RemoteSessionClientIds []uuid.UUID
+	OrganizationID         string
+}
 
 type ListOrganizationMcpServersForClientsRow struct {
 	ClientID    uuid.UUID
@@ -6652,9 +6658,10 @@ type ListOrganizationMcpServersForClientsRow struct {
 // ListOrganizationMcpServersForClient for a set of clients in one round trip,
 // each row tagged with the client it is attached through, so a consent page
 // or a login decides every bound client's resource from one load. Same
-// liveness and remote-only rules as the single-client query.
-func (q *Queries) ListOrganizationMcpServersForClients(ctx context.Context, remoteSessionClientIds []uuid.UUID) ([]ListOrganizationMcpServersForClientsRow, error) {
-	rows, err := q.db.Query(ctx, listOrganizationMcpServersForClients, remoteSessionClientIds)
+// liveness and remote-only rules as the single-client query, held to the
+// caller's organization so the client ids cannot read another tenant's servers.
+func (q *Queries) ListOrganizationMcpServersForClients(ctx context.Context, arg ListOrganizationMcpServersForClientsParams) ([]ListOrganizationMcpServersForClientsRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationMcpServersForClients, arg.RemoteSessionClientIds, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}

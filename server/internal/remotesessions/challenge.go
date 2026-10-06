@@ -741,8 +741,8 @@ func (m *ChallengeManager) CachedResourceScopesForServer(ctx context.Context, pr
 // the one bound client that may claim it. A client whose grant goes
 // elsewhere, or unqualified because an owning sibling holds the resource,
 // is decided by its own authorization server, not this resource's row.
-func (m *ChallengeManager) ResourceAppliesToClient(ctx context.Context, clientID uuid.UUID, siblingIDs []uuid.UUID, resourceURL string) (bool, error) {
-	resource, err := m.ResourceForClientAtUpstream(ctx, clientID, siblingIDs, resourceURL)
+func (m *ChallengeManager) ResourceAppliesToClient(ctx context.Context, organizationID string, clientID uuid.UUID, siblingIDs []uuid.UUID, resourceURL string) (bool, error) {
+	resource, err := m.ResourceForClientAtUpstream(ctx, organizationID, clientID, siblingIDs, resourceURL)
 	if err != nil {
 		return false, err
 	}
@@ -752,8 +752,8 @@ func (m *ChallengeManager) ResourceAppliesToClient(ctx context.Context, clientID
 // ResourceAppliesToClients is ResourceAppliesToClient for every client bound
 // to one endpoint, judged among each other from a single load, so a consent
 // page with many cards decides them all in one round trip.
-func (m *ChallengeManager) ResourceAppliesToClients(ctx context.Context, clientIDs []uuid.UUID, resourceURL string) (map[uuid.UUID]bool, error) {
-	resources, err := m.refresher.ResourcesForClientsAtUpstream(ctx, clientIDs, resourceURL)
+func (m *ChallengeManager) ResourceAppliesToClients(ctx context.Context, organizationID string, clientIDs []uuid.UUID, resourceURL string) (map[uuid.UUID]bool, error) {
+	resources, err := m.refresher.ResourcesForClientsAtUpstream(ctx, organizationID, clientIDs, resourceURL)
 	if err != nil {
 		return nil, err
 	}
@@ -795,7 +795,7 @@ func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent Paren
 		skipped.Outcome = protectedresource.ProbeOutcomeError
 		return none, skipped
 	}
-	applies, err := m.ResourceAppliesToClient(ctx, client.ID, siblingIDs, resourceURL)
+	applies, err := m.ResourceAppliesToClient(ctx, parent.OrganizationID, client.ID, siblingIDs, resourceURL)
 	if err != nil {
 		m.logger.ErrorContext(ctx, "decide resource ownership for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()), attr.SlogRemoteSessionClientID(client.ID.String()))
 		skipped.Outcome = protectedresource.ProbeOutcomeError
@@ -1085,8 +1085,8 @@ func (m *ChallengeManager) FallbackResourceForClient(ctx context.Context, client
 
 // ResourceForClientAtUpstream derives one client's RFC 8707 resource for a
 // connect made through upstream; see RefreshService.ResourceForClientAtUpstream.
-func (m *ChallengeManager) ResourceForClientAtUpstream(ctx context.Context, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (string, error) {
-	return m.refresher.ResourceForClientAtUpstream(ctx, clientID, siblingIDs, upstream)
+func (m *ChallengeManager) ResourceForClientAtUpstream(ctx context.Context, organizationID string, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (string, error) {
+	return m.refresher.ResourceForClientAtUpstream(ctx, organizationID, clientID, siblingIDs, upstream)
 }
 
 // DisconnectRemoteSession soft-deletes the subject's remote_session for one

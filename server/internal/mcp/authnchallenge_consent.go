@@ -1418,7 +1418,7 @@ func (s *Service) buildRemoteSessionCards(
 		for i := range clients {
 			boundIDs = append(boundIDs, clients[i].ID)
 		}
-		resourceApplies, err = s.remoteChallengeMgr.ResourceAppliesToClients(ctx, boundIDs, serverResourceURL)
+		resourceApplies, err = s.remoteChallengeMgr.ResourceAppliesToClients(ctx, endpoint.OrganizationID, boundIDs, serverResourceURL)
 		if err != nil {
 			s.logger.WarnContext(ctx, "decide resource ownership for consent cards; falling back to issuer scopes", attr.SlogError(err))
 			resourceApplies = nil

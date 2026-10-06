@@ -3086,7 +3086,8 @@ ORDER BY m.id DESC;
 -- ListOrganizationMcpServersForClient for a set of clients in one round trip,
 -- each row tagged with the client it is attached through, so a consent page
 -- or a login decides every bound client's resource from one load. Same
--- liveness and remote-only rules as the single-client query.
+-- liveness and remote-only rules as the single-client query, held to the
+-- caller's organization so the client ids cannot read another tenant's servers.
 SELECT DISTINCT
     link.remote_session_client_id AS client_id,
     m.id,
@@ -3100,6 +3101,7 @@ JOIN mcp_servers AS m ON m.user_session_issuer_id = link.user_session_issuer_id
 JOIN projects AS p ON p.id = m.project_id
 LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
 WHERE link.remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
+  AND p.organization_id = @organization_id::text
   AND m.deleted IS FALSE
 ORDER BY link.remote_session_client_id ASC, m.id DESC;
 
