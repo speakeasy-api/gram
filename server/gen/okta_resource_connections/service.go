@@ -159,6 +159,9 @@ type OktaResourceConnectionServer struct {
 	// identifies the shared readiness confirmation; independent of the confirmed
 	// identity assertion audience.
 	IssuerID *string
+	// The server's authorization server issuer; the Issuer URL to enter when
+	// enabling Cross App Access on a resource app. Omitted when unknown.
+	AuthorizationServerIssuer *string
 	// The resource indicator to enter on the connection: the server's RFC 9728
 	// resource identifier when known, otherwise its URL.
 	ResourceIndicator string

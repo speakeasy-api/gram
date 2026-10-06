@@ -5,11 +5,11 @@ import type { AnalyticsQueryResult } from "@gram/client/models/components/analyt
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { JSX } from "react";
 import {
-  autoGrain,
   completeMeasures,
   hasChartShape,
   isRowsMode,
   queryDimensions,
+  specGrain,
   type ExploreSpec,
 } from "./exploreModel";
 import { CHART_HEIGHT, ResultChart } from "./ResultChart";
@@ -74,9 +74,45 @@ function ResultsBody({
       />
     );
   }
+  return (
+    <ResultDrawing
+      dataset={dataset}
+      spec={spec}
+      rows={primary.data.rows}
+      chartHeight={CHART_HEIGHT}
+    />
+  );
+}
+
+/**
+ * A result that came back with rows, drawn as the spec's chart: the body
+ * the Explore panel and a standalone widget share. Loading, failure and
+ * empty results are the caller's, sized to wherever it sits.
+ */
+export function ResultDrawing({
+  dataset,
+  spec,
+  rows,
+  chartHeight,
+  onRangeSelect,
+}: {
+  dataset: AnalyticsDataset | undefined;
+  spec: ExploreSpec;
+  rows: AnalyticsQueryResult["rows"];
+  /** A timeseries chart's height; without one it fills its container. */
+  chartHeight?: number;
+  /** Dragging across a timeseries selects that range. */
+  onRangeSelect?: ((from: Date, to: Date) => void) | undefined;
+}): JSX.Element {
   if (hasChartShape(spec)) {
     return (
-      <ChartOrReason dataset={dataset} spec={spec} rows={primary.data.rows} />
+      <ChartOrReason
+        dataset={dataset}
+        spec={spec}
+        rows={rows}
+        height={chartHeight}
+        onRangeSelect={onRangeSelect}
+      />
     );
   }
   // Nothing measured means rows, so a number spec that lost its last measure
@@ -85,24 +121,26 @@ function ResultsBody({
     spec.chartType === "number" &&
     completeMeasures(spec.measures).length > 0
   ) {
-    return (
-      <ResultNumbers dataset={dataset} spec={spec} row={primary.data.rows[0]} />
-    );
+    return <ResultNumbers dataset={dataset} spec={spec} row={rows[0]} />;
   }
   if (spec.chartType === "ranked" && !isRowsMode(spec)) {
-    return <ResultRanked spec={spec} rows={primary.data.rows} />;
+    return <ResultRanked spec={spec} rows={rows} />;
   }
-  return <ResultTable dataset={dataset} spec={spec} rows={primary.data.rows} />;
+  return <ResultTable dataset={dataset} spec={spec} rows={rows} />;
 }
 
 function ChartOrReason({
   dataset,
   spec,
   rows,
+  height,
+  onRangeSelect,
 }: {
   dataset: AnalyticsDataset | undefined;
   spec: ExploreSpec;
   rows: AnalyticsQueryResult["rows"];
+  height: number | undefined;
+  onRangeSelect: ((from: Date, to: Date) => void) | undefined;
 }): JSX.Element {
   const measures = completeMeasures(spec.measures);
   const unit = sharedUnit(dataset, measures);
@@ -122,13 +160,23 @@ function ChartOrReason({
     dataset,
   );
   return (
-    <div className="flex flex-col gap-2">
-      <ResultChart
-        seriesSet={seriesSet}
-        unit={unit}
-        chartType={spec.chartType}
-        grain={autoGrain(spec.window)}
-      />
+    <div
+      className={
+        height === undefined
+          ? "flex h-full min-h-0 flex-col gap-2"
+          : "flex flex-col gap-2"
+      }
+    >
+      <div className={height === undefined ? "min-h-0 flex-1" : undefined}>
+        <ResultChart
+          seriesSet={seriesSet}
+          unit={unit}
+          chartType={spec.chartType}
+          grain={specGrain(spec)}
+          height={height}
+          onRangeSelect={onRangeSelect}
+        />
+      </div>
       {seriesSet.hidden > 0 ? (
         <p className="text-muted-foreground text-xs">
           Showing the {seriesSet.series.length} largest of{" "}

@@ -461,3 +461,8 @@ WHERE organization_id = sqlc.arg(organization_id)
   AND created_at >= sqlc.arg(from_time)
   AND created_at <= sqlc.arg(to_time)
 GROUP BY provider, chat_id;
+
+-- name: RecordCapturedSessionID :exec
+-- Keep the native session identifier when hook capture derives a chat UUID.
+UPDATE chats SET external_chat_id = @session_id::text
+WHERE id = @chat_id AND project_id = @project_id AND external_chat_id IS NULL;

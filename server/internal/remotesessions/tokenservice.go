@@ -185,7 +185,7 @@ const remoteSessionLastUsedCutoff = 5 * time.Minute
 // signal; the caller decides whether absence is a challenge or a no-op.
 //
 // Returns errors for unexpected failures and ErrInvalidAuthorizationRequest
-// for delegated callers, which must use the tenant-scoped resolver instead.
+// for assistant turns, which must use the tenant-scoped resolver instead.
 // "No token available" otherwise returns an empty string, not an error.
 //
 // The (subject, remote_session_client_id) pair is uniqueness-enforced
@@ -219,9 +219,8 @@ func (m *ChallengeManager) resolveUpstreamToken(
 ) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
 
-	if invocation, ok := contextvalues.AssistantBusinessInvocationFromContext(ctx); ok && invocation.UserID != "" {
-		// Delegated credentials require the tenant-scoped resolver and its
-		// explicit selected-source and post-refresh revalidation checks.
+	if _, ok := contextvalues.AssistantInvoker(ctx); ok {
+		// Turn-user credentials resolve only through the tenant-scoped path.
 		return zero, ErrInvalidAuthorizationRequest
 	}
 	if _, attached, err := remoteSessionCallerPrincipal(ctx, subject); err != nil {

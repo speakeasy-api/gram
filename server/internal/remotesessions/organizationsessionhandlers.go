@@ -30,17 +30,27 @@ import (
 // be bound to a single audience). Url is empty for every non-remote backend,
 // tunneled included: those route by their own issuer identity instead, so an
 // identifier here would only risk making a mixed issuer read as ambiguous.
+//
+// The result is sent upstream, so it is the registered URL as stored:
+// providers may match the indicator exactly against their RFC 9728 resource,
+// where https://host and https://host/ differ. Trailing slashes are ignored
+// only when deciding whether rows name the same upstream. Rows that differ
+// only in trailing slashes resolve to the shortest spelling, so the result
+// does not depend on row order.
 func clientUpstreamResource(rows []repo.ListOrganizationMcpServersForClientRow) string {
 	resource := ""
 	for _, row := range rows {
-		url := strings.TrimRight(row.Url, "/")
-		if url == "" {
+		if strings.TrimRight(row.Url, "/") == "" {
 			continue
 		}
-		if resource != "" && resource != url {
+		switch {
+		case resource == "":
+			resource = row.Url
+		case !sameUpstream(resource, row.Url):
 			return ""
+		case len(row.Url) < len(resource):
+			resource = row.Url
 		}
-		resource = url
 	}
 	return resource
 }
@@ -51,23 +61,29 @@ func clientUpstreamResource(rows []repo.ListOrganizationMcpServersForClientRow) 
 // when it is attached to it — the caller must still check that no sibling
 // bound to the same endpoint serves it: an endpoint's own server sits in every
 // bound client's rows, so a looser rule would let a second client record the
-// same resource and fail routing closed as a duplicate.
+// same resource and fail routing closed as a duplicate. A claimed upstream is
+// returned verbatim, because it is sent upstream as the resource.
 func claimableUpstream(own []repo.ListOrganizationMcpServersForClientRow, upstream string) (resource string, claimable bool) {
 	derived := clientUpstreamResource(own)
-	want := strings.TrimRight(upstream, "/")
-	if want == "" || derived != "" || !rowsServeUpstream(own, want) {
+	if strings.TrimRight(upstream, "/") == "" || derived != "" || !rowsServeUpstream(own, upstream) {
 		return derived, false
 	}
-	return want, true
+	return upstream, true
 }
 
 func rowsServeUpstream(rows []repo.ListOrganizationMcpServersForClientRow, upstream string) bool {
 	for _, row := range rows {
-		if strings.TrimRight(row.Url, "/") == upstream {
+		if sameUpstream(row.Url, upstream) {
 			return true
 		}
 	}
 	return false
+}
+
+// sameUpstream reports whether two upstream URLs name the same destination,
+// ignoring trailing slashes as credential routing does.
+func sameUpstream(a, b string) bool {
+	return strings.TrimRight(a, "/") == strings.TrimRight(b, "/")
 }
 
 // ListClientSessions lists the sessions minted against a client in the

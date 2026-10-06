@@ -188,7 +188,7 @@ function clearConfirmation(serverName = "Server 0") {
 
 const issuerInput = () => screen.getByLabelText<HTMLInputElement>("Issuer URL");
 
-describe("Enterprise Managed Auth setup", () => {
+describe("setup checklist", () => {
   it("reopens the collapsed agent step when the alert link is followed", () => {
     mocks.readiness.mockReturnValue({
       data: {
@@ -243,6 +243,58 @@ describe("Enterprise Managed Auth setup", () => {
     expect(agentForm()).toBeNull();
     follow();
     expect(agentForm()).toBeTruthy();
+  });
+});
+
+describe("Server connections section", () => {
+  it.each([
+    ["loading", { isPending: true }],
+    ["failed", { data: undefined, error: new Error("Could not load") }],
+    [
+      "loaded",
+      {
+        data: {
+          servers: [],
+          totalCount: 1,
+          pendingCount: 1,
+          undiscoveredCount: 0,
+          agentRecorded: false,
+        },
+        isPlaceholderData: false,
+      },
+    ],
+  ])("keeps its heading and anchor while %s", (_state, readiness) => {
+    mocks.readiness.mockReturnValue(readiness);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <TooltipProvider>
+            <CrossAppAccessTab
+              connection={
+                {
+                  id: "connection",
+                  status: "verified",
+                } as OktaIdentityProviderConnection
+              }
+            />
+          </TooltipProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(
+      screen
+        .getByRole("heading", { name: "Server connections" })
+        .closest("section")?.id,
+    ).toBe("readiness");
+  });
+
+  it("explains what the pending count covers", () => {
+    show([row(0)]);
+    expect(
+      screen.getByText(
+        "Not confirmed or not working. The connection may already exist in Okta.",
+      ),
+    ).toBeTruthy();
   });
 });
 
@@ -456,6 +508,40 @@ describe("review panel", () => {
         screen.queryByRole("button", { name: "Save confirmation" }),
       ).toBeNull(),
     );
+  });
+
+  it("prefills an unconfirmed server with its authorization server issuer", () => {
+    availableApp();
+    show([
+      {
+        ...row(0),
+        authorizationServerIssuer: "https://auth.example.com",
+      },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Review setup" }));
+    expect(issuerInput().value).toBe("https://auth.example.com");
+    expect(mocks.confirm).not.toHaveBeenCalled();
+  });
+
+  it("keeps the saved audience over the issuer and ignores an unusable issuer", () => {
+    availableApp();
+    show([
+      savedRow(0, { authorizationServerIssuer: "https://auth.example.com" }),
+      {
+        ...row(1),
+        resourceIndicator: "https://other.example.com",
+        authorizationServerIssuer: "http://insecure.example.com",
+      },
+    ]);
+    const rows = screen.getAllByRole("row");
+    fireEvent.click(
+      within(rows[1]!).getByRole("button", { name: "Review / edit" }),
+    );
+    expect(issuerInput().value).toBe("https://issuer.example.com/saved");
+    fireEvent.click(
+      within(rows[2]!).getByRole("button", { name: "Review setup" }),
+    );
+    expect(issuerInput().value).toBe("");
   });
 
   it("does not prefill another server from a cleared snapshot with the same resource", () => {

@@ -11,8 +11,12 @@ import (
 // WorkloadSessionAdmission contains the policy sets a workload session acts
 // under, loaded independently and never cached across requests.
 //
-// The owner's policy is not inherited. When a credential records a delegating
-// human, their live policy further restricts the workload's authority.
+// Two sets rather than the three a principal credential carries. A workload
+// holds no grants of its own and inherits the live policy of the agent assigned
+// to it, so there is no separate workload policy to load. The agent owner's own
+// policy is deliberately absent: a workload is a principal in its own right
+// rather than something acting on an owner's behalf, so the owner bounds which
+// agent may be assigned, not what the machine may reach.
 type WorkloadSessionAdmission struct {
 	// AgentPrincipal is the agent the workload inherited from. Admission
 	// refuses a result that names none.
@@ -24,10 +28,6 @@ type WorkloadSessionAdmission struct {
 	Ceiling []Grant
 	// Agent is the assigned agent's live policy A.
 	Agent []Grant
-	// Authorizer is evaluated only when AuthorizerUserID is present. An empty
-	// selected-human policy denies; absence means autonomous execution.
-	AuthorizerUserID string
-	Authorizer       []Grant
 }
 
 // WorkloadSessionAdmitter supplies application-owned workload admission without
@@ -51,10 +51,7 @@ func (e *Engine) AdmitWorkloadSession(ctx context.Context) (context.Context, err
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 	ctx = contextvalues.WithPrincipalCredentialOwner(ctx, admission.OwnerUserID)
-	// Intersect ceiling and agent policies, plus human policy for delegated
-	// sessions. No owner set: an empty owner set would deny every check.
-	if admission.AuthorizerUserID != "" {
-		return admittedPoliciesToContext(ctx, admission.Ceiling, admission.Agent, admission.Authorizer), nil
-	}
+	// Two sets and no owner set. An empty owner set would read as "the owner
+	// allows nothing" and deny every check.
 	return admittedPoliciesToContext(ctx, admission.Ceiling, admission.Agent), nil
 }

@@ -2,6 +2,10 @@ package assistanttokens
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"log"
 	"os"
 	"testing"
@@ -106,7 +110,7 @@ func TestCheckRevocation_active(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, "tokens_active")
-	m := New("test-secret", f.conn, nil)
+	m := New("test-secret", f.conn, nil, nil, nil)
 
 	require.NoError(t, m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID))
 }
@@ -121,7 +125,7 @@ func TestCheckRevocation_threadDeleted(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	m := New("test-secret", f.conn, nil)
+	m := New("test-secret", f.conn, nil, nil, nil)
 
 	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID)
 	requireUnauthorized(t, err)
@@ -137,7 +141,7 @@ func TestCheckRevocation_assistantDeleted(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	m := New("test-secret", f.conn, nil)
+	m := New("test-secret", f.conn, nil, nil, nil)
 
 	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID)
 	requireUnauthorized(t, err)
@@ -154,7 +158,7 @@ func TestCheckRevocation_assistantPaused(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	m := New("test-secret", f.conn, nil)
+	m := New("test-secret", f.conn, nil, nil, nil)
 
 	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID)
 	requireUnauthorized(t, err)
@@ -164,7 +168,7 @@ func TestCheckRevocation_threadMissing(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, "tokens_thread_missing")
-	m := New("test-secret", f.conn, nil)
+	m := New("test-secret", f.conn, nil, nil, nil)
 
 	err := m.checkRevocation(t.Context(), f.projectID, f.assistantID, uuid.New())
 	requireUnauthorized(t, err)
@@ -176,7 +180,7 @@ func TestCheckRevocation_assistantScoped(t *testing.T) {
 	// v2 tokens omit ThreadID — revocation must fall back to an
 	// assistant-only lookup and pass when the assistant is active.
 	f := newFixture(t, "tokens_assistant_scoped")
-	m := New("test-secret", f.conn, nil)
+	m := New("test-secret", f.conn, nil, nil, nil)
 
 	require.NoError(t, m.checkRevocation(t.Context(), f.projectID, f.assistantID, uuid.Nil))
 }
@@ -184,7 +188,7 @@ func TestCheckRevocation_assistantScoped(t *testing.T) {
 func TestMCPAuthFlowSeparatesStableCallbackFromAttempt(t *testing.T) {
 	t.Parallel()
 
-	manager := New("test-secret", nil, nil)
+	manager := New("test-secret", nil, nil, nil, nil)
 	assistantID := uuid.New()
 	attemptID := uuid.NewString()
 	token, err := manager.GenerateMCPAuthFlow(MCPAuthFlowInput{
@@ -217,7 +221,7 @@ func TestMCPAuthFlowSeparatesStableCallbackFromAttempt(t *testing.T) {
 func TestMCPAuthFlowDefaultsAttemptToLegacyFlowID(t *testing.T) {
 	t.Parallel()
 
-	manager := New("test-secret", nil, nil)
+	manager := New("test-secret", nil, nil, nil, nil)
 	flowID := uuid.NewString()
 	token, err := manager.GenerateMCPAuthFlow(MCPAuthFlowInput{
 		OrgID:             "org-test",
@@ -256,7 +260,7 @@ func TestCheckRevocation_assistantScoped_assistantPaused(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	m := New("test-secret", f.conn, nil)
+	m := New("test-secret", f.conn, nil, nil, nil)
 
 	err = m.checkRevocation(t.Context(), f.projectID, f.assistantID, uuid.Nil)
 	requireUnauthorized(t, err)
@@ -266,7 +270,7 @@ func TestGenerate_assistantScopedOmitsThreadClaim(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, "tokens_generate_v2")
-	m := New("test-secret", f.conn, nil)
+	m := New("test-secret", f.conn, nil, nil, nil)
 
 	token, err := m.Generate(GenerateInput{
 		OrgID:       "org",
@@ -286,7 +290,7 @@ func TestCheckRevocation_cacheHitSkipsDB(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, "tokens_cache_hit")
-	m := New("test-secret", f.conn, nil)
+	m := New("test-secret", f.conn, nil, nil, nil)
 
 	// Prime cache with the active path.
 	require.NoError(t, m.checkRevocation(t.Context(), f.projectID, f.assistantID, f.threadID))
@@ -307,7 +311,7 @@ func TestCheckRevocation_cacheRespectsTTL(t *testing.T) {
 	t.Parallel()
 
 	f := newFixture(t, "tokens_cache_ttl")
-	m := New("test-secret", f.conn, nil)
+	m := New("test-secret", f.conn, nil, nil, nil)
 
 	// Force a tiny TTL so we can observe expiry in the test.
 	m.revocation = newRevocationCache(50 * time.Millisecond)
@@ -344,25 +348,17 @@ func requireUnauthorized(t *testing.T, err error) {
 	require.Equal(t, oops.CodeUnauthorized, se.Code)
 }
 
-func TestUnconfiguredExecutionAdmissionFailsClosed(t *testing.T) {
-	t.Parallel()
-	manager := New("test", nil, nil)
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{})
-	token.Header["typ"] = mcpauthz.AssistantExecutionType
-	raw, err := token.SignedString([]byte("attacker"))
-	require.NoError(t, err)
-	require.True(t, IsExecutionToken(raw))
-	_, _, err = manager.AuthorizeRuntime(t.Context(), raw)
-	require.Error(t, err)
-	_, _, err = manager.AuthorizePlatform(t.Context(), raw)
-	require.Error(t, err)
-	_, err = manager.AuthorizeBusiness(t.Context(), raw, uuid.New(), nil)
-	require.Error(t, err)
-}
-
 func TestMalformedTypeNeverEntersLegacyAuthorization(t *testing.T) {
 	t.Parallel()
-	manager := New("secret", nil, nil)
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	private, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	public, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	require.NoError(t, err)
+	executionIssuer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: public})), "https://platform.example.invalid", false)
+	require.NoError(t, err)
+	manager := New("secret", nil, nil, executionIssuer, nil)
 	for _, typ := range []any{nil, 123, []string{"JWT"}, map[string]string{"typ": "JWT"}} {
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"iss": issuer})
 		token.Header["typ"] = typ
@@ -372,8 +368,6 @@ func TestMalformedTypeNeverEntersLegacyAuthorization(t *testing.T) {
 		_, err = manager.Validate(raw)
 		require.Error(t, err)
 		_, _, err = manager.AuthorizeRuntime(t.Context(), raw)
-		require.Error(t, err)
-		_, _, err = manager.AuthorizePlatform(t.Context(), raw)
 		require.Error(t, err)
 	}
 }

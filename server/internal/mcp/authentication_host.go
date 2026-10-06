@@ -205,10 +205,15 @@ func (s *Service) authorizationServerBaseURL(endpoint *ResolvedMcpEndpoint, reso
 	return s.authenticationHostBaseURL
 }
 
-// issuerURL is the endpoint's OAuth issuer identifier when its resource is
-// served under resourceBaseURL. It is the AS metadata issuer, the RFC 9207
-// `iss` on authorization responses and the `iss` claim of minted tokens.
+// issuerURL is the issuer identifier of the authorization server serving the
+// endpoint's OAuth request when its resource is served under resourceBaseURL.
+// It is the AS metadata issuer, the RFC 9207 `iss` on authorization responses
+// and the `iss` claim of minted tokens: the shared authorization server's fixed
+// issuer when it is serving the request, otherwise the endpoint's own.
 func (s *Service) issuerURL(endpoint *ResolvedMcpEndpoint, resourceBaseURL string) (string, error) {
+	if shared := endpoint.servingSharedAuthorizationServer(); shared != nil {
+		return shared.issuer, nil
+	}
 	issuer, err := endpoint.RootURL(s.authorizationServerBaseURL(endpoint, resourceBaseURL))
 	if err != nil {
 		return "", fmt.Errorf("build issuer URL: %w", err)
@@ -233,7 +238,13 @@ func (s *Service) servesAuthorizationServerMetadata(ctx context.Context, endpoin
 // the host the request was sent to. That keeps an assertion's accepted
 // audiences an exact pair for the addressed endpoint: the issuer, or the URL
 // the request was sent to.
+//
+// A shared authorization server is served only on its issuer's host, so its
+// own URLs are already the addressed ones.
 func (s *Service) requestAuthorizationServerURLs(ctx context.Context, endpoint *ResolvedMcpEndpoint, resourceBaseURL string) (AuthorizationServerURLs, error) {
+	if shared := endpoint.servingSharedAuthorizationServer(); shared != nil {
+		return shared.urls()
+	}
 	urls, err := endpoint.AuthorizationServerURLs(s.authorizationServerBaseURL(endpoint, resourceBaseURL))
 	if err != nil {
 		return AuthorizationServerURLs{}, err
@@ -249,4 +260,30 @@ func (s *Service) requestAuthorizationServerURLs(ctx context.Context, endpoint *
 	urls.Token = addressed.Token
 	urls.Revoke = addressed.Revoke
 	return urls, nil
+}
+
+// consentURL is the consent page URL for the challenge stateID: on the shared
+// authorization server when it is serving the endpoint's OAuth request,
+// otherwise under perEndpointBaseURL, the origin the caller serves the
+// endpoint's own consent page from.
+func (s *Service) consentURL(endpoint *ResolvedMcpEndpoint, perEndpointBaseURL, stateID string) (string, error) {
+	if shared := endpoint.servingSharedAuthorizationServer(); shared != nil {
+		return shared.consentURL(stateID)
+	}
+	return endpoint.ConsentURL(perEndpointBaseURL, stateID)
+}
+
+// protectedResourceAuthorizationServer is the authorization server the
+// endpoint's RFC 9728 protected resource metadata names when its resource is
+// served under resourceBaseURL: the issuer's shared authorization server when
+// it has one, otherwise the endpoint's own. Requests over a private network
+// ingress keep the endpoint's own authorization server on the private origin,
+// which the shared authorization server does not serve.
+func (s *Service) protectedResourceAuthorizationServer(ctx context.Context, endpoint *ResolvedMcpEndpoint, resourceBaseURL string) (string, error) {
+	origin, ok := requestorigin.FromContext(ctx)
+	private := ok && origin.Surface == requestorigin.SurfacePrivateNetwork
+	if endpoint.sharedAuthorizationServer != nil && !private {
+		return endpoint.sharedAuthorizationServer.issuer, nil
+	}
+	return s.issuerURL(endpoint, resourceBaseURL)
 }

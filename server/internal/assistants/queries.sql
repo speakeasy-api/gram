@@ -122,6 +122,21 @@ WHERE project_id = @project_id
 ORDER BY id
 FOR NO KEY UPDATE;
 
+-- name: ListAttachmentTargetIDs :many
+-- Resolves the toolsets and MCP servers a write would attach so the handler
+-- can authorize them first. Read-only: the write locks them itself.
+SELECT t.id
+FROM toolsets t
+WHERE t.project_id = @project_id
+  AND t.slug = ANY(@toolset_slugs::TEXT[])
+  AND t.deleted IS FALSE
+UNION ALL
+SELECT ms.id
+FROM mcp_servers ms
+WHERE ms.project_id = @project_id
+  AND ms.slug = ANY(@mcp_server_slugs::TEXT[])
+  AND ms.deleted IS FALSE;
+
 -- name: ResolveEnvironmentsForWrite :many
 SELECT id, slug
 FROM environments
@@ -590,11 +605,6 @@ DO UPDATE SET
   updated_at = clock_timestamp()
 RETURNING id;
 
--- name: GetEnqueuedAssistantThread :one
-SELECT assistant_thread_id FROM assistant_thread_events
-WHERE project_id = @project_id AND assistant_id = @assistant_id
-  AND event_id = @event_id AND deleted IS FALSE;
-
 -- name: InsertAssistantThreadEvent :one
 INSERT INTO assistant_thread_events (
   assistant_thread_id,
@@ -968,21 +978,6 @@ WHERE t.id = @thread_id
   AND r.ended IS FALSE
   AND r.state IN (@starting_state, @active_state)
 ORDER BY r.created_at DESC
-LIMIT 1;
-
--- name: FailPendingExecutionEvent :execrows
-UPDATE assistant_thread_events
-SET status = @failed_status, last_error = @last_error, updated_at = clock_timestamp()
-WHERE id = @event_id AND project_id = @project_id AND assistant_thread_id = @thread_id
-  AND status = @pending_status AND deleted IS FALSE;
-
--- name: GetNextPendingExecutionEvent :one
-SELECT e.id, e.event_id, e.normalized_payload_json
-FROM assistant_thread_events e
-JOIN assistant_threads t ON t.id = e.assistant_thread_id AND t.project_id = e.project_id
-WHERE e.project_id = @project_id AND e.assistant_thread_id = @thread_id
-  AND e.status = @pending_status AND e.deleted IS FALSE AND t.deleted IS FALSE
-ORDER BY e.created_at ASC
 LIMIT 1;
 
 -- name: ClaimNextPendingEvent :one
@@ -1640,40 +1635,3 @@ WHERE project_id = @project_id::uuid
   AND id = ANY(@ids::uuid[])
   AND kind = 'chat_attachment'
   AND deleted IS FALSE;
-
--- name: LockAssistantIdentityAnchor :one
-SELECT id, organization_id, name, created_by_user_id, status
-FROM assistants WHERE id = @assistant_id AND project_id = @project_id AND deleted IS FALSE
-FOR UPDATE;
-
--- name: ListAssistantIdentityStates :many
-SELECT DISTINCT ON (b.original_assistant_id)
- b.original_assistant_id, b.original_agent_id, b.generation,
- (b.deleted OR b.assistant_id IS NULL OR b.agent_id IS NULL OR b.project_ref_id IS NULL
- OR g.id IS NULL OR g.deleted OR g.revoked_at IS NOT NULL OR g.owner_reassignment_required_at IS NOT NULL
- OR (a.created_by_user_id IS NOT NULL AND g.owner_user_id IS DISTINCT FROM a.created_by_user_id))::boolean AS tombstoned
-FROM assistant_agent_bindings b
-LEFT JOIN assistants a ON a.id = b.assistant_id AND a.organization_id = b.organization_id AND a.project_id = b.project_id
-LEFT JOIN agents g ON g.id = b.agent_id AND g.organization_id = b.organization_id AND g.project_id = b.project_id
-WHERE b.project_id = @project_id AND b.original_assistant_id = ANY(@assistant_ids::uuid[])
-ORDER BY b.original_assistant_id, b.generation DESC;
-
--- name: FindLegacyWakeRequester :many
--- Legacy scheduling audits can identify the original human actor. Multiple
--- distinct actors are ambiguous; callers retain legacy behavior instead of guessing.
-SELECT DISTINCT actor_id::text
-FROM audit_logs
-WHERE organization_id = @organization_id AND project_id = @project_id::uuid
-  AND subject_id = @trigger_id::text AND subject_type = 'trigger_instance'
-  AND action = 'wake:scheduled' AND actor_type = 'user'
-  AND actor_id NOT IN ('', 'system', '*')
-LIMIT 2;
-
--- name: GetAssistantExecutionReplyOrigin :one
-SELECT e.normalized_payload_json, e.trigger_instance_id
-FROM assistant_thread_events e
-JOIN assistant_threads t ON t.id = e.assistant_thread_id AND t.project_id = e.project_id AND t.assistant_id = e.assistant_id
-JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
-WHERE e.assistant_id = @assistant_id AND e.assistant_thread_id = @thread_id
- AND e.project_id = @project_id AND a.organization_id = @organization_id
- AND e.event_id = @event_id AND NOT e.deleted AND NOT a.deleted AND a.deleted_at IS NULL AND a.status = 'active' AND NOT t.deleted AND t.deleted_at IS NULL;

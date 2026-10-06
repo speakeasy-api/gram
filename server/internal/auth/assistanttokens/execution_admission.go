@@ -2,13 +2,14 @@ package assistanttokens
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
-	"errors"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -21,8 +22,9 @@ import (
 )
 
 // IsExecutionToken selects a validator, not authority. Once selected, an
-// invalid or denied credential cannot retry through owner-scoped runtime-token
-// admission.
+// invalid or denied credential never falls back to user-scoped runtime-token
+// authorization. A malformed typ header also selects it, so it cannot reach
+// the legacy validator either.
 func IsExecutionToken(raw string) bool {
 	token, _, err := jwt.NewParser().ParseUnverified(executionBearer(raw), new(mcpauthz.AssistantExecutionClaims))
 	if err != nil {
@@ -42,22 +44,24 @@ func executionBearer(raw string) string {
 }
 
 func (m *Manager) executionForUse(ctx context.Context, raw string) (*assistantidentity.Execution, error) {
-	if m.executionIssuer == nil || m.executionIdentities == nil || m.executionDB == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
 	claims, err := m.executionIssuer.ValidateAssistantExecution(executionBearer(raw))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "invalid execution credential")
 	}
 	e := claims.Execution
 	if err := m.validateExecutionAuthority(ctx, e); err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "execution authority unavailable")
+		if errors.Is(err, assistantidentity.ErrInvalidIdentity) || errors.Is(err, assistantidentity.ErrActorIneligible) {
+			return nil, oops.E(oops.CodeUnauthorized, err, "execution authority unavailable")
+		}
+		return nil, fmt.Errorf("validate execution authority: %w", err)
 	}
 	return &e, nil
 }
 
-// AuthorizeRuntime is used only for bootstrap, compaction persistence and
-// model inference. Workload execution has no fabricated human UserID.
+// AuthorizeRuntime authorizes runner calls that act for the assistant itself:
+// bootstrap, compaction persistence, MCP OAuth flow creation, model
+// inference and the platform toolset, whose tools enforce their own
+// assistant-scoped restrictions. Other tokens use Authorize.
 func (m *Manager) AuthorizeRuntime(ctx context.Context, raw string) (context.Context, *Claims, error) {
 	if !IsExecutionToken(raw) {
 		return m.Authorize(ctx, raw)
@@ -69,34 +73,41 @@ func (m *Manager) AuthorizeRuntime(ctx context.Context, raw string) (context.Con
 	return m.executionContext(ctx, *e)
 }
 
+// executionContext acts as the trigger's workload principal. Authorization
+// admits it through the ordinary workload path: the token's ceiling
+// intersected with the agent's live policy. No user grants are installed.
 func (m *Manager) executionContext(ctx context.Context, e assistantidentity.Execution) (context.Context, *Claims, error) {
 	project, err := m.projects.GetProjectByID(ctx, e.Identity.ProjectID)
 	if err != nil || project.OrganizationID != e.Identity.OrganizationID {
 		return ctx, nil, oops.C(oops.CodeUnauthorized)
 	}
-	thread, err := assistantsrepo.New(m.executionDB).LoadAssistantThreadForBootstrap(ctx, assistantsrepo.LoadAssistantThreadForBootstrapParams{ThreadID: e.ThreadID, ProjectID: e.Identity.ProjectID})
+	thread, err := assistantsrepo.New(m.db).LoadAssistantThreadForBootstrap(ctx, assistantsrepo.LoadAssistantThreadForBootstrapParams{ThreadID: e.ThreadID, ProjectID: e.Identity.ProjectID})
 	if err != nil || thread.AssistantID != e.Identity.AssistantID || thread.OrganizationID != e.Identity.OrganizationID {
 		return ctx, nil, oops.C(oops.CodeUnauthorized)
 	}
 	ctx = context.WithValue(ctx, executionChatKey{}, thread.ChatID)
-	ctx = context.WithValue(ctx, executionEnvelopeKey{}, e)
-	ctx = contextvalues.WithAssistantInvocationEvent(ctx, e.EventID)
 	org, err := m.orgs.GetOrganizationMetadata(ctx, e.Identity.OrganizationID)
 	if err != nil {
-		return ctx, nil, fmt.Errorf("authorize assistant execution: %w", err)
+		return ctx, nil, fmt.Errorf("load execution organization: %w", err)
 	}
 	ac := &contextvalues.AuthContext{UserID: "", ExternalUserID: "", APIKeyID: "", APIKeyName: "", OrgWidePluginHooksKey: false, SessionID: nil, Email: nil, HasActiveSubscription: false, APIKeyScopes: nil, IsAdmin: false, SupportOrganizationID: "", ActiveOrganizationID: e.Identity.OrganizationID, ProjectID: &project.ID, ProjectSlug: &project.Slug, OrganizationSlug: org.Slug, AccountType: org.GramAccountType, Whitelisted: org.Whitelisted}
 	ctx = contextvalues.WithPrincipalCredentialAuthorization(ctx, ac, urn.NewWorkloadPrincipal(e.Identity.IssuerID, e.Identity.Subject), contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: e.Ceiling.Policy, DelegatedGrantsVersion: int32(e.Ceiling.EncodingVersion)})
 	ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: e.Identity.AssistantID, ThreadID: e.ThreadID})
-	return ctx, executionRuntimeClaims(e, ""), nil
+	ctx = contextvalues.WithAssistantInvoker(ctx, e.HumanUserID)
+	var claims Claims
+	claims.OrgID = e.Identity.OrganizationID
+	claims.ProjectID = e.Identity.ProjectID.String()
+	claims.AssistantID = e.Identity.AssistantID.String()
+	claims.ThreadID = e.ThreadID.String()
+	claims.UserID = e.HumanUserID
+	return ctx, &claims, nil
 }
 
-// AuthorizeBusiness is selected only by the server's resource MCP route. The
-// runtime credential is not an MCP-resource access token and never enters that
-// token validator. Instead, the concrete server resource is authorized using
-// the existing workload ceiling/live-agent admission and subsequent tool checks.
-func (m *Manager) AuthorizeBusiness(ctx context.Context, raw string, resource uuid.UUID, restriction BusinessPolicyRestriction) (context.Context, error) {
-	if resource == uuid.Nil || m.authz == nil {
+// AuthorizeBusiness authorizes an execution token for one MCP server or
+// toolset in the token's project. The resource's project is read from storage
+// so a global resource ID cannot lend cross-project authority.
+func (m *Manager) AuthorizeBusiness(ctx context.Context, raw string, resource uuid.UUID) (context.Context, error) {
+	if resource == uuid.Nil {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 	e, err := m.executionForUse(ctx, raw)
@@ -107,11 +118,9 @@ func (m *Manager) AuthorizeBusiness(ctx context.Context, raw string, resource uu
 	if err != nil {
 		return ctx, fmt.Errorf("authorize assistant business execution: %w", err)
 	}
-	// Resolve ownership from storage even when a route supplies only an ID.
-	// Global resource IDs cannot lend cross-project authority to a token.
-	_, err = mcpserversrepo.New(m.executionDB).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: resource, ProjectID: e.Identity.ProjectID})
+	_, err = mcpserversrepo.New(m.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: resource, ProjectID: e.Identity.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		_, err = toolsetsrepo.New(m.executionDB).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: resource, ProjectID: e.Identity.ProjectID})
+		_, err = toolsetsrepo.New(m.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: resource, ProjectID: e.Identity.ProjectID})
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ctx, oops.C(oops.CodeForbidden)
@@ -119,118 +128,20 @@ func (m *Manager) AuthorizeBusiness(ctx context.Context, raw string, resource uu
 	if err != nil {
 		return ctx, fmt.Errorf("resolve execution resource ownership: %w", err)
 	}
-	// Delegation belongs to workload admission, not a source-specific resolver.
-	credential, _ := contextvalues.PrincipalCredentialAuthorization(ctx)
-	credential.AuthorizerUserID = e.HumanUserID
-	ac, _ := contextvalues.GetAuthContext(ctx)
-	actor, _ := contextvalues.AuthenticatedActor(ctx)
-	ctx = contextvalues.WithPrincipalCredentialAuthorization(ctx, ac, actor, credential)
 	ctx, err = m.authz.PrepareContext(ctx)
 	if err != nil {
 		return ctx, fmt.Errorf("authorize assistant business execution: %w", err)
 	}
-	// A trusted server hook may only intersect an additional policy. It cannot
-	// choose another principal, credential, resource or platform route.
-	if restriction != nil {
-		grants, err := restriction(ctx, *e)
-		if err != nil {
-			return ctx, fmt.Errorf("authorize assistant business execution: %w", err)
-		}
-		ctx = authz.RestrictContext(ctx, grants)
-	}
 	if err := m.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, resource.String(), e.Identity.ProjectID.String())); err != nil {
 		return ctx, fmt.Errorf("authorize assistant business execution: %w", err)
 	}
-	ctx = contextvalues.WithAssistantBusinessInvocation(ctx, e.Identity.OrganizationID, e.Identity.ProjectID, e.HumanUserID, func(current context.Context) (context.Context, error) {
-		return m.AuthorizeBusiness(current, raw, resource, restriction)
-	})
 	return ctx, nil
-}
-
-// AuthorizePlatform is called exclusively by the registered platform route.
-// It preserves assistant-owned credentials/permissions independently of the
-// chosen invoker and of business denial. Tool-level managed/project/thread
-// restrictions still run in the platform service. External MCPs cannot select it.
-func (m *Manager) AuthorizePlatform(ctx context.Context, raw string) (context.Context, *Claims, error) {
-	if !IsExecutionToken(raw) {
-		return m.Authorize(ctx, raw)
-	}
-	if m.executionIssuer == nil || m.executionIdentities == nil || m.executionDB == nil {
-		return ctx, nil, oops.C(oops.CodeUnauthorized)
-	}
-	claims, err := m.executionIssuer.ValidateAssistantExecution(executionBearer(raw))
-	if err != nil {
-		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "invalid platform execution credential")
-	}
-	e := &claims.Execution
-	// Platform capabilities belong to the assistant, not the selected human.
-	// Live workload/thread authority remains mandatory; invoker grant loss must
-	// not suppress an otherwise authorized assistant-owned error reply.
-	if err := m.validateExecutionWorkloadAuthority(ctx, *e); err != nil {
-		return ctx, nil, oops.E(oops.CodeUnauthorized, err, "invalid platform authority")
-	}
-
-	// Keep the workload and AssistantPrincipal; platform tools authorize their
-	// own assistant-owned capabilities. Never install creator user grants.
-	return m.executionContext(ctx, *e)
 }
 
 type executionChatKey struct{}
 
-// ExecutionChatID is trusted persisted routing metadata, not an HTTP header.
+// ExecutionChatID is the chat of the thread an execution token is pinned to.
 func ExecutionChatID(ctx context.Context) (uuid.UUID, bool) {
 	id, ok := ctx.Value(executionChatKey{}).(uuid.UUID)
 	return id, ok
-}
-
-// BusinessPolicyRestriction is the invocation-scoped integration boundary for
-// AIM-412's human policy. Nil means AIM-411's ceiling intersect agent policy;
-// a configured hook returning no grants denies, and errors never select owner.
-type BusinessPolicyRestriction func(context.Context, assistantidentity.Execution) ([]authz.Grant, error)
-
-func executionRuntimeClaims(e assistantidentity.Execution, userID string) *Claims {
-	var claims Claims
-	claims.OrgID = e.Identity.OrganizationID
-	claims.ProjectID = e.Identity.ProjectID.String()
-	claims.AssistantID = e.Identity.AssistantID.String()
-	claims.ThreadID = e.ThreadID.String()
-	claims.UserID = userID
-	return &claims
-}
-
-// BusinessExecution is server-validated invocation metadata. Credential selection
-// reads it only after AuthorizeBusiness; callers cannot supply this context key.
-type executionEnvelopeKey struct{}
-
-func BusinessExecution(ctx context.Context) (assistantidentity.Execution, bool) {
-	e, ok := ctx.Value(executionEnvelopeKey{}).(assistantidentity.Execution)
-	return e, ok
-}
-
-// RevalidateBusinessExecution checks the originally admitted resource again
-// after an upstream refresh, without reselecting a caller or credential.
-// Dispatch must use RefreshBusinessExecution to retain the resulting live policy.
-func RevalidateBusinessExecution(ctx context.Context) error {
-	invocation, ok := contextvalues.AssistantBusinessInvocationFromContext(ctx)
-	if !ok {
-		return assistantidentity.ErrInvalidIdentity
-	}
-	if err := invocation.Revalidate(ctx); err != nil {
-		return fmt.Errorf("revalidate execution business context: %w", err)
-	}
-	return nil
-}
-
-// RefreshBusinessExecution carries live business policy into dispatch after
-// blocking credential work. Non-execution and platform contexts are unchanged.
-func RefreshBusinessExecution(ctx context.Context) (context.Context, error) {
-	invocation, ok := contextvalues.AssistantBusinessInvocationFromContext(ctx)
-	if !ok {
-		return ctx, nil
-	}
-	fresh, err := invocation.RevalidatedContext(ctx)
-	if err != nil {
-		return ctx, fmt.Errorf("refresh execution business context: %w", err)
-	}
-	return fresh, nil
 }

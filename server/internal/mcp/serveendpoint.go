@@ -183,11 +183,12 @@ func (s *Service) serveResolvedMCPEndpoint(
 ) error {
 	ctx := r.Context()
 	publicTunnel := isTunneledPublic(mcpServer)
-	// Bound executions use business policy even on otherwise public resources.
-	// Keep the database row untouched; visibility here selects request-local
-	// policy interceptors, never grants, credentials, or a platform context.
-	if assistanttokens.IsExecutionToken(httpheaders.AuthorizationOrChatSessionToken(r)) {
-		boundCtx, err := s.assistantTokens.AuthorizeBusiness(ctx, httpheaders.AuthorizationOrChatSessionToken(r), mcpServer.ID, nil)
+	gateToken := httpheaders.AuthorizationBearerToken(r)
+	// An execution token is authorized as the agent even on a public server,
+	// so the request is served as private.
+	if executionToken := httpheaders.AuthorizationOrChatSessionToken(r); assistanttokens.IsExecutionToken(executionToken) {
+		gateToken = executionToken
+		boundCtx, err := s.assistantTokens.AuthorizeBusiness(ctx, executionToken, mcpServer.ID)
 		if err != nil {
 			return fmt.Errorf("authorize business endpoint: %w", err)
 		}
@@ -252,7 +253,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return err
 		}
 		upstreamResource = resolvedEndpoint.UpstreamResource
-		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, httpheaders.AuthorizationOrChatSessionToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
+		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, gateToken, s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}
@@ -281,11 +282,6 @@ func (s *Service) serveResolvedMCPEndpoint(
 				return err
 			}
 		}
-		ctx, err = assistanttokens.RefreshBusinessExecution(ctx)
-		if err != nil {
-			return fmt.Errorf("refresh assistant execution policy: %w", err)
-		}
-		r = r.WithContext(ctx)
 		if mcpServer.RemoteMcpServerID.Valid {
 			return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate, sessionToolSelection)
 		}
@@ -437,10 +433,10 @@ func grantRoutesToUpstream(resource, upstream string, tunneled bool) bool {
 	if tunneled && resource == "" {
 		return true
 	}
-	// Whole-string trim, the same normalization the grant's resource was
-	// recorded with (resolveUpstreamResource, resolveMetaMemberResource), so
-	// stored grants and live upstreams compare under one rule. An encoded
-	// slash is untouched and stays a distinct audience.
+	// Whole-string trim on both sides: grants record the upstream's resource
+	// verbatim, and older grants recorded it trimmed, so stored grants and live
+	// upstreams compare under one rule. An encoded slash is untouched and stays
+	// a distinct audience.
 	want := strings.TrimRight(upstream, "/")
 	return want != "" && strings.TrimRight(resource, "/") == want
 }
@@ -642,8 +638,10 @@ func (s *Service) BuildResolvedMcpEndpointForServer(
 }
 
 // resolveUpstreamResource derives the RFC 8707 resource indicator for an
-// mcp_server's upstream: the remote backend URL without trailing slashes, or
-// the tunneled backend's saved resource identifier verbatim. Other backends
+// mcp_server's upstream: the remote backend URL or the tunneled backend's saved
+// resource identifier, both verbatim. The value may be sent upstream as the
+// resource, and a provider may match it exactly, trailing slash included;
+// credential routing ignores trailing slashes when comparing. Other backends
 // have no upstream resource.
 func (s *Service) resolveUpstreamResource(
 	ctx context.Context,
@@ -663,7 +661,7 @@ func (s *Service) resolveUpstreamResource(
 		case err != nil:
 			return "", oops.E(oops.CodeUnexpected, err, "load remote mcp server").LogError(ctx, logger)
 		}
-		return strings.TrimRight(remote.Url, "/"), nil
+		return remote.Url, nil
 	case mcpServer.TunneledMcpServerID.Valid:
 		tunneled, err := tunneledmcprepo.New(s.db).GetServerByID(ctx, tunneledmcprepo.GetServerByIDParams{
 			ID:        mcpServer.TunneledMcpServerID.UUID,

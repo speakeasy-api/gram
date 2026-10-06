@@ -168,15 +168,25 @@ func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *s
 		return
 	}
 
+	projectID := *authCtx.ProjectID
 	doc, _, err := wellknown.DiscoverProtectedResourceMetadata(ctx, s.policy, resourceURL)
-	switch {
-	case err != nil:
+	if err != nil {
 		logger.WarnContext(ctx, "re-probe protected resource metadata", attr.SlogError(err))
-		return
-	case !doc.IdentifiesResource(resourceURL):
-		logger.WarnContext(ctx, "protected resource metadata names another resource", attr.SlogURLFull(resourceURL))
+		if typed, ok := errors.AsType[*wellknown.ProtectedResourceDiscoveryError](err); ok {
+			if err := recordProtectedResourceFetchError(ctx, s.db, projectID, authCtx.ActiveOrganizationID, resourceURL, typed); err != nil {
+				logger.ErrorContext(ctx, "record protected resource fetch error", attr.SlogError(err))
+			}
+		}
 		return
 	}
+	if err := recordProtectedResource(ctx, s.db, projectID, authCtx.ActiveOrganizationID, resourceURL, doc); err != nil {
+		logger.ErrorContext(ctx, "record protected resource", attr.SlogError(err))
+	}
+	if !doc.ValidForResource(resourceURL) {
+		logger.WarnContext(ctx, "protected resource metadata resource or location mismatch", attr.SlogURLFull(urls.DiagnosticURL(resourceURL)))
+		return
+	}
+	logScopeComparison(ctx, logger, projectID, serverID, resourceURL, doc, clients)
 	display := displayFromDocument(resourceURL, doc)
 
 	for _, rc := range clients {

@@ -11,6 +11,7 @@ import {
   hasChartShape,
   initialSpec,
   isRowsMode,
+  longestWindow,
   measureAlias,
   measureLabel,
   measureUnit,
@@ -123,7 +124,7 @@ describe("the describe-to-controls mapping", () => {
       measures: [{ op: "count", field: "" }],
       dimensions: ["user"],
       chartType: "line",
-      window: "24h",
+      window: "1d",
       limit: 0,
     });
     expect(specForDataset(usage)).toMatchObject({
@@ -203,9 +204,24 @@ describe("measure and filter drafts", () => {
 });
 
 describe("the queries a spec describes", () => {
+  it("ends a window shorter than an hour on the next minute, not the next hour", () => {
+    const now = Date.UTC(2026, 8, 14, 10, 17, 30);
+    const { from, to } = windowRange("15m", now);
+    expect(to.toISOString()).toBe("2026-09-14T10:18:00.000Z");
+    expect(from.toISOString()).toBe("2026-09-14T10:03:00.000Z");
+  });
+
+  it("buckets every dashboard preset: hours up to three days, then days, then weeks", () => {
+    expect(autoGrain("15m")).toBe("hour");
+    expect(autoGrain("4h")).toBe("hour");
+    expect(autoGrain("3d")).toBe("hour");
+    expect(autoGrain("15d")).toBe("day");
+    expect(autoGrain("90d")).toBe("week");
+  });
+
   it("aligns the window to the hour so the key stays stable within it", () => {
     const now = Date.UTC(2026, 8, 14, 10, 17, 0);
-    const { from, to } = windowRange("24h", now);
+    const { from, to } = windowRange("1d", now);
     expect(to.toISOString()).toBe("2026-09-14T11:00:00.000Z");
     expect(from.toISOString()).toBe("2026-09-13T11:00:00.000Z");
   });
@@ -329,5 +345,17 @@ describe("filterForField", () => {
   it("starts a filter on a field with its first operator and no values", () => {
     const next = filterForField(sessions, "user");
     expect(next).toEqual({ field: "user", operator: "equals", values: [] });
+  });
+});
+
+describe("longestWindow", () => {
+  it("picks the longest window, reading an older spelling as today's", () => {
+    expect(longestWindow(["7d", "90d", "1h"])).toBe("90d");
+    expect(longestWindow(["24h", "4h"])).toBe("1d");
+  });
+
+  it("is undefined when nothing is a window", () => {
+    expect(longestWindow([])).toBeUndefined();
+    expect(longestWindow([undefined, "2h"])).toBeUndefined();
   });
 });

@@ -42,6 +42,7 @@ type Endpoints struct {
 	ListResourceAudience                 goa.Endpoint
 	SetResourceAudience                  goa.Endpoint
 	ListAudienceOptions                  goa.Endpoint
+	ExplainResourceAccess                goa.Endpoint
 	RequestAccess                        goa.Endpoint
 	ListChallenges                       goa.Endpoint
 	ListChallengeBuckets                 goa.Endpoint
@@ -80,6 +81,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListResourceAudience:                 NewListResourceAudienceEndpoint(s, a.APIKeyAuth),
 		SetResourceAudience:                  NewSetResourceAudienceEndpoint(s, a.APIKeyAuth),
 		ListAudienceOptions:                  NewListAudienceOptionsEndpoint(s, a.APIKeyAuth),
+		ExplainResourceAccess:                NewExplainResourceAccessEndpoint(s, a.APIKeyAuth),
 		RequestAccess:                        NewRequestAccessEndpoint(s, a.APIKeyAuth),
 		ListChallenges:                       NewListChallengesEndpoint(s, a.APIKeyAuth),
 		ListChallengeBuckets:                 NewListChallengeBucketsEndpoint(s, a.APIKeyAuth),
@@ -116,6 +118,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListResourceAudience = m(e.ListResourceAudience)
 	e.SetResourceAudience = m(e.SetResourceAudience)
 	e.ListAudienceOptions = m(e.ListAudienceOptions)
+	e.ExplainResourceAccess = m(e.ExplainResourceAccess)
 	e.RequestAccess = m(e.RequestAccess)
 	e.ListChallenges = m(e.ListChallenges)
 	e.ListChallengeBuckets = m(e.ListChallengeBuckets)
@@ -924,6 +927,29 @@ func NewListAudienceOptionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 			return nil, err
 		}
 		return s.ListAudienceOptions(ctx, p)
+	}
+}
+
+// NewExplainResourceAccessEndpoint returns an endpoint function that calls the
+// method "explainResourceAccess" of service "access".
+func NewExplainResourceAccessEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ExplainResourceAccessPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ExplainResourceAccess(ctx, p)
 	}
 }
 

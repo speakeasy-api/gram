@@ -36,7 +36,7 @@ describe("OktaConnectionTab", () => {
       expect(screen.getByLabelText("Okta organization URL")).toBeTruthy();
       expect(screen.getAllByRole("textbox")).toHaveLength(1);
       expect(screen.queryByText("Connection")).toBeNull();
-      expect(screen.queryByText("Okta setup checklist")).toBeNull();
+      expect(screen.queryByRole("button", { name: /^Connect, / })).toBeNull();
       expect(screen.queryByRole("navigation")).toBeNull();
     },
   );

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,10 +14,17 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/background/triggers"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
+	workloadrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
 func (f identityFixture) resolve(t *testing.T, assistantID, triggerID uuid.UUID) assistantidentity.Resolution {
@@ -27,79 +34,82 @@ func (f identityFixture) resolve(t *testing.T, assistantID, triggerID uuid.UUID)
 	return result
 }
 
-func TestRootIdentityCreateRetargetPauseDelete(t *testing.T) {
+func (f identityFixture) bound(t *testing.T, triggerID uuid.UUID) bool {
+	t.Helper()
+	_, err := identityrepo.New(f.db).GetTriggerBinding(t.Context(), identityrepo.GetTriggerBindingParams{ProjectID: f.projectID, TriggerID: triggerID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false
+	}
+	require.NoError(t, err)
+	return true
+}
+
+func (f identityFixture) retarget(t *testing.T, item triggerrepo.TriggerInstance, assistantID uuid.UUID) {
+	t.Helper()
+	_, err := f.app.Update(t.Context(), triggers.UpdateParams{ID: item.ID, ProjectID: f.projectID, DefinitionSlug: item.DefinitionSlug, Name: item.Name, EnvironmentID: item.EnvironmentID, TargetKind: item.TargetKind, TargetRef: assistantID.String(), TargetDisplay: item.TargetDisplay, Config: map[string]any{}, Status: item.Status})
+	require.NoError(t, err)
+}
+
+func TestRootTriggerBindsRetargetsAndWithdraws(t *testing.T) {
 	t.Parallel()
 	f := newIdentityFixture(t)
-	ctx := t.Context()
-	item, err := f.app.Create(ctx, f.createParams())
+	item, err := f.app.Create(t.Context(), f.createParams())
 	require.NoError(t, err)
 	first := f.resolve(t, f.assistantID, item.ID)
 	require.Equal(t, assistantidentity.Active, first.State)
-	require.NotNil(t, first.Identity)
-	nextAssistant := f.createAssistant(t, true)
-	update := triggers.UpdateParams{ID: item.ID, ProjectID: f.projectID, DefinitionSlug: item.DefinitionSlug, Name: item.Name, EnvironmentID: item.EnvironmentID, TargetKind: item.TargetKind, TargetRef: nextAssistant.String(), TargetDisplay: item.TargetDisplay, Config: map[string]any{}, Status: item.Status}
-	_, err = f.app.Update(ctx, update)
-	require.NoError(t, err)
-	next := f.resolve(t, nextAssistant, item.ID)
-	require.Equal(t, assistantidentity.Active, next.State)
-	require.Equal(t, first.Identity.Subject, next.Identity.Subject)
-	require.Greater(t, next.Identity.TriggerGeneration, first.Identity.TriggerGeneration)
-	require.Error(t, testIdentityService.Validate(ctx, f.db, *first.Identity))
-	_, err = f.app.SetStatus(ctx, f.projectID, item.ID, triggers.StatusPaused)
-	require.NoError(t, err)
-	require.Equal(t, assistantidentity.Unavailable, f.resolve(t, nextAssistant, item.ID).State)
-	require.ErrorIs(t, testIdentityService.Validate(ctx, f.db, *next.Identity), assistantidentity.ErrInvalidIdentity)
-	_, err = f.app.SetStatus(ctx, f.projectID, item.ID, triggers.StatusActive)
-	require.NoError(t, err)
-	resumed := f.resolve(t, nextAssistant, item.ID)
-	require.Equal(t, assistantidentity.Active, resumed.State)
-	require.Equal(t, next.Identity, resumed.Identity)
-	require.NoError(t, testIdentityService.Validate(ctx, f.db, *next.Identity))
-	require.Equal(t, next.Identity.Subject, resumed.Identity.Subject)
-	require.NoError(t, f.app.Delete(ctx, f.projectID, item.ID))
-	require.Equal(t, assistantidentity.Tombstoned, f.resolve(t, nextAssistant, item.ID).State)
-	require.ErrorIs(t, testIdentityService.Validate(ctx, f.db, *resumed.Identity), assistantidentity.ErrInvalidIdentity)
-}
 
-func TestRootIdentityRetargetLegacyDoesNotFallback(t *testing.T) {
-	t.Parallel()
-	f := newIdentityFixture(t)
-	item, err := f.app.Create(t.Context(), f.createParams())
-	require.NoError(t, err)
-	original := f.resolve(t, f.assistantID, item.ID)
-	legacyID := f.createAssistant(t, false)
-	_, err = f.app.Update(t.Context(), triggers.UpdateParams{ID: item.ID, ProjectID: f.projectID, DefinitionSlug: item.DefinitionSlug, Name: item.Name, EnvironmentID: item.EnvironmentID, TargetKind: item.TargetKind, TargetRef: legacyID.String(), TargetDisplay: item.TargetDisplay, Config: map[string]any{}, Status: item.Status})
-	require.NoError(t, err)
-	require.Equal(t, assistantidentity.Tombstoned, f.resolve(t, legacyID, item.ID).State)
-	require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, *original.Identity), assistantidentity.ErrInvalidIdentity)
-}
+	next := f.createAssistant(t, true)
+	f.retarget(t, item, next)
+	moved := f.resolve(t, next, item.ID)
+	require.Equal(t, assistantidentity.Active, moved.State)
+	require.Equal(t, first.Identity.Subject, moved.Identity.Subject)
+	require.NotEqual(t, first.Identity.AgentID, moved.Identity.AgentID)
+	require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, *first.Identity), assistantidentity.ErrInvalidIdentity)
+	require.Equal(t, assistantidentity.Unavailable, f.resolve(t, f.assistantID, item.ID).State, "a trigger bound for another assistant does not resolve for this one")
 
-func TestRootIdentityConcurrentResumeIsIdempotent(t *testing.T) {
-	t.Parallel()
-	f := newIdentityFixture(t)
-	item, err := f.app.Create(t.Context(), f.createParams())
-	require.NoError(t, err)
-	before := f.resolve(t, f.assistantID, item.ID)
-	_, err = f.app.SetStatus(t.Context(), f.projectID, item.ID, triggers.StatusPaused)
-	require.NoError(t, err)
-	var group errgroup.Group
-	for range 4 {
-		group.Go(func() error {
-			_, err := f.app.SetStatus(t.Context(), f.projectID, item.ID, triggers.StatusActive)
-			if err != nil {
-				return fmt.Errorf("resume trigger concurrently: %w", err)
-			}
-			return nil
-		})
+	legacy := f.createAssistant(t, false)
+	f.retarget(t, item, legacy)
+	require.False(t, f.bound(t, item.ID))
+	require.Equal(t, assistantidentity.NeverConfigured, f.resolve(t, legacy, item.ID).State)
+
+	f.retarget(t, item, next)
+	require.True(t, f.bound(t, item.ID))
+	require.NoError(t, f.app.Delete(t.Context(), f.projectID, item.ID))
+	require.False(t, f.bound(t, item.ID))
+	require.Equal(t, assistantidentity.Unavailable, f.resolve(t, next, item.ID).State)
+
+	for _, tc := range []struct {
+		action audit.Action
+		want   int64
+	}{
+		{action: audit.ActionWorkloadIssuerCreate, want: 1},
+		{action: audit.ActionWorkloadAdmissionAdmit, want: 3},
+		{action: audit.ActionWorkloadAdmissionWithdraw, want: 3},
+	} {
+		count, err := audittest.AuditLogCountByAction(t.Context(), f.db, tc.action)
+		require.NoError(t, err)
+		require.Equal(t, tc.want, count, tc.action)
+		latest, err := audittest.LatestAuditLogByAction(t.Context(), f.db, tc.action)
+		require.NoError(t, err)
+		require.Equal(t, agentownership.SystemActor.ID, latest.ActorID, "unauthenticated trigger changes are attributed to the system")
 	}
-	require.NoError(t, group.Wait())
-	after := f.resolve(t, f.assistantID, item.ID)
-	require.Equal(t, assistantidentity.Active, after.State)
-	require.Equal(t, before.Identity.TriggerGeneration, after.Identity.TriggerGeneration)
-	require.Equal(t, before.Identity.Subject, after.Identity.Subject)
 }
 
-func TestRootIdentityCreateCompensationPreservesTombstone(t *testing.T) {
+func TestRootTriggerPauseKeepsIdentity(t *testing.T) {
+	t.Parallel()
+	f := newIdentityFixture(t)
+	params := f.createParams()
+	params.Status = triggers.StatusPaused
+	item, err := f.app.Create(t.Context(), params)
+	require.NoError(t, err)
+	paused := f.resolve(t, f.assistantID, item.ID)
+	require.Equal(t, assistantidentity.Active, paused.State)
+	_, err = f.app.SetStatus(t.Context(), f.projectID, item.ID, triggers.StatusActive)
+	require.NoError(t, err)
+	require.Equal(t, paused, f.resolve(t, f.assistantID, item.ID))
+}
+
+func TestRootTriggerCreateCompensationWithdrawsIdentity(t *testing.T) {
 	t.Parallel()
 	f := newIdentityFixture(t)
 	params := f.createParams()
@@ -112,80 +122,52 @@ func TestRootIdentityCreateCompensationPreservesTombstone(t *testing.T) {
 	})
 	require.Error(t, err, "no Temporal client forces post-commit schedule compensation")
 	require.NotEqual(t, uuid.Nil, triggerID)
-	require.Equal(t, assistantidentity.Tombstoned, f.resolve(t, f.assistantID, triggerID).State)
-	_, err = f.app.GetInstance(t.Context(), f.projectID, triggerID)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.False(t, f.bound(t, triggerID))
 }
 
-func TestContinuationCreateNeverMintsRootIdentity(t *testing.T) {
+func TestContinuationWakeIsNeverBound(t *testing.T) {
 	t.Parallel()
 	f := newIdentityFixture(t)
-	root, err := f.app.Create(t.Context(), f.createParams())
-	require.NoError(t, err)
-	before := f.resolve(t, f.assistantID, root.ID)
 	var wakeID uuid.UUID
-	_, err = f.app.CreateWakeInstance(t.Context(), triggers.CreateWakeInstanceParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, Name: "Follow up", AssistantID: f.assistantID, TargetDisplay: "Assistant", FireAt: time.Now().Add(time.Hour), Note: nil, CorrelationID: "thread-identity"}, func(ctx context.Context, tx pgx.Tx, item triggerrepo.TriggerInstance) error {
+	_, err := f.app.CreateWakeInstance(t.Context(), triggers.CreateWakeInstanceParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, Name: "Follow up", AssistantID: f.assistantID, TargetDisplay: "Assistant", FireAt: time.Now().Add(time.Hour), Note: nil, CorrelationID: "thread-identity"}, func(ctx context.Context, tx pgx.Tx, item triggerrepo.TriggerInstance) error {
 		wakeID = item.ID
-		_, err := identityrepo.New(tx).GetTriggerBinding(ctx, identityrepo.GetTriggerBindingParams{PlatformIssuer: "https://platform.example.invalid", PlatformJwksUri: "https://platform.example.invalid/.well-known/jwks.json", OrganizationID: "org-trigger-test", ProjectID: f.projectID, TriggerID: item.ID})
-		if !errors.Is(err, pgx.ErrNoRows) {
-			return errors.New("wake unexpectedly acquired a root binding")
+		if err := testIdentityService.BindRootTrigger(ctx, tx, item.ProjectID, item.ID); err != nil {
+			return fmt.Errorf("bind wake: %w", err)
+		}
+		if _, err := identityrepo.New(tx).GetTriggerBinding(ctx, identityrepo.GetTriggerBindingParams{ProjectID: item.ProjectID, TriggerID: item.ID}); !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("wake acquired a root binding: %w", err)
 		}
 		return nil
 	})
 	require.Error(t, err, "no Temporal client forces workflow compensation")
+	require.NotContains(t, err.Error(), "wake acquired a root binding")
 	require.NotEqual(t, uuid.Nil, wakeID)
-	_, err = identityrepo.New(f.db).GetTriggerBinding(t.Context(), identityrepo.GetTriggerBindingParams{PlatformIssuer: "https://platform.example.invalid", PlatformJwksUri: "https://platform.example.invalid/.well-known/jwks.json", OrganizationID: "org-trigger-test", ProjectID: f.projectID, TriggerID: wakeID})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
-	after := f.resolve(t, f.assistantID, root.ID)
-	require.Equal(t, before, after)
+	require.False(t, f.bound(t, wakeID))
 }
 
-func TestRootIdentityPausedCreateAndMutationRollback(t *testing.T) {
-	t.Parallel()
-	f := newIdentityFixture(t)
-	params := f.createParams()
-	params.Status = triggers.StatusPaused
-	item, err := f.app.Create(t.Context(), params)
-	require.NoError(t, err)
-	_, err = identityrepo.New(f.db).GetTriggerBinding(t.Context(), identityrepo.GetTriggerBindingParams{PlatformIssuer: "https://platform.example.invalid", PlatformJwksUri: "https://platform.example.invalid/.well-known/jwks.json", OrganizationID: "org-trigger-test", ProjectID: f.projectID, TriggerID: item.ID})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
-	_, err = f.app.SetStatus(t.Context(), f.projectID, item.ID, triggers.StatusActive)
-	require.NoError(t, err)
-	before := f.resolve(t, f.assistantID, item.ID)
-	hookErr := errors.New("reject mutation")
-	_, err = f.app.SetStatus(t.Context(), f.projectID, item.ID, triggers.StatusPaused, func(context.Context, pgx.Tx, triggerrepo.TriggerInstance) error { return hookErr })
-	require.ErrorIs(t, err, hookErr)
-	require.Equal(t, before, f.resolve(t, f.assistantID, item.ID))
-	err = f.app.Delete(t.Context(), f.projectID, item.ID, func(context.Context, pgx.Tx, triggerrepo.TriggerInstance) error { return hookErr })
-	require.ErrorIs(t, err, hookErr)
-	require.Equal(t, before, f.resolve(t, f.assistantID, item.ID))
-
-}
-
-func TestRootIdentityUpdatePausePreservesIdentityAndPausedRetargetReplacesIt(t *testing.T) {
+func TestRootTriggerManagementToleratesUserWorkloadEdits(t *testing.T) {
 	t.Parallel()
 	f := newIdentityFixture(t)
 	ctx := t.Context()
 	item, err := f.app.Create(ctx, f.createParams())
 	require.NoError(t, err)
-	first := f.resolve(t, f.assistantID, item.ID)
-	update := triggers.UpdateParams{ID: item.ID, ProjectID: f.projectID, DefinitionSlug: item.DefinitionSlug, Name: item.Name, EnvironmentID: item.EnvironmentID, TargetKind: item.TargetKind, TargetRef: item.TargetRef, TargetDisplay: item.TargetDisplay, Config: map[string]any{}, Status: triggers.StatusPaused}
-	_, err = f.app.Update(ctx, update)
+	resolved := f.resolve(t, f.assistantID, item.ID)
+	require.Equal(t, assistantidentity.Active, resolved.State)
+
+	// A user withdraws the issuer through the workload identity surface.
+	workloads := workloadrepo.New(f.db)
+	_, err = workloads.SoftDeleteWorkloadIssuer(ctx, workloadrepo.SoftDeleteWorkloadIssuerParams{OrganizationID: "org-trigger-test", ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, ID: resolved.Identity.IssuerID})
+	require.NoError(t, err)
+	_, err = workloads.SoftDeleteWorkloadAdmissionsByIssuer(ctx, workloadrepo.SoftDeleteWorkloadAdmissionsByIssuerParams{OrganizationID: "org-trigger-test", WorkloadIssuerID: resolved.Identity.IssuerID})
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.Unavailable, f.resolve(t, f.assistantID, item.ID).State)
-	_, err = f.app.SetStatus(ctx, f.projectID, item.ID, triggers.StatusActive)
+
+	_, err = f.app.SetStatus(ctx, f.projectID, item.ID, triggers.StatusPaused)
 	require.NoError(t, err)
-	require.Equal(t, first.Identity, f.resolve(t, f.assistantID, item.ID).Identity)
-	nextAssistant := f.createAssistant(t, true)
-	update.TargetRef = nextAssistant.String()
-	_, err = f.app.Update(ctx, update)
-	require.NoError(t, err)
-	require.ErrorIs(t, testIdentityService.Validate(ctx, f.db, *first.Identity), assistantidentity.ErrInvalidIdentity)
-	_, err = f.app.SetStatus(ctx, f.projectID, item.ID, triggers.StatusActive)
-	require.NoError(t, err)
-	next := f.resolve(t, nextAssistant, item.ID)
-	require.Equal(t, assistantidentity.Active, next.State)
-	require.Greater(t, next.Identity.TriggerGeneration, first.Identity.TriggerGeneration)
+	next := f.createAssistant(t, true)
+	f.retarget(t, item, next)
+	require.Equal(t, assistantidentity.Active, f.resolve(t, next, item.ID).State)
+	require.NoError(t, f.app.Delete(ctx, f.projectID, item.ID))
 }
 
 func TestWakeCapturesRequesterOrOwnerAtCreation(t *testing.T) {
@@ -217,19 +199,89 @@ func TestWakeCapturesRequesterOrOwnerAtCreation(t *testing.T) {
 	}
 }
 
-func TestRootDeletionWithoutIdentityLifecycleFailsClosed(t *testing.T) {
+func (f identityFixture) provisionTx(t *testing.T, tx pgx.Tx, assistantID uuid.UUID) error {
+	t.Helper()
+	if err := testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, AssistantID: assistantID, ActorUserID: "trigger-owner"}); err != nil {
+		return fmt.Errorf("provision assistant identity: %w", err)
+	}
+	return nil
+}
+
+func TestTriggerCreateDuringUpgradeIsBound(t *testing.T) {
 	t.Parallel()
 	f := newIdentityFixture(t)
-	item, err := f.app.Create(t.Context(), f.createParams())
-	require.NoError(t, err)
-	before := f.resolve(t, f.assistantID, item.ID)
-	f.app.SetIdentityService(nil)
-	require.ErrorContains(t, f.app.Delete(t.Context(), f.projectID, item.ID), "identity lifecycle is not configured")
-	retained, err := f.app.GetInstance(t.Context(), f.projectID, item.ID)
-	require.NoError(t, err)
-	require.Equal(t, triggers.StatusActive, retained.Status)
-	require.Equal(t, before, f.resolve(t, f.assistantID, item.ID))
-	f.app.SetIdentityService(testIdentityService)
-	require.NoError(t, f.app.Delete(t.Context(), f.projectID, item.ID))
-	require.Equal(t, assistantidentity.Tombstoned, f.resolve(t, f.assistantID, item.ID).State)
+	ctx := t.Context()
+	legacy := f.createAssistant(t, false)
+	params := f.createParams()
+	params.TargetRef = legacy.String()
+
+	upgrade := testenv.BeginTx(t, ctx, f.db)
+	require.NoError(t, f.provisionTx(t, upgrade, legacy))
+	var item triggerrepo.TriggerInstance
+	var group errgroup.Group
+	group.Go(func() error {
+		var err error
+		item, err = f.app.Create(ctx, params)
+		if err != nil {
+			return fmt.Errorf("create trigger during upgrade: %w", err)
+		}
+		return nil
+	})
+	testenv.WaitForQueryBlockedBy(t, ctx, f.db, testenv.BackendPID(upgrade), "%ShareLockAssistant :one%")
+	require.NoError(t, upgrade.Commit(ctx))
+	require.NoError(t, group.Wait())
+	require.True(t, f.bound(t, item.ID))
+	require.Equal(t, assistantidentity.Active, f.resolve(t, legacy, item.ID).State)
+}
+
+func TestUpgradeDuringTriggerCreateBindsIt(t *testing.T) {
+	t.Parallel()
+	f := newIdentityFixture(t)
+	ctx := t.Context()
+	legacy := f.createAssistant(t, false)
+	params := f.createParams()
+	params.TargetRef = legacy.String()
+
+	holding := make(chan uint32, 1)
+	release := make(chan struct{})
+	t.Cleanup(sync.OnceFunc(func() { close(release) }))
+	createDone := make(chan error, 1)
+	var item triggerrepo.TriggerInstance
+	go func() {
+		var err error
+		item, err = f.app.Create(ctx, params, func(_ context.Context, tx pgx.Tx, _ triggerrepo.TriggerInstance) error {
+			holding <- testenv.BackendPID(tx)
+			<-release
+			return nil
+		})
+		createDone <- err
+	}()
+	var creator uint32
+	select {
+	case creator = <-holding:
+	case err := <-createDone:
+		require.FailNow(t, "create finished before holding its lock", "error: %v", err)
+	}
+
+	var group errgroup.Group
+	group.Go(func() error {
+		tx, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary only; the upgrade uses the identity service.
+		if err != nil {
+			return fmt.Errorf("begin upgrade: %w", err)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(context.Background()) })
+		if err := f.provisionTx(t, tx, legacy); err != nil {
+			return err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit upgrade: %w", err)
+		}
+		return nil
+	})
+	testenv.WaitForQueryBlockedBy(t, ctx, f.db, creator, "%name: LockAssistant :one%")
+	release <- struct{}{}
+	require.NoError(t, <-createDone)
+	require.NoError(t, group.Wait())
+	require.True(t, f.bound(t, item.ID))
+	require.Equal(t, assistantidentity.Active, f.resolve(t, legacy, item.ID).State)
 }

@@ -32,6 +32,7 @@ export const ResourceKind = {
   Org: "org",
   Environment: "environment",
   Skill: "skill",
+  Assistant: "assistant",
   RiskPolicy: "risk_policy",
   Chat: "chat",
   Agent: "agent",
@@ -52,7 +53,7 @@ export type Selector = {
    */
   disposition?: Disposition | undefined;
   /**
-   * Project filter (MCP scopes only). When set with resource_id='*', grants access to all servers in the project.
+   * Project filter (MCP, environment, and assistant scopes). When set with resource_id='*', grants access to every resource of the kind in the project.
    */
   projectId?: string | undefined;
   /**

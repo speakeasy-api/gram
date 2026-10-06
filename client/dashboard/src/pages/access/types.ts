@@ -1,4 +1,4 @@
-import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type {
   Disposition as SelectorDisposition,
   Selector,
@@ -25,6 +25,7 @@ export type ResourceType =
   | "mcp"
   | "environment"
   | "skill"
+  | "assistant"
   | "risk_policy"
   | "chat"
   | "agent"
@@ -55,6 +56,28 @@ export function isProjectSelectableResourceType(
   resourceType: ResourceType,
 ): boolean {
   return resourceType === "project" || resourceType === "skill";
+}
+
+/**
+ * Resource types whose grants narrow to projects through the `projectId`
+ * selector (`{ resourceId: "*", projectId }`) rather than storing the project
+ * id as the resource id. Grants naming one resource of these kinds are made
+ * through the API; the role editor offers only the project picker.
+ */
+export function isProjectFilteredResourceType(
+  resourceType: ResourceType,
+): resourceType is "assistant" {
+  return resourceType === "assistant";
+}
+
+/** Whether the role editor narrows this resource type by project. */
+export function isProjectScopedResourceType(
+  resourceType: ResourceType,
+): boolean {
+  return (
+    isProjectSelectableResourceType(resourceType) ||
+    isProjectFilteredResourceType(resourceType)
+  );
 }
 
 /** The 4 MCP tool annotation hint keys. */

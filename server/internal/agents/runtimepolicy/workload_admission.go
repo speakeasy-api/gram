@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -60,7 +59,9 @@ func admitWorkloadSessionInTx(ctx context.Context, tx accessrepo.DBTX) (authz.Wo
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	credential, hasCredential := contextvalues.PrincipalCredentialAuthorization(ctx)
 	actor, hasActor := contextvalues.AuthenticatedActor(ctx)
-	// A workload may run autonomously or carry an optional delegating human.
+	// No AuthorizerUserID requirement, unlike a principal credential: a
+	// workload records no approving human, so demanding one here would refuse
+	// every workload session.
 	if !ok || authCtx == nil || !hasCredential || !hasActor ||
 		authCtx.ActiveOrganizationID == "" || actor.Type != urn.PrincipalTypeWorkload {
 		return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)
@@ -132,30 +133,11 @@ func admitWorkloadSessionInTx(ctx context.Context, tx accessrepo.DBTX) (authz.Wo
 		return authz.WorkloadSessionAdmission{}, fmt.Errorf("load live agent policy: %w", err)
 	}
 
-	var authorizerPolicy []authz.Grant
-	if credential.AuthorizerUserID != "" {
-		principals, err := authz.ResolveUserPrincipals(ctx, tx, authCtx.ActiveOrganizationID, credential.AuthorizerUserID)
-		if err != nil {
-			if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
-				return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)
-			}
-			return authz.WorkloadSessionAdmission{}, fmt.Errorf("resolve workload delegator: %w", err)
-		}
-		if !slices.Contains(principals, urn.NewPrincipal(urn.PrincipalTypeUser, credential.AuthorizerUserID)) {
-			return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)
-		}
-		authorizerPolicy, err = authz.LoadGrants(ctx, tx, authCtx.ActiveOrganizationID, principals)
-		if err != nil {
-			return authz.WorkloadSessionAdmission{}, fmt.Errorf("load workload delegator policy: %w", err)
-		}
-	}
 	return authz.WorkloadSessionAdmission{
-		AuthorizerUserID: credential.AuthorizerUserID,
-		Authorizer:       authorizerPolicy,
-		AgentPrincipal:   agentPrincipal.String(),
-		OwnerUserID:      agent.OwnerUserID,
-		Ceiling:          policy.RuntimeGrants(),
-		Agent:            agentPolicy,
+		AgentPrincipal: agentPrincipal.String(),
+		OwnerUserID:    agent.OwnerUserID,
+		Ceiling:        policy.RuntimeGrants(),
+		Agent:          agentPolicy,
 	}, nil
 }
 

@@ -89,3 +89,19 @@ func HTTPOrEmpty(raw string) string {
 	}
 	return ""
 }
+
+// DiagnosticURL renders an HTTP(S) URL without userinfo, query, or fragment.
+// It preserves the escaped path for diagnostics, not protocol identity or
+// requests. Paths may still contain credentials; no path heuristics are applied.
+// Empty input stays empty. Invalid nonempty input is replaced rather than
+// echoed, since parse errors can leak it.
+func DiagnosticURL(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.Opaque != "" {
+		return "<invalid URL>"
+	}
+	return (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path, RawPath: u.RawPath}).String()
+}

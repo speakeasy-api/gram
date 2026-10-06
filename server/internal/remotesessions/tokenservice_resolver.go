@@ -45,49 +45,8 @@ func remoteSessionCallerPrincipal(ctx context.Context, subject urn.SessionSubjec
 // attachment never falls back to the agent's, owner's, or authorizer's grant.
 func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, caller urn.SessionSubject, resource string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
-	if e, ok := contextvalues.AssistantBusinessInvocationFromContext(ctx); ok && e.UserID != "" {
-		if e.ProjectID != projectID || e.OrganizationID != organizationID || caller.Kind != urn.SessionSubjectKindUser || caller.ID != e.UserID {
-			return zero, ErrInvalidAuthorizationRequest
-		}
-		if e.Resource == "" || (resource != "" && resource != e.Resource) {
-			return zero, nil
-		}
-		resource = e.Resource
-		if err := e.Revalidate(ctx); err != nil {
-			return zero, fmt.Errorf("revalidate invocation authority: %w", err)
-		}
-		q := remotesessions_repo.New(m.db)
-		params := remotesessions_repo.GetDelegatedRemoteSessionParams{SubjectUrn: caller, RemoteSessionClientID: clientID, ProjectID: projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID}
-		selected, err := q.GetDelegatedRemoteSession(ctx, params)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return zero, nil
-		}
-		if err != nil {
-			return zero, fmt.Errorf("select invocation credential: %w", err)
-		}
-		// Legacy unbound grants cannot establish the credential's target resource.
-		if !selected.Resource.Valid || selected.Resource.String != resource {
-			return zero, nil
-		}
-		resolved, err := m.resolveCredentialToken(ctx, selected, resource)
-		if err != nil || resolved.Token == "" {
-			return resolved, err
-		}
-		current, err := q.GetDelegatedRemoteSession(ctx, params)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return zero, nil
-		}
-		if err != nil {
-			return zero, fmt.Errorf("revalidate invocation credential: %w", err)
-		}
-		if current.ID != selected.ID || current.GrantGeneration != selected.GrantGeneration {
-			return zero, nil
-		}
-		if err := e.Revalidate(ctx); err != nil {
-			return zero, fmt.Errorf("revalidate invocation authority: %w", err)
-		}
-		m.touchResolvedCredential(ctx, selected)
-		return resolved, nil
+	if invoker, ok := contextvalues.AssistantInvoker(ctx); ok {
+		return m.resolveInvokerUpstreamToken(ctx, projectID, organizationID, userSessionIssuerID, clientID, caller, resource, invoker)
 	}
 	principalID, attached, err := remoteSessionCallerPrincipal(ctx, caller)
 	if err != nil {
@@ -134,5 +93,37 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, proje
 		return zero, nil
 	}
 	m.touchResolvedCredential(ctx, source)
+	return resolved, nil
+}
+
+// resolveInvokerUpstreamToken serves an agent-backed assistant turn with the
+// turn user's own consented session for the upstream resource the request was
+// authorized for. It never falls back to another user's or the agent's
+// session.
+func (m *ChallengeManager) resolveInvokerUpstreamToken(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, caller urn.SessionSubject, resource, invoker string) (resolvedUpstreamToken, error) {
+	var zero resolvedUpstreamToken
+	if caller.Kind != urn.SessionSubjectKindUser || caller.ID != invoker {
+		return zero, ErrInvalidAuthorizationRequest
+	}
+	pinned, ok := contextvalues.AssistantBusinessResource(ctx)
+	if !ok || (resource != "" && resource != pinned) {
+		return zero, nil
+	}
+	selected, err := remotesessions_repo.New(m.db).GetDelegatedRemoteSession(ctx, remotesessions_repo.GetDelegatedRemoteSessionParams{SubjectUrn: caller, RemoteSessionClientID: clientID, ProjectID: projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return zero, nil
+	}
+	if err != nil {
+		return zero, fmt.Errorf("select turn user credential: %w", err)
+	}
+	// A session without a recorded resource cannot prove it targets this one.
+	if !selected.Resource.Valid || selected.Resource.String != pinned {
+		return zero, nil
+	}
+	resolved, err := m.resolveCredentialToken(ctx, selected, pinned)
+	if err != nil || resolved.Token == "" {
+		return resolved, err
+	}
+	m.touchResolvedCredential(ctx, selected)
 	return resolved, nil
 }

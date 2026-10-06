@@ -11,6 +11,7 @@ import { invalidateAllTrigger } from "@gram/client/react-query/trigger.js";
 import { invalidateAllTriggers } from "@gram/client/react-query/triggers.js";
 import { invalidateAllSkill } from "@gram/client/react-query/skill.js";
 import { useQueryClient } from "@tanstack/react-query";
+import { useProject } from "@/contexts/Auth";
 import {
   ReactNode,
   useCallback,
@@ -36,6 +37,7 @@ export function AssistantDraftProvider({
   children: ReactNode;
 }): JSX.Element {
   const queryClient = useQueryClient();
+  const project = useProject();
   const [assistantId, setAssistantIdState] = useState<string | null>(
     initialAssistantId,
   );
@@ -45,7 +47,7 @@ export function AssistantDraftProvider({
   const pendingRef = useRef(new Map<string, PendingResolver>());
 
   const { data: assistant, refetch } = useAssistantsGet(
-    { id: assistantId ?? "" },
+    { id: assistantId ?? "", gramProject: project.slug },
     undefined,
     {
       enabled: !!assistantId,
@@ -68,14 +70,17 @@ export function AssistantDraftProvider({
 
   const setAssistant = useCallback(
     (next: Assistant) => {
-      queryClient.setQueryData(queryKeyAssistantsGet({ id: next.id }), next);
+      queryClient.setQueryData(
+        queryKeyAssistantsGet({ id: next.id, gramProject: project.slug }),
+        next,
+      );
       setAssistantIdState((prev) => {
         if (prev === next.id) return prev;
         onAssistantCreated?.(next.id);
         return next.id;
       });
     },
-    [queryClient, onAssistantCreated],
+    [queryClient, onAssistantCreated, project.slug],
   );
 
   const invalidateAll = useCallback(() => {
