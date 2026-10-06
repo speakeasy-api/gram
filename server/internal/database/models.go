@@ -732,6 +732,34 @@ type CustomDomain struct {
 	Deleted                  bool
 }
 
+type Dashboard struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Description     pgtype.Text
+	Filters         []byte
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
+type DashboardWidget struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	DashboardID    uuid.UUID
+	WidgetID       uuid.UUID
+	X              int32
+	Y              int32
+	W              int32
+	H              int32
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type DataExportRoute struct {
 	ID                uuid.UUID
 	OrganizationID    string
