@@ -26,6 +26,7 @@ import type { ActivePanel, AnnotationHint, ResourceType } from "./types";
 import {
   ANNOTATION_TO_DISPOSITION,
   DISPOSITION_TO_ANNOTATION,
+  isProjectFilteredResourceType,
   isProjectSelectableResourceType,
   isUnrestrictedResourceType,
   unrestrictedResourceLabel,
@@ -109,6 +110,7 @@ export function GrantRuleDrawerContent({
 
   const isMcpConnect = scope === "mcp:connect";
   const projectSelectable = isProjectSelectableResourceType(resourceType);
+  const projectFiltered = isProjectFilteredResourceType(resourceType);
 
   const panelState = computePanelState(selectors, resourceType);
   // Use override only when selectors are empty (user just switched mode)
@@ -351,7 +353,11 @@ export function GrantRuleDrawerContent({
     } else {
       onChangeSelectors([
         ...selectors,
-        { resourceKind: "mcp", resourceId: "*", projectId },
+        {
+          resourceKind: projectFiltered ? resourceType : "mcp",
+          resourceId: "*",
+          projectId,
+        },
       ]);
     }
   };
@@ -376,25 +382,26 @@ export function GrantRuleDrawerContent({
     <div className="border-border divide-border shrink-0 divide-y border">
       {!isDenyProp && isPanelAllowed("all") && (
         <ScopeOption
-          label={projectSelectable ? "All projects" : "All servers"}
-          description={
-            projectSelectable
-              ? "Give access to every project in your org"
-              : "Give access to all servers in every project in your org"
-          }
+          label={allScopeLabel(projectSelectable, projectFiltered)}
+          description={allScopeDescription(projectSelectable, projectFiltered)}
           selected={activePanel === "all"}
           onClick={() => switchPanel("all")}
         />
       )}
-      {resourceType === "mcp" && isPanelAllowed("projects") && (
-        <ScopeOption
-          label="Specific projects"
-          description="Give access to servers within specific projects in your org"
-          selected={activePanel === "projects"}
-          onClick={() => switchPanel("projects")}
-        />
-      )}
-      {isPanelAllowed("servers") && (
+      {(resourceType === "mcp" || projectFiltered) &&
+        isPanelAllowed("projects") && (
+          <ScopeOption
+            label="Specific projects"
+            description={
+              projectFiltered
+                ? "Give access to assistants within specific projects in your org"
+                : "Give access to servers within specific projects in your org"
+            }
+            selected={activePanel === "projects"}
+            onClick={() => switchPanel("projects")}
+          />
+        )}
+      {!projectFiltered && isPanelAllowed("servers") && (
         <ScopeOption
           label={projectSelectable ? "Specific projects" : "Specific servers"}
           description={
@@ -417,7 +424,7 @@ export function GrantRuleDrawerContent({
     </div>
   );
 
-  const resourceList = activePanel === "servers" && (
+  const resourceList = activePanel === "servers" && !projectFiltered && (
     <>
       <div className="border-border mt-3 flex items-center gap-2 border border-b-0 px-4 py-2.5">
         <input
@@ -1138,4 +1145,19 @@ function ScopeOption({
       </span>
     </button>
   );
+}
+
+function allScopeLabel(projectSelectable: boolean, projectFiltered: boolean) {
+  if (projectFiltered) return "All assistants";
+  return projectSelectable ? "All projects" : "All servers";
+}
+
+function allScopeDescription(
+  projectSelectable: boolean,
+  projectFiltered: boolean,
+) {
+  if (projectFiltered) return "Give access to every assistant in your org";
+  return projectSelectable
+    ? "Give access to every project in your org"
+    : "Give access to all servers in every project in your org";
 }

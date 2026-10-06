@@ -1,3 +1,8 @@
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { buildLoadChatOverviewQuery } from "@gram/client/react-query/loadChatOverview.js";
+import { buildListChatSessionLinksQuery } from "@gram/client/react-query/listChatSessionLinks.js";
+import { SlackChannelLink } from "@/components/slack-channel-link";
+import { IdentityAvatar } from "@/components/identity-avatar";
 import { AccountTypeIcon } from "@/components/account-type-icon";
 import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
@@ -16,7 +21,7 @@ import { useListChatSessionLinks } from "@gram/client/react-query/listChatSessio
 import { useMembers } from "@gram/client/react-query/members.js";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
   ArrowUpRight,
@@ -28,7 +33,11 @@ import {
 import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import { toast } from "sonner";
 import { formatPlatform } from "@/lib/formatPlatform";
-import { summarizeLineage, type LineageSummary } from "./sessionLinks";
+import {
+  groupSubsessions,
+  summarizeLineage,
+  type LineageSummary,
+} from "./sessionLinks";
 
 interface ChatLogsTableProps {
   chats: ChatOverview[];
@@ -270,6 +279,8 @@ export function ChatLogsTable({
   // One batched lineage lookup for the visible rows. Optional decoration:
   // errors are swallowed (never blank the list) and the endpoint caps at 100
   // ids, matching the list's maximum page size.
+  const client = useGramContext();
+  const queryClient = useQueryClient();
   const chatIds = useMemo(
     () => chats.slice(0, 100).map((chat) => chat.id),
     [chats],
@@ -278,6 +289,58 @@ export function ChatLogsTable({
     enabled: chatIds.length > 0,
     throwOnError: false,
     retry: false,
+  });
+  const { data: ancestors } = useQuery({
+    queryKey: ["chatSubsessionAncestors", chatIds, linksData?.links],
+    enabled: !!linksData?.links.some((link) => link.kind === "subagent"),
+    retry: false,
+    throwOnError: false,
+    queryFn: async () => {
+      const links = [...(linksData?.links ?? [])];
+      const parents: ChatOverview[] = [];
+      const visited = new Set(chatIds);
+      let requested = 0;
+      // Fetch authorized overview metadata without opening transcripts. Bound
+      // ancestor depth and count, and retain only the exact requested IDs.
+      for (let depth = 0; depth < 10 && requested < 100; depth++) {
+        const ids = [
+          ...new Set(
+            links
+              .filter(
+                (link) =>
+                  link.kind === "subagent" &&
+                  link.parentCaptured &&
+                  link.parentChatId &&
+                  !visited.has(link.parentChatId),
+              )
+              .map((link) => link.parentChatId!),
+          ),
+        ].slice(0, 100 - requested);
+        if (!ids.length) break;
+        requested += ids.length;
+        for (const id of ids) visited.add(id);
+        for (let offset = 0; offset < ids.length; offset += 8) {
+          const loaded = await Promise.allSettled(
+            ids.slice(offset, offset + 8).map((id) => {
+              const query = buildLoadChatOverviewQuery(client, {
+                id,
+              });
+              return queryClient.fetchQuery({ ...query, staleTime: 60_000 });
+            }),
+          );
+          for (const result of loaded)
+            if (result.status === "fulfilled" && result.value)
+              parents.push(result.value);
+        }
+        const query = buildListChatSessionLinksQuery(client, { chatIds: ids });
+        const next = await queryClient.fetchQuery({
+          ...query,
+          staleTime: 60_000,
+        });
+        links.push(...next.links);
+      }
+      return { parents, links };
+    },
   });
   const lineageByChat = useMemo(() => {
     const map = new Map<string, LineageSummary>();
@@ -288,6 +351,14 @@ export function ChatLogsTable({
     }
     return map;
   }, [chatIds, linksData]);
+  const groupedChats = useMemo(
+    () =>
+      groupSubsessions(
+        [...chats, ...(ancestors?.parents ?? [])],
+        ancestors?.links ?? linksData?.links ?? [],
+      ),
+    [chats, linksData, ancestors],
+  );
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   if (isLoading && chats.length === 0) {
     return (
@@ -342,7 +413,7 @@ export function ChatLogsTable({
   return (
     <>
       <div className="divide-border bg-card divide-y">
-        {chats.map((chat) => {
+        {groupedChats.map(({ session: chat, depth }) => {
           const isSelected = selectedChatId === chat.id;
           const source = chat.source;
           const riskCount = chat.riskFindingsCount ?? 0;
@@ -366,6 +437,7 @@ export function ChatLogsTable({
                 className={cn(
                   "group relative w-full px-5 py-4 transition-colors duration-150",
                   "hover:bg-muted/50",
+                  depth > 0 && "bg-muted/20",
                   isSelected && "bg-primary/5",
                 )}
               >
@@ -375,7 +447,10 @@ export function ChatLogsTable({
                   aria-label={`Open session ${getTraceId(chat.id)}`}
                   className="absolute inset-0 z-10 focus:outline-none"
                 />
-                <div className="pointer-events-none relative z-20 flex items-center gap-5">
+                <div
+                  className="pointer-events-none relative z-20 flex items-center gap-5"
+                  style={{ paddingLeft: Math.min(depth, 8) * 24 }}
+                >
                   {/* Left: Risk findings indicator */}
                   <div className="shrink-0">
                     <RiskIndicator count={riskCount} />
@@ -388,6 +463,12 @@ export function ChatLogsTable({
                       <h3 className="text-foreground line-clamp-2 text-sm leading-snug font-medium">
                         {chat.title}
                       </h3>
+                      {depth > 0 && (
+                        <span className="text-muted-foreground inline-flex shrink-0 items-center gap-1 self-center text-xs">
+                          <GitBranch className="size-3" aria-hidden />
+                          Subagent
+                        </span>
+                      )}
                       <SessionLineageIcons
                         summary={lineageByChat.get(chat.id)}
                         onActivate={() => onSelectChat(chat)}
@@ -395,7 +476,7 @@ export function ChatLogsTable({
                     </div>
 
                     {/* Meta row — muted mono */}
-                    <div className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs">
+                    <div className="text-muted-foreground mt-1.5 flex min-h-5 flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs">
                       <span className="inline-flex items-center gap-1">
                         {getTraceId(chat.id)}
                         <span className="pointer-events-auto">
@@ -404,26 +485,79 @@ export function ChatLogsTable({
                       </span>
                       <span className="text-muted-foreground/40">·</span>
                       <span className="inline-flex items-center gap-1.5">
-                        {chat.assistantName ? (
-                          <>
-                            <Icon name="bot" className="size-3.5 opacity-60" />
-                            <span className="max-w-[120px] truncate">
-                              {chat.assistantName}
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <AccountTypeIcon accountType={chat.accountType} />
-                            <span className="max-w-[120px] truncate">
-                              <ChatOwnerLabel
-                                members={membersData?.members}
-                                chat={chat}
-                                currentUser={user}
-                                accountEmail={personalAccountEmail(chat)}
-                              />
-                            </span>
-                          </>
+                        {(chat.participants?.length ?? 0) > 0 && (
+                          <span
+                            className="flex shrink-0 -space-x-1"
+                            aria-label="Conversation participants"
+                          >
+                            {chat.participants
+                              ?.slice(0, 5)
+                              .map((participant) => {
+                                const label =
+                                  participant.displayName ??
+                                  participant.providerUserId;
+                                return (
+                                  <SimpleTooltip
+                                    key={`${participant.provider}:${participant.providerTeamId ?? ""}:${participant.providerUserId}:${participant.userId ?? ""}`}
+                                    tooltip={
+                                      <div>
+                                        <div>{label}</div>
+                                        <div className="text-xs opacity-75">
+                                          Slack · {participant.providerUserId}
+                                          {participant.providerTeamId
+                                            ? ` · ${participant.providerTeamId}`
+                                            : ""}
+                                        </div>
+                                      </div>
+                                    }
+                                  >
+                                    <span
+                                      className="pointer-events-auto"
+                                      aria-label={label}
+                                    >
+                                      <IdentityAvatar
+                                        label={label}
+                                        className="border-card size-5 border"
+                                        textClassName="text-[10px]"
+                                      />
+                                    </span>
+                                  </SimpleTooltip>
+                                );
+                              })}
+                            {(chat.participants?.length ?? 0) > 5 && (
+                              <span
+                                className="bg-card text-muted-foreground flex size-4 items-center justify-center rounded-full text-[8px]"
+                                title={`${chat.participants?.length ?? 0} participants`}
+                              >
+                                +{(chat.participants?.length ?? 0) - 5}
+                              </span>
+                            )}
+                          </span>
                         )}
+                        {(chat.participants?.length ?? 0) === 0 &&
+                          (chat.assistantName ? (
+                            <>
+                              <Icon
+                                name="bot"
+                                className="size-3.5 opacity-60"
+                              />
+                              <span className="max-w-[120px] truncate">
+                                {chat.assistantName}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <AccountTypeIcon accountType={chat.accountType} />
+                              <span className="max-w-[120px] truncate">
+                                <ChatOwnerLabel
+                                  members={membersData?.members}
+                                  chat={chat}
+                                  currentUser={user}
+                                  accountEmail={personalAccountEmail(chat)}
+                                />
+                              </span>
+                            </>
+                          ))}
                       </span>
                       {source && (
                         <>
@@ -435,6 +569,16 @@ export function ChatLogsTable({
                             />
                             {formatChatSource(source, chat)}
                           </span>
+                        </>
+                      )}
+                      {chat.slackChannelId && (
+                        <>
+                          <span className="text-muted-foreground/40">·</span>
+                          <SlackChannelLink
+                            channelId={chat.slackChannelId}
+                            channelName={chat.slackChannelName}
+                            teamId={chat.slackTeamId}
+                          />
                         </>
                       )}
                       <span className="text-muted-foreground/40">·</span>

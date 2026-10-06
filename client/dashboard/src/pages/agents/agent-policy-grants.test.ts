@@ -33,6 +33,8 @@ describe("agent policy scope catalog", () => {
   // direction and a missing capability in the other.
   it("offers exactly the agent-runtime-safe scopes", () => {
     expect(AGENT_POLICY_SCOPES.map((scope) => scope.slug).sort()).toEqual([
+      "assistant:read",
+      "assistant:write",
       "environment:read",
       "environment:write",
       "mcp:connect",

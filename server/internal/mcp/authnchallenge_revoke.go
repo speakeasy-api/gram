@@ -60,14 +60,24 @@ func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) error {
 //     client_secret, so holding a validly-signed token is what proves the
 //     caller may revoke it.
 func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+	urls, err := s.requestAuthorizationServerURLs(r.Context(), endpoint, s.BaseURLForRequest(r))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build authorization server URLs").LogError(r.Context(), s.logger)
+	}
+	return s.serveRevoke(w, r, endpoint.LogWith(s.logger), endpoint.UserSessionIssuerID, urls)
+}
+
+// serveRevoke revokes a token of the issuer's clients. Revocation is scoped to
+// the issuer, not to an MCP server, so per-endpoint and shared authorization
+// servers share it; urls are the addressed authorization server's, against
+// which client assertions are checked.
+func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuerID uuid.UUID, urls AuthorizationServerURLs) error {
 	ctx := r.Context()
 
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := r.ParseForm(); err != nil {
-		return writeTokenError(ctx, w, s.logger, http.StatusBadRequest, "invalid_request", "failed to parse form")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "failed to parse form")
 	}
-
-	logger := endpoint.LogWith(s.logger)
 
 	creds := extractClientCredentials(r)
 	presentedAuthMethod := creds.method
@@ -77,7 +87,7 @@ func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *
 		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
 	}
 	clientRow, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		UserSessionIssuerID: issuerID,
 		ClientID:            clientID,
 	})
 	if err != nil {
@@ -93,7 +103,7 @@ func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *
 	// deliberately NOT applied here is the CIMD admission `disabled` check:
 	// revocation is a de-escalation, and a client an operator has just
 	// de-admitted should still be able to kill its own outstanding tokens.
-	if reason := s.authenticateOAuthClient(ctx, logger, endpoint, clientAssertionAtRevoke, &clientRow, creds, s.BaseURLForRequest(r)); reason != "" {
+	if reason := s.authenticateOAuthClient(ctx, logger, issuerID, urls, clientAssertionAtRevoke, &clientRow, creds); reason != "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", reason)
 		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
 	}
@@ -111,7 +121,6 @@ func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *
 	// authenticated client before revoking; ownership mismatches look like
 	// the "unknown token" success path to the caller (§2.2 — don't leak
 	// ownership).
-	issuerID := endpoint.UserSessionIssuerID
 	clientUUID := clientRow.ID
 	switch hint {
 	case "refresh_token":

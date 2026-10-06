@@ -1,3 +1,4 @@
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { MultiSelect } from "@/components/ui/MultiSelect";
@@ -31,14 +32,14 @@ import {
   measureLabel,
   parseLimit,
   specForDataset,
-  WINDOW_OPTIONS,
+  WINDOW_PRESETS,
   type ChartType,
   type ExploreSpec,
   type FilterDraft,
   type MeasureDraft,
-  type WindowPreset,
 } from "./exploreModel";
 import { FilterRow } from "./FilterRow";
+
 import { MeasureRow } from "./MeasureRow";
 
 // Radix Select cannot carry "" as an item value, so the "keep group order"
@@ -159,7 +160,7 @@ export function QueryBuilder({
             <FilterRow
               key={index}
               dataset={dataset}
-              window={spec.window}
+              span={spec}
               filter={filter}
               onChange={(next) => setFilter(index, next)}
               onRemove={() => patch({ filters: removeAt(spec.filters, index) })}
@@ -254,23 +255,36 @@ export function QueryBuilder({
           />
         </BuilderField>
         <BuilderField label="Window">
-          <Select
-            value={spec.window}
-            onValueChange={(window) =>
-              patch({ window: window as WindowPreset })
-            }
-          >
-            <SelectTrigger className="w-44" aria-label="Window">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {WINDOW_OPTIONS.map((window) => (
-                <SelectItem key={window.value} value={window.value}>
-                  {window.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* The dashboard's own date picker: its presets, and a custom
+              range typed, picked on the calendar, or brought by a page or a
+              dragged chart. Picking a preset drops the range. The picker
+              has no name of its own, so the group carries it. */}
+          <div role="group" aria-label="Window">
+            <TimeRangePicker
+              preset={spec.range ? null : spec.window}
+              customRange={
+                spec.range
+                  ? {
+                      from: new Date(spec.range.from),
+                      to: new Date(spec.range.to),
+                    }
+                  : null
+              }
+              customRangeLabel={spec.range?.label ?? null}
+              availablePresets={WINDOW_PRESETS}
+              onPresetChange={(window) => patch({ window, range: undefined })}
+              onCustomRangeChange={(from, to, label) =>
+                patch({
+                  range: {
+                    from: from.getTime(),
+                    to: to.getTime(),
+                    ...(label ? { label } : {}),
+                  },
+                })
+              }
+              onClearCustomRange={() => patch({ range: undefined })}
+            />
+          </div>
         </BuilderField>
         {/* A timeseries is drawn in time order up to the server's cap, so
             order and limit only apply to whole-window charts. */}

@@ -19,6 +19,7 @@ export const CONNECTION_SECTION_ID = "connection";
 export const AGENT_SECTION_ID = "agent";
 export const CHECKLIST_SECTION_ID = "checklist";
 export const CLIENT_ID_SECTION_ID = "client-id";
+export const READINESS_SECTION_ID = "readiness";
 
 export function identityProvidersHref(): string {
   return "?tab=identity-providers";

@@ -66,9 +66,16 @@ func directRemoteProtocolFixture(t *testing.T, mode string) (*directRemoteHTTPIn
 				_, _ = io.WriteString(w, `{}`)
 				return
 			}
-			if r.URL.Path == "/.well-known/oauth-protected-resource/mcp" {
+			switch {
+			case r.URL.Path == "/.well-known/oauth-protected-resource/mcp":
 				_, _ = io.WriteString(w, `{"authorization_servers":["https://remote.example.test"]}`)
-			} else {
+			case mode == "auth401-cimd":
+				// No registration_endpoint; Client ID Metadata Document only.
+				_, _ = io.WriteString(w, `{"issuer":"https://remote.example.test","authorization_endpoint":"https://remote.example.test/authorize","token_endpoint":"https://remote.example.test/token","client_id_metadata_document_supported":true,"token_endpoint_auth_methods_supported":["none"],"code_challenge_methods_supported":["S256"]}`)
+			case mode == "auth401-manual":
+				// OAuth advertised with neither automatic registration path.
+				_, _ = io.WriteString(w, `{"issuer":"https://remote.example.test","authorization_endpoint":"https://remote.example.test/authorize","token_endpoint":"https://remote.example.test/token","token_endpoint_auth_methods_supported":["client_secret_basic"]}`)
+			default:
 				_, _ = io.WriteString(w, `{"registration_endpoint":"https://remote.example.test/register"}`)
 			}
 			return
@@ -104,7 +111,7 @@ func directRemoteProtocolFixture(t *testing.T, mode string) (*directRemoteHTTPIn
 		methods = append(methods, request.Method)
 		mu.Unlock()
 		r.Body = io.NopCloser(bytes.NewReader(body))
-		if mode == "auth401" || mode == "auth403" || ((mode == "discover-auth" || strings.HasPrefix(mode, "discover-blocked")) && request.Method == "server/discover") || (mode == "tools-auth" && request.Method == "tools/list") {
+		if strings.HasPrefix(mode, "auth401") || mode == "auth403" || ((mode == "discover-auth" || strings.HasPrefix(mode, "discover-blocked")) && request.Method == "server/discover") || (mode == "tools-auth" && request.Method == "tools/list") {
 			status := http.StatusUnauthorized
 			if mode == "auth403" {
 				status = http.StatusForbidden

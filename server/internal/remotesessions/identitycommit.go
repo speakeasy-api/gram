@@ -659,11 +659,7 @@ type providerCapabilities struct {
 }
 
 func (p providerCapabilities) supportsCIMD() bool {
-	if !p.clientIDMetadataDocumentSupported {
-		return false
-	}
-	methods := p.tokenEndpointAuthMethodsSupported
-	return len(methods) == 0 || slices.Contains(methods, string(TokenEndpointAuthMethodNone))
+	return SupportsClientIDMetadataDocument(p.clientIDMetadataDocumentSupported, p.tokenEndpointAuthMethodsSupported)
 }
 
 // capabilities is what registration is chosen from: the new provider's

@@ -1,7 +1,9 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Button } from "@/components/ui/Button";
-import { MoreActions } from "@/components/ui/MoreActions";
-import { SearchBar } from "@/components/ui/SearchBar";
+import {
+  MoreActions,
+  type Action as MoreActionsItem,
+} from "@/components/ui/MoreActions";
 import {
   Select,
   SelectContent,
@@ -28,10 +30,27 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useMemo, useState, type JSX } from "react";
+import { useLocation, useSearchParams } from "react-router";
+import { Page } from "@/components/page-layout";
+import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
+import { WidgetCards } from "./WidgetCards";
+import { findDataset, longestWindow, type ExploreSpec } from "./exploreModel";
+import { pageCanFilter } from "./pageContext";
+import { usePageFilters, type PageFilterField } from "./usePageFilters";
 import { useCanEditWidget } from "./useCanEditWidget";
 import { useCreatorName } from "./useCreatorName";
 import { useWidgetMutations } from "./useWidgetMutations";
 import { DeleteWidgetDialog, WidgetDetailsDialog } from "./WidgetDialogs";
+
+// The fields the cards' filter bar may offer, in order: the dimensions most
+// questions about agent activity are cut by.
+const CARD_FILTER_FIELDS: readonly PageFilterField[] = [
+  { field: "user", label: "User" },
+  { field: "surface", label: "Agent" },
+  { field: "model", label: "Model" },
+  { field: "mcp_server", label: "MCP server" },
+  { field: "status", label: "Status" },
+];
 
 // The sort the list opens on: the server's own order, most recently updated
 // first.
@@ -60,6 +79,7 @@ export function WidgetList({
   isPending,
   isError,
   onOpen,
+  onOpenQuery,
   confirmLeave,
   onDeleted,
   onExplore,
@@ -70,6 +90,8 @@ export function WidgetList({
   isError: boolean;
   /** Open a widget in the Explore tab. */
   onOpen: (widget: Widget) => void;
+  /** Open a question in the Explore tab: a saved widget's, or its own. */
+  onOpenQuery: (spec: ExploreSpec, widgetId: string | null) => void;
   /**
    * Run this once leaving the open widget's unsaved edits is confirmed,
    * before anything is opened or copied.
@@ -86,6 +108,7 @@ export function WidgetList({
   const canEdit = useCanEditWidget();
   const mutations = useWidgetMutations();
 
+  const [view, setView] = useListView();
   const [search, setSearch] = useState("");
   const [createdBy, setCreatedBy] = useState(ANYONE);
   const [dataset, setDataset] = useState(ALL_DATASETS);
@@ -97,6 +120,69 @@ export function WidgetList({
     () => [...new Set(widgets.map((widget) => widget.dataset))].sort(),
     [widgets],
   );
+  // The cards' filter values are read over the longest window any widget
+  // asks, so a value only its oldest days hold can still be picked.
+  const optionsWindow = useMemo(
+    () => longestWindow(widgets.map((widget) => widget.query.window)),
+    [widgets],
+  );
+  // The cards' filter bar offers the fields some widget can be filtered by,
+  // settled on the project's widgets rather than the ones the search leaves,
+  // so it does not change under someone typing. It shows in the cards view
+  // only, and asks for its options only there.
+  const catalog = useAnalyticsDescribe().data?.datasets;
+  const cardFields = useMemo(
+    () =>
+      CARD_FILTER_FIELDS.filter(({ field }) =>
+        datasets.some((name) =>
+          pageCanFilter(findDataset(catalog ?? [], name), field),
+        ),
+      ),
+    [catalog, datasets],
+  );
+  const cardFilters = usePageFilters({
+    fields: cardFields,
+    optionsWindow,
+    optionsDatasets: datasets,
+    optionsEnabled: view === "cards",
+  });
+
+  // The same actions on a row and on a card.
+  const actionsFor = (widget: Widget): MoreActionsItem[] => [
+    {
+      label: "Open",
+      icon: "square-arrow-out-up-right",
+      onClick: () => confirmLeave(() => onOpen(widget)),
+    },
+    ...(canEdit(widget)
+      ? [
+          {
+            label: "Rename",
+            icon: "pencil" as const,
+            onClick: () => setRenaming(widget),
+          },
+        ]
+      : []),
+    {
+      label: "Duplicate",
+      icon: "copy",
+      disabled: mutations.pending,
+      onClick: () => confirmLeave(() => mutations.duplicate(widget.id, onOpen)),
+    },
+    // Someone else's widget without project write can only be
+    // copied.
+    ...(canEdit(widget)
+      ? [
+          {
+            label: "Delete",
+            icon: "trash" as const,
+            destructive: true,
+            separatorBefore: true,
+            onClick: () => setDeleting(widget),
+          },
+        ]
+      : []),
+  ];
 
   const columns: Column<Widget>[] = [
     {
@@ -175,42 +261,7 @@ export function WidgetList({
         <span onClick={(event) => event.stopPropagation()}>
           <MoreActions
             triggerAriaLabel={`Actions for ${widget.name}`}
-            actions={[
-              {
-                label: "Open",
-                icon: "square-arrow-out-up-right",
-                onClick: () => confirmLeave(() => onOpen(widget)),
-              },
-              ...(canEdit(widget)
-                ? [
-                    {
-                      label: "Rename",
-                      icon: "pencil" as const,
-                      onClick: () => setRenaming(widget),
-                    },
-                  ]
-                : []),
-              {
-                label: "Duplicate",
-                icon: "copy",
-                disabled: mutations.pending,
-                onClick: () =>
-                  confirmLeave(() => mutations.duplicate(widget.id, onOpen)),
-              },
-              // Someone else's widget without project write can only be
-              // copied.
-              ...(canEdit(widget)
-                ? [
-                    {
-                      label: "Delete",
-                      icon: "trash" as const,
-                      destructive: true,
-                      separatorBefore: true,
-                      onClick: () => setDeleting(widget),
-                    },
-                  ]
-                : []),
-            ]}
+            actions={actionsFor(widget)}
           />
         </span>
       ),
@@ -267,45 +318,70 @@ export function WidgetList({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <SearchBar
-          value={search}
-          onChange={setSearch}
-          placeholder="Search widgets"
-          className="w-72"
+      {/* The list's own controls on one row; in the cards view, the
+          shared filter bar the cards answer within on the next. */}
+      <Page.Toolbar>
+        <Page.Toolbar.Row>
+          <Page.Toolbar.Search
+            value={search}
+            onChange={setSearch}
+            placeholder="Search widgets"
+          />
+          <Page.Toolbar.Leading>
+            <Select value={createdBy} onValueChange={setCreatedBy}>
+              <SelectTrigger className="h-10 w-44" aria-label="Created by">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ANYONE}>Created by anyone</SelectItem>
+                <SelectItem value={ME}>Created by me</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={dataset} onValueChange={setDataset}>
+              <SelectTrigger className="h-10 w-44" aria-label="Dataset">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_DATASETS}>All datasets</SelectItem>
+                {datasets.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Page.Toolbar.Leading>
+          <Page.Toolbar.ViewAs
+            value={view === "cards" ? "grid" : "table"}
+            onChange={(mode) => setView(mode === "grid" ? "cards" : "list")}
+          />
+        </Page.Toolbar.Row>
+        {view === "cards" ? (
+          <Page.Toolbar.Row>
+            <Page.Toolbar.Filters {...cardFilters.toolbar} />
+          </Page.Toolbar.Row>
+        ) : null}
+      </Page.Toolbar>
+      {view === "cards" ? (
+        <WidgetCards
+          widgets={rows}
+          page={cardFilters.context}
+          actionsFor={actionsFor}
+          onOpen={(spec, widgetId) =>
+            confirmLeave(() => onOpenQuery(spec, widgetId ?? null))
+          }
         />
-        <Select value={createdBy} onValueChange={setCreatedBy}>
-          <SelectTrigger className="w-44" aria-label="Created by">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ANYONE}>Created by anyone</SelectItem>
-            <SelectItem value={ME}>Created by me</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={dataset} onValueChange={setDataset}>
-          <SelectTrigger className="w-44" aria-label="Dataset">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_DATASETS}>All datasets</SelectItem>
-            {datasets.map((name) => (
-              <SelectItem key={name} value={name}>
-                {name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <Table
-        columns={columns}
-        data={rows}
-        rowKey={(widget) => widget.id}
-        onRowClick={(widget) => confirmLeave(() => onOpen(widget))}
-        sort={sort}
-        onSortChange={setSort}
-        noResultsMessage="No widgets match these filters."
-      />
+      ) : (
+        <Table
+          columns={columns}
+          data={rows}
+          rowKey={(widget) => widget.id}
+          onRowClick={(widget) => confirmLeave(() => onOpen(widget))}
+          sort={sort}
+          onSortChange={setSort}
+          noResultsMessage="No widgets match these filters."
+        />
+      )}
 
       <WidgetDetailsDialog
         key={renaming?.id ?? "closed"}
@@ -348,6 +424,33 @@ export function WidgetList({
       />
     </div>
   );
+}
+
+type ListView = "list" | "cards";
+
+/** The search parameter holding how the Widgets tab shows its widgets. */
+const VIEW_PARAM = "view";
+
+/**
+ * Whether the Widgets tab lists widgets or draws them as cards, kept in the
+ * URL beside the tab so a link opens on the same view. Switching keeps the
+ * history entry's state, as switching tabs does.
+ */
+function useListView(): [ListView, (view: ListView) => void] {
+  const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const view: ListView = params.get(VIEW_PARAM) === "cards" ? "cards" : "list";
+  const set = (next: ListView) =>
+    setParams(
+      (prev) => {
+        const out = new URLSearchParams(prev);
+        if (next === "cards") out.set(VIEW_PARAM, "cards");
+        else out.delete(VIEW_PARAM);
+        return out;
+      },
+      { replace: true, state: location.state },
+    );
+  return [view, set];
 }
 
 function ChartTypeCell({ type }: { type: unknown }): JSX.Element {

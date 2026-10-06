@@ -83,8 +83,14 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 // Generated client_secret is returned plaintext exactly once; only its
 // bcrypt hash is persisted in user_session_clients.client_secret_hash.
 func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+	return s.serveRegister(w, r, endpoint.LogWith(s.logger).With(attr.SlogToolsetMCPSlug(endpoint.Slug)), endpoint.UserSessionIssuerID)
+}
+
+// serveRegister registers a client with the issuer. Clients belong to the
+// issuer, not to an MCP server, so per-endpoint and shared authorization
+// servers share it.
+func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuerID uuid.UUID) error {
 	ctx := r.Context()
-	logger := endpoint.LogWith(s.logger)
 
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		mediaType, _, err := mime.ParseMediaType(ct)
@@ -142,7 +148,7 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 	}
 
 	row, err := usersessions_repo.New(s.db).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		UserSessionIssuerID: issuerID,
 		ClientID:            clientID,
 		ClientSecretHash:    clientSecretHash,
 		ClientName:          req.ClientName,
@@ -166,7 +172,6 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 	logger.InfoContext(ctx, "user session client registered",
 		attr.SlogOAuthClientID(clientID),
 		attr.SlogOAuthClientName(req.ClientName),
-		attr.SlogToolsetMCPSlug(endpoint.Slug),
 		attr.SlogOAuthRegisteredAuthMethod(req.TokenEndpointAuthMethod),
 		attr.SlogOAuthClientSecretGenerated(clientSecretHash.Valid),
 		attr.SlogOAuthRedirectURICount(len(req.RedirectURIs)),
