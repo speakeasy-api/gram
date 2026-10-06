@@ -63,14 +63,7 @@ func VerifyLiveRemoteMCPSourceInTransaction(ctx context.Context, tx pgx.Tx, proj
 		return fmt.Errorf("invalid remote MCP source verification input")
 	}
 
-	var sourceExists bool
-	err := tx.QueryRow(ctx, `
-SELECT TRUE
-FROM remote_mcp_servers
-WHERE id = $1
-  AND project_id = $2
-  AND deleted IS FALSE
-FOR UPDATE`, remoteMCPServerID, projectID).Scan(&sourceExists)
+	_, err := repo.New(tx).LockLiveRemoteMCPSource(ctx, repo.LockLiveRemoteMCPSourceParams{ID: remoteMCPServerID, ProjectID: projectID})
 	if err != nil {
 		return fmt.Errorf("verify remote MCP source ownership: %w", err)
 	}
