@@ -116,7 +116,7 @@ func (s *Service) view(ctx context.Context, row repo.Widget, now time.Time) *gen
 // validate returns what is wrong with a widget, or "", logging a failure
 // that is not the widget's fault rather than returning its detail.
 func (s *Service) validate(ctx context.Context, dataset string, query, visualization []byte, now time.Time) string {
-	reason, err := validate(s.catalog, dataset, query, visualization, now)
+	reason, err := Validate(s.catalog, dataset, query, visualization, now)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "validate widget", attr.SlogError(err))
 	}
@@ -127,7 +127,7 @@ func (s *Service) validate(ctx context.Context, dataset string, query, visualiza
 // failure that is not the widget's fault is a server error rather than a
 // rejection the caller could fix.
 func (s *Service) problem(ctx context.Context, dataset string, query, visualization []byte) (string, error) {
-	reason, err := validate(s.catalog, dataset, query, visualization, s.now())
+	reason, err := Validate(s.catalog, dataset, query, visualization, s.now())
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "validate widget").LogError(ctx, s.logger)
 	}
