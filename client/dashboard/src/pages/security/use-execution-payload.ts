@@ -22,18 +22,19 @@ export type ExecutionPayload = {
 export function useExecutionPayload(
   result: RiskResult | null,
 ): ExecutionPayload {
-  const { mutate, isPending, isError, variables } =
-    useRiskRevealResultPayloadMutation();
+  const { mutate, isPending, isError } = useRiskRevealResultPayloadMutation();
   const [cache, setCache] = useState<Map<string, RiskRevealPayloadResult>>(
     () => new Map(),
   );
+  // Keyed by payload, so a sibling sharing it sees the request as its own.
+  const [requestKey, setRequestKey] = useState<string | null>(null);
   const key = result ? payloadKey(result) : null;
-  const pendingId = variables?.request.riskIDRequestBody.id;
-  const isOwnRequest = result != null && pendingId === result.id;
+  const isOwnRequest = key !== null && requestKey === key;
   const data = key ? cache.get(key) : undefined;
 
   const reveal = useCallback(() => {
     if (!result || !key || cache.has(key) || isPending) return;
+    setRequestKey(key);
     mutate(
       { request: { riskIDRequestBody: { id: result.id } } },
       {
