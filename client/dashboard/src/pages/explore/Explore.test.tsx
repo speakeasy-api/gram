@@ -2132,19 +2132,34 @@ describe("Explore", () => {
     it("says while the dashboards load, and when they did not, rather than offering none", async () => {
       const user = userEvent.setup();
       testState.widgets = [savedWidget("w-1", "Sessions by user")];
+      const openPicker = async () => {
+        await user.click(
+          screen.getByRole("button", { name: "Actions for Sessions by user" }),
+        );
+        await user.click(
+          screen.getByRole("menuitem", { name: /Add to dashboard/ }),
+        );
+        return screen.getByRole("dialog");
+      };
+
+      testState.dashboardsPending = true;
+      const { unmount } = renderExplore("/explore?tab=widgets");
+      let dialog = await openPicker();
+      expect(dialog.querySelector("[aria-busy='true']")).toBeTruthy();
+      expect(
+        within(dialog).queryByText("The dashboards could not be fetched."),
+      ).toBeNull();
+      expect(within(dialog).queryByText(/yours to change yet/)).toBeNull();
+      unmount();
+
+      testState.dashboardsPending = false;
       testState.dashboardsFailed = true;
       renderExplore("/explore?tab=widgets");
-
-      await user.click(
-        screen.getByRole("button", { name: "Actions for Sessions by user" }),
-      );
-      await user.click(
-        screen.getByRole("menuitem", { name: /Add to dashboard/ }),
-      );
-      const dialog = screen.getByRole("dialog");
+      dialog = await openPicker();
       expect(
         within(dialog).getByText("The dashboards could not be fetched."),
       ).toBeTruthy();
+      expect(dialog.querySelector("[aria-busy='true']")).toBeNull();
       expect(within(dialog).queryByText(/yours to change yet/)).toBeNull();
       await user.click(
         within(dialog).getByRole("button", { name: "Try again" }),
