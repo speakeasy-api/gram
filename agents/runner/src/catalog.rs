@@ -15,8 +15,9 @@ use std::sync::Arc;
 
 use agentkit_core::{ToolOutput, ToolResultPart};
 use agentkit_tools_core::{
-    CatalogReader, PermissionRequest, Tool, ToolCatalogEvent, ToolContext, ToolError, ToolName,
-    ToolRequest, ToolResult, ToolSource, ToolSpec,
+    CatalogReader, PermissionDecision, PermissionRequest, Tool, ToolCatalogEvent, ToolContext,
+    ToolError, ToolExecutionOutcome, ToolInterruption, ToolName, ToolRequest, ToolResult,
+    ToolSource, ToolSpec,
 };
 use async_trait::async_trait;
 use serde_json::json;
@@ -100,6 +101,16 @@ impl ReconnectingTool {
     }
 }
 
+impl ReconnectingTool {
+    async fn reconnected(&self, err: ToolError) -> ToolError {
+        let note = match self.request_reconnect().await {
+            Ok(()) => "the MCP connection was reset; retry the call".to_string(),
+            Err(reason) => reason,
+        };
+        ToolError::ExecutionFailed(format!("{err}; {note}"))
+    }
+}
+
 fn transport_suspect(err: &ToolError) -> bool {
     matches!(
         err,
@@ -130,12 +141,19 @@ impl Tool for ReconnectingTool {
         ctx: &mut ToolContext<'_>,
     ) -> Result<ToolResult, ToolError> {
         match self.inner.invoke(request, ctx).await {
-            Err(err) if transport_suspect(&err) => {
-                let note = match self.request_reconnect().await {
-                    Ok(()) => "the MCP connection was reset; retry the call".to_string(),
-                    Err(reason) => reason,
-                };
-                Err(ToolError::ExecutionFailed(format!("{err}; {note}")))
+            Err(err) if transport_suspect(&err) => Err(self.reconnected(err).await),
+            other => other,
+        }
+    }
+
+    async fn invoke_outcome(
+        &self,
+        request: ToolRequest,
+        ctx: &mut ToolContext<'_>,
+    ) -> ToolExecutionOutcome {
+        match self.inner.invoke_outcome(request, ctx).await {
+            ToolExecutionOutcome::Failed(err) if transport_suspect(&err) => {
+                ToolExecutionOutcome::Failed(self.reconnected(err).await)
             }
             other => other,
         }
@@ -143,8 +161,9 @@ impl Tool for ReconnectingTool {
 }
 
 /// A discovered MCP tool whose server is not connected right now. Invoking it
-/// asks the actor to connect the owning server, then dispatches against the
-/// fresh session's catalog entry.
+/// asks the actor to connect the owning server, then dispatches through the
+/// fresh session's real tool: its own permission requests are evaluated
+/// exactly as the executor would for a direct call, before it runs.
 struct DeferredMcpTool {
     spec: ToolSpec,
     catalog: Arc<CatalogReader>,
@@ -182,19 +201,54 @@ impl Tool for DeferredMcpTool {
         request: ToolRequest,
         ctx: &mut ToolContext<'_>,
     ) -> Result<ToolResult, ToolError> {
-        self.connect().await.map_err(ToolError::Unavailable)?;
+        match self.invoke_outcome(request, ctx).await {
+            ToolExecutionOutcome::Completed(result) => Ok(result),
+            ToolExecutionOutcome::Failed(error) => Err(error),
+            ToolExecutionOutcome::Interrupted(ToolInterruption::ApprovalRequired(req)) => Err(
+                ToolError::Unavailable(format!("tool requires approval: {}", req.summary)),
+            ),
+        }
+    }
+
+    async fn invoke_outcome(
+        &self,
+        request: ToolRequest,
+        ctx: &mut ToolContext<'_>,
+    ) -> ToolExecutionOutcome {
+        if let Err(reason) = self.connect().await {
+            return ToolExecutionOutcome::Failed(ToolError::Unavailable(reason));
+        }
         let Some(inner) = self.catalog.get(&self.spec.name) else {
-            return Ok(ToolResult::new(ToolResultPart::error(
+            return ToolExecutionOutcome::Completed(ToolResult::new(ToolResultPart::error(
                 request.call_id,
                 ToolOutput::text(unknown_tool_message(&self.spec.name)),
             )));
         };
-        ReconnectingTool {
+        let tool = ReconnectingTool {
             inner,
             cmd_tx: self.cmd_tx.clone(),
+        };
+        let requests = match tool.proposed_requests(&request) {
+            Ok(requests) => requests,
+            Err(error) => return ToolExecutionOutcome::Failed(error),
+        };
+        for permission in requests {
+            match ctx.permissions.evaluate(permission.as_ref()) {
+                PermissionDecision::Allow => {}
+                PermissionDecision::Deny(denial) => {
+                    return ToolExecutionOutcome::Failed(ToolError::PermissionDenied(denial));
+                }
+                PermissionDecision::RequireApproval(mut req) => {
+                    req.call_id = Some(request.call_id.clone());
+                    if ctx.approved_request.as_ref().map(|a| &a.id) != Some(&req.id) {
+                        return ToolExecutionOutcome::Interrupted(
+                            ToolInterruption::ApprovalRequired(req),
+                        );
+                    }
+                }
+            }
         }
-        .invoke(request, ctx)
-        .await
+        tool.invoke_outcome(request, ctx).await
     }
 }
 
@@ -321,5 +375,138 @@ mod tests {
         );
         assert!(source.specs().is_empty());
         assert!(unknown_tool_message(&ToolName::new("gobblygoop")).contains("tool_search"));
+    }
+
+    struct GuardedTool {
+        spec: ToolSpec,
+    }
+
+    struct GuardedRequest(agentkit_core::MetadataMap);
+
+    impl PermissionRequest for GuardedRequest {
+        fn kind(&self) -> &'static str {
+            "test.guarded"
+        }
+        fn summary(&self) -> String {
+            "guarded call".into()
+        }
+        fn metadata(&self) -> &agentkit_core::MetadataMap {
+            &self.0
+        }
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    #[async_trait]
+    impl Tool for GuardedTool {
+        fn spec(&self) -> &ToolSpec {
+            &self.spec
+        }
+
+        fn proposed_requests(
+            &self,
+            _request: &ToolRequest,
+        ) -> Result<Vec<Box<dyn PermissionRequest>>, ToolError> {
+            Ok(vec![Box::new(GuardedRequest(Default::default()))])
+        }
+
+        async fn invoke(
+            &self,
+            request: ToolRequest,
+            _ctx: &mut ToolContext<'_>,
+        ) -> Result<ToolResult, ToolError> {
+            Ok(ToolResult::new(ToolResultPart::success(
+                request.call_id,
+                ToolOutput::text("ran"),
+            )))
+        }
+    }
+
+    struct Policy(PermissionDecision);
+
+    impl agentkit_tools_core::PermissionChecker for Policy {
+        fn evaluate(&self, request: &dyn PermissionRequest) -> PermissionDecision {
+            assert_eq!(request.kind(), "test.guarded");
+            self.0.clone()
+        }
+    }
+
+    #[tokio::test]
+    async fn deferred_calls_raise_the_same_permission_requests_as_direct_ones() {
+        use agentkit_core::ApprovalId;
+        use agentkit_tools_core::{
+            ApprovalReason, ApprovalRequest, BasicToolExecutor, OwnedToolContext, PermissionCode,
+            PermissionDenial, ToolExecutor,
+        };
+        let name = "mcp_srv_guarded";
+        let guarded = move || -> Arc<dyn Tool> {
+            Arc::new(GuardedTool {
+                spec: ToolSpec::new(name, "guarded", json!({"type": "object"})),
+            })
+        };
+        let (writer, reader) = dynamic_catalog("mcp");
+        let writer = Arc::new(writer);
+        let known = KnownTools::default();
+        known.record("srv", [name.to_string()].into());
+        let (cmd_tx, mut cmd_rx) = mpsc::channel(4);
+        let reconnect_writer = writer.clone();
+        tokio::spawn(async move {
+            while let Some(cmd) = cmd_rx.recv().await {
+                if let McpCmd::ConnectForTool { reply, .. } = cmd {
+                    reconnect_writer.upsert(guarded());
+                    let _ = reply.send(Ok(()));
+                }
+            }
+        });
+        let executor =
+            BasicToolExecutor::new([
+                Arc::new(HiddenCatalogSource::new(reader, cmd_tx, known)) as Arc<dyn ToolSource>
+            ]);
+        let approval = ApprovalRequest {
+            task_id: None,
+            call_id: None,
+            id: ApprovalId::new("approve-guarded"),
+            request_kind: "test.guarded".into(),
+            reason: ApprovalReason::PolicyRequiresConfirmation,
+            summary: "guarded call".into(),
+            metadata: Default::default(),
+        };
+        let denial = PermissionDenial {
+            code: PermissionCode::CustomPolicyDenied,
+            message: "denied".into(),
+            metadata: Default::default(),
+        };
+        for decision in [
+            PermissionDecision::Deny(denial),
+            PermissionDecision::RequireApproval(approval),
+            PermissionDecision::Allow,
+        ] {
+            let mut outcomes = Vec::new();
+            for connected in [true, false] {
+                if connected {
+                    writer.upsert(guarded());
+                } else {
+                    writer.remove(&ToolName::new(name));
+                }
+                let owned = OwnedToolContext {
+                    session_id: "s".into(),
+                    turn_id: "t".into(),
+                    metadata: Default::default(),
+                    permissions: Arc::new(Policy(decision.clone())),
+                    resources: Arc::new(()),
+                    cancellation: None,
+                    execution_scope: None,
+                    approved_request: None,
+                };
+                let request = ToolRequest::new("call", name, json!({}), "s", "t");
+                let outcome = executor.execute(request, &mut owned.borrowed()).await;
+                outcomes.push(format!("{outcome:?}"));
+            }
+            assert_eq!(
+                outcomes[0], outcomes[1],
+                "a deferred call must be authorized exactly like a direct one"
+            );
+        }
     }
 }
