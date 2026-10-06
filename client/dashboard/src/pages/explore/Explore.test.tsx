@@ -63,6 +63,8 @@ function applyWrite(kind: Write, request: Record<string, unknown>): unknown {
     const widget = {
       ...body,
       id: `created-${testState.writes.length}`,
+      // A new widget, like a copy, is on no dashboard yet.
+      dashboards: [],
       projectId: "project",
       organizationId: "org",
       createdByUserId: "member-1",
@@ -997,6 +999,7 @@ describe("Explore", () => {
         name,
         dataset: spec.dataset,
         ...widgetFromSpec(spec),
+        dashboards: [],
         projectId: "project",
         organizationId: "org",
         createdByUserId: "member-1",
@@ -1380,6 +1383,46 @@ describe("Explore", () => {
       expect(testState.writes[0]?.kind).toBe("duplicate");
       expect(param("tab")).toBeNull();
       expect(param("widget")).toBe("created-1");
+    });
+
+    it("says which dashboards a widget is on: in the list, beside Save, and when deleting", async () => {
+      const user = userEvent.setup();
+      testState.widgets = [
+        storedWidget("w-1", "Slow tools", p95ByTool, {
+          dashboards: [
+            { id: "d-1", name: "Agent activity" },
+            { id: "d-2", name: "Costs" },
+          ],
+        }),
+        storedWidget("w-2", "Sessions", p95ByTool),
+      ];
+      renderExplore();
+      showWidgets();
+      // Rows are found by name: the list sorts by updated time, and both
+      // widgets were saved within the same instant or not.
+      const rowOf = (name: string) =>
+        screen
+          .getAllByRole("row")
+          .find((row) => row.textContent?.includes(name));
+      expect(rowOf("Slow tools")?.textContent).toContain(
+        "On “Agent activity” and “Costs”",
+      );
+      expect(rowOf("Sessions")?.textContent).toContain("—");
+
+      openWidget("Slow tools");
+      expect(screen.queryByText(/Saving changes its card/)).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Bar" }));
+      expect(
+        screen.getByText(
+          "Saving changes its card on “Agent activity” and “Costs”",
+        ),
+      ).toBeTruthy();
+
+      await user.click(screen.getByRole("button", { name: "Widget actions" }));
+      await user.click(screen.getByRole("menuitem", { name: /Delete/ }));
+      expect(
+        screen.getByText(/Its card goes from “Agent activity” and “Costs” too/),
+      ).toBeTruthy();
     });
 
     it("deletes the open widget and keeps the builder", async () => {

@@ -3,7 +3,9 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { TextArea } from "@/components/ui/Textarea";
+import type { WidgetDashboard } from "@gram/client/models/components/widgetdashboard.js";
 import { useState, type FormEvent, type JSX } from "react";
+import { describeDashboards } from "./widgetUsage";
 import { MAX_NAME_LENGTH } from "./widgetNames";
 
 const MAX_DESCRIPTION_LENGTH = 2000;
@@ -127,15 +129,21 @@ export function DetailsDialog({
   );
 }
 
-/** Confirms deleting a widget, which removes it for everyone. */
+/**
+ * Confirms deleting a widget, which removes it for everyone, and from every
+ * dashboard it is on.
+ */
 export function DeleteWidgetDialog({
   name,
+  dashboards,
   open,
   pending,
   onCancel,
   onConfirm,
 }: {
   name: string;
+  /** The dashboards the widget is on, whose cards go with it. */
+  dashboards: WidgetDashboard[];
   open: boolean;
   pending: boolean;
   onCancel: () => void;
@@ -152,8 +160,12 @@ export function DeleteWidgetDialog({
         <Dialog.Header>
           <Dialog.Title>Delete “{name}”?</Dialog.Title>
           <Dialog.Description>
-            It leaves this project's widgets for everyone. Anything open in the
-            builder stays on screen, as a link, until you move on.
+            It leaves this project's widgets for everyone.{" "}
+            {dashboards.length > 0
+              ? `Its card goes from ${describeDashboards(dashboards)} too. `
+              : ""}
+            Anything open in the builder stays on screen, as a link, until you
+            move on.
           </Dialog.Description>
         </Dialog.Header>
         <Dialog.Footer>
