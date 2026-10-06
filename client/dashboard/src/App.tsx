@@ -313,13 +313,13 @@ const RouteProvider = () => {
     const projectActions = projectSlug
       ? projectNavRoutes
           .filter(
-            ({ route, scope, resourceId }) =>
+            ({ route, scope, resourceId, projectId }) =>
               !route.external &&
               route.component &&
               route.title &&
               // Mirror the sidebar's per-page scope gating so the palette never
               // offers (nor navigates to) pages the user can't access.
-              (scope.length === 0 || hasAnyScope(scope, resourceId)),
+              (scope.length === 0 || hasAnyScope(scope, resourceId, projectId)),
           )
           .map(({ route }) =>
             routeToNavAction(route, "Pages", `nav-page-${route.url || "home"}`),

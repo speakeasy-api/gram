@@ -13,8 +13,9 @@ type RuntimeScopeRegistryVersion int
 const (
 	RuntimeScopeRegistryVersion1 RuntimeScopeRegistryVersion = 1
 	RuntimeScopeRegistryVersion2 RuntimeScopeRegistryVersion = 2
+	RuntimeScopeRegistryVersion3 RuntimeScopeRegistryVersion = 3
 
-	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion2
+	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion3
 )
 
 // RuntimeScopeLifecycle distinguishes active scope registrations from retained
@@ -91,6 +92,10 @@ var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
 	authz.ScopeSkillBlockedRead:        activeRuntimeScope(),
 	authz.ScopeSkillWrite:              safeRuntimeScope(),
 	authz.ScopeSkillBlockedWrite:       activeRuntimeScope(),
+	authz.ScopeAssistantRead:           safeRuntimeScopeSince(RuntimeScopeRegistryVersion3),
+	authz.ScopeAssistantBlockedRead:    activeRuntimeScope(),
+	authz.ScopeAssistantWrite:          safeRuntimeScopeSince(RuntimeScopeRegistryVersion3),
+	authz.ScopeAssistantBlockedWrite:   activeRuntimeScope(),
 	authz.ScopePluginWrite:             activeRuntimeScope(),
 	authz.ScopePluginBlockedWrite:      activeRuntimeScope(),
 	authz.ScopeRiskPolicyEvaluate:      safeRuntimeScope(),

@@ -489,6 +489,26 @@ describe("computeRuleLabel", () => {
       ),
     ).toBe("2 projects");
   });
+
+  it("assistant selectors describe projects", () => {
+    expect(
+      computeRuleLabel(
+        [sel({ resourceKind: "assistant", projectId: "p1" })],
+        "assistant",
+        projects,
+      ),
+    ).toBe("Project: ecommerce-api");
+  });
+
+  it("assistant selectors naming one assistant describe assistants", () => {
+    expect(
+      computeRuleLabel(
+        [sel({ resourceKind: "assistant", resourceId: "a1" })],
+        "assistant",
+        projects,
+      ),
+    ).toBe("1 assistant");
+  });
 });
 
 // --- computeRuleTooltip ---
@@ -610,5 +630,16 @@ describe("computeRuleTooltip", () => {
         projects,
       ),
     ).toBe("Permits access to skills in ecommerce-api");
+  });
+
+  it("assistant selectors describe project access", () => {
+    expect(
+      computeRuleTooltip(
+        "allow",
+        [sel({ resourceKind: "assistant", projectId: "p1" })],
+        "assistant",
+        projects,
+      ),
+    ).toBe("Permits access to all assistants in ecommerce-api");
   });
 });
