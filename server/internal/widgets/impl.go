@@ -108,9 +108,28 @@ func (s *Service) authorize(ctx context.Context, scope authz.Scope) (*contextval
 	return authCtx, nil
 }
 
-// view renders a stored widget, validating it as it is read.
-func (s *Service) view(ctx context.Context, row repo.Widget, now time.Time) *gen.Widget {
-	return mv.BuildWidgetView(row, s.validate(ctx, row.Dataset, row.Query, row.Visualization, now))
+// view renders a stored widget, validating it as it is read, with the
+// dashboards it is placed on.
+func (s *Service) view(ctx context.Context, row repo.Widget, now time.Time, dashboards []*gen.WidgetDashboard) *gen.Widget {
+	return mv.BuildWidgetView(row, s.validate(ctx, row.Dataset, row.Query, row.Visualization, now), dashboards)
+}
+
+// dashboardsOf renders the dashboards a widget is on.
+func dashboardsOf(rows []repo.ListDashboardsForWidgetRow) []*gen.WidgetDashboard {
+	out := make([]*gen.WidgetDashboard, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, &gen.WidgetDashboard{ID: row.DashboardID.String(), Name: row.DashboardName})
+	}
+	return out
+}
+
+// usage reads the dashboards one widget is on.
+func (s *Service) usage(ctx context.Context, queries *repo.Queries, projectID, widgetID uuid.UUID) ([]*gen.WidgetDashboard, error) {
+	rows, err := queries.ListDashboardsForWidget(ctx, repo.ListDashboardsForWidgetParams{ProjectID: projectID, WidgetID: widgetID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list widget dashboards").LogError(ctx, s.logger)
+	}
+	return dashboardsOf(rows), nil
 }
 
 // validate returns what is wrong with a widget, or "", logging a failure
@@ -142,15 +161,24 @@ func (s *Service) ListWidgets(ctx context.Context, _ *gen.ListWidgetsPayload) (*
 		return nil, err
 	}
 
-	rows, err := repo.New(s.db).ListWidgets(ctx, *authCtx.ProjectID)
+	queries := repo.New(s.db)
+	rows, err := queries.ListWidgets(ctx, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list widgets").LogError(ctx, s.logger)
+	}
+	placed, err := queries.ListWidgetDashboards(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list widget dashboards").LogError(ctx, s.logger)
+	}
+	byWidget := map[uuid.UUID][]*gen.WidgetDashboard{}
+	for _, row := range placed {
+		byWidget[row.WidgetID] = append(byWidget[row.WidgetID], &gen.WidgetDashboard{ID: row.DashboardID.String(), Name: row.DashboardName})
 	}
 
 	now := s.now()
 	result := &gen.ListWidgetsResult{Widgets: make([]*gen.Widget, 0, len(rows))}
 	for _, row := range rows {
-		result.Widgets = append(result.Widgets, s.view(ctx, row, now))
+		result.Widgets = append(result.Widgets, s.view(ctx, row, now, byWidget[row.ID]))
 	}
 	return result, nil
 }
@@ -166,14 +194,19 @@ func (s *Service) GetWidget(ctx context.Context, payload *gen.GetWidgetPayload) 
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid widget id")
 	}
 
-	row, err := repo.New(s.db).GetWidget(ctx, repo.GetWidgetParams{ProjectID: *authCtx.ProjectID, ID: id})
+	queries := repo.New(s.db)
+	row, err := queries.GetWidget(ctx, repo.GetWidgetParams{ProjectID: *authCtx.ProjectID, ID: id})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "widget not found")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get widget").LogError(ctx, s.logger)
 	}
-	return s.view(ctx, row, s.now()), nil
+	dashboards, err := s.usage(ctx, queries, *authCtx.ProjectID, id)
+	if err != nil {
+		return nil, err
+	}
+	return s.view(ctx, row, s.now(), dashboards), nil
 }
 
 // CreateWidget saves a widget after validating its query against the
@@ -260,7 +293,7 @@ func (s *Service) insert(ctx context.Context, authCtx *contextvalues.AuthContext
 		return nil, oops.E(oops.CodeUnexpected, err, "create widget").LogError(ctx, s.logger)
 	}
 
-	view := mv.BuildWidgetView(row, "")
+	view := mv.BuildWidgetView(row, "", nil)
 	if err := s.audit.LogWidgetCreate(ctx, dbtx, audit.LogWidgetCreateEvent{WidgetEventBase: s.auditBase(authCtx, row), Snapshot: view, DuplicatedFrom: duplicatedFrom}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit widget creation").LogError(ctx, s.logger)
 	}
@@ -322,8 +355,13 @@ func (s *Service) UpdateWidget(ctx context.Context, payload *gen.UpdateWidgetPay
 		return nil, oops.E(oops.CodeUnexpected, err, "update widget").LogError(ctx, s.logger)
 	}
 
-	view := mv.BuildWidgetView(row, "")
-	if err := s.audit.LogWidgetUpdate(ctx, dbtx, audit.LogWidgetUpdateEvent{WidgetEventBase: s.auditBase(authCtx, row), Before: s.view(ctx, before, s.now()), After: view}); err != nil {
+	// The edit reaches every dashboard the widget is on; the view says which.
+	dashboards, err := s.usage(ctx, queries, *authCtx.ProjectID, id)
+	if err != nil {
+		return nil, err
+	}
+	view := mv.BuildWidgetView(row, "", dashboards)
+	if err := s.audit.LogWidgetUpdate(ctx, dbtx, audit.LogWidgetUpdateEvent{WidgetEventBase: s.auditBase(authCtx, row), Before: s.view(ctx, before, s.now(), dashboards), After: view}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit widget update").LogError(ctx, s.logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
@@ -362,6 +400,10 @@ func (s *Service) DeleteWidget(ctx context.Context, payload *gen.DeleteWidgetPay
 		return err
 	}
 
+	// The widget comes off every dashboard it was on; the dashboards stay.
+	if err := queries.DeleteWidgetPlacements(ctx, repo.DeleteWidgetPlacementsParams{ProjectID: *authCtx.ProjectID, WidgetID: id}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "remove widget from dashboards").LogError(ctx, s.logger)
+	}
 	row, err := queries.DeleteWidget(ctx, repo.DeleteWidgetParams{ProjectID: *authCtx.ProjectID, ID: id})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

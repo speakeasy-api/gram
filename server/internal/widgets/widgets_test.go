@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	dashboardsrepo "github.com/speakeasy-api/gram/server/internal/dashboards/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/widgets"
 	widgetsrepo "github.com/speakeasy-api/gram/server/internal/widgets/repo"
@@ -547,4 +548,62 @@ func withQuery(query map[string]any, key string, value any) map[string]any {
 // rowsQuery asks for rows at the dataset's grain: nothing measured.
 func rowsQuery() map[string]any {
 	return map[string]any{"window": "24h", "grain": "none", "dimensions": []any{"user"}, "ungrouped": true}
+}
+
+func TestWidgetDashboards(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created, err := ti.service.CreateWidget(ctx, createPayload("placed", validQuery(), barChart()))
+	require.NoError(t, err)
+	require.Empty(t, created.Dashboards, "a new widget is on no dashboard")
+	widgetID := uuid.MustParse(created.ID)
+
+	// Two dashboards, written directly: this is about what the widget says.
+	dashboards := dashboardsrepo.New(ti.conn)
+	newDashboard := func(name string) dashboardsrepo.Dashboard {
+		row, err := dashboards.CreateDashboard(ctx, dashboardsrepo.CreateDashboardParams{
+			ProjectID: ti.projectID, OrganizationID: ti.orgID, CreatedByUserID: pgtype.Text{String: ti.userID, Valid: true},
+			Name: name, Description: pgtype.Text{String: "", Valid: false}, Filters: []byte("{}"),
+		})
+		require.NoError(t, err)
+		return row
+	}
+	place := func(dashboard dashboardsrepo.Dashboard, x int32) {
+		_, err := dashboards.InsertPlacement(ctx, dashboardsrepo.InsertPlacementParams{
+			ProjectID: ti.projectID, OrganizationID: ti.orgID, DashboardID: dashboard.ID, WidgetID: widgetID, X: x, Y: 0, W: 4, H: 3,
+		})
+		require.NoError(t, err)
+	}
+	alpha, beta := newDashboard("Alpha"), newDashboard("Beta")
+	place(alpha, 0)
+	place(alpha, 4)
+	place(beta, 0)
+
+	got, err := ti.service.GetWidget(ctx, &gen.GetWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, []*gen.WidgetDashboard{{ID: alpha.ID.String(), Name: "Alpha"}, {ID: beta.ID.String(), Name: "Beta"}}, got.Dashboards, "each dashboard once, however many cards show the widget")
+
+	listed, err := ti.service.ListWidgets(ctx, &gen.ListWidgetsPayload{SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.Widgets, 1)
+	require.Equal(t, got.Dashboards, listed.Widgets[0].Dashboards)
+
+	updated, err := ti.service.UpdateWidget(ctx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "renamed", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, got.Dashboards, updated.Dashboards, "an edit says where it reached")
+
+	// A deleted dashboard no longer counts.
+	_, err = dashboards.DeleteDashboard(ctx, dashboardsrepo.DeleteDashboardParams{ProjectID: ti.projectID, ID: beta.ID})
+	require.NoError(t, err)
+	got, err = ti.service.GetWidget(ctx, &gen.GetWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, []*gen.WidgetDashboard{{ID: alpha.ID.String(), Name: "Alpha"}}, got.Dashboards)
+
+	// Deleting the widget takes it off the dashboard; the dashboard stays.
+	require.NoError(t, ti.service.DeleteWidget(ctx, &gen.DeleteWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil}))
+	placements, err := dashboards.ListPlacements(ctx, dashboardsrepo.ListPlacementsParams{ProjectID: ti.projectID, DashboardID: alpha.ID})
+	require.NoError(t, err)
+	require.Empty(t, placements)
+	_, err = dashboards.GetDashboard(ctx, dashboardsrepo.GetDashboardParams{ProjectID: ti.projectID, ID: alpha.ID})
+	require.NoError(t, err)
 }

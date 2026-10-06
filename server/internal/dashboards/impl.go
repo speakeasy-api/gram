@@ -526,7 +526,7 @@ func (s *Service) DuplicateDashboard(ctx context.Context, payload *gen.Duplicate
 				WidgetURN:        urn.NewWidget(copied.ID),
 				Name:             copied.Name,
 			},
-			Snapshot:       mv.BuildWidgetView(copied, ""),
+			Snapshot:       mv.BuildWidgetView(copied, "", nil),
 			DuplicatedFrom: &sourceURN,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "audit widget copy").LogError(ctx, s.logger)

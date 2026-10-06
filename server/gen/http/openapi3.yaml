@@ -117380,6 +117380,11 @@ components:
                 created_by_user_id:
                     type: string
                     description: Who saved it, when known
+                dashboards:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WidgetDashboard'
+                    description: 'The dashboards this widget is placed on, each once. Widgets are linked, not copied: an edit reaches all of them, and a delete removes it from all of them.'
                 dataset:
                     type: string
                     description: The catalog dataset the widget asks
@@ -117421,8 +117426,21 @@ components:
                 - dataset
                 - query
                 - visualization
+                - dashboards
                 - created_at
                 - updated_at
+        WidgetDashboard:
+            type: object
+            properties:
+                id:
+                    type: string
+                    format: uuid
+                name:
+                    type: string
+            description: A dashboard a widget is placed on.
+            required:
+                - id
+                - name
         WorkOSDomainVerificationIntentOptions:
             type: object
             properties:

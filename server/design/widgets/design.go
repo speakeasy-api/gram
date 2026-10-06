@@ -6,6 +6,13 @@ import (
 	. "goa.design/goa/v3/dsl"
 )
 
+var WidgetDashboard = Type("WidgetDashboard", func() {
+	Description("A dashboard a widget is placed on.")
+	Attribute("id", String, func() { Format(FormatUUID) })
+	Attribute("name", String)
+	Required("id", "name")
+})
+
 var Widget = Type("Widget", func() {
 	Description("A named question against a catalog dataset together with how it is drawn. Belongs to a project and is visible to everyone in the organization. Widgets are the building block dashboards will place.")
 	Attribute("id", String, func() { Format(FormatUUID) })
@@ -18,9 +25,10 @@ var Widget = Type("Widget", func() {
 	Attribute("query", MapOf(String, Any), "The question: window, grain, dimensions, measures, filters, order and limit. Planned against the catalog on save and on read.")
 	Attribute("visualization", MapOf(String, Any), "How the question is drawn: a chart type and its options. The client owns the chart vocabulary; the server checks only that the chart can draw the question.")
 	Attribute("invalid_reason", String, "Present when the widget no longer works, naming what is wrong: a field the catalog dropped, or a chart that cannot draw the question. A catalog change fails visibly rather than returning wrong numbers.")
+	Attribute("dashboards", ArrayOf(WidgetDashboard), "The dashboards this widget is placed on, each once. Widgets are linked, not copied: an edit reaches all of them, and a delete removes it from all of them.")
 	Attribute("created_at", String, func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, func() { Format(FormatDateTime) })
-	Required("id", "project_id", "organization_id", "name", "dataset", "query", "visualization", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "name", "dataset", "query", "visualization", "dashboards", "created_at", "updated_at")
 })
 
 var ListWidgetsResult = Type("ListWidgetsResult", func() {
