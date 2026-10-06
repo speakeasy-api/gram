@@ -1944,6 +1944,7 @@ trackedFiles:
   src/models/components/verifyurlrequestbody.ts: {}
   src/models/components/verifyurlresult.ts: {}
   src/models/components/widget.ts: {}
+  src/models/components/widgetdashboard.ts: {}
   src/models/components/workloadadmission.ts: {}
   src/models/components/workloadidentitypolicy.ts: {}
   src/models/components/workloadissuer.ts: {}
@@ -5261,7 +5262,7 @@ examples:
         application/json: {"dataset": "<value>", "name": "<value>", "query": {}, "visualization": {"key": "<value>"}}
       responses:
         "200":
-          application/json: {"created_at": "2026-08-21T08:18:11.887Z", "dataset": "sessions", "id": "abc35cd7-5e59-4bc9-897e-4417799445d7", "name": "<value>", "organization_id": "<id>", "project_id": "cc727594-aa5c-474b-9e85-0062f1bda1c6", "query": {"key": "<value>", "key1": "<value>", "key2": "<value>"}, "updated_at": "2025-11-03T13:21:26.661Z", "visualization": {"key": "<value>"}}
+          application/json: {"created_at": "2026-08-21T08:18:11.887Z", "dashboards": [], "dataset": "sessions", "id": "abc35cd7-5e59-4bc9-897e-4417799445d7", "name": "<value>", "organization_id": "<id>", "project_id": "cc727594-aa5c-474b-9e85-0062f1bda1c6", "query": {"key": "<value>", "key1": "<value>", "key2": "<value>"}, "updated_at": "2025-11-03T13:21:26.661Z", "visualization": {"key": "<value>"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -6234,7 +6235,7 @@ examples:
         application/json: {"id": "76dd2a6e-7006-441f-bc48-1a1b5084f4e1"}
       responses:
         "200":
-          application/json: {"created_at": "2026-04-17T02:11:32.660Z", "dataset": "sessions", "id": "3a510c9b-16c8-4a62-80f0-238f7cd174e2", "name": "<value>", "organization_id": "<id>", "project_id": "99a89e8a-9c15-41c9-895e-447c0c1df251", "query": {"key": "<value>", "key1": "<value>"}, "updated_at": "2024-09-18T08:38:22.889Z", "visualization": {"key": "<value>", "key1": "<value>"}}
+          application/json: {"created_at": "2026-04-17T02:11:32.660Z", "dashboards": [], "dataset": "sessions", "id": "3a510c9b-16c8-4a62-80f0-238f7cd174e2", "name": "<value>", "organization_id": "<id>", "project_id": "99a89e8a-9c15-41c9-895e-447c0c1df251", "query": {"key": "<value>", "key1": "<value>"}, "updated_at": "2024-09-18T08:38:22.889Z", "visualization": {"key": "<value>", "key1": "<value>"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -8038,7 +8039,7 @@ examples:
           id: "e060f4de-8e95-403f-b99e-83c4cd8acfc5"
       responses:
         "200":
-          application/json: {"created_at": "2025-09-19T04:37:41.717Z", "dataset": "sessions", "id": "76a471ba-1fa5-427c-b2d4-3734d4efe976", "name": "<value>", "organization_id": "<id>", "project_id": "2c1a15b4-a378-45c6-a7f8-c94919dd366d", "query": {}, "updated_at": "2025-02-23T17:49:03.246Z", "visualization": {"key": "<value>", "key1": "<value>"}}
+          application/json: {"created_at": "2025-09-19T04:37:41.717Z", "dashboards": [{"id": "060f4de8-e950-43f9-a9e8-3c4cd8acfc5e", "name": "<value>"}], "dataset": "sessions", "id": "76a471ba-1fa5-427c-b2d4-3734d4efe976", "name": "<value>", "organization_id": "<id>", "project_id": "2c1a15b4-a378-45c6-a7f8-c94919dd366d", "query": {}, "updated_at": "2025-02-23T17:49:03.246Z", "visualization": {"key": "<value>", "key1": "<value>"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -10120,7 +10121,7 @@ examples:
     speakeasy-default-list-widgets:
       responses:
         "200":
-          application/json: {"widgets": [{"created_at": "2026-05-01T16:28:02.078Z", "dataset": "sessions", "id": "0aa99f05-5ee4-4d6f-9607-90cfe83fc14a", "name": "<value>", "organization_id": "<id>", "project_id": "99125515-bbab-46da-a9d9-a5cfe022dad6", "query": {"key": "<value>", "key1": "<value>", "key2": "<value>"}, "updated_at": "2024-03-27T17:13:31.645Z", "visualization": {"key": "<value>", "key1": "<value>"}}]}
+          application/json: {"widgets": [{"created_at": "2026-05-01T16:28:02.078Z", "dashboards": [{"id": "c0aa99f0-55ee-44d6-af60-790cfe83fc14", "name": "<value>"}], "dataset": "sessions", "id": "0aa99f05-5ee4-4d6f-9607-90cfe83fc14a", "name": "<value>", "organization_id": "<id>", "project_id": "99125515-bbab-46da-a9d9-a5cfe022dad6", "query": {"key": "<value>", "key1": "<value>", "key2": "<value>"}, "updated_at": "2024-03-27T17:13:31.645Z", "visualization": {"key": "<value>", "key1": "<value>"}}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -12718,7 +12719,7 @@ examples:
         application/json: {"dataset": "<value>", "id": "35c06408-5714-4622-859f-f35e6220977d", "name": "<value>", "query": {}, "visualization": {"key": "<value>", "key1": "<value>", "key2": "<value>"}}
       responses:
         "200":
-          application/json: {"created_at": "2025-11-29T15:43:05.187Z", "dataset": "sessions", "id": "2539be16-4125-41b6-b6bb-c60f42ca9dac", "name": "<value>", "organization_id": "<id>", "project_id": "ffd85942-1993-4593-8d9a-61a91a6b76de", "query": {"key": "<value>", "key1": "<value>", "key2": "<value>"}, "updated_at": "2026-07-03T05:32:27.154Z", "visualization": {"key": "<value>"}}
+          application/json: {"created_at": "2025-11-29T15:43:05.187Z", "dashboards": [], "dataset": "sessions", "id": "2539be16-4125-41b6-b6bb-c60f42ca9dac", "name": "<value>", "organization_id": "<id>", "project_id": "ffd85942-1993-4593-8d9a-61a91a6b76de", "query": {"key": "<value>", "key1": "<value>", "key2": "<value>"}, "updated_at": "2026-07-03T05:32:27.154Z", "visualization": {"key": "<value>"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

@@ -1357,6 +1357,30 @@ func marshalWidgetsWidgetToWidgetResponseBody(v *widgets.Widget) *WidgetResponse
 			res.Visualization[tk] = tv
 		}
 	}
+	if v.Dashboards != nil {
+		res.Dashboards = make([]*WidgetDashboardResponseBody, len(v.Dashboards))
+		for i, val := range v.Dashboards {
+			if val == nil {
+				res.Dashboards[i] = nil
+				continue
+			}
+			res.Dashboards[i] = marshalWidgetsWidgetDashboardToWidgetDashboardResponseBody(val)
+		}
+	} else {
+		res.Dashboards = []*WidgetDashboardResponseBody{}
+	}
+
+	return res
+}
+
+// marshalWidgetsWidgetDashboardToWidgetDashboardResponseBody builds a value of
+// type *WidgetDashboardResponseBody from a value of type
+// *widgets.WidgetDashboard.
+func marshalWidgetsWidgetDashboardToWidgetDashboardResponseBody(v *widgets.WidgetDashboard) *WidgetDashboardResponseBody {
+	res := &WidgetDashboardResponseBody{
+		ID:   v.ID,
+		Name: v.Name,
+	}
 
 	return res
 }

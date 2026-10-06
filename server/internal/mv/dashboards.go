@@ -47,6 +47,23 @@ func EncodeDashboardFilters(filters *gen.DashboardFilters) ([]byte, error) {
 // that do not decode render as none rather than failing the whole list:
 // the dashboard is still there, it just opens on the defaults.
 func BuildDashboardView(row dashboardsrepo.Dashboard, placements []dashboardsrepo.DashboardWidget) *gen.Dashboard {
+	return &gen.Dashboard{
+		ID:              row.ID.String(),
+		ProjectID:       row.ProjectID.String(),
+		OrganizationID:  row.OrganizationID,
+		CreatedByUserID: conv.FromPGText[string](row.CreatedByUserID),
+		Name:            row.Name,
+		Description:     conv.FromPGText[string](row.Description),
+		Filters:         decodeDashboardFilters(row.Filters),
+		Widgets:         BuildDashboardPlacements(placements),
+		CreatedAt:       conv.FromPGTimestamptz(row.CreatedAt),
+		UpdatedAt:       conv.FromPGTimestamptz(row.UpdatedAt),
+	}
+}
+
+// BuildDashboardPlacements renders a dashboard's cards on their own: the
+// shape a layout change is audited with.
+func BuildDashboardPlacements(placements []dashboardsrepo.DashboardWidget) []*gen.DashboardPlacement {
 	widgets := make([]*gen.DashboardPlacement, 0, len(placements))
 	for _, placement := range placements {
 		widgets = append(widgets, &gen.DashboardPlacement{
@@ -58,18 +75,7 @@ func BuildDashboardView(row dashboardsrepo.Dashboard, placements []dashboardsrep
 			H:        int(placement.H),
 		})
 	}
-	return &gen.Dashboard{
-		ID:              row.ID.String(),
-		ProjectID:       row.ProjectID.String(),
-		OrganizationID:  row.OrganizationID,
-		CreatedByUserID: conv.FromPGText[string](row.CreatedByUserID),
-		Name:            row.Name,
-		Description:     conv.FromPGText[string](row.Description),
-		Filters:         decodeDashboardFilters(row.Filters),
-		Widgets:         widgets,
-		CreatedAt:       conv.FromPGTimestamptz(row.CreatedAt),
-		UpdatedAt:       conv.FromPGTimestamptz(row.UpdatedAt),
-	}
+	return widgets
 }
 
 func decodeDashboardFilters(raw []byte) *gen.DashboardFilters {

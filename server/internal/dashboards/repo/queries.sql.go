@@ -197,6 +197,7 @@ FROM widgets
 WHERE project_id = $1
   AND id = $2
   AND deleted IS FALSE
+FOR SHARE
 `
 
 type GetWidgetForPlacementParams struct {
@@ -205,6 +206,9 @@ type GetWidgetForPlacementParams struct {
 }
 
 // The widget a card links to must be a live widget of the same project.
+// Held in share mode for the rest of the layout's transaction, so deleting
+// the widget (which locks it for update) waits for the layout to commit and
+// then takes the new card off with the rest.
 func (q *Queries) GetWidgetForPlacement(ctx context.Context, arg GetWidgetForPlacementParams) (Widget, error) {
 	row := q.db.QueryRow(ctx, getWidgetForPlacement, arg.ProjectID, arg.ID)
 	var i Widget

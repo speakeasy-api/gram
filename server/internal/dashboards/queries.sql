@@ -115,11 +115,15 @@ RETURNING *;
 
 -- name: GetWidgetForPlacement :one
 -- The widget a card links to must be a live widget of the same project.
+-- Held in share mode for the rest of the layout's transaction, so deleting
+-- the widget (which locks it for update) waits for the layout to commit and
+-- then takes the new card off with the rest.
 SELECT *
 FROM widgets
 WHERE project_id = @project_id
   AND id = @id
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+FOR SHARE;
 
 -- name: ListWidgetsForDashboard :many
 -- The widgets behind a dashboard's cards, once each, for duplicating them.
