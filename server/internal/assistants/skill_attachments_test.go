@@ -61,7 +61,7 @@ func TestAssistantSkillHydrationTracksLatestAndPin(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistant_skill_hydration")
-	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive, true)
 	require.NoError(t, err)
 	emptyView, err := toHTTPAssistant(record)
 	require.NoError(t, err)
@@ -133,7 +133,7 @@ func TestBuildThreadBootstrapInitializesAndReusesPersistedSkillBaseline(t *testi
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistant_skill_bootstrap_snapshot")
-	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Bootstrap skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Bootstrap skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive, true)
 	require.NoError(t, err)
 	skill, _ := createSkillAttachmentFixture(t, conn, projectID, record.ID, "bootstrap-skill", "user-test")
 
@@ -171,7 +171,7 @@ func TestAssistantSkillQueriesResolveLatestPinArchiveAndRevoke(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistant_skill_query_resolution")
-	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Query skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Query skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive, true)
 	require.NoError(t, err)
 	skill, first := createSkillAttachmentFixture(t, conn, projectID, record.ID, "query-skill", "user-test")
 	queries := assistantrepo.New(conn)
@@ -314,7 +314,7 @@ func TestSkillsLoadRequiresAssistantPrincipal(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "skills_load_unauthorized")
-	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Unauthorized skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Unauthorized skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive, true)
 	require.NoError(t, err)
 	createSkillAttachmentFixture(t, conn, projectID, record.ID, "skill", "user-test")
 
@@ -331,7 +331,7 @@ func TestSkillsLoadReturnsAttachedContent(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "skills_load_content")
-	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Load skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Load skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive, true)
 	require.NoError(t, err)
 	skill, version := createSkillAttachmentFixture(t, conn, projectID, record.ID, "loaded-skill", "user-test")
 	threadID := uuid.New()
@@ -407,7 +407,7 @@ func TestSkillsLoadReportsNoAttachedSkills(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "skills_load_empty")
-	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Empty skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Empty skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive, true)
 	require.NoError(t, err)
 	ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: record.ID, ThreadID: uuid.New()})
 
@@ -424,7 +424,7 @@ func TestSkillsLoadHidesUnattachedSkillWhenAnotherIsAttached(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "skills_load_not_attached")
-	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Missing skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Missing skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive, true)
 	require.NoError(t, err)
 	createSkillAttachmentFixture(t, conn, projectID, record.ID, "attached-skill", "user-test")
 	ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: record.ID, ThreadID: uuid.New()})
@@ -446,7 +446,7 @@ func TestSkillsLoadWriteFailureDoesNotRecordObservation(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "skills_load_write_failure")
-	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Writer failure assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Writer failure assistant", "test-model", "", nil, nil, 60, 1, StatusActive, true)
 	require.NoError(t, err)
 	createSkillAttachmentFixture(t, conn, projectID, record.ID, "loaded-skill", "user-test")
 	ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: record.ID, ThreadID: uuid.New()})
@@ -473,7 +473,7 @@ func TestSkillsLoadObservationFailureDoesNotAlterSuccessfulResult(t *testing.T) 
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "skills_load_observation_failure")
-	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Observation failure assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Observation failure assistant", "test-model", "", nil, nil, 60, 1, StatusActive, true)
 	require.NoError(t, err)
 	_, version := createSkillAttachmentFixture(t, conn, projectID, record.ID, "loaded-skill", "user-test")
 	ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: record.ID, ThreadID: uuid.New()})
@@ -499,7 +499,7 @@ func TestSkillsLoadRecordsObservationAfterCallContextCancellation(t *testing.T) 
 	t.Parallel()
 
 	svc, baseCtx, projectID, conn := newRBACServiceWithConn(t, "skills_load_canceled_context")
-	record, err := svc.core.CreateAssistant(baseCtx, "org-test", projectID, "user-test", "Canceled context assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	record, err := svc.core.CreateAssistant(baseCtx, "org-test", projectID, "user-test", "Canceled context assistant", "test-model", "", nil, nil, 60, 1, StatusActive, true)
 	require.NoError(t, err)
 	_, version := createSkillAttachmentFixture(t, conn, projectID, record.ID, "loaded-skill", "user-test")
 	baseCtx = contextvalues.SetAssistantPrincipal(baseCtx, contextvalues.AssistantPrincipal{AssistantID: record.ID, ThreadID: uuid.New()})
@@ -520,7 +520,7 @@ func TestSkillsLoadV2PrincipalRecordsGramChatID(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "skills_load_v2_principal")
-	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "V2 skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "V2 skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive, true)
 	require.NoError(t, err)
 	_, version := createSkillAttachmentFixture(t, conn, projectID, record.ID, "loaded-skill", "user-test")
 	chatID := uuid.New()
@@ -541,7 +541,7 @@ func TestSkillsLoadInvalidGramChatIDSkipsObservation(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "skills_load_invalid_chat")
-	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Invalid chat skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Invalid chat skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive, true)
 	require.NoError(t, err)
 	_, version := createSkillAttachmentFixture(t, conn, projectID, record.ID, "loaded-skill", "user-test")
 	ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: record.ID, ThreadID: uuid.New()})
@@ -573,7 +573,7 @@ func TestDeleteAssistantRevokesAndAuditsSkillAttachments(t *testing.T) {
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistant_skill_delete")
 	ensureAssistantTestOrganization(t, conn)
-	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Delete skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive)
+	record, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Delete skill assistant", "test-model", "", nil, nil, 60, 1, StatusActive, true)
 	require.NoError(t, err)
 	skill, _ := createSkillAttachmentFixture(t, conn, projectID, record.ID, "delete-skill", "user-test")
 
@@ -608,7 +608,7 @@ func TestDisableManagedAssistantRevokesAndAuditsSkillAttachments(t *testing.T) {
 	projectID := newProvisioningProject(t, conn, "managed-skill-disable")
 	ensureAssistantTestOrganization(t, conn)
 	core := newProvisioningCore(t, conn)
-	record, err := core.EnableManagedAssistant(t.Context(), "org-test", projectID, "user-test")
+	record, err := core.EnableManagedAssistant(t.Context(), "org-test", projectID, "user-test", true)
 	require.NoError(t, err)
 	skill, _ := createSkillAttachmentFixture(t, conn, projectID, record.ID, "managed-delete-skill", "user-test")
 

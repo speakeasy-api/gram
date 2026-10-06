@@ -40,7 +40,7 @@ func TestExecutionTokenRevalidatesLiveIdentity(t *testing.T) {
 	project := newProvisioningProject(t, db, "execution-token")
 	seedProjectRead(t, db, "user-1", project)
 	core := newProvisioningCore(t, db)
-	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Execution token", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive)
+	record, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Execution token", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true)
 	require.NoError(t, err)
 	trigger, err := core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, record.ID, record.Name)
 	require.NoError(t, err)

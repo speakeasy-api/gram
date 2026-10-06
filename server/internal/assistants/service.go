@@ -1325,6 +1325,7 @@ func (s *ServiceCore) CreateAssistant(
 	warmTTLSeconds int,
 	maxConcurrency int,
 	status string,
+	provisionIdentity bool,
 ) (assistantRecord, error) {
 	if createdByUserID == "" {
 		return assistantRecord{}, fmt.Errorf("create assistant: missing user id")
@@ -1369,8 +1370,10 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, err
 	}
 
-	if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
-		return assistantRecord{}, fmt.Errorf("provision assistant identity: %w", err)
+	if provisionIdentity {
+		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
+			return assistantRecord{}, fmt.Errorf("provision assistant identity: %w", err)
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit assistant tx: %w", err)
