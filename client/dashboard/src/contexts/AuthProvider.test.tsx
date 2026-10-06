@@ -904,3 +904,50 @@ describe("AuthProvider organization host", () => {
     expect(replaceSpy).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("AuthProvider server-rendered return targets", () => {
+  const INSTALL_PAGE = "/mcp/linear/install?domain=custom";
+  const LOGIN_WITH_INSTALL_PAGE = `/login?redirect=${encodeURIComponent(INSTALL_PAGE)}`;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    replaceSpy = vi
+      .spyOn(window.location, "replace")
+      .mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    cleanup();
+    replaceSpy?.mockRestore();
+    replaceSpy = undefined;
+  });
+
+  // /mcp/<slug>/install is rendered by the server, not the dashboard. Routing
+  // to it client-side would make the provider read "mcp" as an org slug and
+  // bounce the signed-in user to their org's home page.
+  it("loads an install page return target from the server", async () => {
+    mocks.sessionData.mockReturnValue(gatedSession({ whitelisted: true }));
+
+    renderGate(LOGIN_WITH_INSTALL_PAGE);
+
+    await waitFor(() => {
+      expect(replaceSpy).toHaveBeenCalledWith(INSTALL_PAGE);
+    });
+    expect(replaceSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("location").textContent).toBe(
+      LOGIN_WITH_INSTALL_PAGE,
+    );
+    expect(screen.queryByTestId("app")).toBeNull();
+  });
+
+  it("still routes a dashboard return target client-side", () => {
+    mocks.sessionData.mockReturnValue(gatedSession({ whitelisted: true }));
+
+    renderGate("/login?redirect=%2Ftest-org%2Fsettings");
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/test-org/settings",
+    );
+    expect(replaceSpy).not.toHaveBeenCalled();
+  });
+});
