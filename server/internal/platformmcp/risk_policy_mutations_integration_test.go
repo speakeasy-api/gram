@@ -426,3 +426,78 @@ func TestRiskPolicyAudienceReplacement(t *testing.T) {
 	require.Empty(t, restoredRead.Policy.Audience.PrincipalURNs)
 	require.Equal(t, restored.Version, restoredRead.Policy.Version)
 }
+
+func TestRiskPolicyCreateAcceptsMCPScope(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_risk_policy_create_scope")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	principal.ClientID = "test-client"
+	principal.Surface = SurfacePlatformMCP
+	ctx = ContextWithPrincipal(ctx, principal)
+
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, true)
+	controls, err := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-policy-test-key")
+	require.NoError(t, err)
+	handlers, err := NewRiskPolicyMutationHandlers(conn, controls, risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil))
+	require.NoError(t, err)
+
+	scoped := func(key string, overrides map[string]any) map[string]any {
+		input := map[string]any{
+			"project_slug":    project.Slug,
+			"preset":          "secrets_and_credentials",
+			"idempotency_key": key,
+			"mcp_scope":       map[string]any{"all_servers": true, "tool_annotations": []string{"destructiveHint"}},
+		}
+		maps.Copy(input, overrides)
+		return input
+	}
+
+	_, created, err := handlers.CreatePolicy(ctx, nil, scoped("create-scoped-key", nil))
+	require.NoError(t, err)
+	policyID, err := uuid.Parse(created.Policy.ID)
+	require.NoError(t, err)
+	stored, err := riskrepo.New(conn).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: policyID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Equal(t, "block", stored.Action)
+	require.JSONEq(t, `{"all_servers":true,"tool_annotations":["destructiveHint"],"servers":[]}`, string(stored.McpScope))
+
+	reads, err := newRiskReadService(conn, "risk-policy-test-key")
+	require.NoError(t, err)
+	read, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: policyID.String()})
+	require.NoError(t, err)
+	require.NotNil(t, read.Policy.MCPScope, "the read an agent verifies with shows where the policy applies")
+	require.True(t, read.Policy.MCPScope.AllServers)
+	require.Equal(t, []string{"destructiveHint"}, read.Policy.MCPScope.ToolAnnotations)
+
+	_, replayed, err := handlers.CreatePolicy(ctx, nil, scoped("create-scoped-key", nil))
+	require.NoError(t, err)
+	require.True(t, replayed.Receipt.Replayed)
+
+	_, unscoped, err := handlers.CreatePolicy(ctx, nil, map[string]any{"project_slug": project.Slug, "preset": "prompt_injection", "idempotency_key": "create-unscoped-key"})
+	require.NoError(t, err)
+	unscopedRead, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: unscoped.Policy.ID})
+	require.NoError(t, err)
+	require.Nil(t, unscopedRead.Policy.MCPScope)
+
+	for name, tc := range map[string]struct {
+		overrides map[string]any
+		contains  string
+	}{
+		"action the gateway cannot enforce": {map[string]any{"action": "warn"}, "use flag or block"},
+		"session-level preset":              {map[string]any{"preset": "unapproved_mcp_servers"}, "cannot be used by an MCP-scoped policy"},
+		"server outside the project":        {map[string]any{"mcp_scope": map[string]any{"servers": []map[string]any{{"mcp_server_id": "11111111-1111-4111-8111-111111111111"}}}}, "does not belong to the project"},
+		"no servers selected":               {map[string]any{"mcp_scope": map[string]any{"tool_annotations": []string{"destructiveHint"}}}, "at least one server"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, _, err := handlers.CreatePolicy(ctx, nil, scoped("rejected-"+name, tc.overrides))
+			var refusal *ToolRefusalError
+			require.ErrorAs(t, err, &refusal)
+			require.Contains(t, refusal.Payload, `"code":"invalid_request"`)
+			require.Contains(t, refusal.Payload, tc.contains)
+		})
+	}
+}

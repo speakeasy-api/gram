@@ -391,7 +391,7 @@ describe("StandardPolicyEditor scope rows", () => {
         },
       }),
     );
-    fireEvent.click(screen.getByText("Everywhere"));
+    fireEvent.click(screen.getByText("Agent sessions"));
 
     expect(screen.getByText("Selected MCP servers")).toBeTruthy();
   });
@@ -678,7 +678,7 @@ describe("StandardPolicyEditor scope rows", () => {
       expect(server.getAttribute("aria-checked")).toBe("true");
     });
 
-    fireEvent.click(screen.getByText("Everywhere"));
+    fireEvent.click(screen.getByText("Agent sessions"));
     fireEvent.click(screen.getByText("Selected MCP servers"));
     expect(
       screen
@@ -702,7 +702,7 @@ describe("StandardPolicyEditor scope rows", () => {
     expect(screen.getByText(expression)).toBeTruthy();
     fireEvent.click(screen.getByText("Selected MCP servers"));
     expect(screen.queryByText(expression)).toBeNull();
-    fireEvent.click(screen.getByText("Everywhere"));
+    fireEvent.click(screen.getByText("Agent sessions"));
     expect(screen.getByText(expression)).toBeTruthy();
   });
 
@@ -864,7 +864,7 @@ describe("MCP scope form conversion", () => {
     });
   });
 
-  it("serializes Everywhere as no MCP scope", () => {
+  it("serializes Agent sessions as no MCP scope", () => {
     const value = policyMCPScopeValue({
       allServers: true,
       toolAnnotations: ["readOnlyHint"],
