@@ -748,9 +748,12 @@ type ListManagedAgentsParams struct {
 }
 
 // Keyset paginated on the same (LOWER(name), id) tuple it orders by, so a page
-// boundary cannot repeat or skip a row when agents are created or renamed
-// between requests. The caller drops rows it may not read, so it asks for more
-// than one page and walks the cursor until it has filled one.
+// boundary is a position in that ordering rather than an offset: inserts and
+// deletes elsewhere in the list cannot shift the rows a later page returns,
+// which is what an OFFSET would do. A rename is the exception, because it
+// moves the row itself — one renamed across the boundary can still be seen
+// twice or not at all. The caller drops rows it may not read, so it asks for
+// more than one page and walks the cursor until it has filled one.
 func (q *Queries) ListManagedAgents(ctx context.Context, arg ListManagedAgentsParams) ([]Agent, error) {
 	rows, err := q.db.Query(ctx, listManagedAgents,
 		arg.OrganizationID,

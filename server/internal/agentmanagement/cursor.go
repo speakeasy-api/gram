@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -23,6 +24,12 @@ func decodeAgentCursor(cursor string) (string, uuid.UUID, error) {
 	decoded, err := base64.RawURLEncoding.DecodeString(cursor)
 	if err != nil {
 		return "", uuid.Nil, fmt.Errorf("decode agent cursor: %w", err)
+	}
+
+	// Postgres rejects a text parameter that is not valid UTF-8, which would
+	// surface as an unexpected error rather than the bad request this is.
+	if !utf8.Valid(decoded) {
+		return "", uuid.Nil, errors.New("decode agent cursor: not valid utf-8")
 	}
 
 	payload := string(decoded)

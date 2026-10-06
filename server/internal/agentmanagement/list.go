@@ -106,6 +106,10 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	ownerIDs := make([]string, 0, limit+1)
 	seenOwners := make(map[string]bool)
 
+	// Set when the scan cap stopped a walk that still had rows to read. The
+	// page is then short of a full one but not the end of the list, so it must
+	// still carry a cursor or the client stops early on agents it may read.
+	var capped *repo.Agent
 	for scan := 0; scan < maxAgentPageScans && len(readable) <= limit; scan++ {
 		rows, err := queries.ListManagedAgents(ctx, repo.ListManagedAgentsParams{
 			OrganizationID:   human.Auth.ActiveOrganizationID,
@@ -151,12 +155,22 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		last := rows[len(rows)-1]
 		cursorName = pgtype.Text{String: strings.ToLower(last.Name), Valid: true}
 		cursorID = uuid.NullUUID{UUID: last.ID, Valid: true}
+		if scan == maxAgentPageScans-1 && len(readable) <= limit {
+			row := last
+			capped = &row
+		}
 	}
 
 	var nextCursor *string
-	if len(readable) > limit {
+	switch {
+	case len(readable) > limit:
 		readable = readable[:limit]
 		value := encodeAgentCursor(readable[len(readable)-1].Name, readable[len(readable)-1].ID)
+		nextCursor = &value
+	case capped != nil:
+		// The cursor names the last row scanned, readable or not: it is a
+		// position in the ordering, not a row the caller is being shown.
+		value := encodeAgentCursor(capped.Name, capped.ID)
 		nextCursor = &value
 	}
 

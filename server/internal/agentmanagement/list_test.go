@@ -2,10 +2,13 @@ package agentmanagement
 
 import (
 	"bytes"
+	"encoding/base64"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
@@ -182,7 +185,7 @@ func TestListAgentsPagesDescendingWithoutRepeatingOrSkipping(t *testing.T) {
 	require.Equal(t, []string{"Echo", "Delta", "Charlie", "Bravo", "Alpha"}, seen)
 }
 
-func TestListAgentsSearchesByNameAcrossPages(t *testing.T) {
+func TestListAgentsSearchesByName(t *testing.T) {
 	t.Parallel()
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
@@ -284,6 +287,58 @@ func TestListAgentsRejectsATamperedCursor(t *testing.T) {
 		_, err := service.List(ctx, &gen.ListPayload{Cursor: &cursor})
 		requireOopsCode(t, err, oops.CodeBadRequest)
 	}
+}
+
+func TestListAgentsRejectsACursorThatIsNotUTF8(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "caller")
+	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx := validatedHumanContext(t, "org-a", "caller")
+
+	// Postgres rejects a text parameter that is not valid UTF-8, so without a
+	// check this reaches the database and comes back as an unexpected error
+	// rather than the bad request it is.
+	cursor := base64.RawURLEncoding.EncodeToString(
+		append([]byte{0xff, 0xfe}, []byte("|"+uuid.New().String())...),
+	)
+	_, err := service.List(ctx, &gen.ListPayload{Cursor: &cursor})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestListAgentsKeepsPagingWhenTheScanCapIsHit(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "caller")
+	seedOrganizationUser(t, conn, "org-a", "other")
+	// Each scan reads limit+1 rows, so the cap covers 2*maxAgentPageScans rows
+	// at limit 1. Seed more unreadable agents than that, with a readable one
+	// beyond them: the first page cannot reach it, so it must hand back a
+	// cursor rather than report the list exhausted.
+	for i := range 2*maxAgentPageScans + 2 {
+		createAgent(t, conn, "org-a", "other", fmt.Sprintf("Hidden %03d", i))
+	}
+	visible := createAgent(t, conn, "org-a", "caller", "Zzz visible")
+	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx := validatedHumanContext(t, "org-a", "caller")
+
+	seen := make([]string, 0, 1)
+	var cursor *string
+	for range maxAgentPageScans + 4 {
+		result, err := service.List(ctx, &gen.ListPayload{Limit: 1, Cursor: cursor})
+		require.NoError(t, err)
+		for _, agent := range result.Items {
+			seen = append(seen, agent.ID)
+		}
+		cursor = result.NextCursor
+		if cursor == nil {
+			break
+		}
+	}
+	require.Nil(t, cursor, "pagination must terminate")
+	require.Equal(t, []string{visible.ID.String()}, seen)
 }
 
 func TestListAgentsRejectsAnOutOfRangeLimit(t *testing.T) {
