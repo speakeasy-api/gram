@@ -163,3 +163,16 @@ func TestProbeProtectedResourceOnUseSkipsPlainHTTP(t *testing.T) {
 	})
 	require.Empty(t, started)
 }
+
+func TestProtectedResourceMismatchMessage(t *testing.T) {
+	t.Parallel()
+
+	doc := wellknown.OAuthProtectedResourceMetadata{Resource: "https://rs.example.test/other", MetadataURL: "https://rs.example.test/.well-known/oauth-protected-resource"}
+	require.Equal(t, "The metadata document names the resource https://rs.example.test/other, not the requested one.", protectedResourceMismatchMessage("https://rs.example.test/mcp", doc))
+
+	doc.Resource = "https://rs.example.test/mcp"
+	require.Equal(t, "The metadata document was read from https://rs.example.test/.well-known/oauth-protected-resource, not the resource's well-known location.", protectedResourceMismatchMessage("https://rs.example.test/mcp", doc))
+
+	doc.Resource = ""
+	require.Equal(t, "The metadata document names the resource (empty), not the requested one.", protectedResourceMismatchMessage("https://rs.example.test/mcp", doc))
+}

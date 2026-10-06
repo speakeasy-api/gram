@@ -81,7 +81,7 @@ func recordProtectedResource(ctx context.Context, db repo.DBTX, projectID uuid.U
 	// Keep this check at the write boundary so every discovery path rejects
 	// mismatches, including identifiers differing only by a trailing slash.
 	if !doc.ValidForResource(resourceURL) {
-		return recordProtectedResourceError(ctx, db, projectID, orgID, resourceURL, doc.MetadataURL, protectedResourceMismatchMessage)
+		return recordProtectedResourceError(ctx, db, projectID, orgID, resourceURL, doc.MetadataURL, protectedResourceMismatchMessage(resourceURL, doc))
 	}
 
 	_, err := repo.New(db).UpsertRemoteProtectedResource(ctx, repo.UpsertRemoteProtectedResourceParams{

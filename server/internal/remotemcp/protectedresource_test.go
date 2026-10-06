@@ -602,7 +602,7 @@ func TestProxyManager_ProtectedResourceProbeRecordsAnotherResourceAsError(t *tes
 	require.EqualValues(t, 1, hits.Load())
 
 	row := loadProtectedResource(t, ctx, ti, upstream.URL)
-	require.Equal(t, "The metadata document resource or location does not match the requested resource.", row.MetadataLastError.String)
+	require.Equal(t, "The metadata document names the resource https://other.example.test/mcp, not the requested one.", row.MetadataLastError.String)
 	require.True(t, row.MetadataLastErrorAt.Valid)
 	require.False(t, row.MetadataFetchedAt.Valid)
 	require.Nil(t, row.AuthorizationServers)

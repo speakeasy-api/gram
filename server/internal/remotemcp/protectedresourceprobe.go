@@ -39,8 +39,25 @@ const (
 )
 
 // protectedResourceMismatchMessage is recorded when the document's resource
-// member or metadata location does not match the server's URL.
-const protectedResourceMismatchMessage = "The metadata document resource or location does not match the requested resource."
+// member or metadata location does not match the server's URL, naming which.
+func protectedResourceMismatchMessage(resourceURL string, doc wellknown.OAuthProtectedResourceMetadata) string {
+	if doc.Resource != resourceURL {
+		return "The metadata document names the resource " + truncateForRecord(doc.Resource) + ", not the requested one."
+	}
+	return "The metadata document was read from " + truncateForRecord(doc.MetadataURL) + ", not the resource's well-known location."
+}
+
+// truncateForRecord bounds an upstream-supplied value before it is stored.
+func truncateForRecord(v string) string {
+	const limit = 200
+	if v == "" {
+		return "(empty)"
+	}
+	if len(v) > limit {
+		return v[:limit] + "…"
+	}
+	return v
+}
 
 type protectedResourceCheck struct {
 	at time.Time
