@@ -4,6 +4,14 @@ import * as z from "zod";
 
 export const isCI = z.stringbool().catch(false).parse(process.env["CI"]);
 
+/** Config file names looked up in the project directory, in order. */
+export const CONFIG_FILE_NAMES = [
+  "gram.config.ts",
+  "gram.config.mts",
+  "gram.config.js",
+  "gram.config.mjs",
+];
+
 export type UserConfig = {
   /**
    * The path to the entrypoint file for the application. This must export

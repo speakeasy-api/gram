@@ -6,7 +6,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { $, ProcessPromise, chalk } from "zx";
 import { defaultCLIResolverDeps, resolveCLI } from "./cli.ts";
-import { isCI, type ParsedUserConfig } from "./config.ts";
+import { CONFIG_FILE_NAMES, isCI, type ParsedUserConfig } from "./config.ts";
 
 type Artifacts = {
   funcFilename: string;
@@ -14,7 +14,9 @@ type Artifacts = {
   zipFilename: string;
 };
 
-async function resolveArtifacts(cfg: ParsedUserConfig): Promise<Artifacts> {
+export async function resolveArtifacts(
+  cfg: ParsedUserConfig,
+): Promise<Artifacts> {
   return {
     funcFilename: join(cfg.outDir, "functions.js"),
     manifestFilename: join(cfg.outDir, "manifest.json"),
@@ -70,7 +72,7 @@ export async function buildFunctions(logger: Logger, cfg: ParsedUserConfig) {
   };
 }
 
-async function inferSlug(cwd: string): Promise<string> {
+export async function inferSlug(cwd: string): Promise<string> {
   const result = await resolvePackageJson(cwd);
   if (!result) {
     throw new Error(`Could not find package.json in ${cwd} or any parent dir.`);
@@ -443,14 +445,7 @@ async function openBrowser(logger: Logger, url: string) {
 }
 
 async function updateConfigFile(cwd: string, shouldOpen: boolean) {
-  const configFiles = [
-    "gram.config.ts",
-    "gram.config.mts",
-    "gram.config.js",
-    "gram.config.mjs",
-  ];
-
-  for (const configFile of configFiles) {
+  for (const configFile of CONFIG_FILE_NAMES) {
     const configPath = join(cwd, configFile);
     try {
       await stat(configPath);
