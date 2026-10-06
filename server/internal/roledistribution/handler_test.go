@@ -139,8 +139,7 @@ func TestRoleDistributionSubscriptionPolicy(t *testing.T) {
 	require.Equal(t, 7*24*time.Hour, policy.GetRetention().AsDuration())
 	require.Equal(t, 10*time.Second, policy.GetRetryPolicy().GetMinimumBackoff().AsDuration())
 	require.Equal(t, 600*time.Second, policy.GetRetryPolicy().GetMaximumBackoff().AsDuration())
-	require.EqualValues(t, 10, policy.GetDeadLetter().GetMaxDeliveryAttempts())
-	require.Empty(t, policy.GetDeadLetter().GetName(), "DLQ uses generated convention")
+	require.Nil(t, policy.GetDeadLetter(), "failures retry until retention; no dead-letter topic")
 	_, registered := topics.Lookup(string(message.FullName()))
 	require.True(t, registered)
 }
