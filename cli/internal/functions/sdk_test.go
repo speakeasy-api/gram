@@ -165,7 +165,11 @@ func TestBuild_RealNode(t *testing.T) {
 		t.Skipf("node %s is older than %s", version, MinNodeVersion)
 	}
 
-	runner := Runner{Env: os.Environ(), Stdin: nil, Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}}
+	// Each subtest gets its own runner: the subtests run in parallel and node
+	// writes to the runner's output buffers.
+	newRunner := func() Runner {
+		return Runner{Env: os.Environ(), Stdin: nil, Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}}
+	}
 
 	installSDK := func(t *testing.T, dir string, buildJS string) {
 		t.Helper()
@@ -176,7 +180,7 @@ func TestBuild_RealNode(t *testing.T) {
 
 	t.Run("missing", func(t *testing.T) {
 		t.Parallel()
-		_, err := runner.Build(t.Context(), ProjectOptions{Dir: t.TempDir(), ConfigFile: "", Entrypoint: "", OutDir: ""})
+		_, err := newRunner().Build(t.Context(), ProjectOptions{Dir: t.TempDir(), ConfigFile: "", Entrypoint: "", OutDir: ""})
 		require.ErrorIs(t, err, ErrSDKMissing)
 	})
 
@@ -184,7 +188,7 @@ func TestBuild_RealNode(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		installSDK(t, dir, "export function defineConfig(c) { return c; }\n")
-		_, err := runner.Build(t.Context(), ProjectOptions{Dir: dir, ConfigFile: "", Entrypoint: "", OutDir: ""})
+		_, err := newRunner().Build(t.Context(), ProjectOptions{Dir: dir, ConfigFile: "", Entrypoint: "", OutDir: ""})
 		require.ErrorIs(t, err, ErrSDKOutdated)
 	})
 
@@ -195,7 +199,7 @@ func TestBuild_RealNode(t *testing.T) {
   return { project: { cwd: opts.cwd, outDir: opts.outDir, zipFile: opts.outDir + "/gram.zip", deployStagingFile: "", slug: "fake" }, files: [] };
 }
 `)
-		result, err := runner.Build(t.Context(), ProjectOptions{Dir: dir, ConfigFile: "", Entrypoint: "", OutDir: "out"})
+		result, err := newRunner().Build(t.Context(), ProjectOptions{Dir: dir, ConfigFile: "", Entrypoint: "", OutDir: "out"})
 		require.NoError(t, err)
 		require.Equal(t, dir, result.Project.Dir)
 		require.Equal(t, "out/gram.zip", result.Project.ZipFile)
@@ -208,7 +212,7 @@ func TestBuild_RealNode(t *testing.T) {
 		sdkDir := filepath.Join(dir, "node_modules", "@gram-ai", "functions")
 		writeFile(t, filepath.Join(sdkDir, "package.json"), `{"name":"@gram-ai/functions","type":"module","exports":{".":"./index.js"}}`)
 		writeFile(t, filepath.Join(sdkDir, "index.js"), "export {};\n")
-		_, err := runner.Build(t.Context(), ProjectOptions{Dir: dir, ConfigFile: "", Entrypoint: "", OutDir: ""})
+		_, err := newRunner().Build(t.Context(), ProjectOptions{Dir: dir, ConfigFile: "", Entrypoint: "", OutDir: ""})
 		require.ErrorIs(t, err, ErrSDKOutdated)
 	})
 
@@ -219,7 +223,7 @@ func TestBuild_RealNode(t *testing.T) {
 		writeFile(t, filepath.Join(depDir, "package.json"), `{"name":"some-dep","type":"module","exports":{".":"./index.js"}}`)
 		writeFile(t, filepath.Join(depDir, "index.js"), "export {};\n")
 		installSDK(t, dir, "import \"some-dep/missing\";\nexport async function build() { return {}; }\n")
-		_, err := runner.Build(t.Context(), ProjectOptions{Dir: dir, ConfigFile: "", Entrypoint: "", OutDir: ""})
+		_, err := newRunner().Build(t.Context(), ProjectOptions{Dir: dir, ConfigFile: "", Entrypoint: "", OutDir: ""})
 		require.Error(t, err)
 		require.NotErrorIs(t, err, ErrSDKOutdated)
 		require.ErrorContains(t, err, "@gram-ai/functions build failed")
@@ -229,7 +233,7 @@ func TestBuild_RealNode(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 		installSDK(t, dir, "export async function build() { throw new Error(\"entrypoint broke\"); }\n")
-		_, err := runner.Build(t.Context(), ProjectOptions{Dir: dir, ConfigFile: "", Entrypoint: "", OutDir: ""})
+		_, err := newRunner().Build(t.Context(), ProjectOptions{Dir: dir, ConfigFile: "", Entrypoint: "", OutDir: ""})
 		require.ErrorContains(t, err, "@gram-ai/functions build failed")
 	})
 }

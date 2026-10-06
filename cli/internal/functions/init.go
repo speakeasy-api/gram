@@ -58,7 +58,7 @@ const (
 
 // packageNameRE matches the package names init accepts: npm names, unscoped or
 // with an @scope, limited to alphanumerics, dashes and underscores.
-var packageNameRE = regexp.MustCompile(`^(@[a-z0-9-_]+/)?[a-z0-9-_]+$`)
+var packageNameRE = regexp.MustCompile(`^(@[a-z0-9_-]+/)?[a-z0-9_-]+$`)
 
 // skippedTemplateEntries are never copied into a project. NEXT_STEPS.txt is
 // printed instead. ts-framework/create-function/scripts/copy-templates.mjs
