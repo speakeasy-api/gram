@@ -1926,15 +1926,24 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
 ORDER BY c.id ASC;
 
 -- name: ListRemoteSessionClientIDsForUserSessionIssuer :many
--- The clients bound to a user session issuer in the tenant, as ListRemoteSessionClientsForUserSessionIssuer
--- admits them. A login decides whether its endpoint's resource belongs to
--- the selected client against this set of siblings.
+-- The clients bound to a user session issuer in the tenant, exactly as
+-- ListRemoteSessionClientsForUserSessionIssuer admits them: the same tenancy
+-- on client, issuer and user session issuer, and all three live. A login
+-- decides whether its endpoint's resource belongs to the selected client
+-- against this set of siblings, so a client whose issuer is gone must not
+-- stand in the way of a live one.
 SELECT c.id
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = @user_session_issuer_id
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+  AND (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
+  AND (i.project_id = @project_id::uuid OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = @organization_id::text)))
   AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+  AND usi.deleted IS FALSE
 ORDER BY c.id ASC;
 
 -- name: GetRemoteURLForMcpServer :one
@@ -3072,6 +3081,27 @@ WHERE m.deleted IS FALSE
       WHERE link.remote_session_client_id = @remote_session_client_id
   )
 ORDER BY m.id DESC;
+
+-- name: ListOrganizationMcpServersForClients :many
+-- ListOrganizationMcpServersForClient for a set of clients in one round trip,
+-- each row tagged with the client it is attached through, so a consent page
+-- or a login decides every bound client's resource from one load. Same
+-- liveness and remote-only rules as the single-client query.
+SELECT DISTINCT
+    link.remote_session_client_id AS client_id,
+    m.id,
+    m.project_id,
+    p.slug AS project_slug,
+    m.name,
+    m.slug,
+    COALESCE(rms.url, '')::text AS url
+FROM remote_session_client_user_session_issuers AS link
+JOIN mcp_servers AS m ON m.user_session_issuer_id = link.user_session_issuer_id
+JOIN projects AS p ON p.id = m.project_id
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE link.remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
+  AND m.deleted IS FALSE
+ORDER BY link.remote_session_client_id ASC, m.id DESC;
 
 -- name: ListOrganizationMcpServerNamesForIssuer :many
 -- Display names (and URL fallbacks) of MCP servers attached to any client of a

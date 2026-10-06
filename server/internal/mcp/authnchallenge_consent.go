@@ -1409,9 +1409,20 @@ func (s *Service) buildRemoteSessionCards(
 	// stands in, because no login reads it.
 	discoverScopes := s.remoteChallengeMgr.ResourceScopeDiscoveryEnabled(ctx, endpoint.OrganizationID)
 	serverResource, serverResourceURL, hasServerResource := s.remoteChallengeMgr.CachedResourceScopesForServer(ctx, endpoint.ProjectID, endpoint.McpServerID, discoverScopes)
-	boundIDs := make([]uuid.UUID, 0, len(clients))
-	for i := range clients {
-		boundIDs = append(boundIDs, clients[i].ID)
+	// One load decides ownership for every card. A lookup fault logs and
+	// the cards keep their issuers' scopes: the reconnect hint this feeds
+	// is best effort and must not fail the page.
+	var resourceApplies map[uuid.UUID]bool
+	if hasServerResource {
+		boundIDs := make([]uuid.UUID, 0, len(clients))
+		for i := range clients {
+			boundIDs = append(boundIDs, clients[i].ID)
+		}
+		resourceApplies, err = s.remoteChallengeMgr.ResourceAppliesToClients(ctx, boundIDs, serverResourceURL)
+		if err != nil {
+			s.logger.WarnContext(ctx, "decide resource ownership for consent cards; falling back to issuer scopes", attr.SlogError(err))
+			resourceApplies = nil
+		}
 	}
 
 	// Single round-trip for connection state across all cards. Empty when
@@ -1489,14 +1500,8 @@ func (s *Service) buildRemoteSessionCards(
 		}
 		tokenActive, tokenExpiresAt, tokenExpiresIn := tokenLine(renderedAt, state.Token, state.AccessExpiresAt)
 		resourceScopes := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: discoverScopes}
-		if hasServerResource {
-			applies, err := s.remoteChallengeMgr.ResourceAppliesToClient(ctx, c.ID, boundIDs, serverResourceURL)
-			if err != nil {
-				return nil, fmt.Errorf("decide resource ownership for consent card: %w", err)
-			}
-			if applies {
-				resourceScopes = serverResource
-			}
+		if resourceApplies[c.ID] {
+			resourceScopes = serverResource
 		}
 		requested := c.RequestedScopes(resourceScopes).Scopes
 		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable

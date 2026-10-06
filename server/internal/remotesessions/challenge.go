@@ -749,6 +749,21 @@ func (m *ChallengeManager) ResourceAppliesToClient(ctx context.Context, clientID
 	return resource != "" && sameUpstream(resource, resourceURL), nil
 }
 
+// ResourceAppliesToClients is ResourceAppliesToClient for every client bound
+// to one endpoint, judged among each other from a single load, so a consent
+// page with many cards decides them all in one round trip.
+func (m *ChallengeManager) ResourceAppliesToClients(ctx context.Context, clientIDs []uuid.UUID, resourceURL string) (map[uuid.UUID]bool, error) {
+	resources, err := m.refresher.ResourcesForClientsAtUpstream(ctx, clientIDs, resourceURL)
+	if err != nil {
+		return nil, err
+	}
+	applies := make(map[uuid.UUID]bool, len(resources))
+	for id, resource := range resources {
+		applies[id] = resource != "" && sameUpstream(resource, resourceURL)
+	}
+	return applies, nil
+}
+
 // loginResourceScopes resolves the protected resource row of the MCP server
 // the login is for, probing it within the login budget. An organization not
 // enrolled (discover false), a login with no remote-backed server, a server
