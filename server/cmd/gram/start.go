@@ -1075,7 +1075,8 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), serverURL)
-			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cache.NewRedisCacheAdapter(redisClient))
+			assistantIdentities := newAssistantIdentities(c, auditLogger)
+			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cache.NewRedisCacheAdapter(redisClient), assistantIdentities)
 
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
@@ -1191,7 +1192,7 @@ func newStartCommand() *cli.Command {
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
 			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo, auditLogger).
 				WithTurnStream(turnStream)
-			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger)
+			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
@@ -1201,7 +1202,7 @@ func newStartCommand() *cli.Command {
 			assistantsCore.SetFeatureProvider(featureFlags)
 			assistantsCore.SetSiteURL(siteURL)
 			assistantsCore.SetOutboundCallbackOrigin(callbackOrigins.Outbound)
-			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
+			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient), featureFlags)
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
 			networkIngressConfig, err := networkIngressConfigFromCLI(c)
@@ -1793,6 +1794,7 @@ func newStartCommand() *cli.Command {
 			}
 			riskFindings := riskchrepo.New(chDB)
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
+				AssistantIdentity:         assistantsSvc,
 				Logger:                    logger,
 				MeterProvider:             meterProvider,
 				TracerProvider:            tracerProvider,

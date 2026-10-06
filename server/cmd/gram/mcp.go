@@ -332,7 +332,8 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	slackClient := slack_client.NewSlackClient(guardianPolicy)
 	// Listing and reading triggers works without Temporal; scheduling one
 	// returns an error from the trigger tool instead of dispatching.
-	triggerApp := newTriggersApp(logger, db, enc, nil, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cacheImpl)
+	assistantIdentities := newAssistantIdentities(c, auditLogger)
+	triggerApp := newTriggersApp(logger, db, enc, nil, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cacheImpl, assistantIdentities)
 	assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
 	platformExtras := append([]platformtools.ExternalTool{}, platformtoolsruntime.MemoryExternalTools(memoryService)...)
 	platformExtras = append(platformExtras, platformtoolsruntime.AssistantSkillTools(logger, db)...)

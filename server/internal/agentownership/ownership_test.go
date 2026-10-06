@@ -2,6 +2,7 @@ package agentownership_test
 
 import (
 	"context"
+	"github.com/jackc/pgx/v5"
 	"log"
 	"os"
 	"testing"
@@ -83,7 +84,9 @@ func TestOwnerLossLatchIsDurableScopedAndIdempotent(t *testing.T) {
 	two, err := agentrepo.New(conn).CreateAgent(t.Context(), agentrepo.CreateAgentParams{OrganizationID: "org-two", OwnerUserID: "owner", Name: "Two"})
 	require.NoError(t, err)
 
-	require.NoError(t, agentownership.LatchOwnerLossByMembership(t.Context(), conn, "org-one", "owner", agentownership.OwnerReassignmentReasonMembershipLost, agentownership.SystemActor, nil))
+	require.NoError(t, pgx.BeginFunc(t.Context(), conn, func(tx pgx.Tx) error {
+		return agentownership.LatchOwnerLossByMembership(t.Context(), tx, "org-one", "owner", agentownership.OwnerReassignmentReasonMembershipLost, agentownership.SystemActor, nil)
+	}))
 	latchedOne, err := agentrepo.New(conn).GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-one", ID: one.ID})
 	require.NoError(t, err)
 	require.True(t, latchedOne.OwnerReassignmentRequiredAt.Valid)
@@ -93,13 +96,17 @@ func TestOwnerLossLatchIsDurableScopedAndIdempotent(t *testing.T) {
 	require.False(t, unlatchedTwo.OwnerReassignmentRequiredAt.Valid)
 
 	firstLatch := latchedOne.OwnerReassignmentRequiredAt.Time
-	require.NoError(t, agentownership.LatchOwnerLossByMembership(t.Context(), conn, "org-one", "owner", agentownership.OwnerReassignmentReasonOwnerInactive, agentownership.SystemActor, nil))
+	require.NoError(t, pgx.BeginFunc(t.Context(), conn, func(tx pgx.Tx) error {
+		return agentownership.LatchOwnerLossByMembership(t.Context(), tx, "org-one", "owner", agentownership.OwnerReassignmentReasonOwnerInactive, agentownership.SystemActor, nil)
+	}))
 	latchedOne, err = agentrepo.New(conn).GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-one", ID: one.ID})
 	require.NoError(t, err)
 	require.Equal(t, firstLatch, latchedOne.OwnerReassignmentRequiredAt.Time)
 	require.Equal(t, string(agentownership.OwnerReassignmentReasonMembershipLost), latchedOne.OwnerReassignmentReason.String)
 
-	require.NoError(t, agentownership.LatchOwnerLossByUser(t.Context(), conn, "owner", agentownership.OwnerReassignmentReasonOwnerDeleted, agentownership.SystemActor, nil))
+	require.NoError(t, pgx.BeginFunc(t.Context(), conn, func(tx pgx.Tx) error {
+		return agentownership.LatchOwnerLossByUser(t.Context(), tx, "owner", agentownership.OwnerReassignmentReasonOwnerDeleted, agentownership.SystemActor, nil)
+	}))
 	latchedTwo, err := agentrepo.New(conn).GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-two", ID: two.ID})
 	require.NoError(t, err)
 	require.True(t, latchedTwo.OwnerReassignmentRequiredAt.Valid)

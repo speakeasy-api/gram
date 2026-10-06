@@ -60,6 +60,7 @@ import (
 )
 
 type platformMCPConfig struct {
+	AssistantIdentity      platformmcp.AssistantIdentityManagement
 	Logger                 *slog.Logger
 	MeterProvider          metric.MeterProvider
 	TracerProvider         trace.TracerProvider
@@ -527,6 +528,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		fixtureConfig.CatalogDescriptor(),
 		accessReads,
 		accessRoleMutations,
+		platformmcp.NewAssistantIdentityService(config.AssistantIdentity, platformReader, config.FeatureFlags),
 		newPlatformMCPConnectionMutations(config),
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
 	oauth.Attach(config.Mux)
@@ -1104,6 +1106,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		platformmcp.CatalogDescriptor{},
 		accessReads,
 		accessRoleMutations,
+		platformmcp.NewAssistantIdentityService(config.AssistantIdentity, platformReader, config.FeatureFlags),
 		newPlatformMCPConnectionMutations(config),
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
 	oauth.Attach(config.Mux)

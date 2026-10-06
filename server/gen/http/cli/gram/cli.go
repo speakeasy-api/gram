@@ -126,7 +126,7 @@ func UsageCommands() []string {
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"organization-assets upload-organization-image",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
-		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
+		"assistants (list-assistants|get-assistant|create-assistant|upgrade-assistant-identity|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|register|info|transfer-out|transfer-in)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
@@ -770,6 +770,11 @@ func ParseEndpoint(
 		assistantsCreateAssistantBodyFlag             = assistantsCreateAssistantFlags.String("body", "REQUIRED", "")
 		assistantsCreateAssistantSessionTokenFlag     = assistantsCreateAssistantFlags.String("session-token", "", "")
 		assistantsCreateAssistantProjectSlugInputFlag = assistantsCreateAssistantFlags.String("project-slug-input", "", "")
+
+		assistantsUpgradeAssistantIdentityFlags                = flag.NewFlagSet("upgrade-assistant-identity", flag.ExitOnError)
+		assistantsUpgradeAssistantIdentityBodyFlag             = assistantsUpgradeAssistantIdentityFlags.String("body", "REQUIRED", "")
+		assistantsUpgradeAssistantIdentitySessionTokenFlag     = assistantsUpgradeAssistantIdentityFlags.String("session-token", "", "")
+		assistantsUpgradeAssistantIdentityProjectSlugInputFlag = assistantsUpgradeAssistantIdentityFlags.String("project-slug-input", "", "")
 
 		assistantsUpdateAssistantFlags                = flag.NewFlagSet("update-assistant", flag.ExitOnError)
 		assistantsUpdateAssistantBodyFlag             = assistantsUpdateAssistantFlags.String("body", "REQUIRED", "")
@@ -4975,6 +4980,7 @@ func ParseEndpoint(
 	assistantsListAssistantsFlags.Usage = assistantsListAssistantsUsage
 	assistantsGetAssistantFlags.Usage = assistantsGetAssistantUsage
 	assistantsCreateAssistantFlags.Usage = assistantsCreateAssistantUsage
+	assistantsUpgradeAssistantIdentityFlags.Usage = assistantsUpgradeAssistantIdentityUsage
 	assistantsUpdateAssistantFlags.Usage = assistantsUpdateAssistantUsage
 	assistantsDeleteAssistantFlags.Usage = assistantsDeleteAssistantUsage
 	assistantsSendMessageFlags.Usage = assistantsSendMessageUsage
@@ -6451,6 +6457,9 @@ func ParseEndpoint(
 
 			case "create-assistant":
 				epf = assistantsCreateAssistantFlags
+
+			case "upgrade-assistant-identity":
+				epf = assistantsUpgradeAssistantIdentityFlags
 
 			case "update-assistant":
 				epf = assistantsUpdateAssistantFlags
@@ -9400,6 +9409,9 @@ func ParseEndpoint(
 			case "create-assistant":
 				endpoint = c.CreateAssistant()
 				data, err = assistantsc.BuildCreateAssistantPayload(*assistantsCreateAssistantBodyFlag, *assistantsCreateAssistantSessionTokenFlag, *assistantsCreateAssistantProjectSlugInputFlag)
+			case "upgrade-assistant-identity":
+				endpoint = c.UpgradeAssistantIdentity()
+				data, err = assistantsc.BuildUpgradeAssistantIdentityPayload(*assistantsUpgradeAssistantIdentityBodyFlag, *assistantsUpgradeAssistantIdentitySessionTokenFlag, *assistantsUpgradeAssistantIdentityProjectSlugInputFlag)
 			case "update-assistant":
 				endpoint = c.UpdateAssistant()
 				data, err = assistantsc.BuildUpdateAssistantPayload(*assistantsUpdateAssistantBodyFlag, *assistantsUpdateAssistantSessionTokenFlag, *assistantsUpdateAssistantProjectSlugInputFlag)
@@ -14394,6 +14406,7 @@ func assistantsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-assistants: List assistants for the current project.`)
 	fmt.Fprintln(os.Stderr, `    get-assistant: Get an assistant by ID.`)
 	fmt.Fprintln(os.Stderr, `    create-assistant: Create an assistant.`)
+	fmt.Fprintln(os.Stderr, `    upgrade-assistant-identity: Give an existing assistant its own dedicated agent and per-trigger workload identities. The agent starts with access to every MCP server and skill in the project and to administering this assistant, and is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.`)
 	fmt.Fprintln(os.Stderr, `    update-assistant: Update an assistant.`)
 	fmt.Fprintln(os.Stderr, `    delete-assistant: Delete an assistant.`)
 	fmt.Fprintln(os.Stderr, `    send-message: Send a message from the dashboard to an assistant as the calling user. Continue an existing conversation by passing its chat_id (from listChats), or omit chat_id to start a new conversation — the server mints and returns a fresh chat id. The reply is delivered asynchronously; poll the chat service (loadChat) to read it.`)
@@ -14466,6 +14479,28 @@ func assistantsCreateAssistantUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants create-assistant --body '{\n      \"instructions\": \"abc123\",\n      \"max_concurrency\": 1,\n      \"mcp_servers\": [\n         {\n            \"endpoint_slug\": \"abc123\",\n            \"environment_slug\": \"abc123\",\n            \"mcp_server_slug\": \"abc123\"\n         }\n      ],\n      \"model\": \"abc123\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ],\n      \"warm_ttl_seconds\": 1\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantsUpgradeAssistantIdentityUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants upgrade-assistant-identity", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Give an existing assistant its own dedicated agent and per-trigger workload identities. The agent starts with access to every MCP server and skill in the project and to administering this assistant, and is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants upgrade-assistant-identity --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func assistantsUpdateAssistantUsage() {

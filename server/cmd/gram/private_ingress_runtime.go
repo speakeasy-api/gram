@@ -238,6 +238,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if err != nil {
 		return nil, err
 	}
+	assistantIdentities := newAssistantIdentities(c, auditLogger)
 	callbackOrigins, err := callbackOriginsFromCLI(c, serverURL, c.String("environment"), platformHosts)
 	if err != nil {
 		return nil, err
@@ -247,14 +248,14 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, err
 	}
 	identityResolver.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
-	triggerApp := newTriggersApp(logger, db, enc, r.Temporal, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cacheImpl)
+	triggerApp := newTriggersApp(logger, db, enc, r.Temporal, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cacheImpl, assistantIdentities)
 	assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
 	assistantRuntime, err := newAssistantRuntime(ctx, logger, tracerProvider, c, guardianPolicy, db, serverURL)
 	if err != nil {
 		return nil, err
 	}
 	contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cacheImpl)
-	assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, enc, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger)
+	assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, enc, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
 	assistantsCore.SetWakeCanceller(triggerApp)
 	assistantsCore.SetDashboardIngestor(triggerApp)
 	assistantsCore.SetChatMessageWriter(chatWriter)
@@ -263,7 +264,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
 	assistantsCore.SetFeatureProvider(featureFlags)
 	assistantsCore.SetOutboundCallbackOrigin(callbackOrigins.Outbound)
-	triggerApp.RegisterDispatcher(assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: r.Temporal}, ratelimit.NewRedisStore(redisClient)))
+	triggerApp.RegisterDispatcher(assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: r.Temporal}, ratelimit.NewRedisStore(redisClient), featureFlags))
 	platformExtras := append([]platformtools.ExternalTool{}, platformruntime.MemoryExternalTools(memoryService)...)
 	platformExtras = append(platformExtras, platformruntime.AssistantSkillTools(logger, db, platformskills.WithEfficacySignaler(efficacySignaler))...)
 	gcpIdentity := newGCPIdentity(ctx, logger, c)

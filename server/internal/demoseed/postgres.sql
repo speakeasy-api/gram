@@ -436,6 +436,15 @@ BEGIN
   DELETE FROM platform_mcp_catalog_registrations
     WHERE organization_id = demo_org AND project_id = proj_a;
 
+  -- Binding rows point at project resources; clear them by tenant and project
+  -- keys, including rows whose pointers were nulled by resource deletion.
+  DELETE FROM trigger_workload_bindings
+    WHERE organization_id = demo_org AND project_id = proj_a;
+  DELETE FROM assistant_agent_bindings
+    WHERE organization_id = demo_org AND project_id = proj_a;
+  -- Assistants and trigger instances cascade from projects below, together
+  -- with their dependent distributions/attachments. Do not delete them early.
+
   -- assistant_mcp_servers and plugin_servers RESTRICT hard server deletion.
   -- Other direct mcp_servers dependents (meta members, collection attachments,
   -- metadata, endpoints, and tool metadata) cascade. mcp_servers in turn pins
@@ -1386,6 +1395,95 @@ BEGIN
      'DEMO-NOT-A-VALID-HASH-' || demo.det_uuid('gram-demo-workload-refresh-2')::text,
      now() + interval '6 days', now() - interval '30 minutes',
      now() - interval '3 hours', now() - interval '4 days');
+
+  -- One assistant with a dedicated agent and one legacy assistant without.
+  INSERT INTO assistants
+    (id, organization_id, project_id, created_by_user_id, name, model, instructions)
+  VALUES
+    (demo.det_uuid('gram-demo-assistant-bound'), demo_org, proj_a, demo_user_ids[1],
+     'Identity-bound assistant', 'anthropic/claude-sonnet-4.6', 'Help summarize project activity.'),
+    (demo.det_uuid('gram-demo-assistant-legacy'), demo_org, proj_a, demo_user_ids[1],
+     'Legacy assistant', 'anthropic/claude-sonnet-4.6', 'Help summarize project activity.');
+
+  -- The dedicated agent starts with the grants provisioning gives it: every
+  -- MCP server and skill in the assistant's project, and its own assistant.
+  INSERT INTO agents (id, organization_id, project_id, owner_user_id, name)
+  VALUES (demo.det_uuid('gram-demo-assistant-agent'), demo_org, proj_a,
+          demo_user_ids[1], 'Identity-bound assistant agent');
+
+  INSERT INTO principal_grants
+    (id, organization_id, principal_urn, scope, selectors)
+  VALUES
+    (demo.det_uuid('gram-demo-assistant-agent-grant-mcp-connect'), demo_org,
+     'agent:' || demo.det_uuid('gram-demo-assistant-agent')::text, 'mcp:connect',
+     jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*', 'project_id', proj_a::text)),
+    (demo.det_uuid('gram-demo-assistant-agent-grant-mcp-read'), demo_org,
+     'agent:' || demo.det_uuid('gram-demo-assistant-agent')::text, 'mcp:read',
+     jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*', 'project_id', proj_a::text)),
+    (demo.det_uuid('gram-demo-assistant-agent-grant-skill-read'), demo_org,
+     'agent:' || demo.det_uuid('gram-demo-assistant-agent')::text, 'skill:read',
+     jsonb_build_object('resource_kind', 'skill', 'resource_id', proj_a::text)),
+    (demo.det_uuid('gram-demo-assistant-agent-grant-assistant-write'), demo_org,
+     'agent:' || demo.det_uuid('gram-demo-assistant-agent')::text, 'assistant:write',
+     jsonb_build_object('resource_kind', 'assistant',
+                        'resource_id', demo.det_uuid('gram-demo-assistant-bound')::text));
+
+  INSERT INTO trigger_instances
+    (id, organization_id, project_id, definition_slug, name, target_kind, target_ref, target_display)
+  SELECT demo.det_uuid('gram-demo-assistant-dashboard-' || fixture), demo_org, proj_a,
+         'dashboard', name || ' dashboard', 'assistant', id::text, name
+  FROM (VALUES
+    ('bound', demo.det_uuid('gram-demo-assistant-bound'), 'Identity-bound assistant'),
+    ('legacy', demo.det_uuid('gram-demo-assistant-legacy'), 'Legacy assistant')
+  ) AS roots(fixture, id, name);
+
+  -- Inert display fixture: runtime provisioning uses GRAM_AUTHZ_ISSUER_URL and
+  -- the existing Gram JWKS endpoint; this example cannot sign or run work.
+  INSERT INTO workload_issuers
+    (id, organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission)
+  VALUES (demo.det_uuid('gram-demo-assistant-platform-trust'), demo_org, proj_a,
+          'Assistant triggers ' || proj_a::text, 'https://platform.example.invalid',
+          'https://platform.example.invalid/.well-known/jwks.json', FALSE);
+
+  INSERT INTO assistant_agent_bindings
+    (id, organization_id, project_id, project_ref_organization_id, project_ref_id,
+     original_assistant_id, assistant_ref_organization_id, assistant_ref_project_id, assistant_id,
+     original_agent_id, agent_ref_organization_id, agent_ref_project_id, agent_id, generation)
+  VALUES (demo.det_uuid('gram-demo-assistant-binding'), demo_org, proj_a, demo_org, proj_a,
+          demo.det_uuid('gram-demo-assistant-bound'), demo_org, proj_a, demo.det_uuid('gram-demo-assistant-bound'),
+          demo.det_uuid('gram-demo-assistant-agent'), demo_org, proj_a, demo.det_uuid('gram-demo-assistant-agent'), 1);
+
+  -- Bind the dashboard root trigger, never a continuation wake.
+  INSERT INTO trigger_workload_bindings
+    (id, organization_id, project_id, project_ref_organization_id, project_ref_id,
+     original_trigger_id, trigger_ref_organization_id, trigger_ref_project_id, trigger_id,
+     original_assistant_binding_id, assistant_binding_ref_organization_id,
+     assistant_binding_ref_project_id, assistant_binding_id, assistant_binding_generation,
+     original_workload_issuer_id, workload_issuer_ref_organization_id, workload_issuer_ref_project_id,
+     workload_issuer_id, subject, generation)
+  SELECT demo.det_uuid('gram-demo-assistant-root-binding'), demo_org, proj_a, demo_org, proj_a,
+         id, demo_org, proj_a, id,
+         demo.det_uuid('gram-demo-assistant-binding'), demo_org, proj_a,
+         demo.det_uuid('gram-demo-assistant-binding'), 1,
+         demo.det_uuid('gram-demo-assistant-platform-trust'), demo_org, proj_a,
+         demo.det_uuid('gram-demo-assistant-platform-trust'), 'assistant-trigger:' || id::text, 1
+  FROM trigger_instances
+  WHERE organization_id = demo_org AND project_id = proj_a
+    AND definition_slug = 'dashboard' AND target_kind = 'assistant'
+    AND target_ref = demo.det_uuid('gram-demo-assistant-bound')::text
+    AND status = 'active' AND deleted IS FALSE;
+
+  INSERT INTO workload_identity_admissions
+    (id, organization_id, project_id, workload_issuer_id, subject, match_kind, name)
+  SELECT demo.det_uuid('gram-demo-assistant-admission'), demo_org, proj_a,
+         workload_issuer_id, subject, 'exact', 'Identity-bound assistant dashboard'
+  FROM trigger_workload_bindings WHERE organization_id = demo_org AND project_id = proj_a;
+
+  INSERT INTO workload_agent_assignments
+    (id, organization_id, workload_issuer_id, subject, match_kind, agent_id)
+  SELECT demo.det_uuid('gram-demo-assistant-assignment'), demo_org,
+         workload_issuer_id, subject, 'exact', demo.det_uuid('gram-demo-assistant-agent')
+  FROM trigger_workload_bindings WHERE organization_id = demo_org AND project_id = proj_a;
 
   ------------------------------------------------------------------
   -- MCP servers and the Gateway Endpoint fronting them (AGE-3299).
@@ -3327,8 +3425,8 @@ Channel context stays in the Raw view.
 
   SELECT count(*) INTO stray FROM principal_grants
   WHERE organization_id = demo_org AND principal_urn LIKE 'agent:%';
-  IF stray <> 2 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 2 scoped agent grants, found %', stray;
+  IF stray <> 6 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 6 scoped agent grants, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM principal_grants
@@ -3392,8 +3490,8 @@ Channel context stays in the Raw view.
   END IF;
 
   SELECT count(*) INTO stray FROM agents WHERE organization_id = demo_org;
-  IF stray <> 4 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 4 managed agents, found %', stray;
+  IF stray <> 5 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 5 managed agents, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_sessions
@@ -3552,19 +3650,67 @@ Channel context stays in the Raw view.
     RAISE EXCEPTION 'demo seed postflight: % MCP connections have no registration', stray;
   END IF;
 
+  -- The legacy assistant stays without a dedicated agent.
+  SELECT count(*) INTO stray FROM assistants
+  WHERE organization_id = demo_org AND project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 assistants, found %', stray;
+  END IF;
+  SELECT count(*) INTO stray FROM trigger_instances
+  WHERE organization_id = demo_org AND project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 dashboard roots, found %', stray;
+  END IF;
+  SELECT count(*) INTO stray FROM assistant_agent_bindings
+  WHERE organization_id = demo_org AND project_id = proj_a;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 assistant binding, found %', stray;
+  END IF;
+  SELECT count(*) INTO stray FROM trigger_workload_bindings
+  WHERE organization_id = demo_org AND project_id = proj_a;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 root binding, found %', stray;
+  END IF;
+  SELECT count(*) INTO stray
+  FROM trigger_workload_bindings t
+  JOIN assistant_agent_bindings b ON b.id = t.assistant_binding_id
+  JOIN assistants a ON a.id = b.assistant_id
+  JOIN agents ag ON ag.id = b.agent_id
+  JOIN trigger_instances r ON r.id = t.trigger_id
+  JOIN workload_issuers i ON i.id = t.workload_issuer_id
+  JOIN workload_identity_admissions adm ON adm.workload_issuer_id = i.id
+    AND adm.organization_id = demo_org AND adm.project_id = proj_a
+    AND adm.subject = t.subject AND adm.match_kind = 'exact' AND adm.deleted IS FALSE
+  JOIN workload_agent_assignments wa ON wa.workload_issuer_id = i.id
+    AND wa.organization_id = demo_org AND wa.agent_id = ag.id
+    AND wa.subject = t.subject AND wa.match_kind = 'exact' AND wa.deleted IS FALSE
+  WHERE t.organization_id = demo_org AND t.project_id = proj_a
+    AND t.deleted IS FALSE AND b.deleted IS FALSE
+    AND a.id = demo.det_uuid('gram-demo-assistant-bound')
+    AND ag.project_id = proj_a AND ag.owner_user_id = demo_user_ids[1]
+    AND ag.suspended_at IS NULL AND ag.revoked_at IS NULL
+    AND i.issuer = 'https://platform.example.invalid' AND i.jwks_uri = 'https://platform.example.invalid/.well-known/jwks.json' AND i.allow_wildcard_admission IS FALSE
+    AND r.definition_slug = 'dashboard' AND r.target_kind = 'assistant' AND r.target_ref = a.id::text
+    AND t.subject = 'assistant-trigger:' || r.id::text
+    AND (SELECT count(*) FROM principal_grants g
+      WHERE g.organization_id = demo_org AND g.principal_urn = 'agent:' || ag.id::text) = 4;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: identity-bound assistant root is incoherent';
+  END IF;
+
   -- Workload sessions, and the trust configuration that labels them. A
   -- workload whose issuer or assignment went missing would render as an
   -- unnamed issuer with no agent, which is a real state but not the one seeded.
   SELECT count(*) INTO stray FROM workload_issuers
   WHERE organization_id = demo_org AND deleted IS FALSE;
-  IF stray <> 2 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 2 workload issuers, found %', stray;
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 workload issuers, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM workload_identity_admissions
   WHERE organization_id = demo_org AND deleted IS FALSE;
-  IF stray <> 4 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 4 workload admissions, found %', stray;
+  IF stray <> 5 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 5 workload admissions, found %', stray;
   END IF;
 
   -- The seed writes these tables in raw SQL, so it never passes through
@@ -3612,8 +3758,8 @@ Channel context stays in the Raw view.
 
   SELECT count(*) INTO stray FROM workload_agent_assignments
   WHERE organization_id = demo_org AND deleted IS FALSE;
-  IF stray <> 3 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 3 workload agent assignments, found %', stray;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 workload agent assignments, found %', stray;
   END IF;
 
   -- An admission may not out-reach its issuer's tier: an organization-tier

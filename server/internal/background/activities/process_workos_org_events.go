@@ -295,7 +295,7 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 // run by the caller after the transaction commits. workosOrgID is the
 // organization whose event stream is being processed. newOrganizationDefaultHost
 // is recorded on an organization the event creates.
-func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, workosOrgID string, event events.Event, newOrganizationDefaultHost pgtype.Text) (postCommitEffects, error) {
+func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, workosOrgID string, event events.Event, newOrganizationDefaultHost pgtype.Text) (postCommitEffects, error) {
 	var none postCommitEffects
 
 	switch event.Event {

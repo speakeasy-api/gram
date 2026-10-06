@@ -36,6 +36,13 @@ type CreateAssistantRequestBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 }
 
+// UpgradeAssistantIdentityRequestBody is the type of the "assistants" service
+// "upgradeAssistantIdentity" endpoint HTTP request body.
+type UpgradeAssistantIdentityRequestBody struct {
+	// The assistant ID.
+	ID string `form:"id" json:"id" xml:"id"`
+}
+
 // UpdateAssistantRequestBody is the type of the "assistants" service
 // "updateAssistant" endpoint HTTP request body.
 type UpdateAssistantRequestBody struct {
@@ -103,6 +110,12 @@ type GetAssistantResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
+	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
+	// The assistant's dedicated agent ID, when it has one.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -136,6 +149,51 @@ type CreateAssistantResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
+	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
+	// The assistant's dedicated agent ID, when it has one.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// The assistant name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The model identifier used by the assistant.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// The system instructions for the assistant.
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Toolsets available to the assistant.
+	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
+	// MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
+	// Skills attached to the assistant.
+	Skills []*AssistantSkillRefResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
+	// Warm runtime TTL in seconds.
+	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
+	// Maximum active warm runtimes for the assistant.
+	MaxConcurrency *int `form:"max_concurrency,omitempty" json:"max_concurrency,omitempty" xml:"max_concurrency,omitempty"`
+	// The assistant status.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Creation timestamp.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// Last update timestamp.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// UpgradeAssistantIdentityResponseBody is the type of the "assistants" service
+// "upgradeAssistantIdentity" endpoint HTTP response body.
+type UpgradeAssistantIdentityResponseBody struct {
+	// The assistant ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The project ID owning the assistant.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The ID of the user who created the assistant, if known.
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
+	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
+	// The assistant's dedicated agent ID, when it has one.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -169,6 +227,12 @@ type UpdateAssistantResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
+	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
+	// The assistant's dedicated agent ID, when it has one.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -227,6 +291,12 @@ type GetManagedAssistantResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
+	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
+	// The assistant's dedicated agent ID, when it has one.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -260,6 +330,12 @@ type EnsureManagedAssistantResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
+	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
+	// The assistant's dedicated agent ID, when it has one.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -821,6 +897,196 @@ type CreateAssistantUnexpectedResponseBody struct {
 // service "createAssistant" endpoint HTTP response body for the
 // "gateway_error" error.
 type CreateAssistantGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpgradeAssistantIdentityUnauthorizedResponseBody is the type of the
+// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
+// for the "unauthorized" error.
+type UpgradeAssistantIdentityUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpgradeAssistantIdentityForbiddenResponseBody is the type of the
+// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
+// for the "forbidden" error.
+type UpgradeAssistantIdentityForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpgradeAssistantIdentityBadRequestResponseBody is the type of the
+// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
+// for the "bad_request" error.
+type UpgradeAssistantIdentityBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpgradeAssistantIdentityNotFoundResponseBody is the type of the "assistants"
+// service "upgradeAssistantIdentity" endpoint HTTP response body for the
+// "not_found" error.
+type UpgradeAssistantIdentityNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpgradeAssistantIdentityConflictResponseBody is the type of the "assistants"
+// service "upgradeAssistantIdentity" endpoint HTTP response body for the
+// "conflict" error.
+type UpgradeAssistantIdentityConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpgradeAssistantIdentityUnsupportedMediaResponseBody is the type of the
+// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
+// for the "unsupported_media" error.
+type UpgradeAssistantIdentityUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpgradeAssistantIdentityInvalidResponseBody is the type of the "assistants"
+// service "upgradeAssistantIdentity" endpoint HTTP response body for the
+// "invalid" error.
+type UpgradeAssistantIdentityInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpgradeAssistantIdentityInvariantViolationResponseBody is the type of the
+// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
+// for the "invariant_violation" error.
+type UpgradeAssistantIdentityInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpgradeAssistantIdentityUnexpectedResponseBody is the type of the
+// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
+// for the "unexpected" error.
+type UpgradeAssistantIdentityUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// UpgradeAssistantIdentityGatewayErrorResponseBody is the type of the
+// "assistants" service "upgradeAssistantIdentity" endpoint HTTP response body
+// for the "gateway_error" error.
+type UpgradeAssistantIdentityGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1962,6 +2228,12 @@ type AssistantResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
+	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
+	// The assistant's dedicated agent ID, when it has one.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -2084,6 +2356,16 @@ func NewCreateAssistantRequestBody(p *assistants.CreateAssistantPayload) *Create
 			}
 			body.McpServers[i] = marshalTypesAssistantMCPServerRefToAssistantMCPServerRefRequestBody(val)
 		}
+	}
+	return body
+}
+
+// NewUpgradeAssistantIdentityRequestBody builds the HTTP request body from the
+// payload of the "upgradeAssistantIdentity" endpoint of the "assistants"
+// service.
+func NewUpgradeAssistantIdentityRequestBody(p *assistants.UpgradeAssistantIdentityPayload) *UpgradeAssistantIdentityRequestBody {
+	body := &UpgradeAssistantIdentityRequestBody{
+		ID: p.ID,
 	}
 	return body
 }
@@ -2334,6 +2616,8 @@ func NewGetAssistantAssistantOK(body *GetAssistantResponseBody) *types.Assistant
 		ID:              *body.ID,
 		ProjectID:       *body.ProjectID,
 		CreatedByUserID: body.CreatedByUserID,
+		IdentityState:   body.IdentityState,
+		AgentID:         body.AgentID,
 		Name:            *body.Name,
 		Model:           *body.Model,
 		Instructions:    *body.Instructions,
@@ -2528,6 +2812,8 @@ func NewCreateAssistantAssistantOK(body *CreateAssistantResponseBody) *types.Ass
 		ID:              *body.ID,
 		ProjectID:       *body.ProjectID,
 		CreatedByUserID: body.CreatedByUserID,
+		IdentityState:   body.IdentityState,
+		AgentID:         body.AgentID,
 		Name:            *body.Name,
 		Model:           *body.Model,
 		Instructions:    *body.Instructions,
@@ -2715,6 +3001,202 @@ func NewCreateAssistantGatewayError(body *CreateAssistantGatewayErrorResponseBod
 	return v
 }
 
+// NewUpgradeAssistantIdentityAssistantOK builds a "assistants" service
+// "upgradeAssistantIdentity" endpoint result from a HTTP "OK" response.
+func NewUpgradeAssistantIdentityAssistantOK(body *UpgradeAssistantIdentityResponseBody) *types.Assistant {
+	v := &types.Assistant{
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		CreatedByUserID: body.CreatedByUserID,
+		IdentityState:   body.IdentityState,
+		AgentID:         body.AgentID,
+		Name:            *body.Name,
+		Model:           *body.Model,
+		Instructions:    *body.Instructions,
+		WarmTTLSeconds:  *body.WarmTTLSeconds,
+		MaxConcurrency:  *body.MaxConcurrency,
+		Status:          *body.Status,
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
+	}
+	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
+	for i, val := range body.Toolsets {
+		if val == nil {
+			v.Toolsets[i] = nil
+			continue
+		}
+		v.Toolsets[i] = unmarshalAssistantToolsetRefResponseBodyToTypesAssistantToolsetRef(val)
+	}
+	v.McpServers = make([]*types.AssistantMCPServerRef, len(body.McpServers))
+	for i, val := range body.McpServers {
+		if val == nil {
+			v.McpServers[i] = nil
+			continue
+		}
+		v.McpServers[i] = unmarshalAssistantMCPServerRefResponseBodyToTypesAssistantMCPServerRef(val)
+	}
+	v.Skills = make([]*types.AssistantSkillRef, len(body.Skills))
+	for i, val := range body.Skills {
+		if val == nil {
+			v.Skills[i] = nil
+			continue
+		}
+		v.Skills[i] = unmarshalAssistantSkillRefResponseBodyToTypesAssistantSkillRef(val)
+	}
+
+	return v
+}
+
+// NewUpgradeAssistantIdentityUnauthorized builds a assistants service
+// upgradeAssistantIdentity endpoint unauthorized error.
+func NewUpgradeAssistantIdentityUnauthorized(body *UpgradeAssistantIdentityUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpgradeAssistantIdentityForbidden builds a assistants service
+// upgradeAssistantIdentity endpoint forbidden error.
+func NewUpgradeAssistantIdentityForbidden(body *UpgradeAssistantIdentityForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpgradeAssistantIdentityBadRequest builds a assistants service
+// upgradeAssistantIdentity endpoint bad_request error.
+func NewUpgradeAssistantIdentityBadRequest(body *UpgradeAssistantIdentityBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpgradeAssistantIdentityNotFound builds a assistants service
+// upgradeAssistantIdentity endpoint not_found error.
+func NewUpgradeAssistantIdentityNotFound(body *UpgradeAssistantIdentityNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpgradeAssistantIdentityConflict builds a assistants service
+// upgradeAssistantIdentity endpoint conflict error.
+func NewUpgradeAssistantIdentityConflict(body *UpgradeAssistantIdentityConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpgradeAssistantIdentityUnsupportedMedia builds a assistants service
+// upgradeAssistantIdentity endpoint unsupported_media error.
+func NewUpgradeAssistantIdentityUnsupportedMedia(body *UpgradeAssistantIdentityUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpgradeAssistantIdentityInvalid builds a assistants service
+// upgradeAssistantIdentity endpoint invalid error.
+func NewUpgradeAssistantIdentityInvalid(body *UpgradeAssistantIdentityInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpgradeAssistantIdentityInvariantViolation builds a assistants service
+// upgradeAssistantIdentity endpoint invariant_violation error.
+func NewUpgradeAssistantIdentityInvariantViolation(body *UpgradeAssistantIdentityInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpgradeAssistantIdentityUnexpected builds a assistants service
+// upgradeAssistantIdentity endpoint unexpected error.
+func NewUpgradeAssistantIdentityUnexpected(body *UpgradeAssistantIdentityUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewUpgradeAssistantIdentityGatewayError builds a assistants service
+// upgradeAssistantIdentity endpoint gateway_error error.
+func NewUpgradeAssistantIdentityGatewayError(body *UpgradeAssistantIdentityGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewUpdateAssistantAssistantOK builds a "assistants" service
 // "updateAssistant" endpoint result from a HTTP "OK" response.
 func NewUpdateAssistantAssistantOK(body *UpdateAssistantResponseBody) *types.Assistant {
@@ -2722,6 +3204,8 @@ func NewUpdateAssistantAssistantOK(body *UpdateAssistantResponseBody) *types.Ass
 		ID:              *body.ID,
 		ProjectID:       *body.ProjectID,
 		CreatedByUserID: body.CreatedByUserID,
+		IdentityState:   body.IdentityState,
+		AgentID:         body.AgentID,
 		Name:            *body.Name,
 		Model:           *body.Model,
 		Instructions:    *body.Instructions,
@@ -3390,6 +3874,8 @@ func NewGetManagedAssistantAssistantOK(body *GetManagedAssistantResponseBody) *t
 		ID:              *body.ID,
 		ProjectID:       *body.ProjectID,
 		CreatedByUserID: body.CreatedByUserID,
+		IdentityState:   body.IdentityState,
+		AgentID:         body.AgentID,
 		Name:            *body.Name,
 		Model:           *body.Model,
 		Instructions:    *body.Instructions,
@@ -3584,6 +4070,8 @@ func NewEnsureManagedAssistantAssistantOK(body *EnsureManagedAssistantResponseBo
 		ID:              *body.ID,
 		ProjectID:       *body.ProjectID,
 		CreatedByUserID: body.CreatedByUserID,
+		IdentityState:   body.IdentityState,
+		AgentID:         body.AgentID,
 		Name:            *body.Name,
 		Model:           *body.Model,
 		Instructions:    *body.Instructions,
@@ -3835,6 +4323,14 @@ func ValidateGetAssistantResponseBody(body *GetAssistantResponseBody) (err error
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
+	if body.IdentityState != nil {
+		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "UNAVAILABLE") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE"}))
+		}
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
 	for _, e := range body.Toolsets {
 		if e != nil {
 			if err2 := ValidateAssistantToolsetRefResponseBody(e); err2 != nil {
@@ -3918,6 +4414,105 @@ func ValidateCreateAssistantResponseBody(body *CreateAssistantResponseBody) (err
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
+	if body.IdentityState != nil {
+		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "UNAVAILABLE") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE"}))
+		}
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	for _, e := range body.Toolsets {
+		if e != nil {
+			if err2 := ValidateAssistantToolsetRefResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.McpServers {
+		if e != nil {
+			if err2 := ValidateAssistantMCPServerRefResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Skills {
+		if e != nil {
+			if err2 := ValidateAssistantSkillRefResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.Status != nil {
+		if !(*body.Status == "active" || *body.Status == "paused") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "paused"}))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateUpgradeAssistantIdentityResponseBody runs the validations defined on
+// UpgradeAssistantIdentityResponseBody
+func ValidateUpgradeAssistantIdentityResponseBody(body *UpgradeAssistantIdentityResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Model == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("model", "body"))
+	}
+	if body.Instructions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("instructions", "body"))
+	}
+	if body.Toolsets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolsets", "body"))
+	}
+	if body.McpServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_servers", "body"))
+	}
+	if body.Skills == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skills", "body"))
+	}
+	if body.WarmTTLSeconds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("warm_ttl_seconds", "body"))
+	}
+	if body.MaxConcurrency == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("max_concurrency", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.IdentityState != nil {
+		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "UNAVAILABLE") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE"}))
+		}
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
 	for _, e := range body.Toolsets {
 		if e != nil {
 			if err2 := ValidateAssistantToolsetRefResponseBody(e); err2 != nil {
@@ -4000,6 +4595,14 @@ func ValidateUpdateAssistantResponseBody(body *UpdateAssistantResponseBody) (err
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.IdentityState != nil {
+		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "UNAVAILABLE") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE"}))
+		}
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {
@@ -4117,6 +4720,14 @@ func ValidateGetManagedAssistantResponseBody(body *GetManagedAssistantResponseBo
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
+	if body.IdentityState != nil {
+		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "UNAVAILABLE") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE"}))
+		}
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
 	for _, e := range body.Toolsets {
 		if e != nil {
 			if err2 := ValidateAssistantToolsetRefResponseBody(e); err2 != nil {
@@ -4199,6 +4810,14 @@ func ValidateEnsureManagedAssistantResponseBody(body *EnsureManagedAssistantResp
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.IdentityState != nil {
+		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "UNAVAILABLE") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE"}))
+		}
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {
@@ -4934,6 +5553,248 @@ func ValidateCreateAssistantUnexpectedResponseBody(body *CreateAssistantUnexpect
 // ValidateCreateAssistantGatewayErrorResponseBody runs the validations defined
 // on createAssistant_gateway_error_response_body
 func ValidateCreateAssistantGatewayErrorResponseBody(body *CreateAssistantGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpgradeAssistantIdentityUnauthorizedResponseBody runs the
+// validations defined on upgradeAssistantIdentity_unauthorized_response_body
+func ValidateUpgradeAssistantIdentityUnauthorizedResponseBody(body *UpgradeAssistantIdentityUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpgradeAssistantIdentityForbiddenResponseBody runs the validations
+// defined on upgradeAssistantIdentity_forbidden_response_body
+func ValidateUpgradeAssistantIdentityForbiddenResponseBody(body *UpgradeAssistantIdentityForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpgradeAssistantIdentityBadRequestResponseBody runs the validations
+// defined on upgradeAssistantIdentity_bad_request_response_body
+func ValidateUpgradeAssistantIdentityBadRequestResponseBody(body *UpgradeAssistantIdentityBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpgradeAssistantIdentityNotFoundResponseBody runs the validations
+// defined on upgradeAssistantIdentity_not_found_response_body
+func ValidateUpgradeAssistantIdentityNotFoundResponseBody(body *UpgradeAssistantIdentityNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpgradeAssistantIdentityConflictResponseBody runs the validations
+// defined on upgradeAssistantIdentity_conflict_response_body
+func ValidateUpgradeAssistantIdentityConflictResponseBody(body *UpgradeAssistantIdentityConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpgradeAssistantIdentityUnsupportedMediaResponseBody runs the
+// validations defined on
+// upgradeAssistantIdentity_unsupported_media_response_body
+func ValidateUpgradeAssistantIdentityUnsupportedMediaResponseBody(body *UpgradeAssistantIdentityUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpgradeAssistantIdentityInvalidResponseBody runs the validations
+// defined on upgradeAssistantIdentity_invalid_response_body
+func ValidateUpgradeAssistantIdentityInvalidResponseBody(body *UpgradeAssistantIdentityInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpgradeAssistantIdentityInvariantViolationResponseBody runs the
+// validations defined on
+// upgradeAssistantIdentity_invariant_violation_response_body
+func ValidateUpgradeAssistantIdentityInvariantViolationResponseBody(body *UpgradeAssistantIdentityInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpgradeAssistantIdentityUnexpectedResponseBody runs the validations
+// defined on upgradeAssistantIdentity_unexpected_response_body
+func ValidateUpgradeAssistantIdentityUnexpectedResponseBody(body *UpgradeAssistantIdentityUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateUpgradeAssistantIdentityGatewayErrorResponseBody runs the
+// validations defined on upgradeAssistantIdentity_gateway_error_response_body
+func ValidateUpgradeAssistantIdentityGatewayErrorResponseBody(body *UpgradeAssistantIdentityGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -6443,6 +7304,14 @@ func ValidateAssistantResponseBody(body *AssistantResponseBody) (err error) {
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.IdentityState != nil {
+		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "UNAVAILABLE") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE"}))
+		}
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
 	}
 	for _, e := range body.Toolsets {
 		if e != nil {

@@ -162,6 +162,7 @@ trackedFiles:
   src/funcs/assistantsList.ts: {}
   src/funcs/assistantsSendMessage.ts: {}
   src/funcs/assistantsUpdate.ts: {}
+  src/funcs/assistantsUpgradeIdentity.ts: {}
   src/funcs/auditlogsList.ts: {}
   src/funcs/auditlogsListFacets.ts: {}
   src/funcs/authCallback.ts: {}
@@ -2688,6 +2689,7 @@ trackedFiles:
   src/models/operations/updatewidget.ts: {}
   src/models/operations/updateworkloadissuer.ts: {}
   src/models/operations/updateworkloadsubject.ts: {}
+  src/models/operations/upgradeassistantidentity.ts: {}
   src/models/operations/uploadchatattachment.ts: {}
   src/models/operations/uploadfunctions.ts: {}
   src/models/operations/uploadimage.ts: {}
@@ -2787,6 +2789,7 @@ trackedFiles:
   src/react-query/assistantsList.core.ts: {}
   src/react-query/assistantsList.ts: {}
   src/react-query/assistantsUpdate.ts: {}
+  src/react-query/assistantsUpgradeIdentity.ts: {}
   src/react-query/attachOrganizationRemoteSessionClientKeySet.ts: {}
   src/react-query/attachRemoteSessionClientKeySet.ts: {}
   src/react-query/attachUserSessionIssuer.ts: {}
@@ -12746,6 +12749,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  upgradeAssistantIdentity:
+    speakeasy-default-upgrade-assistant-identity:
+      requestBody:
+        application/json: {"id": "66fcd9ef-f51b-424d-af16-24d2bb60b923"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-06-06T05:39:10.842Z", "id": "d7760fca-c2db-4e72-9ab0-828c2d13fc00", "instructions": "<value>", "max_concurrency": 893719, "mcp_servers": [], "model": "Mercielago", "name": "<value>", "project_id": "d2e1343b-df24-4f2b-b22c-013960045716", "skills": [], "status": "active", "toolsets": [{"toolset_slug": "<value>"}], "updated_at": "2025-02-16T09:47:18.267Z", "warm_ttl_seconds": 331426}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   uploadChatAttachment:
     speakeasy-default-upload-chat-attachment:
       parameters:

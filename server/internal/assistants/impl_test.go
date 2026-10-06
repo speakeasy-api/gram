@@ -547,6 +547,7 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 
 	conn, err := assistantsInfra.CloneTestDatabase(t, dbName)
 	require.NoError(t, err)
+	seedIdentityMembers(t, conn)
 
 	proj, err := projectsRepo.New(conn).CreateProject(t.Context(), projectsRepo.CreateProjectParams{
 		Name:           "Project",
@@ -564,8 +565,9 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 		logger:   logger,
 		auth:     nil,
 		authz:    authzEngine,
-		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger()),
+		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn)),
 		signaler: &stubWorkflowSignaler{signalledThreads: nil},
+		features: identityFlags(true),
 	}
 
 	sessionID := "session-test"
