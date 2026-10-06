@@ -94,44 +94,6 @@ func (q *Queries) DeleteProjectEMATombstones(ctx context.Context, arg DeleteProj
 	return err
 }
 
-const deleteProjectRiskExecutionEvidence = `-- name: DeleteProjectRiskExecutionEvidence :execrows
-DELETE FROM risk_execution_evidence
-WHERE project_id = $1
-  AND organization_id = $2
-`
-
-type DeleteProjectRiskExecutionEvidenceParams struct {
-	ProjectID      uuid.UUID
-	OrganizationID string
-}
-
-func (q *Queries) DeleteProjectRiskExecutionEvidence(ctx context.Context, arg DeleteProjectRiskExecutionEvidenceParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteProjectRiskExecutionEvidence, arg.ProjectID, arg.OrganizationID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteProjectRiskFindingEvidence = `-- name: DeleteProjectRiskFindingEvidence :execrows
-DELETE FROM risk_finding_evidence
-WHERE project_id = $1
-  AND organization_id = $2
-`
-
-type DeleteProjectRiskFindingEvidenceParams struct {
-	ProjectID      uuid.UUID
-	OrganizationID string
-}
-
-func (q *Queries) DeleteProjectRiskFindingEvidence(ctx context.Context, arg DeleteProjectRiskFindingEvidenceParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteProjectRiskFindingEvidence, arg.ProjectID, arg.OrganizationID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const getFirstProject = `-- name: GetFirstProject :one
 SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 FROM projects

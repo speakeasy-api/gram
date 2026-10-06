@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
@@ -54,7 +53,8 @@ func TestProjectsService_DeleteProject_CreatesAuditLog(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
-func TestProjectsService_DeleteProject_RemovesMCPFindingEvidence(t *testing.T) {
+// Evidence outlives a deleted project and ages out with the 90-day sweep.
+func TestProjectsService_DeleteProject_RetainsMCPFindingEvidence(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestProjectsService(t)
@@ -92,7 +92,7 @@ func TestProjectsService_DeleteProject_RemovesMCPFindingEvidence(t *testing.T) {
 		FindingID:      findingID,
 		Now:            conv.ToPGTimestamptz(now),
 	})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.NoError(t, err)
 	_, err = evidenceRepo.GetMCPExecutionEvidence(ctx, riskrepo.GetMCPExecutionEvidenceParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      project.ID,
@@ -100,7 +100,7 @@ func TestProjectsService_DeleteProject_RemovesMCPFindingEvidence(t *testing.T) {
 		Phase:          "request",
 		Now:            conv.ToPGTimestamptz(now),
 	})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.NoError(t, err)
 }
 
 func TestProjectsService_DeleteProject_InvalidIDDoesNotCreateAuditLog(t *testing.T) {
