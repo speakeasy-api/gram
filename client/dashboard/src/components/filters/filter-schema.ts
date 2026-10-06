@@ -94,9 +94,10 @@ interface BaseDimension<K extends FilterKind> {
   placeholder?: string;
   /**
    * Overrides the empty-state "All …" label for select/multiselect dimensions
-   * (the chip and the sheet's "all" option). Defaults to `All <pluralized
-   * label>`; set this when the pluralized noun reads oddly (e.g. `allLabel:
-   * "All"` for a Risk filter instead of "All risks").
+   * (the chip and the sheet's "all" option), and a date range's "All time".
+   * Defaults to `All <pluralized label>`; set this when the pluralized noun
+   * reads oddly (e.g. `allLabel: "All"` for a Risk filter instead of "All
+   * risks").
    */
   allLabel?: string;
   /**
@@ -249,10 +250,14 @@ const PRESET_LABELS: Record<string, string> = {
   "90d": "Last 90 days",
 };
 
-function dateRangeLabel(value: DateRangeValue): string {
+/**
+ * A date range as its chip reads. With nothing picked it reads "All time",
+ * or the dimension's `allLabel` where nothing picked means something else.
+ */
+function dateRangeLabel(value: DateRangeValue, dim: FilterDimension): string {
   if (value.customRange) return value.customLabel ?? "Custom range";
   if (value.preset) return PRESET_LABELS[value.preset] ?? value.preset;
-  return "All time";
+  return dim.allLabel ?? "All time";
 }
 
 /**
@@ -277,7 +282,7 @@ export function chipLabel(
 ): string {
   switch (dim.kind) {
     case "daterange":
-      return dateRangeLabel(value as DateRangeValue);
+      return dateRangeLabel(value as DateRangeValue, dim);
     case "select": {
       const v = value as string | null;
       return v ? optionLabel(v, options) : allLabelFor(dim);

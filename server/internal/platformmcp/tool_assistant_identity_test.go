@@ -41,7 +41,7 @@ func TestAssistantIdentityToolContract(t *testing.T) {
 	t.Parallel()
 	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "live", Version: "1"}, nil))
 	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "unavailable", Version: "1"}, nil))
-	registerAssistantIdentityTool(live, &assistantIdentityService{})
+	registerAssistantIdentityTool(live, &AssistantIdentityService{})
 	registerAssistantIdentityTool(unavailable, nil)
 	a := descriptorByName(t, live, upgradeAssistantIdentityToolName)
 	b := descriptorByName(t, unavailable, upgradeAssistantIdentityToolName)
@@ -55,10 +55,7 @@ func TestAssistantIdentityToolContract(t *testing.T) {
 		require.Contains(t, string(a.InputSchema), field)
 	}
 	require.Contains(t, a.Description, "project:write")
-	require.Contains(t, a.Description, "without configured workload identity (NEVER_CONFIGURED)")
-	require.Contains(t, a.Description, "Repeating an already active upgrade is safe")
-	require.NotContains(t, a.Description, "legacy")
-	require.Contains(t, string(a.InputSchema), "NEVER_CONFIGURED")
+	require.Contains(t, a.Description, "Repeating the upgrade is safe")
 	require.Contains(t, a.Description, "ACTIVE does not prove")
 	ctx := contextWithPrincipal(t.Context(), Principal{OrganizationID: "test-org", UserID: "test-user"})
 	_, err := b.Invoke(ctx, []byte(`{"project_id":"`+uuid.NewString()+`","assistant_id":"`+uuid.NewString()+`","confirmed":true}`))
@@ -76,9 +73,9 @@ func TestAssistantIdentityUpgradeUsesAuthorizedEndpointAndSafeProjection(t *test
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, SessionID: &sessionID}, actor)
 	grants := []authz.Grant{authz.NewGrant(authz.ScopeProjectWrite, projectID.String())}
 	ctx = authz.GrantsToContext(ctx, grants)
-	state, agentID, generation := "ACTIVE", uuid.NewString(), int64(3)
+	state, agentID := "ACTIVE", uuid.NewString()
 	calls := 0
-	service := &assistantIdentityService{
+	service := &AssistantIdentityService{
 		resolveProject: func(_ context.Context, org string, input FindMCPInput) (ResolvedProject, error) {
 			require.Equal(t, principal.OrganizationID, org)
 			require.Equal(t, projectID.String(), input.ProjectID)
@@ -98,7 +95,7 @@ func TestAssistantIdentityUpgradeUsesAuthorizedEndpointAndSafeProjection(t *test
 			gotGrants, ok := authz.GrantsFromContext(ctx)
 			require.True(t, ok)
 			require.Equal(t, grants, gotGrants)
-			return &types.Assistant{ID: assistantID.String(), ProjectID: projectID.String(), IdentityState: &state, AgentID: &agentID, IdentityGeneration: &generation, Instructions: "private instructions", CreatedByUserID: new("private creator")}, nil
+			return &types.Assistant{ID: assistantID.String(), ProjectID: projectID.String(), IdentityState: &state, AgentID: &agentID, Instructions: "private instructions", CreatedByUserID: new("private creator")}, nil
 		}),
 	}
 	input := UpgradeAssistantIdentityInput{ProjectID: projectID.String(), AssistantID: assistantID.String(), Confirmed: true}
@@ -106,7 +103,7 @@ func TestAssistantIdentityUpgradeUsesAuthorizedEndpointAndSafeProjection(t *test
 		output, err := service.upgrade(ctx, principal, input)
 		require.NoError(t, err)
 		require.Equal(t, &state, output.IdentityState)
-		require.Equal(t, &generation, output.IdentityGeneration)
+		require.Equal(t, &agentID, output.AgentID)
 		encoded, err := json.Marshal(output)
 		require.NoError(t, err)
 		require.NotContains(t, string(encoded), "private")
@@ -129,7 +126,7 @@ func TestAssistantIdentityUpgradeRejectsAmbiguousUnconfirmedAndHiddenTargets(t *
 	projectID, assistantID := uuid.NewString(), uuid.NewString()
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	resolutions := 0
-	service := &assistantIdentityService{
+	service := &AssistantIdentityService{
 		resolveProject: func(context.Context, string, FindMCPInput) (ResolvedProject, error) {
 			resolutions++
 			return ResolvedProject{}, ErrForbidden
@@ -186,7 +183,7 @@ func TestAssistantIdentityAPIAndMCPRequireSameProjectWrite(t *testing.T) {
 	auth := &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &projectID}
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), auth, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
-	service := &assistantIdentityService{management: management, resolveProject: func(context.Context, string, FindMCPInput) (ResolvedProject, error) {
+	service := &AssistantIdentityService{management: management, resolveProject: func(context.Context, string, FindMCPInput) (ResolvedProject, error) {
 		return ResolvedProject{ID: projectID}, nil
 	}}
 	for _, grants := range [][]authz.Grant{nil, {authz.NewGrant(authz.ScopeProjectWrite, uuid.NewString())}, {authz.NewGrant(authz.ScopeProjectRead, projectID.String())}} {
@@ -201,7 +198,7 @@ func TestAssistantIdentityAPIAndMCPRequireSameProjectWrite(t *testing.T) {
 	}
 }
 
-func TestAssistantIdentityTrustedOAuthUpgradeMatchesAPI(t *testing.T) {
+func TestAssistantIdentityOAuthUpgradeMatchesAPI(t *testing.T) {
 	t.Parallel()
 	db, err := platformMCPInfra.CloneTestDatabase(t, "platform_assistant_identity_oauth")
 	require.NoError(t, err)
@@ -219,33 +216,30 @@ func TestAssistantIdentityTrustedOAuthUpgradeMatchesAPI(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	engine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	tracer, meter := testenv.NewTracerProvider(t), testenv.NewMeterProvider(t)
-	identities, err := assistantidentity.New("https://platform.example.invalid", false)
-	require.NoError(t, err)
-	core := assistants.NewServiceCore(logger, tracer, meter, db, nil, nil, nil, nil, nil, nil, telemetry.NewStub(logger), nil, audit.NewLogger(), identities)
+	identities := assistantidentity.New("https://platform.example.invalid", audit.NewLogger())
+	core := assistants.NewServiceCore(logger, tracer, meter, db, nil, nil, nil, nil, nil, nil, telemetry.NewStub(logger), nil, audit.NewLogger(), identities, engine)
 	management := assistants.NewService(logger, tracer, meter, db, &sessions.Manager{}, engine, core, nil, nil)
-	reader := NewPostgresReader(logger, db, management)
+	service := NewAssistantIdentityService(management, NewPostgresReader(logger, db))
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = contextWithPrincipal(ctx, principal)
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID), authz.NewGrant(authz.ScopeProjectWrite, project.ID.String())})
 	clientID, ok := contextvalues.GetOAuthClientID(ctx)
 	require.True(t, ok)
 	require.Equal(t, principal.ClientID, clientID)
-	output, err := reader.assistantIdentity.upgrade(ctx, principal, UpgradeAssistantIdentityInput{ProjectID: project.ID.String(), AssistantID: legacy.ID.String(), Confirmed: true})
-	require.NoError(t, err, "trusted Platform MCP OAuth attribution must not reject the ordinary user")
+	output, err := service.upgrade(ctx, principal, UpgradeAssistantIdentityInput{ProjectID: project.ID.String(), AssistantID: legacy.ID.String(), Confirmed: true})
+	require.NoError(t, err, "Platform MCP OAuth users can upgrade")
 	require.Equal(t, "ACTIVE", *output.IdentityState)
 	require.NotEmpty(t, output.AgentID)
-	require.NotNil(t, output.IdentityGeneration)
 	// The API shares the same idempotent endpoint and must return the same
-	// committed identity, rather than creating another agent or generation.
+	// committed identity rather than creating another agent.
 	api, err := management.UpgradeAssistantIdentity(ctx, &genassistants.UpgradeAssistantIdentityPayload{ID: legacy.ID.String()})
 	require.NoError(t, err)
 	require.Equal(t, api.IdentityState, output.IdentityState)
 	require.Equal(t, api.AgentID, output.AgentID)
-	require.Equal(t, api.IdentityGeneration, output.IdentityGeneration)
-	count, err := audittest.AuditLogCountByAction(ctx, db, audit.Action("assistant:identity_provision"))
+	count, err := audittest.AuditLogCountByAction(ctx, db, audit.ActionAssistantIdentityProvision)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count, "idempotent API retry must not duplicate the committed provisioning audit")
-	event, err := audittest.LatestAuditLogByAction(ctx, db, audit.Action("assistant:identity_provision"))
+	event, err := audittest.LatestAuditLogByAction(ctx, db, audit.ActionAssistantIdentityProvision)
 	require.NoError(t, err)
 	require.Equal(t, principal.UserID, event.ActorID)
 	require.Equal(t, principal.OrganizationID, event.OrganizationID)
@@ -254,15 +248,4 @@ func TestAssistantIdentityTrustedOAuthUpgradeMatchesAPI(t *testing.T) {
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(event.Metadata, &metadata))
 	require.Equal(t, *output.AgentID, metadata["agent_id"])
-	require.EqualValues(t, *output.IdentityGeneration, metadata["generation"])
-
-	clientID, ok = contextvalues.GetOAuthClientID(ctx)
-	require.True(t, ok)
-	require.Equal(t, principal.ClientID, clientID, "upgrade must not discard OAuth audit provenance")
-	// The exception is the trusted acting surface, not OAuth provenance alone.
-	untrusted := contextvalues.SetActingSurface(ctx, "dashboard")
-	_, err = management.UpgradeAssistantIdentity(untrusted, &genassistants.UpgradeAssistantIdentityPayload{ID: legacy.ID.String()})
-	var denied *oops.ShareableError
-	require.ErrorAs(t, err, &denied)
-	require.Equal(t, oops.CodeForbidden, denied.Code)
 }

@@ -38,6 +38,17 @@ const (
 	directRemoteSourceKind        = "remote_url"
 )
 
+// oauth_discovery values for an endpoint that answered with an authentication
+// challenge. available_dcr and available_cimd name the automatic client
+// registration path its provider offers; available means the provider
+// advertises OAuth but neither path; incomplete means no usable metadata.
+const (
+	oauthDiscoveryAvailableDCR  = "available_dcr"
+	oauthDiscoveryAvailableCIMD = "available_cimd"
+	oauthDiscoveryAvailable     = "available"
+	oauthDiscoveryIncomplete    = "incomplete"
+)
+
 var (
 	ErrDirectRemoteRejected    = errors.New("direct remote MCP URL rejected")
 	ErrDirectRemoteUnavailable = errors.New("direct remote MCP inspection unavailable")
@@ -381,7 +392,7 @@ func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, cl
 		}
 		if setupCategoryFromError(err) == SetupCategoryTemporarilyUnavailable {
 			if available {
-				return "available", nil
+				return oauthDiscoveryAvailable, nil
 			}
 			return "", err
 		}
@@ -407,24 +418,55 @@ func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, cl
 				}
 				if setupCategoryFromError(err) == SetupCategoryTemporarilyUnavailable {
 					if available {
-						return "available", nil
+						return oauthDiscoveryAvailable, nil
 					}
 					return "", err
 				}
 				if err != nil || status != http.StatusOK {
 					continue
 				}
-				if endpoint, _ := authorizationMetadata["registration_endpoint"].(string); endpoint != "" {
-					return "available_dcr", nil
+				if discovery := directRemoteAutomaticRegistration(authorizationMetadata); discovery != "" {
+					return discovery, nil
 				}
 				available = true
 			}
 		}
 	}
 	if available {
-		return "available", nil
+		return oauthDiscoveryAvailable, nil
 	}
-	return "incomplete", nil
+	return oauthDiscoveryIncomplete, nil
+}
+
+// directRemoteAutomaticRegistration names the automatic client registration
+// path one authorization server's metadata offers, or "" when it offers none.
+// It prefers the path attachment takes: dynamic client registration when
+// attachment can use it, then a Client ID Metadata Document under the
+// predicate the dashboard's automatic setup and attachment share. A valid
+// dynamic registration endpoint attachment cannot use still counts, since the
+// dashboard's automatic setup registers public clients through it.
+func directRemoteAutomaticRegistration(metadata map[string]any) string {
+	endpoint, _ := metadata["registration_endpoint"].(string)
+	supported, _ := metadata["client_id_metadata_document_supported"].(bool)
+	var methods []string
+	if advertised, ok := metadata["token_endpoint_auth_methods_supported"].([]any); ok {
+		methods = make([]string, 0, len(advertised))
+		for _, method := range advertised {
+			if name, ok := method.(string); ok {
+				methods = append(methods, name)
+			}
+		}
+	}
+	switch {
+	case attachmentCanUseDynamicRegistration(endpoint, methods):
+		return oauthDiscoveryAvailableDCR
+	case remotesessions.SupportsClientIDMetadataDocument(supported, methods):
+		return oauthDiscoveryAvailableCIMD
+	case validDynamicClientRegistrationEndpoint(endpoint):
+		return oauthDiscoveryAvailableDCR
+	default:
+		return ""
+	}
 }
 
 func transientDirectRemoteMetadataStatus(status int) bool {

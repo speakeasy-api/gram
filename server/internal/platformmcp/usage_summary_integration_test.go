@@ -49,7 +49,7 @@ func TestGetToolUsageSummaryAttributesToConfiguredServers(t *testing.T) {
 		},
 	}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).WithAuthorization(engine)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
 	service := NewDiagnosticsService(conn, stubUsageSummaryTelemetry{}, func(context.Context, string) (bool, error) { return false, nil }, reader, nil,
 		OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}).
 		WithToolUsageBreakdown(toolUsage)
@@ -131,7 +131,7 @@ func TestGetToolUsageSummaryRequiresProjectRead(t *testing.T) {
 
 	toolUsage := &recordingToolUsageReader{}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).WithAuthorization(engine)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
 	service := NewDiagnosticsService(conn, stubUsageSummaryTelemetry{}, func(context.Context, string) (bool, error) { return false, nil }, reader, nil,
 		OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}).
 		WithToolUsageBreakdown(toolUsage)
@@ -172,7 +172,7 @@ func TestGetToolUsageSummaryReportsTruncationOnlyWhenATargetWasOmitted(t *testin
 		usageRow(telemetryrepo.ToolUsageTargetTypeSkill, "skill-sentinel", "skill-sentinel", sentinelCalls, 0))
 
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).WithAuthorization(engine)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
 
 	for _, test := range []struct {
 		name      string

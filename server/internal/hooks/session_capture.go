@@ -79,6 +79,11 @@ func (s *Service) ensureHookChat(
 		if existing != projectID {
 			return errChatProjectMismatch
 		}
+		if metadata.SessionID != "" && sessionIDToUUID(metadata.SessionID) == chatID {
+			if err := queries.RecordCapturedSessionID(ctx, repo.RecordCapturedSessionIDParams{ChatID: chatID, ProjectID: projectID, SessionID: metadata.SessionID}); err != nil {
+				return fmt.Errorf("record captured session id: %w", err)
+			}
+		}
 		return nil
 	case !errors.Is(err, pgx.ErrNoRows):
 		return fmt.Errorf("get chat project: %w", err)
@@ -99,6 +104,11 @@ func (s *Service) ensureHookChat(
 		return errChatProjectMismatch
 	case err != nil:
 		return fmt.Errorf("upsert claude code session: %w", err)
+	}
+	if metadata.SessionID != "" && sessionIDToUUID(metadata.SessionID) == chatID {
+		if err := queries.RecordCapturedSessionID(ctx, repo.RecordCapturedSessionIDParams{ChatID: chatID, ProjectID: projectID, SessionID: metadata.SessionID}); err != nil {
+			return fmt.Errorf("record captured session id: %w", err)
+		}
 	}
 	return nil
 }
@@ -574,6 +584,17 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 		}
 	}
 
+	writes := []chat.MessageWrite{{
+		Params:         msgParams,
+		BillingUserID:  metadata.UserID,
+		AssistantID:    uuid.Nil,
+		WorkloadSource: metering.WorkloadSourceHook,
+		UserEmail:      metadata.UserEmail,
+		Provider:       metadata.Provider,
+		HookHostname:   metadata.Hostname,
+		AccountType:    metadata.AccountType,
+		BillingMode:    metadata.BillingMode,
+	}}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin prompt correlation transaction: %w", err)
@@ -605,17 +626,6 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 	if err := s.ensureHookChat(ctx, repo.New(tx), metadata, msgParams.ChatID, projectID, defaultTitle); err != nil {
 		return false, err
 	}
-	writes := []chat.MessageWrite{{
-		Params:         msgParams,
-		BillingUserID:  metadata.UserID,
-		AssistantID:    uuid.Nil,
-		WorkloadSource: metering.WorkloadSourceHook,
-		UserEmail:      metadata.UserEmail,
-		Provider:       metadata.Provider,
-		HookHostname:   metadata.Hostname,
-		AccountType:    metadata.AccountType,
-		BillingMode:    metadata.BillingMode,
-	}}
 	n, err := s.writer.WriteInTx(ctx, tx, writes)
 	if err != nil {
 		return false, fmt.Errorf("insert uncorrelated agent prompt: %w", err)

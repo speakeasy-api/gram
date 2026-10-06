@@ -22,9 +22,7 @@ const (
 	bootstrapRateBurst    = 60
 	bootstrapRatePerMin   = 60
 	bootstrapMaxBodyBytes = 4 * 1024
-	// Schema caps max_concurrency at 100. Each turn attempt makes one
-	// bootstrap call. Allow all 100 slots at the per-thread sustained rate,
-	// but only one simultaneous wave, not 60 bursts for every thread ID.
+	// One burst covers the schema's max_concurrency of 100 threads.
 	bootstrapAggregateBurst      = 100
 	bootstrapAggregateRatePerMin = 100 * bootstrapRatePerMin
 )
@@ -103,32 +101,26 @@ func (s *Service) handleGetThreadBootstrap(w http.ResponseWriter, r *http.Reques
 	return nil
 }
 
-// Per-thread limits run first so a single hot thread cannot drain the shared
-// allowance. Both guards use the existing distributed Store and fail-open
-// outage behavior; exceeding either healthy bucket is a real throttle.
+// Thread-bound credentials take a per-thread bucket first so one hot thread
+// cannot drain the assistant-wide allowance. A Store outage is not a throttle;
+// fail open rather than wedge bootstrap.
 func (s *Service) allowBootstrap(ctx context.Context, assistantID, tokenThreadID uuid.UUID) error {
-	rateKey := assistantID.String()
-	if tokenThreadID != uuid.Nil {
-		rateKey += ":" + tokenThreadID.String()
+	key := assistantID.String()
+	if tokenThreadID == uuid.Nil {
+		return s.allowBootstrapKey(ctx, s.bootstrapLimiter, assistantID, key)
 	}
-	for _, guard := range []struct {
-		limiter *ratelimit.Limiter
-		key     string
-	}{
-		{s.bootstrapLimiter, rateKey},
-		{s.bootstrapAggregateLimiter, assistantID.String()},
-	} {
-		switch res, err := guard.limiter.Allow(ctx, guard.key); {
-		case err != nil:
-			s.logger.WarnContext(ctx, "bootstrap rate limiter unavailable, allowing", attr.SlogError(err), attr.SlogAssistantID(assistantID.String()))
-		case !res.Allowed:
-			return oops.E(oops.CodeRateLimitExceeded, nil, "thread bootstrap rate limit exceeded")
-		}
-		if tokenThreadID == uuid.Nil {
-			// Legacy credentials use only their original assistant-wide bucket;
-			// bound-thread traffic must not consume their independent allowance.
-			return nil
-		}
+	if err := s.allowBootstrapKey(ctx, s.bootstrapLimiter, assistantID, key+":"+tokenThreadID.String()); err != nil {
+		return err
+	}
+	return s.allowBootstrapKey(ctx, s.bootstrapAggregateLimiter, assistantID, key)
+}
+
+func (s *Service) allowBootstrapKey(ctx context.Context, limiter *ratelimit.Limiter, assistantID uuid.UUID, key string) error {
+	switch res, err := limiter.Allow(ctx, key); {
+	case err != nil:
+		s.logger.WarnContext(ctx, "bootstrap rate limiter unavailable, allowing", attr.SlogError(err), attr.SlogAssistantID(assistantID.String()))
+	case !res.Allowed:
+		return oops.E(oops.CodeRateLimitExceeded, nil, "thread bootstrap rate limit exceeded")
 	}
 	return nil
 }

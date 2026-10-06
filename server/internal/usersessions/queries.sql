@@ -52,6 +52,20 @@ WHERE id = @id
   AND (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id = @organization_id::text))
   AND deleted IS FALSE;
 
+-- name: GetSharedUserSessionIssuerByID :one
+-- Loads an issuer by id alone for its shared authorization server, served at
+-- <origin>/oauth/usi/{id}. That URL carries no project or organization, so
+-- the id is the only scope available; callers must confirm the issuer is in
+-- 'shared' mode before serving anything for it. The organization is resolved
+-- through the owning project for project-level issuers.
+SELECT
+    sqlc.embed(issuer),
+    COALESCE(issuer.organization_id, project.organization_id)::text AS resolved_organization_id
+FROM user_session_issuers AS issuer
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE issuer.id = @id
+  AND issuer.deleted IS FALSE;
+
 -- name: GetProjectUserSessionIssuerByID :one
 SELECT *
 FROM user_session_issuers
@@ -1765,7 +1779,8 @@ INSERT INTO user_sessions (
     refresh_token_hash,
     refresh_expires_at,
     expires_at,
-    tool_selection
+    tool_selection,
+    resource
 )
 SELECT
     issuer.project_id,
@@ -1780,7 +1795,8 @@ SELECT
     @refresh_token_hash,
     @refresh_expires_at,
     @expires_at,
-    @tool_selection
+    @tool_selection,
+    sqlc.narg('resource')
 FROM issuer
 RETURNING *;
 

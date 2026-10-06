@@ -442,6 +442,8 @@ func (s *Service) placeRemoteSessionRecheck(ctx context.Context, logger *slog.Lo
 		ToolsetID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		McpSlug:         placement.Slug,
 		RouteBase:       "mcp",
+
+		SharedAuthorizationServer: false,
 	}
 	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, ref)
 	if errors.Is(err, mcpendpoints.ErrPolicyDenied) {

@@ -90,6 +90,10 @@ export type OktaResourceConnectionServer = {
    */
   audience?: string | undefined;
   /**
+   * The server's authorization server issuer; the Issuer URL to enter when enabling Cross App Access on a resource app. Omitted when unknown.
+   */
+  authorizationServerIssuer?: string | undefined;
+  /**
    * Present when state is broken. audience_mismatch: legacy value, no longer emitted; the administrator-confirmed Okta audience may differ from the server's authorization server issuer; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app's client authentication; downstream_rejected: the identity provider issued the assertion but the server's authorization server refused it.
    */
   brokenReason?: BrokenReason | undefined;
@@ -195,6 +199,7 @@ export const OktaResourceConnectionServer$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     audience: z.optional(z.string()),
+    authorization_server_issuer: z.optional(z.string()),
     broken_reason: z.optional(BrokenReason$inboundSchema),
     client_binding: ClientBinding$inboundSchema,
     client_id: z.optional(z.string()),
@@ -222,6 +227,7 @@ export const OktaResourceConnectionServer$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "authorization_server_issuer": "authorizationServerIssuer",
       "broken_reason": "brokenReason",
       "client_binding": "clientBinding",
       "client_id": "clientId",

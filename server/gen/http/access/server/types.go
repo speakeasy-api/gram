@@ -469,6 +469,16 @@ type ListAudienceOptionsResponseBody struct {
 	Options []*AudienceOptionResponseBody `form:"options" json:"options" xml:"options"`
 }
 
+// ExplainResourceAccessResponseBody is the type of the "access" service
+// "explainResourceAccess" endpoint HTTP response body.
+type ExplainResourceAccessResponseBody struct {
+	// Who may connect without a rule. public: connecting is not checked against
+	// rules. private: rules decide. disabled: nobody can connect.
+	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+	// The decision for use, view and manage, in that order.
+	Levels []*ExplainedAccessLevelResponseBody `form:"levels" json:"levels" xml:"levels"`
+}
+
 // RequestAccessResponseBody is the type of the "access" service
 // "requestAccess" endpoint HTTP response body.
 type RequestAccessResponseBody struct {
@@ -5333,6 +5343,195 @@ type ListAudienceOptionsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ExplainResourceAccessUnauthorizedResponseBody is the type of the "access"
+// service "explainResourceAccess" endpoint HTTP response body for the
+// "unauthorized" error.
+type ExplainResourceAccessUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExplainResourceAccessForbiddenResponseBody is the type of the "access"
+// service "explainResourceAccess" endpoint HTTP response body for the
+// "forbidden" error.
+type ExplainResourceAccessForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExplainResourceAccessBadRequestResponseBody is the type of the "access"
+// service "explainResourceAccess" endpoint HTTP response body for the
+// "bad_request" error.
+type ExplainResourceAccessBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExplainResourceAccessNotFoundResponseBody is the type of the "access"
+// service "explainResourceAccess" endpoint HTTP response body for the
+// "not_found" error.
+type ExplainResourceAccessNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExplainResourceAccessConflictResponseBody is the type of the "access"
+// service "explainResourceAccess" endpoint HTTP response body for the
+// "conflict" error.
+type ExplainResourceAccessConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExplainResourceAccessUnsupportedMediaResponseBody is the type of the
+// "access" service "explainResourceAccess" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ExplainResourceAccessUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExplainResourceAccessInvalidResponseBody is the type of the "access" service
+// "explainResourceAccess" endpoint HTTP response body for the "invalid" error.
+type ExplainResourceAccessInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExplainResourceAccessInvariantViolationResponseBody is the type of the
+// "access" service "explainResourceAccess" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ExplainResourceAccessInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExplainResourceAccessUnexpectedResponseBody is the type of the "access"
+// service "explainResourceAccess" endpoint HTTP response body for the
+// "unexpected" error.
+type ExplainResourceAccessUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExplainResourceAccessGatewayErrorResponseBody is the type of the "access"
+// service "explainResourceAccess" endpoint HTTP response body for the
+// "gateway_error" error.
+type ExplainResourceAccessGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RequestAccessUnauthorizedResponseBody is the type of the "access" service
 // "requestAccess" endpoint HTTP response body for the "unauthorized" error.
 type RequestAccessUnauthorizedResponseBody struct {
@@ -6292,8 +6491,8 @@ type SelectorResponseBody struct {
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP scopes only). When set with resource_id='*', grants
-	// access to all servers in the project.
+	// Project filter (MCP, environment, and assistant scopes). When set with
+	// resource_id='*', grants access to every resource of the kind in the project.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.
@@ -6641,6 +6840,71 @@ type AudienceOptionResponseBody struct {
 	MemberCount *int64 `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 }
 
+// ExplainedAccessLevelResponseBody is used to define fields on response body
+// types.
+type ExplainedAccessLevelResponseBody struct {
+	// The access being explained.
+	Level string `form:"level" json:"level" xml:"level"`
+	// Whether the rules give the member this access.
+	Allowed bool `form:"allowed" json:"allowed" xml:"allowed"`
+	// For use: whether every tool, only some, or none are reachable.
+	ToolAccess *string `form:"tool_access,omitempty" json:"tool_access,omitempty" xml:"tool_access,omitempty"`
+	// Every rule matching this access, deciding rules first.
+	Rules []*ExplainedAccessRuleResponseBody `form:"rules" json:"rules" xml:"rules"`
+}
+
+// ExplainedAccessRuleResponseBody is used to define fields on response body
+// types.
+type ExplainedAccessRuleResponseBody struct {
+	// Canonical principal URN holding the rule.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// What the principal identifies.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// Human-readable name for the principal.
+	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+	// The access the rule gives, or the access a "blocked_" rule takes away. "all"
+	// is a grant covering every permission.
+	Level string `form:"level" json:"level" xml:"level"`
+	// Whether the rule names this resource, every resource in its project, or
+	// every resource of its kind.
+	AppliesTo string `form:"applies_to" json:"applies_to" xml:"applies_to"`
+	// Tool names the rule is narrowed to, when it is not the whole resource.
+	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// Tool annotations the rule is narrowed to, when it is not the whole resource.
+	Dispositions []string `form:"dispositions,omitempty" json:"dispositions,omitempty" xml:"dispositions,omitempty"`
+	// How the rule shaped the decision. allows: proves the access. overrides: a
+	// rule made directly to the member that proves the access despite a block from
+	// a role or everyone. overridden: a block such a rule overrides. blocks: takes
+	// the access away. blocked: an allow that matches but that a block keeps from
+	// counting. limits: a block taking away some of the resource's tools.
+	Effect string `form:"effect" json:"effect" xml:"effect"`
+	// Why a blocked rule made directly to the member did not override the block.
+	// wildcard_direct_grant: it covers every resource. narrower_direct_grant: it
+	// constrains something the tool does not carry. own_exclusion: the member's
+	// own block applies.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Whether the member holds this role only through a directory role mapping.
+	ViaDirectoryMapping bool `form:"via_directory_mapping" json:"via_directory_mapping" xml:"via_directory_mapping"`
+	// The directory role mappings giving the member this role, including when they
+	// also hold it directly. Returned only to organization administrators, because
+	// attribute values can carry personal data.
+	DirectorySources []*ExplainedAccessDirectorySourceResponseBody `form:"directory_sources,omitempty" json:"directory_sources,omitempty" xml:"directory_sources,omitempty"`
+}
+
+// ExplainedAccessDirectorySourceResponseBody is used to define fields on
+// response body types.
+type ExplainedAccessDirectorySourceResponseBody struct {
+	// Whether membership of a directory group or a directory attribute value
+	// mapped the role.
+	SourceKind string `form:"source_kind" json:"source_kind" xml:"source_kind"`
+	// The directory group, for a group mapping.
+	DirectoryGroupName *string `form:"directory_group_name,omitempty" json:"directory_group_name,omitempty" xml:"directory_group_name,omitempty"`
+	// The directory attribute, for an attribute mapping.
+	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
+	// The attribute value the member's profile matched, for an attribute mapping.
+	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
+}
+
 // AuthzChallengeResponseBody is used to define fields on response body types.
 type AuthzChallengeResponseBody struct {
 	// Unique challenge identifier.
@@ -6808,8 +7072,8 @@ type SelectorRequestBody struct {
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP scopes only). When set with resource_id='*', grants
-	// access to all servers in the project.
+	// Project filter (MCP, environment, and assistant scopes). When set with
+	// resource_id='*', grants access to every resource of the kind in the project.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.
@@ -7406,6 +7670,27 @@ func NewListAudienceOptionsResponseBody(res *access.ListAudienceOptionsResult) *
 		}
 	} else {
 		body.Options = []*AudienceOptionResponseBody{}
+	}
+	return body
+}
+
+// NewExplainResourceAccessResponseBody builds the HTTP response body from the
+// result of the "explainResourceAccess" endpoint of the "access" service.
+func NewExplainResourceAccessResponseBody(res *access.ExplainResourceAccessResult) *ExplainResourceAccessResponseBody {
+	body := &ExplainResourceAccessResponseBody{
+		Visibility: res.Visibility,
+	}
+	if res.Levels != nil {
+		body.Levels = make([]*ExplainedAccessLevelResponseBody, len(res.Levels))
+		for i, val := range res.Levels {
+			if val == nil {
+				body.Levels[i] = nil
+				continue
+			}
+			body.Levels[i] = marshalAccessExplainedAccessLevelToExplainedAccessLevelResponseBody(val)
+		}
+	} else {
+		body.Levels = []*ExplainedAccessLevelResponseBody{}
 	}
 	return body
 }
@@ -11304,6 +11589,156 @@ func NewListAudienceOptionsGatewayErrorResponseBody(res *goa.ServiceError) *List
 	return body
 }
 
+// NewExplainResourceAccessUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "explainResourceAccess" endpoint of the "access"
+// service.
+func NewExplainResourceAccessUnauthorizedResponseBody(res *goa.ServiceError) *ExplainResourceAccessUnauthorizedResponseBody {
+	body := &ExplainResourceAccessUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExplainResourceAccessForbiddenResponseBody builds the HTTP response body
+// from the result of the "explainResourceAccess" endpoint of the "access"
+// service.
+func NewExplainResourceAccessForbiddenResponseBody(res *goa.ServiceError) *ExplainResourceAccessForbiddenResponseBody {
+	body := &ExplainResourceAccessForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExplainResourceAccessBadRequestResponseBody builds the HTTP response body
+// from the result of the "explainResourceAccess" endpoint of the "access"
+// service.
+func NewExplainResourceAccessBadRequestResponseBody(res *goa.ServiceError) *ExplainResourceAccessBadRequestResponseBody {
+	body := &ExplainResourceAccessBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExplainResourceAccessNotFoundResponseBody builds the HTTP response body
+// from the result of the "explainResourceAccess" endpoint of the "access"
+// service.
+func NewExplainResourceAccessNotFoundResponseBody(res *goa.ServiceError) *ExplainResourceAccessNotFoundResponseBody {
+	body := &ExplainResourceAccessNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExplainResourceAccessConflictResponseBody builds the HTTP response body
+// from the result of the "explainResourceAccess" endpoint of the "access"
+// service.
+func NewExplainResourceAccessConflictResponseBody(res *goa.ServiceError) *ExplainResourceAccessConflictResponseBody {
+	body := &ExplainResourceAccessConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExplainResourceAccessUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "explainResourceAccess" endpoint of the
+// "access" service.
+func NewExplainResourceAccessUnsupportedMediaResponseBody(res *goa.ServiceError) *ExplainResourceAccessUnsupportedMediaResponseBody {
+	body := &ExplainResourceAccessUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExplainResourceAccessInvalidResponseBody builds the HTTP response body
+// from the result of the "explainResourceAccess" endpoint of the "access"
+// service.
+func NewExplainResourceAccessInvalidResponseBody(res *goa.ServiceError) *ExplainResourceAccessInvalidResponseBody {
+	body := &ExplainResourceAccessInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExplainResourceAccessInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "explainResourceAccess" endpoint of the
+// "access" service.
+func NewExplainResourceAccessInvariantViolationResponseBody(res *goa.ServiceError) *ExplainResourceAccessInvariantViolationResponseBody {
+	body := &ExplainResourceAccessInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExplainResourceAccessUnexpectedResponseBody builds the HTTP response body
+// from the result of the "explainResourceAccess" endpoint of the "access"
+// service.
+func NewExplainResourceAccessUnexpectedResponseBody(res *goa.ServiceError) *ExplainResourceAccessUnexpectedResponseBody {
+	body := &ExplainResourceAccessUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExplainResourceAccessGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "explainResourceAccess" endpoint of the "access"
+// service.
+func NewExplainResourceAccessGatewayErrorResponseBody(res *goa.ServiceError) *ExplainResourceAccessGatewayErrorResponseBody {
+	body := &ExplainResourceAccessGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRequestAccessUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "requestAccess" endpoint of the "access" service.
 func NewRequestAccessUnauthorizedResponseBody(res *goa.ServiceError) *RequestAccessUnauthorizedResponseBody {
@@ -12386,6 +12821,18 @@ func NewListAudienceOptionsPayload(apikeyToken *string, sessionToken *string) *a
 	return v
 }
 
+// NewExplainResourceAccessPayload builds a access service
+// explainResourceAccess endpoint payload.
+func NewExplainResourceAccessPayload(resourceKind string, resourceID string, userID string, sessionToken *string) *access.ExplainResourceAccessPayload {
+	v := &access.ExplainResourceAccessPayload{}
+	v.ResourceKind = resourceKind
+	v.ResourceID = resourceID
+	v.UserID = userID
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewRequestAccessPayload builds a access service requestAccess endpoint
 // payload.
 func NewRequestAccessPayload(body *RequestAccessRequestBody, apikeyToken *string, sessionToken *string) *access.RequestAccessPayload {
@@ -12722,8 +13169,8 @@ func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:blocked_read" || *body.Scope == "org:admin" || *body.Scope == "org:blocked_admin" || *body.Scope == "project:read" || *body.Scope == "project:blocked_read" || *body.Scope == "project:write" || *body.Scope == "project:blocked_write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:blocked_read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:blocked_write" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:blocked_connect" || *body.Scope == "environment:read" || *body.Scope == "environment:blocked_read" || *body.Scope == "environment:write" || *body.Scope == "environment:blocked_write" || *body.Scope == "skill:read" || *body.Scope == "skill:blocked_read" || *body.Scope == "skill:write" || *body.Scope == "skill:blocked_write" || *body.Scope == "assistant:read" || *body.Scope == "assistant:blocked_read" || *body.Scope == "assistant:write" || *body.Scope == "assistant:blocked_write" || *body.Scope == "plugin:write" || *body.Scope == "plugin:blocked_write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "risk_policy:block" || *body.Scope == "chat:read" || *body.Scope == "chat:write" || *body.Scope == "agent:read" || *body.Scope == "agent:write" || *body.Scope == "agent:authorize" || *body.Scope == "agent:transfer" || *body.Scope == "workload:read" || *body.Scope == "workload:blocked_read" || *body.Scope == "workload:write" || *body.Scope == "workload:blocked_write" || *body.Scope == "org:device_agent_sync" || *body.Scope == "org:hooks_ingest") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "assistant:read", "assistant:blocked_read", "assistant:write", "assistant:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "workload:read", "workload:blocked_read", "workload:write", "workload:blocked_write", "org:device_agent_sync", "org:hooks_ingest"}))
 		}
 	}
 	for _, e := range body.Selectors {
@@ -12746,8 +13193,8 @@ func ValidateSelectorRequestBody(body *SelectorRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
 	}
 	if body.ResourceKind != nil {
-		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "workload" || *body.ResourceKind == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "agent", "workload", "*"}))
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "workload" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "workload", "*"}))
 		}
 	}
 	if body.Disposition != nil {

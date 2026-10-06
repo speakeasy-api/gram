@@ -234,11 +234,12 @@ func TestServeConsentAction_ConnectSendsPerClientResource(t *testing.T) {
 
 	ctx, fx := seedMultiClientConsentEndpoint(t)
 
+	// Upstream A is registered with a trailing slash and is sent as registered.
 	locA := postConnectAction(t, fx, fx.clientA)
 	require.Equal(t, "age3328-a-as.example.com", locA.Host)
-	require.Equal(t, consentUpstreamA, locA.Query().Get("resource"))
+	require.Equal(t, consentUpstreamA+"/", locA.Query().Get("resource"))
 	stateA := mintedRemoteLoginState(t, ctx, fx, locA.Query().Get("state"))
-	require.Equal(t, consentUpstreamA, stateA.Resource)
+	require.Equal(t, consentUpstreamA+"/", stateA.Resource)
 	require.Equal(t, fx.clientA, stateA.RemoteSessionClientID)
 
 	locB := postConnectAction(t, fx, fx.clientB)
@@ -297,7 +298,8 @@ func seedSharedUpstreamEndpoint(t *testing.T, slug string) (context.Context, con
 	attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, other, slug+"-srv-b", consentUpstreamB)
 
 	endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, shared, slug)
-	endpoint.UpstreamResource = consentUpstreamA
+	// As resolveUpstreamResource reads it: the registered URL, verbatim.
+	endpoint.UpstreamResource = consentUpstreamA + "/"
 
 	return ctx, consentActionFixture{
 		ti:        ti,
@@ -324,9 +326,9 @@ func TestServeConsentAction_ConnectSharedClientRecordsEndpointUpstream(t *testin
 	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-sole", "", []uuid.UUID{fx.shared, other})
 
 	loc := postConnectAction(t, fx, shared)
-	require.Equal(t, consentUpstreamA, loc.Query().Get("resource"))
+	require.Equal(t, consentUpstreamA+"/", loc.Query().Get("resource"))
 	state := mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state"))
-	require.Equal(t, consentUpstreamA, state.Resource)
+	require.Equal(t, consentUpstreamA+"/", state.Resource)
 }
 
 // A shared client never claims the endpoint's upstream from a sibling that
@@ -340,7 +342,7 @@ func TestServeConsentAction_ConnectSharedClientDefersToOwningSibling(t *testing.
 	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-shared", "", []uuid.UUID{fx.shared, other})
 
 	locOwner := postConnectAction(t, fx, owner)
-	require.Equal(t, consentUpstreamA, locOwner.Query().Get("resource"))
+	require.Equal(t, consentUpstreamA+"/", locOwner.Query().Get("resource"))
 
 	locShared := postConnectAction(t, fx, shared)
 	_, hasResource := locShared.Query()["resource"]
@@ -506,4 +508,65 @@ func TestServeConsentAction_MultiBindingExchangePersistsPerClientResource(t *tes
 	require.Equal(t, consentUpstreamA, byClient[clientA].Resource)
 	require.Equal(t, "exchanged-b", byClient[clientB].Token)
 	require.Equal(t, consentUpstreamB, byClient[clientB].Resource)
+}
+
+// GRW-253: an upstream that publishes its RFC 9728 resource with a trailing
+// slash and matches the RFC 8707 resource exactly rejects a trimmed one. The
+// registered URL reaches the authorize and token legs, and the grant, exactly
+// as registered; one registered without a trailing slash never gains one.
+func TestServeConsentAction_ConnectSendsRegisteredResourceVerbatim(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		slug     string
+		resource string
+	}{
+		{name: "trailing slash kept", slug: "grw253-slash", resource: "https://upstream-exact.example.com/"},
+		{name: "no trailing slash added", slug: "grw253-bare", resource: "https://upstream-exact.example.com"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestMCPService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			require.NotNil(t, authCtx.ProjectID)
+			projectID := *authCtx.ProjectID
+			orgID := authCtx.ActiveOrganizationID
+
+			shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+			attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, shared, tc.slug+"-srv", tc.resource)
+
+			var posted atomic.Value
+			as := newConsentExchangeAS(t, &posted, "exchanged-"+tc.slug)
+			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, tc.slug, as.URL, []uuid.UUID{shared})
+
+			endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, shared, tc.slug+"-consent")
+			fx := consentActionFixture{
+				ti:        ti,
+				endpoint:  endpoint,
+				stateID:   stateID,
+				projectID: projectID,
+				orgID:     orgID,
+				shared:    shared,
+				subject:   subject,
+				clientA:   clientID,
+				clientB:   uuid.Nil,
+				clientC:   uuid.Nil,
+				clientD:   uuid.Nil,
+			}
+
+			loc := postConnectAction(t, fx, clientID)
+			require.Equal(t, tc.resource, loc.Query().Get("resource"), "authorize leg")
+
+			completeRemoteLogin(t, newConsentCallbackManager(t, ti), loc)
+			require.Equal(t, consentExchangeCapture{HasResource: true, Resource: tc.resource}, posted.Load(), "token leg")
+
+			sess, err := remotesessions_repo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID})
+			require.NoError(t, err)
+			require.Equal(t, tc.resource, sess.Resource.String, "refresh replays the recorded resource")
+		})
+	}
 }

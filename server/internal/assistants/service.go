@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -138,25 +141,24 @@ func assistantValidationError(format string, args ...any) error {
 }
 
 type assistantRecord struct {
-	IdentityState      string
-	AgentID            *string
-	IdentityGeneration *int64
-	ID                 uuid.UUID
-	ProjectID          uuid.UUID
-	OrganizationID     string
-	CreatedByUserID    string
-	Name               string
-	Model              string
-	Instructions       string
-	Toolsets           []assistantToolsetRow
-	MCPServers         []assistantMCPServerRow
-	Skills             []assistantSkillRow
-	WarmTTLSeconds     int
-	MaxConcurrency     int
-	Status             string
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-	DeletedAt          pgtype.Timestamptz
+	IdentityState   string
+	AgentID         *string
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID string
+	Name            string
+	Model           string
+	Instructions    string
+	Toolsets        []assistantToolsetRow
+	MCPServers      []assistantMCPServerRow
+	Skills          []assistantSkillRow
+	WarmTTLSeconds  int
+	MaxConcurrency  int
+	Status          string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	DeletedAt       pgtype.Timestamptz
 }
 
 type assistantThreadRecord struct {
@@ -239,121 +241,116 @@ type assistantSkillRow struct {
 
 func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistantRecord {
 	return assistantRecord{
-		IdentityState:      "",
-		AgentID:            nil,
-		IdentityGeneration: nil,
-		ID:                 row.ID,
-		ProjectID:          row.ProjectID,
-		OrganizationID:     row.OrganizationID,
-		CreatedByUserID:    conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
-		Name:               row.Name,
-		Model:              row.Model,
-		Instructions:       row.Instructions,
-		Toolsets:           nil,
-		MCPServers:         nil,
-		Skills:             nil,
-		WarmTTLSeconds:     conv.SafeInt(row.WarmTtlSeconds),
-		MaxConcurrency:     conv.SafeInt(row.MaxConcurrency),
-		Status:             row.Status,
-		CreatedAt:          row.CreatedAt.Time,
-		UpdatedAt:          row.UpdatedAt.Time,
-		DeletedAt:          row.DeletedAt,
+		IdentityState:   "",
+		AgentID:         nil,
+		ID:              row.ID,
+		ProjectID:       row.ProjectID,
+		OrganizationID:  row.OrganizationID,
+		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:            row.Name,
+		Model:           row.Model,
+		Instructions:    row.Instructions,
+		Toolsets:        nil,
+		MCPServers:      nil,
+		Skills:          nil,
+		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		Status:          row.Status,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		DeletedAt:       row.DeletedAt,
 	}
 }
 
 func assistantRecordFromListRow(row assistantrepo.ListAssistantsRow) assistantRecord {
 	return assistantRecord{
-		IdentityState:      "",
-		AgentID:            nil,
-		IdentityGeneration: nil,
-		ID:                 row.ID,
-		ProjectID:          row.ProjectID,
-		OrganizationID:     row.OrganizationID,
-		CreatedByUserID:    conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
-		Name:               row.Name,
-		Model:              row.Model,
-		Instructions:       row.Instructions,
-		Toolsets:           nil,
-		MCPServers:         nil,
-		Skills:             nil,
-		WarmTTLSeconds:     conv.SafeInt(row.WarmTtlSeconds),
-		MaxConcurrency:     conv.SafeInt(row.MaxConcurrency),
-		Status:             row.Status,
-		CreatedAt:          row.CreatedAt.Time,
-		UpdatedAt:          row.UpdatedAt.Time,
-		DeletedAt:          row.DeletedAt,
+		IdentityState:   "",
+		AgentID:         nil,
+		ID:              row.ID,
+		ProjectID:       row.ProjectID,
+		OrganizationID:  row.OrganizationID,
+		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:            row.Name,
+		Model:           row.Model,
+		Instructions:    row.Instructions,
+		Toolsets:        nil,
+		MCPServers:      nil,
+		Skills:          nil,
+		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		Status:          row.Status,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		DeletedAt:       row.DeletedAt,
 	}
 }
 
 func assistantRecordFromGetRow(row assistantrepo.GetAssistantRow) assistantRecord {
 	return assistantRecord{
-		IdentityState:      "",
-		AgentID:            nil,
-		IdentityGeneration: nil,
-		ID:                 row.ID,
-		ProjectID:          row.ProjectID,
-		OrganizationID:     row.OrganizationID,
-		CreatedByUserID:    conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
-		Name:               row.Name,
-		Model:              row.Model,
-		Instructions:       row.Instructions,
-		Toolsets:           nil,
-		MCPServers:         nil,
-		Skills:             nil,
-		WarmTTLSeconds:     conv.SafeInt(row.WarmTtlSeconds),
-		MaxConcurrency:     conv.SafeInt(row.MaxConcurrency),
-		Status:             row.Status,
-		CreatedAt:          row.CreatedAt.Time,
-		UpdatedAt:          row.UpdatedAt.Time,
-		DeletedAt:          row.DeletedAt,
+		IdentityState:   "",
+		AgentID:         nil,
+		ID:              row.ID,
+		ProjectID:       row.ProjectID,
+		OrganizationID:  row.OrganizationID,
+		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:            row.Name,
+		Model:           row.Model,
+		Instructions:    row.Instructions,
+		Toolsets:        nil,
+		MCPServers:      nil,
+		Skills:          nil,
+		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		Status:          row.Status,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		DeletedAt:       row.DeletedAt,
 	}
 }
 
 func assistantRecordFromDispatchRow(row assistantrepo.GetAssistantForDispatchRow) assistantRecord {
 	return assistantRecord{
-		IdentityState:      "",
-		AgentID:            nil,
-		IdentityGeneration: nil,
-		ID:                 row.ID,
-		ProjectID:          row.ProjectID,
-		OrganizationID:     row.OrganizationID,
-		CreatedByUserID:    conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
-		Name:               row.Name,
-		Model:              row.Model,
-		Instructions:       row.Instructions,
-		Toolsets:           nil,
-		MCPServers:         nil,
-		Skills:             nil,
-		WarmTTLSeconds:     conv.SafeInt(row.WarmTtlSeconds),
-		MaxConcurrency:     conv.SafeInt(row.MaxConcurrency),
-		Status:             row.Status,
-		CreatedAt:          row.CreatedAt.Time,
-		UpdatedAt:          row.UpdatedAt.Time,
-		DeletedAt:          row.DeletedAt,
+		IdentityState:   "",
+		AgentID:         nil,
+		ID:              row.ID,
+		ProjectID:       row.ProjectID,
+		OrganizationID:  row.OrganizationID,
+		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:            row.Name,
+		Model:           row.Model,
+		Instructions:    row.Instructions,
+		Toolsets:        nil,
+		MCPServers:      nil,
+		Skills:          nil,
+		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		Status:          row.Status,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		DeletedAt:       row.DeletedAt,
 	}
 }
 
 func assistantRecordFromUpdateRow(row assistantrepo.UpdateAssistantRow) assistantRecord {
 	return assistantRecord{
-		IdentityState:      "",
-		AgentID:            nil,
-		IdentityGeneration: nil,
-		ID:                 row.ID,
-		ProjectID:          row.ProjectID,
-		OrganizationID:     row.OrganizationID,
-		CreatedByUserID:    conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
-		Name:               row.Name,
-		Model:              row.Model,
-		Instructions:       row.Instructions,
-		Toolsets:           nil,
-		MCPServers:         nil,
-		Skills:             nil,
-		WarmTTLSeconds:     conv.SafeInt(row.WarmTtlSeconds),
-		MaxConcurrency:     conv.SafeInt(row.MaxConcurrency),
-		Status:             row.Status,
-		CreatedAt:          row.CreatedAt.Time,
-		UpdatedAt:          row.UpdatedAt.Time,
-		DeletedAt:          row.DeletedAt,
+		IdentityState:   "",
+		AgentID:         nil,
+		ID:              row.ID,
+		ProjectID:       row.ProjectID,
+		OrganizationID:  row.OrganizationID,
+		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:            row.Name,
+		Model:           row.Model,
+		Instructions:    row.Instructions,
+		Toolsets:        nil,
+		MCPServers:      nil,
+		Skills:          nil,
+		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		Status:          row.Status,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		DeletedAt:       row.DeletedAt,
 	}
 }
 
@@ -412,6 +409,7 @@ type DashboardIngestor interface {
 
 type ServiceCore struct {
 	identities        *assistantidentity.Service
+	authz             *authz.Engine
 	logger            *slog.Logger
 	tracer            trace.Tracer
 	db                *pgxpool.Pool
@@ -455,6 +453,7 @@ func NewServiceCore(
 	contextWindow *openrouter.ContextWindowResolver,
 	auditLogger *audit.Logger,
 	identities *assistantidentity.Service,
+	authzEngine *authz.Engine,
 ) *ServiceCore {
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/assistants")
 	turnClassified, err := meter.Int64Counter(
@@ -468,6 +467,7 @@ func NewServiceCore(
 
 	return &ServiceCore{
 		identities:        identities,
+		authz:             authzEngine,
 		logger:            logger,
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
 		db:                db,
@@ -904,6 +904,37 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 	return out, nil
 }
 
+// AttachmentTargetIDs resolves the toolset and MCP server slugs a create or
+// update would attach to their IDs, so the caller can authorize them before
+// the write. Unknown slugs are skipped; the write itself rejects them.
+func (s *ServiceCore) AttachmentTargetIDs(ctx context.Context, projectID uuid.UUID, toolsets []*types.AssistantToolsetRef, mcpServers []*types.AssistantMCPServerRef) ([]uuid.UUID, error) {
+	toolsetSlugs := make([]string, 0, len(toolsets))
+	for _, ref := range toolsets {
+		if ref != nil {
+			toolsetSlugs = append(toolsetSlugs, ref.ToolsetSlug)
+		}
+	}
+	serverSlugs := make([]string, 0, len(mcpServers))
+	for _, ref := range mcpServers {
+		if ref != nil {
+			serverSlugs = append(serverSlugs, ref.McpServerSlug)
+		}
+	}
+	if len(toolsetSlugs) == 0 && len(serverSlugs) == 0 {
+		return nil, nil
+	}
+
+	ids, err := assistantrepo.New(s.db).ListAttachmentTargetIDs(ctx, assistantrepo.ListAttachmentTargetIDsParams{
+		ProjectID:      projectID,
+		ToolsetSlugs:   toolsetSlugs,
+		McpServerSlugs: serverSlugs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve assistant attachment targets: %w", err)
+	}
+	return ids, nil
+}
+
 // resolvedMcpServerInsert captures the FK values we need to write one row in
 // assistant_mcp_servers for a single (mcp_server_slug, environment_slug?) ref.
 type resolvedMcpServerInsert struct {
@@ -1264,9 +1295,9 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 		})
 	}
 	return &types.Assistant{
-		IdentityState:      conv.PtrEmpty(record.IdentityState),
-		AgentID:            record.AgentID,
-		IdentityGeneration: record.IdentityGeneration, ID: record.ID.String(),
+		IdentityState:   conv.PtrEmpty(record.IdentityState),
+		AgentID:         record.AgentID,
+		ID:              record.ID.String(),
 		ProjectID:       record.ProjectID.String(),
 		CreatedByUserID: conv.PtrEmpty(record.CreatedByUserID),
 		Name:            record.Name,
@@ -1340,13 +1371,9 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, err
 	}
 
-	if _, err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
-		return assistantRecord{}, fmt.Errorf("assistant identity Provision: %w", err)
+	if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
+		return assistantRecord{}, fmt.Errorf("provision assistant identity: %w", err)
 	}
-	if _, err := s.ensureDashboardRootTx(ctx, tx, organizationID, projectID, record.ID, name); err != nil {
-		return assistantRecord{}, err
-	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit assistant tx: %w", err)
 	}
@@ -1467,10 +1494,6 @@ func (s *ServiceCore) UpdateAssistant(
 	}
 
 	queries := assistantrepo.New(tx)
-	_, err = queries.LockAssistantIdentityAnchor(ctx, assistantrepo.LockAssistantIdentityAnchorParams{ProjectID: projectID, AssistantID: assistantID})
-	if err != nil {
-		return assistantRecord{}, fmt.Errorf("lock assistant for update: %w", err)
-	}
 	updated, err := queries.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
 		Name:           conv.PtrToPGText(name),
 		Model:          conv.PtrToPGText(model),
@@ -1550,18 +1573,10 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 		return fmt.Errorf("begin delete assistant tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-
+	if err := s.identities.TombstoneAssistant(ctx, tx, projectID, assistantID, actor, actorDisplayName); err != nil {
+		return fmt.Errorf("withdraw assistant workload identity: %w", err)
+	}
 	queries := assistantrepo.New(tx)
-	anchor, err := queries.LockAssistantIdentityAnchor(ctx, assistantrepo.LockAssistantIdentityAnchorParams{ProjectID: projectID, AssistantID: assistantID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("lock assistant for deletion: %w", err)
-	}
-	if err := assistantidentity.TombstoneAssistant(ctx, tx, anchor.OrganizationID, projectID, assistantID); err != nil {
-		return fmt.Errorf("assistant identity TombstoneAssistant: %w", err)
-	}
 	err = queries.DeleteAssistant(ctx, assistantrepo.DeleteAssistantParams{
 		AssistantID: assistantID,
 		ProjectID:   projectID,
@@ -2014,30 +2029,14 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 			ShouldSignal: false,
 		}, nil
 	}
-	// Only active assistants may signal retries. Preserve the stored identity.
-	// An ingress retry must signal the original persisted invocation even if
-	// its authority changed after the first insert. Dispatch validates that
-	// envelope; re-resolving here could strand it or change its attribution.
-	existingThread, err := assistantrepo.New(s.db).GetEnqueuedAssistantThread(ctx, assistantrepo.GetEnqueuedAssistantThreadParams{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, EventID: task.EventID})
-	if err == nil {
-		return EnqueueResult{AssistantID: assistant.ID, ThreadID: existingThread, ShouldSignal: true}, nil
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return EnqueueResult{}, fmt.Errorf("find previously enqueued assistant event: %w", err)
-	}
 
 	sourceKind, sourceRefJSON, normalizedPayloadJSON, sourcePayloadJSON, err := buildAssistantEventPayload(task)
 	if err != nil {
 		return EnqueueResult{}, err
 	}
-	// Reject invalid ingress before creating a chat or thread. Reserved metadata
-	// is sanitized by captureExecution after the trusted thread is resolved.
-	var payload map[string]json.RawMessage
-	if err := json.Unmarshal(normalizedPayloadJSON, &payload); err != nil {
-		return EnqueueResult{}, fmt.Errorf("decode trigger event payload: %w", err)
-	}
-	if payload == nil {
-		return EnqueueResult{}, fmt.Errorf("trigger event payload must be a JSON object")
+	normalizedPayloadJSON, err = stampEventSourceKind(normalizedPayloadJSON, sourceKind)
+	if err != nil {
+		return EnqueueResult{}, err
 	}
 	triggerInstanceID, err := conv.PtrToNullUUID(conv.PtrEmpty(task.TriggerInstanceID))
 	if err != nil {
@@ -2080,23 +2079,6 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		return EnqueueResult{}, fmt.Errorf("upsert assistant thread: %w", err)
 	}
 
-	// UpsertAssistantThread serializes concurrent insertion into this thread;
-	// check again after waiting, before capturing any new authority.
-	existingThread, err = queries.GetEnqueuedAssistantThread(ctx, assistantrepo.GetEnqueuedAssistantThreadParams{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, EventID: task.EventID})
-	if err == nil {
-		if err := tx.Commit(ctx); err != nil {
-			return EnqueueResult{}, fmt.Errorf("commit duplicate assistant enqueue: %w", err)
-		}
-		return EnqueueResult{AssistantID: assistant.ID, ThreadID: existingThread, ShouldSignal: true}, nil
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return EnqueueResult{}, fmt.Errorf("find concurrent assistant enqueue: %w", err)
-	}
-	normalizedPayloadJSON, err = s.captureExecution(ctx, assistant, sourceKind, threadID, triggerInstanceID, task.EventID, normalizedPayloadJSON)
-	if err != nil {
-		return EnqueueResult{}, err
-	}
-
 	_, err = queries.InsertAssistantThreadEvent(ctx, assistantrepo.InsertAssistantThreadEventParams{
 		AssistantThreadID:     threadID,
 		AssistantID:           assistant.ID,
@@ -2111,12 +2093,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	// pgx.ErrNoRows means the event was already enqueued by an earlier attempt
 	// (idempotent retry). We still signal: a turn whose earlier coordinator
 	// signal failed must be picked up when the client retries.
-	if errors.Is(err, pgx.ErrNoRows) {
-		threadID, err = queries.GetEnqueuedAssistantThread(ctx, assistantrepo.GetEnqueuedAssistantThreadParams{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, EventID: task.EventID})
-		if err != nil {
-			return EnqueueResult{}, fmt.Errorf("find winning assistant enqueue: %w", err)
-		}
-	} else if err != nil {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return EnqueueResult{}, fmt.Errorf("insert assistant thread event: %w", err)
 	}
 
@@ -2179,6 +2156,38 @@ func (s *ServiceCore) CheckDashboardChatOwnership(ctx context.Context, projectID
 		return fmt.Errorf("resolve dashboard chat access: %w", err)
 	}
 	return nil
+}
+
+// eventSourceKindKey records an event's own source on its payload: a wake can
+// reuse an existing thread whose source is Slack.
+const eventSourceKindKey = "_gram_source_kind"
+
+// reservedEventKeys are server-owned payload fields that select a turn's
+// identity. encoding/json matches field names case-insensitively, so ingress
+// drops every case variant of them.
+var reservedEventKeys = []string{eventSourceKindKey, "gram_event_kind", "_gram_resume_user_id"}
+
+// stampEventSourceKind drops reserved fields from object payloads and adds the
+// source. Any other JSON value is returned unchanged, and its turn falls back
+// to the thread source.
+func stampEventSourceKind(payload []byte, sourceKind string) ([]byte, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil || fields == nil {
+		return payload, nil //nolint:nilerr // non-object payloads are valid and stay unstamped
+	}
+	maps.DeleteFunc(fields, func(key string, _ json.RawMessage) bool {
+		return slices.ContainsFunc(reservedEventKeys, func(reserved string) bool { return strings.EqualFold(key, reserved) })
+	})
+	encoded, err := json.Marshal(sourceKind)
+	if err != nil {
+		return nil, fmt.Errorf("encode trigger event source: %w", err)
+	}
+	fields[eventSourceKindKey] = encoded
+	stamped, err := json.Marshal(fields)
+	if err != nil {
+		return nil, fmt.Errorf("encode trigger event source: %w", err)
+	}
+	return stamped, nil
 }
 
 func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, []byte, error) {
@@ -2600,44 +2609,6 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		Attempt:           0,
 	})
 
-	// Cold admission must not provision a VM for an event we already know
-	// cannot execute. Keep the execution-time recheck below for lifecycle races.
-	preflightProcessed := false
-	if runtimeRecord.State == runtimeStateStarting && thread.CorrelationID != warmupCorrelationID {
-		for {
-			pending, err := assistantrepo.New(s.db).GetNextPendingExecutionEvent(ctx, assistantrepo.GetNextPendingExecutionEventParams{ProjectID: projectID, ThreadID: threadID, PendingStatus: eventStatusPending})
-			if errors.Is(err, pgx.ErrNoRows) {
-				if err := s.stopRuntimeRecord(ctx, projectID, runtimeRecord.ID, runtimeStateStopped); err != nil {
-					return ProcessThreadEventsResult{}, err
-				}
-				return ProcessThreadEventsResult{AssistantID: assistant.ID, ProcessedAnyEvent: preflightProcessed, WarmUntil: time.Time{}, WarmTTLSeconds: assistant.WarmTTLSeconds, RuntimeActive: false, RetryAdmission: true, BootstrappedRuntime: false}, nil
-			}
-			if err != nil {
-				return ProcessThreadEventsResult{}, fmt.Errorf("read cold execution event: %w", err)
-			}
-			var event assistantThreadEventRecord
-			event.ID = pending.ID
-			event.EventID = pending.EventID
-			event.NormalizedPayloadJSON = pending.NormalizedPayloadJson
-			err = classifyExecutionDispatchError(s.checkExecutionDispatch(ctx, assistant, thread, event))
-			if err == nil {
-				break
-			}
-			if !errors.Is(err, errExecutionDenied) {
-				return ProcessThreadEventsResult{}, err
-			}
-			changed, failErr := assistantrepo.New(s.db).FailPendingExecutionEvent(ctx, assistantrepo.FailPendingExecutionEventParams{EventID: event.ID, ProjectID: projectID, ThreadID: threadID, PendingStatus: eventStatusPending, FailedStatus: eventStatusFailed, LastError: conv.ToPGText(err.Error())})
-			if failErr != nil {
-				return ProcessThreadEventsResult{}, fmt.Errorf("fail pending cold execution: %w", failErr)
-			}
-			if changed == 0 {
-				continue
-			}
-			s.emitAssistantTelemetry(ctx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant cold execution denied", "ERROR", err)
-			preflightProcessed = true
-		}
-	}
-
 	ensureResult, err := s.runtime.Ensure(ctx, runtimeRecord)
 	if err != nil {
 		// Ensure failed: mark the runtime row failed so the coordinator's
@@ -2668,7 +2639,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		bootstrappedRuntime = true
 	}
 
-	processedAny := preflightProcessed
+	processedAny := false
 	for {
 		event, ok, err := s.claimNextPendingEvent(ctx, thread.ProjectID, thread.ID)
 		if err != nil {
@@ -2692,15 +2663,6 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				attr.SlogError(runErr),
 			)
 			s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_failed", "assistant turn failed", "ERROR", runErr)
-
-			if errors.Is(runErr, errExecutionDenied) {
-				if err := s.failEvent(ctx, thread.ProjectID, event.ID, runErr); err != nil {
-					return ProcessThreadEventsResult{}, err
-				}
-				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant execution denied", "ERROR", runErr)
-				processedAny = true
-				continue
-			}
 
 			teardownExhausted := errors.Is(runErr, ErrRuntimeUnhealthy) && event.Attempts >= maxRuntimeTeardowns
 			outcome := turnErrorBucket(runErr)
@@ -2817,16 +2779,21 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				}, nil
 			}
 
-			// Upstream completion provider rejected the request (Anthropic 400
-			// on a malformed message, OpenRouter rate limit, etc), or a live
-			// runtime returned a deterministic 4xx. The runtime is fine —
+			// The turn's identity was rejected, the upstream completion
+			// provider rejected the request (Anthropic 400 on a malformed
+			// message, OpenRouter rate limit, etc), or a live runtime
+			// returned a deterministic 4xx. The runtime is fine —
 			// replaying the same input would just reproduce it, so terminally
 			// fail the event and keep the VM warm. Request admission so any
 			// other pending event on the thread is drained on the warm runtime
 			// instead of waiting out the warm timer; the failed event is no
 			// longer claimable, so this cannot loop on it.
-			if errors.Is(runErr, ErrCompletionFailed) || errors.Is(runErr, ErrHistoryCorrupted) {
-				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event failed at completion provider", "ERROR", runErr)
+			if errors.Is(runErr, ErrTurnIdentity) || errors.Is(runErr, ErrCompletionFailed) || errors.Is(runErr, ErrHistoryCorrupted) {
+				message := "assistant event failed at completion provider"
+				if errors.Is(runErr, ErrTurnIdentity) {
+					message = "assistant event identity rejected"
+				}
+				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", message, "ERROR", runErr)
 				if err := s.failEvent(ctx, thread.ProjectID, event.ID, runErr); err != nil {
 					return ProcessThreadEventsResult{}, err
 				}
@@ -2929,9 +2896,6 @@ func (s *ServiceCore) processEventTurn(
 	runtime assistantRuntimeRecord,
 	event assistantThreadEventRecord,
 ) ([]byte, error) {
-	if err := s.checkExecutionDispatch(ctx, assistant, thread, event); err != nil {
-		return nil, classifyExecutionDispatchError(err)
-	}
 	skills, err := s.loadAssistantSkills(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
 	if err != nil {
 		return nil, err
@@ -2952,21 +2916,13 @@ func (s *ServiceCore) processEventTurn(
 
 	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
 
-	prompt, actorUserID := "", assistant.CreatedByUserID
+	actorUserID, err := s.turnUserID(ctx, assistant, thread, event)
+	if err != nil {
+		return nil, err
+	}
+	prompt := ""
 	var inputParts []runtimeContentPart
 	if mcpAuthPrompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
-		// Signed callback state retains the initiating actor. Only historical
-		// persisted callbacks without this field retain legacy owner behavior.
-		var resume mcpAuthEventPayload
-		if err := json.Unmarshal(event.NormalizedPayloadJSON, &resume); err != nil {
-			return nil, fmt.Errorf("decode OAuth continuation: %w", err)
-		}
-		if resume.ActorUserID != "" {
-			if err := s.checkTurnUser(ctx, assistant, resume.ActorUserID); err != nil {
-				return nil, err
-			}
-			actorUserID = resume.ActorUserID
-		}
 		prompt = mcpAuthPrompt
 	} else {
 		adapter, err := getSourceAdapter(thread.SourceKind)
@@ -2976,10 +2932,6 @@ func (s *ServiceCore) processEventTurn(
 		prompt, err = adapter.DecodeTurn(event)
 		if err != nil {
 			return nil, fmt.Errorf("decode assistant turn: %w", err)
-		}
-		actorUserID, err = s.turnUserID(ctx, assistant, thread, event)
-		if err != nil {
-			return nil, err
 		}
 		// Best-effort: files attached to the triggering message ride along as
 		// vision/text content. Failures degrade to the metadata-only turn.
@@ -3182,25 +3134,24 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		LastEventAt:   time.Time{},
 	}
 	assistant := assistantRecord{
-		IdentityState:      "",
-		AgentID:            nil,
-		IdentityGeneration: nil,
-		ID:                 row.AssistantID,
-		ProjectID:          row.ProjectID,
-		OrganizationID:     row.OrganizationID,
-		CreatedByUserID:    conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
-		Name:               row.Name,
-		Model:              row.Model,
-		Instructions:       row.Instructions,
-		Toolsets:           nil,
-		MCPServers:         nil,
-		Skills:             nil,
-		WarmTTLSeconds:     conv.SafeInt(row.WarmTtlSeconds),
-		MaxConcurrency:     conv.SafeInt(row.MaxConcurrency),
-		Status:             row.Status,
-		CreatedAt:          row.CreatedAt.Time,
-		UpdatedAt:          row.UpdatedAt.Time,
-		DeletedAt:          row.DeletedAt,
+		IdentityState:   "",
+		AgentID:         nil,
+		ID:              row.AssistantID,
+		ProjectID:       row.ProjectID,
+		OrganizationID:  row.OrganizationID,
+		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:            row.Name,
+		Model:           row.Model,
+		Instructions:    row.Instructions,
+		Toolsets:        nil,
+		MCPServers:      nil,
+		Skills:          nil,
+		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		Status:          row.Status,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		DeletedAt:       row.DeletedAt,
 	}
 	if err := s.hydrateAssistantToolSources(ctx, assistant.ProjectID, &assistant); err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant tool sources").LogError(ctx, s.logger, logAttrs...)
@@ -3556,25 +3507,24 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 		LastEventAt:   row.LastEventAt.Time,
 	}
 	assistant := assistantRecord{
-		IdentityState:      "",
-		AgentID:            nil,
-		IdentityGeneration: nil,
-		ID:                 row.AssistantRecordID,
-		ProjectID:          row.AssistantRecordProjectID,
-		OrganizationID:     row.OrganizationID,
-		CreatedByUserID:    conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
-		Name:               row.Name,
-		Model:              row.Model,
-		Instructions:       row.Instructions,
-		Toolsets:           nil,
-		MCPServers:         nil,
-		Skills:             nil,
-		WarmTTLSeconds:     conv.SafeInt(row.WarmTtlSeconds),
-		MaxConcurrency:     conv.SafeInt(row.MaxConcurrency),
-		Status:             row.Status,
-		CreatedAt:          row.CreatedAt.Time,
-		UpdatedAt:          row.UpdatedAt.Time,
-		DeletedAt:          row.DeletedAt,
+		IdentityState:   "",
+		AgentID:         nil,
+		ID:              row.AssistantRecordID,
+		ProjectID:       row.AssistantRecordProjectID,
+		OrganizationID:  row.OrganizationID,
+		CreatedByUserID: conv.FromPGTextOrEmpty[string](row.CreatedByUserID),
+		Name:            row.Name,
+		Model:           row.Model,
+		Instructions:    row.Instructions,
+		Toolsets:        nil,
+		MCPServers:      nil,
+		Skills:          nil,
+		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
+		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
+		Status:          row.Status,
+		CreatedAt:       row.CreatedAt.Time,
+		UpdatedAt:       row.UpdatedAt.Time,
+		DeletedAt:       row.DeletedAt,
 	}
 	runtime := assistantRuntimeRecord{
 		ID:                  row.RuntimeID,

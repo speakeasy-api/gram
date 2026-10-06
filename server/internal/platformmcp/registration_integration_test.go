@@ -204,7 +204,7 @@ func TestMemberResourceDiscoveryUsesLiveRBAC(t *testing.T) {
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
 	prepared, err := NewLiveOrgAdminAuthorizer(conn, engine).PrepareExternalContext(ctx, principal)
 	require.NoError(t, err)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).WithAuthorization(engine)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
 	reader.setInventoryCursorKey("member-discovery-key")
 
 	projects, err := reader.ListProjects(prepared, principal, ListProjectsInput{Limit: 1})
@@ -297,7 +297,7 @@ func TestDelegatedDiagnosticsProjectReadAllowsCustomRoleAndDeniesOtherProjects(t
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
 	prepared, err := NewLiveOrgAdminAuthorizer(conn, engine).PrepareExternalContext(ctx, principal)
 	require.NoError(t, err)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).WithAuthorization(engine)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
 
 	resolved, err := reader.ResolveProjectRead(prepared, principal, FindMCPInput{ProjectID: allowedProject.ID.String()})
 	require.NoError(t, err)
