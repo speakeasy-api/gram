@@ -9,9 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"net/url"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -2158,26 +2156,42 @@ func (s *ServiceCore) CheckDashboardChatOwnership(ctx context.Context, projectID
 	return nil
 }
 
-// eventSourceKindKey records an event's own source on its payload: a wake can
-// reuse an existing thread whose source is Slack.
-const eventSourceKindKey = "_gram_source_kind"
+const (
+	// eventSourceKindKey records an event's own source on its payload: a wake
+	// can reuse an existing thread whose source is Slack.
+	eventSourceKindKey = "_gram_source_kind"
 
-// reservedEventKeys are server-owned payload fields that select a turn's
-// identity. encoding/json matches field names case-insensitively, so ingress
-// drops every case variant of them.
-var reservedEventKeys = []string{eventSourceKindKey, "gram_event_kind", "_gram_resume_user_id"}
+	// wakeIdentityVersionKey and wakeRequesterUserIDKey carry the requester a
+	// wake captured when it was scheduled.
+	wakeIdentityVersionKey = "identity_version"
+	wakeRequesterUserIDKey = "requester_user_id"
 
-// stampEventSourceKind drops reserved fields from object payloads and adds the
-// source. Any other JSON value is returned unchanged, and its turn falls back
-// to the thread source.
+	// mcpAuthEventKindKey and mcpAuthResumeUserIDKey mark an OAuth
+	// continuation and the user whose turn started it. Only the OAuth callback
+	// writes them, on an event that never passes through ingress.
+	mcpAuthEventKindKey    = "gram_event_kind"
+	mcpAuthResumeUserIDKey = "_gram_resume_user_id"
+)
+
+// stampEventSourceKind marks an object payload with its server-assigned
+// source. Any spelling of an identity key that JSON decoding would fold onto
+// it is removed first; only a wake keeps the exact requester fields its own
+// scheduler wrote, and no ingress payload keeps the OAuth continuation keys.
+// Any other JSON value is returned unchanged, and its turn falls back to the
+// thread source.
 func stampEventSourceKind(payload []byte, sourceKind string) ([]byte, error) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(payload, &fields); err != nil || fields == nil {
 		return payload, nil //nolint:nilerr // non-object payloads are valid and stay unstamped
 	}
-	maps.DeleteFunc(fields, func(key string, _ json.RawMessage) bool {
-		return slices.ContainsFunc(reservedEventKeys, func(reserved string) bool { return strings.EqualFold(key, reserved) })
-	})
+	for key := range fields {
+		for _, reserved := range []string{eventSourceKindKey, wakeIdentityVersionKey, wakeRequesterUserIDKey, mcpAuthEventKindKey, mcpAuthResumeUserIDKey} {
+			kept := sourceKind == sourceKindWake && key == reserved && (reserved == wakeIdentityVersionKey || reserved == wakeRequesterUserIDKey)
+			if strings.EqualFold(key, reserved) && !kept {
+				delete(fields, key)
+			}
+		}
+	}
 	encoded, err := json.Marshal(sourceKind)
 	if err != nil {
 		return nil, fmt.Errorf("encode trigger event source: %w", err)
