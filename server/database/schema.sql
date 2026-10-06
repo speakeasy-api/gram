@@ -2359,6 +2359,10 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   -- Operator-pinned scope request, sent verbatim in place of the discovered
   -- scope set. NULL is unset; an empty array on create or update clears it.
   scope_override TEXT[],
+  -- When true, a login that would otherwise fall back to scopes_supported
+  -- omits the scope parameter so the authorization server applies its
+  -- default. NULL or false sends the list.
+  omit_scope_fallback BOOLEAN,
   -- Whether the issuer accepts the RFC 8707 resource parameter. NULL until
   -- learned. False once a login succeeded only after the resource parameter
   -- was dropped, or when an operator states it.
@@ -6423,6 +6427,12 @@ CREATE TABLE IF NOT EXISTS remote_protected_resources (
   dpop_bound_access_tokens_required BOOLEAN,
   dpop_signing_alg_values_supported TEXT[],
   tls_client_certificate_bound_access_tokens BOOLEAN,
+
+  -- Operator-pinned scopes for logins to this resource, sent as written plus
+  -- the feature scopes the issuer advertises. Beats every discovered source;
+  -- scopes the resource no longer advertises are flagged, not dropped. NULL
+  -- is unset. Written by its own upsert, never by discovery.
+  scope_override TEXT[],
 
   -- The scope parameter of the last WWW-Authenticate challenge the resource
   -- answered with (RFC 6750 §3), and when. NULL until one is seen.
