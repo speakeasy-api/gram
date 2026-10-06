@@ -149,12 +149,13 @@ func dashboardLoginURL(siteURL, redirect string, signinError transferSigninError
 
 // sessionFailure maps an error from authenticating the source session.
 func sessionFailure(err error) *transferFailure {
-	var shareable *oops.ShareableError
-	if errors.As(err, &shareable) && shareable.Code == oops.CodeUnauthorized {
-		return failTransfer(signinTransferSessionExpired, "session_unauthenticated", err)
-	}
-	if errors.As(err, &shareable) && shareable.Code == oops.CodeForbidden {
-		return failTransfer(signinTransferAccessChanged, "session_forbidden", err)
+	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+		if shareable.Code == oops.CodeUnauthorized {
+			return failTransfer(signinTransferSessionExpired, "session_unauthenticated", err)
+		}
+		if shareable.Code == oops.CodeForbidden {
+			return failTransfer(signinTransferAccessChanged, "session_forbidden", err)
+		}
 	}
 	return failTransfer(signinTransferTemporaryError, "session_authenticate_failed", err)
 }
@@ -183,8 +184,17 @@ func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPaylo
 	logger := s.logger.With(attr.SlogGoaMethod("TransferOut"))
 	redirect := transferRedirect(payload.Redirect)
 
+	// Failures land on the target host's login page once the target is known
+	// to be a platform host, and on this host's otherwise.
 	loginSiteURL := s.platformHostURL(ctx, s.siteOrigin)
-	location, failure := s.transferOut(ctx, logger, payload, redirect, &loginSiteURL)
+	targetBaseURL := ""
+	if s.cfg.OrgHosts != nil {
+		if baseURL, ok := s.cfg.OrgHosts.IsPlatformHost(conv.PtrValOr(payload.TargetHost, "")); ok {
+			targetBaseURL = baseURL
+			loginSiteURL = s.dashboardSiteURL(baseURL)
+		}
+	}
+	location, failure := s.transferOut(ctx, logger, payload, redirect, targetBaseURL)
 	if failure != nil {
 		failure.log(ctx, logger)
 		return &gen.TransferOutResult{Location: dashboardLoginURL(loginSiteURL, redirect, failure.code)}, nil
@@ -192,18 +202,15 @@ func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPaylo
 	return &gen.TransferOutResult{Location: location}, nil
 }
 
-// transferOut does TransferOut's work. Once the target is known to be a
-// platform host it points loginSiteURL at that host's dashboard, so failures
-// after that land on the target's login page.
-func (s *Service) transferOut(ctx context.Context, logger *slog.Logger, payload *gen.TransferOutPayload, redirect string, loginSiteURL *string) (string, *transferFailure) {
+// transferOut does TransferOut's work. targetBaseURL is the target's server
+// base URL, or "" when the target is not a platform host.
+func (s *Service) transferOut(ctx context.Context, logger *slog.Logger, payload *gen.TransferOutPayload, redirect, targetBaseURL string) (string, *transferFailure) {
 	if s.cfg.OrgHosts == nil {
 		return "", failTransfer(signinTransferTemporaryError, "platform_hosts_not_configured", nil)
 	}
-	targetBaseURL, ok := s.cfg.OrgHosts.IsPlatformHost(conv.PtrValOr(payload.TargetHost, ""))
-	if !ok {
+	if targetBaseURL == "" {
 		return "", failTransfer(signinTransferWrongDestination, "target_not_platform_host", nil)
 	}
-	*loginSiteURL = s.dashboardSiteURL(targetBaseURL)
 
 	sourceURL, ok := currentPlatformURL(ctx)
 	if !ok {
@@ -235,12 +242,6 @@ func (s *Service) transferOut(ctx context.Context, logger *slog.Logger, payload 
 	if session.ImpersonatorEmail != "" || session.SupportOrganizationID != "" {
 		return "", failTransfer(signinTransferNotTransferable, "session_not_transferable", nil)
 	}
-	// Authenticate also checks membership, a disabled organization, and
-	// refreshes the session, as any authenticated request would.
-	ctx, err = s.sessions.Authenticate(ctx, sessionID)
-	if err != nil {
-		return "", sessionFailure(err)
-	}
 
 	targetURL, err := url.Parse(targetBaseURL)
 	if err != nil {
@@ -260,16 +261,28 @@ func (s *Service) transferOut(ctx context.Context, logger *slog.Logger, payload 
 	if err != nil {
 		return "", failTransfer(signinTransferTemporaryError, "organization_load_failed", err)
 	}
+	// Authenticate refuses a disabled organization as unauthenticated; check
+	// first so the user is told their access changed, not that they were
+	// signed out.
+	if orgMetadata.DisabledAt.Valid {
+		return "", failTransfer(signinTransferAccessChanged, "organization_disabled", nil)
+	}
 	move, ok := s.organizationHostMove(ctx, orgMetadata.DefaultHost)
 	if !ok || !sameHost(move.serverURL.Host, targetURL.Host) {
 		return "", failTransfer(signinTransferWrongDestination, "target_not_organization_host", nil)
 	}
 
+	// Authenticate also checks membership and refreshes the session, as any
+	// authenticated request would.
+	ctx, err = s.sessions.Authenticate(ctx, sessionID)
+	if err != nil {
+		return "", sessionFailure(err)
+	}
+
+	// Create refuses support and impersonation sessions too, but those were
+	// refused above, so any error here is a backend failure.
 	code, err := s.transferManager.Create(ctx, session, nonce, sourceURL.Host, targetURL.Host)
-	switch {
-	case errors.Is(err, authsessions.ErrSessionNotTransferable):
-		return "", failTransfer(signinTransferNotTransferable, "session_not_transferable", err)
-	case err != nil:
+	if err != nil {
 		return "", failTransfer(signinTransferTemporaryError, "code_create_failed", err)
 	}
 
@@ -403,15 +416,18 @@ func (s *Service) transferInCallback(ctx context.Context, logger *slog.Logger, c
 		return nil, codeFailure("lookup", err)
 	}
 
-	// The cookie is single-use, so it is cleared whatever the outcome.
+	// The cookie is cleared once the code can no longer be redeemed: on a
+	// mismatch, which burns the code, and once the code is consumed. A
+	// membership refusal or lookup error leaves both, so going back to this
+	// URL can still finish the transfer within the code's lifetime.
 	jar, ok := transferCookieJarFromContext(ctx)
 	if !ok {
 		return nil, failTransfer(signinTransferTemporaryError, "cookie_jar_missing", nil)
 	}
 	cookieName := transferNonceCookieName(record.NonceHash)
 	nonce := jar.Get(cookieName)
-	jar.Clear(cookieName)
 	if !record.BoundTo(nonce) {
+		jar.Clear(cookieName)
 		// Burn the code: see the flow notes at the top of this file. A
 		// browser without the cookie could never redeem it anyway.
 		if err := s.transferManager.Consume(ctx, code); err != nil {
@@ -435,7 +451,11 @@ func (s *Service) transferInCallback(ctx context.Context, logger *slog.Logger, c
 	// Consume only after every check passes, so a transient failure above
 	// leaves the code redeemable. Consume is atomic: a concurrent second use
 	// fails here.
-	if err := s.transferManager.Consume(ctx, code); err != nil {
+	err = s.transferManager.Consume(ctx, code)
+	if err == nil || errors.Is(err, authsessions.ErrTransferCodeNotFound) {
+		jar.Clear(cookieName)
+	}
+	if err != nil {
 		return nil, codeFailure("consume", err)
 	}
 

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
@@ -34,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -753,6 +755,9 @@ func TestService_TransferIn_MembershipLookupErrorDoesNotConsume(t *testing.T) {
 	f.instance.conn.Close()
 	requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, b), errTemporary)
 
+	// The cookie is kept, so the same browser can retry.
+	require.Len(t, b.transferCookies(), 1)
+
 	// The code is still there for a retry.
 	_, err := sessions.NewTransferManager(f.instance.nonceStore).Lookup(ctx, code, testExtraPlatformHost)
 	require.NoError(t, err)
@@ -992,4 +997,38 @@ func TestService_TransferOut_SessionCacheFailureIsTemporary(t *testing.T) {
 	result, err := svc.TransferOut(f.sourceCtx(ctx), outPayload("nonce"))
 	require.NoError(t, err)
 	require.Equal(t, targetLogin(testTransferRedirect, errTemporary), result.Location)
+}
+
+func TestService_TransferOut_DisabledOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+
+	// A disabled organization on the target host that the user belongs to.
+	const disabledOrgID = "disabled-org"
+	require.NoError(t, testrepo.New(f.instance.conn).CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
+		ID:                 disabledOrgID,
+		Name:               "Disabled Organization",
+		Slug:               "disabled-org",
+		GramAccountType:    "free",
+		WorkosID:           pgtype.Text{String: "", Valid: false},
+		Whitelisted:        false,
+		FreeTrialStartedAt: pgtype.Timestamptz{Time: time.Now(), InfinityModifier: 0, Valid: true},
+		FreeTrialEndsAt:    pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: 0, Valid: true},
+		DisabledAt:         pgtype.Timestamptz{Time: time.Now(), InfinityModifier: 0, Valid: true},
+		CreatedAt:          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+	}))
+	require.NoError(t, f.instance.createTestOrganization(ctx, MockOrganizationEntry{ID: disabledOrgID, Name: "Disabled Organization", Slug: "disabled-org", WorkosID: nil, UserWorkspaceSlugs: nil}, f.userInfo.UserID))
+	require.NoError(t, orgRepo.New(f.instance.conn).SetOrganizationDefaultHostForTest(ctx, orgRepo.SetOrganizationDefaultHostForTestParams{
+		DefaultHost: conv.ToPGText(testTargetBaseURL),
+		ID:          disabledOrgID,
+	}))
+
+	disabled := f.source
+	disabled.SessionID = "disabled-org-session"
+	disabled.ActiveOrganizationID = disabledOrgID
+	require.NoError(t, f.instance.sessionManager.StoreSession(ctx, disabled))
+
+	sourceCtx := contextvalues.SetSessionTokenInContext(atHost(ctx, testServerURL.String()), disabled.SessionID)
+	require.Equal(t, targetLogin(testTransferRedirect, errAccessChanged), f.out(sourceCtx, t, outPayload("nonce")))
 }
