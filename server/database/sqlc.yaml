@@ -1053,3 +1053,12 @@ sql:
         out: "../cmd/tools/sweep_false_positives/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
+  - schema: schema.sql
+    queries: ../cmd/tools/migrations/riskfindingscols/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../cmd/tools/migrations/riskfindingscols/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
