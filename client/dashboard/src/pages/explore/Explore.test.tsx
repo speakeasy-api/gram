@@ -56,6 +56,11 @@ const testState = vi.hoisted(() => ({
   dashboardWrites: [] as { kind: string; request: Record<string, unknown> }[],
   /** Who is told when the dashboards change, as react-query would tell. */
   dashboardListeners: new Set<() => void>(),
+  /** Every success toast, with its text and action. */
+  toasts: [] as {
+    text: string;
+    action?: { label: string; onClick: () => void };
+  }[],
 }));
 
 type Write = "create" | "update" | "duplicate" | "delete";
@@ -486,7 +491,17 @@ vi.mock("@/components/DashboardTimeRangePicker", () => ({
     </select>
   ),
 }));
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
+vi.mock("sonner", () => ({
+  toast: {
+    error: vi.fn(),
+    success: (
+      text: string,
+      options?: { action?: { label: string; onClick: () => void } },
+    ) => {
+      testState.toasts.push({ text, ...options });
+    },
+  },
+}));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ status: testState.flagStatus }),
 }));
@@ -706,6 +721,7 @@ describe("Explore", () => {
     testState.dashboardWrites = [];
     testState.pageTouched = false;
     testState.pageApplied = [];
+    testState.toasts = [];
   });
 
   afterEach(() => {
@@ -2059,6 +2075,117 @@ describe("Explore", () => {
       expect(screen.queryByRole("list", { name: "Cards" })).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Try again" }));
       expect(testState.listFailed).toBe(false);
+    });
+
+    it("places a widget on a dashboard from its row, and offers to open it", async () => {
+      const user = userEvent.setup();
+      testState.widgets = [savedWidget("w-1", "Sessions by user")];
+      testState.dashboards = [
+        dashboard("d-1", "Agent activity"),
+        dashboard("d-2", "Someone else's", { createdByUserId: "other" }),
+      ];
+      renderExplore("/explore?tab=widgets");
+
+      await user.click(
+        screen.getByRole("button", { name: "Actions for Sessions by user" }),
+      );
+      await user.click(
+        screen.getByRole("menuitem", { name: /Add to dashboard/ }),
+      );
+      const dialog = screen.getByRole("dialog");
+      expect(
+        within(dialog).getByText("Add “Sessions by user” to a dashboard"),
+      ).toBeTruthy();
+      // Only dashboards the viewer may change are offered.
+      expect(within(dialog).queryByText("Someone else's")).toBeNull();
+      await user.click(
+        within(dialog).getByRole("button", { name: /Agent activity/ }),
+      );
+
+      expect(testState.dashboardWrites).toEqual([
+        {
+          kind: "addWidget",
+          request: {
+            addDashboardWidgetRequestBody: { id: "d-1", widgetId: "w-1" },
+          },
+        },
+      ]);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      const [toast] = testState.toasts;
+      expect(toast?.text).toBe("Added to “Agent activity”");
+      act(() => toast?.action?.onClick());
+      expect(param("tab")).toBe("dashboards");
+      expect(param("dashboard")).toBe("d-1");
+    });
+
+    it("makes a new dashboard for a widget when none is theirs to change", async () => {
+      const user = userEvent.setup();
+      testState.widgets = [savedWidget("w-1", "Sessions by user")];
+      renderExplore("/explore?tab=widgets");
+
+      await user.click(
+        screen.getByRole("button", { name: "Actions for Sessions by user" }),
+      );
+      await user.click(
+        screen.getByRole("menuitem", { name: /Add to dashboard/ }),
+      );
+      await user.click(screen.getByRole("button", { name: "New dashboard" }));
+      await user.type(
+        screen.getByRole("textbox", { name: "Dashboard name" }),
+        "Agent activity",
+      );
+      await user.click(screen.getByRole("button", { name: "Create and add" }));
+
+      expect(testState.dashboardWrites.map((write) => write.kind)).toEqual([
+        "create",
+        "addWidget",
+      ]);
+      expect(testState.dashboardWrites[1]?.request).toEqual({
+        addDashboardWidgetRequestBody: {
+          id: "dashboard-1",
+          widgetId: "w-1",
+        },
+      });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(testState.toasts[0]?.text).toBe("Added to “Agent activity”");
+    });
+
+    it("saves the builder as a widget straight onto a dashboard, from Advanced", async () => {
+      const user = userEvent.setup();
+      testState.dashboards = [dashboard("d-1", "Agent activity")];
+      renderExplore();
+      fireEvent.click(screen.getByRole("button", { name: "Save widget" }));
+      fireEvent.change(screen.getByRole("textbox", { name: "Widget name" }), {
+        target: { value: "Sessions by user" },
+      });
+      await user.click(screen.getByRole("button", { name: "Advanced" }));
+      const pick = screen.getByRole("combobox", { name: "Dashboard" });
+      expect(pick.textContent).toBe("No dashboard");
+      fireEvent.keyDown(pick, { key: "ArrowDown" });
+      fireEvent.keyDown(screen.getByRole("option", { name: "No dashboard" }), {
+        key: "ArrowDown",
+      });
+      fireEvent.keyDown(
+        screen.getByRole("option", { name: "Agent activity" }),
+        { key: "Enter" },
+      );
+      expect(pick.textContent).toBe("Agent activity");
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(testState.writes[0]?.kind).toBe("create");
+      expect(testState.dashboardWrites).toEqual([
+        {
+          kind: "addWidget",
+          request: {
+            addDashboardWidgetRequestBody: {
+              id: "d-1",
+              widgetId: "created-1",
+            },
+          },
+        },
+      ]);
+      expect(param("widget")).toBe("created-1");
+      expect(testState.toasts[0]?.text).toBe("Added to “Agent activity”");
     });
 
     it("deletes a dashboard from its page and returns to the list", async () => {
