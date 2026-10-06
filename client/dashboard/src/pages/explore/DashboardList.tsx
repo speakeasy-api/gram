@@ -224,7 +224,7 @@ export function DashboardList({
     <div className="flex flex-col gap-4">
       {body}
       <DashboardDetailsDialog
-        key={creating ? "creating" : "closed"}
+        key={creating ? "creating" : "not-creating"}
         open={creating}
         title="New dashboard"
         confirm="Create"
@@ -239,7 +239,7 @@ export function DashboardList({
         }
       />
       <DashboardDetailsDialog
-        key={renaming?.id ?? "closed"}
+        key={renaming ? `renaming-${renaming.id}` : "not-renaming"}
         open={renaming !== null}
         title="Rename dashboard"
         confirm="Rename"

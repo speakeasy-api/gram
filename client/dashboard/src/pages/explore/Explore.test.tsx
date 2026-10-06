@@ -1755,6 +1755,7 @@ describe("Explore", () => {
         }),
       );
       expect(param("tab")).toBeNull();
+      expect(param("dashboard")).toBeNull();
       expect(param("widget")).toBe("w-1");
       expect(urlSpec()).toMatchObject({
         dataset: "sessions",

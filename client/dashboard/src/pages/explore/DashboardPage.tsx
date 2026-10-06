@@ -197,7 +197,7 @@ export function DashboardPage({
       )}
 
       <AddWidgetDialog
-        key={adding ? "adding" : "closed"}
+        key={adding ? "adding" : "not-adding"}
         open={adding}
         widgets={widgets}
         pending={mutations.pending}
@@ -207,7 +207,7 @@ export function DashboardPage({
         }
       />
       <DashboardDetailsDialog
-        key={renaming ? "renaming" : "closed"}
+        key={renaming ? "renaming" : "not-renaming"}
         open={renaming}
         title="Rename dashboard"
         confirm="Rename"
