@@ -67,6 +67,7 @@ describe("getAgentPlatforms", () => {
     );
     expect(step.fields).toEqual([
       { label: "Additional allowed domains", value: "app.getgram.ai" },
+      { label: "Additional allowed domains", value: "ai.speakeasy.com" },
     ]);
     expect(step.afterFields).toContain("Start a new Cowork session");
     expect(step.afterFields).toContain(
@@ -236,8 +237,9 @@ describe("getAgentPlatforms", () => {
     expect(fieldValue("Enable OTEL export", "OTLP endpoint")).toBe(
       "https://ai.speakeasy.com/rpc/hooks.otel",
     );
-    // The allowlist takes bare hostnames. It keeps app.getgram.ai too, because
-    // published plugin hooks still send to the canonical server URL.
+    // The allowlist takes bare hostnames. It lists every prod host, because
+    // published plugin hooks send to whichever one the server URL named at
+    // their last publish.
     expect(
       cowork.setupSteps
         .find(

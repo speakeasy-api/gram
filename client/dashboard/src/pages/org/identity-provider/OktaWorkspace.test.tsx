@@ -7,7 +7,10 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
+import { TooltipProvider } from "@/components/ui/Tooltip";
+import type { LiveConnection } from "./connectionView";
 import { OktaWorkspace } from "./OktaWorkspace";
+import { makeChecklistItem, makeConnection } from "./tabs/setup/testFixtures";
 
 const mocks = vi.hoisted(() => ({
   query: {
@@ -33,9 +36,23 @@ vi.mock("./tabs/setup/OktaConnectionTab", () => ({
 vi.mock("./tabs/applications/ApplicationsTab", () => ({
   ApplicationsTab: () => <div>Okta content: applications</div>,
 }));
-vi.mock("./tabs/cross-app-access/CrossAppAccessTab", () => ({
-  CrossAppAccessTab: () => <div>Okta content: cross-app-access</div>,
-}));
+vi.mock("./tabs/cross-app-access/CrossAppAccessTab", async () => {
+  const { ConnectionChecklist } =
+    await import("./tabs/setup/ConnectionChecklist");
+  return {
+    CrossAppAccessTab: ({ connection }: { connection: LiveConnection }) => (
+      <TooltipProvider>
+        <div>Okta content: cross-app-access</div>
+        {connection.checklist && (
+          <ConnectionChecklist
+            connection={connection}
+            groups={["cross_app_access"]}
+          />
+        )}
+      </TooltipProvider>
+    ),
+  };
+});
 vi.mock("@/components/api-error-alert", () => ({
   ApiErrorAlert: ({ error }: { error: Error | null }) =>
     error ? <div role="alert">{error.message}</div> : null,
@@ -111,6 +128,33 @@ describe("Okta workspace", () => {
     ).toBe("true");
     expect(screen.getByText("Okta content: cross-app-access")).toBeTruthy();
   });
+  it("keeps a collapsed checklist collapsed after visiting another tab", async () => {
+    mocks.query.data.connection = makeConnection({
+      status: "verified",
+      checklist: [makeChecklistItem("record_ai_agent", "cross_app_access")],
+    });
+    show("cross-app-access");
+    const group = () =>
+      screen.getByRole("button", {
+        name: "Cross App Access setup, 0 of 1 complete",
+      });
+    expect(group().getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(group());
+    const crossAppAccess = screen.getByRole("tab", {
+      name: "Cross App Access",
+    });
+    crossAppAccess.focus();
+    fireEvent.keyDown(crossAppAccess, { key: "ArrowLeft" });
+    await waitFor(() =>
+      expect(screen.getByText("Okta content: applications")).toBeTruthy(),
+    );
+    fireEvent.keyDown(screen.getByRole("tab", { name: "Applications" }), {
+      key: "ArrowRight",
+    });
+    await waitFor(() =>
+      expect(group().getAttribute("aria-expanded")).toBe("false"),
+    );
+  });
   it.each(["setup", "applications", "cross-app-access"])(
     "shows creation without workspace navigation for unconnected %s links",
     (view) => {
@@ -121,9 +165,7 @@ describe("Okta workspace", () => {
       ).toBeTruthy();
       expect(screen.getByText("Okta content: setup")).toBeTruthy();
       expect(screen.queryByRole("tablist")).toBeNull();
-      expect(
-        screen.queryByText(/Sync the applications your organization uses/),
-      ).toBeNull();
+      expect(screen.queryByText(/Leverage your Okta connection/)).toBeNull();
     },
   );
   it("treats revoked connections as unconnected for deep links", () => {
@@ -134,9 +176,7 @@ describe("Okta workspace", () => {
     show("cross-app-access");
     expect(screen.getByText("Okta content: setup")).toBeTruthy();
     expect(screen.queryByRole("tablist")).toBeNull();
-    expect(
-      screen.queryByText(/Sync the applications your organization uses/),
-    ).toBeNull();
+    expect(screen.queryByText(/Leverage your Okta connection/)).toBeNull();
   });
   it.each(["pending", "verified"])(
     "keeps workspace tabs for %s connections",
@@ -148,9 +188,7 @@ describe("Okta workspace", () => {
       show("applications");
       expect(screen.getAllByRole("tab")).toHaveLength(3);
       expect(screen.getByText("Okta content: applications")).toBeTruthy();
-      expect(
-        screen.getByText(/Sync the applications your organization uses/),
-      ).toBeTruthy();
+      expect(screen.getByText(/Leverage your Okta connection/)).toBeTruthy();
     },
   );
   it("hides workspace navigation while the connection loads", () => {
@@ -161,9 +199,7 @@ describe("Okta workspace", () => {
       screen.getByRole("link", { name: "All identity providers" }),
     ).toBeTruthy();
     expect(screen.queryByRole("tablist")).toBeNull();
-    expect(
-      screen.queryByText(/Sync the applications your organization uses/),
-    ).toBeNull();
+    expect(screen.queryByText(/Leverage your Okta connection/)).toBeNull();
     expect(screen.queryByText(/Okta content:/)).toBeNull();
   });
   it("shows a failed load inline without tabs", () => {

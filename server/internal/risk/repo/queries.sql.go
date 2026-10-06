@@ -2472,6 +2472,25 @@ func (q *Queries) GetRiskPolicyNameIncludingDeleted(ctx context.Context, arg Get
 	return name, err
 }
 
+const getRiskResultFalsePositiveForTest = `-- name: GetRiskResultFalsePositiveForTest :one
+SELECT false_positive_at
+FROM risk_results
+WHERE project_id = $1
+  AND id = $2
+`
+
+type GetRiskResultFalsePositiveForTestParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) GetRiskResultFalsePositiveForTest(ctx context.Context, arg GetRiskResultFalsePositiveForTestParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getRiskResultFalsePositiveForTest, arg.ProjectID, arg.ID)
+	var false_positive_at pgtype.Timestamptz
+	err := row.Scan(&false_positive_at)
+	return false_positive_at, err
+}
+
 const getRiskResultsByIDs = `-- name: GetRiskResultsByIDs :many
 
 SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
@@ -4848,6 +4867,21 @@ func (q *Queries) LockRiskPolicyMutations(ctx context.Context, projectID string)
 	return err
 }
 
+const lockRiskResultFalsePositiveTransition = `-- name: LockRiskResultFalsePositiveTransition :exec
+SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext($2::text))
+`
+
+type LockRiskResultFalsePositiveTransitionParams struct {
+	ProjectID string
+	ID        string
+}
+
+// Two-key form keeps this lock apart from single-key project locks.
+func (q *Queries) LockRiskResultFalsePositiveTransition(ctx context.Context, arg LockRiskResultFalsePositiveTransitionParams) error {
+	_, err := q.db.Exec(ctx, lockRiskResultFalsePositiveTransition, arg.ProjectID, arg.ID)
+	return err
+}
+
 const markContentPartsRiskAnalyzed = `-- name: MarkContentPartsRiskAnalyzed :exec
 UPDATE chat_content_parts
 SET risk_analyzed_at = clock_timestamp()
@@ -5079,10 +5113,9 @@ type MarkRiskResultsFalsePositiveParams struct {
 	Ids       []uuid.UUID
 }
 
-// Returns the full rows the UPDATE actually changed: they drive audit logging
-// and the ClickHouse mirror's outbox enqueue, both inside the same
-// transaction as this UPDATE, so a retry that changes nothing correctly
-// audits and mirrors nothing.
+// Returns the full rows the UPDATE actually changed for audit logging.
+// ClickHouse copies are selected independently by requested id so a retry can
+// repair a successful append followed by a failed Postgres commit.
 func (q *Queries) MarkRiskResultsFalsePositive(ctx context.Context, arg MarkRiskResultsFalsePositiveParams) ([]RiskResult, error) {
 	rows, err := q.db.Query(ctx, markRiskResultsFalsePositive, arg.Reason, arg.ProjectID, arg.Ids)
 	if err != nil {
@@ -5459,6 +5492,28 @@ type SetChatMessageExternalUserIDForTestParams struct {
 
 func (q *Queries) SetChatMessageExternalUserIDForTest(ctx context.Context, arg SetChatMessageExternalUserIDForTestParams) error {
 	_, err := q.db.Exec(ctx, setChatMessageExternalUserIDForTest, arg.ExternalUserID, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setRiskResultExcludedForTest = `-- name: SetRiskResultExcludedForTest :exec
+UPDATE risk_results
+SET excluded_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) SetRiskResultExcludedForTest(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setRiskResultExcludedForTest, id)
+	return err
+}
+
+const setRiskResultFalsePositiveForTest = `-- name: SetRiskResultFalsePositiveForTest :exec
+UPDATE risk_results
+SET false_positive_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) SetRiskResultFalsePositiveForTest(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setRiskResultFalsePositiveForTest, id)
 	return err
 }
 

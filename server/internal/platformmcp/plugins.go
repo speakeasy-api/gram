@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"slices"
 	"strings"
@@ -452,9 +453,16 @@ type PluginsService struct {
 	distributionAdmission     *admission.Guard
 	distributionAdmissionRead distributionAdmissionReader
 
+	// publication and publisher request a plugin publish. republish_plugin
+	// uses both; create_plugin and rename_plugin signal through publisher
+	// after their own publication request commits.
 	publication     plugindelivery.PublicationRequests
 	publisher       plugindelivery.PluginPublishSignaler
 	republishBudget OperationBudget
+
+	metadataLogger *slog.Logger
+	metadataCore   *plugindelivery.PluginMetadataCore
+	metadataBudget OperationBudget
 }
 
 func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMaterial string) *PluginsService {
@@ -492,6 +500,9 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		publication:           plugindelivery.PublicationRequests{Enabled: false},
 		publisher:             nil,
 		republishBudget:       OperationBudget{},
+		metadataLogger:        nil,
+		metadataCore:          nil,
+		metadataBudget:        OperationBudget{},
 	}
 }
 

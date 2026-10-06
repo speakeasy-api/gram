@@ -1104,6 +1104,7 @@ func TestIngest_NonUUIDSessionIDStampsResolvedChatID(t *testing.T) {
 	// The transcript lands under the mapped UUID.
 	persisted, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
+	require.Equal(t, sessionID, persisted.ExternalChatID.String)
 
 	var logs []telemetryrepo.TelemetryLog
 	require.Eventually(t, func() bool {

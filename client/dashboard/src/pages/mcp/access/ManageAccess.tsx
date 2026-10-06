@@ -9,7 +9,6 @@ import {
 } from "@/components/member-facepile";
 import { RequireScope } from "@/components/require-scope";
 import { useRBAC } from "@/hooks/useRBAC";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import {
@@ -23,6 +22,7 @@ import { useOrgRoutes } from "@/routes";
 import { useNavigate } from "react-router";
 import type { SetResourceAudienceEntry } from "@gram/client/models/components/setresourceaudienceentry.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
+import { invalidateAllExplainResourceAccess } from "@gram/client/react-query/explainResourceAccess.js";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { useSetResourceAudienceMutation } from "@gram/client/react-query/setResourceAudience.js";
 import { useMembers } from "@gram/client/react-query/members.js";
@@ -44,7 +44,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { cn } from "@/lib/utils";
-import { useMemo, useState, type ComponentProps, type JSX } from "react";
+import { useMemo, useState, type JSX } from "react";
 import { toast } from "sonner";
 import { AddAudienceDialog } from "./AddAudienceDialog";
 import { RemoveAudienceDialog } from "./RemoveAudienceDialog";
@@ -74,6 +74,7 @@ import {
   revokeScopeWrite,
   type AudienceWrite,
 } from "./accessWrites";
+import { PrincipalBadge } from "./PrincipalBadge";
 import { RoleLink } from "./RoleLink";
 import { isUnnarrowed, ownRules, LEVEL_VERB } from "./serverAudience";
 
@@ -184,7 +185,11 @@ export function ManageAccess({
 
   const setAudience = useSetResourceAudienceMutation({
     onSuccess: async () => {
-      await invalidateAllResourceAudience(queryClient);
+      // Check access answers from the same rules, so an open answer is redone.
+      await Promise.all([
+        invalidateAllResourceAudience(queryClient),
+        invalidateAllExplainResourceAccess(queryClient),
+      ]);
       setAdding(null);
     },
     // The server refuses some writes for a reason worth reading — blocking
@@ -805,33 +810,6 @@ function ownDestructiveBlockOnly(row: AccessRow): boolean {
     (own.tools ?? []).length === 0 &&
     (own.dispositions ?? []).length === 1 &&
     (own.dispositions ?? []).includes("destructive")
-  );
-}
-
-/** What kind of thing a row names, so a role does not read as a person. */
-const PRINCIPAL_BADGE: Record<
-  string,
-  { label: string; variant: ComponentProps<typeof Badge>["variant"] }
-> = {
-  role: { label: "Role", variant: "warning" },
-  user: { label: "Person", variant: "information" },
-  agent: { label: "Agent", variant: "information" },
-  everyone: { label: "Everyone", variant: "neutral" },
-  directory_group: { label: "Group", variant: "neutral" },
-  directory_attribute: { label: "Attribute", variant: "neutral" },
-};
-
-function PrincipalBadge({
-  kind,
-}: {
-  kind: AccessRow["kind"];
-}): JSX.Element | null {
-  const badge = PRINCIPAL_BADGE[kind];
-  if (!badge) return null;
-  return (
-    <Badge variant={badge.variant} size="sm">
-      {badge.label}
-    </Badge>
   );
 }
 

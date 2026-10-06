@@ -102,13 +102,14 @@ describe("getCustomDomainCNAME", () => {
 
 describe("agentEgressHosts", () => {
   it.each([
-    ["https://app.getgram.ai", ["app.getgram.ai"]],
+    ["https://app.getgram.ai", ["app.getgram.ai", "ai.speakeasy.com"]],
     ["https://ai.speakeasy.com", ["ai.speakeasy.com", "app.getgram.ai"]],
-    ["https://dev.getgram.ai", ["dev.getgram.ai"]],
+    ["https://dev.getgram.ai", ["dev.getgram.ai", "dev.ai.speakeasy.com"]],
     [
       "https://dev.ai.speakeasy.com",
       ["dev.ai.speakeasy.com", "dev.getgram.ai"],
     ],
+    ["https://pr-12.dev.getgram.ai", ["pr-12.dev.getgram.ai"]],
     ["https://localhost:8080", ["localhost"]],
   ])("allows %s egress to %j", (serverURL, expected) => {
     expect(agentEgressHosts(serverURL)).toEqual(expected);

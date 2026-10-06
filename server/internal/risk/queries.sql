@@ -1598,11 +1598,14 @@ FROM risk_results
 WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[]);
 
+-- name: LockRiskResultFalsePositiveTransition :exec
+-- Two-key form keeps this lock apart from single-key project locks.
+SELECT pg_advisory_xact_lock(hashtext(@project_id::text), hashtext(@id::text));
+
 -- name: MarkRiskResultsFalsePositive :many
--- Returns the full rows the UPDATE actually changed: they drive audit logging
--- and the ClickHouse mirror's outbox enqueue, both inside the same
--- transaction as this UPDATE, so a retry that changes nothing correctly
--- audits and mirrors nothing.
+-- Returns the full rows the UPDATE actually changed for audit logging.
+-- ClickHouse copies are selected independently by requested id so a retry can
+-- repair a successful append followed by a failed Postgres commit.
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
   , false_positive_reason = sqlc.narg(reason)
@@ -2240,3 +2243,19 @@ ORDER BY evidence.created_at, evidence.seq;
 INSERT INTO chat_messages (chat_id, project_id, role, content, generation)
 VALUES (@chat_id, @project_id, 'user', @content, @generation)
 RETURNING id;
+
+-- name: SetRiskResultExcludedForTest :exec
+UPDATE risk_results
+SET excluded_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: SetRiskResultFalsePositiveForTest :exec
+UPDATE risk_results
+SET false_positive_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: GetRiskResultFalsePositiveForTest :one
+SELECT false_positive_at
+FROM risk_results
+WHERE project_id = @project_id
+  AND id = @id;

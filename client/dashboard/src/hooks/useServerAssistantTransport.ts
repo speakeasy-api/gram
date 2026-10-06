@@ -21,13 +21,15 @@ export interface UseServerAssistantTransportResult {
   assistantId: string;
   /** Whether the managed assistant has resolved and the transport is live. */
   ready: boolean;
+  /** Whether the caller can use assistants in the target project. */
+  allowed: boolean;
   /** Connection error message, if resolving the managed assistant failed. */
   error: string | null;
   /**
    * True when the project has no managed assistant yet and the caller lacks
-   * `project:write`. UI should surface "ask an admin to enable this" rather
+   * `assistant:write`. UI should surface "ask an admin to enable this" rather
    * than the connection-error notice — `sendMessage` itself only needs
-   * `project:read`, so once an admin provisions it the same viewer can chat.
+   * `assistant:read`, so once an admin provisions it the same viewer can chat.
    */
   needsAdmin: boolean;
 }
@@ -44,7 +46,7 @@ interface UseServerAssistantTransportOptions {
  * this hook only resolves the assistant and builds the send transport.
  *
  * Read (`assistantsGetManaged`) is decoupled from write
- * (`ensureManagedAssistant`): viewers with `project:read` reach an existing
+ * (`ensureManagedAssistant`): viewers with `assistant:read` reach an existing
  * managed assistant without ever hitting the write-scoped provisioning path.
  * When the assistant is missing, only writers fire ensure; viewers see
  * `needsAdmin` so the caller can show an "ask an admin" notice.
@@ -66,24 +68,27 @@ export function useServerAssistantTransport(
   // The hook can be called with a projectSlug that differs from the URL-active
   // project (e.g. the org audit logs route picks an arbitrary project from
   // organization.projects). Scope the RBAC check to THAT project's id, not
-  // useProject(), so a user with project:write on the target — but not on the
+  // useProject(), so a user with assistant:write on the target — but not on the
   // active one — still gets the writer path.
   const targetProjectId =
     organization.projects.find((p) => p.slug === projectSlug)?.id ?? "";
   // The demo org advertises the full scope set so pages are browsable, but
   // enforcement is read-only — never auto-fire the write-scoped provisioning
   // path there (it would 403 and toast on every page load).
+  // Any assistant grant in the project opens the dock; the server authorizes
+  // the managed assistant itself.
+  const canRead =
+    !!targetProjectId && hasScope("assistant:read", undefined, targetProjectId);
   const canCreate =
     !!targetProjectId &&
     organization.slug !== DEMO_ORG_SLUG &&
-    hasScope("project:write", targetProjectId);
+    hasScope("assistant:write", targetProjectId, targetProjectId);
 
   // The fetcher reads the project from the X-Gram-Project header, but react-
   // query only differentiates by query key — pass projectSlug into the request
   // so a project switch invalidates instead of replaying the old project's
   // cached managed-assistant id.
-  const authorized =
-    enabled && !!targetProjectId && hasScope("project:read", targetProjectId);
+  const authorized = enabled && canRead;
   const getQuery = useAssistantsGetManaged(
     { gramProject: projectSlug },
     undefined,
@@ -189,5 +194,12 @@ export function useServerAssistantTransport(
     options.onSkillIdsSent,
   ]);
 
-  return { transport, assistantId, ready, error, needsAdmin };
+  return {
+    transport,
+    assistantId,
+    ready,
+    allowed: canRead,
+    error,
+    needsAdmin,
+  };
 }

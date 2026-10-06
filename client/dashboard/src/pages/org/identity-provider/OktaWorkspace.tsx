@@ -16,6 +16,7 @@ import { ApplicationsTab } from "./tabs/applications/ApplicationsTab";
 import { CONNECTION_STATUS, isConnected } from "./connectionView";
 import { CrossAppAccessTab } from "./tabs/cross-app-access/CrossAppAccessTab";
 import { useOktaConnection } from "./identityProviderQueries";
+import { ChecklistOverridesProvider } from "./tabs/setup/ConnectionChecklist";
 import { OktaConnectionTab } from "./tabs/setup/OktaConnectionTab";
 import {
   identityProvidersHref,
@@ -120,8 +121,8 @@ export function OktaWorkspace(): JSX.Element {
         <Heading variant="h2">Okta</Heading>
         {connected && (
           <Text muted>
-            Sync the applications your organization uses from Okta and manage
-            Enterprise Managed Auth for your AI agents.
+            Leverage your Okta connection for application syncing and automated
+            authorization.
           </Text>
         )}
       </div>
@@ -135,27 +136,32 @@ export function OktaWorkspace(): JSX.Element {
           <ApiErrorAlert error={query.error} />
           {query.data !== undefined &&
             (connected ? (
-              <Tabs
-                value={view}
-                onValueChange={(value) => {
-                  const next = OKTA_VIEWS.find((item) => item === value);
-                  if (next) void navigate(oktaViewHref(next));
-                }}
-                className="min-w-0 gap-6"
-              >
-                <div className="min-w-0 overflow-x-auto">
-                  <TabsList aria-label="Okta setup and access" className="h-10">
-                    {OKTA_VIEWS.map((item) => (
-                      <TabsTrigger key={item} value={item}>
-                        {VIEW_LABELS[item]}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </div>
-                <TabsContent value={view}>
-                  <ViewContent view={view} connection={connection} />
-                </TabsContent>
-              </Tabs>
+              <ChecklistOverridesProvider key={connection.id}>
+                <Tabs
+                  value={view}
+                  onValueChange={(value) => {
+                    const next = OKTA_VIEWS.find((item) => item === value);
+                    if (next) void navigate(oktaViewHref(next));
+                  }}
+                  className="min-w-0 gap-6"
+                >
+                  <div className="min-w-0 overflow-x-auto">
+                    <TabsList
+                      aria-label="Okta setup and access"
+                      className="h-10"
+                    >
+                      {OKTA_VIEWS.map((item) => (
+                        <TabsTrigger key={item} value={item}>
+                          {VIEW_LABELS[item]}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </div>
+                  <TabsContent value={view}>
+                    <ViewContent view={view} connection={connection} />
+                  </TabsContent>
+                </Tabs>
+              </ChecklistOverridesProvider>
             ) : (
               <OktaConnectionTab connection={connection} />
             ))}

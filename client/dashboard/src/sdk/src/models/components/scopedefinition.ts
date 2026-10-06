@@ -24,6 +24,8 @@ export const ExclusionScope = {
   EnvironmentBlockedWrite: "environment:blocked_write",
   SkillBlockedRead: "skill:blocked_read",
   SkillBlockedWrite: "skill:blocked_write",
+  AssistantBlockedRead: "assistant:blocked_read",
+  AssistantBlockedWrite: "assistant:blocked_write",
   PluginBlockedWrite: "plugin:blocked_write",
   RiskPolicyBypass: "risk_policy:bypass",
   WorkloadBlockedRead: "workload:blocked_read",
@@ -43,6 +45,7 @@ export const ResourceType = {
   Mcp: "mcp",
   Environment: "environment",
   Skill: "skill",
+  Assistant: "assistant",
   RiskPolicy: "risk_policy",
   Chat: "chat",
   Agent: "agent",
@@ -79,6 +82,10 @@ export const Slug = {
   SkillBlockedRead: "skill:blocked_read",
   SkillWrite: "skill:write",
   SkillBlockedWrite: "skill:blocked_write",
+  AssistantRead: "assistant:read",
+  AssistantBlockedRead: "assistant:blocked_read",
+  AssistantWrite: "assistant:write",
+  AssistantBlockedWrite: "assistant:blocked_write",
   PluginWrite: "plugin:write",
   PluginBlockedWrite: "plugin:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
@@ -105,14 +112,16 @@ export type Slug = ClosedEnum<typeof Slug>;
 /**
  * Whether this scope is a first-class permission or an internal storage/evaluation scope.
  */
-export const Visibility = {
+export const ScopeDefinitionVisibility = {
   UserVisible: "user_visible",
   Internal: "internal",
 } as const;
 /**
  * Whether this scope is a first-class permission or an internal storage/evaluation scope.
  */
-export type Visibility = ClosedEnum<typeof Visibility>;
+export type ScopeDefinitionVisibility = ClosedEnum<
+  typeof ScopeDefinitionVisibility
+>;
 
 export type ScopeDefinition = {
   /**
@@ -138,7 +147,7 @@ export type ScopeDefinition = {
   /**
    * Whether this scope is a first-class permission or an internal storage/evaluation scope.
    */
-  visibility: Visibility;
+  visibility: ScopeDefinitionVisibility;
 };
 
 /** @internal */
@@ -154,8 +163,9 @@ export const ResourceType$inboundSchema: z.ZodMiniEnum<typeof ResourceType> = z
 export const Slug$inboundSchema: z.ZodMiniEnum<typeof Slug> = z.enum(Slug);
 
 /** @internal */
-export const Visibility$inboundSchema: z.ZodMiniEnum<typeof Visibility> = z
-  .enum(Visibility);
+export const ScopeDefinitionVisibility$inboundSchema: z.ZodMiniEnum<
+  typeof ScopeDefinitionVisibility
+> = z.enum(ScopeDefinitionVisibility);
 
 /** @internal */
 export const ScopeDefinition$inboundSchema: z.ZodMiniType<
@@ -168,7 +178,7 @@ export const ScopeDefinition$inboundSchema: z.ZodMiniType<
     exclusion_scope: z.optional(ExclusionScope$inboundSchema),
     resource_type: ResourceType$inboundSchema,
     slug: Slug$inboundSchema,
-    visibility: Visibility$inboundSchema,
+    visibility: ScopeDefinitionVisibility$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

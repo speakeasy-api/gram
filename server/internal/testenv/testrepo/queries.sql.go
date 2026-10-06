@@ -153,6 +153,23 @@ func (q *Queries) CorruptDeviceIntegrationCredentialsFixture(ctx context.Context
 	return err
 }
 
+const countAdvisoryLockWaitersFixture = `-- name: CountAdvisoryLockWaitersFixture :one
+SELECT count(*)::integer FROM pg_catalog.pg_locks AS locks
+WHERE locks.locktype = 'advisory' AND NOT locks.granted
+  AND locks.database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())
+  AND locks.classid = ((hashtextextended($1::text, 0) >> 32) & 4294967295)::oid
+  AND locks.objid = (hashtextextended($1::text, 0) & 4294967295)::oid
+  AND locks.objsubid = 1
+`
+
+// Count sessions blocked on an advisory lock by its exact application key.
+func (q *Queries) CountAdvisoryLockWaitersFixture(ctx context.Context, key string) (int32, error) {
+	row := q.db.QueryRow(ctx, countAdvisoryLockWaitersFixture, key)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countAssistantAttachments = `-- name: CountAssistantAttachments :one
 SELECT
   (SELECT count(*) FROM assistant_toolsets at
@@ -5539,6 +5556,42 @@ type SetUserPlatformAdminFixtureParams struct {
 func (q *Queries) SetUserPlatformAdminFixture(ctx context.Context, arg SetUserPlatformAdminFixtureParams) error {
 	_, err := q.db.Exec(ctx, setUserPlatformAdminFixture, arg.Admin, arg.ID)
 	return err
+}
+
+const setUserSessionIssuerAuthorizationServerModeFixture = `-- name: SetUserSessionIssuerAuthorizationServerModeFixture :execrows
+UPDATE user_session_issuers AS issuer
+SET authorization_server_mode = $1,
+    pinned_issuer_url = $2
+WHERE issuer.id = $3
+  AND issuer.deleted IS FALSE
+  AND COALESCE(
+    issuer.organization_id,
+    (SELECT p.organization_id FROM projects AS p WHERE p.id = issuer.project_id)
+  ) = $4::text
+`
+
+type SetUserSessionIssuerAuthorizationServerModeFixtureParams struct {
+	AuthorizationServerMode string
+	PinnedIssuerUrl         pgtype.Text
+	IssuerID                uuid.UUID
+	OrganizationID          string
+}
+
+// Test-only fixture that switches an issuer's authorization server mode and
+// pinned issuer URL, ahead of a management API that sets them. Project-scoped
+// issuers carry no organization_id, so their tenancy is read through the
+// project.
+func (q *Queries) SetUserSessionIssuerAuthorizationServerModeFixture(ctx context.Context, arg SetUserSessionIssuerAuthorizationServerModeFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserSessionIssuerAuthorizationServerModeFixture,
+		arg.AuthorizationServerMode,
+		arg.PinnedIssuerUrl,
+		arg.IssuerID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setUserSessionIssuerCIMDAdmissionMode = `-- name: SetUserSessionIssuerCIMDAdmissionMode :exec

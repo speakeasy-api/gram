@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 
 import { ApiErrorAlert } from "@/components/api-error-alert";
+import { SettingsSection } from "@/components/detail/settings-section";
 import { StatRow } from "@/components/stat-row";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -15,8 +16,6 @@ import type { OktaIdentityProviderConnection } from "@gram/client/models/compone
 import type { OktaResourceConnectionServer } from "@gram/client/models/components/oktaresourceconnectionserver.js";
 import { useIdentityProviderConnectionApplications } from "@gram/client/react-query/identityProviderConnectionApplications.js";
 import { useOktaResourceConnections } from "@gram/client/react-query/oktaResourceConnections.js";
-
-import { SettingsSection } from "@/components/detail/settings-section";
 
 import { ClearConfirmationDialog } from "./ClearConfirmationDialog";
 import { ConnectionChecklist } from "../setup/ConnectionChecklist";
@@ -31,8 +30,15 @@ import {
   oktaConnectionsUrl,
   oktaConsoleUrl,
 } from "../../oktaConsoleLinks";
-import { AGENT_SECTION_ID, oktaViewHref } from "../../tabs";
-import { useClearedConfirmations } from "./useClearedConfirmations";
+import {
+  AGENT_SECTION_ID,
+  oktaViewHref,
+  READINESS_SECTION_ID,
+} from "../../tabs";
+import {
+  sharedConfirmationKey,
+  useClearedConfirmations,
+} from "./useClearedConfirmations";
 import { useXaaConfirm } from "./useXaaConfirm";
 import { XaaBulkConfirmBar } from "./XaaBulkConfirmBar";
 import type { XaaConfirmValues } from "./XaaConfirmFields";
@@ -43,6 +49,7 @@ import {
   hasConfirmation,
   isConfirmable,
   type AppInstanceOption,
+  normalizeAudience,
 } from "./xaaView";
 
 type ReadinessFilter = "pending" | "all";
@@ -74,6 +81,40 @@ function OpenOktaButton({
       Open Okta
     </Button>
   );
+}
+
+function ReadinessSection({
+  action,
+  children,
+}: {
+  action?: ReactNode;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <SettingsSection id={READINESS_SECTION_ID}>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <SettingsSection.Header className="min-w-0 flex-1 basis-80">
+          <SettingsSection.Title>Server connections</SettingsSection.Title>
+          <SettingsSection.Description>
+            Check each server’s connection in Okta, then record your
+            confirmation here. A confirmation is your own record: saving one
+            does not create or verify anything in Okta.
+          </SettingsSection.Description>
+        </SettingsSection.Header>
+        {action && <div className="shrink-0">{action}</div>}
+      </div>
+      <div className="flex min-w-0 flex-col gap-6">{children}</div>
+    </SettingsSection>
+  );
+}
+
+function pendingDescription(data: {
+  pendingCount: number;
+  agentRecorded: boolean;
+}): string {
+  if (data.pendingCount === 0) return "All confirmations are saved";
+  if (!data.agentRecorded) return "Save the AI agent details first";
+  return "Not confirmed or not working. The connection may already exist in Okta.";
 }
 
 function useAppInstances(connectionId: string): AppInstanceOption[] {
@@ -180,19 +221,37 @@ function ReadinessChecklist({
   const openReview = (row: OktaResourceConnectionServer) => {
     if (locked) return;
     const saved = cleared.snapshotFor(row.mcpServerId) ?? row;
+    // A sibling's cleared confirmation may hold a different audience to undo to.
+    const siblingCleared = cleared.snapshots.some(
+      (snapshot) =>
+        sharedConfirmationKey(snapshot) === sharedConfirmationKey(row),
+    );
+    const suggested = siblingCleared
+      ? undefined
+      : normalizeAudience(row.authorizationServerIssuer ?? "");
     resetInteraction();
     setReviewTarget({
       row,
       initialValues: {
-        audience: saved.audience,
+        audience: saved.audience ?? suggested,
         oktaApplicationId: saved.oktaApplicationId,
       },
     });
   };
 
-  if (readiness.isPending) return <SkeletonTable />;
+  if (readiness.isPending) {
+    return (
+      <ReadinessSection>
+        <SkeletonTable />
+      </ReadinessSection>
+    );
+  }
   if (readiness.data === undefined) {
-    return <ApiErrorAlert error={readiness.error} />;
+    return (
+      <ReadinessSection>
+        <ApiErrorAlert error={readiness.error} />
+      </ReadinessSection>
+    );
   }
 
   const data = readiness.data;
@@ -200,51 +259,13 @@ function ReadinessChecklist({
   const reviewDeepLink = reviewTarget?.row.deepLink ?? data.deepLink;
 
   return (
-    <div className="flex min-w-0 flex-col gap-6">
+    <ReadinessSection action={<OpenOktaButton deepLink={data.deepLink} />}>
       {readiness.isError && <ApiErrorAlert error={readiness.error} />}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <Text className="max-w-2xl">
-          Review each server’s Cross App Access setup in Okta, then record its
-          confirmation here. Not confirmed means Speakeasy has no saved
-          confirmation; the connection may already exist in Okta.
-        </Text>
-        <OpenOktaButton deepLink={data.deepLink} />
-      </div>
-
-      <StatRow
-        metrics={[
-          {
-            label: "Not confirmed",
-            value: data.pendingCount,
-            tone: data.pendingCount > 0 ? "warning" : "success",
-            description:
-              data.pendingCount === 0
-                ? "All confirmations are saved"
-                : data.agentRecorded
-                  ? "Review existing setup before creating anything in Okta"
-                  : "Save the AI agent details before reviewing setup",
-          },
-          {
-            label: "Eligible servers",
-            value: data.totalCount,
-            tone: "information",
-            description: "Servers with their own authorization server",
-          },
-          {
-            label: "Waiting for server details",
-            value: data.undiscoveredCount,
-            tone: data.undiscoveredCount > 0 ? "warning" : "neutral",
-            description:
-              "Speakeasy has not checked this server’s sign-in settings yet",
-          },
-        ]}
-      />
 
       {!data.agentRecorded && (
         <Alert variant="warning" alignTop>
           <Text variant="small">
-            Save the Okta AI agent details first. The Okta links and connections
-            below need the agent&apos;s ID.{" "}
+            Okta links and confirmations need the AI agent&apos;s ID.{" "}
             <Link
               to={oktaViewHref("cross-app-access", AGENT_SECTION_ID)}
               className="underline underline-offset-2"
@@ -256,14 +277,31 @@ function ReadinessChecklist({
         </Alert>
       )}
 
-      <Alert variant="info" alignTop>
-        <Text variant="small">
-          These confirmations record settings you reviewed, not a live check of
-          Okta configuration or access. Saving a confirmation does not create or
-          verify the Okta connection. Some servers share one confirmation.
-          Editing or clearing it updates all servers that share it.
-        </Text>
-      </Alert>
+      <StatRow
+        metrics={[
+          {
+            label: "Not confirmed",
+            value: data.pendingCount,
+            tone: data.pendingCount > 0 ? "warning" : "success",
+            description: pendingDescription(data),
+            size: "sm",
+          },
+          {
+            label: "Eligible servers",
+            value: data.totalCount,
+            tone: "information",
+            description: "Use their own authorization server",
+            size: "sm",
+          },
+          {
+            label: "Waiting for server details",
+            value: data.undiscoveredCount,
+            tone: data.undiscoveredCount > 0 ? "warning" : "neutral",
+            description: "Sign-in settings not checked yet",
+            size: "sm",
+          },
+        ]}
+      />
 
       <div className="flex min-w-0 flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -409,11 +447,9 @@ function ReadinessChecklist({
         }}
         onClose={() => setClearTarget(null)}
       />
-    </div>
+    </ReadinessSection>
   );
 }
-
-const READINESS_SECTION_ID = "readiness";
 
 /** The Enterprise Managed Auth phase of the Okta checklist: register the agent, then connect it to each server. */
 function EnterpriseManagedAuthSetup({
@@ -428,16 +464,6 @@ function EnterpriseManagedAuthSetup({
   }
   return (
     <SettingsSection id="enterprise-managed-auth">
-      <SettingsSection.Header>
-        <SettingsSection.Title>
-          Enterprise Managed Auth setup
-        </SettingsSection.Title>
-        <SettingsSection.Description>
-          Let your AI agents reach MCP servers with the identity Okta gives
-          them. Register the Speakeasy AI agent in Okta once, then connect it to
-          each server below.
-        </SettingsSection.Description>
-      </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
           <ConnectionChecklist
@@ -465,9 +491,7 @@ export function CrossAppAccessTab({
     >
       <div className="flex min-w-0 flex-col gap-10">
         <EnterpriseManagedAuthSetup connection={connection} />
-        <div id={READINESS_SECTION_ID} className="scroll-mt-6">
-          <ReadinessChecklist connection={connection} />
-        </div>
+        <ReadinessChecklist connection={connection} />
       </div>
     </ConnectionGate>
   );

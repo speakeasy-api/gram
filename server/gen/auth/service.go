@@ -31,6 +31,28 @@ type Service interface {
 	Register(context.Context, *RegisterPayload) (err error)
 	// Provides information about the current authentication status.
 	Info(context.Context, *InfoPayload) (res *InfoResult, err error)
+	// Step 2/3 (authorize) of a cross-domain session transfer, on the source
+	// platform host. Reached from Step 1/3, transferIn's start mode on the target
+	// host; redirects to Step 3/3, transferIn's callback mode there. Authenticates
+	// the session from the session cookie or header, checks that its active
+	// organization's default host is the target, and stores a one-time transfer
+	// code bound to the browser's nonce. Only an ordinary session whose
+	// organization lives on the target host can transfer. On any failure the
+	// browser is sent to a login page with a signin_error code instead of an
+	// error. See the flow diagram in server/internal/auth/transfer.go.
+	TransferOut(context.Context, *TransferOutPayload) (res *TransferOutResult, err error)
+	// Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform
+	// host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that
+	// binds the transfer to this browser and redirects to Step 2/3, transferOut on
+	// the source host. Step 3/3 (callback: code, no source_host) redeems the
+	// one-time code that transferOut issued, checks it against that cookie, and
+	// sets a new session cookie on this host. The cookie exists because a code
+	// alone would let anyone who holds one sign another person into the code's
+	// account (login CSRF). A request with both or neither, and any failed check,
+	// lands on this host's login page with a signin_error code; a failed callback
+	// never starts a new transfer. See the flow diagram in
+	// server/internal/auth/transfer.go.
+	TransferIn(context.Context, *TransferInPayload) (res *TransferInResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -53,7 +75,7 @@ const ServiceName = "auth"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"callback", "login", "switchScopes", "enterDemo", "logout", "register", "info"}
+var MethodNames = [9]string{"callback", "login", "switchScopes", "enterDemo", "logout", "register", "info", "transferOut", "transferIn"}
 
 // CallbackPayload is the payload type of the auth service callback method.
 type CallbackPayload struct {
@@ -107,7 +129,11 @@ type InfoResult struct {
 	// Fixed expiration of the organization support session.
 	OrganizationOverrideExpiresAt *string
 	ActiveOrganizationID          string
-	GramAccountType               string
+	// Dashboard base URL of the platform host the active organization lives on.
+	// Set only for an ordinary session whose request arrived on a different
+	// platform host; the dashboard moves there.
+	ActiveOrganizationDashboardURL *string
+	GramAccountType                string
 	// Whether the organization has an active billing subscription
 	HasActiveSubscription bool
 	// Whether the organization is whitelisted to access the platform
@@ -197,6 +223,52 @@ type SwitchScopesResult struct {
 	SessionToken string
 	// The authentication session
 	SessionCookie string
+}
+
+// TransferInPayload is the payload type of the auth service transferIn method.
+type TransferInPayload struct {
+	// Start mode: the platform host that holds the session to move here (e.g.
+	// app.getgram.ai)
+	SourceHost *string
+	// Callback mode: the opaque one-time transfer code from the source host's
+	// transferOut endpoint
+	Code *string
+	// Optional URL path to land on once the session is established on this host
+	Redirect *string
+}
+
+// TransferInResult is the result type of the auth service transferIn method.
+type TransferInResult struct {
+	// The URL to redirect to: the source host's transferOut (start mode), the
+	// requested page (callback mode), or this host's login page when a check fails
+	Location string
+	// The new authentication session on this host. Set only when callback mode
+	// succeeds.
+	SessionToken *string
+	// The new authentication session on this host. Set only when callback mode
+	// succeeds.
+	SessionCookie *string
+}
+
+// TransferOutPayload is the payload type of the auth service transferOut
+// method.
+type TransferOutPayload struct {
+	// The target platform host to transfer the session to (e.g. ai.speakeasy.com)
+	TargetHost *string
+	// The browser binding nonce from the target host's transferIn start mode
+	Nonce *string
+	// Optional URL path to redirect to after the transfer completes on the target
+	// host
+	Redirect *string
+	// The session to transfer. Defaults to the session cookie.
+	SessionToken *string
+}
+
+// TransferOutResult is the result type of the auth service transferOut method.
+type TransferOutResult struct {
+	// The URL to redirect to: the target host's transferIn callback with the
+	// transfer code, or a login page when the transfer cannot continue
+	Location string
 }
 
 type Trial struct {

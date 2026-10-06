@@ -868,6 +868,21 @@ WHERE id = @id
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
 VALUES (@organization_id, @stripe_customer_id);
 
+-- name: SetUserSessionIssuerAuthorizationServerModeFixture :execrows
+-- Test-only fixture that switches an issuer's authorization server mode and
+-- pinned issuer URL, ahead of a management API that sets them. Project-scoped
+-- issuers carry no organization_id, so their tenancy is read through the
+-- project.
+UPDATE user_session_issuers AS issuer
+SET authorization_server_mode = @authorization_server_mode,
+    pinned_issuer_url = sqlc.narg('pinned_issuer_url')
+WHERE issuer.id = @issuer_id
+  AND issuer.deleted IS FALSE
+  AND COALESCE(
+    issuer.organization_id,
+    (SELECT p.organization_id FROM projects AS p WHERE p.id = issuer.project_id)
+  ) = @organization_id::text;
+
 -- name: SetMCPServerNetworkAccessModeFixture :execrows
 -- Test-only fixture for building a pre-existing non-public row so update tests
 -- can prove omitted values fail closed while explicit public_only recovers.
@@ -1798,6 +1813,15 @@ SELECT id FROM publish_outbox WHERE id = @id AND organization_id = @organization
 -- Resolve a service-owned session lock by its exact application key.
 SELECT locks.pid::integer FROM pg_catalog.pg_locks AS locks
 WHERE locks.locktype = 'advisory' AND locks.granted
+  AND locks.database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())
+  AND locks.classid = ((hashtextextended(@key::text, 0) >> 32) & 4294967295)::oid
+  AND locks.objid = (hashtextextended(@key::text, 0) & 4294967295)::oid
+  AND locks.objsubid = 1;
+
+-- name: CountAdvisoryLockWaitersFixture :one
+-- Count sessions blocked on an advisory lock by its exact application key.
+SELECT count(*)::integer FROM pg_catalog.pg_locks AS locks
+WHERE locks.locktype = 'advisory' AND NOT locks.granted
   AND locks.database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())
   AND locks.classid = ((hashtextextended(@key::text, 0) >> 32) & 4294967295)::oid
   AND locks.objid = (hashtextextended(@key::text, 0) & 4294967295)::oid

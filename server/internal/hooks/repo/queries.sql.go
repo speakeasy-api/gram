@@ -778,6 +778,23 @@ func (q *Queries) ListUserAccountsByUsers(ctx context.Context, arg ListUserAccou
 	return items, nil
 }
 
+const recordCapturedSessionID = `-- name: RecordCapturedSessionID :exec
+UPDATE chats SET external_chat_id = $1::text
+WHERE id = $2 AND project_id = $3 AND external_chat_id IS NULL
+`
+
+type RecordCapturedSessionIDParams struct {
+	SessionID string
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Keep the native session identifier when hook capture derives a chat UUID.
+func (q *Queries) RecordCapturedSessionID(ctx context.Context, arg RecordCapturedSessionIDParams) error {
+	_, err := q.db.Exec(ctx, recordCapturedSessionID, arg.SessionID, arg.ChatID, arg.ProjectID)
+	return err
+}
+
 const rememberKnownSkillRawHash = `-- name: RememberKnownSkillRawHash :one
 WITH existing_alias AS (
   SELECT srh.canonical_sha256

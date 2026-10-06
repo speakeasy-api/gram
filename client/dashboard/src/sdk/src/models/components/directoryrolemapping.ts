@@ -12,14 +12,16 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * What the mapping matches: a directory group or an attribute value.
  */
-export const SourceKind = {
+export const DirectoryRoleMappingSourceKind = {
   Group: "group",
   Attribute: "attribute",
 } as const;
 /**
  * What the mapping matches: a directory group or an attribute value.
  */
-export type SourceKind = ClosedEnum<typeof SourceKind>;
+export type DirectoryRoleMappingSourceKind = ClosedEnum<
+  typeof DirectoryRoleMappingSourceKind
+>;
 
 export type DirectoryRoleMapping = {
   /**
@@ -50,13 +52,14 @@ export type DirectoryRoleMapping = {
   /**
    * What the mapping matches: a directory group or an attribute value.
    */
-  sourceKind: SourceKind;
+  sourceKind: DirectoryRoleMappingSourceKind;
   updatedAt: Date;
 };
 
 /** @internal */
-export const SourceKind$inboundSchema: z.ZodMiniEnum<typeof SourceKind> = z
-  .enum(SourceKind);
+export const DirectoryRoleMappingSourceKind$inboundSchema: z.ZodMiniEnum<
+  typeof DirectoryRoleMappingSourceKind
+> = z.enum(DirectoryRoleMappingSourceKind);
 
 /** @internal */
 export const DirectoryRoleMapping$inboundSchema: z.ZodMiniType<
@@ -74,7 +77,7 @@ export const DirectoryRoleMapping$inboundSchema: z.ZodMiniType<
     directory_group_name: z.optional(z.string()),
     id: z.string(),
     role_urn: z.string(),
-    source_kind: SourceKind$inboundSchema,
+    source_kind: DirectoryRoleMappingSourceKind$inboundSchema,
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

@@ -2,6 +2,7 @@ import { Text } from "@/components/ui/Text";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import {
   Blocks,
+  Bot,
   Building2,
   ChevronRight,
   FolderOpen,
@@ -63,6 +64,18 @@ export function ResourceLink({
     label = proj?.name ?? resourceId;
     IconEl = FolderOpen;
     to = proj ? `/${orgSlug}/projects/${proj.slug}` : null;
+  } else if (resourceKind === "assistant") {
+    IconEl = Bot;
+    // Assistant checks carry the assistant id (or the project id for
+    // project-level operations such as create), always with the project id on
+    // the bucket, so link to the project's assistants list.
+    const proj =
+      projectMap.get(resourceId) ??
+      (projectId ? projectMap.get(projectId) : undefined);
+    if (proj) {
+      label = proj.name;
+      to = `/${orgSlug}/projects/${proj.slug}/assistants`;
+    }
   } else if (resourceKind === "mcp") {
     IconEl = Plug;
     // Grants use resource_kind "mcp" for both server flavors: the resource id
