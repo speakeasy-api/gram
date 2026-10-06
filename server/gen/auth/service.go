@@ -31,14 +31,14 @@ type Service interface {
 	Register(context.Context, *RegisterPayload) (err error)
 	// Provides information about the current authentication status.
 	Info(context.Context, *InfoPayload) (res *InfoResult, err error)
-	// Initiates a cross-domain session transfer. Creates a signed, one-time-use
-	// token and redirects to the target platform host's transferIn endpoint. Used
-	// to share session cookies seamlessly between platform hosts (e.g.
+	// Initiates a cross-domain session transfer. Stores a one-time transfer code
+	// server-side and redirects to the target platform host's transferIn endpoint.
+	// Used to share session cookies seamlessly between platform hosts (e.g.
 	// app.getgram.ai and ai.speakeasy.com).
 	TransferOut(context.Context, *TransferOutPayload) (res *TransferOutResult, err error)
-	// Completes a cross-domain session transfer. Validates the transfer token and
-	// creates a new session cookie on this host. The transfer token is
-	// one-time-use and expires after 60 seconds.
+	// Completes a cross-domain session transfer. Redeems the transfer code and
+	// creates a new session cookie on this host. The code is one-time-use and
+	// expires after 60 seconds.
 	TransferIn(context.Context, *TransferInPayload) (res *TransferInResult, err error)
 }
 
@@ -214,7 +214,7 @@ type SwitchScopesResult struct {
 
 // TransferInPayload is the payload type of the auth service transferIn method.
 type TransferInPayload struct {
-	// The signed transfer token from the source host's transferOut endpoint
+	// The opaque one-time transfer code from the source host's transferOut endpoint
 	Token string
 	// Optional URL path to redirect to after the session is established
 	Redirect *string
@@ -244,7 +244,7 @@ type TransferOutPayload struct {
 // TransferOutResult is the result type of the auth service transferOut method.
 type TransferOutResult struct {
 	// The URL to redirect to (the target host's transferIn endpoint with the
-	// transfer token)
+	// transfer code)
 	Location string
 }
 

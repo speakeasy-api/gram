@@ -116,10 +116,6 @@ type AuthConfigurations struct {
 	// OrgHosts resolves the dashboard URL of the active organization's default
 	// host. Nil leaves the dashboard on whichever host it was loaded from.
 	OrgHosts *orghost.Resolver
-
-	// TransferTokenSecret is the HMAC secret used to sign cross-domain session
-	// transfer tokens. Required for session sharing between platform hosts.
-	TransferTokenSecret string
 }
 
 // Service for gram dashboard authentication endpoints
@@ -187,11 +183,6 @@ func NewService(
 
 	supportHandoffs := supporthandoff.NewStore(nonceStore)
 
-	var transferManager *authsessions.TransferManager
-	if cfg.TransferTokenSecret != "" {
-		transferManager = authsessions.NewTransferManager([]byte(cfg.TransferTokenSecret), nonceStore)
-	}
-
 	return &Service{
 		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
 		logger:               logger,
@@ -215,7 +206,7 @@ func NewService(
 		trialBundleSeeder:    trialBundleSeeder,
 		auditLogger:          auditLogger,
 		trialNotifier:        trialNotifier,
-		transferManager:      transferManager,
+		transferManager:      authsessions.NewTransferManager(nonceStore),
 		siteOrigin:           parseSiteOrigin(cfg.SignInRedirectURL),
 	}
 }
@@ -1815,14 +1806,11 @@ func (s *Service) destinationFromState(payload *gen.CallbackPayload) string {
 }
 
 // TransferOut initiates a cross-domain session transfer. It validates that the
-// caller has an active session, creates a signed one-time-use transfer token,
+// caller has an active session, stores a one-time transfer code server-side,
 // and returns a redirect to the target platform host's transferIn endpoint.
 func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPayload) (*gen.TransferOutResult, error) {
 	logger := s.logger.With(attr.SlogGoaMethod("TransferOut"))
 
-	if s.transferManager == nil {
-		return nil, oops.E(oops.CodeUnavailable, nil, "session transfer not configured").LogError(ctx, logger)
-	}
 	if s.cfg.OrgHosts == nil {
 		return nil, oops.E(oops.CodeUnavailable, nil, "platform hosts not configured").LogError(ctx, logger)
 	}
@@ -1839,13 +1827,11 @@ func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPaylo
 		return nil, oops.E(oops.CodeForbidden, nil, "session transfer only available on platform hosts").LogWarn(ctx, logger)
 	}
 
-	// Get the current session.
-	sessionToken, _ := contextvalues.GetSessionTokenFromContext(ctx)
-	if sessionToken == "" {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-
-	session, err := s.sessions.GetSession(ctx, sessionToken)
+	session, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "invalid session").LogWarn(ctx, logger)
 	}
@@ -1865,10 +1851,12 @@ func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPaylo
 		return nil, oops.E(oops.CodeBadRequest, nil, "source and target hosts are the same").LogWarn(ctx, logger)
 	}
 
-	// Create the transfer token.
-	token, err := s.transferManager.CreateTransferToken(ctx, session, sourceURL.Host, targetURL.Host)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create transfer token").LogError(ctx, logger)
+	code, err := s.transferManager.Create(ctx, session, sourceURL.Host, targetURL.Host)
+	switch {
+	case errors.Is(err, authsessions.ErrSessionNotTransferable):
+		return nil, oops.E(oops.CodeForbidden, err, "session cannot be transferred").LogWarn(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create transfer code").LogError(ctx, logger)
 	}
 
 	// Build the redirect URL to the target host's transferIn endpoint.
@@ -1878,7 +1866,7 @@ func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPaylo
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to build transfer URL").LogError(ctx, logger)
 	}
 	query := redirectURL.Query()
-	query.Set("token", token)
+	query.Set("token", code)
 	if payload.Redirect != nil && *payload.Redirect != "" {
 		query.Set("redirect", *payload.Redirect)
 	}
@@ -1895,15 +1883,11 @@ func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPaylo
 	}, nil
 }
 
-// TransferIn completes a cross-domain session transfer. It validates the
-// transfer token, creates a new session on this host, and returns a redirect
-// with the new session cookie.
+// TransferIn completes a cross-domain session transfer. It redeems the
+// one-time transfer code, creates a new session on this host, and returns a
+// redirect with the new session cookie.
 func (s *Service) TransferIn(ctx context.Context, payload *gen.TransferInPayload) (*gen.TransferInResult, error) {
 	logger := s.logger.With(attr.SlogGoaMethod("TransferIn"))
-
-	if s.transferManager == nil {
-		return nil, oops.E(oops.CodeUnavailable, nil, "session transfer not configured").LogError(ctx, logger)
-	}
 
 	// Get the current platform origin.
 	origin, ok := requestorigin.FromContext(ctx)
@@ -1917,16 +1901,24 @@ func (s *Service) TransferIn(ctx context.Context, payload *gen.TransferInPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse current origin").LogError(ctx, logger)
 	}
 
-	// Validate and consume the transfer token.
-	claims, err := s.transferManager.ValidateTransferToken(ctx, payload.Token, currentURL.Host)
+	record, err := s.transferManager.Lookup(ctx, payload.Token, currentURL.Host)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "invalid or expired transfer token").LogWarn(ctx, logger)
 	}
 
-	// Verify the user still has access to the organization.
-	_, _, hasAccess := s.identity.HasAccessToOrganization(ctx, claims.ActiveOrganizationID, claims.UserID)
-	if !hasAccess {
+	isMember, err := s.identity.IsOrganizationMember(ctx, record.ActiveOrganizationID, record.UserID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to check organization membership").LogError(ctx, logger)
+	}
+	if !isMember {
 		return nil, oops.E(oops.CodeForbidden, nil, "user no longer has access to organization").LogWarn(ctx, logger)
+	}
+
+	// Consume only after every check passes, so a transient failure above
+	// leaves the code redeemable. Consume is atomic: a concurrent second use
+	// fails here.
+	if err := s.transferManager.Consume(ctx, payload.Token); err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "invalid or expired transfer token").LogWarn(ctx, logger)
 	}
 
 	// Create a new session on this host.
@@ -1937,10 +1929,10 @@ func (s *Service) TransferIn(ctx context.Context, payload *gen.TransferInPayload
 
 	newSession := authsessions.Session{
 		SessionID:             newSessionID,
-		ActiveOrganizationID:  claims.ActiveOrganizationID,
-		UserID:                claims.UserID,
-		WorkOSSessionID:       claims.WorkOSSessionID,
-		ImpersonatorEmail:     claims.ImpersonatorEmail,
+		ActiveOrganizationID:  record.ActiveOrganizationID,
+		UserID:                record.UserID,
+		WorkOSSessionID:       record.WorkOSSessionID,
+		ImpersonatorEmail:     "", // TransferOut refuses impersonation sessions.
 		SupportOrganizationID: "", // Empty for regular sessions; transfers don't carry support admin context.
 		SupportExpiresAt:      time.Time{},
 	}
@@ -1960,9 +1952,9 @@ func (s *Service) TransferIn(ctx context.Context, payload *gen.TransferInPayload
 	}
 
 	logger.InfoContext(ctx, "completed session transfer",
-		attr.SlogSourceHost(claims.SourceHost),
+		attr.SlogSourceHost(record.SourceHost),
 		attr.SlogTargetHost(currentURL.Host),
-		attr.SlogUserID(claims.UserID),
+		attr.SlogUserID(record.UserID),
 	)
 
 	return &gen.TransferInResult{

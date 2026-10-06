@@ -14478,8 +14478,8 @@ func authUsage() {
 	fmt.Fprintln(os.Stderr, `    logout: Logs out the current user by clearing their session.`)
 	fmt.Fprintln(os.Stderr, `    register: Register a new org for a user with their session information.`)
 	fmt.Fprintln(os.Stderr, `    info: Provides information about the current authentication status.`)
-	fmt.Fprintln(os.Stderr, `    transfer-out: Initiates a cross-domain session transfer. Creates a signed, one-time-use token and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).`)
-	fmt.Fprintln(os.Stderr, `    transfer-in: Completes a cross-domain session transfer. Validates the transfer token and creates a new session cookie on this host. The transfer token is one-time-use and expires after 60 seconds.`)
+	fmt.Fprintln(os.Stderr, `    transfer-out: Initiates a cross-domain session transfer. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).`)
+	fmt.Fprintln(os.Stderr, `    transfer-in: Completes a cross-domain session transfer. Redeems the transfer code and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s auth COMMAND --help\n", os.Args[0])
@@ -14634,7 +14634,7 @@ func authTransferOutUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Initiates a cross-domain session transfer. Creates a signed, one-time-use token and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).`)
+	fmt.Fprintln(os.Stderr, `Initiates a cross-domain session transfer. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -target-host STRING: `)
@@ -14655,7 +14655,7 @@ func authTransferInUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Completes a cross-domain session transfer. Validates the transfer token and creates a new session cookie on this host. The transfer token is one-time-use and expires after 60 seconds.`)
+	fmt.Fprintln(os.Stderr, `Completes a cross-domain session transfer. Redeems the transfer code and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -token STRING: `)

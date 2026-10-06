@@ -13467,16 +13467,16 @@ paths:
         name: SwitchScopes
   /rpc/auth.transferIn:
     get:
-      description: Completes a cross-domain session transfer. Validates the transfer token and creates a new session cookie on this host. The transfer token is one-time-use and expires after 60 seconds.
+      description: Completes a cross-domain session transfer. Redeems the transfer code and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.
       operationId: authTransferIn
       parameters:
         - allowEmptyValue: true
-          description: The signed transfer token from the source host's transferOut endpoint
+          description: The opaque one-time transfer code from the source host's transferOut endpoint
           in: query
           name: token
           required: true
           schema:
-            description: The signed transfer token from the source host's transferOut endpoint
+            description: The opaque one-time transfer code from the source host's transferOut endpoint
             type: string
         - allowEmptyValue: true
           description: Optional URL path to redirect to after the session is established
@@ -13566,7 +13566,7 @@ paths:
         disabled: true
   /rpc/auth.transferOut:
     get:
-      description: Initiates a cross-domain session transfer. Creates a signed, one-time-use token and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
+      description: Initiates a cross-domain session transfer. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
       operationId: authTransferOut
       parameters:
         - allowEmptyValue: true
@@ -13596,9 +13596,9 @@ paths:
           description: Temporary Redirect response.
           headers:
             Location:
-              description: The URL to redirect to (the target host's transferIn endpoint with the transfer token)
+              description: The URL to redirect to (the target host's transferIn endpoint with the transfer code)
               schema:
-                description: The URL to redirect to (the target host's transferIn endpoint with the transfer token)
+                description: The URL to redirect to (the target host's transferIn endpoint with the transfer code)
                 type: string
         "400":
           content:

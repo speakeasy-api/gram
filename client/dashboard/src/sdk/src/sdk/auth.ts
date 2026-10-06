@@ -189,7 +189,7 @@ export class Auth extends ClientSDK {
    * transferIn auth
    *
    * @remarks
-   * Completes a cross-domain session transfer. Validates the transfer token and creates a new session cookie on this host. The transfer token is one-time-use and expires after 60 seconds.
+   * Completes a cross-domain session transfer. Redeems the transfer code and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.
    */
   async transferIn(
     request: AuthTransferInRequest,
@@ -206,7 +206,7 @@ export class Auth extends ClientSDK {
    * transferOut auth
    *
    * @remarks
-   * Initiates a cross-domain session transfer. Creates a signed, one-time-use token and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
+   * Initiates a cross-domain session transfer. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
    */
   async transferOut(
     request: AuthTransferOutRequest,

@@ -255,7 +255,7 @@ var _ = Service("auth", func() {
 	})
 
 	Method("transferOut", func() {
-		Description("Initiates a cross-domain session transfer. Creates a signed, one-time-use token and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).")
+		Description("Initiates a cross-domain session transfer. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).")
 
 		Payload(func() {
 			Attribute("target_host", String, "The target platform host to transfer the session to (e.g. ai.speakeasy.com)")
@@ -265,7 +265,7 @@ var _ = Service("auth", func() {
 		})
 
 		Result(func() {
-			Attribute("location", String, "The URL to redirect to (the target host's transferIn endpoint with the transfer token)")
+			Attribute("location", String, "The URL to redirect to (the target host's transferIn endpoint with the transfer code)")
 			Required("location")
 		})
 
@@ -287,12 +287,12 @@ var _ = Service("auth", func() {
 	})
 
 	Method("transferIn", func() {
-		Description("Completes a cross-domain session transfer. Validates the transfer token and creates a new session cookie on this host. The transfer token is one-time-use and expires after 60 seconds.")
+		Description("Completes a cross-domain session transfer. Redeems the transfer code and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.")
 
 		NoSecurity()
 
 		Payload(func() {
-			Attribute("token", String, "The signed transfer token from the source host's transferOut endpoint")
+			Attribute("token", String, "The opaque one-time transfer code from the source host's transferOut endpoint")
 			Attribute("redirect", String, "Optional URL path to redirect to after the session is established")
 			Required("token")
 		})

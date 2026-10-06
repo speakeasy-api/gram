@@ -1511,7 +1511,6 @@ func newStartCommand() *cli.Command {
 					Environment:                c.String("environment"),
 					NewOrganizationDefaultHost: orgHosts.NewOrganizationDefaultHost(),
 					OrgHosts:                   orgHosts,
-					TransferTokenSecret:        c.String(usersessions.JWTSigningKeyFlag),
 				},
 				authzEngine,
 				billingRepo,

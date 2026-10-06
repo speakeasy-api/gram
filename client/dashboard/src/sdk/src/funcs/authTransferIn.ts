@@ -38,7 +38,7 @@ import { Result } from "../types/fp.js";
  * transferIn auth
  *
  * @remarks
- * Completes a cross-domain session transfer. Validates the transfer token and creates a new session cookie on this host. The transfer token is one-time-use and expires after 60 seconds.
+ * Completes a cross-domain session transfer. Redeems the transfer code and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.
  */
 export function authTransferIn(
   client: GramCore,

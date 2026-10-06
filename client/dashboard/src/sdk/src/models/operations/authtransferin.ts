@@ -10,7 +10,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type AuthTransferInRequest = {
   /**
-   * The signed transfer token from the source host's transferOut endpoint
+   * The opaque one-time transfer code from the source host's transferOut endpoint
    */
   token: string;
   /**
