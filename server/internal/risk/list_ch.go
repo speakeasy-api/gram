@@ -20,6 +20,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
+// MaxExecutionIDLen bounds an execution_id filter. Execution IDs are UUIDs;
+// the slack only rejects obviously bogus input.
+const MaxExecutionIDLen = 128
+
 // CanonicalExecutionID trims an execution_id filter and lowercases it when it
 // is a UUID, the form findings store, since the filter is an exact match.
 func CanonicalExecutionID(id string) string {

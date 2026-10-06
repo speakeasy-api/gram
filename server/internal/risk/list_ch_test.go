@@ -1,6 +1,7 @@
 package risk_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -725,4 +728,7 @@ func TestListRiskResults_ExecutionAndResultFilters(t *testing.T) {
 
 	_, err = ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ResultID: new("not-a-uuid")})
 	require.Error(t, err)
+
+	_, err = ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ExecutionID: new(strings.Repeat("e", risk.MaxExecutionIDLen+1))})
+	requireOopsCode(t, err, oops.CodeInvalid)
 }
