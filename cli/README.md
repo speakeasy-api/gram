@@ -31,6 +31,31 @@ formula still installs it under the `gram` name for now, and running it as
 Profiles stay in `~/.gram/profile.json`, so you do not need to authenticate
 again.
 
+## Gram Functions
+
+The `speakeasy functions` commands create, build and deploy
+[Gram Functions](../ts-framework/functions/README.md) projects:
+
+| Command                          | What it does                                                                                                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `speakeasy functions init [dir]` | Create a project from a built-in template (`--template functions` or `--template mcp`). Prompts for missing values on a terminal; `--yes` uses the defaults. |
+| `speakeasy functions build`      | Build the project with its own `@gram-ai/functions` package into `dist/gram.zip`. Needs Node.js 22.18.0 or later.                                            |
+| `speakeasy functions dev`        | Run the project's `dev` script. Arguments after `--` are passed to it.                                                                                       |
+| `speakeasy functions push`       | Build, stage and deploy the project. `--no-build` deploys the existing build.                                                                                |
+| `speakeasy functions stage`      | Add a built zip file to the deployment file without deploying, like `speakeasy stage function`.                                                              |
+
+They replace `npm create @gram-ai/function` and the `gf build` and `gf push`
+commands from `@gram-ai/functions`, which still work but are deprecated.
+
+The project templates live in
+[`internal/functions/templates`](internal/functions/templates) and are embedded
+in the binary. `@gram-ai/create-function` copies them from there when it is
+built, so both scaffolders create the same projects.
+
+To scaffold a project against a local SDK checkout, set
+`GRAM_FUNCTIONS_SDK_VERSION=file:/path/to/gram/ts-framework/functions` when you
+run `speakeasy functions init`.
+
 ## Local Development
 
 1. Setup environment
@@ -47,8 +72,8 @@ again.
 ### Testing Gram Functions
 
 1. Stage zip
-   - `go run main.go stage function --slug test-fn --location fixtures/example.zip`
+   - `go run main.go functions stage --slug test-fn --location fixtures/example.zip`
    - _You never need to do this again as long as you are using the same zip_
 
 2. Push
-   - `go run main.go push`
+   - `go run main.go push --config gram.deploy.json`
