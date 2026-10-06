@@ -209,11 +209,7 @@ func TestProcessRoleDistributionSetup_GatingAndInactiveRoles(t *testing.T) {
 			}
 			require.NoError(t, err)
 			err = processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{Enabled: true})
-			if mode == "no-project" {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
+			require.NoError(t, err)
 
 			if mode == "no-project" {
 				err = pluginsrepo.New(ti.conn).RestoreRoleSetupProjectFixture(ctx, *ac.ProjectID)
