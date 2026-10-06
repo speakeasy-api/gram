@@ -3,6 +3,8 @@
 -- Preserve false-positive marks and migrate only findings emitted live.
 -- Attribution joins enforce the same project/chat ownership as the live writer;
 -- missing anchors retain empty attribution and the finding's timestamp.
+-- Soft-deleted chats retain message/part attribution and live assistant links;
+-- only chat-level user fallback requires a non-deleted chat.
 SELECT r.id, r.created_at, r.organization_id, r.project_id, r.risk_policy_id,
        r.risk_policy_version, r.chat_message_id, r.chat_content_part_id, r.source, r.found,
        r.rule_id, r.description, r.match, r.start_pos, r.end_pos, r.confidence, r.tags,

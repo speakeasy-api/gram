@@ -129,7 +129,7 @@ func parseFlags() (config, error) {
 		fromStr   = flag.String("from", "", "lower time bound, RFC3339 (required); findings created at/after this are scanned")
 		toStr     = flag.String("to", "", "upper time bound, RFC3339 (required); findings created before this are scanned")
 		cursorStr = flag.String("cursor", "", "optional id to resume after (exclusive); overrides -from when set")
-		batchSize = flag.Int("batch-size", defaultBatchSize, "rows fetched and updated per page")
+		batchSize = flag.Int("batch-size", defaultBatchSize, "requested rows per page (reads and writes capped at 5000)")
 		dryRun    = flag.Bool("dry-run", true, "when true (default) only report; pass -dry-run=false to write")
 	)
 	flag.Parse()
@@ -220,13 +220,16 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, cfg config, lib *presetlib.L
 	cursor := cfg.cursor
 
 	queries := repo.New(pool)
+	// SQLc retains every match until the page is processed; cap the result
+	// slice even when an operator requests a larger write batch.
+	pageSize := min(cfg.batchSize, int32(defaultBatchSize))
 
 	for {
 		if err := ctx.Err(); err != nil {
 			return rep, fmt.Errorf("sweep interrupted at %s: %w", cursor, err)
 		}
 
-		rows, err := queries.ListSweepCandidates(ctx, repo.ListSweepCandidatesParams{OrganizationID: cfg.orgID, ProjectID: cfg.projectID, PolicyID: cfg.policyID, RuleIds: ruleIDs, RuleGlobs: globs, Cursor: cursor, UpperBound: upper, PageSize: cfg.batchSize})
+		rows, err := queries.ListSweepCandidates(ctx, repo.ListSweepCandidatesParams{OrganizationID: cfg.orgID, ProjectID: cfg.projectID, PolicyID: cfg.policyID, RuleIds: ruleIDs, RuleGlobs: globs, Cursor: cursor, UpperBound: upper, PageSize: pageSize})
 		if err != nil {
 			return rep, fmt.Errorf("select page after %s: %w", cursor, err)
 		}
@@ -273,7 +276,7 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, cfg config, lib *presetlib.L
 			rep.scanned, rep.flagged, rep.updated, rep.lastCursor)
 
 		// A short page means we reached the end of the window.
-		if n < int(cfg.batchSize) {
+		if n < int(pageSize) {
 			return rep, nil
 		}
 	}

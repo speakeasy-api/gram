@@ -121,7 +121,7 @@ Non-secret flags:
 | `-from`           | —                        | (beginning) | Lower time bound, RFC3339 (`created_at >= from`); applies with or without `-cursor` |
 | `-to`             | —                        | (end)       | Upper time bound, RFC3339 (`created_at < to`)                                       |
 | `-cursor`         | —                        | —           | Resume after this `risk_results` id (exclusive); keyset resume position only        |
-| `-batch-size`     | —                        | `500`       | Rows per source page and per mutation                                               |
+| `-batch-size`     | —                        | `500`       | Requested rows per mutation; source pages are capped at 500 rows                    |
 | `-buffer`         | —                        | `500`       | Channel buffer between pipeline stages                                              |
 | `-dry-run`        | —                        | `true`      | When true, read + report but submit nothing (and do not connect to ClickHouse)      |
 

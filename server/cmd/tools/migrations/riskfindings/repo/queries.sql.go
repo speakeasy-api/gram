@@ -88,6 +88,8 @@ type ListSourcePageRow struct {
 // Preserve false-positive marks and migrate only findings emitted live.
 // Attribution joins enforce the same project/chat ownership as the live writer;
 // missing anchors retain empty attribution and the finding's timestamp.
+// Soft-deleted chats retain message/part attribution and live assistant links;
+// only chat-level user fallback requires a non-deleted chat.
 func (q *Queries) ListSourcePage(ctx context.Context, arg ListSourcePageParams) ([]ListSourcePageRow, error) {
 	rows, err := q.db.Query(ctx, listSourcePage,
 		arg.OrganizationID,

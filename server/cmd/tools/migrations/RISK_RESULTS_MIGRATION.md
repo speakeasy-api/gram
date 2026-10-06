@@ -101,7 +101,7 @@ derived`, anything else `''`. `tool_call_id` is always left empty: Postgres
 - **Denormalized attribution, event time, and category.** The source LEFT JOINs
   `chat_messages`/`chats` to stamp `chat_id`, `user_id`, and `external_user_id`
   (message-level user ids win over chat-level, everything collapsing to `''`
-  when the message or chat is gone), plus `message_created_at`
+  when the anchor no longer resolves or fails its ownership checks), plus `message_created_at`
   (`chat_messages.created_at`, falling back to the finding's own `created_at` —
   the ClickHouse column DEFAULT — when there is no message) and `assistant_id`
   (the chat's most recent live `assistant_threads` link), mirroring the live
@@ -117,6 +117,10 @@ derived`, anything else `''`. `tool_call_id` is always left empty: Postgres
   chat's assistant link, since it has the joins at hand. `category` is
   computed from `(source, rule_id)` via `internal/risk/categories`, same as
   the live writer.
+
+  Soft-deleting a chat preserves historical message/part attribution, message
+  timestamps, and live assistant-thread links. It suppresses only the chat-level
+  user fallback, matching the live attribution queries.
 
 ## Flags
 
@@ -149,6 +153,10 @@ Non-secret flags:
 | `-batch-size`          | —                        | `5000`                 | Rows per source page and sink batch                                                                                                                                                |
 | `-buffer`              | —                        | `5000`                 | Channel buffer between pipeline stages                                                                                                                                             |
 | `-dry-run`             | —                        | `true`                 | When true, read + transform but do not write (and do not connect to ClickHouse)                                                                                                    |
+
+Source reads materialize at most 5,000 rows per page, even when `-batch-size`
+requests larger sink batches. Smaller requested pages are honored. Source batch
+sizes above 2,147,483,647 are rejected rather than silently truncated.
 
 An interrupted run (Ctrl-C / SIGTERM) exits with a **nonzero** status and logs
 the `-cursor` to resume from, so shell automation never mistakes a partial

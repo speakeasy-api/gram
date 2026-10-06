@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,6 +32,7 @@ import (
 // three times (two transform() maps plus the IN list) to a single ALTER
 // statement, so large batches would push the query text past ClickHouse's
 // default 256 KiB max_query_size.
+// It also bounds source pages materialized by SQLc for larger sink batches.
 const DefaultBatchSize = 500
 
 // Criteria keys understood by the Postgres source. All are optional; an unset
@@ -96,6 +98,11 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 	if batchSize <= 0 {
 		batchSize = DefaultBatchSize
 	}
+	if batchSize > math.MaxInt32 {
+		return fmt.Errorf("source batch size exceeds SQLc limit %d", math.MaxInt32)
+	}
+	// SQLc materializes each page; cap reads independently of mutation batches.
+	pageSize := min(batchSize, DefaultBatchSize)
 
 	// Keyset lower bound / resume point. The cursor only sets the id resume
 	// position (id > cursor); it does NOT relax the time window. -from/-to
@@ -124,7 +131,7 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 			return fmt.Errorf("read interrupted at %s: %w", cursor, err)
 		}
 
-		rows, err := repo.New(s.pool).ListSourcePage(ctx, repo.ListSourcePageParams{OrganizationID: orgArg, ProjectID: projectArg, FromTime: fromArg, ToTime: toArg, Cursor: cursor, PageSize: conv.SafeInt32(batchSize)})
+		rows, err := repo.New(s.pool).ListSourcePage(ctx, repo.ListSourcePageParams{OrganizationID: orgArg, ProjectID: projectArg, FromTime: fromArg, ToTime: toArg, Cursor: cursor, PageSize: conv.SafeInt32(pageSize)})
 		if err != nil {
 			return fmt.Errorf("query page after %s: %w", cursor, err)
 		}
@@ -149,7 +156,7 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 		log.Printf("source: read page=%d total=%d read_through=%s", n, s.scanned, cursor)
 
 		// A short page means we reached the end of the window.
-		if n < batchSize {
+		if n < pageSize {
 			return nil
 		}
 	}

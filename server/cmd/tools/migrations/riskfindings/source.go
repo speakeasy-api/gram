@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,8 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
-// DefaultBatchSize is the number of rows fetched per page when the caller does
-// not set a "batch_size" criteria.
+// DefaultBatchSize is the default sink batch size and the maximum number of
+// rows materialized per source page by SQLc.
 const DefaultBatchSize = 5000
 
 // Criteria keys understood by the Postgres source. All are optional except that
@@ -69,7 +70,9 @@ type SourceRow struct {
 	// GetChatContentPartAttribution for content-part-anchored rows (parent
 	// message first, then the part's chat, with the live project and chat-scope
 	// guards). All empty when the anchor no longer resolves or a guard rejects
-	// it (deleted chat/part, missing message, cross-project part).
+	// it (deleted part, missing message, cross-project part). Soft-deleted chats
+	// retain message/part-derived attribution and live assistant links; only
+	// the chat-level user fallback is suppressed, matching the live writer.
 	ChatID         string
 	UserID         string
 	ExternalUserID string
@@ -111,6 +114,12 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 	if batchSize <= 0 {
 		batchSize = DefaultBatchSize
 	}
+	if batchSize > math.MaxInt32 {
+		return fmt.Errorf("source batch size exceeds SQLc limit %d", math.MaxInt32)
+	}
+	// SQLc materializes each page, so keep reads bounded independently of the
+	// requested sink batch size. Smaller requested pages remain supported.
+	pageSize := min(batchSize, DefaultBatchSize)
 
 	// Keyset lower bound / resume point. The cursor only sets the id resume
 	// position (id > cursor); it does NOT relax the time window. -from/-to still
@@ -149,7 +158,7 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 			return fmt.Errorf("read interrupted at %s: %w", cursor, err)
 		}
 
-		rows, err := repo.New(s.pool).ListSourcePage(ctx, repo.ListSourcePageParams{OrganizationID: orgArg, ProjectID: projectArg, PolicyID: policyArg, FromTime: fromArg, ToTime: toArg, Cursor: cursor, PageSize: conv.SafeInt32(batchSize)})
+		rows, err := repo.New(s.pool).ListSourcePage(ctx, repo.ListSourcePageParams{OrganizationID: orgArg, ProjectID: projectArg, PolicyID: policyArg, FromTime: fromArg, ToTime: toArg, Cursor: cursor, PageSize: conv.SafeInt32(pageSize)})
 		if err != nil {
 			return fmt.Errorf("query page after %s: %w", cursor, err)
 		}
@@ -193,7 +202,7 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 		log.Printf("source: read page=%d total=%d read_through=%s", n, s.scanned, cursor)
 
 		// A short page means we reached the end of the window.
-		if n < batchSize {
+		if n < pageSize {
 			return nil
 		}
 	}
