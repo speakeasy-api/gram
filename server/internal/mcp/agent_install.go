@@ -45,21 +45,18 @@ const (
 // person who just created the key, in the command they were shown.
 const agentInstallCodeTTL = 15 * time.Minute
 
-// maxAgentInstallRequestBytes bounds the install-code request body. It carries
-// two short enum values, so 1 KiB is generous.
+// maxAgentInstallRequestBytes bounds the install-code body, which holds two
+// short enum values.
 const maxAgentInstallRequestBytes = 1 << 10 // 1 KiB
 
-// agentInstallFlavor selects which script a code exchanges for. An agent key
-// is issued for exactly one of them, never both.
+// agentInstallFlavor selects the script an install code renders.
 type agentInstallFlavor string
 
 const (
-	// agentInstallFlavorMCP configures local MCP clients with the agent gateway.
-	// It is the default, so a request without a body keeps that behavior.
+	// agentInstallFlavorMCP configures local MCP clients. It is the default.
 	agentInstallFlavorMCP agentInstallFlavor = "mcp"
 
-	// agentInstallFlavorDeviceAgent installs the device agent and enrolls it
-	// under the agent's identity.
+	// agentInstallFlavorDeviceAgent installs and enrolls the device agent.
 	agentInstallFlavorDeviceAgent agentInstallFlavor = "device_agent"
 )
 
@@ -68,8 +65,7 @@ type agentInstallRequest struct {
 	// Flavor picks the script; empty means agentInstallFlavorMCP.
 	Flavor agentInstallFlavor `json:"flavor"`
 
-	// Mode is how the device agent runs. Required for the device agent flavor
-	// and rejected for any other.
+	// Mode is the device agent's run mode; valid only for that flavor.
 	Mode deviceAgentRunMode `json:"mode"`
 }
 
@@ -85,11 +81,10 @@ type agentInstallCode struct {
 	// Key is the live agent key the script inlines.
 	Key string `json:"key"`
 
-	// URL is the agent gateway for the MCP flavor, and the control plane the
-	// device agent reports to for the device agent flavor.
+	// URL is the agent gateway (MCP) or the control plane (device agent).
 	URL string `json:"url"`
 
-	// Flavor is the script this code renders. Empty reads as MCP.
+	// Flavor is the script to render; empty means MCP.
 	Flavor agentInstallFlavor `json:"flavor,omitempty"`
 
 	// Mode is the device agent's run mode; empty for the MCP flavor.
@@ -210,8 +205,7 @@ func (s *Service) HandleAgentInstallScript(w http.ResponseWriter, r *http.Reques
 	return nil
 }
 
-// decodeAgentInstallRequest reads the optional request body. No body is the
-// MCP flavor, which is what the dashboard sent before flavors existed.
+// decodeAgentInstallRequest reads the optional body; no body means MCP.
 func decodeAgentInstallRequest(r *http.Request) (agentInstallRequest, error) {
 	request := agentInstallRequest{Flavor: agentInstallFlavorMCP, Mode: ""}
 	if r.Body == nil {
@@ -222,8 +216,7 @@ func decodeAgentInstallRequest(r *http.Request) (agentInstallRequest, error) {
 	if err := decoder.Decode(&request); err != nil && !errors.Is(err, io.EOF) {
 		return request, fmt.Errorf("decode install request: %w", err)
 	}
-	// One JSON value and nothing after it: a second value or trailing bytes
-	// mean the body is not what the caller thinks it sent.
+	// Reject anything after the first JSON value.
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return request, errors.New("install request has trailing data")
 	}
@@ -236,12 +229,9 @@ func decodeAgentInstallRequest(r *http.Request) (agentInstallRequest, error) {
 	return request, nil
 }
 
-// deviceAgentInstallTarget checks that this key may install the device agent
-// and returns the control plane it will report to.
-//
-// The key must be able to sync, and must not reach MCP servers: an agent key
-// is issued for one runtime, and a device agent key written to disk on a
-// shared host must not double as a gateway credential.
+// deviceAgentInstallTarget returns the control plane for a device agent
+// install. The key must be able to sync and must not reach MCP servers: it is
+// written to disk on the host, so it must not double as a gateway credential.
 func (s *Service) deviceAgentInstallTarget(ctx context.Context, authCtx *contextvalues.AuthContext, mode deviceAgentRunMode) (string, error) {
 	if !slices.Contains(deviceAgentRunModes, mode) {
 		return "", oops.E(oops.CodeBadRequest, nil, "mode must be %q or %q", deviceAgentRunModeEphemeral, deviceAgentRunModeService).LogWarn(ctx, s.logger)
@@ -261,18 +251,16 @@ func (s *Service) deviceAgentInstallTarget(ctx context.Context, authCtx *context
 	}
 	for _, grant := range policy.RuntimeGrants() {
 		if grant.Scope == authz.ScopeMCPConnect {
-			return "", oops.E(oops.CodeForbidden, nil, "This key can connect to MCP servers, so it cannot install the device agent. Issue the agent a device agent key.").LogWarn(ctx, s.logger)
+			return "", oops.E(oops.CodeForbidden, nil, "This key can connect to MCP servers, so it cannot install the device agent. Use a key from an agent provisioned for the device agent.").LogWarn(ctx, s.logger)
 		}
 	}
 
-	// The device agent calls the sync and hooks APIs, which only the platform
-	// hosts serve; a custom domain or private ingress falls back to the server.
+	// Only platform hosts serve the sync and hooks APIs.
 	controlPlane := requestorigin.PlatformHostBaseURL(ctx, s.serverURL.String(), s.serverURL.String())
 	parsed, err := url.Parse(controlPlane)
-	// No loopback exception: the script runs on the agent's host, where
-	// localhost is that machine and not this server.
+	// No loopback exception: localhost on the agent's host is not this server.
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
-		return "", oops.E(oops.CodeFailedPrecondition, err, "This deployment is not served over HTTPS, so the device agent key would travel in plaintext.").LogWarn(ctx, s.logger)
+		return "", oops.E(oops.CodeFailedPrecondition, err, "This deployment is not served over HTTPS, so the device agent's key would be sent unencrypted.").LogWarn(ctx, s.logger)
 	}
 	return strings.TrimRight(controlPlane, "/"), nil
 }

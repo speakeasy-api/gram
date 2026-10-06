@@ -98,11 +98,7 @@ function installRequestFor(
   }
 }
 
-/**
- * Key names are unique per organization. A timestamp alone collides when an
- * agent is issued two keys in the same minute, so a short random suffix keeps
- * each issuance distinct while the date still says when it was made.
- */
+/** Key names are unique per organization, so a random suffix follows the date. */
 function keyName(agentName: string): string {
   const issued = new Date().toISOString().slice(0, 16).replace("T", " ");
   const suffix = crypto.randomUUID().slice(0, 6);
@@ -116,7 +112,7 @@ function verifyNote(
   if (!connected)
     return "Run the setup from the previous step, then wait for the first call.";
   return purpose === "device-agent"
-    ? "The device agent has synced with Gram."
+    ? "The device agent has checked in."
     : "The agent has called the gateway.";
 }
 
@@ -132,10 +128,7 @@ export function ProvisionWizard({
    * ahead is still a draft and none of them can be revisited.
    */
   agent?: ManagedAgent;
-  /**
-   * What a new agent is provisioned for, when the link that opened the wizard
-   * already knows. An existing agent's purpose is read from its policy.
-   */
+  /** Preselects a new agent's purpose. An existing agent's comes from its policy. */
   initialPurpose?: AgentPurpose;
   /** Leaves the wizard for the agent it created, or the list if it made none. */
   onDone: (agentID?: string) => void;
@@ -190,9 +183,8 @@ export function ProvisionWizard({
     onBusy?.(provisioning);
   }, [provisioning, onBusy]);
 
-  // An agent is provisioned for MCP or for the device agent, never both, so an
-  // existing agent's purpose is whatever its stored policy already says. The
-  // same cache the agent page's permissions panel reads and writes.
+  // An existing agent's purpose comes from its stored policy (same cache as the
+  // permissions panel).
   const storedPolicy = useQuery({
     queryKey: ["agent-policy-grants", organization.id, agent?.id],
     queryFn: ({ signal }) =>
@@ -207,8 +199,7 @@ export function ProvisionWizard({
     ? storedPolicy.data && agentPurposeFromPolicy(storedPolicy.data)
     : chosenPurpose;
 
-  // Organization scopes can only be delegated by an org admin, so the device
-  // agent is offered only to one, and only where the device agent is enabled.
+  // Only an org admin can delegate the device agent's organization scopes.
   const { hasScope } = useRBAC();
   const deviceAgentFlag = useFeatureFlag(FEATURE_FLAGS.deviceAgent);
   const deviceAgentBlocked = deviceAgentPurposeBlocked({
@@ -267,7 +258,7 @@ export function ProvisionWizard({
       .finally(() => setMinting(false));
   };
 
-  /** The grants a new MCP key carries: everything delegable on the servers. */
+  /** An MCP key carries everything delegable on the chosen servers. */
   const mcpKeyGrants = async (
     targetID: string,
   ): Promise<AgentPolicyGrantForm[]> => {
@@ -288,9 +279,9 @@ export function ProvisionWizard({
   };
 
   /**
-   * The grants a device agent key carries: exactly sync, hooks, and read on
-   * the chosen project. An existing agent is given whatever of those its
-   * policy lacks first, and is refused if its policy reaches MCP servers.
+   * A device agent key carries exactly sync, hooks, and read on the project.
+   * An existing agent gets any missing grants first, and is refused if its
+   * policy reaches MCP servers.
    */
   const deviceAgentKeyGrants = async (
     target: ManagedAgent,
@@ -300,7 +291,7 @@ export function ProvisionWizard({
       const stored = await sdk.agents.listPolicyGrants({ agentId: target.id });
       if (policyConnectsToMCP(stored))
         throw new Error(
-          "This agent can connect to MCP servers, so it cannot run the device agent. Create a separate agent for the device agent.",
+          "This agent can connect to MCP servers, so it cannot run the device agent. Create a separate agent for that.",
         );
       const missing = missingPolicyGrants(stored, required);
       if (missing.length > 0 && !target.permissions.write)
@@ -346,8 +337,7 @@ export function ProvisionWizard({
     try {
       if (!purpose)
         throw new Error("This agent's permissions are still loading.");
-      // Applies to an existing device agent too: issuing it a key delegates the
-      // same organization scopes as creating one.
+      // Existing agents too: a new key delegates the same organization scopes.
       if (purpose === "device-agent" && deviceAgentBlocked)
         throw new Error(deviceAgentBlocked);
       const draft: AgentPolicyDraft = {
@@ -359,7 +349,7 @@ export function ProvisionWizard({
       };
       // An agent that exists keeps its stored ceiling: this flow issues a key
       // against it rather than rewriting what the agent may ever be delegated.
-      // A device agent is organization-wide: its sync and hook grants are.
+      // A device agent is organization-wide, like its grants.
       const target =
         agent ??
         (await sdk.agents.create({
@@ -403,8 +393,6 @@ export function ProvisionWizard({
       const issued = await sdk.keys.create({
         createKeyForm: {
           agentId: target.id,
-          // Key names are unique per organization, so a date alone collides
-          // the second time an agent is issued a key that day.
           name: keyName(name.trim()),
           expiresAt,
           delegatedGrantsVersion: 2,
@@ -446,7 +434,7 @@ export function ProvisionWizard({
         purpose === "device-agent"
           ? [
               { label: "Owner", value: user.displayName || user.email },
-              { label: "Runs", value: "Device agent" },
+              { label: "Used for", value: "Device agent" },
               {
                 label: "Project",
                 value:
@@ -499,8 +487,7 @@ export function ProvisionWizard({
         return (
           <div className="space-y-6">
             {storedPolicy.isError && (
-              // Its purpose is read from this, so without it the flow cannot
-              // tell which key the agent may be issued.
+              // Without the policy, the agent's purpose is unknown.
               <div
                 role="alert"
                 className="border-destructive text-destructive flex items-center justify-between gap-4 border p-3 text-sm"
@@ -540,11 +527,11 @@ export function ProvisionWizard({
               </Text>
             </div>
             <div className="space-y-2">
-              <Label>Runs</Label>
+              <Label>Used for</Label>
               <Text muted small>
                 {existing
-                  ? "Set when the agent was first provisioned. An agent runs one of these, never both."
-                  : "What this agent's key is for. An agent runs one of these, never both."}
+                  ? "Set when the agent was created. An agent is used for one of these, never both."
+                  : "What this agent's key is for. An agent is used for one of these, never both."}
               </Text>
               <RadioCardGroup
                 value={purpose ?? ""}
@@ -689,7 +676,7 @@ export function ProvisionWizard({
               canRegenerate={!!secret}
               onModeChange={(next) => {
                 setMode(next);
-                // A code renders one script; a new mode needs a new code.
+                // Each code renders one script, so a new mode needs a new code.
                 if (secret && gatewayURL)
                   regenerate(
                     secret,

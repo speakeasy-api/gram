@@ -9,9 +9,8 @@ import {
 } from "../agent-api-key-grants";
 
 /**
- * What an agent identity is provisioned for. An agent is one or the other,
- * never both: a device agent key is written to disk on a shared host, so it
- * must not double as a credential that reaches MCP servers.
+ * What an agent is provisioned for: one or the other, never both. A device
+ * agent key is written to disk, so it must not also reach MCP servers.
  */
 export type AgentPurpose = "mcp" | "device-agent";
 
@@ -52,11 +51,7 @@ export const DEVICE_AGENT_SCOPES = [
   "project:read",
 ];
 
-/**
- * The purpose an existing agent was provisioned for, read from its stored
- * policy. An agent that can sync the device agent is a device agent; anything
- * else is provisioned for MCP, which is what every agent was before.
- */
+/** An agent that can sync the device agent is a device agent; any other is MCP. */
 export function agentPurposeFromPolicy(
   grants: AgentPolicyGrant[],
 ): AgentPurpose {
@@ -71,9 +66,8 @@ export function policyConnectsToMCP(grants: AgentPolicyGrant[]): boolean {
 }
 
 /**
- * Why this person cannot provision a device agent, or null when they can.
- * Organization scopes can only be delegated by an org admin, so offering the
- * option to anyone else is offering a flow that fails at the last step.
+ * Why this person cannot provision a device agent, or null when they can. Only
+ * an org admin can delegate its organization scopes.
  */
 export function deviceAgentPurposeBlocked({
   deviceAgentEnabled,
@@ -115,9 +109,8 @@ function candidateCovers(
 }
 
 /**
- * Picks the delegable candidate for each required grant, narrowed to the
- * required resource. Returns the scopes no candidate covers, since those mean
- * the owner or the caller cannot delegate them.
+ * Picks a delegable candidate for each required grant, narrowed to the required
+ * resource, and returns the scopes no candidate covers.
  */
 export function selectDeviceAgentKeyGrants(
   delegable: AgentPolicyGrantForm[],
@@ -135,12 +128,9 @@ export function selectDeviceAgentKeyGrants(
       missingScopes.push(form.scope);
       continue;
     }
-    // A candidate may wildcard a dimension the requirement pins, and the
-    // server reads a wildcard in an issued grant as "every resource" — so a
-    // `*` kind or id would mint a key far broader than the chosen project.
-    // canNarrowResource cannot close this: it is false for a wildcard kind
-    // (no inventory names those resources), so specialize the candidate here
-    // and let expandRequestedGrants clone an already-specific selector.
+    // An issued `*` kind or id means every resource, so pin any wildcard the
+    // requirement fixes. canNarrowResource is false for a wildcard kind, so
+    // this cannot be left to narrowing.
     const specialized: AgentPolicyGrantForm = {
       ...grant,
       selector: {
@@ -179,11 +169,9 @@ export function undelegableScopesMessage(missingScopes: string[]): string {
 export const REVIEW_FILE = "gram-device-agent.sh";
 
 /**
- * The review-first form of a one-line command: the same single-use URL saved
- * to a file instead of piped to a shell. The file carries the key, so it is
- * created owner-only (an existing file would keep its own mode, so it goes
- * first), and it is removed after the run whether or not the run succeeded,
- * in a subshell that keeps the script's exit status.
+ * The one-line command as download-then-run. The file holds the key, so it is
+ * created owner-only (after removing any old file, which would keep its mode)
+ * and removed after the run, keeping the exit status.
  */
 export function reviewCommands(command: string): {
   fetch: string;

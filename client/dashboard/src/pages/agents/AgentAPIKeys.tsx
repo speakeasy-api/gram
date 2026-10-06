@@ -573,8 +573,7 @@ function AgentAPIKeysContent({
       key: "lastAccessedAt",
       header: "Last used",
       width: "160px",
-      // A device agent has no session to show, so its key's last use is the
-      // only sign it is still checking in.
+      // For a device agent, the only sign it is still checking in.
       render: (key) =>
         key.lastAccessedAt ? <KeyDate date={key.lastAccessedAt} /> : "Never",
     },

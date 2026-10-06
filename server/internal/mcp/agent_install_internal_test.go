@@ -19,8 +19,7 @@ func TestAgentInstallScriptQuotesInterpolatedValues(t *testing.T) {
 	require.NotContains(t, script, "\ntouch pwned")
 }
 
-// managedConfigFrom extracts the managed enrollment written by the script's
-// heredoc, so assertions read the JSON the device agent will read.
+// managedConfigFrom extracts the managed enrollment JSON from the script.
 func managedConfigFrom(t *testing.T, script string) deviceAgentManagedConfig {
 	t.Helper()
 	_, rest, ok := strings.Cut(script, "<<'JSON'\n")
@@ -64,8 +63,7 @@ func TestDeviceAgentInstallScriptServiceLingers(t *testing.T) {
 	require.Equal(t, "automatic", config.AutoUpdate)
 }
 
-// The device agent defaults to production, so production enrollment names no
-// override.
+// Production is the device agent's default, so it needs no override.
 func TestDeviceAgentInstallScriptOmitsTheProductionControlPlane(t *testing.T) {
 	t.Parallel()
 	script, err := deviceAgentInstallScript("https://app.getgram.ai/", "gram_test_key", deviceAgentRunModeService)
@@ -73,8 +71,7 @@ func TestDeviceAgentInstallScriptOmitsTheProductionControlPlane(t *testing.T) {
 	require.NotContains(t, script, "_control_plane_url")
 }
 
-// The key lands in a quoted heredoc. JSON encoding must keep any value from
-// ending the heredoc and running what follows as commands.
+// A key must not be able to end the heredoc and run commands.
 func TestDeviceAgentInstallScriptKeepsTheKeyInsideTheHeredoc(t *testing.T) {
 	t.Parallel()
 	script, err := deviceAgentInstallScript("https://gram.example.test", "key\nJSON\ntouch pwned", deviceAgentRunModeEphemeral)
@@ -89,8 +86,7 @@ func TestDeviceAgentInstallScriptRejectsAnUnknownMode(t *testing.T) {
 	require.Error(t, err)
 }
 
-// The key file belongs to the account that runs the agent and nobody else:
-// never readable through a shared group.
+// The key file is owner-only, never readable through a shared group.
 func TestDeviceAgentInstallScriptKeepsTheKeyOwnerOnly(t *testing.T) {
 	t.Parallel()
 	script, err := deviceAgentInstallScript("https://gram.example.test", "gram_test_key", deviceAgentRunModeService)
@@ -100,13 +96,12 @@ func TestDeviceAgentInstallScriptKeepsTheKeyOwnerOnly(t *testing.T) {
 	require.NotContains(t, script, "chown root:")
 }
 
-// A failed install must not leave a live key on a host that never enrolled.
+// A failed install must not leave a live key behind.
 func TestDeviceAgentInstallScriptRemovesTheKeyWhenInstallFails(t *testing.T) {
 	t.Parallel()
 	script, err := deviceAgentInstallScript("https://gram.example.test", "gram_test_key", deviceAgentRunModeEphemeral)
 	require.NoError(t, err)
 	require.Contains(t, script, `if [ "$status" -ne 0 ] && [ -n "$KEY_WRITTEN" ]; then $SUDO rm -f "$MANAGED"`)
-	// The flag is raised before the file exists, so a failure while writing it
-	// is cleaned up too.
+	// Set before the file is created, so a failed write is cleaned up too.
 	require.Less(t, strings.Index(script, "KEY_WRITTEN=1"), strings.Index(script, `install -m 0600`))
 }

@@ -17,6 +17,7 @@ import type { AgentPurpose } from "./device-agent";
 export type VerifyState = "waiting" | "connected" | "unknown";
 
 type VerifyCopy = {
+  firstEvent: string;
   waiting: string;
   waitingDetail: string;
   connected: string;
@@ -28,10 +29,11 @@ function verifyCopy(purpose: AgentPurpose, gatewayURL: string): VerifyCopy {
   switch (purpose) {
     case "device-agent":
       return {
+        firstEvent: "First check-in",
         waiting: "Waiting for the device agent to check in",
         waitingDetail:
-          "Keep this page open while the setup runs. This updates when the device agent first syncs, which can take a minute to show.",
-        connected: "The device agent has checked in.",
+          "Keep this page open while the setup runs. This updates when the device agent syncs; a sync in the first minute after the command was generated may not show.",
+        connected: "The device agent is live.",
         checks: [
           {
             title: "Device agent installed",
@@ -59,6 +61,7 @@ function verifyCopy(purpose: AgentPurpose, gatewayURL: string): VerifyCopy {
       };
     case "mcp":
       return {
+        firstEvent: "First call",
         waiting: "Waiting for the first call",
         waitingDetail:
           "Keep this page open while the agent runs its setup. This updates as calls reach the gateway.",
@@ -124,7 +127,7 @@ export function StepVerify({
           </h2>
           <Text muted small>
             {state === "connected"
-              ? `First call ${firstCallAt ? dateTimeFormatters.full.format(firstCallAt) : "received"}. ${copy.connected}`
+              ? `${copy.firstEvent} ${firstCallAt ? dateTimeFormatters.full.format(firstCallAt) : "received"}. ${copy.connected}`
               : copy.waitingDetail}
           </Text>
         </div>
@@ -165,7 +168,7 @@ export function StepVerify({
         </span>
         <ul className="space-y-1 text-sm">
           {copy.troubleshooting.map((item, index) => (
-            // Static copy in a fixed order, so the position is the identity.
+            // Static copy in a fixed order.
             <li key={index}>{item}</li>
           ))}
         </ul>

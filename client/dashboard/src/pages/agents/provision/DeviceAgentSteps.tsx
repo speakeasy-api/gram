@@ -24,11 +24,7 @@ import {
 import { Copyable } from "./StepProvision";
 import { WizardStepHeader } from "./WizardChrome";
 
-/**
- * The steps that differ when an agent is provisioned to run the device agent
- * rather than to call MCP servers: which project its hooks report to, and the
- * script that installs and enrolls the device agent on its host.
- */
+/** The wizard steps specific to a device agent: its project and its install. */
 
 export function StepDeviceAgentProject({
   projectId,
@@ -61,9 +57,8 @@ export function StepDeviceAgentProject({
           </SelectContent>
         </Select>
         <Text muted small>
-          The agent can sync its device agent plugins and send hook events
-          across the organization, and read this one project. It cannot connect
-          to MCP servers.
+          The agent can sync device agent plugins and send hook events for the
+          organization, and read this project. It cannot connect to MCP servers.
         </Text>
       </div>
     </div>
@@ -106,18 +101,18 @@ export function StepProvisionDeviceAgent({
             {
               value: "ephemeral",
               label: "Ephemeral",
-              tooltip: "Sandboxes and CI: reconcile once per session",
+              tooltip: "Sandboxes and CI: sync once, then exit",
             },
             {
               value: "service",
               label: "Persistent",
-              tooltip: "Long-lived hosts: a background service",
+              tooltip: "Long-lived hosts: run as a background service",
             },
           ]}
         />
         <Text muted small>
           {mode === "ephemeral"
-            ? "Syncs once and exits. Run speakeasyd sync --once to sync again; the setup link itself works only once."
+            ? "Syncs once and exits. To sync again, run speakeasyd sync --once; the setup link works only once."
             : "Installs a background service for the account that runs it, and keeps it running after logout. Run it as that account, not as root."}
         </Text>
       </div>
@@ -147,7 +142,7 @@ export function StepProvisionDeviceAgent({
               <ol className="space-y-1 text-sm">
                 {[
                   "Downloads and verifies the latest device agent over HTTPS.",
-                  "Writes the agent's key to /etc/speakeasy/managed.json, readable only by root and this account.",
+                  "Writes the agent's key to /etc/speakeasy/managed.json, readable only by this account.",
                   mode === "ephemeral"
                     ? "Syncs once, then exits."
                     : "Installs and starts the background service.",

@@ -10,12 +10,10 @@ import (
 type deviceAgentRunMode string
 
 const (
-	// deviceAgentRunModeEphemeral reconciles once and exits, for hosts that
-	// live for one session and rerun setup at the start of the next.
+	// deviceAgentRunModeEphemeral syncs once and exits, for short-lived hosts.
 	deviceAgentRunModeEphemeral deviceAgentRunMode = "ephemeral"
 
-	// deviceAgentRunModeService installs a per-user background service, for
-	// hosts that stay up.
+	// deviceAgentRunModeService installs a per-user background service.
 	deviceAgentRunModeService deviceAgentRunMode = "service"
 )
 
@@ -23,52 +21,45 @@ const (
 var deviceAgentRunModes = []deviceAgentRunMode{deviceAgentRunModeEphemeral, deviceAgentRunModeService}
 
 const (
-	// deviceAgentInstallerURL is the hosted installer. It resolves the latest
-	// stable release and verifies its checksum, so the script pins neither.
+	// deviceAgentInstallerURL resolves and verifies the latest stable release,
+	// so the script pins no version or checksum.
 	deviceAgentInstallerURL = "https://storage.googleapis.com/speakeasy-device-agent-releases-prod/install.sh"
 
-	// deviceAgentManagedConfigPath is where the device agent reads managed
-	// enrollment on Linux. Agent identities run on Linux hosts; macOS hosts
-	// get the signed package through MDM instead.
+	// deviceAgentManagedConfigPath is the device agent's managed enrollment
+	// file on Linux. macOS hosts use the signed package through MDM.
 	deviceAgentManagedConfigPath = "/etc/speakeasy/managed.json"
 
-	// deviceAgentDefaultControlPlane is the control plane the device agent
-	// reports to when managed enrollment names none.
+	// deviceAgentDefaultControlPlane is used when enrollment names none.
 	deviceAgentDefaultControlPlane = "https://app.getgram.ai"
 
 	// deviceAgentManagedConfigVersion is the managed enrollment schema version.
 	deviceAgentManagedConfigVersion = 1
 )
 
-// deviceAgentManagedConfig is the managed enrollment file the device agent
-// reads at deviceAgentManagedConfigPath. Its shape is the device agent's
-// contract.
+// deviceAgentManagedConfig is the device agent's managed enrollment file.
 type deviceAgentManagedConfig struct {
 	// V is the schema version.
 	V int `json:"v"`
 
-	// AgentKey is the agent API key; it is the host's whole identity.
+	// AgentKey is the agent API key, the host's only credential.
 	AgentKey string `json:"agent_key"`
 
 	// Environment tells the device agent what kind of host it is on.
 	Environment string `json:"environment"`
 
-	// HideUI suppresses the tray UI; nobody is at an agent's host to see it.
+	// HideUI suppresses the tray UI on an unattended host.
 	HideUI bool `json:"hide_ui"`
 
-	// AutoUpdate is "disabled" on a host that lives for one session and
-	// "automatic" on one nobody is around to accept an update prompt on.
+	// AutoUpdate is "disabled" for ephemeral hosts and "automatic" otherwise.
 	AutoUpdate string `json:"auto_update"`
 
 	// ControlPlaneURL overrides the control plane; omitted for production.
 	ControlPlaneURL string `json:"_control_plane_url,omitempty"`
 }
 
-// deviceAgentInstallScript installs the device agent on a Linux host and
-// enrolls it under an agent identity. The key is written to managed enrollment
-// readable only by the account that runs the agent, the script never prints
-// it, and a failed install removes it again so no live key is left on a host
-// that was never enrolled.
+// deviceAgentInstallScript installs and enrolls the device agent on a Linux
+// host. The key file is readable only by the account that runs the agent, and
+// a failed install removes it.
 func deviceAgentInstallScript(controlPlane, key string, mode deviceAgentRunMode) (string, error) {
 	config := deviceAgentManagedConfig{
 		V:               deviceAgentManagedConfigVersion,
@@ -86,8 +77,8 @@ func deviceAgentInstallScript(controlPlane, key string, mode deviceAgentRunMode)
 		run = `  # 3) Sync once and exit. Run "$BIN_DIR/speakeasyd" sync --once to sync again.
   "$BIN_DIR/speakeasyd" sync --once`
 	case deviceAgentRunModeService:
-		run = `  # 3) Register and start the background service under this account.
-  # Keep the per-user service running after logout; root needs no linger.
+		run = `  # 3) Install and start the background service for this account, and
+  #    keep it running after logout.
   if [ -n "$SUDO" ]; then
     sudo loginctl enable-linger "$(id -un)"
   fi
@@ -99,9 +90,8 @@ func deviceAgentInstallScript(controlPlane, key string, mode deviceAgentRunMode)
 	if strings.TrimRight(controlPlane, "/") != deviceAgentDefaultControlPlane {
 		config.ControlPlaneURL = controlPlane
 	}
-	// The JSON goes into a quoted heredoc, so nothing in it is expanded, and
-	// json.Marshal escapes every control character, so no value can end the
-	// heredoc early.
+	// The heredoc is quoted and json.Marshal escapes control characters, so no
+	// value can be expanded or end the heredoc early.
 	managed, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("encode managed config: %w", err)
@@ -110,9 +100,8 @@ func deviceAgentInstallScript(controlPlane, key string, mode deviceAgentRunMode)
 	path := shellSingleQuote(deviceAgentManagedConfigPath)
 	dir := shellSingleQuote(deviceAgentManagedConfigPath[:strings.LastIndex(deviceAgentManagedConfigPath, "/")])
 
-	// Everything runs inside main, called on the last line: piped into sh, the
-	// whole script is read before any of it runs, so a truncated download
-	// runs nothing and no command can read the rest of the script as input.
+	// Wrapping the body in main means a truncated download runs nothing when
+	// piped to sh.
 	return `#!/bin/sh
 # Installs the Gram device agent on this Linux host under an agent identity.
 # Generated for one use. The key below is live: treat this file as a secret.
@@ -127,8 +116,8 @@ main() {
     SUDO="sudo"; BIN_DIR="$HOME/.local/bin"
   fi
 
-  # 1) Install the device agent (latest stable, checksum-verified). Download
-  #    over HTTPS only, and in full, before running it.
+  # 1) Install the latest device agent over HTTPS, downloading it in full
+  #    before running it.
   INSTALLER="$(mktemp)"
   KEY_WRITTEN=""
   trap 'status=$?; rm -f "$INSTALLER"; if [ "$status" -ne 0 ] && [ -n "$KEY_WRITTEN" ]; then $SUDO rm -f "$MANAGED"; echo "Install failed; removed the agent key." >&2; fi' EXIT
@@ -136,10 +125,9 @@ main() {
     -o "$INSTALLER" ` + shellSingleQuote(deviceAgentInstallerURL) + `
   sh "$INSTALLER" --install-dir "$BIN_DIR"
 
-  # 2) Agent identity. The key is this host's only credential.
+  # 2) Write the agent key.
   $SUDO mkdir -p ` + dir + `
-  # Owned by the account that runs the agent and readable by nobody else, and
-  # private before the key is written so it is never briefly readable.
+  # Owner-only before the key is written, so it is never briefly readable.
   KEY_WRITTEN=1
   $SUDO install -m 0600 -o "$(id -un)" /dev/null "$MANAGED"
   $SUDO tee "$MANAGED" >/dev/null <<'JSON'

@@ -31,7 +31,7 @@ import (
 )
 
 // mintInstallCode drives the install-code handler. An empty body is the MCP
-// flavor; ctx carries the request origin the handler reads.
+// flavor; ctx carries the request origin.
 func mintInstallCode(t *testing.T, ctx context.Context, ti *testInstance, agentID, token, body string) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 	var reader io.Reader
@@ -137,15 +137,14 @@ func TestAgentInstall_MintingRequiresThatAgentsKey(t *testing.T) {
 	requireAgentGatewayCode(t, err, oops.CodeNotFound)
 }
 
-// deviceAgentKey is an agent key seeded with the grants a test names.
+// deviceAgentKey is a seeded agent key.
 type deviceAgentKey struct {
 	agentID string
 	token   string
 }
 
-// seedDeviceAgentKey stores an agent key whose delegated policy is exactly
-// grants. The agent and its owner both hold every grant, so live admission
-// keeps them all.
+// seedDeviceAgentKey stores an agent key whose policy is exactly grants. The
+// agent and its owner hold every grant, so admission keeps them all.
 func seedDeviceAgentKey(t *testing.T, ctx context.Context, ti *testInstance, grants []authz.Grant) deviceAgentKey {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -196,7 +195,7 @@ func seedDeviceAgentKey(t *testing.T, ctx context.Context, ti *testInstance, gra
 	return deviceAgentKey{agentID: agent.ID.String(), token: token}
 }
 
-// deviceAgentGrants are the grants the dashboard issues a device agent key.
+// deviceAgentGrants are the grants a device agent key is issued.
 func deviceAgentGrants(ctx context.Context, t *testing.T) []authz.Grant {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -209,8 +208,7 @@ func deviceAgentGrants(ctx context.Context, t *testing.T) []authz.Grant {
 	}
 }
 
-// httpsOrigin is a request arriving on an HTTPS platform host, which is the
-// only control plane a device agent key may be sent to.
+// httpsOrigin is a request on an HTTPS platform host.
 func httpsOrigin(t *testing.T) context.Context {
 	t.Helper()
 	return requestorigin.WithContext(t.Context(), requestorigin.Origin{
@@ -241,8 +239,7 @@ func TestAgentInstall_DeviceAgentCodeExchangesForAnEnrollmentScript(t *testing.T
 	require.Equal(t, "no-store", script.Result().Header.Get("Cache-Control"))
 }
 
-// A key that can reach MCP servers is a gateway credential; writing it into a
-// host's managed enrollment would hand it to everything on that host.
+// A key that can reach MCP servers must not be written to a host.
 func TestAgentInstall_DeviceAgentRefusesAKeyThatCanConnectToMCP(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
@@ -264,8 +261,7 @@ func TestAgentInstall_DeviceAgentRequiresTheSyncGrant(t *testing.T) {
 	requireAgentGatewayCode(t, err, oops.CodeForbidden)
 }
 
-// The test server is plain HTTP. The script runs on another host, so there is
-// no loopback exception: the key must not be sent there in plaintext.
+// The test server is plain HTTP, and there is no loopback exception.
 func TestAgentInstall_DeviceAgentRefusesAPlaintextControlPlane(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)

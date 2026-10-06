@@ -138,9 +138,7 @@ function CloudSetupScript({
 }) {
   const apiKeysHref = useOrgRoutes().apiKeys.href();
   const organization = useOrganization();
-  // Agents are managed per project while this page is org-scoped, so the link
-  // resolves against the organization's first project. Without one there is
-  // no agents page to send anyone to, so the link is left out.
+  // Agents live under a project, so link via the first one, if any.
   const firstProjectSlug = organization.projects[0]?.slug;
   const agentsHref = useRoutes({
     projectSlug: firstProjectSlug ?? "",

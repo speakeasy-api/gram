@@ -36,18 +36,12 @@ export function isCredentialSafe(raw: string): boolean {
   );
 }
 
-/**
- * Which script an install code exchanges for. The server checks the key fits
- * it: a device agent code needs a key that can sync and cannot reach MCP.
- */
+/** The script an install code renders. The server checks the key fits it. */
 export type InstallRequest =
   | { flavor: "mcp" }
   | { flavor: "device_agent"; mode: DeviceAgentRunMode };
 
-/**
- * The server's own reason when it gave one: a refusal such as "this key can
- * connect to MCP servers" is the user's to act on, and a bare status is not.
- */
+/** The server's message when it sent one, since the user can act on it. */
 async function installCodeError(response: Response): Promise<string> {
   const fallback = `Could not prepare a setup command (${response.status})`;
   try {
