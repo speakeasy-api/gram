@@ -199,7 +199,7 @@ func TestIngressPayloadCannotPoseAsWakeRequester(t *testing.T) {
 	event, err := assistantsrepo.New(db).GetLatestAssistantThreadEventByThreadID(t.Context(), assistantsrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: result.ThreadID, ProjectID: project})
 	require.NoError(t, err)
 
-	user, err := core.turnUserID(t.Context(), record, assistantThreadRecord{SourceKind: sourceKindGithub}, assistantThreadEventRecord{NormalizedPayloadJSON: event.NormalizedPayloadJson})
+	user, _, err := core.turnUserID(t.Context(), record, assistantThreadRecord{SourceKind: sourceKindGithub}, assistantThreadEventRecord{NormalizedPayloadJSON: event.NormalizedPayloadJson})
 	require.NoError(t, err)
 	require.Equal(t, "user-1", user, "an ingress payload must not select the turn user")
 }
