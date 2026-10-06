@@ -176,12 +176,16 @@ func unsupportedProtocolVersionError(id mcpjsonrpc.ID, requested string, support
 }
 
 // handleProtocolVersionValidation writes a request validation failure before
-// authentication. Notifications are acknowledged without a JSON-RPC body and
-// are not dispatched. Every failure, notifications included, is counted on
-// mcp.request.rejected by reason; unsupported-version failures are also
-// counted on the protocol-version rejection census. The response is encoded
-// under the revision in effect, unless the failure is a [declarationError]
-// naming the revision that governs it.
+// authentication. A notification is never dispatched. One declaring an
+// unsupported revision is refused with UnsupportedProtocolVersionError and its
+// HTTP 400, under a null id since it answers no request: every revision
+// requires an HTTP error status for a notification the server cannot accept.
+// Other failing notifications are acknowledged without a body. Every failure,
+// notifications included, is counted on mcp.request.rejected by reason;
+// unsupported-version failures are also counted on the protocol-version
+// rejection census. The response is encoded under the revision in effect,
+// unless the failure is a [declarationError] naming the revision that governs
+// it.
 func (s *Service) handleProtocolVersionValidation(
 	r *http.Request,
 	logger *slog.Logger,
@@ -196,8 +200,10 @@ func (s *Service) handleProtocolVersionValidation(
 	}
 	ctx := r.Context()
 
+	unsupported := false
 	if mcpErr, ok := errors.AsType[*oops.MCPError](validationErr); ok {
-		if mcpErr.Code == oops.MCPCodeUnsupportedProtocolVersion {
+		unsupported = mcpErr.Code == oops.MCPCodeUnsupportedProtocolVersion
+		if unsupported {
 			s.metrics.RecordMCPProtocolVersionRejected(ctx, resolution.Declared, req.Method, surface)
 		}
 		if reason, ok := requestRejectionReason(mcpErr.Code); ok {
@@ -205,7 +211,7 @@ func (s *Service) handleProtocolVersionValidation(
 		}
 	}
 
-	if !req.ID.IsSet() {
+	if !req.ID.IsSet() && !unsupported {
 		return true, respondWithNoContent(true, w)
 	}
 

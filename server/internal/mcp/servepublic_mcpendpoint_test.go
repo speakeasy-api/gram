@@ -297,10 +297,10 @@ func TestServePublic_McpEndpoint_ToolsetBacked_UnsupportedVersionPrecedesIssuerA
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, issuerID)
 
 	w, err := servePublicHTTP(t, t.Context(), ti, endpointSlug, toolsListBody(), "", map[string]string{
-		mcpversions.HTTPHeader: mcpversions.Version20260728,
+		mcpversions.HTTPHeader: unservedProtocolVersion,
 	})
 	require.NoError(t, err)
-	requireUnsupportedProtocolVersionResponse(t, w, mcpversions.Version20260728, mcpversions.SupportedHostedToolset())
+	requireUnsupportedProtocolVersionResponse(t, w, unservedProtocolVersion, mcpversions.SupportedHostedToolset())
 	require.Empty(t, w.Header().Get("WWW-Authenticate"))
 }
 
