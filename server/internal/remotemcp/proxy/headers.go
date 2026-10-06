@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -38,6 +39,13 @@ const (
 //
 // Authorization is end-to-end and is handled separately by
 // [Proxy.applyRequestHeaders] based on [Proxy.AuthorizationOverride].
+//
+// The MCP 2026-07-28 standard request headers (Mcp-Method, Mcp-Name, and the
+// Mcp-Param-{Name} family) must never be added here, and configured headers
+// never override them ([Proxy.applyRequestHeaders]). The specification
+// requires an intermediary to forward them, including any Mcp-Param-{Name}
+// header it does not recognize, and the upstream validates them against the
+// body; stripping one would make a conforming request fail upstream.
 func isSkippedRequestHeader(name string) bool {
 	if mcpauthz.ReservedHeader(name) {
 		return true
@@ -190,6 +198,12 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 
 	for _, h := range p.Headers {
 		if mcpauthz.ReservedHeader(h.Name) || mcpauthz.ReservedHeader(h.ValueFromRequestHeader) {
+			continue
+		}
+		// A configured header must not set or delete a standard MCP request
+		// header: the client's value is forwarded untouched, as the
+		// specification requires of an intermediary.
+		if httpheaders.IsStandardMCPRequestHeader(h.Name) {
 			continue
 		}
 		value, err := h.Resolve(userReq)
