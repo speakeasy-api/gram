@@ -196,8 +196,8 @@ func TestRemoteLogin_ChallengeScopesBeatPin(t *testing.T) {
 		withProber(), withLiveResourceScopes(), withRegistrationTelemetry(),
 	)
 	require.Equal(t, "files:write openid", scopeOf(t, env.authURL))
-	require.EqualValues(t, 0, hits.Load())
-	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceChallengeScope, protectedresource.ProbeOutcomeSkippedFresh)
+	require.EqualValues(t, 1, hits.Load(), "the row is refreshed even though the challenge decides")
+	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceChallengeScope, protectedresource.ProbeOutcomeFetched)
 }
 
 // The pin beats the live list and the issuer override, gains the standard
@@ -254,20 +254,21 @@ func TestRemoteLogin_LiveProbeFillsRowAndDecides(t *testing.T) {
 	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceLiveResource, protectedresource.ProbeOutcomeFetched)
 }
 
-// A row read within the hour is trusted without a probe.
-func TestRemoteLogin_FreshRowSkipsProbe(t *testing.T) {
+// A row read moments ago is still probed: the resource may have changed what
+// it advertises, so the live list wins over the cached one.
+func TestRemoteLogin_RecentRowStillProbes(t *testing.T) {
 	t.Parallel()
 
-	resource, hits := fakeResource(t, []string{"stale:list"})
-	_, env := newSyntheticExpiryEnv(t, "fresh-row", scopelessToken,
+	resource, hits := fakeResource(t, []string{"files:write"})
+	_, env := newSyntheticExpiryEnv(t, "recent-row", scopelessToken,
 		withIssuerScopes("admin", "openid"),
 		withRemoteServer(resource.URL),
 		withProtectedResource(protectedResourceSeed{scopesSupported: []string{"files:read"}, fetchedAgo: 10 * time.Minute}),
 		withProber(), withLiveResourceScopes(), withRegistrationTelemetry(),
 	)
-	require.Equal(t, "files:read openid", scopeOf(t, env.authURL))
-	require.EqualValues(t, 0, hits.Load())
-	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceCachedResource, protectedresource.ProbeOutcomeSkippedFresh)
+	require.Equal(t, "files:write openid", scopeOf(t, env.authURL))
+	require.EqualValues(t, 1, hits.Load())
+	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceLiveResource, protectedresource.ProbeOutcomeFetched)
 }
 
 // A probe that fails falls back to the row's last good list and records the failure.
@@ -375,14 +376,14 @@ func TestRemoteLogin_ResourceListReplacesLargeIssuerCatalogue(t *testing.T) {
 func TestListClients_ReadsCachedResourceRowWithoutProbing(t *testing.T) {
 	t.Parallel()
 
-	resource, hits := fakeResource(t, []string{"stale:list"})
+	resource, hits := fakeResource(t, []string{"files:read", "files:write"})
 	ctx, env := newSyntheticExpiryEnv(t, "cached-card", scopelessToken,
 		withIssuerScopes("admin", "openid"),
 		withRemoteServer(resource.URL),
 		withProtectedResource(protectedResourceSeed{pin: []string{"files:read"}, challengeScopes: []string{"c"}, scopesSupported: []string{"files:read", "files:write"}, fetchedAgo: 10 * time.Minute}),
 		withProber(), withLiveResourceScopes(),
 	)
-	require.EqualValues(t, 0, hits.Load())
+	require.EqualValues(t, 1, hits.Load(), "the login itself probes once")
 
 	// The consent card reads the row by the login's server, with or without
 	// the client claiming the resource.
@@ -396,7 +397,7 @@ func TestListClients_ReadsCachedResourceRowWithoutProbing(t *testing.T) {
 	require.True(t, byServer.UseDiscovered)
 	_, _, ok = env.mgr.CachedResourceScopesForServer(ctx, env.projectID, uuid.NullUUID{}, true)
 	require.False(t, ok, "a login with no server has no row")
-	require.EqualValues(t, 0, hits.Load())
+	require.EqualValues(t, 1, hits.Load())
 
 	// The client claims the resource, as the Platform MCP attachment records it.
 	_, err := env.q.UpdateRemoteSessionClientResourceDisplay(ctx, repo.UpdateRemoteSessionClientResourceDisplayParams{
@@ -421,7 +422,7 @@ func TestListClients_ReadsCachedResourceRowWithoutProbing(t *testing.T) {
 	require.True(t, env.mgr.ResourceScopeDiscoveryEnabled(ctx, env.organizationID))
 	require.Equal(t, []string{"c", "openid"}, c.RequestedScopes(c.CachedResourceScopes(true)).Scopes)
 	require.Equal(t, []string{"admin", "openid"}, c.RequestedScopes(c.CachedResourceScopes(false)).Scopes)
-	require.EqualValues(t, 0, hits.Load(), "listing clients never probes")
+	require.EqualValues(t, 1, hits.Load(), "listing clients never probes")
 }
 
 // Without a prober the manager keeps today's behaviour whatever the row says.

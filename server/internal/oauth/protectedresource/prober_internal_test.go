@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -53,11 +54,10 @@ func TestLoginSkip(t *testing.T) {
 		skip bool
 	}{
 		{name: "no row", row: nil, want: "", skip: false},
-		{name: "fetched within the hour", row: &repo.RemoteProtectedResource{MetadataFetchedAt: stamp(now.Add(-30 * time.Minute))}, want: ProbeOutcomeSkippedFresh, skip: true},
-		{name: "fetched over an hour ago", row: &repo.RemoteProtectedResource{MetadataFetchedAt: stamp(now.Add(-2 * time.Hour))}, want: "", skip: false},
+		{name: "fetched moments ago still probes", row: &repo.RemoteProtectedResource{MetadataFetchedAt: stamp(now.Add(-time.Minute))}, want: "", skip: false},
 		{name: "failed within fifteen minutes", row: &repo.RemoteProtectedResource{MetadataLastErrorAt: stamp(now.Add(-5 * time.Minute))}, want: ProbeOutcomeSkippedRecentError, skip: true},
 		{name: "failed over fifteen minutes ago", row: &repo.RemoteProtectedResource{MetadataLastErrorAt: stamp(now.Add(-20 * time.Minute))}, want: "", skip: false},
-		{name: "fresh read outranks a later error", row: &repo.RemoteProtectedResource{MetadataFetchedAt: stamp(now.Add(-30 * time.Minute)), MetadataLastErrorAt: stamp(now.Add(-time.Minute))}, want: ProbeOutcomeSkippedFresh, skip: true},
+		{name: "a recent error backs off even after a good read", row: &repo.RemoteProtectedResource{MetadataFetchedAt: stamp(now.Add(-30 * time.Minute)), MetadataLastErrorAt: stamp(now.Add(-time.Minute))}, want: ProbeOutcomeSkippedRecentError, skip: true},
 		{name: "never read", row: &repo.RemoteProtectedResource{}, want: "", skip: false},
 	}
 	for _, tc := range cases {
@@ -116,6 +116,38 @@ func TestLastGoodScopes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tc.want, LastGoodScopes(tc.row, now))
+		})
+	}
+}
+
+func TestUnchangedRead(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	const resourceURL = "https://rs.example.test/mcp"
+	raw := []byte(`{"resource":"https://rs.example.test/mcp","scopes_supported":["read"]}`)
+	doc := wellknown.OAuthProtectedResourceMetadata{Resource: resourceURL, MetadataURL: "https://rs.example.test" + wellknown.OAuthProtectedResourcePath + "/mcp", ScopesSupported: []string{"read"}, Raw: raw}
+	fresh := func(m []byte) *repo.RemoteProtectedResource {
+		return &repo.RemoteProtectedResource{Metadata: m, MetadataFetchedAt: stamp(now.Add(-time.Hour))}
+	}
+	cases := []struct {
+		name string
+		row  *repo.RemoteProtectedResource
+		doc  wellknown.OAuthProtectedResourceMetadata
+		want bool
+	}{
+		{name: "no row", row: nil, doc: doc, want: false},
+		{name: "same document", row: fresh(raw), doc: doc, want: true},
+		{name: "changed document", row: fresh([]byte(`{"resource":"https://rs.example.test/mcp","scopes_supported":["read","write"]}`)), doc: doc, want: false},
+		{name: "stale stamp", row: &repo.RemoteProtectedResource{Metadata: raw, MetadataFetchedAt: stamp(now.Add(-staleAfter))}, doc: doc, want: false},
+		{name: "never read", row: &repo.RemoteProtectedResource{Metadata: raw}, doc: doc, want: false},
+		{name: "failure after the read", row: &repo.RemoteProtectedResource{Metadata: raw, MetadataFetchedAt: stamp(now.Add(-time.Hour)), MetadataLastErrorAt: stamp(now.Add(-time.Minute))}, doc: doc, want: false},
+		{name: "failure before the read", row: &repo.RemoteProtectedResource{Metadata: raw, MetadataFetchedAt: stamp(now.Add(-time.Hour)), MetadataLastErrorAt: stamp(now.Add(-2 * time.Hour))}, doc: doc, want: true},
+		{name: "mismatched document is always recorded", row: fresh(raw), doc: wellknown.OAuthProtectedResourceMetadata{Resource: resourceURL + "/", MetadataURL: doc.MetadataURL, Raw: raw}, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, unchangedRead(tc.row, tc.doc, resourceURL, now))
 		})
 	}
 }

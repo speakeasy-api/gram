@@ -1,6 +1,7 @@
 package protectedresource
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -46,10 +47,6 @@ const (
 	// resource falls back to the last good read rather than stalling the user.
 	loginProbeBudget = 3 * time.Second
 
-	// loginFreshWindow is how recent a successful read must be for a login to
-	// use the row without probing.
-	loginFreshWindow = time.Hour
-
 	// loginErrorBackoff is how long after a failed read a login stops
 	// re-probing a resource that was just seen failing. On-use probes revisit
 	// a row whose latest visit failed after the same interval, so a login
@@ -71,9 +68,6 @@ const (
 type ProbeOutcome string
 
 const (
-	// ProbeOutcomeSkippedFresh: the row was read successfully within loginFreshWindow.
-	ProbeOutcomeSkippedFresh ProbeOutcome = "skipped_fresh"
-
 	// ProbeOutcomeSkippedRecentError: the last read failed within loginErrorBackoff.
 	ProbeOutcomeSkippedRecentError ProbeOutcome = "skipped_recent_error"
 
@@ -293,9 +287,10 @@ type LoginResolution struct {
 	ProbeDuration time.Duration
 }
 
-// ResolveForLogin reads the resource's row and, when the row is neither
-// fresh nor recently failing, probes the resource within loginProbeBudget
-// and records the result. It never fails the login: a nil prober, a missing
+// ResolveForLogin reads the resource's row and, unless the row failed to
+// read moments ago, probes the resource within loginProbeBudget and records
+// the result. Every login probes: a resource may change what it advertises
+// at any time, so a cached list is only a fallback for a failed probe. It never fails the login: a nil prober, a missing
 // row, or a failed probe degrade to what is cached.
 func (p *Prober) ResolveForLogin(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, organizationID string, resourceURL string) LoginResolution {
 	none := LoginResolution{Row: nil, ScopesSupported: nil, Live: false, Outcome: ProbeOutcomeNotApplicable, ProbeDuration: 0}
@@ -364,9 +359,12 @@ func (p *Prober) ResolveForLogin(ctx context.Context, logger *slog.Logger, proje
 		}
 		return cached
 	}
-	recordErr := p.record(writeCtx, p.db, projectID, organizationID, resourceURL, doc)
-	if recordErr != nil {
-		logger.ErrorContext(ctx, "record protected resource", attr.SlogError(recordErr))
+	var recordErr error
+	if !unchangedRead(existing, doc, resourceURL, now) {
+		recordErr = p.record(writeCtx, p.db, projectID, organizationID, resourceURL, doc)
+		if recordErr != nil {
+			logger.ErrorContext(ctx, "record protected resource", attr.SlogError(recordErr))
+		}
 	}
 	if !doc.ValidForResource(resourceURL) {
 		cached.Outcome = ProbeOutcomeError
@@ -387,13 +385,27 @@ func (p *Prober) ResolveForLogin(ctx context.Context, logger *slog.Logger, proje
 	return LoginResolution{Row: existing, ScopesSupported: doc.ScopesSupported, Live: true, Outcome: ProbeOutcomeFetched, ProbeDuration: cached.ProbeDuration}
 }
 
+// unchangedRead reports whether a login's read repeats what the row already
+// holds, so the write is skipped: the same valid document, recorded without
+// a later failure, and stamped within staleAfter so the row still proves
+// the resource was seen recently.
+func unchangedRead(row *repo.RemoteProtectedResource, doc wellknown.OAuthProtectedResourceMetadata, resourceURL string, now time.Time) bool {
+	if row == nil || !doc.ValidForResource(resourceURL) {
+		return false
+	}
+	if !row.MetadataFetchedAt.Valid || now.Sub(row.MetadataFetchedAt.Time) >= staleAfter {
+		return false
+	}
+	if row.MetadataLastErrorAt.Valid && !row.MetadataLastErrorAt.Time.Before(row.MetadataFetchedAt.Time) {
+		return false
+	}
+	return bytes.Equal(row.Metadata, doc.Raw)
+}
+
 // loginSkip reports whether a login should trust the row as is, and why.
 func loginSkip(row *repo.RemoteProtectedResource, now time.Time) (ProbeOutcome, bool) {
 	if row == nil {
 		return "", false
-	}
-	if row.MetadataFetchedAt.Valid && now.Sub(row.MetadataFetchedAt.Time) < loginFreshWindow {
-		return ProbeOutcomeSkippedFresh, true
 	}
 	if row.MetadataLastErrorAt.Valid && now.Sub(row.MetadataLastErrorAt.Time) < loginErrorBackoff {
 		return ProbeOutcomeSkippedRecentError, true
