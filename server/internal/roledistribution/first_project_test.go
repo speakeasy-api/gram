@@ -77,9 +77,9 @@ func TestPublishFirstProject(t *testing.T) {
 
 func TestPublishFirstProject_WaitsForConcurrentDelete(t *testing.T) {
 	t.Parallel()
+	f := newPipelineFixture(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
-	f := newPipelineFixture(t)
 	org := f.event.GetOrganizationId()
 	deletion, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: Hold a project delete open while another project is created.
 	require.NoError(t, err)
