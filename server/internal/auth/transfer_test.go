@@ -13,18 +13,29 @@ import (
 	"testing"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 // Sessions move from the server host (the source) to the extra platform host
@@ -33,16 +44,31 @@ var testTargetBaseURL = "https://" + testExtraPlatformHost
 
 const testTransferRedirect = "/test-org/mcp?tab=logs#recent"
 
+// The public signin_error codes a failed transfer carries to the login page.
+const (
+	errSessionExpired   = "transfer_session_expired"
+	errWrongDestination = "transfer_wrong_destination"
+	errNotTransferable  = "transfer_not_transferable"
+	errExpired          = "transfer_expired"
+	errBrowserMismatch  = "transfer_browser_mismatch"
+	errAccessChanged    = "transfer_access_changed"
+	errTemporary        = "transfer_temporary_error"
+)
+
 // loginAt is the login fallback on the dashboard at siteURL.
-func loginAt(siteURL, redirect string) string {
-	return siteURL + "/login?" + url.Values{"redirect": {redirect}}.Encode()
+func loginAt(siteURL, redirect, signinError string) string {
+	return siteURL + "/login?" + url.Values{"redirect": {redirect}, "signin_error": {signinError}}.Encode()
 }
 
 // targetLogin is the login fallback on the target host.
-func targetLogin(redirect string) string { return loginAt(testTargetBaseURL, redirect) }
+func targetLogin(redirect, signinError string) string {
+	return loginAt(testTargetBaseURL, redirect, signinError)
+}
 
 // sourceLogin is the login fallback on the source host's dashboard.
-func sourceLogin(redirect string) string { return loginAt(testSiteURL.String(), redirect) }
+func sourceLogin(redirect, signinError string) string {
+	return loginAt(testSiteURL.String(), redirect, signinError)
+}
 
 func atHost(ctx context.Context, baseURL string) context.Context {
 	return requestorigin.WithContext(ctx, originAt(requestorigin.SurfacePlatform, baseURL))
@@ -221,11 +247,11 @@ func (f *transferFixture) in(ctx context.Context, t *testing.T, host, code strin
 	return result
 }
 
-// requireRefused checks a transferIn result is the login fallback with no
-// session.
-func requireRefused(t *testing.T, result *gen.TransferInResult) {
+// requireRefused checks a transferIn result is the login fallback on the
+// target with signinError and no session.
+func requireRefused(t *testing.T, result *gen.TransferInResult, signinError string) {
 	t.Helper()
-	require.Equal(t, targetLogin(testTransferRedirect), result.Location)
+	require.Equal(t, targetLogin(testTransferRedirect, signinError), result.Location)
 	require.Nil(t, result.SessionCookie)
 	require.Nil(t, result.SessionToken)
 }
@@ -338,11 +364,11 @@ func TestService_TransferIn_StartMode(t *testing.T) {
 		sourceHost string
 		want       string
 	}{
-		{"source host is not a platform host", &targetOrigin, "evil.example.com", targetLogin("/")},
-		{"source host is this host", &targetOrigin, testExtraPlatformHost, targetLogin("/")},
-		{"source host is empty", &targetOrigin, "", targetLogin("/")},
-		{"request is not on a platform host", nil, testServerURL.Host, sourceLogin("/")},
-		{"request is on a custom domain", new(originAt(requestorigin.SurfaceCustomDomain, "https://mcp.customer.example")), testServerURL.Host, sourceLogin("/")},
+		{"source host is not a platform host", &targetOrigin, "evil.example.com", targetLogin("/", errWrongDestination)},
+		{"source host is this host", &targetOrigin, testExtraPlatformHost, targetLogin("/", errWrongDestination)},
+		{"source host is empty", &targetOrigin, "", targetLogin("/", errWrongDestination)},
+		{"request is not on a platform host", nil, testServerURL.Host, sourceLogin("/", errWrongDestination)},
+		{"request is on a custom domain", new(originAt(requestorigin.SurfaceCustomDomain, "https://mcp.customer.example")), testServerURL.Host, sourceLogin("/", errWrongDestination)},
 	}
 	for _, tt := range failures {
 		t.Run("falls back to login when "+tt.name, func(t *testing.T) {
@@ -388,7 +414,7 @@ func TestService_TransferOut_Refusals(t *testing.T) {
 				return atHost(ctx, testServerURL.String())
 			},
 			payload: withNonce,
-			want:    targetLogin(testTransferRedirect),
+			want:    targetLogin(testTransferRedirect, errSessionExpired),
 		},
 		{
 			name: "unknown session",
@@ -397,7 +423,7 @@ func TestService_TransferOut_Refusals(t *testing.T) {
 				return contextvalues.SetSessionTokenInContext(atHost(ctx, testServerURL.String()), "unknown")
 			},
 			payload: withNonce,
-			want:    targetLogin(testTransferRedirect),
+			want:    targetLogin(testTransferRedirect, errSessionExpired),
 		},
 		{
 			name: "missing nonce",
@@ -408,7 +434,7 @@ func TestService_TransferOut_Refusals(t *testing.T) {
 				p.Nonce = nil
 				return p
 			},
-			want: targetLogin(testTransferRedirect),
+			want: targetLogin(testTransferRedirect, errWrongDestination),
 		},
 		{
 			name: "missing target",
@@ -419,35 +445,35 @@ func TestService_TransferOut_Refusals(t *testing.T) {
 				p.TargetHost = nil
 				return p
 			},
-			want: sourceLogin(testTransferRedirect),
+			want: sourceLogin(testTransferRedirect, errWrongDestination),
 		},
 		{
 			name:    "empty nonce",
 			opts:    defaultTransferOptions(),
 			ctx:     sourceCtx,
 			payload: func(*transferFixture) *gen.TransferOutPayload { return outPayload("") },
-			want:    targetLogin(testTransferRedirect),
+			want:    targetLogin(testTransferRedirect, errWrongDestination),
 		},
 		{
 			name:    "target is not a platform host",
 			opts:    defaultTransferOptions(),
 			ctx:     sourceCtx,
 			payload: withTarget("evil.example.com"),
-			want:    sourceLogin(testTransferRedirect),
+			want:    sourceLogin(testTransferRedirect, errWrongDestination),
 		},
 		{
 			name:    "target is empty",
 			opts:    defaultTransferOptions(),
 			ctx:     sourceCtx,
 			payload: withTarget(""),
-			want:    sourceLogin(testTransferRedirect),
+			want:    sourceLogin(testTransferRedirect, errWrongDestination),
 		},
 		{
 			name:    "target is this host",
 			opts:    defaultTransferOptions(),
 			ctx:     sourceCtx,
 			payload: withTarget(testServerURL.Host),
-			want:    sourceLogin(testTransferRedirect),
+			want:    sourceLogin(testTransferRedirect, errWrongDestination),
 		},
 		{
 			name: "request is not on a platform host",
@@ -456,35 +482,42 @@ func TestService_TransferOut_Refusals(t *testing.T) {
 				return contextvalues.SetSessionTokenInContext(ctx, f.source.SessionID)
 			},
 			payload: withNonce,
-			want:    targetLogin(testTransferRedirect),
+			want:    targetLogin(testTransferRedirect, errWrongDestination),
 		},
 		{
 			name:    "organization has no default host",
 			opts:    transferOptions{member: true, defaultHost: nil, impersonator: "", supportOrgID: ""},
 			ctx:     sourceCtx,
 			payload: withNonce,
-			want:    targetLogin(testTransferRedirect),
+			want:    targetLogin(testTransferRedirect, errWrongDestination),
 		},
 		{
 			name:    "organization's default host is another host",
 			opts:    transferOptions{member: true, defaultHost: new(testServerURL.String()), impersonator: "", supportOrgID: ""},
 			ctx:     sourceCtx,
 			payload: withNonce,
-			want:    targetLogin(testTransferRedirect),
+			want:    targetLogin(testTransferRedirect, errWrongDestination),
+		},
+		{
+			name:    "user is no longer a member",
+			opts:    transferOptions{member: false, defaultHost: new(testTargetBaseURL), impersonator: "", supportOrgID: ""},
+			ctx:     sourceCtx,
+			payload: withNonce,
+			want:    targetLogin(testTransferRedirect, errAccessChanged),
 		},
 		{
 			name:    "impersonation session",
 			opts:    transferOptions{member: true, defaultHost: new(testTargetBaseURL), impersonator: "support@example.com", supportOrgID: ""},
 			ctx:     sourceCtx,
 			payload: withNonce,
-			want:    targetLogin(testTransferRedirect),
+			want:    targetLogin(testTransferRedirect, errNotTransferable),
 		},
 		{
 			name:    "support session",
 			opts:    transferOptions{member: true, defaultHost: new(testTargetBaseURL), impersonator: "", supportOrgID: "org-123"},
 			ctx:     sourceCtx,
 			payload: withNonce,
-			want:    targetLogin(testTransferRedirect),
+			want:    targetLogin(testTransferRedirect, errNotTransferable),
 		},
 	}
 
@@ -508,7 +541,7 @@ func TestService_TransferOut_OrganizationLessSession(t *testing.T) {
 	require.NoError(t, f.instance.sessionManager.StoreSession(ctx, orgLess))
 
 	orgLessCtx := contextvalues.SetSessionTokenInContext(atHost(ctx, testServerURL.String()), orgLess.SessionID)
-	require.Equal(t, targetLogin(testTransferRedirect), f.out(orgLessCtx, t, outPayload("nonce")))
+	require.Equal(t, targetLogin(testTransferRedirect, errWrongDestination), f.out(orgLessCtx, t, outPayload("nonce")))
 }
 
 func TestService_TransferOut_HeaderSession(t *testing.T) {
@@ -567,7 +600,7 @@ func TestService_TransferIn_ReplayedCode(t *testing.T) {
 	replay := b.clone()
 
 	f.requireAccepted(ctx, t, f.in(ctx, t, testTargetBaseURL, code, b))
-	requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, replay))
+	requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, replay), errExpired)
 }
 
 func TestService_TransferIn_RedirectIsSanitized(t *testing.T) {
@@ -586,7 +619,7 @@ func TestService_TransferIn_UnknownCode(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newTransfer(t, defaultTransferOptions())
-	requireRefused(t, f.in(ctx, t, testTargetBaseURL, "unknown-code", newBrowser()))
+	requireRefused(t, f.in(ctx, t, testTargetBaseURL, "unknown-code", newBrowser()), errExpired)
 }
 
 func TestService_TransferIn_ExpiredCode(t *testing.T) {
@@ -599,7 +632,7 @@ func TestService_TransferIn_ExpiredCode(t *testing.T) {
 	// parallel tests, so delete only this record.
 	require.NoError(t, f.instance.nonceStore.Delete(ctx, "session_transfer:"+nonceHash(code)))
 
-	requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, b))
+	requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, b), errExpired)
 }
 
 // A code presented on another host is refused but stays redeemable by the
@@ -612,7 +645,7 @@ func TestService_TransferIn_WrongHostDoesNotConsume(t *testing.T) {
 
 	result := f.in(ctx, t, testServerURL.String(), code, right.clone())
 	require.Nil(t, result.SessionCookie)
-	require.Equal(t, sourceLogin(testTransferRedirect), result.Location)
+	require.Equal(t, sourceLogin(testTransferRedirect, errWrongDestination), result.Location)
 
 	f.requireAccepted(ctx, t, f.in(ctx, t, testTargetBaseURL, code, right))
 }
@@ -648,8 +681,8 @@ func TestService_TransferIn_BrowserMismatchBurnsCode(t *testing.T) {
 			ctx, f := newTransfer(t, defaultTransferOptions())
 			code, nonce, right := f.begin(ctx, t)
 
-			requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, tt.browser(nonce)))
-			requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, right))
+			requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, tt.browser(nonce)), errBrowserMismatch)
+			requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, right), errExpired)
 		})
 	}
 }
@@ -685,12 +718,12 @@ func TestService_TransferIn_AnotherTransfersCookieIsRefused(t *testing.T) {
 			renamed.Set(name, value)
 		}
 	}
-	requireRefused(t, f.in(ctx, t, testTargetBaseURL, codeB, renamed))
+	requireRefused(t, f.in(ctx, t, testTargetBaseURL, codeB, renamed), errBrowserMismatch)
 
 	// A browser holding only A's cookie under A's name has no cookie for B.
 	codeB2, _, browserB2 := f.begin(ctx, t)
-	requireRefused(t, f.in(ctx, t, testTargetBaseURL, codeB2, browserA.clone()))
-	requireRefused(t, f.in(ctx, t, testTargetBaseURL, codeB2, browserB2)) // the refused code is burned
+	requireRefused(t, f.in(ctx, t, testTargetBaseURL, codeB2, browserA.clone()), errBrowserMismatch)
+	requireRefused(t, f.in(ctx, t, testTargetBaseURL, codeB2, browserB2), errExpired) // the refused code is burned
 }
 
 func TestService_TransferIn_NonMemberDoesNotConsume(t *testing.T) {
@@ -705,7 +738,7 @@ func TestService_TransferIn_NonMemberDoesNotConsume(t *testing.T) {
 	b := newBrowser()
 	b.Set(constants.TransferInNonceCookiePrefix+nonceHash(nonce)[:16], nonce)
 
-	requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, b.clone()))
+	requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, b.clone()), errAccessChanged)
 
 	require.NoError(t, f.instance.createTestOrganization(ctx, f.userInfo.Organizations[0], f.userInfo.UserID))
 	f.requireAccepted(ctx, t, f.in(ctx, t, testTargetBaseURL, code, b))
@@ -718,7 +751,7 @@ func TestService_TransferIn_MembershipLookupErrorDoesNotConsume(t *testing.T) {
 	code, _, b := f.begin(ctx, t)
 
 	f.instance.conn.Close()
-	requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, b))
+	requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, b), errTemporary)
 
 	// The code is still there for a retry.
 	_, err := sessions.NewTransferManager(f.instance.nonceStore).Lookup(ctx, code, testExtraPlatformHost)
@@ -818,7 +851,7 @@ func TestTransfer_HTTP(t *testing.T) {
 	// clears the transfer's cookie, and burns the code.
 	refused := serve(testTargetBaseURL, transferInURL)
 	require.Equal(t, http.StatusTemporaryRedirect, refused.Code)
-	require.Equal(t, targetLogin(testTransferRedirect), refused.Header().Get("Location"))
+	require.Equal(t, targetLogin(testTransferRedirect, errBrowserMismatch), refused.Header().Get("Location"))
 	require.Empty(t, setCookies(refused, constants.SessionCookie))
 	cleared := setCookies(refused, nonceCookie.Name)
 	require.Len(t, cleared, 1)
@@ -826,7 +859,7 @@ func TestTransfer_HTTP(t *testing.T) {
 
 	// That burned the code, so the right cookie no longer helps.
 	burned := serve(testTargetBaseURL, transferInURL, &http.Cookie{Name: nonceCookie.Name, Value: nonceCookie.Value})
-	require.Equal(t, targetLogin(testTransferRedirect), burned.Header().Get("Location"))
+	require.Equal(t, targetLogin(testTransferRedirect, errExpired), burned.Header().Get("Location"))
 
 	// 3b. A fresh transfer with the nonce cookie establishes the session and
 	// clears the cookie.
@@ -858,18 +891,19 @@ func TestService_TransferIn_Modes(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		payload func(code string) *gen.TransferInPayload
+		name        string
+		payload     func(code string) *gen.TransferInPayload
+		signinError string
 	}{
 		{"both source_host and code", func(code string) *gen.TransferInPayload {
 			return &gen.TransferInPayload{SourceHost: new(testServerURL.Host), Code: &code, Redirect: new(testTransferRedirect)}
-		}},
+		}, errWrongDestination},
 		{"neither source_host nor code", func(string) *gen.TransferInPayload {
 			return &gen.TransferInPayload{SourceHost: nil, Code: nil, Redirect: new(testTransferRedirect)}
-		}},
+		}, errWrongDestination},
 		{"a tampered code never restarts a transfer", func(string) *gen.TransferInPayload {
 			return callbackPayload("tampered-code", new(testTransferRedirect))
-		}},
+		}, errExpired},
 	}
 
 	for _, tt := range tests {
@@ -882,11 +916,80 @@ func TestService_TransferIn_Modes(t *testing.T) {
 			probe := b.clone()
 			result, err := f.instance.service.TransferIn(auth.WithTransferCookieJar(atHost(ctx, testTargetBaseURL), probe), tt.payload(code))
 			require.NoError(t, err)
-			requireRefused(t, result)
+			requireRefused(t, result, tt.signinError)
 			require.NotContains(t, result.Location, "transferOut")
 			require.Equal(t, b.transferCookies(), probe.transferCookies(), "no cookie set or cleared")
 
 			f.requireAccepted(ctx, t, f.in(ctx, t, testTargetBaseURL, code, b))
 		})
 	}
+}
+
+// serviceWithRedis builds a service like the fixture's, but storing sessions
+// in sessionRedis and transfer codes in codeRedis, so a test can break one.
+func serviceWithRedis(ctx context.Context, t *testing.T, f *transferFixture, sessionRedis, codeRedis *redis.Client) *auth.Service {
+	t.Helper()
+
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	conn := f.instance.conn
+	billingClient := billing.NewStubClient(logger, tracerProvider)
+	sessionManager := sessions.NewManager(logger, tracerProvider, conn, sessionRedis, testenv.NewCacheSuffix(t, cache.Suffix("auth")), nil, billingClient, f.instance.identityResolver)
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
+	return auth.NewService(logger, tracerProvider, conn, sessionManager, f.instance.identityResolver, f.instance.authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", ""), nil, cache.NewRedisCacheAdapter(codeRedis), authz.NewProvisioner(conn), productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), nil)
+}
+
+// brokenRedis is a client whose every command fails, as in an outage.
+func brokenRedis(t *testing.T) *redis.Client {
+	t.Helper()
+	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", MaxRetries: -1, DialTimeout: 100 * time.Millisecond})
+	t.Cleanup(func() { _ = client.Close() })
+	return client
+}
+
+func TestService_TransferIn_CodeCacheFailureIsTemporary(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	code, _, b := f.begin(ctx, t)
+
+	working, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	svc := serviceWithRedis(ctx, t, f, working, brokenRedis(t))
+
+	result, err := svc.TransferIn(auth.WithTransferCookieJar(atHost(ctx, testTargetBaseURL), b.clone()), callbackPayload(code, new(testTransferRedirect)))
+	require.NoError(t, err)
+	requireRefused(t, result, errTemporary)
+
+	// The outage did not use up the code.
+	f.requireAccepted(ctx, t, f.in(ctx, t, testTargetBaseURL, code, b))
+}
+
+func TestService_TransferIn_SessionStoreFailureIsTemporary(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	code, _, b := f.begin(ctx, t)
+
+	// Transfer codes live in the fixture's Redis; sessions cannot be stored.
+	codes, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	svc := serviceWithRedis(ctx, t, f, brokenRedis(t), codes)
+
+	result, err := svc.TransferIn(auth.WithTransferCookieJar(atHost(ctx, testTargetBaseURL), b), callbackPayload(code, new(testTransferRedirect)))
+	require.NoError(t, err)
+	requireRefused(t, result, errTemporary)
+}
+
+func TestService_TransferOut_SessionCacheFailureIsTemporary(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	codes, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	svc := serviceWithRedis(ctx, t, f, brokenRedis(t), codes)
+
+	result, err := svc.TransferOut(f.sourceCtx(ctx), outPayload("nonce"))
+	require.NoError(t, err)
+	require.Equal(t, targetLogin(testTransferRedirect, errTemporary), result.Location)
 }

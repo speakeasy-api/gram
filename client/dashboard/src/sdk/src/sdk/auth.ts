@@ -188,7 +188,7 @@ export class Auth extends ClientSDK {
    * transferIn auth
    *
    * @remarks
-   * Moves a session onto this platform host from another one, in two modes. Start mode (source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to the source host's transferOut. Callback mode (code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page; a failed callback never starts a new transfer. Used to share sessions between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
+   * Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.
    */
   async transferIn(
     request?: AuthTransferInRequest | undefined,
@@ -205,7 +205,7 @@ export class Auth extends ClientSDK {
    * transferOut auth
    *
    * @remarks
-   * Continues a cross-domain session transfer on the source platform host. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn callback. Only an ordinary session whose active organization lives on the target host can transfer. The session is read from the session cookie or header; on any failure the browser is sent to a login page instead of an error.
+   * Step 2/3 (authorize) of a cross-domain session transfer, on the source platform host. Reached from Step 1/3, transferIn's start mode on the target host; redirects to Step 3/3, transferIn's callback mode there. Authenticates the session from the session cookie or header, checks that its active organization's default host is the target, and stores a one-time transfer code bound to the browser's nonce. Only an ordinary session whose organization lives on the target host can transfer. On any failure the browser is sent to a login page with a signin_error code instead of an error. See the flow diagram in server/internal/auth/transfer.go.
    */
   async transferOut(
     request?: AuthTransferOutRequest | undefined,

@@ -38,7 +38,7 @@ import { Result } from "../types/fp.js";
  * transferIn auth
  *
  * @remarks
- * Moves a session onto this platform host from another one, in two modes. Start mode (source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to the source host's transferOut. Callback mode (code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page; a failed callback never starts a new transfer. Used to share sessions between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
+ * Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.
  */
 export function authTransferIn(
   client: GramCore,

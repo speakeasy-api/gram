@@ -38,7 +38,7 @@ import { Result } from "../types/fp.js";
  * transferOut auth
  *
  * @remarks
- * Continues a cross-domain session transfer on the source platform host. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn callback. Only an ordinary session whose active organization lives on the target host can transfer. The session is read from the session cookie or header; on any failure the browser is sent to a login page instead of an error.
+ * Step 2/3 (authorize) of a cross-domain session transfer, on the source platform host. Reached from Step 1/3, transferIn's start mode on the target host; redirects to Step 3/3, transferIn's callback mode there. Authenticates the session from the session cookie or header, checks that its active organization's default host is the target, and stores a one-time transfer code bound to the browser's nonce. Only an ordinary session whose organization lives on the target host can transfer. On any failure the browser is sent to a login page with a signin_error code instead of an error. See the flow diagram in server/internal/auth/transfer.go.
  */
 export function authTransferOut(
   client: GramCore,

@@ -10,12 +10,14 @@ import (
 	"testing"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 )
 
-var errCacheMiss = errors.New("cache miss")
+// errCacheMiss is the miss the Redis adapter reports.
+var errCacheMiss = redisCache.ErrCacheMiss
 
 // testMemoryCache is a minimal in-memory cache for unit tests. It stores
 // values as JSON, like the Redis adapter. testenv.NewMemoryCache cannot be
@@ -24,15 +26,20 @@ var errCacheMiss = errors.New("cache miss")
 type testMemoryCache struct {
 	mu    sync.Mutex
 	items map[string][]byte
+	// fail, when set, is returned by every read, as a cache outage would.
+	fail error
 }
 
 var _ cache.Cache = (*testMemoryCache)(nil)
 
 func newTestMemoryCache() *testMemoryCache {
-	return &testMemoryCache{mu: sync.Mutex{}, items: make(map[string][]byte)}
+	return &testMemoryCache{mu: sync.Mutex{}, items: make(map[string][]byte), fail: nil}
 }
 
 func (c *testMemoryCache) Get(_ context.Context, key string, value any) error {
+	if c.fail != nil {
+		return c.fail
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	raw, ok := c.items[key]
@@ -43,6 +50,9 @@ func (c *testMemoryCache) Get(_ context.Context, key string, value any) error {
 }
 
 func (c *testMemoryCache) GetAndDelete(_ context.Context, key string, value any) error {
+	if c.fail != nil {
+		return c.fail
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	raw, ok := c.items[key]
@@ -167,10 +177,10 @@ func TestTransferManager_SecondConsumeFails(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, manager.Consume(ctx, code))
-	require.ErrorIs(t, manager.Consume(ctx, code), ErrTransferCodeInvalid)
+	require.ErrorIs(t, manager.Consume(ctx, code), ErrTransferCodeNotFound)
 
 	_, err = manager.Lookup(ctx, code, testTargetHost)
-	require.ErrorIs(t, err, ErrTransferCodeInvalid)
+	require.ErrorIs(t, err, ErrTransferCodeNotFound)
 }
 
 func TestTransferManager_UnknownCodeFails(t *testing.T) {
@@ -180,8 +190,8 @@ func TestTransferManager_UnknownCodeFails(t *testing.T) {
 	manager := NewTransferManager(newTestMemoryCache())
 
 	_, err := manager.Lookup(ctx, "unknown-code", testTargetHost)
-	require.ErrorIs(t, err, ErrTransferCodeInvalid)
-	require.ErrorIs(t, manager.Consume(ctx, "unknown-code"), ErrTransferCodeInvalid)
+	require.ErrorIs(t, err, ErrTransferCodeNotFound)
+	require.ErrorIs(t, manager.Consume(ctx, "unknown-code"), ErrTransferCodeNotFound)
 }
 
 func TestTransferManager_ExpiredCodeFails(t *testing.T) {
@@ -198,7 +208,7 @@ func TestTransferManager_ExpiredCodeFails(t *testing.T) {
 	require.NoError(t, memCache.Delete(ctx, transferKey(code)))
 
 	_, err = manager.Lookup(ctx, code, testTargetHost)
-	require.ErrorIs(t, err, ErrTransferCodeInvalid)
+	require.ErrorIs(t, err, ErrTransferCodeNotFound)
 }
 
 func TestTransferManager_WrongTargetHostDoesNotConsume(t *testing.T) {
@@ -211,7 +221,8 @@ func TestTransferManager_WrongTargetHostDoesNotConsume(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = manager.Lookup(ctx, code, "wrong.example.com")
-	require.ErrorIs(t, err, ErrTransferCodeInvalid)
+	require.ErrorIs(t, err, ErrTransferWrongHost)
+	require.NotErrorIs(t, err, ErrTransferCodeNotFound)
 
 	_, err = manager.Lookup(ctx, code, testTargetHost)
 	require.NoError(t, err)
@@ -275,4 +286,26 @@ func TestTransferManager_RequiresNonce(t *testing.T) {
 
 	_, err := NewTransferManager(newTestMemoryCache()).Create(t.Context(), testTransferSession(), "", testSourceHost, testTargetHost)
 	require.Error(t, err)
+}
+
+func TestTransferManager_CacheFailureIsNotNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	memCache := newTestMemoryCache()
+	manager := NewTransferManager(memCache)
+	code, err := manager.Create(ctx, testTransferSession(), testNonce, testSourceHost, testTargetHost)
+	require.NoError(t, err)
+
+	outage := errors.New("connection refused")
+	memCache.fail = outage
+
+	_, err = manager.Lookup(ctx, code, testTargetHost)
+	require.ErrorIs(t, err, outage)
+	require.NotErrorIs(t, err, ErrTransferCodeNotFound)
+	require.NotErrorIs(t, err, ErrTransferWrongHost)
+
+	err = manager.Consume(ctx, code)
+	require.ErrorIs(t, err, outage)
+	require.NotErrorIs(t, err, ErrTransferCodeNotFound)
 }

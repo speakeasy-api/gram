@@ -620,6 +620,8 @@ const (
 	SessionIDKey                   = attribute.Key("gram.session.id")
 	SessionTransferSourceHostKey   = attribute.Key("gram.session_transfer.source_host")
 	SessionTransferTargetHostKey   = attribute.Key("gram.session_transfer.target_host")
+	TransferFailureReasonKey       = attribute.Key("gram.session_transfer.failure_reason")
+	TransferSigninErrorKey         = attribute.Key("gram.session_transfer.signin_error")
 	SlackEventFullKey              = attribute.Key("gram.slack.event.full")
 	SlackEventTypeKey              = attribute.Key("gram.slack.event.type")
 	SlackTeamIDKey                 = attribute.Key("gram.slack.team.id")
@@ -2600,6 +2602,16 @@ func SlogSecurityType(v string) slog.Attr      { return slog.String(string(Secur
 
 func SessionID(v string) attribute.KeyValue { return SessionIDKey.String(v) }
 func SlogSessionID(v string) slog.Attr      { return slog.String(string(SessionIDKey), v) }
+
+func TransferFailureReason(v string) attribute.KeyValue { return TransferFailureReasonKey.String(v) }
+func SlogTransferFailureReason(v string) slog.Attr {
+	return slog.String(string(TransferFailureReasonKey), v)
+}
+
+func TransferSigninError(v string) attribute.KeyValue { return TransferSigninErrorKey.String(v) }
+func SlogTransferSigninError(v string) slog.Attr {
+	return slog.String(string(TransferSigninErrorKey), v)
+}
 
 func SourceHost(v string) attribute.KeyValue { return SessionTransferSourceHostKey.String(v) }
 func SlogSourceHost(v string) slog.Attr      { return slog.String(string(SessionTransferSourceHostKey), v) }
