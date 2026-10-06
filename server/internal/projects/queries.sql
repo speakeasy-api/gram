@@ -163,11 +163,6 @@ SELECT count(*) FROM remote_session_ema_bindings WHERE project_id = @project_id 
 -- name: DeleteProjectEMATombstones :exec
 DELETE FROM remote_session_ema_bindings WHERE project_id = @project_id AND organization_id = @organization_id AND state = 'unlinked';
 
--- name: DeleteProjectRiskFindingEvidence :execrows
-DELETE FROM risk_finding_evidence
-WHERE project_id = @project_id
-  AND organization_id = @organization_id;
-
 -- name: LockOtherActiveProject :one
 -- FOR SHARE waits for an in-flight project delete, then rechecks the row, so a
 -- concurrently deleted project is not reported as still active.

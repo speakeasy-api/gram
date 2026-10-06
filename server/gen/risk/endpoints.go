@@ -29,6 +29,7 @@ type Endpoints struct {
 	ListRiskResults                goa.Endpoint
 	ListRiskResultsForAgent        goa.Endpoint
 	UnmaskRiskResult               goa.Endpoint
+	RevealRiskResultPayload        goa.Endpoint
 	ListRiskResultsByChat          goa.Endpoint
 	MarkRiskResultsFalsePositive   goa.Endpoint
 	UnmarkRiskResultsFalsePositive goa.Endpoint
@@ -89,6 +90,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListRiskResults:                NewListRiskResultsEndpoint(s, a.APIKeyAuth),
 		ListRiskResultsForAgent:        NewListRiskResultsForAgentEndpoint(s, a.APIKeyAuth),
 		UnmaskRiskResult:               NewUnmaskRiskResultEndpoint(s, a.APIKeyAuth),
+		RevealRiskResultPayload:        NewRevealRiskResultPayloadEndpoint(s, a.APIKeyAuth),
 		ListRiskResultsByChat:          NewListRiskResultsByChatEndpoint(s, a.APIKeyAuth),
 		MarkRiskResultsFalsePositive:   NewMarkRiskResultsFalsePositiveEndpoint(s, a.APIKeyAuth),
 		UnmarkRiskResultsFalsePositive: NewUnmarkRiskResultsFalsePositiveEndpoint(s, a.APIKeyAuth),
@@ -147,6 +149,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListRiskResults = m(e.ListRiskResults)
 	e.ListRiskResultsForAgent = m(e.ListRiskResultsForAgent)
 	e.UnmaskRiskResult = m(e.UnmaskRiskResult)
+	e.RevealRiskResultPayload = m(e.RevealRiskResultPayload)
 	e.ListRiskResultsByChat = m(e.ListRiskResultsByChat)
 	e.MarkRiskResultsFalsePositive = m(e.MarkRiskResultsFalsePositive)
 	e.UnmarkRiskResultsFalsePositive = m(e.UnmarkRiskResultsFalsePositive)
@@ -953,6 +956,65 @@ func NewUnmaskRiskResultEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.UnmaskRiskResult(ctx, p)
+	}
+}
+
+// NewRevealRiskResultPayloadEndpoint returns an endpoint function that calls
+// the method "revealRiskResultPayload" of service "risk".
+func NewRevealRiskResultPayloadEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RevealRiskResultPayloadPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.RevealRiskResultPayload(ctx, p)
 	}
 }
 

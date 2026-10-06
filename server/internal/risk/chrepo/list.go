@@ -37,11 +37,15 @@ type ListRiskFindingsParams struct {
 	PolicyIDs      []string
 	MCPServerID    string
 	ChatID         string
-	From           *time.Time
-	To             *time.Time
-	Category       string
-	RuleIDSubstr   string
-	UserIDSubstr   string
+	// ResultID narrows to one finding id.
+	ResultID uuid.NullUUID
+	// ExecutionID narrows to the findings of one mediated execution.
+	ExecutionID  string
+	From         *time.Time
+	To           *time.Time
+	Category     string
+	RuleIDSubstr string
+	UserIDSubstr string
 	// ExternalUserIDs matches whole external user ids rather than a substring.
 	// The identity page needs exactly one subject's findings, and a substring
 	// of one person's id routinely matches another's.
@@ -179,6 +183,20 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 		Where(squirrel.Eq{"risk_policy_id": p.PolicyIDs})
 	if p.ChatID != "" {
 		sb = sb.Where("chat_id = ?", p.ChatID)
+	}
+	if p.ResultID.Valid {
+		sb = sb.Where("id = ?", p.ResultID.UUID)
+	}
+	if p.ExecutionID != "" {
+		// Suppression copies carry no execution metadata, so the filter selects
+		// ids rather than rows and every copy still reaches the dedup.
+		sb = sb.Where(sq.Select("id").
+			From("risk_findings").
+			Where("organization_id = ?", p.OrganizationID).
+			Where("project_id = ?", p.ProjectID).
+			Where("execution_id = ?", p.ExecutionID).
+			Prefix("id IN (").
+			Suffix(")"))
 	}
 	return sb, nil
 }

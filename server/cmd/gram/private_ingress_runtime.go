@@ -205,8 +205,9 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		r.cleanup = append(r.cleanup, enforcementShutdown)
 	}
 	logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
+	toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
 	telemLogger, stop := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cacheImpl, chDB, logsEnabled,
-		newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs), tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs))
+		toolIOLogsEnabled, tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs))
 	r.cleanup = append(r.cleanup, stop)
 	telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessions, logsEnabled, newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture), posthogClient, authzEngine, featureFlags)
 	chatWriter, stop := chat.NewChatMessageWriter(logger, db, assetStorage)
@@ -220,7 +221,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, enc, openRouter), chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), &background.TemporalChatTitleGenerator{TemporalEnv: r.Temporal}, telemLogger)
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
-		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, publishers, shadowMCPClient,
+		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, publishers, shadowMCPClient, toolIOLogsEnabled,
 	)
 	if err != nil {
 		return nil, err

@@ -1,8 +1,10 @@
 package risk_test
 
 import (
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -62,4 +64,96 @@ func TestMCPFindingEvidenceStoreEncryptsAndExpiresMatches(t *testing.T) {
 	cleaned, err = riskrepo.New(ti.conn).CleanupExpiredMCPFindingEvidenceBatch(ctx, 500)
 	require.NoError(t, err)
 	require.Zero(t, cleaned)
+}
+
+func TestMCPFindingEvidenceStoreEncryptsAndExpiresExecutionPayloads(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	orgID := authCtx.ActiveOrganizationID
+	projectID := *authCtx.ProjectID
+
+	now := time.Now().UTC()
+	executionID := uuid.NewString()
+	payload := `{"query":"raw MCP credential"}`
+	require.NoError(t, ti.findingEvidence.Store(ctx, risk.MCPFindingEvidenceBatch{
+		OrganizationID: orgID,
+		ProjectID:      projectID,
+		CreatedAt:      now,
+		Findings:       []risk.MCPFindingEvidence{{ID: uuid.New(), Match: "raw MCP credential"}},
+		Execution:      &risk.MCPExecutionPayload{ExecutionID: executionID, Phase: "request", Payload: payload},
+	}))
+	// A second policy's findings on the same phase keep the first payload.
+	require.NoError(t, ti.findingEvidence.Store(ctx, risk.MCPFindingEvidenceBatch{
+		OrganizationID: orgID,
+		ProjectID:      projectID,
+		CreatedAt:      now.Add(time.Minute),
+		Findings:       []risk.MCPFindingEvidence{{ID: uuid.New(), Match: "other"}},
+		Execution:      &risk.MCPExecutionPayload{ExecutionID: executionID, Phase: "request", Payload: "replacement"},
+	}))
+
+	row, err := riskrepo.New(ti.conn).GetMCPExecutionEvidence(ctx, riskrepo.GetMCPExecutionEvidenceParams{
+		OrganizationID: orgID,
+		ProjectID:      projectID,
+		ExecutionID:    executionID,
+		Phase:          "request",
+		Now:            conv.ToPGTimestamptz(now),
+	})
+	require.NoError(t, err)
+	require.NotContains(t, row.PayloadEncrypted, "raw MCP credential")
+
+	revealed, err := ti.findingEvidence.RevealExecutionPayload(ctx, orgID, projectID, executionID, "request", now)
+	require.NoError(t, err)
+	require.Equal(t, payload, revealed.Payload)
+	require.WithinDuration(t, now.Add(90*24*time.Hour), revealed.ExpiresAt, time.Millisecond)
+
+	_, err = ti.findingEvidence.RevealExecutionPayload(ctx, orgID, projectID, executionID, "response", now)
+	require.ErrorIs(t, err, risk.ErrMCPFindingEvidenceNotStored)
+
+	expiredExecutionID := uuid.NewString()
+	require.NoError(t, ti.findingEvidence.Store(ctx, risk.MCPFindingEvidenceBatch{
+		OrganizationID: orgID,
+		ProjectID:      projectID,
+		CreatedAt:      now.Add(-91 * 24 * time.Hour),
+		Findings:       []risk.MCPFindingEvidence{{ID: uuid.New(), Match: "expired"}},
+		Execution:      &risk.MCPExecutionPayload{ExecutionID: expiredExecutionID, Phase: "response", Payload: "expired payload"},
+	}))
+	_, err = ti.findingEvidence.RevealExecutionPayload(ctx, orgID, projectID, expiredExecutionID, "response", now)
+	require.ErrorIs(t, err, risk.ErrMCPFindingEvidenceNotStored)
+
+	cleaned, err := riskrepo.New(ti.conn).CleanupExpiredMCPExecutionEvidenceBatch(ctx, 500)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), cleaned)
+	cleaned, err = riskrepo.New(ti.conn).CleanupExpiredMCPExecutionEvidenceBatch(ctx, 500)
+	require.NoError(t, err)
+	require.Zero(t, cleaned)
+	_, err = ti.findingEvidence.RevealExecutionPayload(ctx, orgID, projectID, executionID, "request", now)
+	require.NoError(t, err, "cleanup keeps live payloads")
+}
+
+func TestMCPFindingEvidenceStoreCapsExecutionPayloadAtRuneBoundary(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	now := time.Now().UTC()
+	executionID := uuid.NewString()
+	// The two-byte rune straddles the cap, so the cut lands before it.
+	prefix := strings.Repeat("a", risk.MaxMCPExecutionPayloadBytes-1)
+	require.NoError(t, ti.findingEvidence.Store(ctx, risk.MCPFindingEvidenceBatch{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		CreatedAt:      now,
+		Findings:       []risk.MCPFindingEvidence{{ID: uuid.New(), Match: "secret"}},
+		Execution:      &risk.MCPExecutionPayload{ExecutionID: executionID, Phase: "response", Payload: prefix + "é secret"},
+	}))
+
+	revealed, err := ti.findingEvidence.RevealExecutionPayload(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, executionID, "response", now)
+	require.NoError(t, err)
+	require.Equal(t, prefix, revealed.Payload)
+	require.True(t, utf8.ValidString(revealed.Payload))
 }
