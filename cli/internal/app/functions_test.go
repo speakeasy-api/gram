@@ -89,7 +89,8 @@ func TestResolveInitOptions_Prompts(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "fresh")
 
 	answers := strings.Join([]string{
-		"mcp",         // template
+		"3",           // template, rejected
+		"2",           // template, by number
 		"Not Valid",   // name, rejected
 		"@acme/tools", // name
 		taken,         // dir, rejected because it is not empty
@@ -116,6 +117,7 @@ func TestResolveInitOptions_Prompts(t *testing.T) {
 
 	require.Contains(t, out.String(), "1) Gram Functions")
 	require.Contains(t, out.String(), "2) Model Context Protocol SDK")
+	require.Contains(t, out.String(), "Enter a number from 1 to 2 or a template name")
 	require.Contains(t, out.String(), `invalid project name "Not Valid"`)
 	require.Contains(t, out.String(), "already exists and is not empty")
 	require.Contains(t, out.String(), "Install dependencies with npm? (y/n) [y]: ")

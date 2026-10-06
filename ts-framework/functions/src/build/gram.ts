@@ -26,7 +26,7 @@ export async function resolveArtifacts(
 
 export async function buildFunctions(logger: Logger, cfg: ParsedUserConfig) {
   const cwd = cfg.cwd ?? process.cwd();
-  const entrypoint = join(cwd, cfg.entrypoint);
+  const entrypoint = resolve(cwd, cfg.entrypoint);
   const exp = await import(resolve(entrypoint)).then((mod) => {
     return mod.default; // If this is a Promise (then-able) then it will be resolved
   });

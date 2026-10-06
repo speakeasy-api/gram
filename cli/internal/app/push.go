@@ -257,12 +257,21 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				Method:         c.String("method"),
 				NonBlocking:    c.Bool("skip-poll"),
 				APIKey:         c.String("api-key"),
-				APIURL:         c.String("api-url"),
+				APIURL:         explicitAPIURL(c),
 			})
 
 			return reportPushResult(ctx, logger, result, err)
 		},
 	}
+}
+
+// explicitAPIURL returns --api-url or GRAM_API_URL when one is given and ""
+// otherwise, so DoPush uses the profile's URL before the flag's default.
+func explicitAPIURL(c *cli.Context) string {
+	if !c.IsSet("api-url") {
+		return ""
+	}
+	return c.String("api-url")
 }
 
 // reportPushResult logs the outcome of DoPush and prints the deployment link.

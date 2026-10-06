@@ -146,7 +146,12 @@ async function init(argv: string[]): Promise<void> {
   }
 
   let installCli = false;
-  const proc = await $`which gram`.quiet().nothrow();
+  // The project's build and push scripts run `speakeasy`, so look for the AI
+  // Control Plane CLI under that name rather than the old `gram` binary.
+  const proc =
+    await $`speakeasy --control-plane-cli 2>/dev/null | grep -qx speakeasy-ai-control-plane-cli`
+      .quiet()
+      .nothrow();
   // check exit code and decide if we should prompt
   if (proc.exitCode !== 0) {
     const res = await confirmOrClack({

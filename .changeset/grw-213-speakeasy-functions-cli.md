@@ -9,3 +9,5 @@ Add `speakeasy functions` commands for Gram Functions projects:
 - `speakeasy functions dev` runs the project's `dev` script and passes arguments after `--` to it.
 - `speakeasy functions push` builds, stages and deploys the project with your `speakeasy auth` profile. `--slug`, `--project`, `--scale` and `--memory-mib` override the project config, and `--no-build` deploys the existing build.
 - `speakeasy functions stage` adds a built zip file to the deployment file without deploying, the same as `speakeasy stage function`, which keeps working.
+
+`speakeasy push` now deploys to the API URL saved by `speakeasy auth` when neither `--api-url` nor `GRAM_API_URL` is set, instead of always using `https://app.getgram.ai`.

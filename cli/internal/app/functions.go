@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -306,13 +307,27 @@ func (p *prompter) text(question string, def string, validate func(string) error
 	}
 }
 
-// choose asks for one of templates by number or name.
+// choose asks for one of templates by number or name until it gets one.
 func (p *prompter) choose(question string, templates []functions.Template) (string, error) {
 	_, _ = fmt.Fprintln(p.out, question)
 	for i, t := range templates {
 		_, _ = fmt.Fprintf(p.out, "  %d) %s - %s\n", i+1, t.Label, t.Hint)
 	}
-	return p.ask("Template", templates[0].Name)
+	for {
+		answer, err := p.ask("Template", templates[0].Name)
+		if err != nil {
+			return "", err
+		}
+		if n, err := strconv.Atoi(answer); err == nil && n >= 1 && n <= len(templates) {
+			return templates[n-1].Name, nil
+		}
+		for _, t := range templates {
+			if t.Name == answer {
+				return answer, nil
+			}
+		}
+		_, _ = fmt.Fprintf(p.out, "Enter a number from 1 to %d or a template name\n", len(templates))
+	}
 }
 
 // confirmOrDefault returns given when set. Otherwise it asks when p is not
@@ -437,7 +452,7 @@ name without its scope.
 					Method:         "merge",
 					NonBlocking:    false,
 					APIKey:         c.String("api-key"),
-					APIURL:         c.String("api-url"),
+					APIURL:         explicitAPIURL(c),
 				},
 			})
 			if reportErr := reportPushResult(ctx, logging.PullLogger(ctx), result, err); reportErr != nil {

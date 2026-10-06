@@ -62,7 +62,10 @@ async function loadProjectConfig(
     config: {
       ...config,
       cwd: resolve(cwd, config.cwd),
-      entrypoint: opts.entrypoint ?? config.entrypoint,
+      // Like the other path options, an entrypoint override is relative to cwd.
+      entrypoint: opts.entrypoint
+        ? resolve(cwd, opts.entrypoint)
+        : config.entrypoint,
       outDir: resolve(cwd, opts.outDir ?? config.outDir),
       deployStagingFile: resolve(cwd, config.deployStagingFile),
     },
