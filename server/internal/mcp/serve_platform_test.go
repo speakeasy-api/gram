@@ -135,8 +135,10 @@ func TestServePlatformToolset_UnsupportedVersionPrecedesTokenAuthentication(t *t
 
 // Failures that escape the platform handler reach the client as JSON-RPC
 // errors, as on the other MCP surfaces, with the HTTP status the failure
-// carries. A handshake-era revision is declared deliberately: the error shape
-// does not depend on the client speaking 2026-07-28.
+// carries. A handshake-era revision is declared deliberately: the unknown
+// toolset is rejected before the body is read, so its error is encoded under
+// the handshake revisions' rules whatever the client declared, and encoding it
+// under 2026-07-28 rules for a 2026-07-28 declaration is tracked as AIM-446.
 func TestServePlatformToolset_AttachedFailuresAreJSONRPCErrors(t *testing.T) {
 	t.Parallel()
 
