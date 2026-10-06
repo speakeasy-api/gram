@@ -14,7 +14,7 @@ import type { JSX, ReactNode } from "react";
  * screens.
  */
 
-export type WizardStepState = "done" | "current" | "todo";
+type WizardStepState = "done" | "current" | "todo";
 
 export function WizardStepper({
   steps,

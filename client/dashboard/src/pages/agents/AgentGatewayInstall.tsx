@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { getServerURL } from "@/lib/utils";
+import { isCredentialSafe } from "./provision/gateway";
 import { useState, type JSX } from "react";
 
 /**
@@ -25,25 +26,6 @@ function agentGatewayURL(agentID: string): string {
 
 /** Stands in for the key on the runtimes that read it from the environment. */
 const KEY_ENV = "GRAM_AGENT_KEY";
-
-/**
- * Whether an endpoint may carry a bearer key. HTTPS everywhere, except
- * loopback, where the request never reaches a network. An unparseable URL is
- * treated as unsafe rather than assumed fine.
- */
-function isCredentialSafe(raw: string): boolean {
-  let parsed;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    return false;
-  }
-  if (parsed.protocol === "https:") return true;
-  return (
-    parsed.protocol === "http:" &&
-    ["localhost", "127.0.0.1", "[::1]", "::1"].includes(parsed.hostname)
-  );
-}
 
 type Recipe = { id: string; label: string; body: string };
 

@@ -52,6 +52,12 @@ export async function mintInstallCommand(
     throw new Error(`Could not prepare a setup command (${response.status})`);
   }
   const { code } = (await response.json()) as { code: string };
+  // This value is pasted into a shell. It is minted by our own server, but a
+  // command built by interpolation is only safe if what goes into it cannot
+  // carry shell syntax, so that is checked here rather than assumed upstream.
+  if (!/^[A-Za-z0-9_-]+$/.test(code)) {
+    throw new Error("Could not prepare a setup command (malformed code)");
+  }
   const base = new URL(gatewayURL);
   return `curl -fsSL ${base.origin}/agent-mcp/install/${code} | sh`;
 }
