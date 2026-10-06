@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/roledistribution/requests"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
@@ -1594,17 +1595,31 @@ func (s *Service) getProjectsOrSetupDefaults(ctx context.Context, organizationID
 }
 
 func (s *Service) createDefaultProject(ctx context.Context, organizationID string) (projectsRepo.Project, error) {
-	project, err := s.projectsRepo.CreateProject(ctx, projectsRepo.CreateProjectParams{
+	var empty projectsRepo.Project
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return empty, oops.E(oops.CodeUnexpected, err, "error creating default project").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	project, err := s.projectsRepo.WithTx(tx).CreateProject(ctx, projectsRepo.CreateProjectParams{
 		OrganizationID: organizationID,
 		Name:           "Default",
 		Slug:           "default",
 	})
-	var empty projectsRepo.Project
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return empty, oops.E(oops.CodeConflict, nil, "project already exists")
 		}
+		return empty, oops.E(oops.CodeUnexpected, err, "error creating default project").LogError(ctx, s.logger)
+	}
+
+	if err := requests.PublishFirstProject(ctx, tx, organizationID, project.ID); err != nil {
+		return empty, oops.E(oops.CodeUnexpected, err, "error requesting role distribution").LogError(ctx, s.logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
 		return empty, oops.E(oops.CodeUnexpected, err, "error creating default project").LogError(ctx, s.logger)
 	}
 

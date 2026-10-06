@@ -76,3 +76,18 @@ func LockOrganization(ctx context.Context, tx pgx.Tx, organizationID string) err
 func ResumeOrganization(ctx context.Context, tx pgx.Tx, organizationID string) error {
 	return Publish(ctx, tx, Request{OrganizationID: "", RoleURN: "", GlobalRoleID: "", BootstrapOrganizationID: organizationID, Cursor: ""})
 }
+
+// PublishFirstProject starts one organization pass when projectID is the
+// organization's only active project. Setup skips projectless organizations,
+// so this is the trigger that distributes roles created before any project.
+// Concurrent first projects may each publish; setup reuses plugins and assignments.
+func PublishFirstProject(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID) error {
+	var first bool
+	if err := tx.QueryRow(ctx, `SELECT NOT EXISTS (SELECT 1 FROM projects WHERE organization_id = $1 AND deleted IS FALSE AND id <> $2)`, organizationID, projectID).Scan(&first); err != nil {
+		return fmt.Errorf("check first organization project: %w", err)
+	}
+	if !first {
+		return nil
+	}
+	return ResumeOrganization(ctx, tx, organizationID)
+}

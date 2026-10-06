@@ -40,6 +40,9 @@ No attempt counters or persistent completion ledger are maintained here.
 Setup atomically commits plugin changes, assignments, and publication enqueue.
 Duplicate delivery reuses matching plugins and assignments. Disabled organizations
 and flags intentionally skip rather than fail. There is no automatic reset loop.
+Organizations without an active project also skip. Creating an organization's
+first active project enqueues one organization-bootstrap event in the same
+transaction, so roles created before any project are distributed then.
 
 New organizations enable `automatic-role-distribution`; existing organizations
 are not enabled by this change. Apply the schema before running revised code.
