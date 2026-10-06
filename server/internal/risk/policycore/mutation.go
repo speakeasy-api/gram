@@ -364,7 +364,7 @@ func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 		if err != nil {
 			return MutationResult{}, mutationError("encode audience selector", err)
 		}
-		if _, err := tx.Exec(ctx, `SELECT id FROM principal_grants WHERE organization_id = $1 AND scope = $2 AND selectors = $3 ORDER BY id FOR UPDATE`, locked.OrganizationID, string(authz.ScopeRiskPolicyEvaluate), selector); err != nil {
+		if err := queries.LockExactAudienceGrants(ctx, repo.LockExactAudienceGrantsParams{OrganizationID: locked.OrganizationID, Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: selector}); err != nil {
 			return MutationResult{}, mutationError("lock exact audience grants", err)
 		}
 	}

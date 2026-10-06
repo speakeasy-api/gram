@@ -4706,6 +4706,23 @@ func (q *Queries) ListUserEmailsByIDs(ctx context.Context, arg ListUserEmailsByI
 	return items, nil
 }
 
+const lockExactAudienceGrants = `-- name: LockExactAudienceGrants :exec
+SELECT id FROM principal_grants
+WHERE organization_id = $1 AND scope = $2 AND selectors = $3
+ORDER BY id FOR UPDATE
+`
+
+type LockExactAudienceGrantsParams struct {
+	OrganizationID string
+	Scope          string
+	Selectors      []byte
+}
+
+func (q *Queries) LockExactAudienceGrants(ctx context.Context, arg LockExactAudienceGrantsParams) error {
+	_, err := q.db.Exec(ctx, lockExactAudienceGrants, arg.OrganizationID, arg.Scope, arg.Selectors)
+	return err
+}
+
 const lockRiskExclusionMutations = `-- name: LockRiskExclusionMutations :exec
 SELECT pg_advisory_xact_lock(hashtextextended('risk-exclusion:' || $1::text, 0))
 `
