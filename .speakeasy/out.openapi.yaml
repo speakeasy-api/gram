@@ -13573,6 +13573,213 @@ paths:
       x-speakeasy-name-override: switchScopes
       x-speakeasy-react-hook:
         name: SwitchScopes
+  /rpc/auth.transferIn:
+    get:
+      description: 'Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code''s account (login CSRF). A request with both or neither, and any failed check, lands on this host''s login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.'
+      operationId: authTransferIn
+      parameters:
+        - allowEmptyValue: true
+          description: 'Start mode: the platform host that holds the session to move here (e.g. app.getgram.ai)'
+          in: query
+          name: source_host
+          schema:
+            description: 'Start mode: the platform host that holds the session to move here (e.g. app.getgram.ai)'
+            type: string
+        - allowEmptyValue: true
+          description: 'Callback mode: the opaque one-time transfer code from the source host''s transferOut endpoint'
+          in: query
+          name: code
+          schema:
+            description: 'Callback mode: the opaque one-time transfer code from the source host''s transferOut endpoint'
+            type: string
+        - allowEmptyValue: true
+          description: Optional URL path to land on once the session is established on this host
+          in: query
+          name: redirect
+          schema:
+            description: Optional URL path to land on once the session is established on this host
+            type: string
+      responses:
+        "307":
+          description: Temporary Redirect response.
+          headers:
+            Gram-Session:
+              description: Session header
+              schema:
+                description: Session header
+                type: string
+            Location:
+              description: 'The URL to redirect to: the source host''s transferOut (start mode), the requested page (callback mode), or this host''s login page when a check fails'
+              schema:
+                description: 'The URL to redirect to: the source host''s transferOut (start mode), the requested page (callback mode), or this host''s login page when a check fails'
+                type: string
+            Set-Cookie:
+              description: The new authentication session on this host. Set only when callback mode succeeds.
+              schema:
+                description: The new authentication session on this host. Set only when callback mode succeeds.
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: transferIn auth
+      tags:
+        - auth
+      x-speakeasy-name-override: transferIn
+      x-speakeasy-react-hook:
+        disabled: true
+  /rpc/auth.transferOut:
+    get:
+      description: Step 2/3 (authorize) of a cross-domain session transfer, on the source platform host. Reached from Step 1/3, transferIn's start mode on the target host; redirects to Step 3/3, transferIn's callback mode there. Authenticates the session from the session cookie or header, checks that its active organization's default host is the target, and stores a one-time transfer code bound to the browser's nonce. Only an ordinary session whose organization lives on the target host can transfer. On any failure the browser is sent to a login page with a signin_error code instead of an error. See the flow diagram in server/internal/auth/transfer.go.
+      operationId: authTransferOut
+      parameters:
+        - allowEmptyValue: true
+          description: The target platform host to transfer the session to (e.g. ai.speakeasy.com)
+          in: query
+          name: target_host
+          schema:
+            description: The target platform host to transfer the session to (e.g. ai.speakeasy.com)
+            type: string
+        - allowEmptyValue: true
+          description: The browser binding nonce from the target host's transferIn start mode
+          in: query
+          name: nonce
+          schema:
+            description: The browser binding nonce from the target host's transferIn start mode
+            type: string
+        - allowEmptyValue: true
+          description: Optional URL path to redirect to after the transfer completes on the target host
+          in: query
+          name: redirect
+          schema:
+            description: Optional URL path to redirect to after the transfer completes on the target host
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "307":
+          description: Temporary Redirect response.
+          headers:
+            Location:
+              description: 'The URL to redirect to: the target host''s transferIn callback with the transfer code, or a login page when the transfer cannot continue'
+              schema:
+                description: 'The URL to redirect to: the target host''s transferIn callback with the transfer code, or a login page when the transfer cannot continue'
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: transferOut auth
+      tags:
+        - auth
+      x-speakeasy-name-override: transferOut
+      x-speakeasy-react-hook:
+        disabled: true
   /rpc/businessMemories.contentScopes:
     get:
       description: List the complete content-scope tree and distinct-memory counts for the active project. Requires organization admin.

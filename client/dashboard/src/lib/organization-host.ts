@@ -3,7 +3,24 @@
  *
  * `auth.info` returns `activeOrganizationDashboardUrl` only when the active
  * organization lives on a different configured platform host from the one the
- * request arrived on, so the server owns which hosts qualify. The checks here
+ * request arrived on, so the server owns which hosts qualify. The move hands
+ * the session over with a session transfer (`auth.transferIn` start mode on
+ * the other host), so the user does not sign in again.
+ *
+ * A transfer starts only when all of these hold:
+ * - the organization's default_host is non-NULL (NULL is the legacy host and
+ *   never gets a dashboard URL, so it never moves),
+ * - that host differs from the current host,
+ * - the current path is not exempt (below),
+ * - and this tab has not already recorded a move of this organization to that
+ *   host in sessionStorage.
+ *
+ * The move is recorded before the browser leaves, so at most one automatic
+ * transfer per organization and host happens per tab. Any failure along the
+ * way (an expired code, a missing or overwritten nonce cookie, a session
+ * store error, or an organization host that is not a configured platform
+ * host) ends on the other host's login page, or leaves the tab here, and
+ * never starts a second automatic transfer. The checks here
  * are the browser's own guard: the target must be an absolute https URL (http
  * only from an http page) on another host, and a tab moves an organization at
  * most once to a given host, so two hosts that disagree can never bounce a tab
@@ -48,8 +65,10 @@ function allowedProtocol(target: string, current: string): boolean {
 }
 
 /**
- * The URL that keeps the current path, query and hash on the organization's
- * host, or undefined when the dashboard should stay where it is.
+ * The URL that starts a session transfer to the organization's host and lands
+ * on the current path and query there, or undefined when the dashboard should
+ * stay where it is. The hash is dropped: the transfer URL is server-visible and
+ * logged, and a fragment can carry secrets that never left the browser before.
  */
 export function organizationHostRedirectTarget(
   dashboardUrl: string | undefined,
@@ -66,7 +85,11 @@ export function organizationHostRedirectTarget(
   if (!allowedProtocol(target.protocol, current.protocol)) return undefined;
   if (target.host === current.host) return undefined;
 
-  return target.origin + current.pathname + current.search + current.hash;
+  const params = new URLSearchParams({
+    source_host: current.host,
+    redirect: current.pathname + current.search,
+  });
+  return `${target.origin}/rpc/auth.transferIn?${params.toString()}`;
 }
 
 function moves(): string[] {

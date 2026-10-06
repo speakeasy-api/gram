@@ -14,11 +14,52 @@ const current = {
   hash: "#recent",
 };
 
+/** The transferStart URL on origin that hands over the session from sourceHost. */
+function transfer(
+  origin: string,
+  redirect: string,
+  sourceHost = current.host,
+): string {
+  const params = new URLSearchParams({ source_host: sourceHost, redirect });
+  return `${origin}/rpc/auth.transferIn?${params.toString()}`;
+}
+
+const PAGE = "/acme/mcp/servers?tab=logs&q=a%20b";
+
 describe("organizationHostRedirectTarget", () => {
-  it("keeps the path, query and hash on the organization's host", () => {
+  it("starts a session transfer on the organization's host", () => {
     expect(
       organizationHostRedirectTarget("https://ai.example.com", current),
-    ).toBe("https://ai.example.com/acme/mcp/servers?tab=logs&q=a%20b#recent");
+    ).toBe(transfer("https://ai.example.com", PAGE));
+  });
+
+  it("encodes the path and query into the redirect parameter", () => {
+    const target = organizationHostRedirectTarget("https://ai.example.com", {
+      ...current,
+      pathname: "/acme/a b/&c",
+      search: "?x=1&redirect=%2Fevil",
+      hash: "#frag?y=2",
+    });
+    const url = new URL(target!);
+    expect(url.origin).toBe("https://ai.example.com");
+    expect(url.pathname).toBe("/rpc/auth.transferIn");
+    expect([...url.searchParams.keys()]).toEqual(["source_host", "redirect"]);
+    expect(url.searchParams.get("source_host")).toBe("app.example.com");
+    expect(url.searchParams.get("redirect")).toBe(
+      "/acme/a b/&c?x=1&redirect=%2Fevil",
+    );
+    expect(url.hash).toBe("");
+  });
+
+  it("never puts the hash in the server-visible transfer URL", () => {
+    const target = organizationHostRedirectTarget("https://ai.example.com", {
+      ...current,
+      hash: "#access_token=secret",
+    });
+    expect(target).not.toContain("secret");
+    expect(new URL(target!).searchParams.get("redirect")).toBe(
+      "/acme/mcp/servers?tab=logs&q=a%20b",
+    );
   });
 
   it("ignores any path on the dashboard URL", () => {
@@ -27,7 +68,7 @@ describe("organizationHostRedirectTarget", () => {
         "https://ai.example.com/ignored/",
         current,
       ),
-    ).toBe("https://ai.example.com/acme/mcp/servers?tab=logs&q=a%20b#recent");
+    ).toBe(transfer("https://ai.example.com", PAGE));
   });
 
   it.each([
@@ -82,7 +123,7 @@ describe("organizationHostRedirectTarget", () => {
         search,
         hash: "",
       }),
-    ).toBe(`https://ai.example.com${pathname}${search}`);
+    ).toBe(transfer("https://ai.example.com", `${pathname}${search}`));
   });
 
   it("still moves a page below a hand-off path's name", () => {
@@ -93,7 +134,7 @@ describe("organizationHostRedirectTarget", () => {
         search: "",
         hash: "",
       }),
-    ).toBe("https://ai.example.com/acme/shadow-mcp/request-log");
+    ).toBe(transfer("https://ai.example.com", "/acme/shadow-mcp/request-log"));
   });
 
   it("refuses an http target from an https page", () => {
@@ -109,15 +150,13 @@ describe("organizationHostRedirectTarget", () => {
         protocol: "http:",
         host: "localhost:5173",
       }),
-    ).toBe("http://localhost:5174/acme/mcp/servers?tab=logs&q=a%20b#recent");
+    ).toBe(transfer("http://localhost:5174", PAGE, "localhost:5173"));
   });
 
   it("treats a different port as a different host", () => {
     expect(
       organizationHostRedirectTarget("https://app.example.com:8443", current),
-    ).toBe(
-      "https://app.example.com:8443/acme/mcp/servers?tab=logs&q=a%20b#recent",
-    );
+    ).toBe(transfer("https://app.example.com:8443", PAGE));
   });
 });
 

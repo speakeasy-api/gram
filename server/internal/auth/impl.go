@@ -33,7 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
-	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	authsessions "github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -129,7 +129,7 @@ type Service struct {
 	tracer               trace.Tracer
 	logger               *slog.Logger
 	db                   *pgxpool.Pool
-	sessions             *sessions.Manager
+	sessions             *authsessions.Manager
 	identity             *identity.Resolver
 	cfg                  AuthConfigurations
 	authz                *authz.Engine
@@ -148,6 +148,7 @@ type Service struct {
 	trialBundleSeeder    EnterpriseTrialBundleSeeder
 	auditLogger          *audit.Logger
 	trialNotifier        trialemails.Notifier
+	transferManager      *authsessions.TransferManager
 
 	// siteOrigin is the dashboard's "scheme://host", derived from
 	// cfg.SignInRedirectURL. It is the one absolute origin a post-login redirect
@@ -161,7 +162,7 @@ func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
-	sessions *sessions.Manager,
+	sessions *authsessions.Manager,
 	identityResolver *identity.Resolver,
 	cfg AuthConfigurations,
 	authzEngine *authz.Engine,
@@ -206,6 +207,7 @@ func NewService(
 		trialBundleSeeder:    trialBundleSeeder,
 		auditLogger:          auditLogger,
 		trialNotifier:        trialNotifier,
+		transferManager:      authsessions.NewTransferManager(nonceStore),
 		siteOrigin:           parseSiteOrigin(cfg.SignInRedirectURL),
 	}
 }
@@ -234,6 +236,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// Wrap Logout handler: have the browser drop the origin's cookies and
 	// client-side storage once the session has been invalidated server-side.
 	server.Logout = middleware.ClearSiteDataOnLogout(server.Logout)
+
+	// Wrap TransferIn: give it the browser's per-transfer nonce cookies, whose
+	// names Goa cannot know ahead of the request.
+	server.TransferIn = transferCookieMiddleware(server.TransferIn)
 
 	srv.Mount(mux, server)
 }
@@ -397,11 +403,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	userID := login.UserID
 	userInfo := login.UserInfo
 
-	sessionID, err := sessions.NewSessionID()
+	sessionID, err := authsessions.NewSessionID()
 	if err != nil {
 		return redirectWithError(authErrInit, err)
 	}
-	session := sessions.Session{
+	session := authsessions.Session{
 		SessionID:             sessionID,
 		UserID:                userID,
 		ActiveOrganizationID:  "",
@@ -542,14 +548,16 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 	}
 
-	// An organization that lives on another platform host signs in again
-	// there, landing on the same destination. Impersonation sessions stay on
-	// the host that started them.
+	// An organization that lives on another platform host gets this session
+	// handed over there, landing on the same destination. The session is
+	// stored above and its cookie is set on this same response, so
+	// transferOut on this host finds it. Impersonation sessions stay on the
+	// host that started them.
 	if idpUser.ImpersonatorEmail() == "" {
 		destination, movable := s.organizationDestination(payload, orgMetadata.Slug)
 		if move, ok := s.organizationHostMove(ctx, orgMetadata.DefaultHost); ok && movable {
 			return &gen.CallbackResult{
-				Location:      move.loginURL(destination),
+				Location:      move.transferURL(destination),
 				SessionToken:  session.SessionID,
 				SessionCookie: session.SessionID,
 			}, nil
@@ -566,8 +574,9 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 // organizationDestination is the post-login destination to carry to another
 // host for the organization with slug orgSlug: the sanitized destination from
 // state when it names that organization, and the organization's root when
-// there is none. Naming the organization makes the second login select the
-// same one, so it does not move the browser again.
+// there is none. Naming the organization means that if the transfer falls
+// back to a login on that host, the login selects the same organization and
+// does not move the browser again.
 //
 // ok is false for any other destination, and the login stays on this host.
 // Those are hand-offs that must finish where they started, such as the CLI
@@ -825,8 +834,8 @@ func (s *Service) organizationSlugFromState(payload *gen.CallbackPayload) string
 	return s.organizationSlugFromDestinationURL(state.FinalDestinationURL)
 }
 
-func (s *Service) activeOrganizationFromState(payload *gen.CallbackPayload, organizations []sessions.Organization) (sessions.Organization, bool) {
-	var empty sessions.Organization
+func (s *Service) activeOrganizationFromState(payload *gen.CallbackPayload, organizations []authsessions.Organization) (authsessions.Organization, bool) {
+	var empty authsessions.Organization
 
 	orgSlug := s.organizationSlugFromState(payload)
 	if orgSlug == "" {
@@ -842,8 +851,8 @@ func (s *Service) activeOrganizationFromState(payload *gen.CallbackPayload, orga
 	return empty, false
 }
 
-func activeOrganizationFromWorkOSID(workosOrgID string, organizations []sessions.Organization) (sessions.Organization, bool) {
-	var empty sessions.Organization
+func activeOrganizationFromWorkOSID(workosOrgID string, organizations []authsessions.Organization) (authsessions.Organization, bool) {
+	var empty authsessions.Organization
 
 	for _, org := range organizations {
 		if org.WorkosID != nil && *org.WorkosID == workosOrgID {
@@ -893,7 +902,7 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		selectedOrg = *payload.OrganizationID
 	}
 
-	var selected sessions.Organization
+	var selected authsessions.Organization
 	orgFound := false
 	for _, org := range userInfo.Organizations {
 		if org.ID == selectedOrg {
@@ -989,7 +998,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 		return nil, oops.E(oops.CodeUnexpected, err, "error invalidating user").LogError(ctx, s.logger)
 	}
 
-	if err := s.sessions.ClearSession(ctx, sessions.Session{
+	if err := s.sessions.ClearSession(ctx, authsessions.Session{
 		SessionID:             *authCtx.SessionID,
 		ActiveOrganizationID:  authCtx.ActiveOrganizationID,
 		UserID:                authCtx.UserID,
@@ -1036,7 +1045,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error loading demo organization").LogError(ctx, s.logger)
 		}
-		userInfo.Organizations = append(userInfo.Organizations, sessions.Organization{
+		userInfo.Organizations = append(userInfo.Organizations, authsessions.Organization{
 			ID:                 orgMeta.ID,
 			Name:               orgMeta.Name,
 			Slug:               orgMeta.Slug,
@@ -1052,7 +1061,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error loading support organization").LogError(ctx, s.logger)
 		}
-		userInfo.Organizations = []sessions.Organization{{
+		userInfo.Organizations = []authsessions.Organization{{
 			ID:                 orgMeta.ID,
 			Name:               orgMeta.Name,
 			Slug:               orgMeta.Slug,
@@ -1208,7 +1217,7 @@ func loadTrial(
 // applySignupWhitelist keeps the book-a-demo gate off for a signup that
 // reused a Gram identity. Prefer an already-whitelisted membership; otherwise
 // whitelist the org the session is about to activate.
-func (s *Service) applySignupWhitelist(ctx context.Context, organizations []sessions.Organization, activeOrgID string, orgMetadata orgRepo.OrganizationMetadatum) (string, orgRepo.OrganizationMetadatum, error) {
+func (s *Service) applySignupWhitelist(ctx context.Context, organizations []authsessions.Organization, activeOrgID string, orgMetadata orgRepo.OrganizationMetadatum) (string, orgRepo.OrganizationMetadatum, error) {
 	if orgMetadata.Whitelisted {
 		return activeOrgID, orgMetadata, nil
 	}
@@ -1343,7 +1352,7 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	return nil
 }
 
-func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sessions.CachedUserInfo, session *sessions.Session) (string, error) {
+func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *authsessions.CachedUserInfo, session *authsessions.Session) (string, error) {
 	orgName := generateLegibleOrgName()
 
 	// Assistants is a live product for users who never asked for a trial, so a
