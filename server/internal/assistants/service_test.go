@@ -1075,7 +1075,7 @@ func TestServiceCoreProcessThreadEventsCompletesEvent(t *testing.T) {
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
 
 	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
 	runTurnMCP := &atomic.Pointer[[]runtimeMCPServer]{}
 	runTurnPrompt := &atomic.Pointer[string]{}
 	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil, runTurnMCPServers: runTurnMCP, runTurnPrompt: runTurnPrompt}
@@ -1266,7 +1266,7 @@ func TestProcessEventTurnNestsSkillNoticeForRegularAndMCPAuthPrompts(t *testing.
 	logger := testenv.NewLogger(t)
 	prompt := &atomic.Pointer[string]{}
 	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnPrompt: prompt}
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, assistanttokens.New("test-jwt-secret", conn, nil, nil, nil), nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, assistanttokens.New("test-jwt-secret", conn, nil), nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 	assistant, err := core.GetAssistant(t.Context(), projectID, assistantID)
 	require.NoError(t, err)
 	thread := assistantThreadRecord{ID: threadID, AssistantID: assistantID, ProjectID: projectID, CorrelationID: "corr-1", SourceKind: sourceKindSlack}
@@ -1313,7 +1313,7 @@ func TestServiceCoreProcessThreadEventsRequeuesOnTurnFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
 	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: errors.New("runtime RunTurn blew up")}
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, tokens, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
@@ -1350,7 +1350,7 @@ func TestServiceCoreProcessThreadEventsMarksRuntimeFailedOnUnhealthyTurn(t *test
 
 	var stopCalls atomic.Int64
 	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
 	backend := testRuntimeBackend{
 		backend:    runtimeBackendFlyIO,
 		runTurnErr: ErrRuntimeUnhealthy,
@@ -1392,7 +1392,7 @@ func TestServiceCoreProcessThreadEventsCapsRuntimeTeardowns(t *testing.T) {
 
 	var stopCalls atomic.Int64
 	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
 	backend := testRuntimeBackend{
 		backend:    runtimeBackendFlyIO,
 		runTurnErr: ErrRuntimeUnhealthy,
@@ -2527,7 +2527,7 @@ func TestServiceCoreEnqueueTriggerTaskSkipsMissingAssistant(t *testing.T) {
 	require.NoError(t, err)
 
 	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, tokens, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 
 	missing := uuid.New()

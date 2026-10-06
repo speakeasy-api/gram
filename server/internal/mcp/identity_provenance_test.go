@@ -81,7 +81,7 @@ func TestApplyIssuerGate_RejectedAssistantTokenStampsNothing(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine, nil, nil).Generate(assistanttokens.GenerateInput{
+	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine).Generate(assistanttokens.GenerateInput{
 		OrgID:       authCtx.ActiveOrganizationID,
 		ProjectID:   otherProject.ID,
 		UserID:      authCtx.UserID,

@@ -248,7 +248,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	}
 	identityResolver.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 	triggerApp := newTriggersApp(logger, db, enc, r.Temporal, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cacheImpl, assistantIdentities)
-	assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine, callerAssertions, assistantIdentities)
+	assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
 	assistantRuntime, err := newAssistantRuntime(ctx, logger, tracerProvider, c, guardianPolicy, db, serverURL)
 	if err != nil {
 		return nil, err

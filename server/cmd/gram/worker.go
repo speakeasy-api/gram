@@ -40,7 +40,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
-	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/metering"
@@ -141,8 +140,6 @@ func newWorkerCommand() *cli.Command {
 
 	flags := append(workerRuntimeFlags(),
 		&cli.StringFlag{Name: "authz-issuer-url", EnvVars: []string{"GRAM_AUTHZ_ISSUER_URL"}, Usage: "Gram platform signing issuer origin"},
-		&cli.StringFlag{Name: "authz-private-key", EnvVars: []string{"GRAM_AUTHZ_PRIVATE_KEY"}, Usage: "Gram platform signing key for assistant execution identity"},
-		&cli.StringFlag{Name: "authz-public-keys", EnvVars: []string{"GRAM_AUTHZ_PUBLIC_KEYS"}, Usage: "Gram platform verification keys for assistant execution identity"},
 		&cli.StringFlag{
 			Name:     "server-url",
 			Usage:    "The public URL of the server",
@@ -755,11 +752,7 @@ func newWorkerCommand() *cli.Command {
 			assistantIdentities := newAssistantIdentities(c, auditLogger)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL, nil, nil, slackClient, cache.NewRedisCacheAdapter(redisClient), assistantIdentities)
 
-			executionIssuer, err := mcpauthz.New(c.String("authz-private-key"), c.String("authz-public-keys"), c.String("authz-issuer-url"), c.String("environment") == "local")
-			if err != nil {
-				return fmt.Errorf("configure assistant execution issuer: %w", err)
-			}
-			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine, executionIssuer, assistantIdentities)
+			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
 
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), serverURL)
 

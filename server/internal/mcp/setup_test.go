@@ -447,7 +447,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine, nil, nil)
+	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine)
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
 	auditLogger := audit.NewLogger()
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")

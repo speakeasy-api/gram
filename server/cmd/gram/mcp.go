@@ -334,7 +334,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// returns an error from the trigger tool instead of dispatching.
 	assistantIdentities := newAssistantIdentities(c, auditLogger)
 	triggerApp := newTriggersApp(logger, db, enc, nil, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cacheImpl, assistantIdentities)
-	assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine, callerAssertions, assistantIdentities)
+	assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
 	platformExtras := append([]platformtools.ExternalTool{}, platformtoolsruntime.MemoryExternalTools(memoryService)...)
 	platformExtras = append(platformExtras, platformtoolsruntime.AssistantSkillTools(logger, db)...)
 

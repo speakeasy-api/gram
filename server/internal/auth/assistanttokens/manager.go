@@ -13,12 +13,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -101,32 +99,23 @@ type GenerateInput struct {
 
 type Manager struct {
 	jwtSecret  string
-	db         *pgxpool.Pool
 	tokens     *tokenrepo.Queries
 	orgs       *organizationsrepo.Queries
 	projects   *projectsrepo.Queries
 	users      *usersrepo.Queries
 	authz      *authz.Engine
 	revocation *revocationCache
-
-	// executionIssuer signs and verifies agent-backed execution tokens with
-	// the deployment's Gram platform key; identities resolves them live.
-	executionIssuer *mcpauthz.Issuer
-	identities      *assistantidentity.Service
 }
 
-func New(jwtSecret string, db *pgxpool.Pool, authzEngine *authz.Engine, executionIssuer *mcpauthz.Issuer, identities *assistantidentity.Service) *Manager {
+func New(jwtSecret string, db *pgxpool.Pool, authzEngine *authz.Engine) *Manager {
 	return &Manager{
-		jwtSecret:       jwtSecret,
-		db:              db,
-		tokens:          tokenrepo.New(db),
-		orgs:            organizationsrepo.New(db),
-		projects:        projectsrepo.New(db),
-		users:           usersrepo.New(db),
-		authz:           authzEngine,
-		revocation:      newRevocationCache(revocationCacheTTL),
-		executionIssuer: executionIssuer,
-		identities:      identities,
+		jwtSecret:  jwtSecret,
+		tokens:     tokenrepo.New(db),
+		orgs:       organizationsrepo.New(db),
+		projects:   projectsrepo.New(db),
+		users:      usersrepo.New(db),
+		authz:      authzEngine,
+		revocation: newRevocationCache(revocationCacheTTL),
 	}
 }
 
