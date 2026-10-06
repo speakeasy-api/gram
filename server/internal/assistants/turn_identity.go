@@ -37,15 +37,16 @@ func legacyTurnUserID(assistant assistantRecord, thread assistantThreadRecord, e
 }
 
 // selectTurnUser picks the user a turn of an agent-backed assistant acts
-// under. Only an unmapped Slack sender falls back to the owner; a selected
+// under, and whether that user was identified by the event rather than taken
+// as the owner. Only an unmapped Slack sender falls back to the owner; a selected
 // user who is later denied is never retried as the owner.
 //
 // Fields are read by exact key. Ingress strips every spelling of the
 // identity keys that JSON decoding would fold onto them, and only the server
 // writes the exact ones.
-func selectTurnUser(ctx context.Context, assistant assistantRecord, threadSource string, event assistantThreadEventRecord, lookup slackUserLookup) (string, error) {
+func selectTurnUser(ctx context.Context, assistant assistantRecord, threadSource string, event assistantThreadEventRecord, lookup slackUserLookup) (string, bool, error) {
 	if !json.Valid(event.NormalizedPayloadJSON) {
-		return "", errors.New("turn payload is not valid JSON")
+		return "", false, errors.New("turn payload is not valid JSON")
 	}
 	// A valid non-object payload carries no identity fields and is never stamped.
 	var fields map[string]json.RawMessage
@@ -53,20 +54,20 @@ func selectTurnUser(ctx context.Context, assistant assistantRecord, threadSource
 		fields = nil
 	}
 	if kind, err := exactField[string](fields, mcpAuthEventKindKey); err != nil {
-		return "", err
+		return "", false, err
 	} else if kind == mcpAuthEventKind {
 		resume, err := exactField[string](fields, mcpAuthResumeUserIDKey)
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
 		if resume != "" {
 			// An OAuth continuation acts as the user whose turn started it.
-			return resume, nil
+			return resume, true, nil
 		}
 	}
 	source := threadSource
 	if stamped, err := exactField[string](fields, eventSourceKindKey); err != nil {
-		return "", err
+		return "", false, err
 	} else if stamped != "" {
 		source = stamped
 	}
@@ -74,7 +75,7 @@ func selectTurnUser(ctx context.Context, assistant assistantRecord, threadSource
 	case sourceKindWake:
 		version, err := exactField[int](fields, wakeIdentityVersionKey)
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
 		switch version {
 		case 0:
@@ -82,43 +83,43 @@ func selectTurnUser(ctx context.Context, assistant assistantRecord, threadSource
 		case wakeIdentityVersionRequester:
 			requester, err := exactField[string](fields, wakeRequesterUserIDKey)
 			if err != nil {
-				return "", err
+				return "", false, err
 			}
 			if requester == "" {
-				return "", errors.New("wake has no captured requester")
+				return "", false, errors.New("wake has no captured requester")
 			}
-			return requester, nil
+			return requester, true, nil
 		default:
-			return "", fmt.Errorf("unsupported wake identity version %d", version)
+			return "", false, fmt.Errorf("unsupported wake identity version %d", version)
 		}
 	case sourceKindDashboard:
 		sender, err := exactField[string](fields, "user_id")
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
 		if sender != "" {
-			return sender, nil
+			return sender, true, nil
 		}
 	case sourceKindSlack:
 		team, err := exactField[string](fields, "team_id")
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
 		sender, err := exactField[string](fields, "user_id")
 		if err != nil {
-			return "", err
+			return "", false, err
 		}
 		if team != "" && sender != "" {
 			user, err := lookup(ctx, slackrepo.ResolveSlackMappingUserParams{OrganizationID: assistant.OrganizationID, SlackTeamID: team, SlackUserID: sender})
 			if err == nil && user != "" {
-				return user, nil
+				return user, true, nil
 			}
 		}
 	}
 	if assistant.CreatedByUserID == "" {
-		return "", errors.New("assistant owner is unavailable")
+		return "", false, errors.New("assistant owner is unavailable")
 	}
-	return assistant.CreatedByUserID, nil
+	return assistant.CreatedByUserID, false, nil
 }
 
 // exactField decodes fields[key], matching the key exactly. A missing key or
@@ -135,31 +136,39 @@ func exactField[T any](fields map[string]json.RawMessage, key string) (T, error)
 	return value, nil
 }
 
-// turnUserID returns the user a turn acts under and whether the assistant runs
-// as its dedicated agent. Identity failures wrap ErrTurnIdentity; storage
-// failures do not.
-func (s *ServiceCore) turnUserID(ctx context.Context, assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) (string, bool, error) {
+// turnIdentity is who a turn acts as. AgentBacked turns run as the
+// assistant's agent; HumanKnown says the event identified UserID rather than
+// UserID being the owner it falls back to.
+type turnIdentity struct {
+	UserID      string
+	AgentBacked bool
+	HumanKnown  bool
+}
+
+// turnUserID returns who a turn acts as. Identity failures wrap
+// ErrTurnIdentity; storage failures do not.
+func (s *ServiceCore) turnUserID(ctx context.Context, assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) (turnIdentity, error) {
 	states, err := assistantidentity.States(ctx, s.db, assistant.ProjectID, []uuid.UUID{assistant.ID})
 	if err != nil {
-		return "", false, fmt.Errorf("load turn identity state: %w", err)
+		return turnIdentity{}, fmt.Errorf("load turn identity state: %w", err)
 	}
 	switch states[assistant.ID].State {
 	case assistantidentity.NeverConfigured:
-		return legacyTurnUserID(assistant, thread, event), false, nil
+		return turnIdentity{UserID: legacyTurnUserID(assistant, thread, event), AgentBacked: false, HumanKnown: false}, nil
 	case assistantidentity.Active:
 	default:
-		return "", false, fmt.Errorf("%w: assistant agent is not active", ErrTurnIdentity)
+		return turnIdentity{}, fmt.Errorf("%w: assistant agent is not active", ErrTurnIdentity)
 	}
 
-	user, err := selectTurnUser(ctx, assistant, thread.SourceKind, event, slackrepo.New(s.db).ResolveSlackMappingUser)
+	user, known, err := selectTurnUser(ctx, assistant, thread.SourceKind, event, slackrepo.New(s.db).ResolveSlackMappingUser)
 	if err != nil {
-		return "", false, fmt.Errorf("%w: %w", ErrTurnIdentity, err)
+		return turnIdentity{}, fmt.Errorf("%w: %w", ErrTurnIdentity, err)
 	}
 	if err := assistantidentity.CheckActor(ctx, s.db, s.authz, assistant.OrganizationID, assistant.ProjectID, user); err != nil {
 		if errors.Is(err, assistantidentity.ErrActorIneligible) {
-			return "", false, fmt.Errorf("%w: turn user: %w", ErrTurnIdentity, err)
+			return turnIdentity{}, fmt.Errorf("%w: turn user: %w", ErrTurnIdentity, err)
 		}
-		return "", false, fmt.Errorf("check turn user: %w", err)
+		return turnIdentity{}, fmt.Errorf("check turn user: %w", err)
 	}
-	return user, true, nil
+	return turnIdentity{UserID: user, AgentBacked: true, HumanKnown: known}, nil
 }
