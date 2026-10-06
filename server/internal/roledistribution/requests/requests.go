@@ -12,6 +12,7 @@ import (
 
 	roledistributionv1 "github.com/speakeasy-api/gram/infra/gen/gram/role_distribution/v1"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 // Request identifies exactly one setup, global fanout, or organization bootstrap.
@@ -83,10 +84,7 @@ func ResumeOrganization(ctx context.Context, tx pgx.Tx, organizationID string) e
 // so this is the trigger that distributes roles created before any project.
 // Concurrent first projects may each publish; setup reuses plugins and assignments.
 func PublishFirstProject(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID) error {
-	// FOR SHARE waits for an in-flight project delete, then rechecks the row,
-	// so a concurrently deleted project cannot suppress the bootstrap.
-	var other uuid.UUID
-	err := tx.QueryRow(ctx, `SELECT id FROM projects WHERE organization_id = $1 AND deleted IS FALSE AND id <> $2 LIMIT 1 FOR SHARE`, organizationID, projectID).Scan(&other)
+	_, err := projectsrepo.New(tx).LockOtherActiveProject(ctx, projectsrepo.LockOtherActiveProjectParams{OrganizationID: organizationID, ProjectID: projectID})
 	if err == nil {
 		return nil
 	}
