@@ -5303,6 +5303,29 @@ func (q *Queries) GetRemoteSessionRecheckEndpoints(ctx context.Context, arg GetR
 	return items, nil
 }
 
+const getRemoteURLForMcpServer = `-- name: GetRemoteURLForMcpServer :one
+SELECT rms.url
+FROM mcp_servers AS m
+JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE m.id = $1
+  AND m.project_id = $2
+  AND m.deleted IS FALSE
+`
+
+type GetRemoteURLForMcpServerParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// The upstream URL a remote-backed MCP server proxies to, which is the
+// protected resource its logins are for. No row for a tunneled or hosted server.
+func (q *Queries) GetRemoteURLForMcpServer(ctx context.Context, arg GetRemoteURLForMcpServerParams) (string, error) {
+	row := q.db.QueryRow(ctx, getRemoteURLForMcpServer, arg.McpServerID, arg.ProjectID)
+	var url string
+	err := row.Scan(&url)
+	return url, err
+}
+
 const getTenantRemoteSessionIssuerByID = `-- name: GetTenantRemoteSessionIssuerByID :one
 
 SELECT id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, omit_scope_fallback, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
@@ -7616,6 +7639,10 @@ SELECT
     i.metadata_fetched_at                  AS metadata_fetched_at,
     i.metadata_last_error_at               AS metadata_last_error_at,
     i.metadata_last_error_url              AS metadata_last_error_url,
+    rpr.scope_override                     AS resource_scope_override,
+    rpr.challenge_scopes                   AS resource_challenge_scopes,
+    rpr.scopes_supported                   AS resource_scopes_supported,
+    rpr.metadata_fetched_at                AS resource_metadata_fetched_at,
     (
       i.metadata IS NOT NULL AND (
         i.introspection_endpoint_auth_methods_supported IS NULL
@@ -7633,10 +7660,14 @@ FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-WHERE link.user_session_issuer_id = $1
-  AND (c.project_id = $2 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3)))
-  AND (usi.project_id = $2 OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
-  AND (i.project_id = $2 OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = $3)))
+LEFT JOIN remote_protected_resources AS rpr
+  ON rpr.project_id = $1
+ AND rpr.resource_identifier = c.resource_identifier
+ AND rpr.deleted IS FALSE
+WHERE link.user_session_issuer_id = $2
+  AND (c.project_id = $1 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3)))
+  AND (usi.project_id = $1 OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
+  AND (i.project_id = $1 OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = $3)))
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
   AND usi.deleted IS FALSE
@@ -7644,8 +7675,8 @@ ORDER BY c.id ASC
 `
 
 type ListRemoteSessionClientsForUserSessionIssuerParams struct {
+	ProjectID           uuid.UUID
 	UserSessionIssuerID uuid.UUID
-	ProjectID           uuid.NullUUID
 	OrganizationID      pgtype.Text
 }
 
@@ -7690,6 +7721,10 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	MetadataFetchedAt                          pgtype.Timestamptz
 	MetadataLastErrorAt                        pgtype.Timestamptz
 	MetadataLastErrorUrl                       pgtype.Text
+	ResourceScopeOverride                      []string
+	ResourceChallengeScopes                    []string
+	ResourceScopesSupported                    []string
+	ResourceMetadataFetchedAt                  pgtype.Timestamptz
 	MetadataNeedsReprojection                  bool
 }
 
@@ -7700,7 +7735,7 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 // and global catalog clients. Every tier still requires an explicit link to
 // the reachable user_session_issuer and a reachable upstream issuer.
 func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Context, arg ListRemoteSessionClientsForUserSessionIssuerParams) ([]ListRemoteSessionClientsForUserSessionIssuerRow, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionClientsForUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
+	rows, err := q.db.Query(ctx, listRemoteSessionClientsForUserSessionIssuer, arg.ProjectID, arg.UserSessionIssuerID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -7749,6 +7784,10 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.MetadataFetchedAt,
 			&i.MetadataLastErrorAt,
 			&i.MetadataLastErrorUrl,
+			&i.ResourceScopeOverride,
+			&i.ResourceChallengeScopes,
+			&i.ResourceScopesSupported,
+			&i.ResourceMetadataFetchedAt,
 			&i.MetadataNeedsReprojection,
 		); err != nil {
 			return nil, err

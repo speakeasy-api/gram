@@ -1400,6 +1400,8 @@ func (s *Service) buildRemoteSessionCards(
 		return nil, nil
 	}
 	clients = s.remoteChallengeMgr.WithCatalogBranding(ctx, clients)
+	// Cards read the cached resource row only; the login probes.
+	discoverScopes := s.remoteChallengeMgr.ResourceScopeDiscoveryEnabled(ctx, endpoint.OrganizationID)
 
 	// Single round-trip for connection state across all cards. Empty when
 	// the subject hasn't been stamped yet (early render before IDP /
@@ -1475,7 +1477,7 @@ func (s *Service) buildRemoteSessionCards(
 			validationReason = inactiveReason(issuerDisplay)
 		}
 		tokenActive, tokenExpiresAt, tokenExpiresIn := tokenLine(renderedAt, state.Token, state.AccessExpiresAt)
-		requested, _ := c.RequestedScopes()
+		requested := c.RequestedScopes(c.CachedResourceScopes(discoverScopes)).Scopes
 		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable
 		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
 		cards = append(cards, remoteSessionCard{

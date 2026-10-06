@@ -854,6 +854,68 @@ func (q *Queries) ListIssuerClients(ctx context.Context, arg ListIssuerClientsPa
 	return items, nil
 }
 
+const listRemoteProtectedResourceScopes = `-- name: ListRemoteProtectedResourceScopes :many
+SELECT
+    rpr.project_id
+  , rpr.resource_identifier
+  , rpr.scope_override
+  , rpr.challenge_scopes
+  , rpr.scopes_supported
+  , rpr.metadata_fetched_at
+FROM remote_protected_resources AS rpr
+JOIN projects AS p
+  ON p.id = rpr.project_id
+ AND p.organization_id = $1
+ AND p.deleted IS FALSE
+WHERE rpr.project_id = ANY ($2::uuid[])
+  AND rpr.resource_identifier = ANY ($3::text[])
+  AND rpr.deleted IS FALSE
+`
+
+type ListRemoteProtectedResourceScopesParams struct {
+	OrganizationID      string
+	ProjectIds          []uuid.UUID
+	ResourceIdentifiers []string
+}
+
+type ListRemoteProtectedResourceScopesRow struct {
+	ProjectID          uuid.UUID
+	ResourceIdentifier string
+	ScopeOverride      []string
+	ChallengeScopes    []string
+	ScopesSupported    []string
+	MetadataFetchedAt  pgtype.Timestamptz
+}
+
+// What the cached protected resource rows say about scopes, for any of the
+// given projects and upstream URLs; callers match rows back to servers.
+func (q *Queries) ListRemoteProtectedResourceScopes(ctx context.Context, arg ListRemoteProtectedResourceScopesParams) ([]ListRemoteProtectedResourceScopesRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteProtectedResourceScopes, arg.OrganizationID, arg.ProjectIds, arg.ResourceIdentifiers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteProtectedResourceScopesRow
+	for rows.Next() {
+		var i ListRemoteProtectedResourceScopesRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.ResourceIdentifier,
+			&i.ScopeOverride,
+			&i.ChallengeScopes,
+			&i.ScopesSupported,
+			&i.MetadataFetchedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listResourceConnections = `-- name: ListResourceConnections :many
 SELECT
     r.id, r.organization_id, r.identity_provider_connection_id, r.remote_session_issuer_id, r.resource, r.audience, r.okta_application_id, r.observed_result, r.observed_at, r.created_at, r.updated_at

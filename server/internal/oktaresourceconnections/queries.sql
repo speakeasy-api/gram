@@ -192,6 +192,25 @@ WHERE c.deleted IS FALSE
   )
 ORDER BY c.remote_session_issuer_id, c.project_id NULLS LAST, c.created_at, c.id;
 
+-- name: ListRemoteProtectedResourceScopes :many
+-- What the cached protected resource rows say about scopes, for any of the
+-- given projects and upstream URLs; callers match rows back to servers.
+SELECT
+    rpr.project_id
+  , rpr.resource_identifier
+  , rpr.scope_override
+  , rpr.challenge_scopes
+  , rpr.scopes_supported
+  , rpr.metadata_fetched_at
+FROM remote_protected_resources AS rpr
+JOIN projects AS p
+  ON p.id = rpr.project_id
+ AND p.organization_id = @organization_id
+ AND p.deleted IS FALSE
+WHERE rpr.project_id = ANY (@project_ids::uuid[])
+  AND rpr.resource_identifier = ANY (@resource_identifiers::text[])
+  AND rpr.deleted IS FALSE;
+
 -- name: ListEMABindings :many
 SELECT
     b.project_id

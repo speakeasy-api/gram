@@ -213,7 +213,7 @@ func (s *CatalogIdentityProviderAttachmentService) discoverSupportedIssuerMetada
 func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx context.Context, organizationID string, project ResolvedProject, userSessionIssuerID uuid.UUID, issuerURL string) (bool, error) {
 	clients, err := remotesessionsrepo.New(s.db).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
 		UserSessionIssuerID: userSessionIssuerID,
-		ProjectID:           conv.ToNullUUID(project.ID),
+		ProjectID:           project.ID,
 		OrganizationID:      conv.ToPGText(organizationID),
 	})
 	if err != nil {

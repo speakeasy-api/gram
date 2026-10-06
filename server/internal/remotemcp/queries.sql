@@ -267,6 +267,26 @@ WHERE project_id = @project_id
     AND resource_identifier = @resource_identifier::text
     AND deleted IS FALSE;
 
+-- name: SetRemoteProtectedResourceScopeOverride :execrows
+-- Pins the scopes logins to this resource request; NULL clears the pin.
+UPDATE remote_protected_resources
+SET
+    scope_override = sqlc.narg(scope_override)::text[],
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+    AND resource_identifier = @resource_identifier::text
+    AND deleted IS FALSE;
+
+-- name: SetRemoteProtectedResourceMetadataTimestamps :execrows
+-- Test fixture: backdates when the row was last read or last failed.
+UPDATE remote_protected_resources
+SET
+    metadata_fetched_at = sqlc.narg(metadata_fetched_at)::timestamptz,
+    metadata_last_error_at = sqlc.narg(metadata_last_error_at)::timestamptz
+WHERE project_id = @project_id
+    AND resource_identifier = @resource_identifier::text
+    AND deleted IS FALSE;
+
 -- name: GetRemoteProtectedResource :one
 SELECT *
 FROM remote_protected_resources

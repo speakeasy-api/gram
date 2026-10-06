@@ -294,7 +294,8 @@ func TestRemoteLogin_Unchanged_ClientScopeAlreadyCarryingStandardScopes(t *testi
 	clients, err := env.mgr.ListClients(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID)
 	require.NoError(t, err)
 	require.Len(t, clients, 1)
-	scopes, widened := clients[0].RequestedScopes()
+	resolution := clients[0].RequestedScopes(remotesessions.ResourceScopes{})
+	scopes, widened := resolution.Scopes, resolution.Widened
 	require.Equal(t, stored, scopes)
 	require.Empty(t, widened, "nothing was appended, so nothing is logged as widened")
 }

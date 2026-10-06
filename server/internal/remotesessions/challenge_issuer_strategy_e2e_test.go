@@ -93,11 +93,18 @@ func TestRemoteLogin_ScopeOverrideIsRequestedVerbatim(t *testing.T) {
 
 	_, env := newSyntheticExpiryEnv(t, "scope-override", scopelessToken,
 		withIssuerScopes("channels:history", "openid", "offline_access"),
-		withClientScope("channels:history"),
 		withScopeOverride("custom:one", "custom:two"),
 	)
 	require.Equal(t, "custom:one custom:two", scopeOf(t, env.authURL))
 	require.Equal(t, []string{"custom:one", "custom:two"}, env.session.Scopes)
+
+	// A client with its own scope keeps it; the override is the issuer-wide fallback.
+	_, scoped := newSyntheticExpiryEnv(t, "scope-override-client", scopelessToken,
+		withIssuerScopes("channels:history", "openid", "offline_access"),
+		withClientScope("channels:history"),
+		withScopeOverride("custom:one", "custom:two"),
+	)
+	require.Equal(t, "channels:history openid offline_access", scopeOf(t, scoped.authURL))
 }
 
 // Empty scopes_supported adds nothing; the NULL case exists only on Client (TestClientRequestedScopes).

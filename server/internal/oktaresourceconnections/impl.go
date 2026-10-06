@@ -241,6 +241,32 @@ type snapshot struct {
 	bindings     map[uuid.UUID][]repo.ListEMABindingsRow
 	records      map[upstreamKey]*record
 	deepLink     string
+
+	// resources is the cached protected resource row per remote-backed
+	// server, read once; the login probes, this surface never does.
+	resources map[resourceKey]repo.ListRemoteProtectedResourceScopesRow
+	// discoverScopes applies the resource's advertised scopes, per the rollout flag.
+	discoverScopes bool
+}
+
+// resourceKey is a remote-backed server's protected resource row key.
+type resourceKey struct {
+	projectID uuid.UUID
+	url       string
+}
+
+// resourceScopes is what the cached resource row for sv says about scopes.
+func (snap *snapshot) resourceScopes(sv repo.ListEligibleServersRow) remotesessions.ResourceScopes {
+	out := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: snap.discoverScopes}
+	if !sv.RemoteUrl.Valid {
+		return out
+	}
+	row, ok := snap.resources[resourceKey{projectID: sv.ProjectID, url: sv.RemoteUrl.String}]
+	if !ok {
+		return out
+	}
+	out.Pin, out.ChallengeScopes, out.ScopesSupported = row.ScopeOverride, row.ChallengeScopes, row.ScopesSupported
+	return out
 }
 
 func (snap *snapshot) agentRecorded() bool {
@@ -251,7 +277,7 @@ func (snap *snapshot) agentRecorded() bool {
 func (snap *snapshot) derive(sv repo.ListEligibleServersRow) row {
 	r := row{server: sv, connection: nil, clientID: "", binding: "", scopes: nil, resource: resourceIndicator(sv), state: "", reason: "", broken: ""}
 	r.connection = snap.records[r.key()]
-	r.clientID, r.scopes, r.binding = resolveClient(sv, r.resource, snap.clients[sv.IssuerID], snap.bindings[sv.IssuerID])
+	r.clientID, r.scopes, r.binding = resolveClient(sv, r.resource, snap.clients[sv.IssuerID], snap.bindings[sv.IssuerID], snap.resourceScopes(sv))
 	in := inputsFor(sv, r.connection, snap.agentRecorded())
 	r.state = Derive(in)
 	r.reason = NotApplicableReason(in)
@@ -280,15 +306,17 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 		return nil, err
 	}
 	snap := &snapshot{
-		connection:   connection,
-		rows:         make([]row, 0, len(all)),
-		total:        0,
-		pending:      0,
-		undiscovered: 0,
-		clients:      map[uuid.UUID][]repo.ListIssuerClientsRow{},
-		bindings:     map[uuid.UUID][]repo.ListEMABindingsRow{},
-		records:      map[upstreamKey]*record{},
-		deepLink:     deepLink(connection),
+		connection:     connection,
+		rows:           make([]row, 0, len(all)),
+		total:          0,
+		pending:        0,
+		undiscovered:   0,
+		clients:        map[uuid.UUID][]repo.ListIssuerClientsRow{},
+		bindings:       map[uuid.UUID][]repo.ListEMABindingsRow{},
+		records:        map[upstreamKey]*record{},
+		deepLink:       deepLink(connection),
+		resources:      map[resourceKey]repo.ListRemoteProtectedResourceScopesRow{},
+		discoverScopes: s.scopeDiscoveryEnabled(ctx, logger, organizationID),
 	}
 	servers := make([]repo.ListEligibleServersRow, 0, len(all))
 	seen := map[uuid.UUID]bool{}
@@ -312,6 +340,23 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 	}
 	for _, c := range clients {
 		snap.clients[c.RemoteSessionIssuerID] = append(snap.clients[c.RemoteSessionIssuerID], c)
+	}
+	var projectIDs []uuid.UUID
+	var resourceURLs []string
+	for _, sv := range servers {
+		if sv.RemoteUrl.Valid {
+			projectIDs = append(projectIDs, sv.ProjectID)
+			resourceURLs = append(resourceURLs, sv.RemoteUrl.String)
+		}
+	}
+	if len(projectIDs) > 0 {
+		resources, err := q.ListRemoteProtectedResourceScopes(ctx, repo.ListRemoteProtectedResourceScopesParams{OrganizationID: organizationID, ProjectIds: projectIDs, ResourceIdentifiers: resourceURLs})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list protected resource scopes").LogError(ctx, logger)
+		}
+		for _, r := range resources {
+			snap.resources[resourceKey{projectID: r.ProjectID, url: r.ResourceIdentifier}] = r
+		}
 	}
 	bindings, err := q.ListEMABindings(ctx, repo.ListEMABindingsParams{OrganizationID: organizationID, IssuerIds: issuerIDs})
 	if err != nil {
@@ -371,7 +416,7 @@ func resourceIndicator(sv repo.ListEligibleServersRow) string {
 // bindings for the resource that agree on one client win; else the single
 // attached client in the server's project or the organization, preferring
 // one registered for this resource; else ambiguous or missing.
-func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []repo.ListIssuerClientsRow, bindings []repo.ListEMABindingsRow) (string, []string, string) {
+func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []repo.ListIssuerClientsRow, bindings []repo.ListEMABindingsRow, resourceScopes remotesessions.ResourceScopes) (string, []string, string) {
 	byID := make(map[uuid.UUID]repo.ListIssuerClientsRow, len(clients))
 	for _, c := range clients {
 		byID[c.ID] = c
@@ -391,7 +436,7 @@ func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []re
 		if !ok || (c.ProjectID.Valid && c.ProjectID.UUID != sv.ProjectID) {
 			continue
 		}
-		for _, scope := range scopesOr(b.RequestedScopes, requestedScopes(c)) {
+		for _, scope := range scopesOr(b.RequestedScopes, requestedScopes(c, resourceScopes)) {
 			if !slices.Contains(boundScopes, scope) {
 				boundScopes = append(boundScopes, scope)
 			}
@@ -429,19 +474,37 @@ func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []re
 	case 0:
 		return "", nil, ClientBindingMissing
 	case 1:
-		return candidates[0].ClientID, requestedScopes(candidates[0]), ClientBindingSingle
+		return candidates[0].ClientID, requestedScopes(candidates[0], resourceScopes), ClientBindingSingle
 	default:
 		return "", nil, ClientBindingAmbiguous
 	}
 }
 
-func requestedScopes(c repo.ListIssuerClientsRow) []string {
-	scopes, _ := (remotesessions.Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
+// requestedScopes is what a login through c would request today, from the
+// cached resource row; this surface never probes.
+func requestedScopes(c repo.ListIssuerClientsRow, resourceScopes remotesessions.ResourceScopes) []string {
+	scopes := (remotesessions.Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
 		ClientScope:           c.Scope,
 		IssuerScopeOverride:   c.IssuerScopeOverride,
 		IssuerScopesSupported: c.IssuerScopesSupported,
-	}).RequestedScopes()
+	}).RequestedScopes(resourceScopes).Scopes
 	return scopesOr(nil, scopes)
+}
+
+// scopeDiscoveryEnabled reports whether the organization's logins base their
+// scope request on what the resource advertises; unreadable reads as off.
+func (s *Service) scopeDiscoveryEnabled(ctx context.Context, logger *slog.Logger, organizationID string) bool {
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		logger.WarnContext(ctx, "read organization for scope discovery flag", attr.SlogError(err))
+		return false
+	}
+	enabled, err := s.features.IsFlagEnabledLocal(ctx, feature.FlagRemoteSessionLiveResourceScopes, organizationID, feature.OrgProjectGroups(org.Slug, ""), nil)
+	if err != nil {
+		logger.WarnContext(ctx, "evaluate scope discovery flag", attr.SlogError(err))
+		return false
+	}
+	return enabled
 }
 
 func scopesOr(preferred, fallback []string) []string {
@@ -619,7 +682,7 @@ func (s *Service) Confirm(ctx context.Context, payload *srv.ConfirmPayload) (*sr
 		if resource == "" {
 			return nil, oops.E(oops.CodeFailedPrecondition, nil, "the server has no resource indicator")
 		}
-		if _, _, binding := resolveClient(server, resource, snap.clients[server.IssuerID], snap.bindings[server.IssuerID]); binding == ClientBindingMissing || binding == ClientBindingAmbiguous {
+		if _, _, binding := resolveClient(server, resource, snap.clients[server.IssuerID], snap.bindings[server.IssuerID], snap.resourceScopes(server)); binding == ClientBindingMissing || binding == ClientBindingAmbiguous {
 			return nil, oops.E(oops.CodeFailedPrecondition, nil, "the server has no single client registered at its authorization server")
 		}
 		key := upstreamKey{issuerID: server.IssuerID, resource: resource}

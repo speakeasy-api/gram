@@ -34,8 +34,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -254,9 +256,48 @@ type syntheticLoginOptions struct {
 	callbackOrigins *remotesessions.CallbackOrigins
 	// clientCallbackBaseURL is the client's recorded callback origin; empty stores NULL.
 	clientCallbackBaseURL string
+	// remoteServerURL, when set, seeds a remote-backed MCP server at that URL
+	// and makes the login for it, so scope resolution consults its resource row.
+	remoteServerURL string
+	// protectedResource, when set, seeds the resource row for remoteServerURL.
+	protectedResource *protectedResourceSeed
+	// prober wires a fresh protected resource prober into the manager.
+	prober bool
+	// liveResourceScopes enrols the organization in resource-first scope discovery.
+	liveResourceScopes bool
+}
+
+// protectedResourceSeed is a remote_protected_resources row as a login finds it.
+type protectedResourceSeed struct {
+	// scopesSupported is the advertised list; nil leaves the member NULL.
+	scopesSupported []string
+	// pin is the operator's scope_override; nil leaves it unset.
+	pin []string
+	// challengeScopes is the last challenge's scope param; nil leaves it unset.
+	challengeScopes []string
+	// fetchedAgo backdates the last successful read; zero leaves it at now.
+	fetchedAgo time.Duration
+	// errorAgo, when set, records a failed read that long ago.
+	errorAgo time.Duration
 }
 
 type syntheticLoginOption func(*syntheticLoginOptions)
+
+func withRemoteServer(serverURL string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.remoteServerURL = serverURL }
+}
+
+func withProtectedResource(seed protectedResourceSeed) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.protectedResource = &seed }
+}
+
+func withProber() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.prober = true }
+}
+
+func withLiveResourceScopes() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.liveResourceScopes = true }
+}
 
 func withTunnels(tunnels *tunnelrouting.HTTPClient) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.tunnels = tunnels }
@@ -423,6 +464,14 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	if options.callbackOrigins != nil {
 		managerOptions = append(managerOptions, remotesessions.WithCallbackOrigins(*options.callbackOrigins))
 	}
+	if options.prober {
+		managerOptions = append(managerOptions, remotesessions.WithProtectedResourceProber(protectedresource.NewProber(ti.conn, policy)))
+	}
+	if options.liveResourceScopes {
+		flags := &feature.InMemory{}
+		flags.SetFlag(feature.FlagRemoteSessionLiveResourceScopes, feature.AnyDistinctID, true)
+		managerOptions = append(managerOptions, remotesessions.WithFeatureFlags(flags))
+	}
 	if options.issuerMetadataRefresh {
 		issuerMetadataReader = sdkmetric.NewManualReader()
 		issuerMetadata = remotesessions.NewIssuerMetadataRefresher(logger, sdkmetric.NewMeterProvider(sdkmetric.WithReader(issuerMetadataReader)), ti.conn, policy, options.tunnels, audit.NewLogger())
@@ -523,6 +572,13 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	}
 
 	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "usi-synthetic-"+slugSuffix)
+	var mcpServerID uuid.NullUUID
+	if options.remoteServerURL != "" {
+		mcpServerID = conv.ToNullUUID(seedRemoteMcpServerForLogin(t, ctx, ti.conn, *authCtx.ProjectID, userIssuer, "synthetic-mcp-"+slugSuffix, options.remoteServerURL))
+		if options.protectedResource != nil {
+			seedProtectedResource(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, options.remoteServerURL, *options.protectedResource)
+		}
+	}
 
 	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
@@ -560,6 +616,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		UserSessionIssuerID: userIssuer,
 		Subject:             &subject,
 		McpSlug:             "synthetic-mcp-" + slugSuffix,
+		McpServerID:         mcpServerID,
 		FinalRedirectURI:    "",
 		Resource:            options.resource,
 	}, clients[0])

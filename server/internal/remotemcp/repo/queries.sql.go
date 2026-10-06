@@ -632,6 +632,62 @@ func (q *Queries) RecordRemoteProtectedResourceFetchError(ctx context.Context, a
 	return i, err
 }
 
+const setRemoteProtectedResourceMetadataTimestamps = `-- name: SetRemoteProtectedResourceMetadataTimestamps :execrows
+UPDATE remote_protected_resources
+SET
+    metadata_fetched_at = $1::timestamptz,
+    metadata_last_error_at = $2::timestamptz
+WHERE project_id = $3
+    AND resource_identifier = $4::text
+    AND deleted IS FALSE
+`
+
+type SetRemoteProtectedResourceMetadataTimestampsParams struct {
+	MetadataFetchedAt   pgtype.Timestamptz
+	MetadataLastErrorAt pgtype.Timestamptz
+	ProjectID           uuid.UUID
+	ResourceIdentifier  string
+}
+
+// Test fixture: backdates when the row was last read or last failed.
+func (q *Queries) SetRemoteProtectedResourceMetadataTimestamps(ctx context.Context, arg SetRemoteProtectedResourceMetadataTimestampsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRemoteProtectedResourceMetadataTimestamps,
+		arg.MetadataFetchedAt,
+		arg.MetadataLastErrorAt,
+		arg.ProjectID,
+		arg.ResourceIdentifier,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setRemoteProtectedResourceScopeOverride = `-- name: SetRemoteProtectedResourceScopeOverride :execrows
+UPDATE remote_protected_resources
+SET
+    scope_override = $1::text[],
+    updated_at = clock_timestamp()
+WHERE project_id = $2
+    AND resource_identifier = $3::text
+    AND deleted IS FALSE
+`
+
+type SetRemoteProtectedResourceScopeOverrideParams struct {
+	ScopeOverride      []string
+	ProjectID          uuid.UUID
+	ResourceIdentifier string
+}
+
+// Pins the scopes logins to this resource request; NULL clears the pin.
+func (q *Queries) SetRemoteProtectedResourceScopeOverride(ctx context.Context, arg SetRemoteProtectedResourceScopeOverrideParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRemoteProtectedResourceScopeOverride, arg.ScopeOverride, arg.ProjectID, arg.ResourceIdentifier)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateServer = `-- name: UpdateServer :one
 UPDATE remote_mcp_servers
 SET

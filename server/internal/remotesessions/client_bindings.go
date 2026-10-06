@@ -83,7 +83,7 @@ func (m *ChallengeManager) listRemoteSessionClientRowsForUserSessionIssuer(
 ) ([]repo.ListRemoteSessionClientsForUserSessionIssuerRow, error) {
 	rows, err := repo.New(m.db).ListRemoteSessionClientsForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsForUserSessionIssuerParams{
 		UserSessionIssuerID: userSessionIssuerID,
-		ProjectID:           conv.ToNullUUID(projectID),
+		ProjectID:           projectID,
 		OrganizationID:      conv.ToPGText(organizationID),
 	})
 	if err != nil {

@@ -128,6 +128,17 @@ const (
 	// when the fold flag is on. Same targeting; removed with the fold flag.
 	FlagCanonicalIdentityFoldShadow Flag = "canonical-identity-fold-shadow"
 
+	// FlagRemoteSessionLiveResourceScopes lets a remote-session login consult
+	// its protected resource row (the last WWW-Authenticate challenge's
+	// scopes, the operator's pin, else the RFC 9728 scopes_supported read
+	// live or from the cached row) ahead of the issuer's whole
+	// scopes_supported catalogue. Client scopes and issuer overrides apply
+	// either way.
+	// Evaluated server-side with the local-only helper, distinct id =
+	// organization id and the organization group (org slug). Inconclusive
+	// reads as off. Removed once resource-first discovery is GA (AIM-432).
+	FlagRemoteSessionLiveResourceScopes Flag = "remote-session-live-resource-scopes"
+
 	// FlagPaygSelfServeBilling gates the self-serve Stripe Checkout rollout.
 	// Targeted by PostHog organization group (org slug) and removed once PAYG
 	// billing is generally available.

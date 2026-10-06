@@ -51,13 +51,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -234,6 +237,16 @@ type ChallengeManager struct {
 	// enforcement decision (AIS-566) reads.
 	metrics *remotesessionmetrics.Authorize
 
+	// scopeMetrics counts which precedence step decided each login's scope request.
+	scopeMetrics *remotesessionmetrics.ScopeResolution
+
+	// protectedResources resolves the login's protected resource row, probing
+	// it within a short budget; nil skips the resource steps of scope resolution.
+	protectedResources *protectedresource.Prober
+
+	// features gates resource-first scope discovery per organization; nil reads as off.
+	features feature.Provider
+
 	registrationTelemetry registration.Recorder
 
 	// privateAuthorityValidator is injected at construction. The callback package
@@ -327,6 +340,19 @@ func WithCallbackOrigins(origins CallbackOrigins) ChallengeManagerOption {
 	return func(m *ChallengeManager) { m.origins = origins }
 }
 
+// WithProtectedResourceProber lets logins read, and when the organization is
+// enrolled probe, the protected resource row of the MCP server they are for.
+// It is the same prober the proxy refreshes rows with, so one replica has one
+// writer. Without it the login never consults a resource row.
+func WithProtectedResourceProber(prober *protectedresource.Prober) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.protectedResources = prober }
+}
+
+// WithFeatureFlags evaluates the resource-first scope discovery rollout flag.
+func WithFeatureFlags(features feature.Provider) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.features = features }
+}
+
 func NewChallengeManager(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -361,6 +387,9 @@ func NewChallengeManager(
 			interceptors.NewGoogle(logger),
 		},
 		metrics:                   remotesessionmetrics.NewAuthorize(logger, meterProvider),
+		scopeMetrics:              remotesessionmetrics.NewScopeResolution(logger, meterProvider),
+		protectedResources:        nil,
+		features:                  nil,
 		registrationTelemetry:     registration.NewMetrics(logger, meterProvider),
 		privateAuthorityValidator: nil,
 		idTokens:                  NoIDTokenVerifier(),
@@ -443,6 +472,15 @@ type Client struct {
 	// Empty when unset; set, it is requested verbatim.
 	IssuerScopeOverride []string
 
+	// ResourceScopeOverride, ResourceChallengeScopes, and
+	// ResourceScopesSupported are the cached protected resource row for
+	// ResourceIdentifier, as it stood when the client was listed; nil when
+	// there is no row or the member was never captured. The login path reads
+	// the row for the MCP server it is for instead.
+	ResourceScopeOverride   []string
+	ResourceChallengeScopes []string
+	ResourceScopesSupported []string
+
 	// IssuerResourceIndicatorSupported is an operator's answer to whether the
 	// issuer accepts the RFC 8707 resource parameter. Nil sends it.
 	IssuerResourceIndicatorSupported *bool
@@ -508,30 +546,164 @@ func (c Client) needsRegistrationRotation(now time.Time) (RotationTrigger, bool)
 // identity; offline_access for a refresh token.
 var standardScopes = []string{"openid", "email", "profile", "offline_access"}
 
-// RequestedScopes resolves the authorize scope set: IssuerScopeOverride
-// verbatim; else ClientScope (or IssuerScopesSupported when empty) plus each
-// standard scope the issuer advertises. widened is what was appended to a
-// client scope.
-func (c Client) RequestedScopes() (scopes []string, widened []string) {
-	if len(c.IssuerScopeOverride) > 0 {
-		return slices.Clone(c.IssuerScopeOverride), nil
+// ResourceScopes is what the protected resource a login is for says about
+// scopes. The zero value is a login with no resource row.
+type ResourceScopes struct {
+	// Pin is the operator's scope_override on the resource; nil when unset.
+	Pin []string
+
+	// ChallengeScopes is the scope param of the resource's last
+	// WWW-Authenticate challenge; nil when none was seen.
+	ChallengeScopes []string
+
+	// ScopesSupported is the resource's advertised list: nil when unknown,
+	// empty when the document names none.
+	ScopesSupported []string
+
+	// Live reports that ScopesSupported was read during this login rather than from the cached row.
+	Live bool
+
+	// UseDiscovered applies ChallengeScopes, Pin, and ScopesSupported as
+	// request bases; off, the resolution is the issuer-only one.
+	UseDiscovered bool
+}
+
+// ScopeResolution is the authorize scope set and how it was decided.
+type ScopeResolution struct {
+	// Scopes is the scope parameter to send; empty sends none.
+	Scopes []string
+
+	// Widened lists the standard scopes appended to the chosen base.
+	Widened []string
+
+	// Source is the precedence step that supplied the base.
+	Source remotesessionmetrics.ScopeSource
+
+	// Unadvertised lists pinned scopes the resource's advertised list lacks,
+	// when it advertises one. They are sent regardless.
+	Unadvertised []string
+}
+
+// RequestedScopes resolves the authorize scope set, in order: the client's
+// scope, the resource's challenge scopes, the resource pin, the resource's
+// scopes_supported, the issuer's override (verbatim), the issuer's
+// scopes_supported. Every base but the issuer override gains the standard
+// scopes the issuer advertises.
+func (c Client) RequestedScopes(resource ResourceScopes) ScopeResolution {
+	var base []string
+	var source remotesessionmetrics.ScopeSource
+	var unadvertised []string
+	switch {
+	case len(c.ClientScope) > 0:
+		base, source = c.ClientScope, remotesessionmetrics.ScopeSourceClientScope
+	case resource.UseDiscovered && resource.ChallengeScopes != nil:
+		base, source = resource.ChallengeScopes, remotesessionmetrics.ScopeSourceChallengeScope
+	case resource.UseDiscovered && resource.Pin != nil:
+		base, source = resource.Pin, remotesessionmetrics.ScopeSourceResourcePin
+		if resource.ScopesSupported != nil {
+			for _, scope := range resource.Pin {
+				if !slices.Contains(resource.ScopesSupported, scope) {
+					unadvertised = append(unadvertised, scope)
+				}
+			}
+		}
+	case resource.UseDiscovered && len(resource.ScopesSupported) > 0:
+		base, source = resource.ScopesSupported, remotesessionmetrics.ScopeSourceCachedResource
+		if resource.Live {
+			source = remotesessionmetrics.ScopeSourceLiveResource
+		}
+	case len(c.IssuerScopeOverride) > 0:
+		return ScopeResolution{Scopes: slices.Clone(c.IssuerScopeOverride), Widened: nil, Source: remotesessionmetrics.ScopeSourceIssuerOverride, Unadvertised: nil}
+	default:
+		return c.issuerCatalogueScopes()
 	}
-	base := c.IssuerScopesSupported
-	narrowed := len(c.ClientScope) > 0
-	if narrowed {
-		base = c.ClientScope
+	scopes, widened := c.withStandardScopes(base)
+	return ScopeResolution{Scopes: scopes, Widened: widened, Source: source, Unadvertised: unadvertised}
+}
+
+// issuerCatalogueScopes is the last resort: the issuer's whole
+// scopes_supported, or nothing when it advertises none.
+func (c Client) issuerCatalogueScopes() ScopeResolution {
+	if len(c.IssuerScopesSupported) == 0 {
+		return ScopeResolution{Scopes: nil, Widened: nil, Source: remotesessionmetrics.ScopeSourceNone, Unadvertised: nil}
 	}
+	scopes, widened := c.withStandardScopes(c.IssuerScopesSupported)
+	return ScopeResolution{Scopes: scopes, Widened: widened, Source: remotesessionmetrics.ScopeSourceIssuerCatalogue, Unadvertised: nil}
+}
+
+// withStandardScopes copies base and appends each standard scope the issuer
+// advertises that base lacks, returning what was appended.
+func (c Client) withStandardScopes(base []string) (scopes []string, widened []string) {
 	scopes = slices.Clone(base)
 	for _, scope := range standardScopes {
 		if slices.Contains(scopes, scope) || !slices.Contains(c.IssuerScopesSupported, scope) {
 			continue
 		}
 		scopes = append(scopes, scope)
-		if narrowed {
-			widened = append(widened, scope)
-		}
+		widened = append(widened, scope)
 	}
 	return scopes, widened
+}
+
+// CachedResourceScopes is the resource row as the client listing cached it,
+// for callers that must not probe.
+func (c Client) CachedResourceScopes(useDiscovered bool) ResourceScopes {
+	return ResourceScopes{
+		Pin:             c.ResourceScopeOverride,
+		ChallengeScopes: c.ResourceChallengeScopes,
+		ScopesSupported: c.ResourceScopesSupported,
+		Live:            false,
+		UseDiscovered:   useDiscovered,
+	}
+}
+
+// ResourceScopeDiscoveryEnabled reports whether the organization's logins
+// consult the protected resource row (its challenge scopes, pin, and
+// advertised list) when deciding their scope request. An unreadable
+// organization or flag reads as off.
+func (m *ChallengeManager) ResourceScopeDiscoveryEnabled(ctx context.Context, organizationID string) bool {
+	if m.features == nil {
+		return false
+	}
+	org, err := orgrepo.New(m.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		m.logger.WarnContext(ctx, "read organization for scope discovery flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return false
+	}
+	enabled, err := m.features.IsFlagEnabledLocal(ctx, feature.FlagRemoteSessionLiveResourceScopes, organizationID, feature.OrgProjectGroups(org.Slug, ""), nil)
+	if err != nil {
+		m.logger.WarnContext(ctx, "evaluate scope discovery flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return false
+	}
+	return enabled
+}
+
+// loginResourceScopes resolves the protected resource row of the MCP server
+// the login is for, probing it within the login budget. An organization not
+// enrolled, a login with no remote-backed server, or a manager without a
+// prober has no row.
+func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent ParentChallenge) (ResourceScopes, protectedresource.LoginResolution) {
+	none := ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: false}
+	skipped := protectedresource.LoginResolution{Row: nil, ScopesSupported: nil, Live: false, Outcome: protectedresource.ProbeOutcomeNotApplicable, ProbeDuration: 0}
+	if m.protectedResources == nil || !parent.McpServerID.Valid || !m.ResourceScopeDiscoveryEnabled(ctx, parent.OrganizationID) {
+		return none, skipped
+	}
+	resourceURL, err := remotesessions_repo.New(m.db).GetRemoteURLForMcpServer(ctx, remotesessions_repo.GetRemoteURLForMcpServerParams{McpServerID: parent.McpServerID.UUID, ProjectID: parent.ProjectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return none, skipped
+	case err != nil:
+		m.logger.ErrorContext(ctx, "get remote url for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()))
+		skipped.Outcome = protectedresource.ProbeOutcomeError
+		return none, skipped
+	}
+	resolved := m.protectedResources.ResolveForLogin(ctx, m.logger, parent.ProjectID, parent.OrganizationID, resourceURL)
+	out := ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: resolved.ScopesSupported, Live: resolved.Live, UseDiscovered: true}
+	if resolved.Row != nil {
+		out.Pin = resolved.Row.ScopeOverride
+		out.ChallengeScopes = resolved.Row.ChallengeScopes
+	}
+	return out, resolved
 }
 
 // issuerIdentifier preserves the configured identity verbatim. Retained legacy
@@ -590,6 +762,9 @@ func (m *ChallengeManager) ListClients(
 			ClientScope:                      r.ClientScope,
 			IssuerScopesSupported:            r.ScopesSupported,
 			IssuerScopeOverride:              r.ScopeOverride,
+			ResourceScopeOverride:            r.ResourceScopeOverride,
+			ResourceChallengeScopes:          r.ResourceChallengeScopes,
+			ResourceScopesSupported:          r.ResourceScopesSupported,
 			IssuerResourceIndicatorSupported: conv.FromPGBool[bool](r.ResourceIndicatorSupported),
 			IssuerAuthorizationResponseIssParameterSupported: r.AuthorizationResponseIssParameterSupported.Valid && r.AuthorizationResponseIssParameterSupported.Bool,
 			IssuerCodeChallengeMethodsSupported:              r.CodeChallengeMethodsSupported,
@@ -936,15 +1111,37 @@ func (m *ChallengeManager) mintAuthorization(
 		return "", fmt.Errorf("parse authorization_endpoint: %w", err)
 	}
 
-	scopes, widened := client.RequestedScopes()
-	if len(widened) > 0 {
-		m.logger.DebugContext(ctx, "requested scope widens the client's configured scope",
+	resource, resolved := m.loginResourceScopes(ctx, parent)
+	probeOutcome := resolved.Outcome
+	resolution := client.RequestedScopes(resource)
+	scopes := resolution.Scopes
+	if !retry {
+		m.scopeMetrics.Record(ctx, resolution.Source, probeOutcome)
+	}
+	if resolved.ProbeDuration > 0 {
+		m.scopeMetrics.RecordProbe(ctx, probeOutcome, resolved.ProbeDuration)
+	}
+	if len(resolution.Unadvertised) > 0 {
+		m.logger.InfoContext(ctx, "resource scope pin requests scopes the resource does not advertise",
 			attr.SlogProjectID(parent.ProjectID.String()),
 			attr.SlogOrganizationID(parent.OrganizationID),
 			attr.SlogOAuthIssuer(client.IssuerURL),
 			attr.SlogRemoteSessionClientID(client.ID.String()),
 			attr.SlogOAuthScope(strings.Join(scopes, " ")),
-			attr.SlogOAuthScopeAdded(strings.Join(widened, " ")),
+			attr.SlogOAuthScopeUnadvertised(resolution.Unadvertised),
+			attr.SlogOAuthResourceScopesSupported(resource.ScopesSupported),
+			attr.SlogOAuthResourceProbeOutcome(probeOutcome),
+		)
+	}
+	if len(resolution.Widened) > 0 {
+		m.logger.DebugContext(ctx, "requested scope widens the chosen scope base",
+			attr.SlogProjectID(parent.ProjectID.String()),
+			attr.SlogOrganizationID(parent.OrganizationID),
+			attr.SlogOAuthIssuer(client.IssuerURL),
+			attr.SlogRemoteSessionClientID(client.ID.String()),
+			attr.SlogOAuthScopeSource(resolution.Source),
+			attr.SlogOAuthScope(strings.Join(scopes, " ")),
+			attr.SlogOAuthScopeAdded(strings.Join(resolution.Widened, " ")),
 		)
 	}
 	// The resource stays on the session: a grant without one is unroutable.
