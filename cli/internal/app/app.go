@@ -36,6 +36,7 @@ func newApp() *cli.App {
 			newStatusCommand(),
 			newWhoAmICommand(),
 			newStageCommand(),
+			newFunctionsCommand(),
 			newInstallCommand(),
 			newUpdateCommand(),
 			newRedeployCommand(),

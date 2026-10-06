@@ -12,11 +12,12 @@ interacting with hosted databases.
 ## Prerequisites
 
 - [Node.js](https://nodejs.org) version 22.18.0 or later
-- [Gram CLI](https://www.speakeasy.com/docs/gram/command-line/use)
+- The Speakeasy AI Control Plane CLI: `brew install speakeasy-api/tap/cli` or
+  `npm i -g @speakeasy-api/cli`
 
 ## Quick start
 
-To get started, install dependencies and run the development server:
+To get started, install dependencies:
 
 ```bash
 pnpm install
@@ -25,14 +26,16 @@ pnpm install
 To build a zip file that can be deployed to Gram, run:
 
 ```bash
-pnpm build
+speakeasy functions build
 ```
 
-After building, push your function to Gram with:
+Then deploy your function to Gram with:
 
 ```bash
-pnpm push
+speakeasy functions push
 ```
+
+The `build` and `push` package scripts run the same commands.
 
 ## Testing Locally
 
@@ -40,7 +43,7 @@ If you want to poke at the tools you've built during local development, you can
 start a local MCP server over stdio transport with:
 
 ```bash
-pnpm dev
+speakeasy functions dev
 ```
 
 Specifically, this command will spin up [MCP inspector][mcp-inspector] to let

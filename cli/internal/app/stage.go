@@ -183,25 +183,31 @@ The stage command will gradually build a deployment config that can later be
 passed to "speakeasy push". It is used to add Gram Functions zip files and OpenAPI
 YAML/JSON documents.
 `[1:],
-		Flags: []cli.Flag{
-			&cli.PathFlag{
-				Name:  "config",
-				Usage: "Path to the deployment config file",
-				Value: "gram.deploy.json",
-			},
-		},
+		Flags: []cli.Flag{stageConfigFlag()},
 		Subcommands: []*cli.Command{
 			newStageFunctionCommand(),
 			newStageOpenAPICommand(),
 		},
-		Before: func(cCtx *cli.Context) error {
-			configPath := cCtx.Path("config")
-			if err := ensureConfigFileExists(configPath); err != nil {
-				return fmt.Errorf("invalid config file %s: %w", configPath, err)
-			}
-			return nil
-		},
+		Before: ensureStageConfig,
 	}
+}
+
+func stageConfigFlag() *cli.PathFlag {
+	return &cli.PathFlag{
+		Name:  "config",
+		Usage: "Path to the deployment config file",
+		Value: "gram.deploy.json",
+	}
+}
+
+// ensureStageConfig creates the --config deployment file when it is missing
+// and validates it otherwise.
+func ensureStageConfig(cCtx *cli.Context) error {
+	configPath := cCtx.Path("config")
+	if err := ensureConfigFileExists(configPath); err != nil {
+		return fmt.Errorf("invalid config file %s: %w", configPath, err)
+	}
+	return nil
 }
 
 func newStageFunctionCommand() *cli.Command {

@@ -59,6 +59,10 @@ async function init(argv: string[]): Promise<void> {
     return;
   }
 
+  log.warn(
+    "This scaffolder is superseded by `speakeasy functions init`, which creates the same projects. Install the CLI with `brew install speakeasy-api/tap/cli` or `npm i -g @speakeasy-api/cli`.",
+  );
+
   const template = await selectOrClack<string>({
     message: "Pick a framework",
     options: [
@@ -163,7 +167,16 @@ async function init(argv: string[]): Promise<void> {
 
   tlog.message("Scaffolding");
   const dirname = import.meta.dirname;
-  const templateDir = resolve(join(dirname, "..", `gram-template-${template}`));
+  // The templates come from the speakeasy CLI, which embeds them; the build
+  // copies them into this package. "gram" is the CLI's "functions" template.
+  const templateDir = resolve(
+    join(
+      dirname,
+      "..",
+      "templates",
+      template === "gram" ? "functions" : template,
+    ),
+  );
   await fs.cp(templateDir, dir, {
     recursive: true,
     filter: (src) => {
