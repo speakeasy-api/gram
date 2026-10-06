@@ -85,7 +85,7 @@ func TestAttach_MountsOrganizationFeaturesRoutes(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestGetOrganizationFeatures_ReturnsTwentyOneFields(t *testing.T) {
+func TestGetOrganizationFeatures_ReturnsTwentyFields(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)

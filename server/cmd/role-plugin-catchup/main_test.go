@@ -70,7 +70,8 @@ func TestCatchUp(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, enabled, "stored flag cleanup is a separate operation")
 
-	require.NoError(t, q.RejectPublishOutboxWritesFixture(ctx))
+	// Selection is ordered by ID: queue org-disabled-flag, then reject org-never-enabled.
+	require.NoError(t, q.RejectCatchUpSecondOrganizationFixture(ctx))
 	_, err = catchUp(ctx, db, true)
 	require.Error(t, err)
 	rows, err = q.ListPublishOutboxRows(ctx)

@@ -133,6 +133,17 @@ func (q *Queries) PipelineRenamePlugin(ctx context.Context, arg PipelineRenamePl
 	return err
 }
 
+const rejectCatchUpSecondOrganizationFixture = `-- name: RejectCatchUpSecondOrganizationFixture :exec
+ALTER TABLE publish_outbox ADD CONSTRAINT reject_catchup_second_organization_fixture
+CHECK (organization_id <> 'org-never-enabled') NOT VALID
+`
+
+// Allow the first selected organization, then fail to prove catch-up rollback.
+func (q *Queries) RejectCatchUpSecondOrganizationFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, rejectCatchUpSecondOrganizationFixture)
+	return err
+}
+
 const rolloutActiveRoles = `-- name: RolloutActiveRoles :many
 SELECT ('role:global:' || id)::text AS role_urn FROM global_roles WHERE deleted IS FALSE AND workos_deleted IS FALSE
 UNION ALL
