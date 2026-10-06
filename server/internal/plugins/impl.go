@@ -53,6 +53,7 @@ import (
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -831,10 +832,11 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	// Serialize all backend representations with role delivery before checking identity.
+	if err := lockDistributionAdmission(ctx, tx, *ac.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, s.logger)
+	}
 	if backend.mcpServerID.Valid || backend.metaMcpServerID.Valid {
-		if err := lockDistributionAdmission(ctx, tx, *ac.ProjectID); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, s.logger)
-		}
 		if backend.metaMcpServerID.Valid {
 			gateway, gatewayErr := s.repo.WithTx(tx).GetGatewayForPluginServer(ctx, repo.GetGatewayForPluginServerParams{
 				MetaMcpServerID: backend.metaMcpServerID.UUID,
@@ -864,6 +866,20 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 				return nil, mapDistributionAdmissionError(err)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, s.logger)
+		}
+	}
+
+	if !backend.metaMcpServerID.Valid {
+		exists, err := s.repo.WithTx(tx).HasRoleDeliveryMembership(ctx, repo.HasRoleDeliveryMembershipParams{
+			PluginID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
+			ToolsetID: backend.toolsetID, McpServerID: backend.mcpServerID,
+			LegacyToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, PreserveRemoval: false,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check plugin server identity").LogError(ctx, s.logger)
+		}
+		if exists {
+			return nil, oops.E(oops.CodeConflict, nil, "this server has already been added to the plugin")
 		}
 	}
 
@@ -1197,6 +1213,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	var rollout admission.RolloutConfig
 	var rolloutErr error
 	rollout, rolloutErr = s.distributionRollout(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID)
+	ctx = roledelivery.WithProjectAdmission(ctx, ac.ActiveOrganizationID, *ac.ProjectID, rollout, rolloutErr)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
@@ -1221,7 +1238,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName: ac.Email,
 		ActorSlug:        nil,
-	}, pluginassignments.Dependencies{Guard: s.assignmentAdmissionGuard(rollout, rolloutErr), BeforeReplace: nil})
+	}, pluginassignments.Dependencies{Guard: s.assignmentAdmissionGuard(rollout, rolloutErr), BeforeReplace: nil, DeliveryGuard: s.distributionAdmission})
 	if err != nil {
 		switch {
 		case errors.Is(err, pluginassignments.ErrNotFound):
@@ -1232,6 +1249,11 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 			return nil, mapDistributionAdmissionError(err)
 		default:
 			return nil, oops.E(oops.CodeUnexpected, err, "set plugin assignments").LogError(ctx, s.logger)
+		}
+	}
+	if result.ContentChanged {
+		if err := s.publicationRequests.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "request role audience publication").LogError(ctx, s.logger)
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {

@@ -19,6 +19,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins/audience"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -294,6 +297,11 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		}
 	}
 
+	ctx, err = s.roleMgr.PrepareRoleUpdate(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "prepare role delivery admission").LogError(ctx, s.logger)
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin resource audience transaction").LogError(ctx, s.logger)
@@ -311,12 +319,61 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock resource audience").LogError(ctx, s.logger)
 	}
+	// Capture both removed and proposed roles before replacing any level. Lock
+	// role rows before delivery acquires project admission and plugin locks,
+	// matching the role editor's ordering.
+	roles := map[string]struct{}{}
+	for level, scope := range audienceLevelScopes {
+		grants, err := authz.ListGrantsForResource(ctx, tx, authz.Resource{
+			OrganizationID: ac.ActiveOrganizationID,
+			Scope:          scope,
+			ResourceID:     payload.ResourceID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list resource roles").LogError(ctx, s.logger)
+		}
+		for _, grant := range grants {
+			if strings.HasPrefix(grant.PrincipalUrn, "role:") {
+				roles[grant.PrincipalUrn] = struct{}{}
+			}
+		}
+		for _, entry := range principalsByLevel[level] {
+			if entry.Principal.Type == urn.PrincipalTypeRole {
+				roles[entry.Principal.String()] = struct{}{}
+			}
+		}
+	}
+	roleURNs := make([]string, 0, len(roles))
+	for role := range roles {
+		roleURNs = append(roleURNs, role)
+	}
+	sort.Strings(roleURNs)
+	for _, role := range roleURNs {
+		roleID, err := uuid.Parse(role[strings.LastIndex(role, ":")+1:])
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "parse resource role ID").LogError(ctx, s.logger)
+		}
+		if _, err := accessrepo.New(tx).LockOrganizationRoleByID(ctx, accessrepo.LockOrganizationRoleByIDParams{
+			OrganizationID: ac.ActiveOrganizationID, ID: roleID,
+		}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock resource role").LogError(ctx, s.logger)
+		}
+	}
 	current, err := s.audienceFingerprint(ctx, tx, ac.ActiveOrganizationID, payload.ResourceID)
 	if err != nil {
 		return nil, err
 	}
 	if current != payload.ExpectedVersion {
 		return nil, oops.E(oops.CodeFailedPrecondition, nil, "access for this server changed while you were editing; reload and try again")
+	}
+
+	before := make(map[string][]authz.Grant, len(roleURNs))
+	for _, role := range roleURNs {
+		grants, err := roledelivery.Snapshot(ctx, tx, ac.ActiveOrganizationID, role)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "snapshot role delivery grants").LogError(ctx, s.logger)
+		}
+		before[role] = grants
 	}
 
 	// Every level is rewritten, including the ones nobody was given, so a
@@ -334,6 +391,28 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		}
 	}
 
+	// Lock the complete project union before delivering any role. Role order
+	// need not match project order, and RoleChanged holds locks until commit.
+	if err := lockAudienceRoleDeliveryProjects(ctx, tx, ac.ActiveOrganizationID, roleURNs); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock audience role delivery projects").LogError(ctx, s.logger)
+	}
+
+	changedProjects := map[uuid.UUID]struct{}{}
+	for _, role := range roleURNs {
+		projects, err := roledelivery.RoleChanged(ctx, tx, ac.ActiveOrganizationID, role, before[role], s.roleMgr.roleDeliveryGuard)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "update role audience plugin servers").LogError(ctx, s.logger)
+		}
+		for _, projectID := range projects {
+			changedProjects[projectID] = struct{}{}
+		}
+	}
+	for projectID := range changedProjects {
+		if err := s.roleMgr.roleDeliveryPublication.Project(ctx, tx, ac.ActiveOrganizationID, projectID, ac.UserID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "request role delivery publication").LogError(ctx, s.logger)
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit resource audience").LogError(ctx, s.logger)
 	}
@@ -344,6 +423,35 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	}
 
 	return &gen.ResourceAudienceResult{Entries: entries, Version: version}, nil
+}
+
+// lockAudienceRoleDeliveryProjects follows RoleChanged's project ordering across
+// the entire audience edit, rather than acquiring each role's projects in turn.
+// The caller must already hold all affected role locks.
+func lockAudienceRoleDeliveryProjects(ctx context.Context, tx pgx.Tx, organizationID string, roles []string) error {
+	projects := map[uuid.UUID]struct{}{}
+	for _, role := range roles {
+		plugins, err := pluginsrepo.New(tx).ListRoleDeliveryPlugins(ctx, pluginsrepo.ListRoleDeliveryPluginsParams{
+			OrganizationID: organizationID, PrincipalUrn: role,
+		})
+		if err != nil {
+			return fmt.Errorf("list role delivery plugins: %w", err)
+		}
+		for _, plugin := range plugins {
+			projects[plugin.ProjectID] = struct{}{}
+		}
+	}
+	projectIDs := make([]uuid.UUID, 0, len(projects))
+	for projectID := range projects {
+		projectIDs = append(projectIDs, projectID)
+	}
+	slices.SortFunc(projectIDs, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
+	for _, projectID := range projectIDs {
+		if err := admission.LockProject(ctx, tx, projectID); err != nil {
+			return fmt.Errorf("lock role delivery project admission: %w", err)
+		}
+	}
+	return nil
 }
 
 // ListAudienceOptions lists the principals an administrator can give access

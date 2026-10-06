@@ -723,7 +723,8 @@ BEGIN
   END LOOP;
 
   -- Show the completed one-time onboarding result, not a pending repair job.
-  -- Role plugins are empty and role-only; the Default plugin remains Everyone.
+  -- Role plugins stay role-only; the Default plugin remains Everyone.
+  -- Matching server content is populated after the servers exist below.
   INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
   VALUES (demo_org, proj_a, 'Default', 'default', true)
   RETURNING id INTO custom_role_id;
@@ -1457,6 +1458,31 @@ BEGIN
     (demo.det_uuid('gram-demo-github-wildcard-grant'), demo_org,
      'user:' || demo_user_ids[4], 'mcp:connect',
      jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*'));
+
+  -- Distribute these servers to the seeded organization roles with Use access:
+  -- mcp:read and mcp:write imply mcp:connect, including disposition-limited
+  -- access. Store server identities, not legacy toolset memberships. Content
+  -- has no manual/automatic distinction and never widens a plugin's audience.
+  INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
+  SELECT p.id, s.id, s.name
+  FROM plugins p
+  JOIN plugin_assignments a ON a.plugin_id = p.id AND a.organization_id = demo_org
+  JOIN organization_roles r ON a.principal_urn = 'role:organization:' || r.id
+    AND r.organization_id = demo_org
+  CROSS JOIN mcp_servers s
+  WHERE p.organization_id = demo_org AND p.project_id = proj_a
+    AND s.project_id = proj_a
+    AND EXISTS (
+      SELECT 1 FROM principal_grants g
+      WHERE g.organization_id = demo_org AND g.principal_urn = a.principal_urn
+        AND g.scope IN ('mcp:connect', 'mcp:read', 'mcp:write')
+        AND g.selectors->>'resource_kind' = 'mcp'
+        AND g.selectors->>'resource_id' = '*');
+
+  GET DIAGNOSTICS stray = ROW_COUNT;
+  IF stray <> 30 THEN
+    RAISE EXCEPTION 'demo seed: expected 30 role server memberships, found %', stray;
+  END IF;
 
   -- Leave instructions NULL so Settings starts with the editable built-in
   -- instructions, matching the gateway's initialize and server/discover text.
