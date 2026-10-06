@@ -42,7 +42,7 @@ import { useRoutes } from "@/routes";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Bot, Plus, User } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
@@ -64,6 +64,7 @@ import {
   fetchDeviceCoverage,
   NO_DEVICE_BUCKET,
 } from "./identityDeviceCoverage";
+import type { AgentLifecycleFilter } from "./identityRoster";
 import {
   fetchIdentityRoster,
   identityRosterQueryKey,
@@ -173,6 +174,69 @@ const IDENTITY_FILTERS = defineFilters([
   },
 ]);
 
+/**
+ * An agent is not a person: it has no department, no directory team, no
+ * managed device and no AI-provider account. Filtering it by those asks
+ * questions none of its rows can answer, so the agents page gets the
+ * dimensions an agent actually has — all three columns on the agent itself,
+ * and all three applied by the server that pages the list.
+ */
+const AGENT_FILTERS = defineFilters([
+  {
+    id: "lifecycle",
+    label: "Status",
+    kind: "multiselect",
+    pinned: true,
+    description: "Whether the agent can still act, and why not if it cannot.",
+  },
+  {
+    id: "owner",
+    label: "Owner",
+    kind: "multiselect",
+    description:
+      "The person accountable for the agent, who holds it even while others hold grants on it.",
+  },
+  {
+    id: "registered",
+    label: "Registered",
+    kind: "select",
+    allLabel: "Any time",
+    description: "When the agent identity was created here.",
+  },
+]);
+
+const AGENT_LIFECYCLE_OPTIONS = [
+  { value: "active", label: "Active" },
+  { value: "suspended", label: "Suspended" },
+  { value: "revoked", label: "Revoked" },
+];
+
+/** Each bucket is the window it names, matching the people roster's. */
+const AGENT_REGISTERED_OPTIONS = [
+  { value: "7d", label: "Last 7 days" },
+  { value: "30d", label: "Last 30 days" },
+  { value: "older", label: "Over 30 days ago" },
+];
+
+/** The cutoffs a registered bucket means, as the server reads them. */
+function registeredWindow(bucket: string): {
+  after?: Date;
+  before?: Date;
+} {
+  const days = (count: number) =>
+    new Date(Date.now() - count * 24 * 60 * 60 * 1000);
+  switch (bucket) {
+    case "7d":
+      return { after: days(7) };
+    case "30d":
+      return { after: days(30) };
+    case "older":
+      return { before: days(30) };
+    default:
+      return {};
+  }
+}
+
 const ACCOUNT_TYPE_OPTIONS = [
   { value: "personal", label: "Personal" },
   { value: "team", label: "Team" },
@@ -222,7 +286,7 @@ const KIND_OPTIONS = [
     label: (
       <span className="flex items-center gap-2">
         <User className="size-4" aria-hidden="true" />
-        Humans
+        People
       </span>
     ),
   },
@@ -261,7 +325,10 @@ const IDENTITY_COLUMNS: Column<Employee>[] = [
   {
     key: "identity",
     header: "Identity",
-    width: "1.6fr",
+    // The name and address are the widest thing in the row and the thing the
+    // row is looked up by, so the flexible space goes here rather than being
+    // shared out evenly with columns holding a word or a number.
+    width: "2.4fr",
     sortable: true,
     sortValue: (identity) => identity.name.toLowerCase(),
     render: (identity) => <IdentityCell identity={identity} />,
@@ -284,7 +351,7 @@ const IDENTITY_COLUMNS: Column<Employee>[] = [
   {
     key: "role",
     header: "Roles",
-    width: "1fr",
+    width: "1.3fr",
     render: (identity) => (
       <Text muted small className="truncate">
         {roleLabel(identity)}
@@ -303,7 +370,8 @@ const IDENTITY_COLUMNS: Column<Employee>[] = [
         </SimpleTooltip>
       </span>
     ),
-    width: "1fr",
+    // "2 accounts" plus its chevron, not a share of the leftover space.
+    width: "150px",
     sortable: true,
     sortLabel: "Accounts",
     // Personal-holders first (ascending), then more accounts before fewer, so
@@ -315,7 +383,7 @@ const IDENTITY_COLUMNS: Column<Employee>[] = [
   {
     key: "lastActivity",
     header: "Last activity",
-    width: "200px",
+    width: "180px",
     sortable: true,
     sortValue: (identity) => identity.lastActivityTimestamp ?? 0,
     render: (identity) => <LastActivityCell identity={identity} />,
@@ -323,7 +391,7 @@ const IDENTITY_COLUMNS: Column<Employee>[] = [
   {
     key: "tokens",
     header: "Tokens",
-    width: "120px",
+    width: "130px",
     sortable: true,
     sortValue: (identity) => identity.tokenCount,
     render: (identity) => (
@@ -362,18 +430,18 @@ export default function IdentitiesIndex({
 }
 
 /** The bare /identities URL lands on the people roster. */
-export function HumansIndexRedirect(): JSX.Element {
+export function PeopleIndexRedirect(): JSX.Element {
   const routes = useRoutes();
   const location = useLocation();
   return (
     <Navigate
-      to={`${routes.identities.humans.href()}${location.search}`}
+      to={`${routes.identities.people.href()}${location.search}`}
       replace
     />
   );
 }
 
-export function HumansIndex(): JSX.Element {
+export function PeopleIndex(): JSX.Element {
   return <IdentitiesIndex kind="person" />;
 }
 
@@ -404,31 +472,78 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     !session.organizationOverride &&
     !session.impersonatorEmail &&
     getRBACScopeOverrideHeader(import.meta.env.DEV || isPlatformAdmin) === null;
-  const agentsQuery = useQuery({
-    queryKey: [
-      "identities",
-      "registered-agents",
-      organization.id,
-      session.user.id,
-    ],
-    queryFn: ({ signal }) => fetchRegisteredAgents(sdk, signal),
-    enabled: agentsEnabled,
-    throwOnError: false,
-    retry: false,
-  });
   const [search, setSearch] = useState("");
   // Honours `?sort=<column>:<asc|desc>` so a handoff can open the list on the
   // order it was talking about — the dashboard's Top Users "View all" means
   // "these people, by tokens", and landing on last-activity order shows a
   // different set entirely.
+  // A roster is read by name, so it opens in name order. "Who was busy
+  // lately" is a question the sort control answers on request, and one that
+  // `?sort=` still opens the page on when a handoff asks for it.
   const [sort, setSort] = useState<SortDescriptor | null>(
     parseSortParam(location.search) ?? {
-      id: "lastActivity",
-      direction: "desc",
+      id: "identity",
+      direction: "asc",
     },
   );
-  const { values, setValue, clearValue, clearAll } =
-    useFilterState(IDENTITY_FILTERS);
+  // Each roster filters on its own dimensions, so each gets its own schema.
+  const { values, setValue, clearValue, clearAll } = useFilterState(
+    kind === "agent" ? AGENT_FILTERS : IDENTITY_FILTERS,
+  );
+  const lifecycleKey = JSON.stringify(values.lifecycle ?? []);
+  const ownerKey = JSON.stringify(values.owner ?? []);
+  const registered = (values.registered as string | undefined) ?? "";
+
+  // The agents table sorts on its own column, by its own order: the people
+  // table's "last activity, descending" names a column agents do not have.
+  // Name is the only agent column that sorts, so this is a direction.
+  const [agentSort, setAgentSort] = useState<SortDescriptor | null>({
+    id: "identity",
+    direction: "asc",
+  });
+  const agentSortOrder = agentSort?.direction === "desc" ? "desc" : "asc";
+  // The agent roster pages at the server: the cursor walks the same ordering
+  // and the same search the query ran, so a page is a page of the list the
+  // reader is actually looking at.
+  //
+  // Only the agents page reads it. The people table drops agent rows anyway,
+  // so fetching them there would be a request whose every row is discarded.
+  const agentsQuery = useInfiniteQuery({
+    queryKey: [
+      "identities",
+      "registered-agents",
+      organization.id,
+      session.user.id,
+      search.trim().toLowerCase(),
+      agentSortOrder,
+      lifecycleKey,
+      ownerKey,
+      registered,
+    ],
+    queryFn: ({ pageParam, signal }) =>
+      fetchRegisteredAgents(
+        sdk,
+        {
+          cursor: pageParam,
+          limit: PAGE_SIZE,
+          search,
+          sortOrder: agentSortOrder,
+          lifecycle: JSON.parse(lifecycleKey) as AgentLifecycleFilter[],
+          ownerUserIds: JSON.parse(ownerKey) as string[],
+          ...registeredWindow(registered),
+        },
+        signal,
+      ),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    enabled: agentsEnabled && kind === "agent",
+    throwOnError: false,
+    retry: false,
+  });
+  const registeredAgents = useMemo(
+    () => (agentsQuery.data?.pages ?? []).flatMap((page) => page.items),
+    [agentsQuery.data],
+  );
 
   const membersQuery = useMembers(undefined, undefined, {
     throwOnError: false,
@@ -488,16 +603,14 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
         rolesQuery.data?.roles ?? [],
         usageQuery.data ?? [],
       ),
-      ...(agentsEnabled ? (agentsQuery.data ?? []) : []).map(
-        registeredAgentIdentity,
-      ),
+      ...(agentsEnabled ? registeredAgents : []).map(registeredAgentIdentity),
     ],
     [
       membersQuery.data,
       rolesQuery.data,
       usageQuery.data,
       agentsEnabled,
-      agentsQuery.data,
+      registeredAgents,
     ],
   );
 
@@ -553,24 +666,43 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   // out of the schema rather than show a filter that cannot filter. A dimension
   // whose value is still set in the URL is kept regardless of its options: it is
   // narrowing the list, and dropping its control would leave no way to clear it.
+  const ownerOptions = useMemo(
+    () =>
+      (membersQuery.data?.members ?? [])
+        .map((member) => ({ value: member.id, label: member.name }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [membersQuery.data],
+  );
   const filterSchema = useMemo(
     () =>
-      IDENTITY_FILTERS.filter((dimension) => {
-        if (dimension.id === "kind") return hasLegacyKindFilter;
-        const selected = (values[dimension.id as keyof typeof values] ??
-          []) as string[];
-        if (selected.length > 0) return true;
-        if (dimension.id === "role") return roleOptions.length > 0;
-        if (dimension.id === "department") return departmentOptions.length > 0;
-        if (dimension.id === "team") return teamOptions.length > 0;
-        if (dimension.id === "device_status") {
-          return deviceStatusOptions.length > 0;
-        }
-        return true;
-      }),
+      kind === "agent"
+        ? AGENT_FILTERS.filter((dimension) => {
+            const selected = (values[dimension.id as keyof typeof values] ??
+              []) as string[];
+            if (selected.length > 0) return true;
+            // An owner list with nobody in it is a control that cannot narrow.
+            if (dimension.id === "owner") return ownerOptions.length > 0;
+            return true;
+          })
+        : IDENTITY_FILTERS.filter((dimension) => {
+            if (dimension.id === "kind") return hasLegacyKindFilter;
+            const selected = (values[dimension.id as keyof typeof values] ??
+              []) as string[];
+            if (selected.length > 0) return true;
+            if (dimension.id === "role") return roleOptions.length > 0;
+            if (dimension.id === "department")
+              return departmentOptions.length > 0;
+            if (dimension.id === "team") return teamOptions.length > 0;
+            if (dimension.id === "device_status") {
+              return deviceStatusOptions.length > 0;
+            }
+            return true;
+          }),
     [
+      kind,
       values,
       hasLegacyKindFilter,
+      ownerOptions.length,
       roleOptions.length,
       departmentOptions.length,
       teamOptions.length,
@@ -597,6 +729,11 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     const selectedTeams = JSON.parse(teamKey) as string[];
     const query = search.trim().toLowerCase();
     return identities.filter((identity) => {
+      // The agents page asked the server for exactly this list — its status,
+      // owner, registration window and name search are all in the query that
+      // produced the page. Re-applying people predicates here would drop rows
+      // for having no department.
+      if (kind === "agent") return true;
       if (
         selectedKinds.length > 0 &&
         !selectedKinds.includes(identityKindOf(identity))
@@ -653,6 +790,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       );
     });
   }, [
+    kind,
     identities,
     search,
     kindKey,
@@ -675,8 +813,8 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   // scroll position across a new filter shows the reader page four of
   // something they have not seen page one of.
   const agentsById = useMemo(
-    () => new Map((agentsQuery.data ?? []).map((agent) => [agent.id, agent])),
-    [agentsQuery.data],
+    () => new Map(registeredAgents.map((agent) => [agent.id, agent])),
+    [registeredAgents],
   );
   // An agent has no roles, no linked accounts and no inbox: those columns were
   // an em dash on every row. What it does have is a lifecycle, an owner and a
@@ -756,23 +894,14 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     () => sortedRows.filter((row) => identityKindOf(row) !== "agent"),
     [sortedRows],
   );
-  // The agents table sorts on its own columns, by its own order: the people
-  // table's "last activity, descending" names a column agents do not have.
-  const [agentSort, setAgentSort] = useState<SortDescriptor | null>({
-    id: "identity",
-    direction: "asc",
-  });
+  // The server already returned these in the order and the search the query
+  // asked for, so they are not re-sorted here: sorting the loaded pages would
+  // only reorder the rows that happen to have arrived.
   const agentRows = useMemo(
-    () =>
-      sortTableData(
-        sortedRows.filter((row) => identityKindOf(row) === "agent"),
-        agentColumns,
-        agentSort,
-      ) as Employee[],
-    [sortedRows, agentColumns, agentSort],
+    () => sortedRows.filter((row) => identityKindOf(row) === "agent"),
+    [sortedRows],
   );
   const [peopleVisible, setPeopleVisible] = useState(PAGE_SIZE);
-  const [agentsVisible, setAgentsVisible] = useState(PAGE_SIZE);
   const openIdentity = (row: Employee) =>
     void navigate(
       routes.identities.detail.overview.href(
@@ -801,7 +930,6 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   // are not.
   useEffect(() => {
     setPeopleVisible(PAGE_SIZE);
-    setAgentsVisible(PAGE_SIZE);
   }, [
     search,
     kindKey,
@@ -819,7 +947,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   return (
     <Page.Section>
       <Page.Section.Title>
-        {kind === "agent" ? "Agents" : "Humans"}
+        {kind === "agent" ? "Agents" : "People"}
       </Page.Section.Title>
       <Page.Section.Description>
         {kind === "agent"
@@ -839,10 +967,10 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       <Page.Section.Body>
         {/* The section stacks its body children at 8px, which reads as one
             block: the tiles, the controls and the table are three things. */}
-        {/* Both tables on screen at once: the page does not scroll past one
-            to reach the other, so each pane takes half the room left under the
-            controls and scrolls its own rows. */}
-        <div className="-mb-24 flex h-[calc(100dvh-21rem)] min-h-[20rem] flex-col gap-6">
+        {/* The table is as tall as its rows, up to the room left under the
+            controls. Past that it scrolls itself rather than the page: a short
+            roster no longer leaves a band of empty table under the last row. */}
+        <div className="flex max-h-[calc(100dvh-19rem)] flex-col gap-6">
           {/* No stat tiles: each table states its own count, and the four
               numbers above them repeated it without saying anything the rows
               do not. */}
@@ -861,6 +989,9 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
                   schema={filterSchema}
                   values={values}
                   optionsById={{
+                    lifecycle: AGENT_LIFECYCLE_OPTIONS,
+                    owner: ownerOptions,
+                    registered: AGENT_REGISTERED_OPTIONS,
                     kind: Object.entries(IDENTITY_KIND_LABELS).map(
                       ([value, label]) => ({ value, label }),
                     ),
@@ -908,9 +1039,14 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
               columns={agentColumns}
               rows={agentRows}
               sort={agentSort}
-              onSortChange={setAgentSort}
-              visible={agentsVisible}
-              onLoadMore={() => setAgentsVisible((count) => count + PAGE_SIZE)}
+              onSortChange={(next) =>
+                // Name is the only sortable agent column, so direction is the
+                // whole choice, and it is the server that applies it.
+                setAgentSort(next ?? { id: "identity", direction: "asc" })
+              }
+              visible={agentRows.length}
+              hasMore={agentsQuery.hasNextPage}
+              onLoadMore={() => void agentsQuery.fetchNextPage()}
               onRowClick={openIdentity}
               emptyMessage={rosterMessage("No agents match these filters")}
             />
@@ -934,6 +1070,7 @@ function IdentityGroup({
   columns,
   rows,
   visible,
+  hasMore,
   onLoadMore,
   sort,
   onSortChange,
@@ -947,34 +1084,33 @@ function IdentityGroup({
   columns: Column<Employee>[];
   rows: Employee[];
   visible: number;
+  /** Overrides "more rows exist" for a list whose rest lives on the server. */
+  hasMore?: boolean;
   onLoadMore: () => void;
   sort: SortDescriptor | null;
   onSortChange: (next: SortDescriptor | null) => void;
   onRowClick: (row: Employee) => void;
   emptyMessage: ReactNode;
 }): JSX.Element {
-  // Equal halves: both tables are on screen whatever either one holds, and
-  // each scrolls its own rows rather than pushing the other down.
   return (
-    <section className="flex min-h-[9rem] flex-1 basis-0 flex-col gap-3">
+    <section className="flex min-h-[9rem] min-w-0 flex-col gap-3 overflow-hidden">
       {/* No heading when the page already carries it: one roster per page
-          means the page title and this would say the same word. */}
-      {(heading || action) && (
-        <div className="flex items-baseline justify-between gap-6">
-          <div className="flex min-w-0 items-baseline gap-3">
-            {heading && <h2 className="text-base font-medium">{heading}</h2>}
-            <span className="text-muted-foreground font-mono text-xs">
-              {count} {count === 1 ? "row" : "rows"}
-            </span>
-            {note && (
-              <Text muted small className="truncate">
-                {note}
-              </Text>
-            )}
-          </div>
-          {action}
+          means the page title and this would say the same word. The count is
+          not the heading, so it is still shown on its own. */}
+      <div className="flex items-baseline justify-between gap-6">
+        <div className="flex min-w-0 items-baseline gap-3">
+          {heading && <h2 className="text-base font-medium">{heading}</h2>}
+          <span className="text-muted-foreground font-mono text-xs">
+            {count} {count === 1 ? "row" : "rows"}
+          </span>
+          {note && (
+            <Text muted small className="truncate">
+              {note}
+            </Text>
+          )}
         </div>
-      )}
+        {action}
+      </div>
       {/* The rows scroll inside the pane. More of them load as that scroll
           reaches the end, which is the pagination this list has: neither the
           directory nor the agent inventory takes a cursor yet. */}
@@ -998,12 +1134,12 @@ function IdentityGroup({
             noResultsMessage={null}
           />
         </div>
-        <div className="border-border min-h-0 flex-1 overflow-auto overscroll-contain border-b [&>table]:min-h-full [&>table]:content-start [&_table]:border-t-0 [&_table]:border-b-0">
+        <div className="border-border min-h-0 flex-1 overflow-auto overscroll-contain border-b [&_table]:border-t-0 [&_table]:border-b-0">
           <Table
             columns={columns}
             data={rows.slice(0, visible)}
             hideHeader
-            hasMore={visible < rows.length}
+            hasMore={hasMore ?? visible < rows.length}
             onLoadMore={async () => onLoadMore()}
             rowKey={(row) => row.id}
             onRowClick={onRowClick}

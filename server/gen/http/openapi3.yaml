@@ -11668,6 +11668,80 @@ paths:
             operationId: listAgents
             parameters:
                 - allowEmptyValue: true
+                  description: Cursor for the next page of agents.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for the next page of agents.
+                    type: string
+                - allowEmptyValue: true
+                  description: The number of agents to return per page.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: The number of agents to return per page.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Case-insensitive substring match on the agent name.
+                  in: query
+                  name: search
+                  schema:
+                    description: Case-insensitive substring match on the agent name.
+                    type: string
+                - allowEmptyValue: true
+                  description: Name order for the page.
+                  in: query
+                  name: name_order
+                  schema:
+                    default: asc
+                    description: Name order for the page.
+                    enum:
+                        - asc
+                        - desc
+                    type: string
+                - allowEmptyValue: true
+                  description: Keep only agents in these lifecycle states.
+                  in: query
+                  name: lifecycle
+                  schema:
+                    description: Keep only agents in these lifecycle states.
+                    items:
+                        enum:
+                            - active
+                            - suspended
+                            - revoked
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Keep only agents owned by these users.
+                  in: query
+                  name: owner_user_ids
+                  schema:
+                    description: Keep only agents owned by these users.
+                    items:
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Keep only agents registered at or after this moment.
+                  in: query
+                  name: registered_after
+                  schema:
+                    description: Keep only agents registered at or after this moment.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Keep only agents registered before this moment.
+                  in: query
+                  name: registered_before
+                  schema:
+                    description: Keep only agents registered before this moment.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -11679,9 +11753,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                items:
-                                    $ref: '#/components/schemas/ManagedAgent'
-                                type: array
+                                $ref: '#/components/schemas/ListAgentsResult'
                     description: OK response.
                 "400":
                     content:
@@ -11743,6 +11815,14 @@ paths:
             tags:
                 - agents
             x-speakeasy-name-override: list
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
             x-speakeasy-react-hook:
                 name: Agents
     /rpc/agents.listDelegableGrants:
@@ -86759,6 +86839,20 @@ components:
                     description: The member attributes available to target conditions, in editor display order.
             required:
                 - attributes
+        ListAgentsResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ManagedAgent'
+                    description: The agents in this page.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; absent when exhausted.
+            description: A page of managed agents, ordered by name.
+            required:
+                - items
         ListAiScanTargetsResult:
             type: object
             properties:

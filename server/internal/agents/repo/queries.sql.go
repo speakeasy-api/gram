@@ -674,11 +674,81 @@ func (q *Queries) ListManagedAgentSessions(ctx context.Context, arg ListManagedA
 const listManagedAgents = `-- name: ListManagedAgents :many
 SELECT id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted FROM agents
 WHERE organization_id = $1 AND deleted IS FALSE
-ORDER BY LOWER(name), id
+  AND (
+    $2::text IS NULL
+    OR name ILIKE '%' || $2::text || '%'
+  )
+  -- Lifecycle is derived from the same two columns the Go side derives it
+  -- from, so a filter cannot disagree with the badge the row shows.
+  AND (
+    cardinality($3::text[]) = 0
+    OR (CASE
+          WHEN revoked_at IS NOT NULL THEN 'revoked'
+          WHEN suspended_at IS NOT NULL THEN 'suspended'
+          ELSE 'active'
+        END) = ANY($3::text[])
+  )
+  AND (
+    cardinality($4::text[]) = 0
+    OR owner_user_id = ANY($4::text[])
+  )
+  AND (
+    $5::timestamptz IS NULL
+    OR created_at >= $5::timestamptz
+  )
+  AND (
+    $6::timestamptz IS NULL
+    OR created_at < $6::timestamptz
+  )
+  AND (
+    $7::text IS NULL
+    OR (
+      $8::boolean IS FALSE
+      AND (LOWER(name), id) > ($7::text, $9::uuid)
+    )
+    OR (
+      $8::boolean IS TRUE
+      AND (LOWER(name), id) < ($7::text, $9::uuid)
+    )
+  )
+ORDER BY
+  CASE WHEN $8::boolean THEN LOWER(name) END DESC,
+  CASE WHEN NOT $8::boolean THEN LOWER(name) END ASC,
+  CASE WHEN $8::boolean THEN id END DESC,
+  CASE WHEN NOT $8::boolean THEN id END ASC
+LIMIT $10
 `
 
-func (q *Queries) ListManagedAgents(ctx context.Context, organizationID string) ([]Agent, error) {
-	rows, err := q.db.Query(ctx, listManagedAgents, organizationID)
+type ListManagedAgentsParams struct {
+	OrganizationID   string
+	Search           pgtype.Text
+	Lifecycles       []string
+	OwnerUserIds     []string
+	RegisteredAfter  pgtype.Timestamptz
+	RegisteredBefore pgtype.Timestamptz
+	CursorName       pgtype.Text
+	SortDescending   bool
+	CursorID         uuid.NullUUID
+	PageLimit        int32
+}
+
+// Keyset paginated on the same (LOWER(name), id) tuple it orders by, so a page
+// boundary cannot repeat or skip a row when agents are created or renamed
+// between requests. The caller drops rows it may not read, so it asks for more
+// than one page and walks the cursor until it has filled one.
+func (q *Queries) ListManagedAgents(ctx context.Context, arg ListManagedAgentsParams) ([]Agent, error) {
+	rows, err := q.db.Query(ctx, listManagedAgents,
+		arg.OrganizationID,
+		arg.Search,
+		arg.Lifecycles,
+		arg.OwnerUserIds,
+		arg.RegisteredAfter,
+		arg.RegisteredBefore,
+		arg.CursorName,
+		arg.SortDescending,
+		arg.CursorID,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

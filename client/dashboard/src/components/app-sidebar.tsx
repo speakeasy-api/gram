@@ -212,8 +212,8 @@ export function AppSidebar({
             Icon={(p) => <Icon {...p} name="fingerprint" />}
             items={[
               {
-                item: routes.identities.humans,
-                ...accessFor(routes.identities.humans),
+                item: routes.identities.people,
+                ...accessFor(routes.identities.people),
               },
               ...(isAgentManagementEnabled
                 ? [

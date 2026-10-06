@@ -41,7 +41,7 @@ const routes = {
   detectionRules: route("Detection Rules", "detection-rules"),
   identities: {
     ...route("Identities", "identities"),
-    humans: route("Humans", "identities/humans"),
+    people: route("People", "identities/people"),
     agents: route("Agents", "identities/agents"),
   },
   environments: route("Environments", "environments"),
@@ -128,7 +128,7 @@ describe("useProjectNavRoutes", () => {
       result.current.find((entry) => entry.route === routes.agents),
     ).toBeUndefined();
     expect(
-      result.current.find((entry) => entry.route === routes.identities.humans)
+      result.current.find((entry) => entry.route === routes.identities.people)
         ?.scope,
     ).toEqual(["project:read"]);
     expect(
@@ -151,7 +151,7 @@ describe("useProjectNavRoutes", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
     const navRoutes = result.current.map((entry) => entry.route);
     expect(navRoutes.slice(2, 6)).toEqual([
-      routes.identities.humans,
+      routes.identities.people,
       routes.identities.agents,
       routes.mcpSessions,
       routes.remoteIdentityProviders,

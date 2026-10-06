@@ -99,9 +99,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.flag = "enabled";
   mocks.orgRead = true;
-  mocks.agents.mockResolvedValue([
-    { id: "agent_example", name: "Registered agent" },
-  ]);
+  mocks.agents.mockResolvedValue({
+    items: [{ id: "agent_example", name: "Registered agent" }],
+  });
   mocks.coverage.mockResolvedValue({
     byUserId: new Map(),
     byEmail: new Map(),

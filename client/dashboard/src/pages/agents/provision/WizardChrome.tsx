@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Check } from "lucide-react";
@@ -128,8 +129,16 @@ export function WizardSummary({
             Step {step} of {stepCount}
           </span>
         </div>
-        <Text className="font-serif text-2xl">{name || "Unnamed agent"}</Text>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+          {/* The name is a decision like the others, so it is labelled like
+              the others. Until it is typed it is a bar: a placeholder word
+              would read as the agent's name rather than as its absence. */}
+          <div className="contents">
+            <dt className="text-muted-foreground">Name</dt>
+            <dd className="min-w-0 text-right break-words">
+              {name || <Skeleton className="ml-auto h-5 w-28" />}
+            </dd>
+          </div>
           {rows.map((row) => (
             <div key={row.label} className="contents">
               <dt className="text-muted-foreground">{row.label}</dt>

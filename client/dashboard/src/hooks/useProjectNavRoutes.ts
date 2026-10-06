@@ -69,7 +69,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       // Two rosters, two entries: a person arrives from the identity
       // provider, an agent is registered here. The bare identities URL
       // redirects to the people.
-      { route: routes.identities.humans, scope: observe },
+      { route: routes.identities.people, scope: observe },
       ...(agentManagementFlag.status === "enabled"
         ? [{ route: routes.identities.agents, scope: observe }]
         : []),

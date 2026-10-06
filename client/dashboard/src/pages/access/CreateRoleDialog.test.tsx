@@ -1,6 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -8,7 +14,7 @@ import type { Role } from "@gram/client/models/components/role.js";
 const mocks = vi.hoisted(() => ({
   status: "ready" as "ready" | "loading" | "error",
   enabled: false as boolean | undefined,
-  agents: vi.fn(() => ({ data: [] })),
+  list: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
 }));
@@ -23,7 +29,10 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/routes", () => ({ useOrgRoutes: () => ({}) }));
 vi.mock("@gram/client/react-query/agents.js", () => ({
-  useAgents: mocks.agents,
+  queryKeyAgents: () => ["agents"],
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({ agents: { list: mocks.list } }),
 }));
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: () => ({ data: { members: [] } }),
@@ -140,6 +149,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.status = "ready";
   mocks.enabled = false;
+  // agents.list is paginated: it resolves to pages, which the dialog drains.
+  mocks.list.mockResolvedValue([{ result: { items: [] } }]);
 });
 describe("role assignment confirmation", () => {
   function confirmAssignment() {
@@ -203,23 +214,19 @@ describe("role assignment confirmation", () => {
 
 describe("agent management rollout", () => {
   it.each(["false", "loading", "missing", "error"] as const)(
-    "does not enable the query or show the picker when %s",
+    "does not read agents or show the picker when %s",
     (state) => {
       if (state === "loading" || state === "error") mocks.status = state;
       if (state === "missing") mocks.enabled = undefined;
       renderEditor();
-      expect(mocks.agents).toHaveBeenLastCalledWith(undefined, undefined, {
-        enabled: false,
-      });
+      expect(mocks.list).not.toHaveBeenCalled();
       expect(screen.queryByText("Assign Agents")).toBeNull();
     },
   );
-  it("enables the query and picker when enabled", () => {
+  it("reads every agent page and shows the picker when enabled", async () => {
     mocks.enabled = true;
     renderEditor();
-    expect(mocks.agents).toHaveBeenLastCalledWith(undefined, undefined, {
-      enabled: true,
-    });
+    await waitFor(() => expect(mocks.list).toHaveBeenCalled());
     fireEvent.click(screen.getByText("Assign Agents"));
     expect(
       screen.getByText("No agents in this organization yet."),

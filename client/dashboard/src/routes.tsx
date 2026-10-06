@@ -61,8 +61,8 @@ import Costs from "./pages/costs/Costs";
 import Explore from "./pages/explore/Explore";
 import {
   AgentsIndex,
-  HumansIndex,
-  HumansIndexRedirect,
+  PeopleIndex,
+  PeopleIndexRedirect,
   IdentityDetailIndexRedirect,
   IdentitiesRoot,
 } from "./pages/identities/IdentitiesIndex";
@@ -721,18 +721,19 @@ const ROUTE_STRUCTURE = {
     component: IdentitiesRoot,
     // The bare URL holds no roster of its own: people and agents are two
     // rosters, and this sends you to the people.
-    indexComponent: HumansIndexRedirect,
+    indexComponent: PeopleIndexRedirect,
     subPages: {
-      humans: {
-        title: "Humans",
-        url: "humans",
+      people: {
+        title: "People",
+        url: "people",
         icon: "users",
-        component: HumansIndex,
+        component: PeopleIndex,
       },
       agents: {
         title: "Agents",
         url: "agents",
         icon: "bot",
+        stage: "preview",
         component: AgentsIndex,
       },
       detail: {
