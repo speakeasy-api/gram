@@ -125,14 +125,14 @@ beforeEach(() => {
     },
   ]);
 });
-function setup(search = "") {
+function setup(search = "", kind: "person" | "agent" = "agent") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   const tree = () => (
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[`/identities${search}`]}>
-        <IdentitiesIndex />
+        <IdentitiesIndex kind={kind} />
       </MemoryRouter>
     </QueryClientProvider>
   );
@@ -143,7 +143,7 @@ it.each(["disabled", "loading", "missing", "error"])(
   "does not fetch registered agents with rollout %s",
   async (status) => {
     mocks.flag = status;
-    setup();
+    setup("", "person");
     await waitFor(() =>
       expect(
         screen
@@ -173,7 +173,7 @@ it("skips organization-only device coverage for a project reader", async () => {
 it.each(["unknown", "unknown,agent"])(
   "preserves legacy kind=%s and exposes a clearable filter",
   async (kind) => {
-    setup(`?kind=${kind}`);
+    setup(`?kind=${kind}`, "person");
     await waitFor(() =>
       expect(
         screen

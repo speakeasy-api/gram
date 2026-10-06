@@ -334,7 +334,19 @@ const IDENTITY_COLUMNS: Column<Employee>[] = [
   },
 ];
 
-export default function IdentitiesIndex(): JSX.Element {
+/**
+ * People and agents are two rosters, not two halves of one: a person arrives
+ * from the identity provider and cannot be created here, while an agent is
+ * registered here and issued its key here. Each gets its own page, and each
+ * page gets the whole screen.
+ */
+export type RosterKind = "person" | "agent";
+
+export default function IdentitiesIndex({
+  kind,
+}: {
+  kind: RosterKind;
+}): JSX.Element {
   return (
     <RequireScope scope={["project:read"]} level="page">
       <Page>
@@ -342,14 +354,34 @@ export default function IdentitiesIndex(): JSX.Element {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <IdentitiesIndexContent />
+          <IdentitiesIndexContent kind={kind} />
         </Page.Body>
       </Page>
     </RequireScope>
   );
 }
 
-function IdentitiesIndexContent(): JSX.Element {
+/** The bare /identities URL lands on the people roster. */
+export function HumansIndexRedirect(): JSX.Element {
+  const routes = useRoutes();
+  const location = useLocation();
+  return (
+    <Navigate
+      to={`${routes.identities.humans.href()}${location.search}`}
+      replace
+    />
+  );
+}
+
+export function HumansIndex(): JSX.Element {
+  return <IdentitiesIndex kind="person" />;
+}
+
+export function AgentsIndex(): JSX.Element {
+  return <IdentitiesIndex kind="agent" />;
+}
+
+function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   // This page fills the viewport, so the floating dock sat on top of the
   // agents table rather than beside it.
   useHideInsightsDock();
@@ -786,15 +818,24 @@ function IdentitiesIndexContent(): JSX.Element {
 
   return (
     <Page.Section>
-      <Page.Section.Title>Identities</Page.Section.Title>
+      <Page.Section.Title>
+        {kind === "agent" ? "Agents" : "Humans"}
+      </Page.Section.Title>
       <Page.Section.Description>
-        {/* What the page is for, not what it currently holds: each table
-            states its own count. */}
-        Who can act through Gram — the people from your identity provider and
-        the agents you register — with what each of them reached.
+        {kind === "agent"
+          ? "The agent identities you register here, each with its own key, its own permissions and its own line in the audit log."
+          : "The people your identity provider knows about, and what each of them reached through Gram. Gram does not create them."}
       </Page.Section.Description>
-      {/* No page-level action: registering an agent belongs to the agents
-          table, which is the only half of this page it applies to. */}
+      <Page.Section.CTA>
+        {kind === "agent" && agentsEnabled ? (
+          <Button asChild variant="primary">
+            <Link to={`${routes.agents.href()}?create=true`}>
+              <Plus className="size-4" aria-hidden="true" />
+              New agent identity
+            </Link>
+          </Button>
+        ) : null}
+      </Page.Section.CTA>
       <Page.Section.Body>
         {/* The section stacks its body children at 8px, which reads as one
             block: the tiles, the controls and the table are three things. */}
@@ -839,15 +880,14 @@ function IdentitiesIndexContent(): JSX.Element {
               </Page.Toolbar.Actions>
             </Page.Toolbar>
           </div>
-          {/* Two tables, because the two kinds are not the same kind of
-              thing: a person arrives from the identity provider and cannot be
-              created here, while an agent is registered here and issued its
-              key here. One table hid that, whatever the Kind column said. */}
-          {kindKey !== "agent" && (
+          {/* One roster per page: a person arrives from the identity
+              provider and cannot be created here, while an agent is
+              registered here and issued its key here. Two jobs, two screens. */}
+          {kind === "person" && (
             <IdentityGroup
-              heading="People"
+              heading=""
               count={peopleRows.length}
-              note="From your identity provider. Gram does not create them."
+              note=""
               columns={IDENTITY_COLUMNS.filter(
                 (column) => column.key !== "kind",
               )}
@@ -860,21 +900,11 @@ function IdentitiesIndexContent(): JSX.Element {
               emptyMessage={rosterMessage("No people match these filters")}
             />
           )}
-          {kindKey !== "person" && (
+          {kind === "agent" && (
             <IdentityGroup
-              heading="Agents"
+              heading=""
               count={agentRows.length}
-              note="Registered here, and issued their keys here."
-              action={
-                agentsEnabled ? (
-                  <Button asChild variant="secondary" size="sm">
-                    <Link to={`${routes.agents.href()}?create=true`}>
-                      <Plus className="size-4" aria-hidden="true" />
-                      New agent identity
-                    </Link>
-                  </Button>
-                ) : undefined
-              }
+              note=""
               columns={agentColumns}
               rows={agentRows}
               sort={agentSort}
@@ -927,20 +957,24 @@ function IdentityGroup({
   // each scrolls its own rows rather than pushing the other down.
   return (
     <section className="flex min-h-[9rem] flex-1 basis-0 flex-col gap-3">
-      <div className="flex items-baseline justify-between gap-6">
-        {/* Title, count and provenance on one line: the note is a caption for
-            the heading, not a paragraph under it. */}
-        <div className="flex min-w-0 items-baseline gap-3">
-          <h2 className="text-base font-medium">{heading}</h2>
-          <span className="text-muted-foreground font-mono text-xs">
-            {count}
-          </span>
-          <Text muted small className="truncate">
-            {note}
-          </Text>
+      {/* No heading when the page already carries it: one roster per page
+          means the page title and this would say the same word. */}
+      {(heading || action) && (
+        <div className="flex items-baseline justify-between gap-6">
+          <div className="flex min-w-0 items-baseline gap-3">
+            {heading && <h2 className="text-base font-medium">{heading}</h2>}
+            <span className="text-muted-foreground font-mono text-xs">
+              {count} {count === 1 ? "row" : "rows"}
+            </span>
+            {note && (
+              <Text muted small className="truncate">
+                {note}
+              </Text>
+            )}
+          </div>
+          {action}
         </div>
-        {action}
-      </div>
+      )}
       {/* The rows scroll inside the pane. More of them load as that scroll
           reaches the end, which is the pagination this list has: neither the
           directory nor the agent inventory takes a cursor yet. */}

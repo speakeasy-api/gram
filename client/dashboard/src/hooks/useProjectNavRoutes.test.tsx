@@ -39,7 +39,11 @@ const routes = {
   explore: route("Explore", "explore"),
   deployments: route("Deployments", "deployments"),
   detectionRules: route("Detection Rules", "detection-rules"),
-  identities: route("Identities", "identities"),
+  identities: {
+    ...route("Identities", "identities"),
+    humans: route("Humans", "identities/humans"),
+    agents: route("Agents", "identities/agents"),
+  },
   environments: route("Environments", "environments"),
   home: route("Home", ""),
   insights: route("Insights", "insights"),
@@ -117,15 +121,19 @@ describe("useProjectNavRoutes", () => {
     );
   });
 
-  it("keeps agents out of the sidebar: Identities is their index", () => {
+  it("lists the two rosters and keeps the old agents page out of nav", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
 
     expect(
       result.current.find((entry) => entry.route === routes.agents),
     ).toBeUndefined();
     expect(
-      result.current.find((entry) => entry.route === routes.identities)?.scope,
+      result.current.find((entry) => entry.route === routes.identities.humans)
+        ?.scope,
     ).toEqual(["project:read"]);
+    expect(
+      result.current.find((entry) => entry.route === routes.identities.agents),
+    ).toBeTruthy();
   });
 
   it("uses the selected project's read grant for MCP Sessions", () => {
@@ -142,8 +150,9 @@ describe("useProjectNavRoutes", () => {
   it("lists Identity before MCP Gateway, Security and Policy, and Observability", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
     const navRoutes = result.current.map((entry) => entry.route);
-    expect(navRoutes.slice(2, 5)).toEqual([
-      routes.identities,
+    expect(navRoutes.slice(2, 6)).toEqual([
+      routes.identities.humans,
+      routes.identities.agents,
       routes.mcpSessions,
       routes.remoteIdentityProviders,
     ]);

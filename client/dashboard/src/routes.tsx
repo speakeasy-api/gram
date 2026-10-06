@@ -59,7 +59,10 @@ import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
 import Explore from "./pages/explore/Explore";
-import IdentitiesIndex, {
+import {
+  AgentsIndex,
+  HumansIndex,
+  HumansIndexRedirect,
   IdentityDetailIndexRedirect,
   IdentitiesRoot,
 } from "./pages/identities/IdentitiesIndex";
@@ -716,8 +719,22 @@ const ROUTE_STRUCTURE = {
     url: "identities",
     icon: "users",
     component: IdentitiesRoot,
-    indexComponent: IdentitiesIndex,
+    // The bare URL holds no roster of its own: people and agents are two
+    // rosters, and this sends you to the people.
+    indexComponent: HumansIndexRedirect,
     subPages: {
+      humans: {
+        title: "Humans",
+        url: "humans",
+        icon: "users",
+        component: HumansIndex,
+      },
+      agents: {
+        title: "Agents",
+        url: "agents",
+        icon: "bot",
+        component: AgentsIndex,
+      },
       detail: {
         title: "Identity",
         url: ":identityUrn",
