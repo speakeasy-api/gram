@@ -21,6 +21,52 @@ const LAUNCHERS = new Set([
   "docker",
 ]);
 
+const DOCKER_VALUE_OPTIONS: ReadonlySet<string> = new Set([
+  "-v",
+  "--volume",
+  "-e",
+  "--env",
+  "--env-file",
+  "--name",
+  "--network",
+  "--net",
+  "-p",
+  "--publish",
+  "--mount",
+  "--entrypoint",
+  "-w",
+  "--workdir",
+  "-u",
+  "--user",
+  "-l",
+  "--label",
+  "-h",
+  "--hostname",
+  "-m",
+  "--memory",
+  "--platform",
+  "--add-host",
+  "--cpus",
+  "--pull",
+  "--restart",
+]);
+
+const UV_VALUE_OPTIONS: ReadonlySet<string> = new Set([
+  "--from",
+  "--with",
+  "--python",
+  "--index-url",
+]);
+
+// Options whose value is the next token, per launcher binary, so the value
+// isn't read as the package.
+const LAUNCHER_VALUE_OPTIONS: Record<string, ReadonlySet<string> | undefined> =
+  {
+    docker: DOCKER_VALUE_OPTIONS,
+    uvx: UV_VALUE_OPTIONS,
+    uv: UV_VALUE_OPTIONS,
+  };
+
 function splitVersion(token: string): { pkg: string; version: string | null } {
   const pip = token.indexOf("==");
   if (pip > 0)
@@ -42,9 +88,23 @@ export function shadowServerFacts(identifier: string): ShadowServerFacts {
       return { transport: "http", pkg: null, version: null };
     }
   }
-  const token = trimmed
-    .split(/\s+/)
-    .find((t) => t && !t.startsWith("-") && !LAUNCHERS.has(t));
+  const token = packageToken(trimmed.split(/\s+/));
   if (!token) return { transport: "stdio", pkg: null, version: null };
   return { transport: "stdio", ...splitVersion(token) };
+}
+
+function packageToken(tokens: string[]): string | undefined {
+  let valueOptions: ReadonlySet<string> | undefined;
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i]!;
+    if (!t) continue;
+    if (t.startsWith("-")) {
+      // An `--opt=value` form carries its value in the same token.
+      if (!t.includes("=") && valueOptions?.has(t)) i++;
+      continue;
+    }
+    if (!LAUNCHERS.has(t)) return t;
+    valueOptions ??= LAUNCHER_VALUE_OPTIONS[t];
+  }
+  return undefined;
 }

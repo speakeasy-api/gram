@@ -34,4 +34,18 @@ describe("shadowServerFacts", () => {
       version: null,
     });
   });
+
+  it("skips docker option values to find the image", () => {
+    expect(
+      shadowServerFacts(
+        "docker run --rm -i -v /host:/container -e TOKEN --name=mcp acme/mcp-image:1.2",
+      ).pkg,
+    ).toBe("acme/mcp-image:1.2");
+  });
+
+  it("skips uvx option values to find the package", () => {
+    expect(shadowServerFacts("uvx --python 3.12 mcp-server-git").pkg).toBe(
+      "mcp-server-git",
+    );
+  });
 });
