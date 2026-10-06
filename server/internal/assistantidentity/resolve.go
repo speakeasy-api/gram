@@ -76,7 +76,9 @@ func resolve(ctx context.Context, tx pgx.Tx, org string, project, assistant, tri
 	}
 	unavailable := Resolution{State: Unavailable, Identity: nil}
 
-	binding, err := repo.New(tx).GetTriggerBinding(ctx, repo.GetTriggerBindingParams{ProjectID: project, TriggerID: trigger})
+	// Only a binding made for this assistant counts; a trigger bound for
+	// another assistant resolves as unavailable here.
+	binding, err := repo.New(tx).GetAssistantTriggerBinding(ctx, repo.GetAssistantTriggerBindingParams{ProjectID: project, TriggerID: trigger, AssistantID: assistant})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return unavailable, nil
 	}

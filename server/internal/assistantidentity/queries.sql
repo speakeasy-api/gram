@@ -67,6 +67,14 @@ SELECT id, organization_id, original_workload_issuer_id AS workload_issuer_id, s
 FROM trigger_workload_bindings
 WHERE project_id = @project_id AND original_trigger_id = @trigger_id AND deleted IS FALSE;
 
+-- name: GetAssistantTriggerBinding :one
+SELECT tb.organization_id, tb.original_workload_issuer_id AS workload_issuer_id, tb.subject
+FROM trigger_workload_bindings tb
+JOIN assistant_agent_bindings ab ON ab.organization_id = tb.assistant_binding_ref_organization_id
+  AND ab.project_id = tb.assistant_binding_ref_project_id AND ab.id = tb.assistant_binding_id
+WHERE tb.project_id = @project_id AND tb.original_trigger_id = @trigger_id AND tb.deleted IS FALSE
+  AND ab.original_assistant_id = @assistant_id AND ab.deleted IS FALSE;
+
 -- name: ListAssistantTriggerBindings :many
 SELECT tb.original_trigger_id
 FROM trigger_workload_bindings tb

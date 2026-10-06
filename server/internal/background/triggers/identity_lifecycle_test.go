@@ -65,6 +65,7 @@ func TestRootTriggerBindsRetargetsAndWithdraws(t *testing.T) {
 	require.Equal(t, first.Identity.Subject, moved.Identity.Subject)
 	require.NotEqual(t, first.Identity.AgentID, moved.Identity.AgentID)
 	require.ErrorIs(t, testIdentityService.Validate(t.Context(), f.db, *first.Identity), assistantidentity.ErrInvalidIdentity)
+	require.Equal(t, assistantidentity.Unavailable, f.resolve(t, f.assistantID, item.ID).State, "a trigger bound for another assistant does not resolve for this one")
 
 	legacy := f.createAssistant(t, false)
 	f.retarget(t, item, legacy)
@@ -130,9 +131,16 @@ func TestContinuationWakeIsNeverBound(t *testing.T) {
 	var wakeID uuid.UUID
 	_, err := f.app.CreateWakeInstance(t.Context(), triggers.CreateWakeInstanceParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, Name: "Follow up", AssistantID: f.assistantID, TargetDisplay: "Assistant", FireAt: time.Now().Add(time.Hour), Note: nil, CorrelationID: "thread-identity"}, func(ctx context.Context, tx pgx.Tx, item triggerrepo.TriggerInstance) error {
 		wakeID = item.ID
-		return testIdentityService.BindRootTrigger(ctx, tx, item.ProjectID, item.ID)
+		if err := testIdentityService.BindRootTrigger(ctx, tx, item.ProjectID, item.ID); err != nil {
+			return fmt.Errorf("bind wake: %w", err)
+		}
+		if _, err := identityrepo.New(tx).GetTriggerBinding(ctx, identityrepo.GetTriggerBindingParams{ProjectID: item.ProjectID, TriggerID: item.ID}); !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("wake acquired a root binding: %w", err)
+		}
+		return nil
 	})
 	require.Error(t, err, "no Temporal client forces workflow compensation")
+	require.NotContains(t, err.Error(), "wake acquired a root binding")
 	require.NotEqual(t, uuid.Nil, wakeID)
 	require.False(t, f.bound(t, wakeID))
 }

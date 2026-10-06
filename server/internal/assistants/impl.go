@@ -503,6 +503,8 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 	switch {
 	case errors.Is(err, pgx.ErrNoRows), errors.Is(err, assistantidentity.ErrNotFound):
 		return oops.E(oops.CodeNotFound, err, "%s", message).LogError(ctx, logger)
+	case errors.Is(err, assistantidentity.ErrInvalidIdentity):
+		return oops.E(oops.CodeConflict, err, "%s", message).LogWarn(ctx, logger)
 	case errors.Is(err, assistantidentity.ErrActorIneligible):
 		return oops.E(oops.CodeUnauthorized, err, "%s", message).LogWarn(ctx, logger)
 	case errors.Is(err, errAssistantValidation):

@@ -185,6 +185,34 @@ func (q *Queries) GetAssistantBinding(ctx context.Context, arg GetAssistantBindi
 	return i, err
 }
 
+const getAssistantTriggerBinding = `-- name: GetAssistantTriggerBinding :one
+SELECT tb.organization_id, tb.original_workload_issuer_id AS workload_issuer_id, tb.subject
+FROM trigger_workload_bindings tb
+JOIN assistant_agent_bindings ab ON ab.organization_id = tb.assistant_binding_ref_organization_id
+  AND ab.project_id = tb.assistant_binding_ref_project_id AND ab.id = tb.assistant_binding_id
+WHERE tb.project_id = $1 AND tb.original_trigger_id = $2 AND tb.deleted IS FALSE
+  AND ab.original_assistant_id = $3 AND ab.deleted IS FALSE
+`
+
+type GetAssistantTriggerBindingParams struct {
+	ProjectID   uuid.UUID
+	TriggerID   uuid.UUID
+	AssistantID uuid.UUID
+}
+
+type GetAssistantTriggerBindingRow struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+}
+
+func (q *Queries) GetAssistantTriggerBinding(ctx context.Context, arg GetAssistantTriggerBindingParams) (GetAssistantTriggerBindingRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantTriggerBinding, arg.ProjectID, arg.TriggerID, arg.AssistantID)
+	var i GetAssistantTriggerBindingRow
+	err := row.Scan(&i.OrganizationID, &i.WorkloadIssuerID, &i.Subject)
+	return i, err
+}
+
 const getTriggerBinding = `-- name: GetTriggerBinding :one
 SELECT id, organization_id, original_workload_issuer_id AS workload_issuer_id, subject
 FROM trigger_workload_bindings
