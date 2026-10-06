@@ -29,7 +29,7 @@ import (
 
 const turnUserResource = "https://api.example/mcp"
 
-func TestAgentBackedTurnUsesTurnUserUpstreamSessions(t *testing.T) {
+func TestPrincipalCredentialsUseTheirAuthorizersUpstreamSessions(t *testing.T) {
 	t.Parallel()
 	db, err := assistantsInfra.CloneTestDatabase(t, "execution_credentials")
 	require.NoError(t, err)
@@ -40,11 +40,13 @@ func TestAgentBackedTurnUsesTurnUserUpstreamSessions(t *testing.T) {
 	core := newProvisioningCore(t, db)
 	assistant, err := core.CreateAssistant(ctx, "org-test", project, "user-1", "Credentials", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true)
 	require.NoError(t, err)
-	toolset, err := toolsetsrepo.New(db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{OrganizationID: "org-test", ProjectID: project, Name: "Business", Slug: "business", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: pgtype.Text{}, McpEnabled: true})
+	_, err = toolsetsrepo.New(db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{OrganizationID: "org-test", ProjectID: project, Name: "Business", Slug: "business", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: pgtype.Text{}, McpEnabled: true})
 	require.NoError(t, err)
 	thread := seedThreadWithEvent(t, db, assistant.ID, "execution-credentials", "execution-credentials", eventStatusPending)
-	engine := authz.NewEngine(testenv.NewLogger(t), db, authztest.ChallengeLoggingAlwaysDisabled, nil, authz.EngineOpts{AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession})
-	manager := assistanttokens.New("test-secret", db, engine, newTestExecutionIssuer(t), testIdentityService)
+	redisClient, err := assistantsInfra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	engine := authz.NewEngine(testenv.NewLogger(t), db, authztest.ChallengeLoggingAlwaysDisabled, nil, authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential, AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession})
+	manager := assistanttokens.New("test-secret", db, engine, newTestPrincipalCredentials(t, db), cache.NewRedisCacheAdapter(redisClient))
 	core.assistantTokens = manager
 	var dispatched atomic.Pointer[string]
 	core.runtime = testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnToken: &dispatched}
@@ -64,37 +66,41 @@ func TestAgentBackedTurnUsesTurnUserUpstreamSessions(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remoterepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: issuer.ID}))
 
+	authenticate := func(source, payload string) context.Context {
+		t.Helper()
+		_, err := core.processEventTurn(ctx, assistantThreadRecord{ID: thread, ProjectID: project, AssistantID: assistant.ID, SourceKind: source}, assistant, assistantRuntimeRecord{}, assistantThreadEventRecord{ID: uuid.New(), EventID: uuid.NewString(), NormalizedPayloadJSON: []byte(payload)})
+		require.NoError(t, err)
+		authed, _, err := manager.AuthorizeRuntime(ctx, *dispatched.Load())
+		require.NoError(t, err)
+		return authed
+	}
+	agentSubject := urn.NewAgentSubject(uuid.MustParse(*assistant.AgentID))
+	resolve := func(caller context.Context) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+		return sessions.ResolveAccessTokens(caller, project, "org-test", issuer.ID, agentSubject)
+	}
 	callers := map[string]context.Context{}
 	for _, user := range []string{"user-1", "user-2"} {
-		_, err = core.processEventTurn(ctx, assistantThreadRecord{ID: thread, ProjectID: project, AssistantID: assistant.ID, SourceKind: sourceKindDashboard}, assistant, assistantRuntimeRecord{}, assistantThreadEventRecord{ID: uuid.New(), EventID: "event-" + user, NormalizedPayloadJSON: []byte(`{"text":"hi","user_id":"` + user + `"}`)})
-		require.NoError(t, err)
-		business, err := manager.AuthorizeBusiness(ctx, *dispatched.Load(), toolset.ID)
-		require.NoError(t, err)
-		callers[user] = contextvalues.WithAssistantBusinessResource(business, turnUserResource)
+		callers[user] = authenticate(sourceKindDashboard, `{"text":"hi","user_id":"`+user+`"}`)
 		encrypted, err := enc.Encrypt([]byte("private-" + user))
 		require.NoError(t, err)
 		_, err = q.UpsertRemoteSession(ctx, remoterepo.UpsertRemoteSessionParams{SubjectUrn: urn.NewUserSubject(user), UserSessionIssuerID: issuer.ID, RemoteSessionClientID: client.ID, AccessTokenEncrypted: encrypted, Scopes: []string{}, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Resource: conv.ToPGText(turnUserResource)})
 		require.NoError(t, err)
 	}
-	resolve := func(caller context.Context, user string) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-		return sessions.ResolveAccessTokens(caller, project, "org-test", issuer.ID, urn.NewUserSubject(user))
-	}
-
 	for _, user := range []string{"user-1", "user-2"} {
-		tokens, err := resolve(callers[user], user)
+		tokens, err := resolve(callers[user])
 		require.NoError(t, err)
-		require.Equal(t, "private-"+user, tokens[upstream.ID].Token)
+		require.Equal(t, "private-"+user, tokens[upstream.ID].Token, "each credential uses its own authorizer's session")
 		actor, ok := contextvalues.AuthenticatedActor(callers[user])
 		require.True(t, ok)
-		require.Equal(t, urn.PrincipalTypeWorkload, actor.Type, "the agent acts; only credentials come from the turn user")
+		require.Equal(t, urn.PrincipalTypeAgent, actor.Type, "the agent acts; only the upstream session is the user's")
 	}
-	_, err = resolve(callers["user-2"], "user-1")
-	require.Error(t, err, "a turn cannot select another user's sessions")
-	_, err = resolve(contextvalues.WithAssistantBusinessResource(callers["user-2"], "https://other.example/mcp"), "user-2")
-	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "sessions serve only the authorized upstream resource")
+
+	workload := authenticate(sourceKindCron, `{}`)
+	_, err = resolve(workload)
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "a credential with no authorizer never uses anyone's session")
 
 	_, err = q.SoftDeleteRemoteSessionBySubjectAndClient(ctx, remoterepo.SoftDeleteRemoteSessionBySubjectAndClientParams{SubjectUrn: urn.NewUserSubject("user-2"), RemoteSessionClientID: client.ID, UserSessionIssuerID: issuer.ID, ProjectID: project, OrganizationID: "org-test"})
 	require.NoError(t, err)
-	_, err = resolve(callers["user-2"], "user-2")
+	_, err = resolve(callers["user-2"])
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "missing consent never falls back to the owner's session")
 }

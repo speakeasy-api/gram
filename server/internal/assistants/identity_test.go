@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/agents/lifecycle"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -278,4 +279,32 @@ func TestIdentityProvisioningFollowsRolloutFlag(t *testing.T) {
 	upgraded, err := svc.UpgradeAssistantIdentity(granted, &gen.UpgradeAssistantIdentityPayload{ID: legacy.ID, SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Equal(t, string(assistantidentity.Active), *upgraded.IdentityState)
+}
+
+func TestSnapshotCeilingCarriesAssistantSelfAdministration(t *testing.T) {
+	t.Parallel()
+	db, err := assistantsInfra.CloneTestDatabase(t, "identity_ceiling")
+	require.NoError(t, err)
+	project := newProvisioningProject(t, db, "identity-ceiling")
+	core := newProvisioningCore(t, db)
+	record, err := core.EnableManagedAssistant(t.Context(), "org-test", project, "user-1", true)
+	require.NoError(t, err)
+	root, err := core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, record.ID, record.Name)
+	require.NoError(t, err)
+	resolution, err := testIdentityService.Resolve(t.Context(), db, "org-test", project, record.ID, root)
+	require.NoError(t, err)
+	require.Equal(t, assistantidentity.Active, resolution.State)
+
+	ceiling, err := testIdentityService.SnapshotCeiling(t.Context(), db, *resolution.Identity)
+	require.NoError(t, err)
+	require.Equal(t, runtimepolicy.CurrentDelegatedPolicyVersion, ceiling.EncodingVersion)
+	policy, err := runtimepolicy.DecodeDelegatedPolicy(ceiling.EncodingVersion, ceiling.Policy)
+	require.NoError(t, err)
+	grants := policy.RuntimeGrants()
+	allowed, err := authz.GrantsAuthorize(grants, authz.AssistantCheck(authz.ScopeAssistantWrite, record.ID.String(), project.String()))
+	require.NoError(t, err)
+	require.True(t, allowed, "the ceiling keeps the agent's own-assistant administration")
+	allowed, err = authz.GrantsAuthorize(grants, authz.AssistantCheck(authz.ScopeAssistantWrite, uuid.NewString(), project.String()))
+	require.NoError(t, err)
+	require.False(t, allowed)
 }

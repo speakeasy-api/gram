@@ -2,10 +2,6 @@ package mcp_test
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
 	"log"
 	"log/slog"
 	"net/url"
@@ -20,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
-	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
@@ -51,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistant_platform_mcp_adapter"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -104,47 +100,22 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// testExecutionIdentities and testExecutionIssuer sign and resolve assistant
-// execution tokens for every test instance. The RSA key is generated once.
-var (
-	testExecutionIdentities = assistantidentity.New("https://platform.example.invalid", audit.NewLogger())
-	testExecutionIssuer     = sync.OnceValue(func() *mcpauthz.Issuer {
-		key, err := rsa.GenerateKey(rand.Reader, 2048)
-		if err != nil {
-			panic(err)
-		}
-		private, err := x509.MarshalPKCS8PrivateKey(key)
-		if err != nil {
-			panic(err)
-		}
-		public, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
-		if err != nil {
-			panic(err)
-		}
-		issuer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: public})), testExecutionIdentities.Issuer(), false)
-		if err != nil {
-			panic(err)
-		}
-		return issuer
-	})
-)
-
 type testInstance struct {
-	assistantTokens     *assistanttokens.Manager
-	service             *mcp.Service
-	conn                *pgxpool.Pool
-	sessionManager      *sessions.Manager
-	serverURL           *url.URL
-	siteURL             *url.URL
-	logger              *slog.Logger
-	tracerProvider      trace.TracerProvider
-	cacheAdapter        cache.Cache
-	chatSessionsManager *chatsessions.Manager
-	authnChallengeCache cache.TypedCacheObject[mcp.AuthnChallengeState]
-	enc                 *encryption.Client
-	authzEngine         *authz.Engine
-	audit               *audit.Logger
-	tunnelRoutes        route.Store
+	principalCredentials *principalcredential.Issuer
+	service              *mcp.Service
+	conn                 *pgxpool.Pool
+	sessionManager       *sessions.Manager
+	serverURL            *url.URL
+	siteURL              *url.URL
+	logger               *slog.Logger
+	tracerProvider       trace.TracerProvider
+	cacheAdapter         cache.Cache
+	chatSessionsManager  *chatsessions.Manager
+	authnChallengeCache  cache.TypedCacheObject[mcp.AuthnChallengeState]
+	enc                  *encryption.Client
+	authzEngine          *authz.Engine
+	audit                *audit.Logger
+	tunnelRoutes         route.Store
 	// features is the injectable flag provider wired into the service; tests
 	// enable flag-gated behavior (e.g. the Platform MCP assistant toolset
 	// variant) with SetFlagVariant.
@@ -478,7 +449,8 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine, testExecutionIssuer(), testExecutionIdentities)
+	principalCredentials := principalcredential.New(callerAssertions, conn)
+	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine, principalCredentials, cache.NewRedisCacheAdapter(redisClient))
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
 	auditLogger := audit.NewLogger()
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
@@ -517,7 +489,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	})
 	tunnelRoutes := route.NewRouteTable()
 	features := &feature.InMemory{}
-	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, authzEngine, assistantTokens, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime)
+	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime)
 	require.NoError(t, err)
 	// Identity chaining runs as in production, so gate tests without bindings
 	// prove it leaves their behavior unchanged.
@@ -526,23 +498,23 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
 
 	return ctx, &testInstance{
-		assistantTokens:     assistantTokens,
-		service:             svc,
-		conn:                conn,
-		sessionManager:      sessionManager,
-		serverURL:           serverURL,
-		siteURL:             siteURL,
-		logger:              logger,
-		tracerProvider:      tracerProvider,
-		cacheAdapter:        cacheAdapter,
-		chatSessionsManager: chatSessionsManager,
-		authnChallengeCache: authnCache,
-		enc:                 enc,
-		authzEngine:         authzEngine,
-		audit:               auditLogger,
-		tunnelRoutes:        tunnelRoutes,
-		features:            features,
-		efficacySignaler:    efficacySignaler,
+		principalCredentials: principalCredentials,
+		service:              svc,
+		conn:                 conn,
+		sessionManager:       sessionManager,
+		serverURL:            serverURL,
+		siteURL:              siteURL,
+		logger:               logger,
+		tracerProvider:       tracerProvider,
+		cacheAdapter:         cacheAdapter,
+		chatSessionsManager:  chatSessionsManager,
+		authnChallengeCache:  authnCache,
+		enc:                  enc,
+		authzEngine:          authzEngine,
+		audit:                auditLogger,
+		tunnelRoutes:         tunnelRoutes,
+		features:             features,
+		efficacySignaler:     efficacySignaler,
 	}
 }
 

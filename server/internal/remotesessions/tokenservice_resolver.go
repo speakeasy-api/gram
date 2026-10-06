@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -45,8 +46,8 @@ func remoteSessionCallerPrincipal(ctx context.Context, subject urn.SessionSubjec
 // attachment never falls back to the agent's, owner's, or authorizer's grant.
 func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, caller urn.SessionSubject, resource string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
-	if invoker, ok := contextvalues.AssistantInvoker(ctx); ok {
-		return m.resolveInvokerUpstreamToken(ctx, projectID, organizationID, userSessionIssuerID, clientID, caller, resource, invoker)
+	if credential, ok := principalcredential.FromContext(ctx); ok {
+		return m.resolveAuthorizerUpstreamToken(ctx, projectID, organizationID, userSessionIssuerID, clientID, resource, credential.Credential.AuthorizerUserID)
 	}
 	principalID, attached, err := remoteSessionCallerPrincipal(ctx, caller)
 	if err != nil {
@@ -96,31 +97,25 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, proje
 	return resolved, nil
 }
 
-// resolveInvokerUpstreamToken serves an agent-backed assistant turn with the
-// turn user's own consented session for the upstream resource the request was
-// authorized for. It never falls back to another user's or the agent's
-// session.
-func (m *ChallengeManager) resolveInvokerUpstreamToken(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, caller urn.SessionSubject, resource, invoker string) (resolvedUpstreamToken, error) {
+// resolveAuthorizerUpstreamToken serves a request made with a principal
+// credential from the upstream session of the user the credential acts for,
+// on the fly: the session is the user's own, never bound to the credential's
+// principal. A credential with no authorizing user, such as a workload, has
+// no session to use. Neither case falls back to another user's or the
+// principal's own sessions.
+func (m *ChallengeManager) resolveAuthorizerUpstreamToken(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, resource, authorizerUserID string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
-	if caller.Kind != urn.SessionSubjectKindUser || caller.ID != invoker {
-		return zero, ErrInvalidAuthorizationRequest
-	}
-	pinned, ok := contextvalues.AssistantBusinessResource(ctx)
-	if !ok || (resource != "" && resource != pinned) {
+	if authorizerUserID == "" {
 		return zero, nil
 	}
-	selected, err := remotesessions_repo.New(m.db).GetDelegatedRemoteSession(ctx, remotesessions_repo.GetDelegatedRemoteSessionParams{SubjectUrn: caller, RemoteSessionClientID: clientID, ProjectID: projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID})
+	selected, err := remotesessions_repo.New(m.db).GetTenantUserRemoteSession(ctx, remotesessions_repo.GetTenantUserRemoteSessionParams{SubjectUrn: urn.NewUserSubject(authorizerUserID), RemoteSessionClientID: clientID, ProjectID: projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return zero, nil
 	}
 	if err != nil {
-		return zero, fmt.Errorf("select turn user credential: %w", err)
+		return zero, fmt.Errorf("select authorizing user credential: %w", err)
 	}
-	// A session without a recorded resource cannot prove it targets this one.
-	if !selected.Resource.Valid || selected.Resource.String != pinned {
-		return zero, nil
-	}
-	resolved, err := m.resolveCredentialToken(ctx, selected, pinned)
+	resolved, err := m.resolveCredentialToken(ctx, selected, resource)
 	if err != nil || resolved.Token == "" {
 		return resolved, err
 	}

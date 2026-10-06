@@ -43,7 +43,7 @@ func (f wakeCancellerFunc) CancelAssistantWakes(ctx context.Context, projectID, 
 }
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, ClickHouse: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("launch assistants test infrastructure: %v", err)
 	}

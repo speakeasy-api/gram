@@ -84,7 +84,7 @@ func TestDecodeDelegatedPolicyRejectsInvalidProfiles(t *testing.T) {
 		version DelegatedPolicyVersion
 		raw     []byte
 	}{
-		"unsupported version":         {version: 3, raw: mustPolicyJSON(t, DelegatedPolicy{Requested: []DelegatedPolicyGrant{}, Effective: []DelegatedPolicyGrant{}})},
+		"unsupported version":         {version: 4, raw: mustPolicyJSON(t, DelegatedPolicy{Requested: []DelegatedPolicyGrant{}, Effective: []DelegatedPolicyGrant{}})},
 		"unknown envelope field":      {version: 1, raw: []byte(`{"requested":[],"effective":[],"effect":"allow"}`)},
 		"trailing value":              {version: 1, raw: []byte(`{"requested":[],"effective":[]} {}`)},
 		"missing requested":           {version: 1, raw: []byte(`{"effective":[]}`)},
@@ -148,4 +148,24 @@ func mustPolicyJSON(t *testing.T, policy DelegatedPolicy) []byte {
 	}{Requested: policy.Requested, Effective: policy.Effective})
 	require.NoError(t, err)
 	return raw
+}
+
+func TestDelegatedPolicyV3AdmitsAssistantScopes(t *testing.T) {
+	t.Parallel()
+	assistant := authz.NewGrant(authz.ScopeAssistantWrite, "11111111-1111-4111-8111-111111111111")
+
+	_, err := NewDelegatedPolicy(DelegatedPolicyVersion2, []authz.Grant{assistant})
+	require.ErrorIs(t, err, ErrInvalidDelegatedPolicy, "v2 predates the assistant scopes")
+
+	policy, err := NewDelegatedPolicy(DelegatedPolicyVersion3, []authz.Grant{assistant})
+	require.NoError(t, err)
+	encoded, err := EncodeDelegatedPolicy(DelegatedPolicyVersion3, policy)
+	require.NoError(t, err)
+	decoded, err := DecodeDelegatedPolicy(DelegatedPolicyVersion3, encoded)
+	require.NoError(t, err)
+	for _, scope := range []authz.Scope{authz.ScopeAssistantWrite, authz.ScopeAssistantRead} {
+		allowed, err := authz.GrantsAuthorize(decoded.RuntimeGrants(), authz.Check{Scope: scope, ResourceKind: "", ResourceID: assistant.Selector.ResourceID(), Dimensions: nil})
+		require.NoError(t, err)
+		require.True(t, allowed, scope)
+	}
 }

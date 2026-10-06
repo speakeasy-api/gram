@@ -2,7 +2,11 @@ package triggers_test
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"sync"
@@ -19,11 +23,15 @@ import (
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	workloadrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
@@ -197,6 +205,36 @@ func TestWakeCapturesRequesterOrOwnerAtCreation(t *testing.T) {
 			require.ErrorContains(t, err, "captured wake identity")
 		})
 	}
+}
+
+func TestWakeFromWorkloadCredentialRecordsNoRequester(t *testing.T) {
+	t.Parallel()
+	f := newIdentityFixture(t)
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	private, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	public, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	require.NoError(t, err)
+	signer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: public})), "https://platform.example.invalid", false)
+	require.NoError(t, err)
+	credentials := principalcredential.New(signer, f.db)
+	raw, _, err := credentials.Mint(principalcredential.Credential{
+		OrganizationID: "org-trigger-test", ProjectID: f.projectID, AuthorizerUserID: "",
+		Principal: urn.NewWorkloadPrincipal(uuid.New(), "assistant-trigger:"+uuid.NewString()),
+		Grants:    []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, uuid.NewString())},
+	})
+	require.NoError(t, err)
+	ctx, err := credentials.Authenticate(t.Context(), raw)
+	require.NoError(t, err)
+	_, err = f.app.CreateWakeInstance(ctx, triggers.CreateWakeInstanceParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, AssistantID: f.assistantID, Name: "Wake", TargetDisplay: "Assistant", FireAt: time.Now().Add(time.Hour), CorrelationID: "thread"}, func(_ context.Context, _ pgx.Tx, item triggerrepo.TriggerInstance) error {
+		var config map[string]any
+		require.NoError(t, json.Unmarshal(item.ConfigJson, &config))
+		require.NotContains(t, config, "requester_user_id", "a workload wake runs as the workload again, never as the owner")
+		require.NotContains(t, config, "identity_version")
+		return errors.New("captured wake identity")
+	})
+	require.ErrorContains(t, err, "captured wake identity")
 }
 
 func (f identityFixture) provisionTx(t *testing.T, tx pgx.Tx, assistantID uuid.UUID) error {

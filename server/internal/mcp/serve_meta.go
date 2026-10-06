@@ -23,8 +23,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
@@ -94,10 +92,6 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	agentID uuid.UUID,
 ) error {
 	ctx := r.Context()
-	// Execution tokens authorize one server at a time, never an aggregate.
-	if assistanttokens.IsExecutionToken(r.Header.Get("Authorization")) || assistanttokens.IsExecutionToken(r.Header.Get(constants.ChatSessionsTokenHeader)) {
-		return oops.C(oops.CodeUnauthorized)
-	}
 
 	if shouldRecordMetaMCPNetworkRequest(agentID) {
 		s.recordMCPNetworkRequest(ctx, mcpEndpoint.ProjectID, uuid.Nil, metaServer.ID, metaServer.OrganizationID)

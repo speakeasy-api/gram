@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
@@ -182,26 +181,6 @@ func (s *Service) serveResolvedMCPEndpoint(
 	slug, mcpRouteBase string,
 ) error {
 	ctx := r.Context()
-	publicTunnel := isTunneledPublic(mcpServer)
-	gateToken := httpheaders.AuthorizationBearerToken(r)
-	// An execution token is authorized as the agent even on a public server,
-	// so the request is served as private.
-	if executionToken := httpheaders.AuthorizationOrChatSessionToken(r); assistanttokens.IsExecutionToken(executionToken) {
-		gateToken = executionToken
-		boundCtx, err := s.assistantTokens.AuthorizeBusiness(ctx, executionToken, mcpServer.ID)
-		if err != nil {
-			return fmt.Errorf("authorize business endpoint: %w", err)
-		}
-		ac, ok := contextvalues.GetAuthContext(boundCtx)
-		if !ok || ac == nil || ac.ProjectID == nil || *ac.ProjectID != mcpEndpoint.ProjectID {
-			return oops.C(oops.CodeForbidden)
-		}
-		isolated := *mcpServer
-		isolated.Visibility = mcpservers.VisibilityPrivate
-		mcpServer = &isolated
-		ctx = boundCtx
-		r = r.WithContext(ctx)
-	}
 
 	s.recordMCPNetworkRequest(ctx, mcpEndpoint.ProjectID, mcpServer.ID, uuid.Nil, "")
 	logger = logger.With(attr.SlogMcpServerID(mcpServer.ID.String()))
@@ -229,7 +208,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 	// issuer gate is skipped even though the issuer column is populated.
 	// Gate on owner consent before dispatch so ungated callers are never
 	// challenged for a server that will not serve them.
-	if publicTunnel {
+	if isTunneledPublic(mcpServer) {
 		if _, err := s.requireTunneledPublicConsent(ctx, logger, mcpEndpoint, mcpServer); err != nil {
 			return err
 		}
@@ -253,7 +232,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return err
 		}
 		upstreamResource = resolvedEndpoint.UpstreamResource
-		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, gateToken, s.BaseURLForRequest(r), resolvedEndpoint)
+		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}
@@ -893,6 +872,9 @@ func (s *Service) prepareProxyBackendContext(
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
 			if !ok || authCtx == nil || project.OrganizationID != authCtx.ActiveOrganizationID {
 				return nil, "", oops.C(oops.CodeUnauthorized)
+			}
+			if err := requirePrincipalCredentialProject(ctx, project.ID); err != nil {
+				return nil, "", err
 			}
 			ctx = setProxyBackendProjectContext(ctx, authCtx, project.ID, project.Slug)
 		}

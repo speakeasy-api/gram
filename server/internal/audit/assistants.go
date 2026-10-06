@@ -50,20 +50,9 @@ type LogAssistantToolCallEvent struct {
 	ToolURN      urn.Tool
 	Params       json.RawMessage
 
-	// Execution is set when the assistant ran as its agent; the agent is then
-	// the actor.
-	Execution *AssistantExecutionAttribution
-}
-
-// AssistantExecutionAttribution records which workload identity an
-// agent-backed assistant turn ran under and the user it acted for, whose
-// connected accounts supplied any upstream credentials.
-type AssistantExecutionAttribution struct {
-	TriggerID        uuid.UUID `json:"trigger_id"`
-	WorkloadIssuerID uuid.UUID `json:"workload_issuer_id"`
-	WorkloadSubject  string    `json:"workload_subject"`
-	EventID          string    `json:"event_id"`
-	InvokerUserID    string    `json:"invoker_user_id"`
+	// Authorizer is the user a principal credential acts for, when the call
+	// was made with one; the credential's principal is then the actor.
+	Authorizer *urn.Principal
 }
 
 func (l *Logger) LogAssistantToolCall(ctx context.Context, dbtx repo.DBTX, event LogAssistantToolCallEvent) error {
@@ -79,8 +68,8 @@ func (l *Logger) LogAssistantToolCall(ctx context.Context, dbtx repo.DBTX, event
 	if event.Thread != uuid.Nil {
 		meta["thread_id"] = event.Thread.String()
 	}
-	if event.Execution != nil {
-		meta["execution"] = event.Execution
+	if event.Authorizer != nil {
+		meta["authorizer_urn"] = event.Authorizer.String()
 	}
 	if event.Chat != "" {
 		meta["chat_id"] = event.Chat
