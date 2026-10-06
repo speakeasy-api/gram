@@ -30,6 +30,17 @@ it("renders stable explicit labels and nullable capability semantics", () => {
     within(value("Client ID Metadata Document")).getByText("Not supported"),
   ).toBeTruthy();
 });
+it("reads an unset scope fallback as the default and true as sending none", () => {
+  render(<IssuerConfiguration issuer={issuer} />);
+  expect(
+    within(value("Scope fallback")).getByText("Send supported scopes"),
+  ).toBeTruthy();
+  cleanup();
+  render(
+    <IssuerConfiguration issuer={{ ...issuer, omitScopeFallback: true }} />,
+  );
+  expect(within(value("Scope fallback")).getByText("Send none")).toBeTruthy();
+});
 it("omits project ownership", () => {
   render(<IssuerConfiguration issuer={issuer} />);
   expect(screen.queryByText("Project", { selector: "dt" })).toBeNull();

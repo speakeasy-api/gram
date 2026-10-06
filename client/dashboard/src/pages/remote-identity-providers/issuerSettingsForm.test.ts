@@ -129,6 +129,19 @@ describe("buildUpdateIssuerForm", () => {
     expect(form.scopeOverride).toEqual([]);
   });
 
+  // Omitted keeps the stored value; an explicit boolean sets it either way.
+  it("omits the omit-scope-fallback switch unless the caller supplies it", () => {
+    expect("omitScopeFallback" in buildUpdateIssuerForm(baseState)).toBe(false);
+    expect(
+      buildUpdateIssuerForm({ ...baseState, omitScopeFallback: true })
+        .omitScopeFallback,
+    ).toBe(true);
+    expect(
+      buildUpdateIssuerForm({ ...baseState, omitScopeFallback: false })
+        .omitScopeFallback,
+    ).toBe(false);
+  });
+
   it("omits the RFC 8414 arrays when no discovery has run", () => {
     const form = buildUpdateIssuerForm(baseState);
 
@@ -272,6 +285,16 @@ describe("buildUpdateIssuerForm", () => {
 
 describe("buildCreateIssuerForm", () => {
   const { id: _id, ...createState } = baseState;
+
+  it("forwards the omit-scope-fallback switch only when set", () => {
+    expect(
+      buildCreateIssuerForm(createState).omitScopeFallback,
+    ).toBeUndefined();
+    expect(
+      buildCreateIssuerForm({ ...createState, omitScopeFallback: true })
+        .omitScopeFallback,
+    ).toBe(true);
+  });
 
   it("forwards the discovery-only capabilities from a matching snapshot", () => {
     const form = buildCreateIssuerForm({

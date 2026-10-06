@@ -481,6 +481,7 @@ func createServerIdentityProviderParams(projectID uuid.UUID, organizationID stri
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(form.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(form.AuthorizationResponseIssParameterSupported),
 		ScopeOverride:                              scopeOverride(form.ScopeOverride),
+		OmitScopeFallback:                          conv.PtrToPGBool(form.OmitScopeFallback),
 		ResourceIndicatorSupported:                 conv.PtrToPGBool(form.ResourceIndicatorSupported),
 		Metadata:                                   nil,
 		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},

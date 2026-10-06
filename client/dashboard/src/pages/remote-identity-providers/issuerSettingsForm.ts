@@ -28,6 +28,9 @@ export type IssuerSettingsFormState = {
   // Comma-separated scope override. Undefined omits the field so the server
   // keeps what it has; an empty string clears the override.
   scopeOverride?: string;
+  // Send no scope when the issuer's whole scopes_supported would otherwise be
+  // requested. Undefined omits the field so the server keeps what it has.
+  omitScopeFallback?: boolean;
 };
 
 // buildUpdateIssuerForm turns the Settings tab state into the update payload.
@@ -90,6 +93,9 @@ export function buildUpdateIssuerForm(
     ...(state.scopeOverride === undefined
       ? {}
       : { scopeOverride: parseScopes(state.scopeOverride) }),
+    ...(state.omitScopeFallback === undefined
+      ? {}
+      : { omitScopeFallback: state.omitScopeFallback }),
     // Endpoints verbatim ("" clears a dropped URL); null seeded = keep stored.
     userinfoEndpoint: fromDiscovery?.userinfoEndpoint,
     introspectionEndpoint: fromDiscovery?.introspectionEndpoint,
@@ -172,6 +178,7 @@ export function buildCreateIssuerForm(
     opPolicyUri: fromDiscovery?.opPolicyUri || undefined,
     opTosUri: fromDiscovery?.opTosUri || undefined,
     tunneledMcpServerId: state.tunneledMcpServerId?.trim() || undefined,
+    omitScopeFallback: state.omitScopeFallback,
     // Discovery-only capabilities; omitted (NULL) unless discovery ran.
     userinfoEndpoint: fromDiscovery?.userinfoEndpoint || undefined,
     introspectionEndpoint: fromDiscovery?.introspectionEndpoint || undefined,

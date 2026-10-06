@@ -2,6 +2,8 @@ import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { RequireScope } from "@/components/require-scope";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
+import { Label } from "@/components/ui/Label";
+import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
@@ -55,6 +57,14 @@ export function SettingsTab({
   const [scopeOverride, setScopeOverride] = useState(
     (issuer.scopeOverride ?? []).join(", "),
   );
+  // Undefined until the operator flips the switch, so it tracks the saved
+  // value and a save only sends the flag when it was deliberately changed:
+  // an unrelated save must not write false over a NULL the issuer never set.
+  const [omitScopeFallback, setOmitScopeFallback] = useState<
+    boolean | undefined
+  >(undefined);
+  const omitScopeFallbackChecked =
+    omitScopeFallback ?? issuer.omitScopeFallback ?? false;
   const [showDelete, setShowDelete] = useState(false);
   const isPlatformAdmin = useIsPlatformAdmin();
   const { hasAnyScope } = useRBAC();
@@ -128,6 +138,7 @@ export function SettingsTab({
       await invalidateAllOrganizationRemoteSessionIssuer(queryClient, {
         refetchType: "all",
       });
+      setOmitScopeFallback(undefined);
       toast.success("Provider updated");
     },
     onError: (error) => {
@@ -226,6 +237,11 @@ export function SettingsTab({
           jwksUri,
           discoveredSnapshot,
           scopeOverride,
+          omitScopeFallback:
+            omitScopeFallback !== undefined &&
+            omitScopeFallback !== (issuer.omitScopeFallback ?? false)
+              ? omitScopeFallback
+              : undefined,
           tunneledMcpServerId:
             isPlatformAdmin && issuer.projectId
               ? tunneledMcpServerId
@@ -351,13 +367,31 @@ export function SettingsTab({
 
       <SettingsSection
         title="Scopes"
-        description="When set, every sign-in through this provider requests exactly these scopes, and the scopes set on its clients are ignored. Leave blank to request each client's scopes, or the provider's supported scopes when a client sets none."
+        description="The override is requested exactly as written when a sign-in has no client scope, challenge scope or advertised resource scopes. Leave blank to fall back to the provider's supported scopes, unless the switch below is on."
       >
         <SettingsField
           label="Scope override (comma-separated)"
           value={scopeOverride}
           onChange={setScopeOverride}
         />
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-3">
+            <Switch
+              aria-labelledby="omit-scope-fallback-label"
+              checked={omitScopeFallbackChecked}
+              onCheckedChange={setOmitScopeFallback}
+            />
+            <Label id="omit-scope-fallback-label">
+              Send no scope when nothing is known
+            </Label>
+          </div>
+          <Text small muted>
+            By default a sign-in with no other scope source requests every scope
+            this provider advertises. Turn this on to send no scope and let the
+            provider apply its default. Some providers reject a sign-in with no
+            scope. This affects only clients without their own scopes.
+          </Text>
+        </div>
       </SettingsSection>
 
       <SettingsSection

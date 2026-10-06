@@ -91,6 +91,10 @@ export type RemoteSessionIssuer = {
    */
   oidc: boolean;
   /**
+   * When true, a login that would otherwise request the authorization server's whole scopes_supported omits the scope parameter so the server applies its default. Null when unset.
+   */
+  omitScopeFallback?: boolean | undefined;
+  /**
    * RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not advertised.
    */
   opPolicyUri?: string | undefined;
@@ -192,6 +196,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
     logo_asset_id: z.optional(z.string()),
     name: z.optional(z.string()),
     oidc: z.boolean(),
+    omit_scope_fallback: z.optional(z.boolean()),
     op_policy_uri: z.optional(z.string()),
     op_tos_uri: z.optional(z.string()),
     organization_id: z.string(),
@@ -238,6 +243,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
       "jwks_fetched_at": "jwksFetchedAt",
       "jwks_uri": "jwksUri",
       "logo_asset_id": "logoAssetId",
+      "omit_scope_fallback": "omitScopeFallback",
       "op_policy_uri": "opPolicyUri",
       "op_tos_uri": "opTosUri",
       "organization_id": "organizationId",
