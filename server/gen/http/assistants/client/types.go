@@ -110,13 +110,12 @@ type GetAssistantResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	// Whether this assistant has never configured, active, or tombstoned workload
-	// identity bindings. This is configuration state, not permission to execute.
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
-	// The dedicated agent ID for an active identity binding.
+	// The assistant's dedicated agent ID, when it has one.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// The current or last retained assistant identity binding generation.
-	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -150,13 +149,12 @@ type CreateAssistantResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	// Whether this assistant has never configured, active, or tombstoned workload
-	// identity bindings. This is configuration state, not permission to execute.
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
-	// The dedicated agent ID for an active identity binding.
+	// The assistant's dedicated agent ID, when it has one.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// The current or last retained assistant identity binding generation.
-	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -190,13 +188,12 @@ type UpgradeAssistantIdentityResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	// Whether this assistant has never configured, active, or tombstoned workload
-	// identity bindings. This is configuration state, not permission to execute.
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
-	// The dedicated agent ID for an active identity binding.
+	// The assistant's dedicated agent ID, when it has one.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// The current or last retained assistant identity binding generation.
-	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -230,13 +227,12 @@ type UpdateAssistantResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	// Whether this assistant has never configured, active, or tombstoned workload
-	// identity bindings. This is configuration state, not permission to execute.
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
-	// The dedicated agent ID for an active identity binding.
+	// The assistant's dedicated agent ID, when it has one.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// The current or last retained assistant identity binding generation.
-	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -295,13 +291,12 @@ type GetManagedAssistantResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	// Whether this assistant has never configured, active, or tombstoned workload
-	// identity bindings. This is configuration state, not permission to execute.
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
-	// The dedicated agent ID for an active identity binding.
+	// The assistant's dedicated agent ID, when it has one.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// The current or last retained assistant identity binding generation.
-	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -335,13 +330,12 @@ type EnsureManagedAssistantResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	// Whether this assistant has never configured, active, or tombstoned workload
-	// identity bindings. This is configuration state, not permission to execute.
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
-	// The dedicated agent ID for an active identity binding.
+	// The assistant's dedicated agent ID, when it has one.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// The current or last retained assistant identity binding generation.
-	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -2234,13 +2228,12 @@ type AssistantResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	// Whether this assistant has never configured, active, or tombstoned workload
-	// identity bindings. This is configuration state, not permission to execute.
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
-	// The dedicated agent ID for an active identity binding.
+	// The assistant's dedicated agent ID, when it has one.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// The current or last retained assistant identity binding generation.
-	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The model identifier used by the assistant.
@@ -2620,20 +2613,19 @@ func NewListAssistantsGatewayError(body *ListAssistantsGatewayErrorResponseBody)
 // endpoint result from a HTTP "OK" response.
 func NewGetAssistantAssistantOK(body *GetAssistantResponseBody) *types.Assistant {
 	v := &types.Assistant{
-		ID:                 *body.ID,
-		ProjectID:          *body.ProjectID,
-		CreatedByUserID:    body.CreatedByUserID,
-		IdentityState:      body.IdentityState,
-		AgentID:            body.AgentID,
-		IdentityGeneration: body.IdentityGeneration,
-		Name:               *body.Name,
-		Model:              *body.Model,
-		Instructions:       *body.Instructions,
-		WarmTTLSeconds:     *body.WarmTTLSeconds,
-		MaxConcurrency:     *body.MaxConcurrency,
-		Status:             *body.Status,
-		CreatedAt:          *body.CreatedAt,
-		UpdatedAt:          *body.UpdatedAt,
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		CreatedByUserID: body.CreatedByUserID,
+		IdentityState:   body.IdentityState,
+		AgentID:         body.AgentID,
+		Name:            *body.Name,
+		Model:           *body.Model,
+		Instructions:    *body.Instructions,
+		WarmTTLSeconds:  *body.WarmTTLSeconds,
+		MaxConcurrency:  *body.MaxConcurrency,
+		Status:          *body.Status,
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
 	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
@@ -2817,20 +2809,19 @@ func NewGetAssistantGatewayError(body *GetAssistantGatewayErrorResponseBody) *go
 // "createAssistant" endpoint result from a HTTP "OK" response.
 func NewCreateAssistantAssistantOK(body *CreateAssistantResponseBody) *types.Assistant {
 	v := &types.Assistant{
-		ID:                 *body.ID,
-		ProjectID:          *body.ProjectID,
-		CreatedByUserID:    body.CreatedByUserID,
-		IdentityState:      body.IdentityState,
-		AgentID:            body.AgentID,
-		IdentityGeneration: body.IdentityGeneration,
-		Name:               *body.Name,
-		Model:              *body.Model,
-		Instructions:       *body.Instructions,
-		WarmTTLSeconds:     *body.WarmTTLSeconds,
-		MaxConcurrency:     *body.MaxConcurrency,
-		Status:             *body.Status,
-		CreatedAt:          *body.CreatedAt,
-		UpdatedAt:          *body.UpdatedAt,
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		CreatedByUserID: body.CreatedByUserID,
+		IdentityState:   body.IdentityState,
+		AgentID:         body.AgentID,
+		Name:            *body.Name,
+		Model:           *body.Model,
+		Instructions:    *body.Instructions,
+		WarmTTLSeconds:  *body.WarmTTLSeconds,
+		MaxConcurrency:  *body.MaxConcurrency,
+		Status:          *body.Status,
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
 	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
@@ -3014,20 +3005,19 @@ func NewCreateAssistantGatewayError(body *CreateAssistantGatewayErrorResponseBod
 // "upgradeAssistantIdentity" endpoint result from a HTTP "OK" response.
 func NewUpgradeAssistantIdentityAssistantOK(body *UpgradeAssistantIdentityResponseBody) *types.Assistant {
 	v := &types.Assistant{
-		ID:                 *body.ID,
-		ProjectID:          *body.ProjectID,
-		CreatedByUserID:    body.CreatedByUserID,
-		IdentityState:      body.IdentityState,
-		AgentID:            body.AgentID,
-		IdentityGeneration: body.IdentityGeneration,
-		Name:               *body.Name,
-		Model:              *body.Model,
-		Instructions:       *body.Instructions,
-		WarmTTLSeconds:     *body.WarmTTLSeconds,
-		MaxConcurrency:     *body.MaxConcurrency,
-		Status:             *body.Status,
-		CreatedAt:          *body.CreatedAt,
-		UpdatedAt:          *body.UpdatedAt,
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		CreatedByUserID: body.CreatedByUserID,
+		IdentityState:   body.IdentityState,
+		AgentID:         body.AgentID,
+		Name:            *body.Name,
+		Model:           *body.Model,
+		Instructions:    *body.Instructions,
+		WarmTTLSeconds:  *body.WarmTTLSeconds,
+		MaxConcurrency:  *body.MaxConcurrency,
+		Status:          *body.Status,
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
 	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
@@ -3211,20 +3201,19 @@ func NewUpgradeAssistantIdentityGatewayError(body *UpgradeAssistantIdentityGatew
 // "updateAssistant" endpoint result from a HTTP "OK" response.
 func NewUpdateAssistantAssistantOK(body *UpdateAssistantResponseBody) *types.Assistant {
 	v := &types.Assistant{
-		ID:                 *body.ID,
-		ProjectID:          *body.ProjectID,
-		CreatedByUserID:    body.CreatedByUserID,
-		IdentityState:      body.IdentityState,
-		AgentID:            body.AgentID,
-		IdentityGeneration: body.IdentityGeneration,
-		Name:               *body.Name,
-		Model:              *body.Model,
-		Instructions:       *body.Instructions,
-		WarmTTLSeconds:     *body.WarmTTLSeconds,
-		MaxConcurrency:     *body.MaxConcurrency,
-		Status:             *body.Status,
-		CreatedAt:          *body.CreatedAt,
-		UpdatedAt:          *body.UpdatedAt,
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		CreatedByUserID: body.CreatedByUserID,
+		IdentityState:   body.IdentityState,
+		AgentID:         body.AgentID,
+		Name:            *body.Name,
+		Model:           *body.Model,
+		Instructions:    *body.Instructions,
+		WarmTTLSeconds:  *body.WarmTTLSeconds,
+		MaxConcurrency:  *body.MaxConcurrency,
+		Status:          *body.Status,
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
 	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
@@ -3882,20 +3871,19 @@ func NewInterruptTurnGatewayError(body *InterruptTurnGatewayErrorResponseBody) *
 // "getManagedAssistant" endpoint result from a HTTP "OK" response.
 func NewGetManagedAssistantAssistantOK(body *GetManagedAssistantResponseBody) *types.Assistant {
 	v := &types.Assistant{
-		ID:                 *body.ID,
-		ProjectID:          *body.ProjectID,
-		CreatedByUserID:    body.CreatedByUserID,
-		IdentityState:      body.IdentityState,
-		AgentID:            body.AgentID,
-		IdentityGeneration: body.IdentityGeneration,
-		Name:               *body.Name,
-		Model:              *body.Model,
-		Instructions:       *body.Instructions,
-		WarmTTLSeconds:     *body.WarmTTLSeconds,
-		MaxConcurrency:     *body.MaxConcurrency,
-		Status:             *body.Status,
-		CreatedAt:          *body.CreatedAt,
-		UpdatedAt:          *body.UpdatedAt,
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		CreatedByUserID: body.CreatedByUserID,
+		IdentityState:   body.IdentityState,
+		AgentID:         body.AgentID,
+		Name:            *body.Name,
+		Model:           *body.Model,
+		Instructions:    *body.Instructions,
+		WarmTTLSeconds:  *body.WarmTTLSeconds,
+		MaxConcurrency:  *body.MaxConcurrency,
+		Status:          *body.Status,
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
 	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
@@ -4079,20 +4067,19 @@ func NewGetManagedAssistantGatewayError(body *GetManagedAssistantGatewayErrorRes
 // "ensureManagedAssistant" endpoint result from a HTTP "OK" response.
 func NewEnsureManagedAssistantAssistantOK(body *EnsureManagedAssistantResponseBody) *types.Assistant {
 	v := &types.Assistant{
-		ID:                 *body.ID,
-		ProjectID:          *body.ProjectID,
-		CreatedByUserID:    body.CreatedByUserID,
-		IdentityState:      body.IdentityState,
-		AgentID:            body.AgentID,
-		IdentityGeneration: body.IdentityGeneration,
-		Name:               *body.Name,
-		Model:              *body.Model,
-		Instructions:       *body.Instructions,
-		WarmTTLSeconds:     *body.WarmTTLSeconds,
-		MaxConcurrency:     *body.MaxConcurrency,
-		Status:             *body.Status,
-		CreatedAt:          *body.CreatedAt,
-		UpdatedAt:          *body.UpdatedAt,
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		CreatedByUserID: body.CreatedByUserID,
+		IdentityState:   body.IdentityState,
+		AgentID:         body.AgentID,
+		Name:            *body.Name,
+		Model:           *body.Model,
+		Instructions:    *body.Instructions,
+		WarmTTLSeconds:  *body.WarmTTLSeconds,
+		MaxConcurrency:  *body.MaxConcurrency,
+		Status:          *body.Status,
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
 	}
 	v.Toolsets = make([]*types.AssistantToolsetRef, len(body.Toolsets))
 	for i, val := range body.Toolsets {
@@ -4337,8 +4324,8 @@ func ValidateGetAssistantResponseBody(body *GetAssistantResponseBody) (err error
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.IdentityState != nil {
-		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "TOMBSTONED") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "TOMBSTONED"}))
+		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "UNAVAILABLE") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE"}))
 		}
 	}
 	if body.AgentID != nil {
@@ -4428,8 +4415,8 @@ func ValidateCreateAssistantResponseBody(body *CreateAssistantResponseBody) (err
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.IdentityState != nil {
-		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "TOMBSTONED") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "TOMBSTONED"}))
+		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "UNAVAILABLE") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE"}))
 		}
 	}
 	if body.AgentID != nil {
@@ -4519,8 +4506,8 @@ func ValidateUpgradeAssistantIdentityResponseBody(body *UpgradeAssistantIdentity
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.IdentityState != nil {
-		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "TOMBSTONED") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "TOMBSTONED"}))
+		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "UNAVAILABLE") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE"}))
 		}
 	}
 	if body.AgentID != nil {
@@ -4610,8 +4597,8 @@ func ValidateUpdateAssistantResponseBody(body *UpdateAssistantResponseBody) (err
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.IdentityState != nil {
-		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "TOMBSTONED") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "TOMBSTONED"}))
+		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "UNAVAILABLE") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE"}))
 		}
 	}
 	if body.AgentID != nil {
@@ -4734,8 +4721,8 @@ func ValidateGetManagedAssistantResponseBody(body *GetManagedAssistantResponseBo
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.IdentityState != nil {
-		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "TOMBSTONED") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "TOMBSTONED"}))
+		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "UNAVAILABLE") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE"}))
 		}
 	}
 	if body.AgentID != nil {
@@ -4825,8 +4812,8 @@ func ValidateEnsureManagedAssistantResponseBody(body *EnsureManagedAssistantResp
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.IdentityState != nil {
-		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "TOMBSTONED") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "TOMBSTONED"}))
+		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "UNAVAILABLE") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE"}))
 		}
 	}
 	if body.AgentID != nil {
@@ -7319,8 +7306,8 @@ func ValidateAssistantResponseBody(body *AssistantResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.IdentityState != nil {
-		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "TOMBSTONED") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "TOMBSTONED"}))
+		if !(*body.IdentityState == "NEVER_CONFIGURED" || *body.IdentityState == "ACTIVE" || *body.IdentityState == "UNAVAILABLE") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.identity_state", *body.IdentityState, []any{"NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE"}))
 		}
 	}
 	if body.AgentID != nil {

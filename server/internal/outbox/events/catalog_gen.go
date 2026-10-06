@@ -17,6 +17,7 @@ var All = []outbox.EventRegistration{
 	AgentV1,
 	AiScanTargetV1,
 	AssetV1,
+	AssistantIdentityV1,
 	AssistantToolCallV1,
 	AssistantWakeV1,
 	AuditLogCreated,

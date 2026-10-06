@@ -10,7 +10,9 @@ import {
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
 import { useCommandPalette } from "@/contexts/CommandPalette";
+import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
+import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
@@ -359,6 +361,8 @@ export function CommandPalette(): JSX.Element {
   const { isOpen, close, contextBadge } = useCommandPalette();
   const { orgSlug, projectSlug } = useSlugs();
   const { pathname } = useLocation();
+  const project = useProject();
+  const { hasScope } = useRBAC();
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<PaletteMode>(LIST);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -366,6 +370,8 @@ export function CommandPalette(): JSX.Element {
   // Project Assistant and resource search are project-scoped. At the org level
   // (no project in the URL) the palette still works for navigating org pages.
   const inProject = Boolean(projectSlug);
+  const canAskAssistant =
+    inProject && hasScope("assistant:read", undefined, project.id);
 
   // Recents are scoped per user so a shared browser profile doesn't leak
   // history. Gate the session lookup on `isOpen` so we don't poll auth.info on
@@ -450,7 +456,7 @@ export function CommandPalette(): JSX.Element {
   }, [rows]);
   const domOrder = useMemo((): string[] => {
     if (mode.mode !== "list") return [mode.row.candidate.id];
-    const ask = inProject ? [ASK_AI_VALUE] : [];
+    const ask = canAskAssistant ? [ASK_AI_VALUE] : [];
     if (!hasQuery) {
       return [
         ...idle.recents.map((r) => r.candidate.id),
@@ -460,7 +466,7 @@ export function CommandPalette(): JSX.Element {
       ];
     }
     return [...ranked.ordered.map((r) => r.candidate.id), ...ask];
-  }, [mode, inProject, hasQuery, idle, idleProjects, ranked]);
+  }, [mode, canAskAssistant, hasQuery, idle, idleProjects, ranked]);
   const rowsKey = domOrder.join("\n");
   const selectedValue = resolveSelection(
     selectedFor,
@@ -555,7 +561,7 @@ export function CommandPalette(): JSX.Element {
   // while searching: cmdk auto-selects the first item in DOM order, so keeping
   // this row above the matches would steal the highlight from the closest
   // result and force an extra ↓ keypress to reach it (AGE-2807).
-  const askAiGroup = inProject ? (
+  const askAiGroup = canAskAssistant ? (
     <CommandGroup forceMount heading="Assistant">
       <CommandItem
         forceMount

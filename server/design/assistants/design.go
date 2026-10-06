@@ -83,7 +83,7 @@ var _ = Service("assistants", func() {
 	})
 
 	Method("upgradeAssistantIdentity", func() {
-		Description("Explicitly configure workload identity for an assistant without configured workload identity (NEVER_CONFIGURED), creating a dedicated agent and stable trigger workload identities. Existing assistants are never upgraded implicitly. Repeating an already ACTIVE upgrade is safe; tombstoned identities cannot be restored.")
+		Description("Give an existing assistant its own dedicated agent and per-trigger workload identities. The agent starts with access to every MCP server and skill in the project and to administering this assistant, and is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.")
 		Payload(func() {
 			Attribute("id", String, "The assistant ID.", func() { Format(FormatUUID) })
 			Required("id")

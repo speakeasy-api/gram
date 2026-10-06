@@ -2,6 +2,10 @@ package mcp_test
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"log"
 	"log/slog"
 	"net/url"
@@ -16,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
@@ -98,6 +103,31 @@ func TestMain(m *testing.M) {
 
 	os.Exit(code)
 }
+
+// testExecutionIdentities and testExecutionIssuer sign and resolve assistant
+// execution tokens for every test instance. The RSA key is generated once.
+var (
+	testExecutionIdentities = assistantidentity.New("https://platform.example.invalid", audit.NewLogger())
+	testExecutionIssuer     = sync.OnceValue(func() *mcpauthz.Issuer {
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			panic(err)
+		}
+		private, err := x509.MarshalPKCS8PrivateKey(key)
+		if err != nil {
+			panic(err)
+		}
+		public, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+		if err != nil {
+			panic(err)
+		}
+		issuer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: public})), testExecutionIdentities.Issuer(), false)
+		if err != nil {
+			panic(err)
+		}
+		return issuer
+	})
+)
 
 type testInstance struct {
 	assistantTokens     *assistanttokens.Manager
@@ -448,7 +478,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine)
+	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine, testExecutionIssuer(), testExecutionIdentities)
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
 	auditLogger := audit.NewLogger()
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
@@ -479,7 +509,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 		PlatformMCPReadTools: assistant_platform_mcp_adapter.ExternalTools(
 			platformmcp.NewRuntimeWithLifecycle(
 				logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine), "", "test-cursor-key",
-				platformmcp.NewPostgresReader(logger, conn, nil).WithAuthorization(authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+				platformmcp.NewPostgresReader(logger, conn).WithAuthorization(authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 				platformmcp.CatalogDescriptor{},
 			).AssistantTools(),
 			platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine),

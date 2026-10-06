@@ -14,9 +14,9 @@ import {
   filterForField,
   filterableFields,
   operatorsForField,
+  type ExploreSpec,
   type FilterDraft,
   type FilterOperator,
-  type WindowPreset,
 } from "./exploreModel";
 import { FilterValuePicker } from "./FilterValuePicker";
 
@@ -26,15 +26,15 @@ import { FilterValuePicker } from "./FilterValuePicker";
  */
 export function FilterRow({
   dataset,
-  window,
+  span,
   filter,
   onChange,
   onRemove,
   trailing,
 }: {
   dataset: AnalyticsDataset | undefined;
-  /** The builder's window: the picker lists values seen inside it. */
-  window: WindowPreset;
+  /** The builder's window or range: the picker lists values seen inside it. */
+  span: Pick<ExploreSpec, "window" | "range">;
   filter: FilterDraft;
   onChange: (next: FilterDraft) => void;
   onRemove: () => void;
@@ -85,7 +85,7 @@ export function FilterRow({
         <FilterValuePicker
           dataset={dataset.name}
           dimension={field.name}
-          window={window}
+          span={span}
           operator={filter.operator}
           values={filter.values}
           onChange={(values) => onChange({ ...filter, values })}

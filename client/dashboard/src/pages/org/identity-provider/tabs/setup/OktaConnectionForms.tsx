@@ -39,6 +39,7 @@ export function CreateConnectionForm(): JSX.Element {
 
   const createConnection = () => {
     if (create.isPending || normalizedOrgUrl === undefined) return;
+    setOrgUrl(normalizedOrgUrl);
     create.mutate({
       security: SESSION_SECURITY,
       request: {
@@ -82,6 +83,9 @@ export function CreateConnectionForm(): JSX.Element {
               }
               value={orgUrl}
               onChange={setOrgUrl}
+              onBlur={() => {
+                if (normalizedOrgUrl !== undefined) setOrgUrl(normalizedOrgUrl);
+              }}
               placeholder="https://example.okta.com"
               className="font-mono"
               autoComplete="off"
@@ -90,8 +94,8 @@ export function CreateConnectionForm(): JSX.Element {
             />
             <FieldDescription id="okta-org-url-help">
               Use your organization’s address starting with https:// and ending
-              in .okta.com, .oktapreview.com, .okta-emea.com, or .okta.mil. Do
-              not include a page address after the domain.
+              in .okta.com, .oktapreview.com, .okta-emea.com, or .okta.mil. You
+              can also paste your Okta Admin Console address.
             </FieldDescription>
             {trimmed !== "" && normalizedOrgUrl === undefined && (
               <p
@@ -99,8 +103,8 @@ export function CreateConnectionForm(): JSX.Element {
                 role="alert"
                 className="text-destructive text-sm"
               >
-                Enter an HTTPS Okta organization URL, such as
-                https://example.okta.com, with nothing after the domain.
+                Enter an HTTPS Okta organization or Admin Console URL, such as
+                https://example.okta.com.
               </p>
             )}
           </Field>
@@ -288,11 +292,11 @@ export function AgentSetupForm({
       <ApiErrorAlert error={record.error} />
       <FieldDescription id="okta-agent-help">
         The agent ID is the wlp... value in the Okta agent page URL, and it
-        drives the Okta deep links in the server readiness table below. The
-        bound application ID is the Client ID of the app Okta created with the
-        agent; with it, Speakeasy can check that app after each applications
-        sync. Okta does not expose either through its API. Leave a field empty
-        to clear it.
+        drives the Okta deep links in the Server connections table below. The
+        bound application ID is the 0oa... value in the page URL of the app Okta
+        created with the agent, not its Client ID; with it, Speakeasy can check
+        that app after each applications sync. Okta does not expose either
+        through its API. Leave a field empty to clear it.
       </FieldDescription>
       <a
         href="https://help.okta.com/oie/en-us/content/topics/ai-agents/ai-agent-add-manually.htm"

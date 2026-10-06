@@ -1,4 +1,8 @@
-import { isProjectSelectableResourceType } from "./types";
+import {
+  isProjectFilteredResourceType,
+  isProjectScopedResourceType,
+  isProjectSelectableResourceType,
+} from "./types";
 import type { PolicyEffect, ResourceType, RoleGrant } from "./types";
 import type { Selector } from "@gram/client/models/components/selector.js";
 
@@ -125,6 +129,12 @@ const DISPOSITION_LABELS_LOWER: Record<string, string> = {
   open_world: "open-world",
 };
 
+function projectResourceNoun(resourceType: ResourceType): string | null {
+  if (resourceType === "skill") return "skills";
+  if (resourceType === "assistant") return "assistants";
+  return null;
+}
+
 /** Short chip label for a rule (e.g. "All servers", "3 tools", "Project: foo"). */
 export function computeRuleLabel(
   selectors: Selector[] | null,
@@ -132,7 +142,7 @@ export function computeRuleLabel(
   projects: ProjectRef[],
 ): string {
   if (selectors === null) {
-    return isProjectSelectableResourceType(resourceType)
+    return isProjectScopedResourceType(resourceType)
       ? "All projects"
       : "All servers";
   }
@@ -164,7 +174,7 @@ export function computeRuleLabel(
     return `${projectSels.length} projects`;
   }
 
-  // Project-selectable resource types (skill, project) store a
+  // Project-selectable resource types (project, skill) store a
   // project id in resourceId, so the remaining selectors name projects rather
   // than servers.
   if (isProjectSelectableResourceType(resourceType)) {
@@ -177,8 +187,11 @@ export function computeRuleLabel(
     return `${selectors.length} projects`;
   }
 
-  if (selectors.length === 1) return "1 server";
-  return `${selectors.length} servers`;
+  const noun = isProjectFilteredResourceType(resourceType)
+    ? resourceType
+    : "server";
+  if (selectors.length === 1) return `1 ${noun}`;
+  return `${selectors.length} ${noun}s`;
 }
 
 /** Plain-English tooltip describing what a rule does. */
@@ -191,12 +204,14 @@ export function computeRuleTooltip(
   const verb = effect === "allow" ? "Permits" : "Excludes";
 
   if (selectors === null) {
-    if (resourceType === "skill") {
-      return `${verb} access to skills in all projects in your org`;
+    const resource = projectResourceNoun(resourceType);
+    if (resource) {
+      return `${verb} access to ${resource} in all projects in your org`;
     }
-    return isProjectSelectableResourceType(resourceType)
-      ? `${verb} access to all projects in your org`
-      : `${verb} access to all servers across your org`;
+    if (resourceType === "project") {
+      return `${verb} access to all projects in your org`;
+    }
+    return `${verb} access to all servers across your org`;
   }
   if (selectors.length === 0) return `${verb} access (none selected)`;
 
@@ -220,37 +235,40 @@ export function computeRuleTooltip(
       const name = projects.find(
         (p) => p.id === projectSels[0]!.projectId!,
       )?.name;
+      const resources = isProjectFilteredResourceType(resourceType)
+        ? `${resourceType}s`
+        : "servers";
       return name
-        ? `${verb} access to all servers in ${name}`
+        ? `${verb} access to all ${resources} in ${name}`
         : `${verb} access to 1 project`;
     }
     return `${verb} access to ${projectSels.length} projects`;
   }
 
-  if (resourceType === "skill") {
-    if (selectors.length === 1) {
-      const name = projects.find(
-        (p) => p.id === selectors[0]!.resourceId,
-      )?.name;
-      return name
-        ? `${verb} access to skills in ${name}`
-        : `${verb} access to skills in 1 project`;
-    }
-    return `${verb} access to skills in ${selectors.length} projects`;
-  }
-
-  // The other project-selectable resource type (project) also stores project
-  // ids in resourceId, so the rule covers projects, not servers.
   if (isProjectSelectableResourceType(resourceType)) {
     if (selectors.length === 1) {
       const name = projects.find(
         (p) => p.id === selectors[0]!.resourceId,
       )?.name;
-      return name ? `${verb} access in ${name}` : `${verb} access to 1 project`;
+      const resource = projectResourceNoun(resourceType);
+      if (!resource) {
+        return name
+          ? `${verb} access in ${name}`
+          : `${verb} access to 1 project`;
+      }
+      return name
+        ? `${verb} access to ${resource} in ${name}`
+        : `${verb} access to ${resource} in 1 project`;
     }
-    return `${verb} access to ${selectors.length} projects`;
+    const resource = projectResourceNoun(resourceType);
+    return resource
+      ? `${verb} access to ${resource} in ${selectors.length} projects`
+      : `${verb} access to ${selectors.length} projects`;
   }
 
-  if (selectors.length === 1) return `${verb} access to 1 server`;
-  return `${verb} access to ${selectors.length} servers`;
+  const noun = isProjectFilteredResourceType(resourceType)
+    ? resourceType
+    : "server";
+  if (selectors.length === 1) return `${verb} access to 1 ${noun}`;
+  return `${verb} access to ${selectors.length} ${noun}s`;
 }

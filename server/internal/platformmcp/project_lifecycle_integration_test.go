@@ -133,7 +133,7 @@ func TestCreateProjectWritesTheDashboardSideRecordsAndIsListed(t *testing.T) {
 	require.Equal(t, plugin.ID.String(), pluginAudit.SubjectID)
 	require.Equal(t, fixture.principal.UserID, pluginAudit.ActorID)
 
-	listed, err := NewPostgresReader(testenv.NewLogger(t), fixture.conn, nil).WithAuthorization(fixture.engine).ListProjects(ctx, fixture.principal, ListProjectsInput{Limit: 100})
+	listed, err := NewPostgresReader(testenv.NewLogger(t), fixture.conn).WithAuthorization(fixture.engine).ListProjects(ctx, fixture.principal, ListProjectsInput{Limit: 100})
 	require.NoError(t, err)
 	require.Contains(t, listed.Projects, Project{ID: output.Project.ID, Name: "Support Team", Slug: "support-team"})
 }

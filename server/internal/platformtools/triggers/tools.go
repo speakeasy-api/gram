@@ -521,7 +521,7 @@ func (t *ConfigureTrigger) upsertTrigger(
 	action := "created"
 
 	actorPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
-	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok {
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeWorkload {
 		actorPrincipal = actor
 	}
 
@@ -638,7 +638,7 @@ func (t *ConfigureTrigger) upsertWake(
 
 	envQueries := environmentsrepo.New(t.db)
 	actorPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
-	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok {
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeWorkload {
 		actorPrincipal = actor
 	}
 

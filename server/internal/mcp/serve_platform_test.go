@@ -299,7 +299,7 @@ func createAssistant(t *testing.T, ti *testInstance, authCtx *contextvalues.Auth
 
 func mintAssistantToken(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, assistantID uuid.UUID) string {
 	t.Helper()
-	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine).Generate(assistanttokens.GenerateInput{
+	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine, nil, nil).Generate(assistanttokens.GenerateInput{
 		OrgID:       authCtx.ActiveOrganizationID,
 		ProjectID:   *authCtx.ProjectID,
 		UserID:      authCtx.UserID,
@@ -332,7 +332,7 @@ func mintThreadAssistantToken(t *testing.T, ti *testInstance, authCtx *contextva
 		SourceRefJson: []byte("{}"),
 	})
 	require.NoError(t, err)
-	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine).Generate(assistanttokens.GenerateInput{
+	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine, nil, nil).Generate(assistanttokens.GenerateInput{
 		OrgID:       authCtx.ActiveOrganizationID,
 		ProjectID:   *authCtx.ProjectID,
 		UserID:      authCtx.UserID,

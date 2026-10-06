@@ -87,7 +87,99 @@ func TestCandidateInspectionReturnsOAuthSetupCategoryAndActions(t *testing.T) {
 	inspection, ok := result.(CandidateInspection)
 	require.True(t, ok)
 	require.Equal(t, SetupCategoryDynamicRegistrationUnsupported, inspection.SetupCategory)
+	require.Equal(t, AutomaticClientRegistrationNone, inspection.AutomaticClientRegistration)
 	require.Equal(t, []RepairAction{{Kind: "continue_registration", Label: "Choose a project and add this MCP server before finishing its sign-in setup"}}, inspection.Actions)
+}
+
+// The inspector must not report manual setup for a provider that offers an
+// automatic client registration path, and must say which path applies.
+func TestCandidateInspectionReportsAutomaticClientRegistrationPath(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		oauthDiscovery string
+		category       SetupCategory
+		registration   string
+	}{
+		{oauthDiscovery: "available_dcr", category: SetupCategoryAuthenticationRequired, registration: AutomaticClientRegistrationDCR},
+		{oauthDiscovery: "available_cimd", category: SetupCategoryAuthenticationRequired, registration: AutomaticClientRegistrationCIMD},
+		{oauthDiscovery: "available", category: SetupCategoryDynamicRegistrationUnsupported, registration: AutomaticClientRegistrationNone},
+	} {
+		t.Run(test.oauthDiscovery, func(t *testing.T) {
+			t.Parallel()
+			registrar := newRegistrar(newTestMCPServer())
+			registerCandidateInspectionTool(registrar, nil, &testDirectRemoteInspector{inspection: DirectRemoteInspection{
+				CanonicalURL:           "https://remote.example.test/mcp",
+				Transport:              "streamable-http",
+				Authentication:         "authentication_required",
+				OAuthDiscovery:         test.oauthDiscovery,
+				Trust:                  "user_supplied_unreviewed",
+				RequiresDashboardSetup: true,
+			}}, &testRegistrationGate{enabled: true}, allowBudget())
+
+			result, err := catalogInspectionDescriptor(t, registrar).Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), json.RawMessage(`{"remote_url":"https://remote.example.test/mcp"}`))
+			require.NoError(t, err)
+			inspection, ok := result.(CandidateInspection)
+			require.True(t, ok)
+			require.Equal(t, test.category, inspection.SetupCategory)
+			require.Equal(t, test.registration, inspection.AutomaticClientRegistration)
+			encoded, err := json.Marshal(inspection)
+			require.NoError(t, err)
+			require.Contains(t, string(encoded), `"automatic_client_registration":"`+test.registration+`"`)
+		})
+	}
+}
+
+// End to end through the real inspector: a protected MCP whose authorization
+// server has no registration_endpoint but supports Client ID Metadata
+// Documents is automatic sign-in setup; one offering neither stays manual.
+func TestCandidateInspectionDirectRemoteClientRegistrationPaths(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		mode           string
+		oauthDiscovery string
+		category       SetupCategory
+		registration   string
+	}{
+		{mode: "auth401", oauthDiscovery: "available_dcr", category: SetupCategoryAuthenticationRequired, registration: AutomaticClientRegistrationDCR},
+		{mode: "auth401-cimd", oauthDiscovery: "available_cimd", category: SetupCategoryAuthenticationRequired, registration: AutomaticClientRegistrationCIMD},
+		{mode: "auth401-manual", oauthDiscovery: "available", category: SetupCategoryDynamicRegistrationUnsupported, registration: AutomaticClientRegistrationNone},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			t.Parallel()
+			inspector, _ := directRemoteProtocolFixture(t, tc.mode)
+			registrar := newRegistrar(newTestMCPServer())
+			registerCandidateInspectionTool(registrar, nil, inspector, &testRegistrationGate{enabled: true}, allowBudget())
+			result, err := catalogInspectionDescriptor(t, registrar).Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), json.RawMessage(`{"remote_url":"https://remote.example.test/mcp"}`))
+			require.NoError(t, err)
+			inspection, ok := result.(CandidateInspection)
+			require.True(t, ok)
+			require.Equal(t, "authentication_required", inspection.Authentication)
+			require.Equal(t, tc.oauthDiscovery, inspection.OAuthDiscovery)
+			require.Equal(t, tc.category, inspection.SetupCategory)
+			require.Equal(t, tc.registration, inspection.AutomaticClientRegistration)
+		})
+	}
+}
+
+func TestCandidateInspectionOmitsAutomaticClientRegistrationForAnonymous(t *testing.T) {
+	t.Parallel()
+
+	registrar := newRegistrar(newTestMCPServer())
+	registerCandidateInspectionTool(registrar, nil, &testDirectRemoteInspector{inspection: DirectRemoteInspection{
+		CanonicalURL:   "https://remote.example.test/mcp",
+		Transport:      "streamable-http",
+		Authentication: "anonymous",
+		OAuthDiscovery: "not_advertised",
+		Trust:          "user_supplied_unreviewed",
+	}}, &testRegistrationGate{enabled: true}, allowBudget())
+
+	result, err := catalogInspectionDescriptor(t, registrar).Invoke(ContextWithPrincipal(t.Context(), registrationServicePrincipal()), json.RawMessage(`{"remote_url":"https://remote.example.test/mcp"}`))
+	require.NoError(t, err)
+	inspection, ok := result.(CandidateInspection)
+	require.True(t, ok)
+	require.Empty(t, inspection.AutomaticClientRegistration)
+	require.Empty(t, inspection.SetupCategory)
 }
 
 func fmtDirectRemoteInspectionError() error {
@@ -132,7 +224,9 @@ func TestCandidateInspectionDirectRemoteProtocols(t *testing.T) {
 			require.Equal(t, "https://remote.example.test/mcp", inspection.CanonicalURL)
 			require.Equal(t, tc.authentication, inspection.Authentication)
 			if tc.authentication == "authentication_required" {
+				require.Equal(t, SetupCategoryAuthenticationRequired, inspection.SetupCategory)
 				require.Equal(t, "available_dcr", inspection.OAuthDiscovery)
+				require.Equal(t, AutomaticClientRegistrationDCR, inspection.AutomaticClientRegistration)
 				require.True(t, inspection.RequiresDashboardSetup)
 			} else {
 				require.Equal(t, []string{"example"}, inspection.ToolNames)

@@ -161,3 +161,22 @@ func clone(u *url.URL) *url.URL {
 	copied := *u
 	return &copied
 }
+
+// IsPlatformHost reports whether host is the server URL's host or a configured
+// extra platform host, and returns its configured base URL if so.
+func (r *Resolver) IsPlatformHost(host string) (baseURL string, ok bool) {
+	canonical, err := requestorigin.CanonicalHost(host)
+	if err != nil {
+		return "", false
+	}
+	if canonical == r.serverHost {
+		if r.cfg.ServerURL == nil {
+			return "", false
+		}
+		return r.cfg.ServerURL.String(), true
+	}
+	if baseURL, ok := r.cfg.PlatformHosts[canonical]; ok {
+		return baseURL, true
+	}
+	return "", false
+}

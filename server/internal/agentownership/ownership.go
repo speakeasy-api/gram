@@ -3,8 +3,9 @@ package agentownership
 import (
 	"context"
 	"fmt"
-	"github.com/jackc/pgx/v5"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/agents/lifecycle"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
