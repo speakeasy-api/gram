@@ -4,6 +4,7 @@ package requests
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -11,6 +12,7 @@ import (
 
 	roledistributionv1 "github.com/speakeasy-api/gram/infra/gen/gram/role_distribution/v1"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 // Request identifies exactly one setup, global fanout, or organization bootstrap.
@@ -75,4 +77,19 @@ func LockOrganization(ctx context.Context, tx pgx.Tx, organizationID string) err
 // the outbox event. Setup reuses plugins and assignments without a completion ledger.
 func ResumeOrganization(ctx context.Context, tx pgx.Tx, organizationID string) error {
 	return Publish(ctx, tx, Request{OrganizationID: "", RoleURN: "", GlobalRoleID: "", BootstrapOrganizationID: organizationID, Cursor: ""})
+}
+
+// PublishFirstProject starts one organization pass when projectID is the
+// organization's only active project. Setup skips projectless organizations,
+// so this is the trigger that distributes roles created before any project.
+// Concurrent first projects may each publish; setup reuses plugins and assignments.
+func PublishFirstProject(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID) error {
+	_, err := projectsrepo.New(tx).LockOtherActiveProject(ctx, projectsrepo.LockOtherActiveProjectParams{OrganizationID: organizationID, ProjectID: projectID})
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("check first organization project: %w", err)
+	}
+	return ResumeOrganization(ctx, tx, organizationID)
 }

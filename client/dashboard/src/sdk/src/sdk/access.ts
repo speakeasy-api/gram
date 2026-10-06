@@ -5,6 +5,7 @@
 import { accessCreateRole } from "../funcs/accessCreateRole.js";
 import { accessDeleteDirectoryRoleMapping } from "../funcs/accessDeleteDirectoryRoleMapping.js";
 import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
+import { accessExplainResourceAccess } from "../funcs/accessExplainResourceAccess.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
 import { accessGetShadowMCPInventoryServer } from "../funcs/accessGetShadowMCPInventoryServer.js";
 import { accessListAIDetections } from "../funcs/accessListAIDetections.js";
@@ -36,6 +37,7 @@ import { accessUpdateShadowMCPInventoryServerName } from "../funcs/accessUpdateS
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AccessMember } from "../models/components/accessmember.js";
 import { DirectoryRoleMapping } from "../models/components/directoryrolemapping.js";
+import { ExplainResourceAccessResult } from "../models/components/explainresourceaccessresult.js";
 import { ListAIDetectionsResult } from "../models/components/listaidetectionsresult.js";
 import { ListAIDetectionUsersResult } from "../models/components/listaidetectionusersresult.js";
 import { ListAudienceOptionsResult } from "../models/components/listaudienceoptionsresult.js";
@@ -69,6 +71,10 @@ import {
   DeleteRoleRequest,
   DeleteRoleSecurity,
 } from "../models/operations/deleterole.js";
+import {
+  ExplainResourceAccessRequest,
+  ExplainResourceAccessSecurity,
+} from "../models/operations/explainresourceaccess.js";
 import {
   GetRoleRequest,
   GetRoleSecurity,
@@ -234,6 +240,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(accessDeleteRole(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * explainResourceAccess access
+   *
+   * @remarks
+   * Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead. Like listIdentityAccess it describes one person's access, so it takes a session only: API keys are not checked against grants and would see any member's rules.
+   */
+  async explainResourceAccess(
+    request: ExplainResourceAccessRequest,
+    security?: ExplainResourceAccessSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ExplainResourceAccessResult> {
+    return unwrapAsync(accessExplainResourceAccess(
       this,
       request,
       security,

@@ -9,7 +9,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/assistants"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -23,10 +22,7 @@ func TestServiceLegacyDeletedAttachments(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
 			svc, ctx, projectID, conn := newRBACServiceWithConn(t, "legacy_deleted_"+kind)
-			ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-				Scope:    authz.ScopeProjectWrite,
-				Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String()),
-			})
+			ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
 			ts, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 				OrganizationID: "org-test", ProjectID: projectID, Name: "Example tools", Slug: "example-tools",
 				McpSlug: pgtype.Text{String: "example-tools-endpoint", Valid: true}, McpEnabled: true,

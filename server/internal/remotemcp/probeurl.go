@@ -289,7 +289,58 @@ func classifyTransportError(ctx context.Context, err error) ProbeResult {
 }
 
 func parseProtectedResourceMetadataURL(headers []string) *string {
+	for _, value := range authParamValues(headers, "resource_metadata") {
+		metadataURL, err := url.Parse(value)
+		if err != nil || !metadataURL.IsAbs() || metadataURL.Host == "" || metadataURL.User != nil ||
+			(!strings.EqualFold(metadataURL.Scheme, "http") && !strings.EqualFold(metadataURL.Scheme, "https")) {
+			continue
+		}
+		return &value
+	}
+	return nil
+}
+
+// parseChallengeScopes returns the space-separated scope auth-param (RFC 6750
+// §3) of the first Bearer or DPoP challenge that carries one; nil when none
+// does. Other schemes own no such param, so theirs is ignored.
+func parseChallengeScopes(headers []string) []string {
+	for _, p := range authParams(headers) {
+		if !strings.EqualFold(p.name, "scope") || (!strings.EqualFold(p.scheme, "Bearer") && !strings.EqualFold(p.scheme, "DPoP")) {
+			continue
+		}
+		if scopes := strings.Fields(p.value); len(scopes) > 0 {
+			return scopes
+		}
+	}
+	return nil
+}
+
+// authParam is one auth-param of a challenge, with the scheme that opened the challenge.
+type authParam struct {
+	scheme string
+	name   string
+	value  string
+}
+
+// authParamValues returns every value of the named auth-param across the
+// challenge header values, in order, regardless of scheme.
+func authParamValues(headers []string, name string) []string {
+	var values []string
+	for _, p := range authParams(headers) {
+		if strings.EqualFold(p.name, name) {
+			values = append(values, p.value)
+		}
+	}
+	return values
+}
+
+// authParams lists every auth-param across the challenge header values, in
+// order, tolerating malformed neighbours. A bare token starts a new challenge
+// and names its scheme.
+func authParams(headers []string) []authParam {
+	var params []authParam
 	for _, header := range headers {
+		scheme := ""
 		for i := 0; i < len(header); {
 			if header[i] == '"' {
 				_, i, _ = parseAuthParamValue(header, i)
@@ -304,11 +355,12 @@ func parseProtectedResourceMetadataURL(headers []string) *string {
 			for i < len(header) && isAuthTokenByte(header[i]) {
 				i++
 			}
-			name := header[start:i]
+			param := header[start:i]
 			for i < len(header) && (header[i] == ' ' || header[i] == '\t') {
 				i++
 			}
 			if i >= len(header) || header[i] != '=' {
+				scheme = param
 				continue
 			}
 			i++
@@ -318,19 +370,13 @@ func parseProtectedResourceMetadataURL(headers []string) *string {
 
 			value, next, ok := parseAuthParamValue(header, i)
 			i = next
-			if !ok || !strings.EqualFold(name, "resource_metadata") {
+			if !ok {
 				continue
 			}
-
-			metadataURL, err := url.Parse(value)
-			if err != nil || !metadataURL.IsAbs() || metadataURL.Host == "" || metadataURL.User != nil ||
-				(!strings.EqualFold(metadataURL.Scheme, "http") && !strings.EqualFold(metadataURL.Scheme, "https")) {
-				continue
-			}
-			return &value
+			params = append(params, authParam{scheme: scheme, name: param, value: value})
 		}
 	}
-	return nil
+	return params
 }
 
 func parseAuthParamValue(header string, start int) (string, int, bool) {
@@ -342,7 +388,16 @@ func parseAuthParamValue(header string, start int) (string, int, bool) {
 		for end < len(header) && header[end] != ',' && header[end] != ' ' && header[end] != '\t' {
 			end++
 		}
-		return header[start:end], end, end > start
+		next := end
+		for next < len(header) && (header[next] == ' ' || header[next] == '\t') {
+			next++
+		}
+		// Whitespace may only terminate a value before a comma or end of header.
+		// Otherwise an invalid unquoted value would be silently truncated.
+		if next < len(header) && header[next] != ',' {
+			return "", next, false
+		}
+		return header[start:end], next, end > start
 	}
 
 	var value strings.Builder

@@ -117,7 +117,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|sync-directory-groups|set-directory-role-mapping|delete-directory-role-mapping|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|sync-directory-groups|set-directory-role-mapping|delete-directory-role-mapping|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
@@ -127,9 +127,9 @@ func UsageCommands() []string {
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
-		"auth (callback|login|switch-scopes|enter-demo|logout|register|info)",
+		"auth (callback|login|switch-scopes|enter-demo|logout|register|info|transfer-out|transfer-in)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
-		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
+		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat-overview|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
 		"data-exports (list-destinations|list-for-org|create-destination|update-destination|delete-destination|list-routes|create-route|update-route|delete-route)",
@@ -406,6 +406,12 @@ func ParseEndpoint(
 		accessListAudienceOptionsFlags            = flag.NewFlagSet("list-audience-options", flag.ExitOnError)
 		accessListAudienceOptionsApikeyTokenFlag  = accessListAudienceOptionsFlags.String("apikey-token", "", "")
 		accessListAudienceOptionsSessionTokenFlag = accessListAudienceOptionsFlags.String("session-token", "", "")
+
+		accessExplainResourceAccessFlags            = flag.NewFlagSet("explain-resource-access", flag.ExitOnError)
+		accessExplainResourceAccessResourceKindFlag = accessExplainResourceAccessFlags.String("resource-kind", "REQUIRED", "")
+		accessExplainResourceAccessResourceIDFlag   = accessExplainResourceAccessFlags.String("resource-id", "REQUIRED", "")
+		accessExplainResourceAccessUserIDFlag       = accessExplainResourceAccessFlags.String("user-id", "REQUIRED", "")
+		accessExplainResourceAccessSessionTokenFlag = accessExplainResourceAccessFlags.String("session-token", "", "")
 
 		accessRequestAccessFlags            = flag.NewFlagSet("request-access", flag.ExitOnError)
 		accessRequestAccessBodyFlag         = accessRequestAccessFlags.String("body", "REQUIRED", "")
@@ -842,6 +848,17 @@ func ParseEndpoint(
 		authInfoFlags            = flag.NewFlagSet("info", flag.ExitOnError)
 		authInfoSessionTokenFlag = authInfoFlags.String("session-token", "", "")
 
+		authTransferOutFlags            = flag.NewFlagSet("transfer-out", flag.ExitOnError)
+		authTransferOutTargetHostFlag   = authTransferOutFlags.String("target-host", "", "")
+		authTransferOutNonceFlag        = authTransferOutFlags.String("nonce", "", "")
+		authTransferOutRedirectFlag     = authTransferOutFlags.String("redirect", "", "")
+		authTransferOutSessionTokenFlag = authTransferOutFlags.String("session-token", "", "")
+
+		authTransferInFlags          = flag.NewFlagSet("transfer-in", flag.ExitOnError)
+		authTransferInSourceHostFlag = authTransferInFlags.String("source-host", "", "")
+		authTransferInCodeFlag       = authTransferInFlags.String("code", "", "")
+		authTransferInRedirectFlag   = authTransferInFlags.String("redirect", "", "")
+
 		businessMemoriesFlags = flag.NewFlagSet("business-memories", flag.ContinueOnError)
 
 		businessMemoriesListBusinessMemoriesFlags                     = flag.NewFlagSet("list-business-memories", flag.ExitOnError)
@@ -897,6 +914,13 @@ func ParseEndpoint(
 		chatGetWorkUnitsTrendToFlag               = chatGetWorkUnitsTrendFlags.String("to", "", "")
 		chatGetWorkUnitsTrendSessionTokenFlag     = chatGetWorkUnitsTrendFlags.String("session-token", "", "")
 		chatGetWorkUnitsTrendProjectSlugInputFlag = chatGetWorkUnitsTrendFlags.String("project-slug-input", "", "")
+
+		chatLoadChatOverviewFlags                 = flag.NewFlagSet("load-chat-overview", flag.ExitOnError)
+		chatLoadChatOverviewIDFlag                = chatLoadChatOverviewFlags.String("id", "REQUIRED", "")
+		chatLoadChatOverviewSessionTokenFlag      = chatLoadChatOverviewFlags.String("session-token", "", "")
+		chatLoadChatOverviewProjectSlugInputFlag  = chatLoadChatOverviewFlags.String("project-slug-input", "", "")
+		chatLoadChatOverviewChatSessionsTokenFlag = chatLoadChatOverviewFlags.String("chat-sessions-token", "", "")
+		chatLoadChatOverviewApikeyTokenFlag       = chatLoadChatOverviewFlags.String("apikey-token", "", "")
 
 		chatLoadChatFlags                 = flag.NewFlagSet("load-chat", flag.ExitOnError)
 		chatLoadChatIDFlag                = chatLoadChatFlags.String("id", "REQUIRED", "")
@@ -4816,6 +4840,7 @@ func ParseEndpoint(
 	accessListResourceAudienceFlags.Usage = accessListResourceAudienceUsage
 	accessSetResourceAudienceFlags.Usage = accessSetResourceAudienceUsage
 	accessListAudienceOptionsFlags.Usage = accessListAudienceOptionsUsage
+	accessExplainResourceAccessFlags.Usage = accessExplainResourceAccessUsage
 	accessRequestAccessFlags.Usage = accessRequestAccessUsage
 	accessListChallengesFlags.Usage = accessListChallengesUsage
 	accessListChallengeBucketsFlags.Usage = accessListChallengeBucketsUsage
@@ -4916,6 +4941,8 @@ func ParseEndpoint(
 	authLogoutFlags.Usage = authLogoutUsage
 	authRegisterFlags.Usage = authRegisterUsage
 	authInfoFlags.Usage = authInfoUsage
+	authTransferOutFlags.Usage = authTransferOutUsage
+	authTransferInFlags.Usage = authTransferInUsage
 
 	businessMemoriesFlags.Usage = businessMemoriesUsage
 	businessMemoriesListBusinessMemoriesFlags.Usage = businessMemoriesListBusinessMemoriesUsage
@@ -4926,6 +4953,7 @@ func ParseEndpoint(
 	chatListChatsFlags.Usage = chatListChatsUsage
 	chatGetAssistantSessionSummaryFlags.Usage = chatGetAssistantSessionSummaryUsage
 	chatGetWorkUnitsTrendFlags.Usage = chatGetWorkUnitsTrendUsage
+	chatLoadChatOverviewFlags.Usage = chatLoadChatOverviewUsage
 	chatLoadChatFlags.Usage = chatLoadChatUsage
 	chatGenerateTitleFlags.Usage = chatGenerateTitleUsage
 	chatCreditUsageFlags.Usage = chatCreditUsageUsage
@@ -6127,6 +6155,9 @@ func ParseEndpoint(
 			case "list-audience-options":
 				epf = accessListAudienceOptionsFlags
 
+			case "explain-resource-access":
+				epf = accessExplainResourceAccessFlags
+
 			case "request-access":
 				epf = accessRequestAccessFlags
 
@@ -6407,6 +6438,12 @@ func ParseEndpoint(
 			case "info":
 				epf = authInfoFlags
 
+			case "transfer-out":
+				epf = authTransferOutFlags
+
+			case "transfer-in":
+				epf = authTransferInFlags
+
 			}
 
 		case "business-memories":
@@ -6432,6 +6469,9 @@ func ParseEndpoint(
 
 			case "get-work-units-trend":
 				epf = chatGetWorkUnitsTrendFlags
+
+			case "load-chat-overview":
+				epf = chatLoadChatOverviewFlags
 
 			case "load-chat":
 				epf = chatLoadChatFlags
@@ -9014,6 +9054,9 @@ func ParseEndpoint(
 			case "list-audience-options":
 				endpoint = c.ListAudienceOptions()
 				data, err = accessc.BuildListAudienceOptionsPayload(*accessListAudienceOptionsApikeyTokenFlag, *accessListAudienceOptionsSessionTokenFlag)
+			case "explain-resource-access":
+				endpoint = c.ExplainResourceAccess()
+				data, err = accessc.BuildExplainResourceAccessPayload(*accessExplainResourceAccessResourceKindFlag, *accessExplainResourceAccessResourceIDFlag, *accessExplainResourceAccessUserIDFlag, *accessExplainResourceAccessSessionTokenFlag)
 			case "request-access":
 				endpoint = c.RequestAccess()
 				data, err = accessc.BuildRequestAccessPayload(*accessRequestAccessBodyFlag, *accessRequestAccessApikeyTokenFlag, *accessRequestAccessSessionTokenFlag)
@@ -9309,6 +9352,12 @@ func ParseEndpoint(
 			case "info":
 				endpoint = c.Info()
 				data, err = authc.BuildInfoPayload(*authInfoSessionTokenFlag)
+			case "transfer-out":
+				endpoint = c.TransferOut()
+				data, err = authc.BuildTransferOutPayload(*authTransferOutTargetHostFlag, *authTransferOutNonceFlag, *authTransferOutRedirectFlag, *authTransferOutSessionTokenFlag)
+			case "transfer-in":
+				endpoint = c.TransferIn()
+				data, err = authc.BuildTransferInPayload(*authTransferInSourceHostFlag, *authTransferInCodeFlag, *authTransferInRedirectFlag)
 			}
 		case "business-memories":
 			c := businessmemoriesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -9335,6 +9384,9 @@ func ParseEndpoint(
 			case "get-work-units-trend":
 				endpoint = c.GetWorkUnitsTrend()
 				data, err = chatc.BuildGetWorkUnitsTrendPayload(*chatGetWorkUnitsTrendFromFlag, *chatGetWorkUnitsTrendToFlag, *chatGetWorkUnitsTrendSessionTokenFlag, *chatGetWorkUnitsTrendProjectSlugInputFlag)
+			case "load-chat-overview":
+				endpoint = c.LoadChatOverview()
+				data, err = chatc.BuildLoadChatOverviewPayload(*chatLoadChatOverviewIDFlag, *chatLoadChatOverviewSessionTokenFlag, *chatLoadChatOverviewProjectSlugInputFlag, *chatLoadChatOverviewChatSessionsTokenFlag, *chatLoadChatOverviewApikeyTokenFlag)
 			case "load-chat":
 				endpoint = c.LoadChat()
 				data, err = chatc.BuildLoadChatPayload(*chatLoadChatIDFlag, *chatLoadChatGenerationFlag, *chatLoadChatLimitFlag, *chatLoadChatBeforeSeqFlag, *chatLoadChatAfterSeqFlag, *chatLoadChatFromStartFlag, *chatLoadChatRiskOnlyFlag, *chatLoadChatQueryFlag, *chatLoadChatSessionTokenFlag, *chatLoadChatProjectSlugInputFlag, *chatLoadChatChatSessionsTokenFlag, *chatLoadChatApikeyTokenFlag)
@@ -12080,6 +12132,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    list-resource-audience: List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.`)
 	fmt.Fprintln(os.Stderr, `    set-resource-audience: Replace the rules that name one resource. Organization-wide rules are left untouched.`)
 	fmt.Fprintln(os.Stderr, `    list-audience-options: List the principals that can be given access: everyone, roles, people, and agents.`)
+	fmt.Fprintln(os.Stderr, `    explain-resource-access: Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead. Like listIdentityAccess it describes one person's access, so it takes a session only: API keys are not checked against grants and would see any member's rules.`)
 	fmt.Fprintln(os.Stderr, `    request-access: Request access to a scope by sending an email notification to organization administrators.`)
 	fmt.Fprintln(os.Stderr, `    list-challenges: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
 	fmt.Fprintln(os.Stderr, `    list-challenge-buckets: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.`)
@@ -12651,6 +12704,30 @@ func accessListAudienceOptionsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-audience-options --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessExplainResourceAccessUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access explain-resource-access", os.Args[0])
+	fmt.Fprint(os.Stderr, " -resource-kind STRING")
+	fmt.Fprint(os.Stderr, " -resource-id STRING")
+	fmt.Fprint(os.Stderr, " -user-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead. Like listIdentityAccess it describes one person's access, so it takes a session only: API keys are not checked against grants and would see any member's rules.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -resource-kind STRING: `)
+	fmt.Fprintln(os.Stderr, `    -resource-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access explain-resource-access --resource-kind \"mcp\" --resource-id \"abc123\" --user-id \"abc123\" --session-token \"abc123\"")
 }
 
 func accessRequestAccessUsage() {
@@ -14470,6 +14547,8 @@ func authUsage() {
 	fmt.Fprintln(os.Stderr, `    logout: Logs out the current user by clearing their session.`)
 	fmt.Fprintln(os.Stderr, `    register: Register a new org for a user with their session information.`)
 	fmt.Fprintln(os.Stderr, `    info: Provides information about the current authentication status.`)
+	fmt.Fprintln(os.Stderr, `    transfer-out: Step 2/3 (authorize) of a cross-domain session transfer, on the source platform host. Reached from Step 1/3, transferIn's start mode on the target host; redirects to Step 3/3, transferIn's callback mode there. Authenticates the session from the session cookie or header, checks that its active organization's default host is the target, and stores a one-time transfer code bound to the browser's nonce. Only an ordinary session whose organization lives on the target host can transfer. On any failure the browser is sent to a login page with a signin_error code instead of an error. See the flow diagram in server/internal/auth/transfer.go.`)
+	fmt.Fprintln(os.Stderr, `    transfer-in: Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s auth COMMAND --help\n", os.Args[0])
@@ -14614,6 +14693,52 @@ func authInfoUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth info --session-token \"abc123\"")
 }
 
+func authTransferOutUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth transfer-out", os.Args[0])
+	fmt.Fprint(os.Stderr, " -target-host STRING")
+	fmt.Fprint(os.Stderr, " -nonce STRING")
+	fmt.Fprint(os.Stderr, " -redirect STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Step 2/3 (authorize) of a cross-domain session transfer, on the source platform host. Reached from Step 1/3, transferIn's start mode on the target host; redirects to Step 3/3, transferIn's callback mode there. Authenticates the session from the session cookie or header, checks that its active organization's default host is the target, and stores a one-time transfer code bound to the browser's nonce. Only an ordinary session whose organization lives on the target host can transfer. On any failure the browser is sent to a login page with a signin_error code instead of an error. See the flow diagram in server/internal/auth/transfer.go.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -target-host STRING: `)
+	fmt.Fprintln(os.Stderr, `    -nonce STRING: `)
+	fmt.Fprintln(os.Stderr, `    -redirect STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth transfer-out --target-host \"abc123\" --nonce \"abc123\" --redirect \"abc123\" --session-token \"abc123\"")
+}
+
+func authTransferInUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth transfer-in", os.Args[0])
+	fmt.Fprint(os.Stderr, " -source-host STRING")
+	fmt.Fprint(os.Stderr, " -code STRING")
+	fmt.Fprint(os.Stderr, " -redirect STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -source-host STRING: `)
+	fmt.Fprintln(os.Stderr, `    -code STRING: `)
+	fmt.Fprintln(os.Stderr, `    -redirect STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth transfer-in --source-host \"abc123\" --code \"abc123\" --redirect \"abc123\"")
+}
+
 // businessMemoriesUsage displays the usage of the business-memories command
 // and its subcommands.
 func businessMemoriesUsage() {
@@ -14705,6 +14830,7 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, `    list-chats: List all chats for a project`)
 	fmt.Fprintln(os.Stderr, `    get-assistant-session-summary: Get assistant session activity totals for a time range.`)
 	fmt.Fprintln(os.Stderr, `    get-work-units-trend: Aggregate work-units analysis results over time for the project: work done and cost/token efficiency per UTC day.`)
+	fmt.Fprintln(os.Stderr, `    load-chat-overview: Load authorized chat overview metadata by exact ID without reading messages or recording a transcript-open audit event.`)
 	fmt.Fprintln(os.Stderr, `    load-chat: Load a chat by its ID. Messages within a generation are paginated by `+"`"+`seq`+"`"+` keyset: omit cursors to receive the newest page, pass `+"`"+`before_seq`+"`"+` to load older messages (scroll up) or `+"`"+`after_seq`+"`"+` to load newer ones (scroll down). Set `+"`"+`from_start`+"`"+` to receive the oldest page (the start of the thread) instead of the newest. Omit `+"`"+`generation`+"`"+` to receive the latest generation. Set `+"`"+`risk_only`+"`"+` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `+"`"+`query`+"`"+` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `+"`"+`risk_only`+"`"+`).`)
 	fmt.Fprintln(os.Stderr, `    generate-title: Read or set a chat's title. Omit `+"`"+`title`+"`"+` to return the current/auto-generated title (titles are generated asynchronously after a completion). Provide `+"`"+`title`+"`"+` to set a manual title that auto-generation will never overwrite; provide an empty `+"`"+`title`+"`"+` to clear the manual title and re-enable auto-generation.`)
 	fmt.Fprintln(os.Stderr, `    credit-usage: Get the total number of chat credits and usage for the current billing period`)
@@ -14823,6 +14949,32 @@ func chatGetWorkUnitsTrendUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat get-work-units-trend --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func chatLoadChatOverviewUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] chat load-chat-overview", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprint(os.Stderr, " -chat-sessions-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Load authorized chat overview metadata by exact ID without reading messages or recording a transcript-open audit event.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+	fmt.Fprintln(os.Stderr, `    -chat-sessions-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat load-chat-overview --id \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func chatLoadChatUsage() {

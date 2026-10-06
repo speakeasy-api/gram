@@ -293,7 +293,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		RAG: ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager,
 		ShadowMCP: shadowMCPClient, MCPRisk: mcpRiskEvaluator, Audit: auditLogger,
 		PlatformExtras: platformExtras, PlatformFeatureChecker: productFeatures.PlatformFeatureCheck,
-		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: challengeManager, CallbackOrigins: callbackOrigins,
+		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: challengeManager, CallbackOrigins: callbackOrigins, PlatformHosts: platformHosts,
 	})
 	if err != nil {
 		return nil, err

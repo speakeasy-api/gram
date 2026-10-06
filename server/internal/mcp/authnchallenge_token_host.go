@@ -30,10 +30,10 @@ const issuerGateReasonIssuerMismatch = "issuer_mismatch"
 //
 // Scope: callers apply this only to tokens accepted on the issuer-scoped
 // audiences. Resource-scoped tokens (ID-JAG, workload) carry the exact
-// resource URL as their audience and are already bound to the host. AIM-399
-// shared-mode issuers pin `iss` to `<host>/oauth/usi/{id}` and bind `aud` to
-// the exact MCP resource URL; their `iss` never names the request host, so
-// they must bypass this check. Skip them here when that issuer kind lands.
+// resource URL as their audience and are already bound to the host. So do the
+// tokens of a shared authorization server, whose `iss` is the issuer's fixed
+// `<host>/oauth/usi/{id}` rather than the request host; checkSharedResourceSession
+// checks those instead.
 //
 // Accepted without a host check:
 //   - requests with no stamped origin (internal callers) and requests that

@@ -19,7 +19,7 @@ func platformSlugsFixture(t *testing.T) (*Service, assistantRecord, assistantRec
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_platform_slugs")
 	ensureAssistantTestOrganization(t, conn)
-	ctx = authztest.WithExactGrants(t, ctx, projectWriteGrant(projectID))
+	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
 
 	managed, err := svc.EnsureManagedAssistant(ctx, &gen.EnsureManagedAssistantPayload{
 		SessionToken:     nil,

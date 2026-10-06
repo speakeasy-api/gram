@@ -15,7 +15,7 @@ import { ResourceAudienceResult } from "../models/components/resourceaudienceres
 import {
   ListResourceAudienceRequest,
   ListResourceAudienceSecurity,
-  ResourceKind,
+  QueryParamResourceKind,
 } from "../models/operations/listresourceaudience.js";
 import { unwrapAsync } from "../types/fp.js";
 export type ResourceAudienceQueryData = ResourceAudienceResult;
@@ -81,7 +81,7 @@ export function buildResourceAudienceQuery(
 
 export function queryKeyResourceAudience(
   parameters: {
-    resourceKind: ResourceKind;
+    resourceKind: QueryParamResourceKind;
     resourceId: string;
     gramKey?: string | undefined;
     gramSession?: string | undefined;

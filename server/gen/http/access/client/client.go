@@ -121,6 +121,10 @@ type Client struct {
 	// listAudienceOptions endpoint.
 	ListAudienceOptionsDoer goahttp.Doer
 
+	// ExplainResourceAccess Doer is the HTTP client used to make requests to the
+	// explainResourceAccess endpoint.
+	ExplainResourceAccessDoer goahttp.Doer
+
 	// RequestAccess Doer is the HTTP client used to make requests to the
 	// requestAccess endpoint.
 	RequestAccessDoer goahttp.Doer
@@ -187,6 +191,7 @@ func NewClient(
 		ListResourceAudienceDoer:                 doer,
 		SetResourceAudienceDoer:                  doer,
 		ListAudienceOptionsDoer:                  doer,
+		ExplainResourceAccessDoer:                doer,
 		RequestAccessDoer:                        doer,
 		ListChallengesDoer:                       doer,
 		ListChallengeBucketsDoer:                 doer,
@@ -819,6 +824,30 @@ func (c *Client) ListAudienceOptions() goa.Endpoint {
 		resp, err := c.ListAudienceOptionsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "listAudienceOptions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ExplainResourceAccess returns an endpoint that makes HTTP requests to the
+// access service explainResourceAccess server.
+func (c *Client) ExplainResourceAccess() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeExplainResourceAccessRequest(c.encoder)
+		decodeResponse = DecodeExplainResourceAccessResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildExplainResourceAccessRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ExplainResourceAccessDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "explainResourceAccess", err)
 		}
 		return decodeResponse(resp)
 	}

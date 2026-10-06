@@ -17,7 +17,7 @@ import { useState, type JSX } from "react";
 import {
   MAX_FILTER_VALUES,
   type FilterOperator,
-  type WindowPreset,
+  type ExploreSpec,
 } from "./exploreModel";
 import {
   DIMENSION_VALUES_LIMIT,
@@ -35,14 +35,15 @@ import {
 export function FilterValuePicker({
   dataset,
   dimension,
-  window,
+  span,
   operator,
   values,
   onChange,
 }: {
   dataset: string;
   dimension: string;
-  window: WindowPreset;
+  /** What the builder asks over: its window, or the range replacing it. */
+  span: Pick<ExploreSpec, "window" | "range">;
   operator: FilterOperator;
   values: string[];
   onChange: (values: string[]) => void;
@@ -50,7 +51,7 @@ export function FilterValuePicker({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const single = operator === "equals";
-  const listed = useDimensionValues(dataset, dimension, window, open);
+  const listed = useDimensionValues(dataset, dimension, span, open);
 
   const all = listed.data?.values ?? [];
   const needle = search.trim().toLowerCase();
