@@ -2172,9 +2172,9 @@ type DashboardPlacementResponseBody struct {
 
 // PlacementInputRequestBody is used to define fields on request body types.
 type PlacementInputRequestBody struct {
-	// The existing placement, when the card is already on the dashboard
-	ID       *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	WidgetID string  `form:"widget_id" json:"widget_id" xml:"widget_id"`
+	// The placement being moved or resized
+	ID       string `form:"id" json:"id" xml:"id"`
+	WidgetID string `form:"widget_id" json:"widget_id" xml:"widget_id"`
 	// Column the card starts at, on a 12-column grid
 	X int `form:"x" json:"x" xml:"x"`
 	// Row the card starts at
@@ -6975,9 +6975,7 @@ func ValidateDashboardPlacementResponseBody(body *DashboardPlacementResponseBody
 // ValidatePlacementInputRequestBody runs the validations defined on
 // PlacementInputRequestBody
 func ValidatePlacementInputRequestBody(body *PlacementInputRequestBody) (err error) {
-	if body.ID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 	err = goa.MergeErrors(err, goa.ValidateFormat("body.widget_id", body.WidgetID, goa.FormatUUID))
 	if body.X < 0 {
 		err = goa.MergeErrors(err, goa.InvalidRangeError("body.x", body.X, 0, true))

@@ -2174,7 +2174,7 @@ type DashboardPlacementResponseBody struct {
 
 // PlacementInputRequestBody is used to define fields on request body types.
 type PlacementInputRequestBody struct {
-	// The existing placement, when the card is already on the dashboard
+	// The placement being moved or resized
 	ID       *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	WidgetID *string `form:"widget_id,omitempty" json:"widget_id,omitempty" xml:"widget_id,omitempty"`
 	// Column the card starts at, on a 12-column grid
@@ -4211,6 +4211,9 @@ func ValidateDuplicateDashboardRequestBody(body *DuplicateDashboardRequestBody) 
 // ValidatePlacementInputRequestBody runs the validations defined on
 // PlacementInputRequestBody
 func ValidatePlacementInputRequestBody(body *PlacementInputRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
 	if body.WidgetID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("widget_id", "body"))
 	}

@@ -53,8 +53,8 @@ var ListDashboardsResult = Type("ListDashboardsResult", func() {
 })
 
 var PlacementInput = Type("PlacementInput", func() {
-	Description("A card's place in a layout being saved. With an id it moves or resizes the existing card; without one it adds the widget as a new card.")
-	Attribute("id", String, "The existing placement, when the card is already on the dashboard", func() { Format(FormatUUID) })
+	Description("Where a card sits in a layout being saved. It names an existing placement, which is moved or resized; a new card is added with addWidget.")
+	Attribute("id", String, "The placement being moved or resized", func() { Format(FormatUUID) })
 	Attribute("widget_id", String, func() { Format(FormatUUID) })
 	Attribute("x", Int, "Column the card starts at, on a 12-column grid", func() {
 		Minimum(0)
@@ -72,7 +72,7 @@ var PlacementInput = Type("PlacementInput", func() {
 		Minimum(1)
 		Maximum(10000)
 	})
-	Required("widget_id", "x", "y", "w", "h")
+	Required("id", "widget_id", "x", "y", "w", "h")
 })
 
 func dashboardForm() {
@@ -176,7 +176,7 @@ var _ = Service("dashboards", func() {
 	})
 
 	Method("saveDashboardLayout", func() {
-		Description("Replace a dashboard's layout with the given cards. A card with an id moves or resizes the existing placement, one without an id is added, and any placement not listed is removed. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.")
+		Description("Move and resize a dashboard's cards. Each card names an existing placement and where it now sits; any placement not listed is removed, and a new card is added with addWidget. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.")
 		Payload(func() {
 			dashboardID("The dashboard to lay out")
 			Attribute("placements", ArrayOf(PlacementInput), "Every card and where it sits; a dashboard holds at most 100", func() { MaxLength(100) })

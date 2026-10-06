@@ -15456,7 +15456,7 @@ func dashboardsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-dashboard: Get one dashboard by id, with its cards and saved filters.`)
 	fmt.Fprintln(os.Stderr, `    create-dashboard: Make an empty dashboard. Any member of the project can.`)
 	fmt.Fprintln(os.Stderr, `    update-dashboard: Rename a dashboard or change its description. Its creator can; editing someone else's needs project write access.`)
-	fmt.Fprintln(os.Stderr, `    save-dashboard-layout: Replace a dashboard's layout with the given cards. A card with an id moves or resizes the existing placement, one without an id is added, and any placement not listed is removed. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.`)
+	fmt.Fprintln(os.Stderr, `    save-dashboard-layout: Move and resize a dashboard's cards. Each card names an existing placement and where it now sits; any placement not listed is removed, and a new card is added with addWidget. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.`)
 	fmt.Fprintln(os.Stderr, `    add-dashboard-widget: Place a saved widget on a dashboard, as a new card at the bottom, sized for its chart type.`)
 	fmt.Fprintln(os.Stderr, `    remove-dashboard-widget: Take a card off a dashboard. The widget itself stays saved.`)
 	fmt.Fprintln(os.Stderr, `    save-dashboard-filters: Store the date range and filter values a dashboard opens on, for everyone. Until saved, changes in the filter bar are the viewer's own.`)
@@ -15562,7 +15562,7 @@ func dashboardsSaveDashboardLayoutUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Replace a dashboard's layout with the given cards. A card with an id moves or resizes the existing placement, one without an id is added, and any placement not listed is removed. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.`)
+	fmt.Fprintln(os.Stderr, `Move and resize a dashboard's cards. Each card names an existing placement and where it now sits; any placement not listed is removed, and a new card is added with addWidget. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

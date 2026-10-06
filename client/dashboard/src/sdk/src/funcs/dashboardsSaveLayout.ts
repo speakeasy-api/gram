@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * saveDashboardLayout dashboards
  *
  * @remarks
- * Replace a dashboard's layout with the given cards. A card with an id moves or resizes the existing placement, one without an id is added, and any placement not listed is removed. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.
+ * Move and resize a dashboard's cards. Each card names an existing placement and where it now sits; any placement not listed is removed, and a new card is added with addWidget. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.
  */
 export function dashboardsSaveLayout(
   client: GramCore,

@@ -6,7 +6,7 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 /**
- * A card's place in a layout being saved. With an id it moves or resizes the existing card; without one it adds the widget as a new card.
+ * Where a card sits in a layout being saved. It names an existing placement, which is moved or resized; a new card is added with addWidget.
  */
 export type PlacementInput = {
   /**
@@ -14,9 +14,9 @@ export type PlacementInput = {
    */
   h: number;
   /**
-   * The existing placement, when the card is already on the dashboard
+   * The placement being moved or resized
    */
-  id?: string | undefined;
+  id: string;
   /**
    * Width in columns; each chart type also has a minimum, so x + w stays within 12
    */
@@ -35,7 +35,7 @@ export type PlacementInput = {
 /** @internal */
 export type PlacementInput$Outbound = {
   h: number;
-  id?: string | undefined;
+  id: string;
   w: number;
   widget_id: string;
   x: number;
@@ -49,7 +49,7 @@ export const PlacementInput$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     h: z.int(),
-    id: z.optional(z.string()),
+    id: z.string(),
     w: z.int(),
     widgetId: z.string(),
     x: z.int(),

@@ -2319,7 +2319,7 @@ func marshalDashboardsDashboardPlacementToDashboardPlacementResponseBody(v *dash
 // *PlacementInputRequestBody.
 func unmarshalPlacementInputRequestBodyToDashboardsPlacementInput(v *PlacementInputRequestBody) *dashboards.PlacementInput {
 	res := &dashboards.PlacementInput{
-		ID:       v.ID,
+		ID:       *v.ID,
 		WidgetID: *v.WidgetID,
 		X:        *v.X,
 		Y:        *v.Y,

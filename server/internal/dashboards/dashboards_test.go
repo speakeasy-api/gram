@@ -1,6 +1,7 @@
 package dashboards_test
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strings"
@@ -46,8 +47,36 @@ func getPayload(id string) *gen.GetDashboardPayload {
 	return &gen.GetDashboardPayload{ID: id, SessionToken: nil, ProjectSlugInput: nil}
 }
 
+// addCard places a widget on a dashboard through the service, as the page
+// does, and returns the new card: the one for that widget that was not
+// there before, since the same widget may be placed more than once.
+func addCard(t *testing.T, ctx context.Context, ti *testInstance, dashboardID string, widgetID uuid.UUID) *gen.DashboardPlacement {
+	t.Helper()
+	before, err := ti.service.GetDashboard(ctx, getPayload(dashboardID))
+	require.NoError(t, err)
+	had := make(map[string]bool, len(before.Widgets))
+	for _, card := range before.Widgets {
+		had[card.ID] = true
+	}
+	after, err := ti.service.AddDashboardWidget(ctx, &gen.AddDashboardWidgetPayload{ID: dashboardID, WidgetID: widgetID.String(), SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	for _, card := range after.Widgets {
+		if card.WidgetID == widgetID.String() && !had[card.ID] {
+			return card
+		}
+	}
+	t.Fatalf("no new card for widget %s", widgetID)
+	return nil
+}
+
+// placement is where a layout puts a card. A nil id makes the id-less card
+// the API no longer takes.
 func placement(id *string, widgetID string, x, y, w, h int) *gen.PlacementInput {
-	return &gen.PlacementInput{ID: id, WidgetID: widgetID, X: x, Y: y, W: w, H: h}
+	card := &gen.PlacementInput{ID: "", WidgetID: widgetID, X: x, Y: y, W: w, H: h}
+	if id != nil {
+		card.ID = *id
+	}
+	return card
 }
 
 func layoutPayload(id string, placements ...*gen.PlacementInput) *gen.SaveDashboardLayoutPayload {
@@ -223,25 +252,27 @@ func TestUpdateDashboard(t *testing.T) {
 func TestSaveDashboardLayout(t *testing.T) {
 	t.Parallel()
 
-	t.Run("it adds, moves and removes cards, keeping each card's id across saves", func(t *testing.T) {
+	t.Run("it moves and removes cards, keeping each card's id across saves", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)
 		dashboard, err := ti.service.CreateDashboard(ctx, createPayload("layout"))
 		require.NoError(t, err)
 		tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
 		chart := insertWidget(t, ti, "Sessions by user", barQuery, barChart)
+		tileCard := addCard(t, ctx, ti, dashboard.ID, tile.ID)
+		chartCard := addCard(t, ctx, ti, dashboard.ID, chart.ID)
 
 		laid, err := ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID,
-			placement(nil, tile.ID.String(), 0, 0, 3, 2),
-			placement(nil, chart.ID.String(), 3, 0, 9, 3),
+			placement(&tileCard.ID, tile.ID.String(), 0, 0, 3, 2),
+			placement(&chartCard.ID, chart.ID.String(), 3, 0, 9, 3),
 		))
 		require.NoError(t, err)
 		require.Len(t, laid.Widgets, 2)
-		tileCard, chartCard := laid.Widgets[0], laid.Widgets[1]
-		require.Equal(t, tile.ID.String(), tileCard.WidgetID)
-		require.Equal(t, 9, chartCard.W)
+		require.Equal(t, tileCard.ID, laid.Widgets[0].ID, "a moved card keeps its id")
+		require.Equal(t, chartCard.ID, laid.Widgets[1].ID)
+		require.Equal(t, 9, laid.Widgets[1].W)
 
-		// Moving keeps the ids; leaving the chart out removes it.
+		// Leaving the chart out removes it.
 		moved, err := ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID,
 			placement(&tileCard.ID, tile.ID.String(), 6, 4, 4, 2),
 		))
@@ -252,9 +283,11 @@ func TestSaveDashboardLayout(t *testing.T) {
 		require.Equal(t, 4, moved.Widgets[0].Y)
 
 		// The same widget may be on the dashboard twice.
+		again := addCard(t, ctx, ti, dashboard.ID, tile.ID)
+		require.NotEqual(t, tileCard.ID, again.ID)
 		twice, err := ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID,
 			placement(&tileCard.ID, tile.ID.String(), 0, 0, 3, 2),
-			placement(nil, tile.ID.String(), 3, 0, 3, 2),
+			placement(&again.ID, tile.ID.String(), 3, 0, 3, 2),
 		))
 		require.NoError(t, err)
 		require.Len(t, twice.Widgets, 2)
@@ -264,42 +297,43 @@ func TestSaveDashboardLayout(t *testing.T) {
 		require.NotEmpty(t, record.BeforeSnapshot)
 	})
 
-	t.Run("it refuses a card that is too small, runs past the grid, or points nowhere", func(t *testing.T) {
+	t.Run("it refuses a card that is too small, runs past the grid, or has no id", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)
 		dashboard, err := ti.service.CreateDashboard(ctx, createPayload("layout"))
 		require.NoError(t, err)
 		tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
 		chart := insertWidget(t, ti, "Sessions by user", barQuery, barChart)
+		tileCard := addCard(t, ctx, ti, dashboard.ID, tile.ID)
+		chartCard := addCard(t, ctx, ti, dashboard.ID, chart.ID)
+		tileAt := func(x, y, w, h int) *gen.PlacementInput { return placement(&tileCard.ID, tile.ID.String(), x, y, w, h) }
+		chartAt := func(x, y, w, h int) *gen.PlacementInput {
+			return placement(&chartCard.ID, chart.ID.String(), x, y, w, h)
+		}
 
-		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(nil, chart.ID.String(), 0, 0, 3, 3)))
+		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, chartAt(0, 0, 3, 3)))
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "placements[0]: a bar card is at least 4 columns by 3 rows")
 
-		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(nil, tile.ID.String(), 0, 0, 2, 1)))
+		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, tileAt(0, 0, 2, 1)))
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "a number card is at least 2 columns by 2 rows")
 
-		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(nil, tile.ID.String(), 10, 0, 3, 2)))
+		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, tileAt(10, 0, 3, 2)))
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "past the grid's 12 columns")
 
-		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(nil, uuid.NewString(), 0, 0, 3, 2)))
+		// A card without an id is not one to add: adding is addWidget's job,
+		// so a caller never has to match new ids back to the cards it sent.
+		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(nil, tile.ID.String(), 0, 0, 3, 2)))
 		requireOopsCode(t, err, oops.CodeBadRequest)
-		require.ErrorContains(t, err, "is not in this project")
-
-		// A card the dashboard does not have is left out, not refused: it
-		// went while the layout was being made (see the stale-layout test).
-		unknown := uuid.NewString()
-		without, err := ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(&unknown, tile.ID.String(), 0, 0, 3, 2)))
-		require.NoError(t, err)
-		require.Empty(t, without.Widgets)
+		require.ErrorContains(t, err, "placements[0]: a card needs its id; add a widget with addWidget")
 
 		// A position that would wrap an addition is refused, not narrowed.
-		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(nil, tile.ID.String(), math.MaxInt-1, 0, 3, 2)))
+		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, tileAt(math.MaxInt-1, 0, 3, 2)))
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "past the grid's 12 columns")
-		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(nil, tile.ID.String(), 0, math.MaxInt-1, 3, 2)))
+		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, tileAt(0, math.MaxInt-1, 3, 2)))
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "sits past row 10000")
 
@@ -308,21 +342,29 @@ func TestSaveDashboardLayout(t *testing.T) {
 		require.ErrorContains(t, err, "placements[0]: a placement is required")
 
 		// Cards cannot sit on top of each other, and there are only so many.
-		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(nil, tile.ID.String(), 0, 0, 3, 2), placement(nil, tile.ID.String(), 2, 1, 3, 2)))
+		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, tileAt(0, 0, 3, 2), chartAt(2, 1, 6, 3)))
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "placements[1] overlaps placements[0]")
 		many := make([]*gen.PlacementInput, 0, 101)
 		for i := range 101 {
-			many = append(many, placement(nil, tile.ID.String(), 0, i*2, 3, 2))
+			many = append(many, tileAt(0, i*2, 3, 2))
 		}
 		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, many...))
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "a dashboard holds at most 100 cards")
 
-		// A refused layout changes nothing.
+		// A refused layout changes nothing: the cards sit where addWidget
+		// put them.
 		got, err := ti.service.GetDashboard(ctx, getPayload(dashboard.ID))
 		require.NoError(t, err)
-		require.Empty(t, got.Widgets)
+		require.Equal(t, []*gen.DashboardPlacement{tileCard, chartCard}, got.Widgets)
+
+		// A card the dashboard does not have is left out, not refused: it
+		// went while the layout was being made (see the stale-layout test).
+		unknown := uuid.NewString()
+		without, err := ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(&unknown, tile.ID.String(), 0, 0, 3, 2)))
+		require.NoError(t, err)
+		require.Empty(t, without.Widgets)
 	})
 
 	t.Run("a card keeps its widget: pointing it at another is refused", func(t *testing.T) {
@@ -332,10 +374,9 @@ func TestSaveDashboardLayout(t *testing.T) {
 		require.NoError(t, err)
 		tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
 		other := insertWidget(t, ti, "Other", numberQuery, numberChart)
-		laid, err := ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(nil, tile.ID.String(), 0, 0, 3, 2)))
-		require.NoError(t, err)
+		card := addCard(t, ctx, ti, dashboard.ID, tile.ID)
 
-		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(&laid.Widgets[0].ID, other.ID.String(), 0, 0, 3, 2)))
+		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(&card.ID, other.ID.String(), 0, 0, 3, 2)))
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "shows another widget")
 	})
@@ -359,23 +400,16 @@ func TestSaveDashboardLayoutIgnoresCardsThatWent(t *testing.T) {
 	tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
 	chart := insertWidget(t, ti, "Sessions by user", barQuery, barChart)
 	other := insertWidget(t, ti, "Sessions by surface", barQuery, barChart)
+	tileCard := addCard(t, ctx, ti, dashboard.ID, tile.ID)
+	chartCard := addCard(t, ctx, ti, dashboard.ID, chart.ID)
+	otherCard := addCard(t, ctx, ti, dashboard.ID, other.ID)
 
 	laid, err := ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID,
-		placement(nil, tile.ID.String(), 0, 0, 3, 2),
-		placement(nil, chart.ID.String(), 0, 2, 6, 3),
-		placement(nil, other.ID.String(), 6, 2, 6, 3)))
+		placement(&tileCard.ID, tile.ID.String(), 0, 0, 3, 2),
+		placement(&chartCard.ID, chart.ID.String(), 0, 2, 6, 3),
+		placement(&otherCard.ID, other.ID.String(), 6, 2, 6, 3)))
 	require.NoError(t, err)
 	require.Len(t, laid.Widgets, 3)
-	cardOf := func(widgetID uuid.UUID) *gen.DashboardPlacement {
-		for _, card := range laid.Widgets {
-			if card.WidgetID == widgetID.String() {
-				return card
-			}
-		}
-		t.Fatalf("no card for widget %s", widgetID)
-		return nil
-	}
-	tileCard, chartCard, otherCard := cardOf(tile.ID), cardOf(chart.ID), cardOf(other.ID)
 
 	// Meanwhile someone took the chart off, and the tile's widget was deleted.
 	_, err = ti.service.RemoveDashboardWidget(ctx, &gen.RemoveDashboardWidgetPayload{ID: dashboard.ID, PlacementID: chartCard.ID, SessionToken: nil, ProjectSlugInput: nil})
@@ -404,9 +438,10 @@ func TestAddDashboardWidgetNeedsRoom(t *testing.T) {
 	dashboard, err := ti.service.CreateDashboard(ctx, createPayload("full"))
 	require.NoError(t, err)
 	tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+	card := addCard(t, ctx, ti, dashboard.ID, tile.ID)
 
 	// A card ending on the last row leaves nothing below it to append to.
-	_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(nil, tile.ID.String(), 0, 9998, 2, 2)))
+	_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(&card.ID, tile.ID.String(), 0, 9998, 2, 2)))
 	require.NoError(t, err)
 	_, err = ti.service.AddDashboardWidget(ctx, &gen.AddDashboardWidgetPayload{ID: dashboard.ID, WidgetID: tile.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeBadRequest)
@@ -570,10 +605,13 @@ func TestDuplicateDashboard(t *testing.T) {
 		tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
 		chart := insertWidget(t, ti, "Sessions by user", barQuery, barChart)
 		// The tile twice, so one widget copy serves two cards.
+		first := addCard(t, ctx, ti, source.ID, tile.ID)
+		second := addCard(t, ctx, ti, source.ID, tile.ID)
+		chartCard := addCard(t, ctx, ti, source.ID, chart.ID)
 		laid, err := ti.service.SaveDashboardLayout(ctx, layoutPayload(source.ID,
-			placement(nil, tile.ID.String(), 0, 0, 3, 2),
-			placement(nil, tile.ID.String(), 3, 0, 3, 2),
-			placement(nil, chart.ID.String(), 0, 2, 12, 3),
+			placement(&first.ID, tile.ID.String(), 0, 0, 3, 2),
+			placement(&second.ID, tile.ID.String(), 3, 0, 3, 2),
+			placement(&chartCard.ID, chart.ID.String(), 0, 2, 12, 3),
 		))
 		require.NoError(t, err)
 		preset := "30d"

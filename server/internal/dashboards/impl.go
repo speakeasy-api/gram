@@ -250,9 +250,11 @@ func (s *Service) UpdateDashboard(ctx context.Context, payload *gen.UpdateDashbo
 	})
 }
 
-// SaveDashboardLayout replaces a dashboard's layout: a card with an id is
-// moved or resized, one without is added, and any placement not listed is
-// removed. Layout autosaves from the grid, so the last save wins.
+// SaveDashboardLayout moves and resizes a dashboard's cards: each names an
+// existing placement and where it now sits, and any placement not listed is
+// removed. Adding a card is AddDashboardWidget's job, so a caller never has
+// to match new ids in the response back to the cards it sent. Layout
+// autosaves from the grid, so the last save wins.
 func (s *Service) SaveDashboardLayout(ctx context.Context, payload *gen.SaveDashboardLayoutPayload) (*gen.Dashboard, error) {
 	if len(payload.Placements) > maxCards {
 		return nil, oops.E(oops.CodeBadRequest, nil, "a dashboard holds at most %d cards", maxCards)
@@ -273,8 +275,7 @@ func (s *Service) SaveDashboardLayout(ctx context.Context, payload *gen.SaveDash
 		// refuse a widget of another project.
 		type card struct {
 			placed
-			widgetID    uuid.UUID
-			placementID *uuid.UUID
+			placementID uuid.UUID
 		}
 		cards := make([]card, 0, len(payload.Placements))
 		widgetsByID := make(map[uuid.UUID]repo.Widget)
@@ -283,28 +284,27 @@ func (s *Service) SaveDashboardLayout(ctx context.Context, payload *gen.SaveDash
 			if input == nil {
 				return repo.Dashboard{}, oops.E(oops.CodeBadRequest, nil, "%s: a placement is required", position)
 			}
+			if input.ID == "" {
+				return repo.Dashboard{}, oops.E(oops.CodeBadRequest, nil, "%s: a card needs its id; add a widget with addWidget", position)
+			}
+			id, err := uuid.Parse(input.ID)
+			if err != nil {
+				return repo.Dashboard{}, oops.E(oops.CodeBadRequest, err, "%s: invalid placement id", position)
+			}
 			widgetID, err := uuid.Parse(input.WidgetID)
 			if err != nil {
 				return repo.Dashboard{}, oops.E(oops.CodeBadRequest, err, "%s: invalid widget id", position)
 			}
-			var placementID *uuid.UUID
-			if input.ID != nil {
-				id, err := uuid.Parse(*input.ID)
-				if err != nil {
-					return repo.Dashboard{}, oops.E(oops.CodeBadRequest, err, "%s: invalid placement id", position)
-				}
-				current, ok := byID[id]
-				if !ok {
-					// The card went while this layout was being made: someone
-					// took it off, or its widget was deleted. There is nothing
-					// to move, and it is not kept; the rest of the layout
-					// still lands rather than failing until a reload.
-					continue
-				}
-				if current.WidgetID != widgetID {
-					return repo.Dashboard{}, oops.E(oops.CodeBadRequest, nil, "%s: card %s shows another widget; remove it and add the new one", position, id)
-				}
-				placementID = &id
+			current, ok := byID[id]
+			if !ok {
+				// The card went while this layout was being made: someone
+				// took it off, or its widget was deleted. There is nothing
+				// to move, and it is not kept; the rest of the layout still
+				// lands rather than failing until a reload.
+				continue
+			}
+			if current.WidgetID != widgetID {
+				return repo.Dashboard{}, oops.E(oops.CodeBadRequest, nil, "%s: card %s shows another widget; remove it and add the new one", position, id)
 			}
 			widget, ok := widgetsByID[widgetID]
 			if !ok {
@@ -321,7 +321,7 @@ func (s *Service) SaveDashboardLayout(ctx context.Context, payload *gen.SaveDash
 			if reason := checkPlacement(position, input, chartTypeOf(widget.Visualization)); reason != "" {
 				return repo.Dashboard{}, oops.E(oops.CodeBadRequest, nil, "%s", reason)
 			}
-			cards = append(cards, card{placed: placed{position: position, input: input}, widgetID: widgetID, placementID: placementID})
+			cards = append(cards, card{placed: placed{position: position, input: input}, placementID: id})
 		}
 		laid := make([]placed, len(cards))
 		for i, c := range cards {
@@ -333,21 +333,13 @@ func (s *Service) SaveDashboardLayout(ctx context.Context, payload *gen.SaveDash
 
 		keep := make([]uuid.UUID, 0, len(cards))
 		for _, c := range cards {
-			if c.placementID == nil {
-				row, err := queries.InsertPlacement(ctx, placementParams(authCtx, dashboard.ID, c.widgetID, c.input))
-				if err != nil {
-					return repo.Dashboard{}, fmt.Errorf("add dashboard card: %w", err)
-				}
-				keep = append(keep, row.ID)
-				continue
-			}
 			if _, err := queries.MovePlacement(ctx, repo.MovePlacementParams{
 				X: int32(c.input.X), Y: int32(c.input.Y), W: int32(c.input.W), H: int32(c.input.H), //nolint:gosec // bounded by checkPlacement
-				ProjectID: *authCtx.ProjectID, DashboardID: dashboard.ID, ID: *c.placementID,
+				ProjectID: *authCtx.ProjectID, DashboardID: dashboard.ID, ID: c.placementID,
 			}); err != nil {
 				return repo.Dashboard{}, fmt.Errorf("move dashboard card: %w", err)
 			}
-			keep = append(keep, *c.placementID)
+			keep = append(keep, c.placementID)
 		}
 
 		if err := queries.DeletePlacementsNotIn(ctx, repo.DeletePlacementsNotInParams{ProjectID: *authCtx.ProjectID, DashboardID: dashboard.ID, Keep: keep}); err != nil {
@@ -697,19 +689,6 @@ func (s *Service) auditBase(authCtx *contextvalues.AuthContext, row repo.Dashboa
 		ActorDisplayName: authCtx.Email,
 		DashboardURN:     urn.NewDashboard(row.ID),
 		Name:             row.Name,
-	}
-}
-
-func placementParams(authCtx *contextvalues.AuthContext, dashboardID, widgetID uuid.UUID, input *gen.PlacementInput) repo.InsertPlacementParams {
-	return repo.InsertPlacementParams{
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-		DashboardID:    dashboardID,
-		WidgetID:       widgetID,
-		X:              int32(input.X), //nolint:gosec // bounded by checkPlacement
-		Y:              int32(input.Y), //nolint:gosec // bounded by checkPlacement
-		W:              int32(input.W), //nolint:gosec // bounded by checkPlacement
-		H:              int32(input.H), //nolint:gosec // bounded by checkPlacement
 	}
 }
 

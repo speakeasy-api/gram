@@ -27,10 +27,10 @@ type Service interface {
 	// Rename a dashboard or change its description. Its creator can; editing
 	// someone else's needs project write access.
 	UpdateDashboard(context.Context, *UpdateDashboardPayload) (res *Dashboard, err error)
-	// Replace a dashboard's layout with the given cards. A card with an id moves
-	// or resizes the existing placement, one without an id is added, and any
-	// placement not listed is removed. The grid is 12 columns wide, and each chart
-	// type has a minimum size. Layout autosaves, so the last save wins.
+	// Move and resize a dashboard's cards. Each card names an existing placement
+	// and where it now sits; any placement not listed is removed, and a new card
+	// is added with addWidget. The grid is 12 columns wide, and each chart type
+	// has a minimum size. Layout autosaves, so the last save wins.
 	SaveDashboardLayout(context.Context, *SaveDashboardLayoutPayload) (res *Dashboard, err error)
 	// Place a saved widget on a dashboard, as a new card at the bottom, sized for
 	// its chart type.
@@ -194,11 +194,11 @@ type ListDashboardsResult struct {
 	Dashboards []*Dashboard
 }
 
-// A card's place in a layout being saved. With an id it moves or resizes the
-// existing card; without one it adds the widget as a new card.
+// Where a card sits in a layout being saved. It names an existing placement,
+// which is moved or resized; a new card is added with addWidget.
 type PlacementInput struct {
-	// The existing placement, when the card is already on the dashboard
-	ID       *string
+	// The placement being moved or resized
+	ID       string
 	WidgetID string
 	// Column the card starts at, on a 12-column grid
 	X int

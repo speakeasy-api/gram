@@ -23668,7 +23668,7 @@ paths:
                 name: SaveDashboardFilters
     /rpc/dashboards.saveLayout:
         post:
-            description: Replace a dashboard's layout with the given cards. A card with an id moves or resizes the existing placement, one without an id is added, and any placement not listed is removed. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.
+            description: Move and resize a dashboard's cards. Each card names an existing placement and where it now sits; any placement not listed is removed, and a new card is added with addWidget. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.
             operationId: saveDashboardLayout
             parameters:
                 - allowEmptyValue: true
@@ -102020,7 +102020,7 @@ components:
                     maximum: 10000
                 id:
                     type: string
-                    description: The existing placement, when the card is already on the dashboard
+                    description: The placement being moved or resized
                     format: uuid
                 w:
                     type: integer
@@ -102043,8 +102043,9 @@ components:
                     format: int64
                     minimum: 0
                     maximum: 9999
-            description: A card's place in a layout being saved. With an id it moves or resizes the existing card; without one it adds the widget as a new card.
+            description: Where a card sits in a layout being saved. It names an existing placement, which is moved or resized; a new card is added with addWidget.
             required:
+                - id
                 - widget_id
                 - x
                 - "y"
