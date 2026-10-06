@@ -45,6 +45,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -183,8 +184,9 @@ const remoteSessionLastUsedCutoff = 5 * time.Minute
 // deadline, decryption failed. The empty string is the "no token"
 // signal; the caller decides whether absence is a challenge or a no-op.
 //
-// Returns a non-nil error only for unexpected failures (database
-// errors). "No token available" is not an error, whatever its cause.
+// Returns errors for unexpected failures and ErrInvalidAuthorizationRequest
+// for principal credentials, which must use the tenant-scoped resolver.
+// "No token available" otherwise returns an empty string, not an error.
 //
 // The (subject, remote_session_client_id) pair is uniqueness-enforced
 // by a partial index — at most one active row exists per binding, so
@@ -217,6 +219,10 @@ func (m *ChallengeManager) resolveUpstreamToken(
 ) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
 
+	if _, ok := principalcredential.FromContext(ctx); ok {
+		// Principal credentials resolve only through the tenant-scoped path.
+		return zero, ErrInvalidAuthorizationRequest
+	}
 	if _, attached, err := remoteSessionCallerPrincipal(ctx, subject); err != nil {
 		return zero, err
 	} else if attached {
