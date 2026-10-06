@@ -53,6 +53,7 @@ type RemoteProtectedResource struct {
 	DpopBoundAccessTokensRequired         pgtype.Bool
 	DpopSigningAlgValuesSupported         []string
 	TlsClientCertificateBoundAccessTokens pgtype.Bool
+	ScopeOverride                         []string
 	ChallengeScopes                       []string
 	ChallengeScopesSeenAt                 pgtype.Timestamptz
 	Metadata                              []byte

@@ -220,7 +220,7 @@ func (q *Queries) DeleteServerHeader(ctx context.Context, arg DeleteServerHeader
 }
 
 const getRemoteProtectedResource = `-- name: GetRemoteProtectedResource :one
-SELECT id, project_id, organization_id, resource_identifier, metadata_url, authorization_servers, scopes_supported, bearer_methods_supported, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, dpop_bound_access_tokens_required, dpop_signing_alg_values_supported, tls_client_certificate_bound_access_tokens, challenge_scopes, challenge_scopes_seen_at, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, resource_identifier, metadata_url, authorization_servers, scopes_supported, bearer_methods_supported, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, dpop_bound_access_tokens_required, dpop_signing_alg_values_supported, tls_client_certificate_bound_access_tokens, scope_override, challenge_scopes, challenge_scopes_seen_at, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
 FROM remote_protected_resources
 WHERE project_id = $1
     AND resource_identifier = $2::text
@@ -251,6 +251,7 @@ func (q *Queries) GetRemoteProtectedResource(ctx context.Context, arg GetRemoteP
 		&i.DpopBoundAccessTokensRequired,
 		&i.DpopSigningAlgValuesSupported,
 		&i.TlsClientCertificateBoundAccessTokens,
+		&i.ScopeOverride,
 		&i.ChallengeScopes,
 		&i.ChallengeScopesSeenAt,
 		&i.Metadata,
@@ -578,7 +579,7 @@ SET
     metadata_last_error = EXCLUDED.metadata_last_error,
     metadata_last_error_at = clock_timestamp(),
     updated_at = clock_timestamp()
-RETURNING id, project_id, organization_id, resource_identifier, metadata_url, authorization_servers, scopes_supported, bearer_methods_supported, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, dpop_bound_access_tokens_required, dpop_signing_alg_values_supported, tls_client_certificate_bound_access_tokens, challenge_scopes, challenge_scopes_seen_at, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, resource_identifier, metadata_url, authorization_servers, scopes_supported, bearer_methods_supported, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, dpop_bound_access_tokens_required, dpop_signing_alg_values_supported, tls_client_certificate_bound_access_tokens, scope_override, challenge_scopes, challenge_scopes_seen_at, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
 `
 
 type RecordRemoteProtectedResourceFetchErrorParams struct {
@@ -616,6 +617,7 @@ func (q *Queries) RecordRemoteProtectedResourceFetchError(ctx context.Context, a
 		&i.DpopBoundAccessTokensRequired,
 		&i.DpopSigningAlgValuesSupported,
 		&i.TlsClientCertificateBoundAccessTokens,
+		&i.ScopeOverride,
 		&i.ChallengeScopes,
 		&i.ChallengeScopesSeenAt,
 		&i.Metadata,
@@ -801,7 +803,7 @@ SET
     metadata_last_error = NULL,
     metadata_last_error_at = NULL,
     updated_at = clock_timestamp()
-RETURNING id, project_id, organization_id, resource_identifier, metadata_url, authorization_servers, scopes_supported, bearer_methods_supported, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, dpop_bound_access_tokens_required, dpop_signing_alg_values_supported, tls_client_certificate_bound_access_tokens, challenge_scopes, challenge_scopes_seen_at, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, resource_identifier, metadata_url, authorization_servers, scopes_supported, bearer_methods_supported, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, dpop_bound_access_tokens_required, dpop_signing_alg_values_supported, tls_client_certificate_bound_access_tokens, scope_override, challenge_scopes, challenge_scopes_seen_at, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertRemoteProtectedResourceParams struct {
@@ -862,6 +864,7 @@ func (q *Queries) UpsertRemoteProtectedResource(ctx context.Context, arg UpsertR
 		&i.DpopBoundAccessTokensRequired,
 		&i.DpopSigningAlgValuesSupported,
 		&i.TlsClientCertificateBoundAccessTokens,
+		&i.ScopeOverride,
 		&i.ChallengeScopes,
 		&i.ChallengeScopesSeenAt,
 		&i.Metadata,
