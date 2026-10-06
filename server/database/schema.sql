@@ -10503,6 +10503,14 @@ CREATE TABLE IF NOT EXISTS dashboards (
 CREATE INDEX IF NOT EXISTS dashboards_project_id_updated_at_idx
 ON dashboards (project_id, updated_at DESC) WHERE deleted IS FALSE;
 
+-- The target of a card's tenant-pinned link to its dashboard.
+CREATE UNIQUE INDEX IF NOT EXISTS dashboards_project_id_id_key
+ON dashboards (project_id, id);
+
+-- The target of a card's tenant-pinned link to its widget.
+CREATE UNIQUE INDEX IF NOT EXISTS widgets_project_id_id_key
+ON widgets (project_id, id);
+
 -- A placement is one card on a dashboard: the widget it links to and where
 -- it sits on the dashboard's 12-column grid. Placements are structural
 -- rather than content, so they are replaced wholesale as a layout is edited
@@ -10527,10 +10535,11 @@ CREATE TABLE IF NOT EXISTS dashboard_widgets (
 
   CONSTRAINT dashboard_widgets_pkey PRIMARY KEY (id),
   -- The columns are NOT NULL, so a physical delete of a project, dashboard
-  -- or widget has to remove its cards first; the services do.
+  -- or widget has to remove its cards first; the services do. The dashboard
+  -- and widget links carry the project, so a card cannot point across one.
   CONSTRAINT dashboard_widgets_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL,
-  CONSTRAINT dashboard_widgets_dashboard_id_fkey FOREIGN KEY (dashboard_id) REFERENCES dashboards (id) ON DELETE SET NULL,
-  CONSTRAINT dashboard_widgets_widget_id_fkey FOREIGN KEY (widget_id) REFERENCES widgets (id) ON DELETE SET NULL
+  CONSTRAINT dashboard_widgets_project_id_dashboard_id_fkey FOREIGN KEY (project_id, dashboard_id) REFERENCES dashboards (project_id, id) ON DELETE SET NULL,
+  CONSTRAINT dashboard_widgets_project_id_widget_id_fkey FOREIGN KEY (project_id, widget_id) REFERENCES widgets (project_id, id) ON DELETE SET NULL
 );
 
 -- Loading a dashboard's cards, and asking which dashboards a widget is on.
