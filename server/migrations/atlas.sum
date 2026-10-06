@@ -1,4 +1,4 @@
-h1:oimyXgPmj8jVqd/b2HMPokzeXJrL+KbcO2/q+GL90fU=
+h1:GBAqtKQguNUl+OypmrHFXQ7rIMfoRaN8Rh0NSUjPDlg=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -459,3 +459,4 @@ h1:oimyXgPmj8jVqd/b2HMPokzeXJrL+KbcO2/q+GL90fU=
 20261006151741_widgets-add-project-id-key.sql h1:8n3BUg6iyIFLDSGUZHQE5vpYht+ZygUHeUf8I3TV22g=
 20261006151757_dashboards-add-tables.sql h1:3GLX3Q4KaxTpO3OUFukHO4gic5cwTpuGJJw1cJA7B2o=
 20261006160732_toolsets-add-user-session-issuer-id-idx.sql h1:FFGNe9C09bBP9dBYDRDRnIsAgPkDhXjtqq+dfg3qIcE=
+20261006184412_index-plugin-servers-mcp-server-id.sql h1:6Zdyd/8NlvPhbHum3jwrrNhRIJQNTdWOT++82l9j1AU=
