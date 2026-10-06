@@ -8,9 +8,9 @@ package aivendors
 // no recourse. Be generous — an extra document costs a string comparison.
 //
 // Verify every document live before it lands (HTTP 200, valid JSON, client_id
-// equal to URL, token_endpoint_auth_method "none" OR "private_key_jwt" with
-// exactly one of jwks or jwks_uri) and record the date above the product.
-// Every product with Signatures is also a scan target.
+// equal to URL, token_endpoint_auth_method "none" or absent OR
+// "private_key_jwt" with exactly one of jwks or jwks_uri) and record the date
+// above the product. Every product with Signatures is also a scan target.
 //
 // Declaration order is load-bearing: wildcards match in order, so reordering
 // can change which entry a client_id is attributed to.
@@ -500,8 +500,10 @@ var registry = []Product{
 	// server-generated IDs (scl_...). Sibling paths return 404 (/connectors,
 	// /connectors/a/b), so the namespace is bounded. The single redirect_uri
 	// is Vercel's own /callback. client_name is user-chosen (the connector
-	// owner's chosen name), so the catalog DisplayName ("Vercel Connect") is
-	// what attributes the client on consent screens and in the dashboard.
+	// owner's chosen name); the consent page shows it alongside the
+	// connect.vercel.com origin, which is the verifiable trust anchor. The
+	// catalog DisplayName ("Vercel Connect") attributes the client in the
+	// dashboard.
 	{
 		ID:              "vercel-connect",
 		VendorKey:       "vercel",
