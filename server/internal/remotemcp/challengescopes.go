@@ -110,6 +110,12 @@ func (f *ProxyManager) observeChallengeScopes(ctx context.Context, logger *slog.
 		if f.afterChallengeScopes != nil {
 			defer f.afterChallengeScopes()
 		}
+		defer func() {
+			if rec := recover(); rec != nil {
+				f.challengeScopes.seen.CompareAndDelete(key, obs)
+				logger.ErrorContext(detached, "record protected resource challenge scopes panicked", attr.SlogError(fmt.Errorf("%v", rec)))
+			}
+		}()
 		mu := f.challengeScopes.lock(key)
 		mu.Lock()
 		defer mu.Unlock()

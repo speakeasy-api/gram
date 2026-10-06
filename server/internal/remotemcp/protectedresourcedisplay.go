@@ -183,7 +183,7 @@ func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *s
 		logger.ErrorContext(ctx, "record protected resource", attr.SlogError(err))
 	}
 	if !doc.ValidForResource(resourceURL) {
-		logger.WarnContext(ctx, "protected resource metadata resource or location mismatch", attr.SlogURLFull(resourceURL))
+		logger.WarnContext(ctx, "protected resource metadata resource or location mismatch", attr.SlogURLFull(urls.DiagnosticURL(resourceURL)))
 		return
 	}
 	logScopeComparison(ctx, logger, projectID, serverID, resourceURL, doc, clients)

@@ -22,8 +22,9 @@ import (
 // returns either the parsed metadata or a typed unavailability reason.
 // Probe failures (including 404 — the expected outcome for non-OAuth resource
 // servers) are not errors at this layer; the handler always returns HTTP 200
-// with available=false. Only auth, validation, and unexpected database errors
-// are returned as errors.
+// with available=false. Auth, validation, and failures to load the configured
+// server are returned as errors. Recording the discovery outcome is best effort:
+// a persistence failure is logged but does not change the diagnostic response.
 func (s *Service) DiscoverProtectedResourceMetadata(ctx context.Context, payload *gen.DiscoverProtectedResourceMetadataPayload) (*gen.ProtectedResourceMetadataDiscovery, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

@@ -27,16 +27,15 @@ func TestDiscoveredMetadataValidForResource(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			var resource string
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.RequestURI() != wellknown.OAuthProtectedResourcePath+tc.metadataPath {
 					http.NotFound(w, r)
 					return
 				}
-				_ = json.NewEncoder(w).Encode(map[string]any{"resource": resource})
+				_ = json.NewEncoder(w).Encode(map[string]any{"resource": "http://" + r.Host + tc.path})
 			}))
 			t.Cleanup(server.Close)
-			resource = server.URL + tc.path
+			resource := server.URL + tc.path
 			doc, _, err := wellknown.DiscoverProtectedResourceMetadata(context.Background(), newProbeTestPolicy(t), resource)
 			require.NoError(t, err, "invalid fallback remains available for diagnostics")
 			require.Equal(t, resource, doc.Resource)

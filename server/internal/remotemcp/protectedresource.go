@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 )
 
 // scopeOutcome is how a protected resource's scopes_supported relates to the
@@ -74,6 +75,7 @@ func compareScopes(resource, issuer []string) scopeOutcome {
 // recordProtectedResource stores the document read for resourceURL. The
 // resource identifier and canonical metadata location must both match. A
 // mismatch records a failed fetch without replacing the last good document.
+// Stored metadata_url is diagnostic only; validate the full URL before redacting.
 func recordProtectedResource(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL string, doc wellknown.OAuthProtectedResourceMetadata) error {
 	// RFC 9728 §§3.3 and 6 require exact equality, not URL equivalence.
 	// Keep this check at the write boundary so every discovery path rejects
@@ -86,7 +88,7 @@ func recordProtectedResource(ctx context.Context, db repo.DBTX, projectID uuid.U
 		ProjectID:                             projectID,
 		OrganizationID:                        orgID,
 		ResourceIdentifier:                    resourceURL,
-		MetadataUrl:                           doc.MetadataURL,
+		MetadataUrl:                           urls.DiagnosticURL(doc.MetadataURL),
 		AuthorizationServers:                  doc.AuthorizationServers,
 		ScopesSupported:                       doc.ScopesSupported,
 		BearerMethodsSupported:                doc.BearerMethodsSupported,
@@ -136,7 +138,7 @@ func recordProtectedResourceError(ctx context.Context, db repo.DBTX, projectID u
 		ProjectID:          projectID,
 		OrganizationID:     orgID,
 		ResourceIdentifier: resourceURL,
-		MetadataUrl:        metadataURL,
+		MetadataUrl:        urls.DiagnosticURL(metadataURL),
 		MetadataLastError:  message,
 	})
 	if err != nil {
@@ -155,7 +157,7 @@ func logScopeComparison(ctx context.Context, logger *slog.Logger, projectID uuid
 		logger.InfoContext(ctx, "protected resource scopes compared with issuer",
 			attr.SlogProjectID(projectID.String()),
 			attr.SlogRemoteMCPServerID(serverID.String()),
-			attr.SlogURLFull(resourceURL),
+			attr.SlogURLFull(urls.DiagnosticURL(resourceURL)),
 			attr.SlogOAuthIssuer(rc.client.IssuerUrl),
 			attr.SlogOAuthScopeComparison(compareScopes(doc.ScopesSupported, rc.client.ScopesSupported)),
 			attr.SlogOAuthResourceScopesSupported(doc.ScopesSupported),

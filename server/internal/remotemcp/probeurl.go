@@ -388,7 +388,16 @@ func parseAuthParamValue(header string, start int) (string, int, bool) {
 		for end < len(header) && header[end] != ',' && header[end] != ' ' && header[end] != '\t' {
 			end++
 		}
-		return header[start:end], end, end > start
+		next := end
+		for next < len(header) && (header[next] == ' ' || header[next] == '\t') {
+			next++
+		}
+		// Whitespace may only terminate a value before a comma or end of header.
+		// Otherwise an invalid unquoted value would be silently truncated.
+		if next < len(header) && header[next] != ',' {
+			return "", next, false
+		}
+		return header[start:end], next, end > start
 	}
 
 	var value strings.Builder

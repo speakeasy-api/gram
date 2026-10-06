@@ -53,14 +53,8 @@ type ProtectedResourceDiscoveryError struct {
 }
 
 func (e *ProtectedResourceDiscoveryError) Error() string {
-	switch {
-	case e.ProbeURL == "":
-		return e.cause.Error()
-	case e.Status > 0:
-		return fmt.Sprintf("discover %s: HTTP %d: %s", e.ProbeURL, e.Status, e.cause)
-	default:
-		return fmt.Sprintf("discover %s: %s", e.ProbeURL, e.cause)
-	}
+	// The wrapped cause may contain a transport URL, including credentials.
+	return e.UserMessage()
 }
 
 func (e *ProtectedResourceDiscoveryError) Unwrap() error { return e.cause }
@@ -113,29 +107,30 @@ func (e *ProtectedResourceDiscoveryError) Code() string {
 
 // UserMessage returns a public-facing summary suitable for surfacing in the
 // dashboard. Callers should render it verbatim — it intentionally names the
-// probed URL and HTTP status so operators have enough context to act.
+// probed URL (without credentials, query, or fragment) and HTTP status.
 func (e *ProtectedResourceDiscoveryError) UserMessage() string {
+	probeURL := urls.DiagnosticURL(e.ProbeURL)
 	switch e.Code() {
 	case "invalid_url":
 		return "Could not compute OAuth protected resource metadata URL for the remote MCP server"
 	case "host_blocked":
 		return "Host is not allowed by network policy"
 	case "timeout":
-		return fmt.Sprintf("Timed out probing OAuth protected resource metadata at %s", e.ProbeURL)
+		return fmt.Sprintf("Timed out probing OAuth protected resource metadata at %s", probeURL)
 	case "not_found":
-		return fmt.Sprintf("OAuth protected resource metadata not advertised at %s", e.ProbeURL)
+		return fmt.Sprintf("OAuth protected resource metadata not advertised at %s", probeURL)
 	case "malformed":
-		return fmt.Sprintf("OAuth protected resource metadata at %s was not a valid RFC 9728 document", e.ProbeURL)
+		return fmt.Sprintf("OAuth protected resource metadata at %s was not a valid RFC 9728 document", probeURL)
 	case "http_error":
-		return fmt.Sprintf("Unexpected HTTP %d from %s", e.Status, e.ProbeURL)
+		return fmt.Sprintf("Unexpected HTTP %d from %s", e.Status, probeURL)
 	default:
 		if _, ok := errors.AsType[*tls.CertificateVerificationError](e.cause); ok {
-			return fmt.Sprintf("TLS certificate verification failed probing %s", e.ProbeURL)
+			return fmt.Sprintf("TLS certificate verification failed probing %s", probeURL)
 		}
 		if _, ok := errors.AsType[*tls.RecordHeaderError](e.cause); ok {
-			return fmt.Sprintf("TLS handshake failed probing %s", e.ProbeURL)
+			return fmt.Sprintf("TLS handshake failed probing %s", probeURL)
 		}
-		return fmt.Sprintf("Could not reach OAuth protected resource metadata at %s", e.ProbeURL)
+		return fmt.Sprintf("Could not reach OAuth protected resource metadata at %s", probeURL)
 	}
 }
 

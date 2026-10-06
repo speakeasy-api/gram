@@ -290,6 +290,8 @@ func TestProxyManager_RecordsChallengeScopes(t *testing.T) {
 	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	written := make(chan struct{}, 8)
 	manager.SetAfterChallengeScopes(func() { written <- struct{}{} })
+	probed := make(chan struct{}, 8)
+	manager.SetAfterProtectedResourceProbe(func() { probed <- struct{}{} })
 
 	withScopes := rejectingUpstream(t, `Bearer realm="mcp", scope="a b", error="insufficient_scope"`)
 	withoutScopes := rejectingUpstream(t, `Bearer realm="mcp", error="invalid_token"`)
@@ -316,6 +318,7 @@ func TestProxyManager_RecordsChallengeScopes(t *testing.T) {
 
 	postInitialize(t, ctx, manager, scoped)
 	<-written
+	<-probed
 	first := loadProtectedResource(t, ctx, ti, withScopes.URL)
 	require.Equal(t, []string{"a", "b"}, first.ChallengeScopes)
 	require.True(t, first.ChallengeScopesSeenAt.Valid)
