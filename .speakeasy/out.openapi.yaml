@@ -13465,6 +13465,204 @@ paths:
       x-speakeasy-name-override: switchScopes
       x-speakeasy-react-hook:
         name: SwitchScopes
+  /rpc/auth.transferIn:
+    get:
+      description: Completes a cross-domain session transfer. Validates the transfer token and creates a new session cookie on this host. The transfer token is one-time-use and expires after 60 seconds.
+      operationId: authTransferIn
+      parameters:
+        - allowEmptyValue: true
+          description: The signed transfer token from the source host's transferOut endpoint
+          in: query
+          name: token
+          required: true
+          schema:
+            description: The signed transfer token from the source host's transferOut endpoint
+            type: string
+        - allowEmptyValue: true
+          description: Optional URL path to redirect to after the session is established
+          in: query
+          name: redirect
+          schema:
+            description: Optional URL path to redirect to after the session is established
+            type: string
+      responses:
+        "307":
+          description: Temporary Redirect response.
+          headers:
+            Gram-Session:
+              description: Session header
+              schema:
+                description: Session header
+                type: string
+            Location:
+              description: The URL to redirect to after the session is established
+              schema:
+                description: The URL to redirect to after the session is established
+                type: string
+            Set-Cookie:
+              description: The new authentication session on this host
+              schema:
+                description: The new authentication session on this host
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: transferIn auth
+      tags:
+        - auth
+      x-speakeasy-name-override: transferIn
+      x-speakeasy-react-hook:
+        disabled: true
+  /rpc/auth.transferOut:
+    get:
+      description: Initiates a cross-domain session transfer. Creates a signed, one-time-use token and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
+      operationId: authTransferOut
+      parameters:
+        - allowEmptyValue: true
+          description: The target platform host to transfer the session to (e.g. ai.speakeasy.com)
+          in: query
+          name: target_host
+          required: true
+          schema:
+            description: The target platform host to transfer the session to (e.g. ai.speakeasy.com)
+            type: string
+        - allowEmptyValue: true
+          description: Optional URL path to redirect to after the transfer completes on the target host
+          in: query
+          name: redirect
+          schema:
+            description: Optional URL path to redirect to after the transfer completes on the target host
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "307":
+          description: Temporary Redirect response.
+          headers:
+            Location:
+              description: The URL to redirect to (the target host's transferIn endpoint with the transfer token)
+              schema:
+                description: The URL to redirect to (the target host's transferIn endpoint with the transfer token)
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: transferOut auth
+      tags:
+        - auth
+      x-speakeasy-name-override: transferOut
+      x-speakeasy-react-hook:
+        disabled: true
   /rpc/businessMemories.contentScopes:
     get:
       description: List the complete content-scope tree and distinct-memory counts for the active project. Requires organization admin.

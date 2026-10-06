@@ -170,6 +170,8 @@ trackedFiles:
   src/funcs/authLogout.ts: {}
   src/funcs/authRegister.ts: {}
   src/funcs/authSwitchScopes.ts: {}
+  src/funcs/authTransferIn.ts: {}
+  src/funcs/authTransferOut.ts: {}
   src/funcs/businessMemoriesList.ts: {}
   src/funcs/businessMemoriesListContentScopes.ts: {}
   src/funcs/businessMemoriesSearch.ts: {}
@@ -1948,6 +1950,8 @@ trackedFiles:
   src/models/operations/attachusersessionissuer.ts: {}
   src/models/operations/authcallback.ts: {}
   src/models/operations/authlogin.ts: {}
+  src/models/operations/authtransferin.ts: {}
+  src/models/operations/authtransferout.ts: {}
   src/models/operations/beginslackdirectoryconnection.ts: {}
   src/models/operations/cancelstripesubscription.ts: {}
   src/models/operations/captureevent.ts: {}
@@ -4167,6 +4171,26 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  authTransferIn:
+    speakeasy-default-auth-transfer-in:
+      parameters:
+        query:
+          token: "<value>"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  authTransferOut:
+    speakeasy-default-auth-transfer-out:
+      parameters:
+        query:
+          target_host: "<value>"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   beginSlackDirectoryConnection:
     speakeasy-default-begin-slack-directory-connection:
       requestBody:

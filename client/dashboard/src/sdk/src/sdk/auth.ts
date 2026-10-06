@@ -9,6 +9,8 @@ import { authLogin } from "../funcs/authLogin.js";
 import { authLogout } from "../funcs/authLogout.js";
 import { authRegister } from "../funcs/authRegister.js";
 import { authSwitchScopes } from "../funcs/authSwitchScopes.js";
+import { authTransferIn } from "../funcs/authTransferIn.js";
+import { authTransferOut } from "../funcs/authTransferOut.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import {
   AuthCallbackRequest,
@@ -18,6 +20,15 @@ import {
   AuthLoginRequest,
   AuthLoginResponse,
 } from "../models/operations/authlogin.js";
+import {
+  AuthTransferInRequest,
+  AuthTransferInResponse,
+} from "../models/operations/authtransferin.js";
+import {
+  AuthTransferOutRequest,
+  AuthTransferOutResponse,
+  AuthTransferOutSecurity,
+} from "../models/operations/authtransferout.js";
 import {
   EnterDemoRequest,
   EnterDemoResponse,
@@ -167,6 +178,42 @@ export class Auth extends ClientSDK {
     options?: RequestOptions,
   ): Promise<SwitchAuthScopesResponse | undefined> {
     return unwrapAsync(authSwitchScopes(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * transferIn auth
+   *
+   * @remarks
+   * Completes a cross-domain session transfer. Validates the transfer token and creates a new session cookie on this host. The transfer token is one-time-use and expires after 60 seconds.
+   */
+  async transferIn(
+    request: AuthTransferInRequest,
+    options?: RequestOptions,
+  ): Promise<AuthTransferInResponse | undefined> {
+    return unwrapAsync(authTransferIn(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * transferOut auth
+   *
+   * @remarks
+   * Initiates a cross-domain session transfer. Creates a signed, one-time-use token and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
+   */
+  async transferOut(
+    request: AuthTransferOutRequest,
+    security?: AuthTransferOutSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AuthTransferOutResponse | undefined> {
+    return unwrapAsync(authTransferOut(
       this,
       request,
       security,
