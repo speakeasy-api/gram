@@ -80,11 +80,6 @@ func projectOptions(c *cli.Context) (functions.ProjectOptions, error) {
 }
 
 func newFunctionsInitCommand() *cli.Command {
-	templateNames := make([]string, 0, len(functions.Templates))
-	for _, t := range functions.Templates {
-		templateNames = append(templateNames, t.Name)
-	}
-
 	return &cli.Command{
 		Name:      "init",
 		Usage:     "Create a new Gram Functions project",
@@ -97,7 +92,7 @@ used: the functions template, git init and dependency install.
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "template",
-				Usage: "Project template: " + strings.Join(templateNames, " or "),
+				Usage: "Project template: " + strings.Join(functions.TemplateNames(), " or "),
 			},
 			&cli.StringFlag{
 				Name:  "name",
@@ -129,17 +124,17 @@ used: the functions template, git init and dependency install.
 			}
 
 			opts, err := resolveInitOptions(p, initInputs{
-				Dir:       c.Args().First(),
-				Template:  c.String("template"),
-				Name:      c.String("name"),
-				Git:       optionalBool(c, "git"),
-				Install:   optionalBool(c, "install"),
-				UserAgent: r.Getenv("npm_config_user_agent"),
+				Dir:        c.Args().First(),
+				Template:   c.String("template"),
+				Name:       c.String("name"),
+				Git:        optionalBool(c, "git"),
+				Install:    optionalBool(c, "install"),
+				UserAgent:  r.Getenv("npm_config_user_agent"),
+				SDKVersion: r.Getenv(functions.SDKVersionEnv),
 			})
 			if err != nil {
 				return err
 			}
-			opts.SDKVersion = r.Getenv(functions.SDKVersionEnv)
 
 			return r.Init(c.Context, opts)
 		},
@@ -187,6 +182,8 @@ type initInputs struct {
 	Git       *bool
 	Install   *bool
 	UserAgent string
+	// SDKVersion overrides the SDK dependency version.
+	SDKVersion string
 }
 
 // resolveInitOptions fills in missing init values, prompting when p is not
@@ -257,7 +254,7 @@ func resolveInitOptions(p *prompter, in initInputs) (functions.InitOptions, erro
 		Git:            git,
 		Install:        install,
 		PackageManager: pm,
-		SDKVersion:     "",
+		SDKVersion:     in.SDKVersion,
 	}, nil
 }
 
@@ -315,7 +312,7 @@ func (p *prompter) choose(question string, templates []functions.Template) (stri
 	for i, t := range templates {
 		_, _ = fmt.Fprintf(p.out, "  %d) %s - %s\n", i+1, t.Label, t.Hint)
 	}
-	return p.text("Template", templates[0].Name, func(string) error { return nil })
+	return p.ask("Template", templates[0].Name)
 }
 
 // confirmOrDefault returns given when set. Otherwise it asks when p is not

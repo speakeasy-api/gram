@@ -21,7 +21,7 @@ import (
 func TestResolveInitOptions_Defaults(t *testing.T) {
 	t.Parallel()
 
-	opts, err := resolveInitOptions(nil, initInputs{Dir: "", Template: "", Name: "", Git: nil, Install: nil, UserAgent: ""})
+	opts, err := resolveInitOptions(nil, initInputs{Dir: "", Template: "", Name: "", Git: nil, Install: nil, UserAgent: "", SDKVersion: ""})
 	require.NoError(t, err)
 	require.Equal(t, functions.InitOptions{
 		Dir:            "gram-mcp-server",
@@ -38,14 +38,14 @@ func TestResolveInitOptions_NameFromDir(t *testing.T) {
 	t.Parallel()
 
 	dir := filepath.Join(t.TempDir(), "weather-tools")
-	opts, err := resolveInitOptions(nil, initInputs{Dir: dir, Template: "", Name: "", Git: nil, Install: nil, UserAgent: "pnpm/10.0.0"})
+	opts, err := resolveInitOptions(nil, initInputs{Dir: dir, Template: "", Name: "", Git: nil, Install: nil, UserAgent: "pnpm/10.0.0", SDKVersion: ""})
 	require.NoError(t, err)
 	require.Equal(t, "weather-tools", opts.Name)
 	require.Equal(t, dir, opts.Dir)
 	require.Equal(t, "pnpm", opts.PackageManager)
 
 	// A directory name that is not a valid package name falls back.
-	opts, err = resolveInitOptions(nil, initInputs{Dir: filepath.Join(t.TempDir(), "Weather Tools"), Template: "", Name: "", Git: nil, Install: nil, UserAgent: ""})
+	opts, err = resolveInitOptions(nil, initInputs{Dir: filepath.Join(t.TempDir(), "Weather Tools"), Template: "", Name: "", Git: nil, Install: nil, UserAgent: "", SDKVersion: ""})
 	require.NoError(t, err)
 	require.Equal(t, functions.DefaultProjectName, opts.Name)
 }
@@ -53,7 +53,7 @@ func TestResolveInitOptions_NameFromDir(t *testing.T) {
 func TestResolveInitOptions_DirFromScopedName(t *testing.T) {
 	t.Parallel()
 
-	opts, err := resolveInitOptions(nil, initInputs{Dir: "", Template: "mcp", Name: "@acme/tools", Git: new(false), Install: new(false), UserAgent: ""})
+	opts, err := resolveInitOptions(nil, initInputs{Dir: "", Template: "mcp", Name: "@acme/tools", Git: new(false), Install: new(false), UserAgent: "", SDKVersion: ""})
 	require.NoError(t, err)
 	require.Equal(t, functions.InitOptions{
 		Dir:            "tools",
@@ -69,15 +69,15 @@ func TestResolveInitOptions_DirFromScopedName(t *testing.T) {
 func TestResolveInitOptions_Invalid(t *testing.T) {
 	t.Parallel()
 
-	_, err := resolveInitOptions(nil, initInputs{Dir: "", Template: "gram", Name: "", Git: nil, Install: nil, UserAgent: ""})
+	_, err := resolveInitOptions(nil, initInputs{Dir: "", Template: "gram", Name: "", Git: nil, Install: nil, UserAgent: "", SDKVersion: ""})
 	require.ErrorContains(t, err, `unknown template "gram"`)
 
-	_, err = resolveInitOptions(nil, initInputs{Dir: "", Template: "", Name: "Bad Name", Git: nil, Install: nil, UserAgent: ""})
+	_, err = resolveInitOptions(nil, initInputs{Dir: "", Template: "", Name: "Bad Name", Git: nil, Install: nil, UserAgent: "", SDKVersion: ""})
 	require.ErrorContains(t, err, `invalid project name "Bad Name"`)
 
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "x"), nil, 0o600))
-	_, err = resolveInitOptions(nil, initInputs{Dir: dir, Template: "", Name: "", Git: nil, Install: nil, UserAgent: ""})
+	_, err = resolveInitOptions(nil, initInputs{Dir: dir, Template: "", Name: "", Git: nil, Install: nil, UserAgent: "", SDKVersion: ""})
 	require.ErrorContains(t, err, "already exists and is not empty")
 }
 
@@ -102,7 +102,7 @@ func TestResolveInitOptions_Prompts(t *testing.T) {
 	var out bytes.Buffer
 	p := &prompter{in: bufio.NewReader(strings.NewReader(answers)), out: &out}
 
-	opts, err := resolveInitOptions(p, initInputs{Dir: "", Template: "", Name: "", Git: nil, Install: nil, UserAgent: ""})
+	opts, err := resolveInitOptions(p, initInputs{Dir: "", Template: "", Name: "", Git: nil, Install: nil, UserAgent: "", SDKVersion: ""})
 	require.NoError(t, err)
 	require.Equal(t, functions.InitOptions{
 		Dir:            target,
@@ -128,7 +128,7 @@ func TestResolveInitOptions_PromptsSkipGivenValues(t *testing.T) {
 	p := &prompter{in: bufio.NewReader(strings.NewReader("")), out: &out}
 
 	dir := filepath.Join(t.TempDir(), "tools")
-	_, err := resolveInitOptions(p, initInputs{Dir: dir, Template: "functions", Name: "tools", Git: new(true), Install: new(false), UserAgent: ""})
+	_, err := resolveInitOptions(p, initInputs{Dir: dir, Template: "functions", Name: "tools", Git: new(true), Install: new(false), UserAgent: "", SDKVersion: ""})
 	require.NoError(t, err)
 	require.Empty(t, out.String())
 }
@@ -137,7 +137,7 @@ func TestResolveInitOptions_PromptInputClosed(t *testing.T) {
 	t.Parallel()
 
 	p := &prompter{in: bufio.NewReader(strings.NewReader("")), out: &bytes.Buffer{}}
-	_, err := resolveInitOptions(p, initInputs{Dir: "", Template: "", Name: "", Git: nil, Install: nil, UserAgent: ""})
+	_, err := resolveInitOptions(p, initInputs{Dir: "", Template: "", Name: "", Git: nil, Install: nil, UserAgent: "", SDKVersion: ""})
 	require.ErrorIs(t, err, errPromptClosed)
 }
 

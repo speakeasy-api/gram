@@ -20,7 +20,11 @@ func (r Runner) Dev(ctx context.Context, dir string, extra []string) error {
 	if err != nil {
 		return err
 	}
-	if _, ok := pkg.scripts()["dev"]; !ok {
+	scripts, err := pkg.object("scripts")
+	if err != nil {
+		return fmt.Errorf("read package.json: %w", err)
+	}
+	if _, ok := scripts.get("dev"); !ok {
 		return ErrNoDevScript
 	}
 

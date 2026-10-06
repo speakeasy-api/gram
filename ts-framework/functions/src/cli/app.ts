@@ -10,7 +10,7 @@ import { getLogger, getLogLevels, type LogLevel } from "@logtape/logtape";
 
 import pkg from "../../package.json" with { type: "json" };
 import {
-  CONFIG_FILE_NAMES,
+  findConfigFile,
   loadConfig,
   type ParsedUserConfig,
 } from "../build/config.ts";
@@ -35,9 +35,12 @@ const sharedFlags: FlagParametersForType<SharedFlags, CommandContext> = {
     default: "",
     brief: "Path to the configuration file",
     parse: async (configPath: string) => {
-      const candidates = configPath ? [configPath] : CONFIG_FILE_NAMES;
-
-      const hit = candidates.find((f) => existsSync(f));
+      // A missing --config path falls back to the defaults, as it always has.
+      const hit = configPath
+        ? existsSync(configPath)
+          ? configPath
+          : undefined
+        : findConfigFile(process.cwd());
       const res = await loadConfig(hit);
       if (!res.success) {
         throw res.error;
@@ -96,7 +99,7 @@ async function build(
   this: CommandContext,
   { "log-level": logLevel, config }: BuildFlags,
 ) {
-  await configureLogger(pkg.name, logLevel);
+  await configureLogger(logLevel);
   const logger = getLogger([pkg.name]);
   logger.warn(deprecationNotice("build"));
 
@@ -107,7 +110,7 @@ async function push(
   this: CommandContext,
   { "log-level": logLevel, project, config }: PushFlags,
 ) {
-  await configureLogger(pkg.name, logLevel);
+  await configureLogger(logLevel);
   const logger = getLogger([pkg.name]);
   logger.warn(deprecationNotice("push"));
 

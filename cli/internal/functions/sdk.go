@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strconv"
+
+	"github.com/Masterminds/semver/v3"
 )
 
 const (
@@ -195,8 +195,6 @@ func (r Runner) callSDK(ctx context.Context, action string, opts ProjectOptions,
 	return nil
 }
 
-var nodeVersionRE = regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)`)
-
 // checkNode fails when node is missing or older than MinNodeVersion.
 func (r Runner) checkNode(ctx context.Context) error {
 	cmd, err := r.command(ctx, "", "node", "--version")
@@ -222,37 +220,12 @@ func (r Runner) checkNode(ctx context.Context) error {
 	return nil
 }
 
-// versionAtLeast reports whether version is at least minimum. Both are
-// major.minor.patch with an optional leading v. An unparsable version fails.
+// versionAtLeast reports whether version, with an optional leading v, is at
+// least minimum. An unparsable version fails.
 func versionAtLeast(version string, minimum string) bool {
-	got, ok := parseVersion(version)
-	if !ok {
+	got, err := semver.NewVersion(version)
+	if err != nil {
 		return false
 	}
-	want, ok := parseVersion(minimum)
-	if !ok {
-		return false
-	}
-	for i := range got {
-		if got[i] != want[i] {
-			return got[i] > want[i]
-		}
-	}
-	return true
-}
-
-func parseVersion(version string) ([3]int, bool) {
-	var parts [3]int
-	m := nodeVersionRE.FindStringSubmatch(version)
-	if m == nil {
-		return parts, false
-	}
-	for i := range parts {
-		n, err := strconv.Atoi(m[i+1])
-		if err != nil {
-			return parts, false
-		}
-		parts[i] = n
-	}
-	return parts, true
+	return !got.LessThan(semver.MustParse(minimum))
 }

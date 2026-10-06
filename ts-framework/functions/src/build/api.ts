@@ -1,12 +1,7 @@
 import { getConfig, getLogger, type LogLevel } from "@logtape/logtape";
-import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
-import {
-  CONFIG_FILE_NAMES,
-  loadConfig,
-  type ParsedUserConfig,
-} from "./config.ts";
+import { findConfigFile, loadConfig, type ParsedUserConfig } from "./config.ts";
 import { buildFunctions, inferSlug, resolveArtifacts } from "./gram.ts";
 import { configureLogger } from "./logging.ts";
 
@@ -54,9 +49,7 @@ async function loadProjectConfig(
   const cwd = resolve(opts.cwd ?? process.cwd());
   const configFile = opts.configFile
     ? resolve(cwd, opts.configFile)
-    : CONFIG_FILE_NAMES.map((name) => join(cwd, name)).find((path) =>
-        existsSync(path),
-      );
+    : findConfigFile(cwd);
 
   const res = await loadConfig(configFile);
   if (!res.success) {
@@ -111,7 +104,7 @@ export async function resolveProject(
  */
 export async function build(opts: BuildOptions = {}): Promise<BuildResult> {
   if (getConfig() == null) {
-    await configureLogger(pkg.name, opts.logLevel ?? "info");
+    await configureLogger(opts.logLevel ?? "info");
   }
 
   const { cwd, config } = await loadProjectConfig(opts);

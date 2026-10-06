@@ -61,7 +61,8 @@ const (
 var packageNameRE = regexp.MustCompile(`^(@?[a-z0-9-_]+/)?[a-z0-9-_]+$`)
 
 // skippedTemplateEntries are never copied into a project. NEXT_STEPS.txt is
-// printed instead.
+// printed instead. ts-framework/create-function/scripts/copy-templates.mjs
+// keeps the same list, minus NEXT_STEPS.txt, which that scaffolder reads.
 var skippedTemplateEntries = []string{"node_modules", "dist", ".git", "CHANGELOG.md", "NEXT_STEPS.txt"}
 
 // ValidateProjectName returns an error when name is not a valid package name.
@@ -79,11 +80,16 @@ func LookupTemplate(name string) (Template, error) {
 			return t, nil
 		}
 	}
+	return Template{}, fmt.Errorf("unknown template %q: choose one of %s", name, strings.Join(TemplateNames(), ", "))
+}
+
+// TemplateNames returns the names of the embedded templates, default first.
+func TemplateNames() []string {
 	names := make([]string, 0, len(Templates))
 	for _, t := range Templates {
 		names = append(names, t.Name)
 	}
-	return Template{}, fmt.Errorf("unknown template %q: choose one of %s", name, strings.Join(names, ", "))
+	return names
 }
 
 // DefaultDir is the directory init suggests for a project name: the name
@@ -94,16 +100,24 @@ func DefaultDir(name string) string {
 
 // CheckTargetDir fails unless dir is missing or an empty directory.
 func CheckTargetDir(dir string) error {
-	entries, err := os.ReadDir(dir)
+	f, err := os.Open(filepath.Clean(dir))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("check %s: %w", dir, err)
+	}
+	defer func() { _ = f.Close() }()
+
+	// Reading one name is enough to tell whether the directory is empty.
+	_, err = f.Readdirnames(1)
 	switch {
-	case errors.Is(err, fs.ErrNotExist):
+	case errors.Is(err, io.EOF):
 		return nil
 	case err != nil:
 		return fmt.Errorf("check %s: %w", dir, err)
-	case len(entries) > 0:
-		return fmt.Errorf("directory %s already exists and is not empty: choose a different directory", dir)
 	default:
-		return nil
+		return fmt.Errorf("directory %s already exists and is not empty: choose a different directory", dir)
 	}
 }
 

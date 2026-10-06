@@ -1,13 +1,10 @@
 import { configure, getConsoleSink, type LogLevel } from "@logtape/logtape";
 import { getPrettyFormatter } from "@logtape/pretty";
+import pkg from "../../package.json" with { type: "json" };
 import { isCI } from "./config.ts";
 
-/**
- * Sends the SDK's log output and the CLI output it relays to the console.
- *
- * @param category The logger category the SDK logs under.
- */
-export async function configureLogger(category: string, lowestLevel: LogLevel) {
+/** Sends the SDK's log output and the CLI output it relays to the console. */
+export async function configureLogger(lowestLevel: LogLevel) {
   await configure({
     sinks: {
       console: getConsoleSink({
@@ -30,7 +27,7 @@ export async function configureLogger(category: string, lowestLevel: LogLevel) {
         sinks: ["console"],
       },
       {
-        category: [category],
+        category: [pkg.name],
         lowestLevel,
         sinks: ["console"],
       },

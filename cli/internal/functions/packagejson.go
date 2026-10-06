@@ -106,19 +106,6 @@ func (o jsonObject) object(key string) (jsonObject, error) {
 	return obj, nil
 }
 
-// scripts returns the package's scripts by name.
-func (o jsonObject) scripts() map[string]json.RawMessage {
-	scripts, err := o.object("scripts")
-	if err != nil {
-		return nil
-	}
-	out := make(map[string]json.RawMessage, len(scripts))
-	for _, f := range scripts {
-		out[f.Key] = f.Value
-	}
-	return out
-}
-
 // marshalNoEscape encodes v without escaping <, > and &, which package.json
 // scripts use.
 func marshalNoEscape(v any) ([]byte, error) {
@@ -189,13 +176,12 @@ func rewritePackageJSON(path string, rw packageJSONRewrite) error {
 		return err
 	}
 	if deps != nil {
-		for i, f := range deps {
-			if version, ok := rw.Dependencies[f.Key]; ok {
-				raw, err := marshalNoEscape(version)
-				if err != nil {
-					return err
-				}
-				deps[i].Value = raw
+		for name, version := range rw.Dependencies {
+			if _, ok := deps.get(name); !ok {
+				continue
+			}
+			if err := deps.set(name, version); err != nil {
+				return err
 			}
 		}
 		if err := pkg.set("dependencies", deps); err != nil {
