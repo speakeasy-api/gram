@@ -205,14 +205,7 @@ func requireLiveProjectForActiveOrganization(ctx context.Context, tx pgx.Tx, aut
 	if tx == nil || authCtx == nil || authCtx.ProjectID == nil || authCtx.ActiveOrganizationID == "" {
 		return oops.E(oops.CodeBadRequest, nil, "invalid project ownership check")
 	}
-	var projectID uuid.UUID
-	err := tx.QueryRow(ctx, `
-SELECT id
-FROM projects
-WHERE id = $1
-  AND organization_id = $2
-  AND deleted IS FALSE
-FOR UPDATE`, *authCtx.ProjectID, authCtx.ActiveOrganizationID).Scan(&projectID)
+	_, err := repo.New(tx).LockLiveProjectForOrganization(ctx, repo.LockLiveProjectForOrganizationParams{ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return oops.E(oops.CodeNotFound, err, "project not found in active organization")
 	}
