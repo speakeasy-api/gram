@@ -978,9 +978,12 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       <Page.Section.Body>
         {/* The section stacks its body children at 8px, which reads as one
             block: the tiles, the controls and the table are three things. */}
-        {!rosterLoading && !rosterFailed && peopleCount <= 1 && (
-          <IdentitySyncCallout />
-        )}
+        {/* Directory sync is how people arrive; agents are registered here,
+            so this has nothing to offer the agents roster. */}
+        {kind === "person" &&
+          !rosterLoading &&
+          !rosterFailed &&
+          peopleCount <= 1 && <IdentitySyncCallout />}
         {/* The table is as tall as its rows, up to the room left under the
             controls. Past that it scrolls itself rather than the page: a short
             roster no longer leaves a band of empty table under the last row. */}

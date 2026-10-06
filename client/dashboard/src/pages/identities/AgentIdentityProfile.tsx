@@ -1,5 +1,8 @@
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { HumanizeDateTime } from "@/lib/dates";
+import { Navigate, useNavigate } from "react-router";
+import { useRoutes } from "@/routes";
+import { registeredAgentHref } from "./identityRoster";
 import { AgentAPIKeys } from "@/pages/agents/AgentAPIKeys";
 import { AgentGatewayInstall } from "@/pages/agents/AgentGatewayInstall";
 import { ManagedAgentSessions } from "@/pages/agents/ManagedAgentSessions";
@@ -19,10 +22,15 @@ export function AgentIdentityProfile({
   agent: ManagedAgent;
   section: string;
 }): JSX.Element {
+  const navigate = useNavigate();
+  const routes = useRoutes();
   switch (section) {
     case "access":
       return (
-        <IdentitySection title="Permissions">
+        <IdentitySection
+          title="Permissions"
+          meta="What this agent's keys may be narrowed to"
+        >
           <AgentIdentityPermissions agent={agent} />
           <AgentIdentityChallenges agent={agent} />
         </IdentitySection>
@@ -40,13 +48,12 @@ export function AgentIdentityProfile({
           title="Sessions"
           meta="Current agent sessions across the organization"
         >
-          <ManagedAgentSessions agent={agent} />
+          <ManagedAgentSessions agent={agent} variant="bare" />
         </IdentitySection>
       );
     case "devices":
       // An agent holds keys, not provider logins and not machines. The
       // managed-device panel that sat here could only ever say so.
-      //
       //
       // The endpoint and the keys, under one heading. Both come bare: the
       // keys panel's own "Provision" header would repeat the section title
@@ -59,12 +66,33 @@ export function AgentIdentityProfile({
           <IdentityPanel title="Endpoint" contentClassName="p-4">
             <AgentGatewayInstall agentID={agent.id} secret={null} />
           </IdentityPanel>
-          <AgentAPIKeys agent={agent} variant="bare" />
+          {/* Issuing is a flow of its own, so the button hands off to the
+              page that runs it. Without this the control is enabled and does
+              nothing: the panel only opens its own wizard in creation mode. */}
+          <AgentAPIKeys
+            agent={agent}
+            variant="bare"
+            onCreate={() =>
+              navigate(
+                `${registeredAgentHref(routes.agents.href(), "", agent.id)}&credential=new`,
+              )
+            }
+          />
         </IdentitySection>
       );
     default:
+      // Agents have no usage, cost, risk or findings view, and the rail does
+      // not offer them. A link or bookmark to one still resolved and silently
+      // rendered this overview, so the address said one thing and the page
+      // showed another.
+      if (section !== "overview") {
+        return <Navigate to={`../overview${window.location.search}`} replace />;
+      }
       return (
-        <IdentitySection>
+        <IdentitySection
+          title="Overview"
+          meta="What this identity is, and who answers for it"
+        >
           <IdentityPanel title="Agent status">
             <IdentityPanelRow title="Status" trailing={agent.lifecycle} />
             <IdentityPanelRow

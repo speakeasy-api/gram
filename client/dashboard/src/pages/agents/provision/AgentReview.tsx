@@ -91,6 +91,13 @@ export function AgentReview({
         all.findIndex((other) => other.id === entry.id) === index,
     );
 
+  // The scopes the agent's stored policy actually grants. A literal here
+  // described every agent as mcp:connect, whatever its policy said two panels
+  // below.
+  const grantedScopes = [
+    ...new Set((grants.data ?? []).map((grant) => grant.scope)),
+  ].sort();
+
   const body = () => {
     switch (step) {
       case 0:
@@ -184,7 +191,19 @@ export function AgentReview({
               { label: "Scope", value: scopeLabel },
               {
                 label: "Grants",
-                value: <code className="text-xs">mcp:connect</code>,
+                value: grantedScopes.length ? (
+                  <span className="flex flex-wrap justify-end gap-x-2">
+                    {grantedScopes.map((scope) => (
+                      <code key={scope} className="text-xs">
+                        {scope}
+                      </code>
+                    ))}
+                  </span>
+                ) : (
+                  <Text muted small>
+                    None yet
+                  </Text>
+                ),
               },
               { label: "Organization", value: organization.name },
             ]}
