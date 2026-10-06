@@ -333,15 +333,12 @@ const NativeCatalogRegistryURL = "https://registry.speakeasy.com"
 // EnsureNativeCatalogSource retains a stable namespace using existing metadata.
 // It never changes legacy catalog rows or overwrites an operator-disabled native source.
 func EnsureNativeCatalogSource(ctx context.Context, db *pgxpool.Pool) error {
-	_, err := db.Exec(ctx, `INSERT INTO mcp_registries
- (id,name,url,source_type,auth_profile,enabled,certification_state,source_key)
- VALUES ($1,'Speakeasy',$2,'native_v1','none',true,'certified','speakeasy')
- ON CONFLICT (id) DO NOTHING`, NativeCatalogRegistryID, NativeCatalogRegistryURL)
+	queries := repo.New(db)
+	err := queries.EnsureNativeCatalogSource(ctx, repo.EnsureNativeCatalogSourceParams{ID: NativeCatalogRegistryID, Url: NativeCatalogRegistryURL})
 	if err != nil {
 		return fmt.Errorf("ensure native catalog namespace: %w", err)
 	}
-	var valid bool
-	err = db.QueryRow(ctx, `SELECT url=$2 AND source_type='native_v1' AND auth_profile='none' AND source_key='speakeasy' FROM mcp_registries WHERE id=$1`, NativeCatalogRegistryID, NativeCatalogRegistryURL).Scan(&valid)
+	valid, err := queries.ValidateNativeCatalogSource(ctx, repo.ValidateNativeCatalogSourceParams{ID: NativeCatalogRegistryID, Url: NativeCatalogRegistryURL})
 	if err != nil {
 		return fmt.Errorf("verify native catalog namespace: %w", err)
 	}
