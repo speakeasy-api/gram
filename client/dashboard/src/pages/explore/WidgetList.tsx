@@ -18,6 +18,7 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useUser } from "@/contexts/Auth";
 import { formatRelativeTime } from "@/lib/dates";
 import type { Widget } from "@gram/client/models/components/widget.js";
+import type { WidgetDashboard } from "@gram/client/models/components/widgetdashboard.js";
 import {
   ChartArea,
   ChartBar,
@@ -232,6 +233,12 @@ export function WidgetList({
       render: (widget) => <ChartTypeCell type={widget.visualization.type} />,
     },
     {
+      key: "dashboards",
+      header: "Dashboards",
+      width: "1fr",
+      render: (widget) => <DashboardsCell dashboards={widget.dashboards} />,
+    },
+    {
       key: "creator",
       header: "Created by",
       width: "1.5fr",
@@ -410,6 +417,7 @@ export function WidgetList({
       />
       <DeleteWidgetDialog
         name={deleting?.name ?? ""}
+        dashboards={deleting?.dashboards ?? []}
         open={deleting !== null}
         pending={mutations.pending}
         onCancel={() => setDeleting(null)}
@@ -451,6 +459,22 @@ function useListView(): [ListView, (view: ListView) => void] {
       { replace: true, state: location.state },
     );
   return [view, set];
+}
+
+/** How many dashboards a widget is on, naming them on hover. */
+function DashboardsCell({
+  dashboards,
+}: {
+  dashboards: WidgetDashboard[];
+}): JSX.Element {
+  if (dashboards.length === 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  return (
+    <SimpleTooltip tooltip={dashboards.map((d) => d.name).join(", ")}>
+      <span className="tabular-nums">{dashboards.length}</span>
+    </SimpleTooltip>
+  );
 }
 
 function ChartTypeCell({ type }: { type: unknown }): JSX.Element {

@@ -12,6 +12,7 @@ import {
   type Details,
 } from "./WidgetDialogs";
 import { copyName } from "./widgetNames";
+import { describeDashboards } from "./widgetUsage";
 import {
   differsFromWidget,
   specFromStoredWidget,
@@ -108,6 +109,16 @@ export function WidgetBar({
       {RANGED_REASON}
     </span>
   ) : null;
+  // A widget is linked onto its dashboards, so saving edits changes the
+  // card on each of them: said beside Save, once there is something to save.
+  const usageHintId = useId();
+  const usage = open?.dashboards ?? [];
+  const usageHint =
+    changed && !ranged && usage.length > 0 ? (
+      <span id={usageHintId} className="text-muted-foreground text-xs">
+        Saving changes its card on {describeDashboards(usage)}
+      </span>
+    ) : null;
 
   return (
     <div className="flex min-w-0 items-center gap-2">
@@ -119,13 +130,16 @@ export function WidgetBar({
           {/* Someone else's widget without project write cannot be
               changed, only copied. */}
           {editable ? rangedHint : null}
+          {editable ? usageHint : null}
           {editable ? (
             <Button
               variant="secondary"
               size="sm"
               icon="save"
               disabled={!readable || !changed || ranged || mutations.pending}
-              aria-describedby={ranged ? rangedHintId : undefined}
+              aria-describedby={
+                ranged ? rangedHintId : usageHint ? usageHintId : undefined
+              }
               onClick={() =>
                 mutations.update(
                   open.id,
@@ -220,6 +234,7 @@ export function WidgetBar({
       {open ? (
         <DeleteWidgetDialog
           name={open.name}
+          dashboards={open.dashboards}
           open={deleting}
           pending={mutations.pending}
           onCancel={() => setDeleting(false)}
