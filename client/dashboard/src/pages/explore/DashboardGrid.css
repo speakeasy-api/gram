@@ -1,0 +1,20 @@
+/* The dashboard grid's chrome, over react-grid-layout's own styles. */
+
+/* A card is dragged by its header. */
+.dashboard-grid--editable .react-grid-item header {
+  cursor: grab;
+}
+.dashboard-grid--editable .react-grid-item.react-draggable-dragging header {
+  cursor: grabbing;
+}
+
+/* Where a card will land, in the theme's colour rather than red. */
+.dashboard-grid .react-grid-item.react-grid-placeholder {
+  background: var(--color-primary, currentColor);
+  opacity: 0.15;
+}
+
+/* The resize handle's corner mark follows the text colour. */
+.dashboard-grid .react-grid-item > .react-resizable-handle::after {
+  border-color: var(--color-muted-foreground, currentColor);
+}
