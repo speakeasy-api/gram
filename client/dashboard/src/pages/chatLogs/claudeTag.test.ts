@@ -98,6 +98,22 @@ Still opaque.
       )?.messages[0]?.text,
     ).toBe("hello");
   });
+  it.each(["demo", "other"])(
+    "matches namespace-qualified nonce values: %s",
+    (closingNonce) => {
+      const content = `<session-context xmlns:h="urn:demo:harness" h:nonce="demo">opaque</session-context xmlns:h="urn:demo:harness" h:nonce="${closingNonce}"><wake><channel id="C_DEMO"><message from="human">hello</message></channel></wake>`;
+      if (closingNonce === "demo")
+        expect(parseClaudeTagWake(content)?.messages[0]?.text).toBe("hello");
+      else expect(parseClaudeTagWake(content)).toBeNull();
+    },
+  );
+  it("skips opaque reminder headers with raw ampersands", () => {
+    expect(
+      parseClaudeTagWake(
+        '<system-reminder source="a&b">opaque & <example></system-reminder><wake><channel id="C_DEMO"><message from="human">hello</message></channel></wake>',
+      )?.messages[0]?.text,
+    ).toBe("hello");
+  });
   it("normalizes standing owner titles", () => {
     expect(
       parseClaudeTagWake(

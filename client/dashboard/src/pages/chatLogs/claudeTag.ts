@@ -24,11 +24,11 @@ function deliveryEnvelope(text: string): { body: string; context: string } {
       /^<(system-reminder|session-context)(?:\s[^>]*|)>/,
     );
     if (!header) return { body: text, context: contexts.join("\n") };
-    const nonce = contextNonce(header[0]);
-    if (nonce === null) return { body: "", context: "" };
     let end = -1;
     let closingLength = 0;
     if (header[1] === "session-context") {
+      const nonce = contextNonce(header[0]);
+      if (nonce === null) return { body: "", context: "" };
       const closings = text
         .slice(header[0].length)
         .matchAll(/<\/session-context(?:\s[^>]*|)>/g);
@@ -57,7 +57,9 @@ function contextNonce(tag: string): string | undefined | null {
     "application/xml",
   );
   if (doc.querySelector("parsererror")) return null;
-  return doc.documentElement.getAttribute("nonce")?.trim();
+  return Array.from(doc.documentElement.attributes)
+    .find((attribute) => attribute.localName.split(":").at(-1) === "nonce")
+    ?.value.trim();
 }
 
 function deliveryEnd(text: string, name: string): number {

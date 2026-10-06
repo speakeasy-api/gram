@@ -160,3 +160,21 @@ func TestParseContextNonceAmongFutureAttributes(t *testing.T) {
 	require.True(t, got.Detected)
 	require.Equal(t, "hello", got.Text)
 }
+
+func TestParseNamespacedContextNonce(t *testing.T) {
+	t.Parallel()
+	for _, nonce := range []string{"demo", "other"} {
+		t.Run(nonce, func(t *testing.T) {
+			t.Parallel()
+			got := claudetag.Parse(`<session-context xmlns:h="urn:demo:harness" h:nonce="demo">opaque</session-context xmlns:h="urn:demo:harness" h:nonce="` + nonce + `"><wake><channel id="C_DEMO"><message from="human">hello</message></channel></wake>`)
+			require.Equal(t, nonce == "demo", got.Detected)
+		})
+	}
+}
+
+func TestParseOpaqueReminderHeader(t *testing.T) {
+	t.Parallel()
+	got := claudetag.Parse(`<system-reminder source="a&b">opaque & <example></system-reminder><wake><channel id="C_DEMO"><message from="human">hello</message></channel></wake>`)
+	require.True(t, got.Detected)
+	require.Equal(t, "hello", got.Text)
+}

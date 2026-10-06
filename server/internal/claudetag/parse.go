@@ -48,13 +48,13 @@ func deliveryEnvelope(text string) (string, string) {
 		if header == nil {
 			return text, context.String()
 		}
-		nonce, valid := elementAttribute(header[0], "nonce")
-		if !valid {
-			return "", ""
-		}
 		name := header[1]
 		closingStart, closingEnd := -1, -1
 		if name == "session-context" {
+			nonce, valid := elementAttribute(header[0], "nonce")
+			if !valid {
+				return "", ""
+			}
 			for _, loc := range contextClosing.FindAllStringIndex(text[len(header[0]):], -1) {
 				start, end := loc[0]+len(header[0]), loc[1]+len(header[0])
 				closing := strings.Replace(text[start:end], "</", "<", 1)
