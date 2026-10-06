@@ -907,7 +907,7 @@ describe("AuthProvider organization host", () => {
     expect(replaceSpy).toHaveBeenLastCalledWith(transferTo(otherPage));
   });
 
-  it("records the move before leaving, so a failed transfer that comes back never moves again", async () => {
+  it("records the move before leaving, so a failed transfer that comes straight back does not move again", async () => {
     // Source host: the organization lives on ORG_HOST.
     mocks.sessionData.mockReturnValue(
       gatedSession({
@@ -918,7 +918,7 @@ describe("AuthProvider organization host", () => {
     let recordedBeforeLeaving = false;
     replaceSpy?.mockImplementation(() => {
       recordedBeforeLeaving = (
-        sessionStorage.getItem("organizationHostMoves") ?? ""
+        sessionStorage.getItem("organizationHostMoveTimes") ?? ""
       ).includes("ai.example.test");
     });
 
@@ -948,7 +948,7 @@ describe("AuthProvider organization host", () => {
     expect(replaceSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("does not move a tab to the same host twice", async () => {
+  it("does not move a tab that comes straight back to the same host", async () => {
     mocks.sessionData.mockReturnValue(
       gatedSession({
         whitelisted: true,
@@ -967,6 +967,34 @@ describe("AuthProvider organization host", () => {
 
     expect(screen.getByTestId("app")).toBeTruthy();
     expect(replaceSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("moves a tab that comes back to this host after the guard window", async () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+    const start = Date.now();
+    const now = vi.spyOn(Date, "now").mockReturnValue(start);
+    try {
+      renderGate(PAGE);
+      await waitFor(() => {
+        expect(replaceSpy).toHaveBeenCalledTimes(1);
+      });
+      cleanup();
+
+      // The person returns to the old host later in the same tab.
+      now.mockReturnValue(start + 16_000);
+      renderGate(PAGE);
+      await waitFor(() => {
+        expect(replaceSpy).toHaveBeenCalledTimes(2);
+      });
+      expect(replaceSpy).toHaveBeenLastCalledWith(transferTo(PAGE));
+    } finally {
+      now.mockRestore();
+    }
   });
 });
 
