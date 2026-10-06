@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -144,6 +145,15 @@ func TestAgentBackedTurnsRunWithPrincipalCredentials(t *testing.T) {
 		admitted, err := engine.PrepareContext(ctx)
 		require.NoError(t, err)
 		require.Error(t, engine.Require(admitted, connect), "business access follows the agent's live policy")
+	}
+
+	_, err = agentrepo.New(db).SuspendAgent(t.Context(), agentrepo.SuspendAgentParams{OrganizationID: "org-test", ID: uuid.MustParse(*assistant.AgentID)})
+	require.NoError(t, err)
+	for _, token := range []string{human, autonomous} {
+		_, _, err := manager.AuthorizeRuntime(t.Context(), token)
+		var denied *oops.ShareableError
+		require.ErrorAs(t, err, &denied, "an admission refusal is an authorization error, not a server error")
+		require.Equal(t, oops.CodeUnauthorized, denied.Code)
 	}
 }
 

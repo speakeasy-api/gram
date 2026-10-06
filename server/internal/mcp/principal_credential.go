@@ -26,7 +26,10 @@ func (s *Service) authenticatePrincipalCredential(ctx context.Context, token str
 	}
 	authed, err = s.authz.PrepareContext(authed)
 	if err != nil {
-		return ctx, fmt.Errorf("admit principal credential: %w", err)
+		if isCredentialDenial(err) {
+			return ctx, fmt.Errorf("%w: %w", errCredentialRejected, oops.E(oops.CodeUnauthorized, err, "principal credential is no longer admitted"))
+		}
+		return ctx, oops.E(oops.CodeUnexpected, err, "admit principal credential").LogError(ctx, s.logger)
 	}
 	credential, _ := principalcredential.FromContext(authed)
 	if credential.Credential.Principal.Type == urn.PrincipalTypeAgent {
