@@ -176,8 +176,10 @@ type syntheticExpiryEnv struct {
 	organizationID string
 	issuerID       uuid.UUID
 	clientID       uuid.UUID
-	subject        urn.SessionSubject
-	session        repo.RemoteSession
+	// mcpServerID is the remote-backed server withRemoteServer seeded; invalid without one.
+	mcpServerID uuid.NullUUID
+	subject     urn.SessionSubject
+	session     repo.RemoteSession
 	// authURL is the upstream authorize redirect BuildAuthorizationUrl minted
 	// for the login, so a test can assert on its query parameters.
 	authURL string
@@ -652,6 +654,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		organizationID: authCtx.ActiveOrganizationID,
 		issuerID:       issuer.ID,
 		clientID:       client.ID,
+		mcpServerID:    mcpServerID,
 		subject:        subject,
 		session:        repo.RemoteSession{},
 		authURL:        authURL,

@@ -70,6 +70,32 @@ func TestLoginSkip(t *testing.T) {
 	}
 }
 
+func TestRefreshDue(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	cases := []struct {
+		name string
+		row  *repo.RemoteProtectedResource
+		want bool
+	}{
+		{name: "never visited", row: &repo.RemoteProtectedResource{}, want: true},
+		{name: "fetched within a day", row: &repo.RemoteProtectedResource{MetadataFetchedAt: stamp(now.Add(-23 * time.Hour))}, want: false},
+		{name: "fetched over a day ago", row: &repo.RemoteProtectedResource{MetadataFetchedAt: stamp(now.Add(-25 * time.Hour))}, want: true},
+		{name: "error only, within the backoff", row: &repo.RemoteProtectedResource{MetadataLastErrorAt: stamp(now.Add(-5 * time.Minute))}, want: false},
+		{name: "error only, past the backoff", row: &repo.RemoteProtectedResource{MetadataLastErrorAt: stamp(now.Add(-20 * time.Minute))}, want: true},
+		{name: "error newer than the fetch, past the backoff", row: &repo.RemoteProtectedResource{MetadataFetchedAt: stamp(now.Add(-2 * time.Hour)), MetadataLastErrorAt: stamp(now.Add(-20 * time.Minute))}, want: true},
+		{name: "error newer than the fetch, within the backoff", row: &repo.RemoteProtectedResource{MetadataFetchedAt: stamp(now.Add(-2 * time.Hour)), MetadataLastErrorAt: stamp(now.Add(-time.Minute))}, want: false},
+		{name: "fetch newer than an old error stands for a day", row: &repo.RemoteProtectedResource{MetadataFetchedAt: stamp(now.Add(-2 * time.Hour)), MetadataLastErrorAt: stamp(now.Add(-3 * time.Hour))}, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, refreshDue(tc.row, now))
+		})
+	}
+}
+
 func TestLastGoodScopes(t *testing.T) {
 	t.Parallel()
 
@@ -89,7 +115,7 @@ func TestLastGoodScopes(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.want, lastGoodScopes(tc.row, now))
+			require.Equal(t, tc.want, LastGoodScopes(tc.row, now))
 		})
 	}
 }

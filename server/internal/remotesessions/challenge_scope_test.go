@@ -135,10 +135,33 @@ func TestClientRequestedScopes(t *testing.T) {
 			wantSource: remotesessionmetrics.ScopeSourceCachedResource,
 		},
 		{
-			name:       "a resource advertising no scopes falls through to the issuer",
+			// By design: an empty scopes_supported says the resource names no
+			// scopes, so the issuer's catalogue is still the fallback.
+			name:       "a live resource advertising an empty scopes_supported falls through to the issuer catalogue by design",
 			client:     Client{IssuerScopesSupported: []string{"admin", "openid"}},
 			resource:   discovered(ResourceScopes{ScopesSupported: []string{}, Live: true}),
 			wantScopes: []string{"admin", "openid"},
+			wantSource: remotesessionmetrics.ScopeSourceIssuerCatalogue,
+		},
+		{
+			name:       "an empty pin is unset and falls through to the advertised list",
+			client:     Client{IssuerScopesSupported: []string{"admin"}},
+			resource:   discovered(ResourceScopes{Pin: []string{}, ScopesSupported: []string{"files:read"}}),
+			wantScopes: []string{"files:read"},
+			wantSource: remotesessionmetrics.ScopeSourceCachedResource,
+		},
+		{
+			name:       "empty challenge scopes are unset and fall through to the pin",
+			client:     Client{IssuerScopesSupported: []string{"admin"}},
+			resource:   discovered(ResourceScopes{ChallengeScopes: []string{}, Pin: []string{"files:read"}}),
+			wantScopes: []string{"files:read"},
+			wantSource: remotesessionmetrics.ScopeSourceResourcePin,
+		},
+		{
+			name:       "an empty pin and empty challenge scopes leave the issuer catalogue in charge",
+			client:     Client{IssuerScopesSupported: []string{"admin"}},
+			resource:   discovered(ResourceScopes{ChallengeScopes: []string{}, Pin: []string{}}),
+			wantScopes: []string{"admin"},
 			wantSource: remotesessionmetrics.ScopeSourceIssuerCatalogue,
 		},
 		{

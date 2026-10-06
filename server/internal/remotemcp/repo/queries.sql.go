@@ -666,7 +666,7 @@ func (q *Queries) SetRemoteProtectedResourceMetadataTimestamps(ctx context.Conte
 const setRemoteProtectedResourceScopeOverride = `-- name: SetRemoteProtectedResourceScopeOverride :execrows
 UPDATE remote_protected_resources
 SET
-    scope_override = $1::text[],
+    scope_override = CASE WHEN cardinality($1::text[]) > 0 THEN $1::text[] END,
     updated_at = clock_timestamp()
 WHERE project_id = $2
     AND resource_identifier = $3::text
@@ -679,7 +679,7 @@ type SetRemoteProtectedResourceScopeOverrideParams struct {
 	ResourceIdentifier string
 }
 
-// Pins the scopes logins to this resource request; NULL clears the pin.
+// Pins the scopes logins to this resource request; NULL or an empty array clears the pin.
 func (q *Queries) SetRemoteProtectedResourceScopeOverride(ctx context.Context, arg SetRemoteProtectedResourceScopeOverrideParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setRemoteProtectedResourceScopeOverride, arg.ScopeOverride, arg.ProjectID, arg.ResourceIdentifier)
 	if err != nil {

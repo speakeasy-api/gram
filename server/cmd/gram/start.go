@@ -1122,8 +1122,7 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 
-			// One prober per replica: the proxy's on-use refresh and the login's
-			// probe share its debounce, slots, and recorder.
+			// One prober per replica, shared by the proxy's on-use refresh and the login's probe.
 			protectedResources := protectedresource.NewProber(db, guardianPolicy)
 			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags)
 			if err != nil {

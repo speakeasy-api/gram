@@ -134,9 +134,6 @@ const (
 	// live or from the cached row) ahead of the issuer's whole
 	// scopes_supported catalogue. Client scopes and issuer overrides apply
 	// either way.
-	// Evaluated server-side with the local-only helper, distinct id =
-	// organization id and the organization group (org slug). Inconclusive
-	// reads as off. Removed once resource-first discovery is GA (AIM-432).
 	FlagRemoteSessionLiveResourceScopes Flag = "remote-session-live-resource-scopes"
 
 	// FlagPaygSelfServeBilling gates the self-serve Stripe Checkout rollout.

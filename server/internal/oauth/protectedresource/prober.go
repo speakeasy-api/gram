@@ -29,9 +29,13 @@ const (
 	// keeps the server from being probed again on use.
 	staleAfter = 24 * time.Hour
 
-	// probeSlots caps the probes in flight per replica; a use arriving with
-	// every slot taken is dropped, a later one retries.
+	// probeSlots caps the detached on-use probes in flight per replica; a use
+	// arriving with every slot taken is dropped, a later one retries.
 	probeSlots = 2
+
+	// loginProbeSlots caps the login probes in flight per replica. Logins have
+	// their own pool so background on-use probes cannot starve them.
+	loginProbeSlots = 4
 
 	// probeBudget caps one detached probe: discovery's own ten-second budget
 	// plus the row read and write.
@@ -46,7 +50,10 @@ const (
 	loginFreshWindow = time.Hour
 
 	// loginErrorBackoff is how long after a failed read a login stops
-	// re-probing a resource that was just seen failing.
+	// re-probing a resource that was just seen failing. On-use probes revisit
+	// a row whose latest visit failed after the same interval, so a login
+	// that ran out of its budget does not hide the resource from the proxy's
+	// roomier probe for a day.
 	loginErrorBackoff = 15 * time.Minute
 
 	// loginLastGoodWindow bounds how old a cached advertised list may be when
@@ -78,7 +85,11 @@ const (
 	// ProbeOutcomeError: the probe failed, or the document named another resource.
 	ProbeOutcomeError ProbeOutcome = "error"
 
-	// ProbeOutcomeNoSlot: every probe slot on this replica was taken.
+	// ProbeOutcomeCancelled: the login's own context ended during the probe
+	// (the user left); nothing is recorded on the row.
+	ProbeOutcomeCancelled ProbeOutcome = "cancelled"
+
+	// ProbeOutcomeNoSlot: every login probe slot on this replica was taken.
 	ProbeOutcomeNoSlot ProbeOutcome = "no_slot"
 
 	// ProbeOutcomeNoRow: the URL is not probed (not HTTPS) and the resource has no row.
@@ -103,11 +114,23 @@ type Prober struct {
 
 	// checked holds *check per project+URL so an entry is only ever removed by identity.
 	checked sync.Map
-	slots   chan struct{}
-	now     func() time.Time
+
+	// slots bounds detached on-use probes.
+	slots chan struct{}
+
+	// loginSlots bounds synchronous login probes, apart from slots.
+	loginSlots chan struct{}
+
+	// loginBudget is how long one login probe may take; loginProbeBudget
+	// outside tests.
+	loginBudget time.Duration
+
+	// now is the clock the debounce, freshness rules, and probe timing read.
+	now func() time.Time
 
 	// beforeDetached runs synchronously before detached work starts; tests only.
 	beforeDetached func()
+
 	// afterDetached runs when a detached on-use probe finishes; tests only.
 	afterDetached func()
 }
@@ -118,19 +141,22 @@ func NewProber(db *pgxpool.Pool, policy *guardian.Policy) *Prober {
 		policy:         policy,
 		checked:        sync.Map{},
 		slots:          make(chan struct{}, probeSlots),
+		loginSlots:     make(chan struct{}, loginProbeSlots),
+		loginBudget:    loginProbeBudget,
 		now:            time.Now,
 		beforeDetached: nil,
 		afterDetached:  nil,
 	}
 }
 
-// SetClock replaces the clock the debounce and freshness rules read.
+// SetClock replaces the clock the debounce, freshness rules, and probe
+// timing read; tests only.
 func (p *Prober) SetClock(now func() time.Time) { p.now = now }
 
-// SetBeforeDetached runs fn synchronously when detached work is scheduled.
+// SetBeforeDetached runs fn synchronously when detached work is scheduled; tests only.
 func (p *Prober) SetBeforeDetached(fn func()) { p.beforeDetached = fn }
 
-// SetAfterDetached runs fn after a detached on-use probe finishes.
+// SetAfterDetached runs fn after a detached on-use probe finishes; tests only.
 func (p *Prober) SetAfterDetached(fn func()) { p.afterDetached = fn }
 
 // sweep drops checks past their recheck window so the map stays bounded by
@@ -195,9 +221,8 @@ func (p *Prober) ProbeOnUse(ctx context.Context, logger *slog.Logger, projectID 
 	}()
 }
 
-// refresh probes resourceURL unless its row was read, or failed to be read,
-// within staleAfter. Only database failures are returned; a failed probe is
-// recorded on the row.
+// refresh probes resourceURL unless its row is still current. Only database
+// failures are returned; a failed probe is recorded on the row.
 func (p *Prober) refresh(ctx context.Context, projectID uuid.UUID, organizationID string, resourceURL string, now time.Time) error {
 	existing, err := repo.New(p.db).GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: projectID, ResourceIdentifier: resourceURL})
 	switch {
@@ -205,11 +230,7 @@ func (p *Prober) refresh(ctx context.Context, projectID uuid.UUID, organizationI
 	case err != nil:
 		return fmt.Errorf("get remote protected resource: %w", err)
 	default:
-		visited := existing.MetadataFetchedAt.Time
-		if existing.MetadataLastErrorAt.Time.After(visited) {
-			visited = existing.MetadataLastErrorAt.Time
-		}
-		if now.Sub(visited) < staleAfter {
+		if !refreshDue(&existing, now) {
 			return nil
 		}
 	}
@@ -222,6 +243,18 @@ func (p *Prober) refresh(ctx context.Context, projectID uuid.UUID, organizationI
 		return nil
 	}
 	return Record(ctx, p.db, projectID, organizationID, resourceURL, doc)
+}
+
+// refreshDue reports whether an on-use probe should read the row's resource
+// again: a successful read stands for staleAfter, while a row whose latest
+// visit is a failure is revisited after loginErrorBackoff.
+func refreshDue(row *repo.RemoteProtectedResource, now time.Time) bool {
+	fetched := row.MetadataFetchedAt.Time
+	failed := row.MetadataLastErrorAt.Time
+	if failed.After(fetched) {
+		return now.Sub(failed) >= loginErrorBackoff
+	}
+	return now.Sub(fetched) >= staleAfter
 }
 
 // LoginResolution is what a login learns about its resource's metadata.
@@ -258,6 +291,9 @@ func (p *Prober) ResolveForLogin(ctx context.Context, logger *slog.Logger, proje
 	var existing *repo.RemoteProtectedResource
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, context.Canceled):
+		none.Outcome = ProbeOutcomeCancelled
+		return none
 	case err != nil:
 		logger.ErrorContext(ctx, "get remote protected resource for login", attr.SlogError(err))
 		none.Outcome = ProbeOutcomeError
@@ -265,7 +301,7 @@ func (p *Prober) ResolveForLogin(ctx context.Context, logger *slog.Logger, proje
 	default:
 		existing = &row
 	}
-	cached := LoginResolution{Row: existing, ScopesSupported: lastGoodScopes(existing, now), Live: false, Outcome: ProbeOutcomeNotApplicable, ProbeDuration: 0}
+	cached := LoginResolution{Row: existing, ScopesSupported: LastGoodScopes(existing, now), Live: false, Outcome: ProbeOutcomeNotApplicable, ProbeDuration: 0}
 
 	// Metadata persists as-is, so it is only read over TLS.
 	if !urls.IsAbsoluteHTTPSOrLoopback(resourceURL) {
@@ -279,25 +315,30 @@ func (p *Prober) ResolveForLogin(ctx context.Context, logger *slog.Logger, proje
 		return cached
 	}
 	select {
-	case p.slots <- struct{}{}:
-		defer func() { <-p.slots }()
+	case p.loginSlots <- struct{}{}:
+		defer func() { <-p.loginSlots }()
 	default:
 		cached.Outcome = ProbeOutcomeNoSlot
 		return cached
 	}
 
-	probeCtx, cancel := context.WithTimeout(ctx, loginProbeBudget)
+	probeCtx, cancel := context.WithTimeout(ctx, p.loginBudget)
 	defer cancel()
-	started := time.Now()
+	started := p.now()
 	doc, _, err := wellknown.DiscoverProtectedResourceMetadata(probeCtx, p.policy, resourceURL)
-	cached.ProbeDuration = time.Since(started)
+	cached.ProbeDuration = p.now().Sub(started)
 	// The write outlives the probe's budget, not the login's.
 	writeCtx, cancelWrite := context.WithTimeout(context.WithoutCancel(ctx), recordWriteBudget)
 	defer cancelWrite()
 	if err != nil {
+		// The user left: nothing was learned about the resource, so nothing is recorded.
+		if errors.Is(ctx.Err(), context.Canceled) {
+			cached.Outcome = ProbeOutcomeCancelled
+			return cached
+		}
 		cached.Outcome = ProbeOutcomeError
 		if typed, ok := errors.AsType[*wellknown.ProtectedResourceDiscoveryError](err); ok {
-			if typed.Code() == "timeout" {
+			if typed.Code() == wellknown.DiscoveryCodeTimeout {
 				cached.Outcome = ProbeOutcomeTimeout
 			}
 			if recordErr := RecordFetchError(writeCtx, p.db, projectID, organizationID, resourceURL, typed); recordErr != nil {
@@ -313,8 +354,15 @@ func (p *Prober) ResolveForLogin(ctx context.Context, logger *slog.Logger, proje
 		cached.Outcome = ProbeOutcomeError
 		return cached
 	}
-	// The proxy's next use of this server needs no row read for an hour.
-	p.checked.Store(projectID.String()+" "+resourceURL, &check{at: now})
+	// The proxy's next use of this server needs no row read for an hour. A
+	// check a proxy goroutine holds stays its own, so it is never removed
+	// from under it.
+	key := projectID.String() + " " + resourceURL
+	c := &check{at: now}
+	if v, loaded := p.checked.LoadOrStore(key, c); loaded {
+		p.checked.CompareAndSwap(key, v, c)
+	}
+	p.sweep(now)
 	return LoginResolution{Row: existing, ScopesSupported: doc.ScopesSupported, Live: true, Outcome: ProbeOutcomeFetched, ProbeDuration: cached.ProbeDuration}
 }
 
@@ -332,9 +380,9 @@ func loginSkip(row *repo.RemoteProtectedResource, now time.Time) (ProbeOutcome, 
 	return "", false
 }
 
-// lastGoodScopes is the row's advertised list when a read captured one
+// LastGoodScopes is the row's advertised list when a read captured one
 // within loginLastGoodWindow; nil otherwise.
-func lastGoodScopes(row *repo.RemoteProtectedResource, now time.Time) []string {
+func LastGoodScopes(row *repo.RemoteProtectedResource, now time.Time) []string {
 	if row == nil || row.ScopesSupported == nil || !row.MetadataFetchedAt.Valid || now.Sub(row.MetadataFetchedAt.Time) > loginLastGoodWindow {
 		return nil
 	}

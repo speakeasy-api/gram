@@ -268,10 +268,10 @@ WHERE project_id = @project_id
     AND deleted IS FALSE;
 
 -- name: SetRemoteProtectedResourceScopeOverride :execrows
--- Pins the scopes logins to this resource request; NULL clears the pin.
+-- Pins the scopes logins to this resource request; NULL or an empty array clears the pin.
 UPDATE remote_protected_resources
 SET
-    scope_override = sqlc.narg(scope_override)::text[],
+    scope_override = CASE WHEN cardinality(sqlc.narg(scope_override)::text[]) > 0 THEN sqlc.narg(scope_override)::text[] END,
     updated_at = clock_timestamp()
 WHERE project_id = @project_id
     AND resource_identifier = @resource_identifier::text

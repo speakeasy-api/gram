@@ -29,7 +29,7 @@ func Record(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resou
 	// Keep this check at the write boundary so every discovery path rejects
 	// mismatches, including identifiers differing only by a trailing slash.
 	if !doc.ValidForResource(resourceURL) {
-		return RecordError(ctx, db, projectID, orgID, resourceURL, doc.MetadataURL, MismatchMessage(resourceURL, doc))
+		return recordError(ctx, db, projectID, orgID, resourceURL, doc.MetadataURL, mismatchMessage(resourceURL, doc))
 	}
 
 	_, err := repo.New(db).UpsertRemoteProtectedResource(ctx, repo.UpsertRemoteProtectedResourceParams{
@@ -54,7 +54,7 @@ func Record(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resou
 			// Go accepts JSON values (including escaped NULs and large numbers)
 			// that PostgreSQL cannot store in jsonb or extracted text columns.
 			// Record a safe fetch failure so on-use probes keep their backoff.
-			return RecordError(ctx, db, projectID, orgID, resourceURL, doc.MetadataURL, "The metadata document contains values that cannot be stored.")
+			return recordError(ctx, db, projectID, orgID, resourceURL, doc.MetadataURL, "The metadata document contains values that cannot be stored.")
 		}
 		return fmt.Errorf("upsert remote protected resource: %w", err)
 	}
@@ -77,12 +77,12 @@ func isDataError(err error) bool {
 
 // RecordFetchError stores the public-safe reason the last read of resourceURL failed.
 func RecordFetchError(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL string, probeErr *wellknown.ProtectedResourceDiscoveryError) error {
-	return RecordError(ctx, db, projectID, orgID, resourceURL, probeErr.ProbeURL, probeErr.UserMessage())
+	return recordError(ctx, db, projectID, orgID, resourceURL, probeErr.ProbeURL, probeErr.UserMessage())
 }
 
-// RecordError stores message as the last fetch failure of resourceURL,
+// recordError stores message as the last fetch failure of resourceURL,
 // creating the row when none exists.
-func RecordError(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL, metadataURL, message string) error {
+func recordError(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL, metadataURL, message string) error {
 	_, err := repo.New(db).RecordRemoteProtectedResourceFetchError(ctx, repo.RecordRemoteProtectedResourceFetchErrorParams{
 		ProjectID:          projectID,
 		OrganizationID:     orgID,
@@ -96,9 +96,9 @@ func RecordError(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, 
 	return nil
 }
 
-// MismatchMessage is recorded when the document's resource member or
+// mismatchMessage is recorded when the document's resource member or
 // metadata location does not match the server's URL, naming which.
-func MismatchMessage(resourceURL string, doc wellknown.OAuthProtectedResourceMetadata) string {
+func mismatchMessage(resourceURL string, doc wellknown.OAuthProtectedResourceMetadata) string {
 	if doc.Resource != resourceURL {
 		return "The metadata document names the resource " + recordedURL(doc.Resource) + ", not the requested one."
 	}

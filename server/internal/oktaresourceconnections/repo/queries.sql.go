@@ -778,6 +778,7 @@ SELECT
   , c.resource_identifier
   , i.scope_override AS issuer_scope_override
   , i.scopes_supported AS issuer_scopes_supported
+  , i.omit_scope_fallback AS issuer_omit_scope_fallback
   , (
       SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
       FROM remote_session_client_user_session_issuers AS link
@@ -811,15 +812,16 @@ type ListIssuerClientsParams struct {
 }
 
 type ListIssuerClientsRow struct {
-	ID                    uuid.UUID
-	RemoteSessionIssuerID uuid.UUID
-	ProjectID             uuid.NullUUID
-	ClientID              string
-	Scope                 []string
-	ResourceIdentifier    pgtype.Text
-	IssuerScopeOverride   []string
-	IssuerScopesSupported []string
-	UserSessionIssuerIds  []uuid.UUID
+	ID                      uuid.UUID
+	RemoteSessionIssuerID   uuid.UUID
+	ProjectID               uuid.NullUUID
+	ClientID                string
+	Scope                   []string
+	ResourceIdentifier      pgtype.Text
+	IssuerScopeOverride     []string
+	IssuerScopesSupported   []string
+	IssuerOmitScopeFallback pgtype.Bool
+	UserSessionIssuerIds    []uuid.UUID
 }
 
 // Clients the organization holds on the given issuers: project-owned ones in
@@ -842,6 +844,7 @@ func (q *Queries) ListIssuerClients(ctx context.Context, arg ListIssuerClientsPa
 			&i.ResourceIdentifier,
 			&i.IssuerScopeOverride,
 			&i.IssuerScopesSupported,
+			&i.IssuerOmitScopeFallback,
 			&i.UserSessionIssuerIds,
 		); err != nil {
 			return nil, err

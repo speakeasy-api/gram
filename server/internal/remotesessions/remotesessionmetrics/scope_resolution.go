@@ -72,6 +72,8 @@ func NewScopeResolution(logger *slog.Logger, meterProvider metric.MeterProvider)
 		meterResourceProbe,
 		metric.WithDescription("Time a Remote Session login spent probing its protected resource's metadata, by probe outcome."),
 		metric.WithUnit("s"),
+		// The login budget is 3s; the upper buckets catch probes that overran it.
+		metric.WithExplicitBucketBoundaries(0.05, 0.1, 0.25, 0.5, 1, 2, 3, 5),
 	)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterResourceProbe), attr.SlogError(err))

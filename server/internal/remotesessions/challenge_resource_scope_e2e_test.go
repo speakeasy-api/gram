@@ -380,6 +380,19 @@ func TestListClients_ReadsCachedResourceRowWithoutProbing(t *testing.T) {
 	)
 	require.EqualValues(t, 0, hits.Load())
 
+	// The consent card reads the row by the login's server, with or without
+	// the client claiming the resource.
+	byServer, ok := env.mgr.CachedResourceScopesForServer(ctx, env.projectID, env.mcpServerID, true)
+	require.True(t, ok)
+	require.Equal(t, []string{"files:read"}, byServer.Pin)
+	require.Equal(t, []string{"c"}, byServer.ChallengeScopes)
+	require.Equal(t, []string{"files:read", "files:write"}, byServer.ScopesSupported)
+	require.False(t, byServer.Live)
+	require.True(t, byServer.UseDiscovered)
+	_, ok = env.mgr.CachedResourceScopesForServer(ctx, env.projectID, uuid.NullUUID{}, true)
+	require.False(t, ok, "a login with no server has no row")
+	require.EqualValues(t, 0, hits.Load())
+
 	// The client claims the resource, as the Platform MCP attachment records it.
 	_, err := env.q.UpdateRemoteSessionClientResourceDisplay(ctx, repo.UpdateRemoteSessionClientResourceDisplayParams{
 		ResourceIdentifier:    conv.ToPGText(resource.URL),

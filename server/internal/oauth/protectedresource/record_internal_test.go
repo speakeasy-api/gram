@@ -45,22 +45,22 @@ func TestMismatchMessage(t *testing.T) {
 	t.Parallel()
 
 	doc := wellknown.OAuthProtectedResourceMetadata{Resource: "https://rs.example.test/other", MetadataURL: "https://rs.example.test/.well-known/oauth-protected-resource"}
-	require.Equal(t, "The metadata document names the resource https://rs.example.test/other, not the requested one.", MismatchMessage("https://rs.example.test/mcp", doc))
+	require.Equal(t, "The metadata document names the resource https://rs.example.test/other, not the requested one.", mismatchMessage("https://rs.example.test/mcp", doc))
 
 	doc.Resource = "https://rs.example.test/mcp"
-	require.Equal(t, "The metadata document was read from https://rs.example.test/.well-known/oauth-protected-resource, not the resource's well-known location.", MismatchMessage("https://rs.example.test/mcp", doc))
+	require.Equal(t, "The metadata document was read from https://rs.example.test/.well-known/oauth-protected-resource, not the resource's well-known location.", mismatchMessage("https://rs.example.test/mcp", doc))
 
 	doc.Resource = ""
-	require.Equal(t, "The metadata document names the resource (empty), not the requested one.", MismatchMessage("https://rs.example.test/mcp", doc))
+	require.Equal(t, "The metadata document names the resource (empty), not the requested one.", mismatchMessage("https://rs.example.test/mcp", doc))
 
 	doc.Resource = "https://user:secret@rs.example.test/other?token=abc#frag"
-	require.Equal(t, "The metadata document names the resource https://rs.example.test/other, not the requested one.", MismatchMessage("https://rs.example.test/mcp", doc))
+	require.Equal(t, "The metadata document names the resource https://rs.example.test/other, not the requested one.", mismatchMessage("https://rs.example.test/mcp", doc))
 
 	doc.Resource = "urn:example:resource"
-	require.Equal(t, "The metadata document names the resource <invalid URL>, not the requested one.", MismatchMessage("https://rs.example.test/mcp", doc))
+	require.Equal(t, "The metadata document names the resource <invalid URL>, not the requested one.", mismatchMessage("https://rs.example.test/mcp", doc))
 
 	doc.Resource = "https://rs.example.test/" + strings.Repeat("é", 300)
-	got := MismatchMessage("https://rs.example.test/mcp", doc)
+	got := mismatchMessage("https://rs.example.test/mcp", doc)
 	require.True(t, utf8.ValidString(got))
 	require.Equal(t, 200, utf8.RuneCountInString(strings.TrimSuffix(strings.TrimPrefix(got, "The metadata document names the resource "), "…, not the requested one.")))
 }
@@ -94,7 +94,7 @@ func TestDiagnosticStorage(t *testing.T) {
 	require.Equal(t, safeMetadataURL, db.args[3])
 	require.Equal(t, string(raw), db.args[14])
 	require.Equal(t, metadataURL, doc.MetadataURL)
-	require.NoError(t, RecordError(t.Context(), db, uuid.New(), "test-org", resource, metadataURL, "safe failure"))
+	require.NoError(t, recordError(t.Context(), db, uuid.New(), "test-org", resource, metadataURL, "safe failure"))
 	require.Equal(t, resource, db.args[2])
 	require.Equal(t, safeMetadataURL, db.args[3])
 	require.Equal(t, "safe failure", db.args[4])

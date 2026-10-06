@@ -183,20 +183,22 @@ func actor(ctx context.Context, authCtx *contextvalues.AuthContext) urn.Principa
 	return urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 }
 
-// requireEnabled checks the rollout flag; a lookup failure reads as unavailable, never forbidden.
-func (s *Service) requireEnabled(ctx context.Context, logger *slog.Logger, organizationID string) error {
+// requireEnabled checks the rollout flag and returns the organization's
+// slug for later flag reads; a lookup failure reads as unavailable, never
+// forbidden.
+func (s *Service) requireEnabled(ctx context.Context, logger *slog.Logger, organizationID string) (string, error) {
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {
-		return oops.E(oops.CodeUnavailable, err, "okta connections availability could not be determined").LogError(ctx, logger)
+		return "", oops.E(oops.CodeUnavailable, err, "okta connections availability could not be determined").LogError(ctx, logger)
 	}
 	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagOktaConnections, organizationID, feature.OrgProjectGroups(org.Slug, ""))
 	if err != nil {
-		return oops.E(oops.CodeUnavailable, err, "okta connections availability could not be determined").LogError(ctx, logger)
+		return "", oops.E(oops.CodeUnavailable, err, "okta connections availability could not be determined").LogError(ctx, logger)
 	}
 	if !enabled {
-		return oops.E(oops.CodeForbidden, nil, "okta connections are not enabled for this organization")
+		return "", oops.E(oops.CodeForbidden, nil, "okta connections are not enabled for this organization")
 	}
-	return nil
+	return org.Slug, nil
 }
 
 // upstreamKey identifies the resource the administrator connects in Okta.
@@ -245,6 +247,7 @@ type snapshot struct {
 	// resources is the cached protected resource row per remote-backed
 	// server, read once; the login probes, this surface never does.
 	resources map[resourceKey]repo.ListRemoteProtectedResourceScopesRow
+
 	// discoverScopes applies the resource's advertised scopes, per the rollout flag.
 	discoverScopes bool
 }
@@ -287,7 +290,7 @@ func (snap *snapshot) derive(sv repo.ListEligibleServersRow) row {
 
 // load reads the connection, the eligible servers, and the recorded resource
 // connections, and derives every state. It reads outside any transaction.
-func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID string) (*snapshot, error) {
+func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID, organizationSlug string) (*snapshot, error) {
 	q := repo.New(s.db)
 	connection, err := q.GetLiveConnection(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -316,7 +319,7 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 		records:        map[upstreamKey]*record{},
 		deepLink:       deepLink(connection),
 		resources:      map[resourceKey]repo.ListRemoteProtectedResourceScopesRow{},
-		discoverScopes: s.scopeDiscoveryEnabled(ctx, logger, organizationID),
+		discoverScopes: remotesessions.ResourceScopeDiscoveryEnabled(ctx, logger, s.features, organizationID, organizationSlug),
 	}
 	servers := make([]repo.ListEligibleServersRow, 0, len(all))
 	seen := map[uuid.UUID]bool{}
@@ -484,27 +487,12 @@ func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []re
 // cached resource row; this surface never probes.
 func requestedScopes(c repo.ListIssuerClientsRow, resourceScopes remotesessions.ResourceScopes) []string {
 	scopes := (remotesessions.Client{ //nolint:exhaustruct // Only scope inputs are used by RequestedScopes.
-		ClientScope:           c.Scope,
-		IssuerScopeOverride:   c.IssuerScopeOverride,
-		IssuerScopesSupported: c.IssuerScopesSupported,
+		ClientScope:             c.Scope,
+		IssuerScopeOverride:     c.IssuerScopeOverride,
+		IssuerScopesSupported:   c.IssuerScopesSupported,
+		IssuerOmitScopeFallback: c.IssuerOmitScopeFallback.Valid && c.IssuerOmitScopeFallback.Bool,
 	}).RequestedScopes(resourceScopes).Scopes
 	return scopesOr(nil, scopes)
-}
-
-// scopeDiscoveryEnabled reports whether the organization's logins base their
-// scope request on what the resource advertises; unreadable reads as off.
-func (s *Service) scopeDiscoveryEnabled(ctx context.Context, logger *slog.Logger, organizationID string) bool {
-	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		logger.WarnContext(ctx, "read organization for scope discovery flag", attr.SlogError(err))
-		return false
-	}
-	enabled, err := s.features.IsFlagEnabledLocal(ctx, feature.FlagRemoteSessionLiveResourceScopes, organizationID, feature.OrgProjectGroups(org.Slug, ""), nil)
-	if err != nil {
-		logger.WarnContext(ctx, "evaluate scope discovery flag", attr.SlogError(err))
-		return false
-	}
-	return enabled
 }
 
 func scopesOr(preferred, fallback []string) []string {
@@ -522,7 +510,11 @@ func (s *Service) List(ctx context.Context, payload *srv.ListPayload) (*srv.List
 	if err != nil {
 		return nil, err
 	}
-	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID)
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load organization").LogError(ctx, logger)
+	}
+	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID, org.Slug)
 	if err != nil {
 		return nil, err
 	}
@@ -619,14 +611,15 @@ func (s *Service) Confirm(ctx context.Context, payload *srv.ConfirmPayload) (*sr
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireEnabled(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
+	orgSlug, err := s.requireEnabled(ctx, logger, authCtx.ActiveOrganizationID)
+	if err != nil {
 		return nil, err
 	}
 	items, err := parseConfirmations(payload.Connections)
 	if err != nil {
 		return nil, err
 	}
-	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID)
+	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID, orgSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -768,14 +761,15 @@ func (s *Service) Reset(ctx context.Context, payload *srv.ResetPayload) (*srv.Ok
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireEnabled(ctx, logger, authCtx.ActiveOrganizationID); err != nil {
+	orgSlug, err := s.requireEnabled(ctx, logger, authCtx.ActiveOrganizationID)
+	if err != nil {
 		return nil, err
 	}
 	id, err := uuid.Parse(payload.McpServerID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id")
 	}
-	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID)
+	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID, orgSlug)
 	if err != nil {
 		return nil, err
 	}
