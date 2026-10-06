@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -61,9 +62,18 @@ func TestMintAndValidate(t *testing.T) {
 			got, err := issuer.Validate(raw)
 			require.NoError(t, err)
 			require.Equal(t, id, got.ID)
+			require.Equal(t, c.OrganizationID, got.Credential.OrganizationID)
+			require.Equal(t, c.ProjectID, got.Credential.ProjectID)
 			require.Equal(t, c.Principal, got.Credential.Principal)
 			require.Equal(t, c.AuthorizerUserID, got.Credential.AuthorizerUserID)
-			require.Equal(t, c.ProjectID, got.Credential.ProjectID)
+
+			expected, err := runtimepolicy.NewDelegatedPolicy(runtimepolicy.CurrentDelegatedPolicyVersion, c.Grants)
+			require.NoError(t, err)
+			canonical, err := runtimepolicy.EncodeDelegatedPolicy(runtimepolicy.CurrentDelegatedPolicyVersion, expected)
+			require.NoError(t, err)
+			require.Equal(t, int32(runtimepolicy.CurrentDelegatedPolicyVersion), got.DelegatedGrantsVersion)
+			require.JSONEq(t, string(canonical), string(got.DelegatedGrants), "the signed grants are the canonical delegated policy")
+			require.Equal(t, expected.RuntimeGrants(), got.Credential.Grants)
 		})
 	}
 }

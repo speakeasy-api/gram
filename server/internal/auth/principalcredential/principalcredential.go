@@ -195,16 +195,18 @@ func FromContext(ctx context.Context) (Authenticated, bool) {
 
 // Authenticate verifies raw and returns a context authenticated as its
 // principal: the principal credential profile and actor an agent API key
-// produces, scoped to the credential's project. Admission happens later
-// through authz.PrepareContext like any other principal credential. A request
-// that already authenticated with a principal credential is returned as is.
+// produces, scoped to the credential's project. The organization must not be
+// disabled, and an authorizing user must still be an eligible member who can
+// read the project. Admission happens later through authz.PrepareContext like
+// any other principal credential. A context that already authenticated this
+// same token is returned as is.
 func (i *Issuer) Authenticate(ctx context.Context, raw string) (context.Context, error) {
-	if _, ok := FromContext(ctx); ok {
-		return ctx, nil
-	}
 	authenticated, err := i.Validate(raw)
 	if err != nil {
 		return ctx, err
+	}
+	if existing, ok := FromContext(ctx); ok && existing.ID == authenticated.ID {
+		return ctx, nil
 	}
 	c := authenticated.Credential
 	project, err := projectsrepo.New(i.db).GetProjectByID(ctx, c.ProjectID)
@@ -221,6 +223,14 @@ func (i *Issuer) Authenticate(ctx context.Context, raw string) (context.Context,
 	if err != nil {
 		return ctx, fmt.Errorf("load principal credential organization: %w", err)
 	}
+	if org.DisabledAt.Valid {
+		return ctx, fmt.Errorf("%w: organization is disabled", ErrInvalid)
+	}
+	if c.AuthorizerUserID != "" {
+		if err := i.checkAuthorizer(ctx, c); err != nil {
+			return ctx, err
+		}
+	}
 	ac := &contextvalues.AuthContext{
 		ActiveOrganizationID: c.OrganizationID, UserID: "", ExternalUserID: "", APIKeyID: "", APIKeyName: "",
 		OrgWidePluginHooksKey: false, SessionID: nil, ProjectID: &project.ID, OrganizationSlug: org.Slug, Email: nil,
@@ -231,4 +241,30 @@ func (i *Issuer) Authenticate(ctx context.Context, raw string) (context.Context,
 		AuthorizerUserID: c.AuthorizerUserID, DelegatedGrants: authenticated.DelegatedGrants, DelegatedGrantsVersion: authenticated.DelegatedGrantsVersion,
 	})
 	return context.WithValue(ctx, authenticatedKey{}, authenticated), nil
+}
+
+// checkAuthorizer re-checks, on every use, that the user an agent credential
+// acts for is still an eligible member who can read the credential's project.
+// The credential's grants were narrowed by that user's grants at mint.
+func (i *Issuer) checkAuthorizer(ctx context.Context, c Credential) error {
+	principals, eligible, err := runtimepolicy.ResolveEligibleUser(ctx, i.db, c.OrganizationID, c.AuthorizerUserID)
+	if err != nil {
+		return fmt.Errorf("resolve principal credential authorizer: %w", err)
+	}
+	if !eligible {
+		return fmt.Errorf("%w: authorizer is not an eligible member", ErrInvalid)
+	}
+	grants, err := authz.LoadGrants(ctx, i.db, c.OrganizationID, principals)
+	if err != nil {
+		return fmt.Errorf("load principal credential authorizer grants: %w", err)
+	}
+	check := authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: c.ProjectID.String(), Dimensions: nil}
+	allowed, err := authz.GrantsAuthorize(grants, check)
+	if err != nil {
+		return fmt.Errorf("check principal credential authorizer: %w", err)
+	}
+	if !allowed {
+		return fmt.Errorf("%w: authorizer cannot read the project", ErrInvalid)
+	}
+	return nil
 }
