@@ -514,7 +514,9 @@ const manifest = g.manifest();
 
 Deploy with `speakeasy functions push`. It builds the project, adds the zip
 file to the deployment file (`gram.deploy.json` by default) and pushes a
-deployment to the project you chose with `speakeasy auth`. The slug comes from
+deployment. The target project is `--project` (or `GRAM_PROJECT`), then
+`deployProject` in `gram.config.ts`, then the project you chose with
+`speakeasy auth`. The slug comes from
 `--slug`, then `slug` in `gram.config.ts`, then the package.json `name`
 without its scope. Pass `--no-build` to deploy the existing build output.
 
