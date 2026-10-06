@@ -7,7 +7,11 @@ import { CatalogPlatformPage } from "./CatalogPlatformPage";
 import { CatalogPlatforms } from "./CatalogPlatforms";
 import { testPlatform } from "./testPlatform";
 
-const policy = vi.hoisted(() => ({ issuers: [] as unknown[] }));
+const policy = vi.hoisted(() => ({
+  issuers: [] as unknown[],
+  isError: false,
+}));
+const catalogQuery = vi.hoisted(() => ({ isError: false }));
 
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -62,16 +66,24 @@ vi.mock("../WorkloadIssuerDetail", () => ({
   ),
 }));
 vi.mock("@gram/client/react-query/workloadPlatforms.js", () => ({
-  useWorkloadPlatforms: () => ({
-    data: { platforms: [testPlatform] },
-    isPending: false,
-  }),
+  useWorkloadPlatforms: () =>
+    catalogQuery.isError
+      ? { data: undefined, isPending: false, isError: true, refetch: vi.fn() }
+      : {
+          data: { platforms: [testPlatform] },
+          isPending: false,
+          isError: false,
+        },
 }));
 vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
-  useWorkloadIdentities: () => ({
-    data: { issuers: policy.issuers, admissions: [] },
-    isPending: false,
-  }),
+  useWorkloadIdentities: () =>
+    policy.isError
+      ? { data: undefined, isPending: false, isError: true, refetch: vi.fn() }
+      : {
+          data: { issuers: policy.issuers, admissions: [] },
+          isPending: false,
+          isError: false,
+        },
   invalidateAllWorkloadIdentities: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/agents.js", () => ({
@@ -91,11 +103,14 @@ vi.mock("@gram/client/react-query/admitWorkloadSubject.js", () => ({
 afterEach(() => {
   cleanup();
   policy.issuers = [];
+  policy.isError = false;
+  catalogQuery.isError = false;
 });
 
 const claudeTagIssuer = {
   id: "issuer-1",
   issuer: "https://identity.anthropic.com/agents",
+  jwksUri: "https://identity.anthropic.com/agents/jwks.json",
 };
 
 function renderPage(url: string) {
@@ -173,4 +188,39 @@ it("opens the guided setup from the empty state's Set one up", () => {
   renderPage("/access-hub/catalog/claude-tag");
   fireEvent.click(screen.getByRole("button", { name: "Set one up" }));
   expect(currentStep()).toBe("Step 1: Before you start");
+});
+
+it("does not take a platform with the same issuer but other keys for the catalog's", () => {
+  policy.issuers = [
+    { ...claudeTagIssuer, jwksUri: "https://keys.example.com/jwks.json" },
+  ];
+  renderPage("/access-hub/catalog/claude-tag");
+  expect(screen.queryByTestId("issuer-detail")).toBeNull();
+});
+
+it("offers a retry rather than an empty grid when the catalog fails to load", () => {
+  catalogQuery.isError = true;
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <CatalogPlatforms issuers={[]} isPending={false} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  expect(screen.getByText("Couldn’t load the catalog")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+});
+
+it("stays on the platform's page when the catalog fails to load", () => {
+  catalogQuery.isError = true;
+  renderPage("/access-hub/catalog/claude-tag");
+  expect(screen.getByText("Couldn’t load this platform")).toBeTruthy();
+  expect(screen.queryByText("Access Hub list")).toBeNull();
+});
+
+it("does not read a failed policy load as a platform not yet trusted", () => {
+  policy.isError = true;
+  renderPage("/access-hub/catalog/claude-tag");
+  expect(screen.getByText("Couldn’t load this platform")).toBeTruthy();
+  expect(screen.queryByText("No Claude Tag connections yet")).toBeNull();
 });

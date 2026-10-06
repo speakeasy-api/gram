@@ -18,13 +18,20 @@ import type {
 export function useCatalogEntries(): {
   entries: CatalogEntry[];
   isPending: boolean;
+  isError: boolean;
+  refetch: () => void;
 } {
   const query = useWorkloadPlatforms({}, undefined, { throwOnError: false });
   const entries = useMemo(
     () => (query.data?.platforms ?? []).map(toCatalogEntry),
     [query.data],
   );
-  return { entries, isPending: query.isPending };
+  return {
+    entries,
+    isPending: query.isPending,
+    isError: query.isError,
+    refetch: () => void query.refetch(),
+  };
 }
 
 export function toCatalogEntry(platform: WorkloadPlatform): CatalogEntry {
@@ -66,7 +73,7 @@ function toSetupDefinition(
   };
 }
 
-/** A block of a type this dashboard does not know is dropped, not rendered. */
+/** A block keeps only the fields its type uses. */
 function toSetupBlock(block: WorkloadPlatformBlock): SetupBlock[] {
   switch (block.type) {
     case "text":
@@ -111,12 +118,18 @@ function optional(value: string): string | undefined {
 
 /**
  * The trusted platform an entry corresponds to, if the organization trusts it.
- * Matched on the issuer URL until rows carry the catalog key they were created
- * from (AIM-374).
+ * Matched on the issuer and JWKS URLs until rows carry the catalog key they
+ * were created from (AIM-374). The issuer alone is not enough: two rows may
+ * share an issuer URL with different key URLs, and only the one fetching the
+ * entry's keys verifies the platform's tokens.
  */
 export function connectedIssuer(
   entry: CatalogEntry,
   issuers: WorkloadIssuer[],
 ): WorkloadIssuer | undefined {
-  return issuers.find((issuer) => issuer.issuer === entry.issuer.value);
+  return issuers.find(
+    (issuer) =>
+      issuer.issuer === entry.issuer.value &&
+      issuer.jwksUri === entry.jwksUri.value,
+  );
 }

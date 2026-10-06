@@ -9,9 +9,9 @@
  */
 
 /** Whether the operator sees a value the entry supplies. */
-export type Visibility = "hidden" | "read-only";
+type Visibility = "hidden" | "read-only";
 
-export interface CatalogConstant {
+interface CatalogConstant {
   value: string;
   visibility: Visibility;
 }
@@ -37,7 +37,7 @@ export interface CatalogVariable {
  * followed by `*`, and the template must end on a delimiter of the platform's
  * subject format so the stem cannot run into a neighboring value.
  */
-export interface SubjectTemplate {
+interface SubjectTemplate {
   template: string;
   wildcard: boolean;
 }
@@ -82,7 +82,7 @@ export type SetupBlock =
  * rule need; the create step writes them; steps after it describe the
  * platform's side and only unlock once the rows exist.
  */
-export type SetupPhase = "collect" | "create" | "connect";
+type SetupPhase = "collect" | "create" | "connect";
 
 export interface SetupStep {
   id: string;

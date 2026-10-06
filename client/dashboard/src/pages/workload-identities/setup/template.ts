@@ -15,7 +15,7 @@ export function variableProblem(
   }
   if (
     variable.pattern !== undefined &&
-    !new RegExp(`^(?:${variable.pattern})$`).test(trimmed)
+    !patternMatches(variable.pattern, trimmed)
   ) {
     return variable.patternMessage ?? `${variable.label} is not valid.`;
   }
@@ -23,10 +23,22 @@ export function variableProblem(
 }
 
 /**
+ * Whether value matches pattern in full. A pattern this browser cannot compile
+ * matches nothing, so the value reads as invalid rather than the step breaking.
+ */
+function patternMatches(pattern: string, value: string): boolean {
+  try {
+    return new RegExp(`^(?:${pattern})$`).test(value);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The template with each `{key}` replaced by its trimmed value, or null while
  * any placeholder's value is missing or invalid.
  */
-export function fillTemplate(
+function fillTemplate(
   entry: CatalogEntry,
   template: string,
   values: VariableValues,
@@ -62,15 +74,4 @@ export function subjectRule(
     return { subject: `${filled}*`, matchKind: "wildcard" };
   }
   return { subject: filled, matchKind: "exact" };
-}
-
-/** Whether every variable has a usable value. */
-export function variablesComplete(
-  entry: CatalogEntry,
-  values: VariableValues,
-): boolean {
-  return entry.variables.every(
-    (variable) =>
-      variableProblem(variable, values[variable.key] ?? "") === null,
-  );
 }

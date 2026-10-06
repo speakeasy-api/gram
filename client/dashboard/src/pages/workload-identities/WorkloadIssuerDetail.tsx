@@ -49,37 +49,59 @@ import { toast } from "sonner";
 
 const MACHINES_PAGE_SIZE = 10;
 
+/** Which of a platform's identifiers are shown on its page. */
+interface ShownIdentifiers {
+  issuer: boolean;
+  jwksUri: boolean;
+}
+
+const ALL_IDENTIFIERS: ShownIdentifiers = { issuer: true, jwksUri: true };
+
 // The identifiers sit on labeled lines of their own, apart from the
 // description, because they are what an administrator copies into the
 // platform's console.
 function IssuerIdentifiers({
   issuer,
+  shown,
 }: {
   issuer: WorkloadIssuer;
-}): JSX.Element {
+  shown: ShownIdentifiers;
+}): JSX.Element | null {
+  if (!shown.issuer && !shown.jwksUri) {
+    return null;
+  }
   return (
     <dl className="mb-6 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1">
-      <dt>
-        <Text muted small>
-          Issuer URL
-        </Text>
-      </dt>
-      <dd>
-        <Text small className="font-mono break-all">
-          {issuer.issuer}
-        </Text>
-      </dd>
-      <dt>
-        <Text muted small>
-          Keys URL
-        </Text>
-      </dt>
-      <dd>
-        <Text small className="font-mono break-all">
-          {issuer.jwksUri}
-        </Text>
-      </dd>
+      {shown.issuer && (
+        <IdentifierRow label="Issuer URL" value={issuer.issuer} />
+      )}
+      {shown.jwksUri && (
+        <IdentifierRow label="Keys URL" value={issuer.jwksUri} />
+      )}
     </dl>
+  );
+}
+
+function IdentifierRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}): JSX.Element {
+  return (
+    <>
+      <dt>
+        <Text muted small>
+          {label}
+        </Text>
+      </dt>
+      <dd>
+        <Text small className="font-mono break-all">
+          {value}
+        </Text>
+      </dd>
+    </>
   );
 }
 
@@ -135,6 +157,12 @@ export interface CatalogPlatformContext {
 
   /** Opens the guided setup from the empty state. */
   setupButton: ReactNode;
+
+  /**
+   * The identifiers the catalog marks read-only. The rest are the same for
+   * every customer and stay hidden.
+   */
+  shownIdentifiers: ShownIdentifiers;
 }
 
 export function CatalogEmptyState({
@@ -602,7 +630,12 @@ export function IssuerDetail({
         catalog?.description ?? (issuer?.description.trim() || undefined)
       }
       belowHeader={
-        catalog === undefined && issuer && <IssuerIdentifiers issuer={issuer} />
+        issuer && (
+          <IssuerIdentifiers
+            issuer={issuer}
+            shown={catalog?.shownIdentifiers ?? ALL_IDENTIFIERS}
+          />
+        )
       }
     >
       {allowUnavailableReason !== null && (

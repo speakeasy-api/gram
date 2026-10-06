@@ -1,5 +1,6 @@
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
+import { SourceSectionError } from "@/components/sources/SourceSectionError";
 import { Button } from "@/components/ui/Button";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useOrgRoutes } from "@/routes";
@@ -41,6 +42,24 @@ function CatalogPlatform({
   const entry = catalog.entries.find(
     (candidate) => candidate.key === platformKey,
   );
+
+  // A failed load says nothing about whether the platform exists or is
+  // trusted. Redirecting would hide the error, and reading the platform as not
+  // yet trusted would invite registering it a second time.
+  if (catalog.isError || policy.isError) {
+    return (
+      <ResourceListPage title="Catalog platform" stage="preview">
+        <SourceSectionError
+          heading="Couldn’t load this platform"
+          description="The catalog or the trust policy failed to load. Try again in a moment."
+          onRetry={() => {
+            catalog.refetch();
+            void policy.refetch();
+          }}
+        />
+      </ResourceListPage>
+    );
+  }
 
   if (catalog.isPending || policy.isPending) {
     return (
@@ -116,6 +135,10 @@ function CatalogPlatform({
             description: entry.description,
             registerButton,
             setupButton,
+            shownIdentifiers: {
+              issuer: entry.issuer.visibility === "read-only",
+              jwksUri: entry.jwksUri.visibility === "read-only",
+            },
           }}
         />
       )}

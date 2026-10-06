@@ -22,6 +22,31 @@ import { subjectRule, variableProblem, type VariableValues } from "./template";
 const SETUP_PROSE =
   "text-sm [&_ul]:ml-6 [&_ul]:list-disc [&_li]:my-1 [&_strong]:font-semibold";
 
+// Structural subset of an mdast node, enough to walk the tree.
+interface MarkdownNode {
+  type: string;
+  children?: MarkdownNode[];
+}
+
+/**
+ * Drops every image from definition text. Images belong in an image block,
+ * which loads only from the dashboard's origin; one in markdown could point
+ * the operator's browser at any host.
+ */
+function remarkDropImages(): (tree: unknown) => void {
+  return (tree) => dropImages(tree as MarkdownNode);
+}
+
+function dropImages(node: MarkdownNode): void {
+  if (node.children === undefined) return;
+  node.children = node.children.filter(
+    (child) => child.type !== "image" && child.type !== "imageReference",
+  );
+  node.children.forEach(dropImages);
+}
+
+const TEXT_REMARK_PLUGINS = [remarkDropImages];
+
 export interface Option {
   id: string;
   name: string;
@@ -52,7 +77,14 @@ export function SetupBlockView({
     case "text":
       // react-markdown escapes raw HTML, so definition text cannot inject
       // markup or script whatever its source.
-      return <Markdown className={SETUP_PROSE}>{block.markdown}</Markdown>;
+      return (
+        <Markdown
+          className={SETUP_PROSE}
+          extraRemarkPlugins={TEXT_REMARK_PLUGINS}
+        >
+          {block.markdown}
+        </Markdown>
+      );
     case "image":
       return (
         <SetupImage src={block.src} alt={block.alt} caption={block.caption} />

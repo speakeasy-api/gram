@@ -27,6 +27,8 @@ import (
 	"sync"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 )
 
 //go:embed platforms/*.yaml
@@ -387,8 +389,10 @@ func validateConstant(field string, c Constant) error {
 	if c.Visibility != VisibilityHidden && c.Visibility != VisibilityReadOnly {
 		return fmt.Errorf("%s.visibility must be %q or %q", field, VisibilityHidden, VisibilityReadOnly)
 	}
-	if err := requireHTTPS(placeholderPattern.ReplaceAllString(c.Value, "x"), field); err != nil {
-		return err
+	// Held to the rules registration applies, with each placeholder standing in
+	// for a value, so an entry cannot write a row the forms would refuse.
+	if _, err := issuerurl.ParseHTTPSOnly(placeholderPattern.ReplaceAllString(c.Value, "x")); err != nil {
+		return fmt.Errorf("%s %q must be an https URL with no userinfo, query or fragment: %w", field, c.Value, err)
 	}
 	return nil
 }
@@ -409,6 +413,38 @@ func validateVariable(v Variable) error {
 	if _, err := regexp.Compile("^(?:" + v.Pattern + ")$"); err != nil {
 		return fmt.Errorf("variable %q: pattern: %w", v.Key, err)
 	}
+	if err := requirePortablePattern(v.Pattern); err != nil {
+		return fmt.Errorf("variable %q: pattern: %w", v.Key, err)
+	}
+	return nil
+}
+
+// requirePortablePattern refuses regular expression syntax that Go and
+// JavaScript read differently. The dashboard checks values with the browser's
+// RegExp, and a construct that compiles in both but means different things
+// would let the two disagree about which values are valid. Groups other than
+// (?:...), Unicode classes, \A, \z, \Q...\E and POSIX classes are refused:
+// each is valid Go that JavaScript reads as something else.
+func requirePortablePattern(pattern string) error {
+	for i := 0; i < len(pattern); i++ {
+		rest := pattern[i+1:]
+		switch pattern[i] {
+		case '\\':
+			if rest != "" && strings.ContainsRune(`pPAzQ`, rune(rest[0])) {
+				return fmt.Errorf(`\%c is read differently by Go and JavaScript`, rest[0])
+			}
+			// Skipped, so an escaped "(" or "[" is not read as syntax.
+			i++
+		case '(':
+			if strings.HasPrefix(rest, "?") && !strings.HasPrefix(rest, "?:") {
+				return errors.New("only (?:...) groups are allowed: named and flag groups are read differently by Go and JavaScript")
+			}
+		case '[':
+			if strings.HasPrefix(rest, ":") {
+				return errors.New("POSIX classes like [[:alpha:]] are not understood by JavaScript")
+			}
+		}
+	}
 	return nil
 }
 
@@ -424,6 +460,9 @@ func validateTemplate(field, template string, variables map[string]Variable, tie
 		if variable.Tier != tier {
 			return fmt.Errorf("%s uses {%s}, which must be a %s-tier variable", field, match[1], tier)
 		}
+	}
+	if strings.ContainsAny(placeholderPattern.ReplaceAllString(template, ""), "{}") {
+		return fmt.Errorf("%s has a brace that is not part of a {key} placeholder", field)
 	}
 	return nil
 }
@@ -498,6 +537,11 @@ func validateBlock(b Block, variables map[string]Variable) error {
 		if strings.TrimSpace(b.Markdown) == "" {
 			return errors.New("text needs markdown")
 		}
+		// An image in markdown could load from any host, so images go in an
+		// image block. The dashboard drops any that get past this.
+		if strings.Contains(b.Markdown, "![") {
+			return errors.New("text must not hold an image; use an image block")
+		}
 	case BlockImage:
 		if err := requireOriginPath(b.Src, "image src"); err != nil {
 			return err
@@ -532,17 +576,24 @@ func validateBlock(b Block, variables map[string]Variable) error {
 
 // requireOriginPath refuses anything but a path on the dashboard's own origin.
 // Images ship with the dashboard, and a definition must not be able to point
-// the operator's browser at another host.
+// the operator's browser at another host. Browsers read a backslash as a slash
+// and strip tabs and newlines from URLs, so "/\host" and "/<tab>/host" would
+// both leave the origin; a backslash, whitespace or control character is
+// refused anywhere. The dashboard's isRelativePath applies the same rule.
 func requireOriginPath(raw, field string) error {
-	if !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") || strings.Contains(raw, "\\") {
+	if !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") || strings.ContainsFunc(raw, unsafeInPath) {
 		return fmt.Errorf("%s %q must be a path on the dashboard's origin", field, raw)
 	}
 	return nil
 }
 
+func unsafeInPath(r rune) bool {
+	return r == '\\' || r <= ' ' || r == 0x7f
+}
+
 func requireHTTPS(raw, field string) error {
 	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
 		return fmt.Errorf("%s %q must be an https URL", field, raw)
 	}
 	return nil

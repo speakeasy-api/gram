@@ -1,3 +1,4 @@
+import { SourceSectionError } from "@/components/sources/SourceSectionError";
 import { Badge } from "@/components/ui/Badge";
 import { Card, Cards } from "@/components/ui/Card";
 import { useOrgRoutes } from "@/routes";
@@ -17,6 +18,19 @@ export function CatalogPlatforms({
   isPending: boolean;
 }): JSX.Element {
   const catalog = useCatalogEntries();
+
+  // An empty grid would read as a catalog with nothing in it.
+  if (catalog.isError) {
+    return (
+      <Cards noGrid>
+        <SourceSectionError
+          heading="Couldn’t load the catalog"
+          description="The platforms Gram can connect failed to load. Try again in a moment."
+          onRetry={catalog.refetch}
+        />
+      </Cards>
+    );
+  }
 
   return (
     <Cards isLoading={isPending || catalog.isPending} cardSize={2}>

@@ -98,6 +98,7 @@ export function PlatformSetupSheet({
   const activeStep = definition.steps[activeIndex]!;
   const nextStep = definition.steps[activeIndex + 1];
   const previousStep = definition.steps[activeIndex - 1];
+  const activeComplete = stepComplete(activeStep, inputs);
 
   const registerIssuer = useRegisterWorkloadIssuerMutation();
   const admitSubject = useAdmitWorkloadSubjectMutation();
@@ -132,7 +133,11 @@ export function PlatformSetupSheet({
           },
         },
       });
-      toast.success(`${entry.displayName} is trusted`);
+      toast.success(
+        isTrusted
+          ? `Access rule added to ${entry.displayName}`
+          : `${entry.displayName} is trusted`,
+      );
       if (nextStep !== undefined) onStepChange(nextStep.id);
     } catch (error) {
       toast.error(
@@ -151,12 +156,24 @@ export function PlatformSetupSheet({
   };
 
   // Another access rule under a platform already trusted, such as a second
-  // Anthropic organization: back to the first step that collects one.
+  // Anthropic organization. The platform's own values stay, since it is
+  // already trusted with them; the rule's are asked for again, starting at the
+  // first step that collects one.
   const addAccess = () => {
-    setValues({});
+    setValues((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([key]) =>
+          entry.variables.some(
+            (variable) => variable.key === key && variable.tier === "platform",
+          ),
+        ),
+      ),
+    );
     setAgentId("");
     setTags([]);
-    const first = definition.steps.find((step) => step.phase === "collect");
+    const first =
+      definition.steps.find((step) => collectsRuleValue(entry, step)) ??
+      definition.steps.find((step) => step.phase === "collect");
     if (first !== undefined) onStepChange(first.id);
   };
 
@@ -250,8 +267,9 @@ export function PlatformSetupSheet({
           <StepAction
             step={activeStep}
             nextStep={nextStep}
-            complete={stepComplete(activeStep, inputs)}
+            complete={activeComplete}
             canCreate={
+              activeComplete &&
               subjectRule(entry, values) !== null &&
               agentId !== "" &&
               tagsProblem(tags) === null
@@ -265,6 +283,18 @@ export function PlatformSetupSheet({
         </SheetFooter>
       </SheetContent>
     </Sheet>
+  );
+}
+
+/** Whether a step has a field for a variable supplied per access rule. */
+function collectsRuleValue(entry: CatalogEntry, step: SetupStep): boolean {
+  return step.blocks.some(
+    (block) =>
+      block.type === "field" &&
+      entry.variables.some(
+        (variable) =>
+          variable.key === block.variable && variable.tier === "rule",
+      ),
   );
 }
 

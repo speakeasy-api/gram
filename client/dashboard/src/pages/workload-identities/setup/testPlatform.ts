@@ -85,6 +85,17 @@ export const testPlatform: WorkloadPlatform = {
           value: "token_endpoint",
           label: "Token endpoint",
         }),
+        block({
+          type: "computed",
+          value: "issuer_url",
+          label: "Issuer URL",
+          help: "Leave the field empty if this shows nothing.",
+        }),
+        block({
+          type: "computed",
+          value: "mcp_host",
+          label: "Allowed API hosts",
+        }),
       ],
     },
     {
