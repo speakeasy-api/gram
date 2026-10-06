@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/speakeasy-api/gram/server/internal/risk"
 )
 
 const (
@@ -76,7 +78,7 @@ func riskFindingListSchema() *jsonschema.Schema {
 	properties["non_assistant"] = &jsonschema.Schema{Type: "boolean", Description: "Only findings from chats not linked to any assistant."}
 	properties["unique_match"] = &jsonschema.Schema{Type: "boolean", Description: "Collapse to one finding per (policy, rule, matched value), keeping the most recent occurrence."}
 	properties["result_id"] = uuidSchema("Optional finding ID. Fetches that one finding, such as one from a shared link, even when it is not on the current page. Returns nothing if it was dismissed, for example as a false positive.")
-	properties["execution_id"] = stringSchema("Optional ID of one mediated MCP execution (tool call, resource read or prompt get), the execution_id a finding returns. Returns the live findings for that execution across its request and response phases; findings that were dismissed, auto-excluded by exclusion rules, or raised under deleted policies are omitted.", 1, riskFindingExecutionIDMaxLen)
+	properties["execution_id"] = stringSchema("Optional ID of one mediated MCP execution (tool call, resource read or prompt get), the execution_id a finding returns. Returns the live findings for that execution across its request and response phases; findings that were dismissed, auto-excluded by exclusion rules, or raised under deleted policies are omitted.", 1, risk.MaxExecutionIDLen)
 	return projectSelectorSchema(properties, nil)
 }
 

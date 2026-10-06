@@ -129,6 +129,7 @@ func TestRiskFindingListValidation(t *testing.T) {
 		{RuleID: strings.Repeat("r", 129)},
 		{ResultID: "not-a-uuid"},
 		{ExecutionID: strings.Repeat("e", 129)},
+		{ExecutionID: "   "},
 		{UserID: strings.Repeat("u", 257)},
 		{Limit: 51},
 		{Limit: -1},
