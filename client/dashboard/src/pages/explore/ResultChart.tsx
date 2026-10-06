@@ -35,6 +35,7 @@ ChartJS.register(
   Legend,
 );
 
+/** The chart's height in the Explore results panel. */
 export const CHART_HEIGHT = 320;
 
 type TimeseriesDataset = ChartDataset<"bar" | "line", (number | null)[]>;
@@ -45,12 +46,15 @@ export function ResultChart({
   unit,
   chartType,
   grain,
+  height,
 }: {
   seriesSet: SeriesSet;
   /** The unit every series shares; the axis and tooltips format by it. */
   unit: string;
   chartType: ChartType;
   grain: Grain;
+  /** Height in pixels; without one the chart fills its container. */
+  height?: number;
 }): JSX.Element {
   const colors = useSeriesColors();
   const isDark = useIsDarkTheme();
@@ -131,7 +135,10 @@ export function ResultChart({
   );
 
   return (
-    <div style={{ height: CHART_HEIGHT }}>
+    <div
+      className={height === undefined ? "h-full min-h-0" : undefined}
+      style={height === undefined ? undefined : { height }}
+    >
       <Chart
         type={chartType === "bar" ? "bar" : "line"}
         data={{ labels: buckets, datasets }}
