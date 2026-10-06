@@ -22,17 +22,22 @@ use async_trait::async_trait;
 use serde_json::json;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::mcp_actor::McpCmd;
+use crate::mcp_actor::{KnownTools, McpCmd};
 
 /// Exposes the MCP catalog for dispatch without advertising any specs.
 pub struct HiddenCatalogSource {
-    catalog: CatalogReader,
+    catalog: Arc<CatalogReader>,
     cmd_tx: mpsc::Sender<McpCmd>,
+    known: KnownTools,
 }
 
 impl HiddenCatalogSource {
-    pub fn new(catalog: CatalogReader, cmd_tx: mpsc::Sender<McpCmd>) -> Self {
-        Self { catalog, cmd_tx }
+    pub fn new(catalog: CatalogReader, cmd_tx: mpsc::Sender<McpCmd>, known: KnownTools) -> Self {
+        Self {
+            catalog: Arc::new(catalog),
+            cmd_tx,
+            known,
+        }
     }
 }
 
@@ -42,11 +47,21 @@ impl ToolSource for HiddenCatalogSource {
     }
 
     fn get(&self, name: &ToolName) -> Option<Arc<dyn Tool>> {
-        let inner = self.catalog.get(name)?;
-        Some(Arc::new(ReconnectingTool {
-            inner,
-            cmd_tx: self.cmd_tx.clone(),
-        }))
+        if let Some(inner) = self.catalog.get(name) {
+            return Some(Arc::new(ReconnectingTool {
+                inner,
+                cmd_tx: self.cmd_tx.clone(),
+            }));
+        }
+        // A tool discovered earlier whose session has since closed: connect
+        // its server when the call dispatches rather than reporting it unknown.
+        self.known.contains(&name.0).then(|| {
+            Arc::new(DeferredMcpTool {
+                spec: placeholder_spec(name),
+                catalog: self.catalog.clone(),
+                cmd_tx: self.cmd_tx.clone(),
+            }) as Arc<dyn Tool>
+        })
     }
 
     fn drain_catalog_events(&self) -> Vec<ToolCatalogEvent> {
@@ -127,6 +142,70 @@ impl Tool for ReconnectingTool {
     }
 }
 
+/// A discovered MCP tool whose server is not connected right now. Invoking it
+/// asks the actor to connect the owning server, then dispatches against the
+/// fresh session's catalog entry.
+struct DeferredMcpTool {
+    spec: ToolSpec,
+    catalog: Arc<CatalogReader>,
+    cmd_tx: mpsc::Sender<McpCmd>,
+}
+
+impl DeferredMcpTool {
+    async fn connect(&self) -> Result<(), String> {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(McpCmd::ConnectForTool {
+                tool_name: self.spec.name.0.clone(),
+                reply: reply_tx,
+            })
+            .await
+            .map_err(|_| "mcp actor unavailable".to_string())?;
+        reply_rx
+            .await
+            .map_err(|_| "mcp actor dropped connect reply".to_string())?
+    }
+}
+
+#[async_trait]
+impl Tool for DeferredMcpTool {
+    fn spec(&self) -> &ToolSpec {
+        &self.spec
+    }
+
+    fn current_spec(&self) -> Option<ToolSpec> {
+        None
+    }
+
+    async fn invoke(
+        &self,
+        request: ToolRequest,
+        ctx: &mut ToolContext<'_>,
+    ) -> Result<ToolResult, ToolError> {
+        self.connect().await.map_err(ToolError::Unavailable)?;
+        let Some(inner) = self.catalog.get(&self.spec.name) else {
+            return Ok(ToolResult::new(ToolResultPart::error(
+                request.call_id,
+                ToolOutput::text(unknown_tool_message(&self.spec.name)),
+            )));
+        };
+        ReconnectingTool {
+            inner,
+            cmd_tx: self.cmd_tx.clone(),
+        }
+        .invoke(request, ctx)
+        .await
+    }
+}
+
+fn placeholder_spec(name: &ToolName) -> ToolSpec {
+    ToolSpec::new(
+        name.clone(),
+        "Unknown tool placeholder.",
+        json!({"type": "object", "additionalProperties": true}),
+    )
+}
+
 /// Terminal fallback source: resolves every name to a tool that returns an
 /// instructive error. Mounted last so real tools always win; its purpose is
 /// to turn calls to hallucinated or undiscovered names into a recovery path
@@ -140,11 +219,7 @@ impl ToolSource for UnknownToolSource {
 
     fn get(&self, name: &ToolName) -> Option<Arc<dyn Tool>> {
         Some(Arc::new(UnknownTool {
-            spec: ToolSpec::new(
-                name.clone(),
-                "Unknown tool placeholder.",
-                json!({"type": "object", "additionalProperties": true}),
-            ),
+            spec: placeholder_spec(name),
         }))
     }
 }
@@ -225,7 +300,7 @@ mod tests {
         let (writer, reader) = dynamic_catalog("mcp");
         writer.upsert(echo());
         let (cmd_tx, _cmd_rx) = mpsc::channel(1);
-        let source = HiddenCatalogSource::new(reader, cmd_tx);
+        let source = HiddenCatalogSource::new(reader, cmd_tx, KnownTools::default());
 
         assert!(source.specs().is_empty());
         assert!(source.get(&ToolName::new("mcp_srv_echo")).is_some());

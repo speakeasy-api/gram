@@ -106,21 +106,22 @@ pub fn build_bootstrap_client(client: reqwest::Client) -> ClientWithMiddleware {
     ClientBuilder::new(client).with(retry_middleware()).build()
 }
 
-/// `McpHttpClient` impl that mints a fresh bearer token per request from a
-/// shared [`TokenRegistry`]. Replaces the static `bearer_token` path in
-/// [`agentkit_mcp::StreamableHttpTransportConfig`] so token rotation does
-/// not require a reconnect.
-pub struct McpRotatingClient {
+/// `McpHttpClient` impl that sends one fixed bearer for the lifetime of a
+/// transport. Each MCP session captures the credential of the invocation that
+/// opened it, so late protocol traffic — a slow discovery POST or the session
+/// DELETE that cleans it up — can never carry a later invocation's bearer to
+/// an endpoint that invocation did not configure.
+pub struct McpSessionClient {
     inner: reqwest::Client,
-    tokens: TokenRegistry,
+    token: String,
     static_headers: HeaderMap,
 }
 
-impl McpRotatingClient {
-    pub fn new(inner: reqwest::Client, tokens: TokenRegistry, static_headers: HeaderMap) -> Self {
+impl McpSessionClient {
+    pub fn new(inner: reqwest::Client, token: String, static_headers: HeaderMap) -> Self {
         Self {
             inner,
-            tokens,
+            token,
             static_headers,
         }
     }
@@ -135,13 +136,13 @@ impl McpRotatingClient {
         custom
     }
 
-    fn current_token(&self) -> Option<String> {
-        self.tokens.current().ok().filter(|t| !t.is_empty())
+    fn bearer(&self) -> Option<String> {
+        Some(self.token.clone()).filter(|t| !t.is_empty())
     }
 }
 
 #[async_trait]
-impl McpHttpClient for McpRotatingClient {
+impl McpHttpClient for McpSessionClient {
     async fn post_message(
         &self,
         uri: Arc<str>,
@@ -150,7 +151,7 @@ impl McpHttpClient for McpRotatingClient {
         _auth_header: Option<String>,
         custom_headers: HashMap<HeaderName, HeaderValue>,
     ) -> Result<McpStreamableHttpPostResponse, McpStreamableHttpError<reqwest::Error>> {
-        let token = self.current_token();
+        let token = self.bearer();
         let headers = self.merged_headers(custom_headers);
         RmcpStreamableHttpClient::post_message(
             &self.inner,
@@ -170,7 +171,7 @@ impl McpHttpClient for McpRotatingClient {
         _auth_header: Option<String>,
         custom_headers: HashMap<HeaderName, HeaderValue>,
     ) -> Result<(), McpStreamableHttpError<reqwest::Error>> {
-        let token = self.current_token();
+        let token = self.bearer();
         let headers = self.merged_headers(custom_headers);
         RmcpStreamableHttpClient::delete_session(&self.inner, uri, session_id, token, headers).await
     }
@@ -183,7 +184,7 @@ impl McpHttpClient for McpRotatingClient {
         _auth_header: Option<String>,
         custom_headers: HashMap<HeaderName, HeaderValue>,
     ) -> Result<McpSseStream, McpStreamableHttpError<reqwest::Error>> {
-        let token = self.current_token();
+        let token = self.bearer();
         let headers = self.merged_headers(custom_headers);
         RmcpStreamableHttpClient::get_stream(
             &self.inner,
