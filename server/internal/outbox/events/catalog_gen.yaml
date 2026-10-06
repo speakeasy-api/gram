@@ -3834,7 +3834,7 @@ webhooks:
                 required: true
     audit_log.risk_result_event_v1:
         post:
-            description: Emitted when a risk result's match is unmasked
+            description: Emitted when a risk result's match is unmasked, its scanned payload is revealed, or it is dismissed or restored
             operationId: audit_log.risk_result_event_v1
             requestBody:
                 content:

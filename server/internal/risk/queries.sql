@@ -2144,6 +2144,57 @@ WHERE evidence.organization_id = expired.organization_id
   AND evidence.project_id = expired.project_id
   AND evidence.finding_id = expired.finding_id;
 
+-- name: InsertMCPExecutionEvidence :exec
+-- A phase's payload is fixed once scanned, so the first writer wins.
+INSERT INTO risk_execution_evidence (
+    organization_id
+  , project_id
+  , execution_id
+  , phase
+  , payload_encrypted
+  , created_at
+  , updated_at
+  , expires_at
+)
+VALUES (
+    @organization_id
+  , @project_id
+  , @execution_id
+  , @phase
+  , @payload_encrypted
+  , @created_at
+  , clock_timestamp()
+  , @expires_at
+)
+ON CONFLICT (organization_id, project_id, execution_id, phase) DO NOTHING;
+
+-- name: GetMCPExecutionEvidence :one
+SELECT payload_encrypted, expires_at
+FROM risk_execution_evidence
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND execution_id = @execution_id
+  AND phase = @phase
+  AND expires_at > @now;
+
+-- name: CleanupExpiredMCPExecutionEvidenceBatch :execrows
+-- Privileged global maintenance query, batched like
+-- CleanupExpiredMCPFindingEvidenceBatch.
+WITH expired AS (
+  SELECT organization_id, project_id, execution_id, phase
+  FROM risk_execution_evidence
+  WHERE expires_at <= clock_timestamp()
+  ORDER BY expires_at, organization_id, project_id, execution_id, phase
+  LIMIT @batch_size::integer
+  FOR UPDATE SKIP LOCKED
+)
+DELETE FROM risk_execution_evidence AS evidence
+USING expired
+WHERE evidence.organization_id = expired.organization_id
+  AND evidence.project_id = expired.project_id
+  AND evidence.execution_id = expired.execution_id
+  AND evidence.phase = expired.phase;
+
 -- name: CreateChatForTest :one
 INSERT INTO chats (project_id, organization_id, user_id, external_user_id)
 VALUES (@project_id, @organization_id, @user_id, @external_user_id)

@@ -153,6 +153,7 @@ function EvidenceRow({
       {isMCPFinding(result) ? (
         <div className="flex items-start justify-between gap-4 px-3 py-2">
           <MCPFindingContext
+            showOutcome
             finding={result}
             names={mcpFindingNames}
             className="min-w-0"

@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 )
 
 // The issuer gate counts every request it turns away on mcp.request.rejected,
@@ -61,15 +62,64 @@ func TestServePublic_McpEndpoint_IssuerGated_RecordsRejectedRequests(t *testing.
 	// empty and the value is the route and slug alone.
 	mcpURL := "/mcp/" + endpointSlug
 	require.Equal(t, int64(1), points[attribute.NewSet(
+		attr.McpRejectionReason(mcpmetrics.RequestRejectionReasonAuthentication),
 		attr.OAuthFailureReason("no_credentials"),
 		attr.McpURL(mcpURL),
 		attr.McpSurface(string(mcpmetrics.SurfaceHosting)),
 		attr.NetworkSurface(mcpmetrics.NetworkSurfacePublic),
 	)])
 	require.Equal(t, int64(1), points[attribute.NewSet(
+		attr.McpRejectionReason(mcpmetrics.RequestRejectionReasonAuthentication),
 		attr.OAuthFailureReason("invalid_bearer_token"),
 		attr.McpURL(mcpURL),
 		attr.McpSurface(string(mcpmetrics.SurfaceHosting)),
 		attr.NetworkSurface(mcpmetrics.NetworkSurfacePublic),
 	)])
+}
+
+// Request validation failures share mcp.request.rejected with the issuer
+// gate, distinguished by gram.mcp.rejection_reason. A meta endpoint's
+// conflicting declarations are a HeaderMismatch.
+func TestServePublic_MetaEndpoint_RecordsValidationRejectedRequests(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	ctx, ti := newTestMCPServiceWithMeterProvider(t, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "meta-" + uuid.NewString()
+	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+
+	_, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodToolsList, map[string]any{
+		"_meta": map[string]any{"io.modelcontextprotocol/protocolVersion": mcpversions.Version20251125},
+	}), "", map[string]string{mcpversions.HTTPHeader: mcpversions.Version20250618})
+	require.NoError(t, err)
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &rm))
+
+	points := map[attribute.Set]int64{}
+	for _, scope := range rm.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if m.Name != mcpmetrics.InstrumentMCPRequestRejected {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok, "rejected instrument must be an int64 counter")
+			for _, dp := range sum.DataPoints {
+				points[dp.Attributes] = dp.Value
+			}
+		}
+	}
+	require.Equal(t, map[attribute.Set]int64{
+		attribute.NewSet(
+			attr.McpRejectionReason(mcpmetrics.RequestRejectionReasonHeaderMismatch),
+			attr.McpURL("/mcp/"+slug),
+			attr.McpSurface(string(mcpmetrics.SurfaceMeta)),
+			attr.NetworkSurface(mcpmetrics.NetworkSurfacePublic),
+		): 1,
+	}, points)
 }

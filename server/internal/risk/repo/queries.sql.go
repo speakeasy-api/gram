@@ -299,6 +299,33 @@ func (q *Queries) BumpRiskPolicyVersion(ctx context.Context, arg BumpRiskPolicyV
 	return i, err
 }
 
+const cleanupExpiredMCPExecutionEvidenceBatch = `-- name: CleanupExpiredMCPExecutionEvidenceBatch :execrows
+WITH expired AS (
+  SELECT organization_id, project_id, execution_id, phase
+  FROM risk_execution_evidence
+  WHERE expires_at <= clock_timestamp()
+  ORDER BY expires_at, organization_id, project_id, execution_id, phase
+  LIMIT $1::integer
+  FOR UPDATE SKIP LOCKED
+)
+DELETE FROM risk_execution_evidence AS evidence
+USING expired
+WHERE evidence.organization_id = expired.organization_id
+  AND evidence.project_id = expired.project_id
+  AND evidence.execution_id = expired.execution_id
+  AND evidence.phase = expired.phase
+`
+
+// Privileged global maintenance query, batched like
+// CleanupExpiredMCPFindingEvidenceBatch.
+func (q *Queries) CleanupExpiredMCPExecutionEvidenceBatch(ctx context.Context, batchSize int32) (int64, error) {
+	result, err := q.db.Exec(ctx, cleanupExpiredMCPExecutionEvidenceBatch, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const cleanupExpiredMCPFindingEvidenceBatch = `-- name: CleanupExpiredMCPFindingEvidenceBatch :execrows
 WITH expired AS (
   SELECT organization_id, project_id, finding_id
@@ -1981,6 +2008,42 @@ func (q *Queries) GetJudgeMessageWindow(ctx context.Context, arg GetJudgeMessage
 	return items, nil
 }
 
+const getMCPExecutionEvidence = `-- name: GetMCPExecutionEvidence :one
+SELECT payload_encrypted, expires_at
+FROM risk_execution_evidence
+WHERE organization_id = $1
+  AND project_id = $2
+  AND execution_id = $3
+  AND phase = $4
+  AND expires_at > $5
+`
+
+type GetMCPExecutionEvidenceParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ExecutionID    string
+	Phase          string
+	Now            pgtype.Timestamptz
+}
+
+type GetMCPExecutionEvidenceRow struct {
+	PayloadEncrypted string
+	ExpiresAt        pgtype.Timestamptz
+}
+
+func (q *Queries) GetMCPExecutionEvidence(ctx context.Context, arg GetMCPExecutionEvidenceParams) (GetMCPExecutionEvidenceRow, error) {
+	row := q.db.QueryRow(ctx, getMCPExecutionEvidence,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ExecutionID,
+		arg.Phase,
+		arg.Now,
+	)
+	var i GetMCPExecutionEvidenceRow
+	err := row.Scan(&i.PayloadEncrypted, &i.ExpiresAt)
+	return i, err
+}
+
 const getMCPFindingEvidence = `-- name: GetMCPFindingEvidence :one
 SELECT match_encrypted
 FROM risk_finding_evidence
@@ -2641,6 +2704,54 @@ DELETE FROM risk_policies WHERE project_id = $1
 // ghost rows that production lookups already filter out.
 func (q *Queries) HardDeleteRiskPoliciesByProject(ctx context.Context, projectID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, hardDeleteRiskPoliciesByProject, projectID)
+	return err
+}
+
+const insertMCPExecutionEvidence = `-- name: InsertMCPExecutionEvidence :exec
+INSERT INTO risk_execution_evidence (
+    organization_id
+  , project_id
+  , execution_id
+  , phase
+  , payload_encrypted
+  , created_at
+  , updated_at
+  , expires_at
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , clock_timestamp()
+  , $7
+)
+ON CONFLICT (organization_id, project_id, execution_id, phase) DO NOTHING
+`
+
+type InsertMCPExecutionEvidenceParams struct {
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	ExecutionID      string
+	Phase            string
+	PayloadEncrypted string
+	CreatedAt        pgtype.Timestamptz
+	ExpiresAt        pgtype.Timestamptz
+}
+
+// A phase's payload is fixed once scanned, so the first writer wins.
+func (q *Queries) InsertMCPExecutionEvidence(ctx context.Context, arg InsertMCPExecutionEvidenceParams) error {
+	_, err := q.db.Exec(ctx, insertMCPExecutionEvidence,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ExecutionID,
+		arg.Phase,
+		arg.PayloadEncrypted,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
 	return err
 }
 

@@ -528,3 +528,27 @@ func TestMCPErrHandle_LegacyRevisionKeepsGramStatusesForMandatedCodes(t *testing
 		require.Equal(t, tt.want, rec.Code, "code %s", tt.code)
 	}
 }
+
+func TestNewMissingRequiredClientCapabilityError_MarshalsSpecShape(t *testing.T) {
+	t.Parallel()
+
+	mcpErr := NewMissingRequiredClientCapabilityError(mcpjsonrpc.NumberID(7), map[string]json.RawMessage{
+		"elicitation": json.RawMessage(`{}`),
+	})
+
+	bs, err := json.Marshal(mcpErr)
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"jsonrpc": "2.0",
+		"id": 7,
+		"error": {
+			"code": -32021,
+			"message": "Missing required client capability",
+			"data": {"requiredCapabilities": {"elicitation": {}}}
+		}
+	}`, string(bs))
+
+	status, ok := mcpErr.Code.MandatedHTTPStatus()
+	require.True(t, ok)
+	require.Equal(t, http.StatusBadRequest, status)
+}
