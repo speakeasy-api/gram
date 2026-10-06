@@ -17,7 +17,7 @@ func TestCopyProjection_LockstepWithInsertColumns(t *testing.T) {
 	t.Parallel()
 
 	versionExpr := "greatest(toDateTime64(?, 9), now64(9), latest.inserted_at) + toIntervalNanosecond(1)"
-	projection := copyProjection("?", "NULL", "'rule'", "''", "'suppression'")
+	projection := copyProjection("?", "NULL", "false_positive_at", "'rule'", "''", "'suppression'")
 	require.Contains(t, projection, versionExpr)
 	// Hide the expression's internal commas before splitting columns.
 	projected := strings.Split(strings.Replace(projection, versionExpr, "version", 1), ", ")
@@ -31,6 +31,8 @@ func TestCopyProjection_LockstepWithInsertColumns(t *testing.T) {
 			require.Equal(t, "?", projected[i])
 		case "exclusion_id":
 			require.Equal(t, "NULL", projected[i])
+		case "false_positive_at":
+			require.Equal(t, "false_positive_at", projected[i])
 		case "excluded_reason":
 			require.Equal(t, "'rule'", projected[i])
 		case "excluded_detail":
