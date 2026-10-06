@@ -2,6 +2,7 @@ package dashboards_test
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
@@ -106,6 +107,19 @@ func TestDashboardDetailsAreChecked(t *testing.T) {
 
 		created, err := ti.service.CreateDashboard(ctx, createPayload(strings.Repeat("é", 200)))
 		require.NoError(t, err)
+
+		// Details are stored trimmed, and a description that says nothing
+		// is not stored at all.
+		blank := "   "
+		spaced, err := ti.service.CreateDashboard(ctx, &gen.CreateDashboardPayload{Name: "  spaced  ", Description: &blank, SessionToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
+		require.Equal(t, "spaced", spaced.Name)
+		require.Nil(t, spaced.Description)
+		about := "  about  "
+		renamed, err := ti.service.UpdateDashboard(ctx, &gen.UpdateDashboardPayload{ID: spaced.ID, Name: " renamed ", Description: &about, SessionToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
+		require.Equal(t, "renamed", renamed.Name)
+		require.Equal(t, "about", *renamed.Description)
 		_, err = ti.service.UpdateDashboard(ctx, &gen.UpdateDashboardPayload{ID: created.ID, Name: strings.Repeat("x", 201), Description: nil, SessionToken: nil, ProjectSlugInput: nil})
 		require.ErrorContains(t, err, "a dashboard name is at most 200 characters")
 		_, err = ti.service.UpdateDashboard(ctx, &gen.UpdateDashboardPayload{ID: created.ID, Name: "ok", Description: &long, SessionToken: nil, ProjectSlugInput: nil})
@@ -279,6 +293,18 @@ func TestSaveDashboardLayout(t *testing.T) {
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "no card")
 
+		// A position that would wrap an addition is refused, not narrowed.
+		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(nil, tile.ID.String(), math.MaxInt-1, 0, 3, 2)))
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "past the grid's 12 columns")
+		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(nil, tile.ID.String(), 0, math.MaxInt-1, 3, 2)))
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "sits past row 10000")
+
+		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, nil))
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "placements[0]: a placement is required")
+
 		// A refused layout changes nothing.
 		got, err := ti.service.GetDashboard(ctx, getPayload(dashboard.ID))
 		require.NoError(t, err)
@@ -309,6 +335,55 @@ func TestSaveDashboardLayout(t *testing.T) {
 		_, err = ti.service.SaveDashboardLayout(otherCtx, layoutPayload(dashboard.ID))
 		requireOopsCode(t, err, oops.CodeForbidden)
 	})
+}
+
+func TestAddDashboardWidgetNeedsRoom(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	dashboard, err := ti.service.CreateDashboard(ctx, createPayload("full"))
+	require.NoError(t, err)
+	tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+
+	// A card ending on the last row leaves nothing below it to append to.
+	_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(nil, tile.ID.String(), 0, 9998, 2, 2)))
+	require.NoError(t, err)
+	_, err = ti.service.AddDashboardWidget(ctx, &gen.AddDashboardWidgetPayload{ID: dashboard.ID, WidgetID: tile.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorContains(t, err, "no room below row 10000")
+}
+
+func TestSaveDashboardFiltersAreBounded(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	dashboard, err := ti.service.CreateDashboard(ctx, createPayload("bounded"))
+	require.NoError(t, err)
+	save := func(filters *gen.DashboardFilters) error {
+		if _, err := ti.service.SaveDashboardFilters(ctx, &gen.SaveDashboardFiltersPayload{ID: dashboard.ID, Filters: filters, SessionToken: nil, ProjectSlugInput: nil}); err != nil {
+			return fmt.Errorf("save filters: %w", err)
+		}
+		return nil
+	}
+
+	many := map[string][]string{}
+	for i := range 21 {
+		many[fmt.Sprintf("dimension_%d", i)] = []string{"a"}
+	}
+	err = save(&gen.DashboardFilters{Range: nil, Values: many})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorContains(t, err, "at most 20 dimensions")
+
+	err = save(&gen.DashboardFilters{Range: nil, Values: map[string][]string{strings.Repeat("k", 101): {"a"}}})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorContains(t, err, "a dimension name is at most 100 characters")
+
+	err = save(&gen.DashboardFilters{Range: nil, Values: map[string][]string{"user": {strings.Repeat("v", 501)}}})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorContains(t, err, "filters.values.user: a value is at most 500 characters")
+
+	from, to, label := "2026-10-01T00:00:00Z", "2026-10-03T00:00:00Z", strings.Repeat("l", 201)
+	err = save(&gen.DashboardFilters{Range: &gen.DashboardRange{Preset: nil, From: &from, To: &to, Label: &label}, Values: map[string][]string{}})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorContains(t, err, "filters.range.label: at most 200 characters")
 }
 
 func TestAddAndRemoveDashboardWidget(t *testing.T) {

@@ -200,10 +200,15 @@ type PlacementInput struct {
 	// The existing placement, when the card is already on the dashboard
 	ID       *string
 	WidgetID string
-	X        int
-	Y        int
-	W        int
-	H        int
+	// Column the card starts at, on a 12-column grid
+	X int
+	// Row the card starts at
+	Y int
+	// Width in columns; each chart type also has a minimum, so x + w stays within
+	// 12
+	W int
+	// Height in rows; each chart type also has a minimum
+	H int
 }
 
 // RemoveDashboardWidgetPayload is the payload type of the dashboards service

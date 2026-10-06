@@ -9,14 +9,26 @@ import { remap as remap$ } from "../../lib/primitives.js";
  * A card's place in a layout being saved. With an id it moves or resizes the existing card; without one it adds the widget as a new card.
  */
 export type PlacementInput = {
+  /**
+   * Height in rows; each chart type also has a minimum
+   */
   h: number;
   /**
    * The existing placement, when the card is already on the dashboard
    */
   id?: string | undefined;
+  /**
+   * Width in columns; each chart type also has a minimum, so x + w stays within 12
+   */
   w: number;
   widgetId: string;
+  /**
+   * Column the card starts at, on a 12-column grid
+   */
   x: number;
+  /**
+   * Row the card starts at
+   */
   y: number;
 };
 

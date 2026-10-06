@@ -132,7 +132,7 @@ WHERE project_id = @project_id
 -- The widgets behind a dashboard's cards, once each, for duplicating them.
 SELECT DISTINCT ON (w.id) w.*
 FROM widgets w
-JOIN dashboard_widgets p ON p.widget_id = w.id
+JOIN dashboard_widgets p ON p.widget_id = w.id AND p.project_id = w.project_id
 WHERE p.project_id = @project_id
   AND p.dashboard_id = @dashboard_id
   AND w.deleted IS FALSE

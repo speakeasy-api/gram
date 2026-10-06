@@ -44,17 +44,31 @@ const (
 	maxDescriptionLength = 2000
 )
 
-// checkDetails returns why a name and description cannot be saved, or "".
-func checkDetails(name string, description *string) string {
-	switch {
-	case strings.TrimSpace(name) == "":
-		return "a dashboard needs a name"
-	case utf8.RuneCountInString(name) > maxNameLength:
-		return fmt.Sprintf("a dashboard name is at most %d characters", maxNameLength)
-	case description != nil && utf8.RuneCountInString(*description) > maxDescriptionLength:
-		return fmt.Sprintf("a dashboard description is at most %d characters", maxDescriptionLength)
+// details is a dashboard's name and description as they are stored: both
+// trimmed, and a description that says nothing dropped.
+type details struct {
+	name        string
+	description *string
+}
+
+// checkDetails returns the name and description to store, or why they
+// cannot be.
+func checkDetails(name string, description *string) (details, string) {
+	out := details{name: strings.TrimSpace(name), description: nil}
+	if description != nil {
+		if trimmed := strings.TrimSpace(*description); trimmed != "" {
+			out.description = &trimmed
+		}
 	}
-	return ""
+	switch {
+	case out.name == "":
+		return out, "a dashboard needs a name"
+	case utf8.RuneCountInString(out.name) > maxNameLength:
+		return out, fmt.Sprintf("a dashboard name is at most %d characters", maxNameLength)
+	case out.description != nil && utf8.RuneCountInString(*out.description) > maxDescriptionLength:
+		return out, fmt.Sprintf("a dashboard description is at most %d characters", maxDescriptionLength)
+	}
+	return out, ""
 }
 
 // copySuffix marks a dashboard made by duplication.
@@ -183,7 +197,8 @@ func (s *Service) CreateDashboard(ctx context.Context, payload *gen.CreateDashbo
 	if authCtx.UserID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "making a dashboard requires a user identity")
 	}
-	if reason := checkDetails(payload.Name, payload.Description); reason != "" {
+	details, reason := checkDetails(payload.Name, payload.Description)
+	if reason != "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "%s", reason)
 	}
 
@@ -197,8 +212,8 @@ func (s *Service) CreateDashboard(ctx context.Context, payload *gen.CreateDashbo
 		ProjectID:       *authCtx.ProjectID,
 		OrganizationID:  authCtx.ActiveOrganizationID,
 		CreatedByUserID: conv.ToPGTextEmpty(authCtx.UserID),
-		Name:            payload.Name,
-		Description:     conv.PtrToPGTextEmpty(payload.Description),
+		Name:            details.name,
+		Description:     conv.PtrToPGTextEmpty(details.description),
 		Filters:         []byte("{}"),
 	})
 	if err != nil {
@@ -217,13 +232,14 @@ func (s *Service) CreateDashboard(ctx context.Context, payload *gen.CreateDashbo
 
 // UpdateDashboard renames a dashboard or changes its description.
 func (s *Service) UpdateDashboard(ctx context.Context, payload *gen.UpdateDashboardPayload) (*gen.Dashboard, error) {
-	if reason := checkDetails(payload.Name, payload.Description); reason != "" {
+	details, reason := checkDetails(payload.Name, payload.Description)
+	if reason != "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "%s", reason)
 	}
 	return s.edit(ctx, payload.ID, "update", func(ctx context.Context, authCtx *contextvalues.AuthContext, queries *repo.Queries, before repo.Dashboard) (repo.Dashboard, error) {
 		row, err := queries.UpdateDashboard(ctx, repo.UpdateDashboardParams{
-			Name:        payload.Name,
-			Description: conv.PtrToPGTextEmpty(payload.Description),
+			Name:        details.name,
+			Description: conv.PtrToPGTextEmpty(details.description),
 			ProjectID:   *authCtx.ProjectID,
 			ID:          before.ID,
 		})
@@ -251,6 +267,9 @@ func (s *Service) SaveDashboardLayout(ctx context.Context, payload *gen.SaveDash
 		keep := make([]uuid.UUID, 0, len(payload.Placements))
 		for i, input := range payload.Placements {
 			position := fmt.Sprintf("placements[%d]", i)
+			if input == nil {
+				return repo.Dashboard{}, oops.E(oops.CodeBadRequest, nil, "%s: a placement is required", position)
+			}
 			widgetID, err := uuid.Parse(input.WidgetID)
 			if err != nil {
 				return repo.Dashboard{}, oops.E(oops.CodeBadRequest, err, "%s: invalid widget id", position)
@@ -329,6 +348,9 @@ func (s *Service) AddDashboardWidget(ctx context.Context, payload *gen.AddDashbo
 			bottom = max(bottom, placement.Y+placement.H)
 		}
 		_, opening := cardSizes(chartTypeOf(widget.Visualization))
+		if bottom > maxGridRow-int32(opening.h) { //nolint:gosec // a fixed small size
+			return repo.Dashboard{}, oops.E(oops.CodeBadRequest, nil, "the dashboard has no room below row %d for another card", maxGridRow)
+		}
 		if _, err := queries.InsertPlacement(ctx, repo.InsertPlacementParams{
 			ProjectID:      *authCtx.ProjectID,
 			OrganizationID: authCtx.ActiveOrganizationID,

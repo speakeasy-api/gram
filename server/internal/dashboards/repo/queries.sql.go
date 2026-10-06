@@ -425,7 +425,7 @@ func (q *Queries) ListProjectPlacements(ctx context.Context, projectID uuid.UUID
 const listWidgetsForDashboard = `-- name: ListWidgetsForDashboard :many
 SELECT DISTINCT ON (w.id) w.id, w.project_id, w.organization_id, w.created_by_user_id, w.name, w.description, w.dataset, w.query, w.visualization, w.created_at, w.updated_at, w.deleted_at, w.deleted
 FROM widgets w
-JOIN dashboard_widgets p ON p.widget_id = w.id
+JOIN dashboard_widgets p ON p.widget_id = w.id AND p.project_id = w.project_id
 WHERE p.project_id = $1
   AND p.dashboard_id = $2
   AND w.deleted IS FALSE

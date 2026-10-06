@@ -2177,10 +2177,15 @@ type PlacementInputRequestBody struct {
 	// The existing placement, when the card is already on the dashboard
 	ID       *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	WidgetID *string `form:"widget_id,omitempty" json:"widget_id,omitempty" xml:"widget_id,omitempty"`
-	X        *int    `form:"x,omitempty" json:"x,omitempty" xml:"x,omitempty"`
-	Y        *int    `form:"y,omitempty" json:"y,omitempty" xml:"y,omitempty"`
-	W        *int    `form:"w,omitempty" json:"w,omitempty" xml:"w,omitempty"`
-	H        *int    `form:"h,omitempty" json:"h,omitempty" xml:"h,omitempty"`
+	// Column the card starts at, on a 12-column grid
+	X *int `form:"x,omitempty" json:"x,omitempty" xml:"x,omitempty"`
+	// Row the card starts at
+	Y *int `form:"y,omitempty" json:"y,omitempty" xml:"y,omitempty"`
+	// Width in columns; each chart type also has a minimum, so x + w stays within
+	// 12
+	W *int `form:"w,omitempty" json:"w,omitempty" xml:"w,omitempty"`
+	// Height in rows; each chart type also has a minimum
+	H *int `form:"h,omitempty" json:"h,omitempty" xml:"h,omitempty"`
 }
 
 // DashboardFiltersRequestBody is used to define fields on request body types.
@@ -4229,9 +4234,19 @@ func ValidatePlacementInputRequestBody(body *PlacementInputRequestBody) (err err
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.x", *body.X, 0, true))
 		}
 	}
+	if body.X != nil {
+		if *body.X > 11 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.x", *body.X, 11, false))
+		}
+	}
 	if body.Y != nil {
 		if *body.Y < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.y", *body.Y, 0, true))
+		}
+	}
+	if body.Y != nil {
+		if *body.Y > 9999 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.y", *body.Y, 9999, false))
 		}
 	}
 	if body.W != nil {
@@ -4239,9 +4254,19 @@ func ValidatePlacementInputRequestBody(body *PlacementInputRequestBody) (err err
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.w", *body.W, 1, true))
 		}
 	}
+	if body.W != nil {
+		if *body.W > 12 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.w", *body.W, 12, false))
+		}
+	}
 	if body.H != nil {
 		if *body.H < 1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.h", *body.H, 1, true))
+		}
+	}
+	if body.H != nil {
+		if *body.H > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.h", *body.H, 10000, false))
 		}
 	}
 	return

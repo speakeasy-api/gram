@@ -2175,10 +2175,15 @@ type PlacementInputRequestBody struct {
 	// The existing placement, when the card is already on the dashboard
 	ID       *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	WidgetID string  `form:"widget_id" json:"widget_id" xml:"widget_id"`
-	X        int     `form:"x" json:"x" xml:"x"`
-	Y        int     `form:"y" json:"y" xml:"y"`
-	W        int     `form:"w" json:"w" xml:"w"`
-	H        int     `form:"h" json:"h" xml:"h"`
+	// Column the card starts at, on a 12-column grid
+	X int `form:"x" json:"x" xml:"x"`
+	// Row the card starts at
+	Y int `form:"y" json:"y" xml:"y"`
+	// Width in columns; each chart type also has a minimum, so x + w stays within
+	// 12
+	W int `form:"w" json:"w" xml:"w"`
+	// Height in rows; each chart type also has a minimum
+	H int `form:"h" json:"h" xml:"h"`
 }
 
 // DashboardFiltersRequestBody is used to define fields on request body types.
@@ -6977,14 +6982,26 @@ func ValidatePlacementInputRequestBody(body *PlacementInputRequestBody) (err err
 	if body.X < 0 {
 		err = goa.MergeErrors(err, goa.InvalidRangeError("body.x", body.X, 0, true))
 	}
+	if body.X > 11 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("body.x", body.X, 11, false))
+	}
 	if body.Y < 0 {
 		err = goa.MergeErrors(err, goa.InvalidRangeError("body.y", body.Y, 0, true))
+	}
+	if body.Y > 9999 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("body.y", body.Y, 9999, false))
 	}
 	if body.W < 1 {
 		err = goa.MergeErrors(err, goa.InvalidRangeError("body.w", body.W, 1, true))
 	}
+	if body.W > 12 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("body.w", body.W, 12, false))
+	}
 	if body.H < 1 {
 		err = goa.MergeErrors(err, goa.InvalidRangeError("body.h", body.H, 1, true))
+	}
+	if body.H > 10000 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("body.h", body.H, 10000, false))
 	}
 	return
 }

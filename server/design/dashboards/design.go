@@ -56,10 +56,22 @@ var PlacementInput = Type("PlacementInput", func() {
 	Description("A card's place in a layout being saved. With an id it moves or resizes the existing card; without one it adds the widget as a new card.")
 	Attribute("id", String, "The existing placement, when the card is already on the dashboard", func() { Format(FormatUUID) })
 	Attribute("widget_id", String, func() { Format(FormatUUID) })
-	Attribute("x", Int, func() { Minimum(0) })
-	Attribute("y", Int, func() { Minimum(0) })
-	Attribute("w", Int, func() { Minimum(1) })
-	Attribute("h", Int, func() { Minimum(1) })
+	Attribute("x", Int, "Column the card starts at, on a 12-column grid", func() {
+		Minimum(0)
+		Maximum(11)
+	})
+	Attribute("y", Int, "Row the card starts at", func() {
+		Minimum(0)
+		Maximum(9999)
+	})
+	Attribute("w", Int, "Width in columns; each chart type also has a minimum, so x + w stays within 12", func() {
+		Minimum(1)
+		Maximum(12)
+	})
+	Attribute("h", Int, "Height in rows; each chart type also has a minimum", func() {
+		Minimum(1)
+		Maximum(10000)
+	})
 	Required("widget_id", "x", "y", "w", "h")
 })
 

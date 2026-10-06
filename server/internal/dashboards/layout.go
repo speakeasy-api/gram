@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	gen "github.com/speakeasy-api/gram/server/gen/dashboards"
 	"github.com/speakeasy-api/gram/server/internal/widgets"
@@ -18,6 +19,17 @@ const gridColumns = 12
 // columns can hold. A dashboard with cards past it is not one anyone made
 // by dragging.
 const maxGridRow = 10_000
+
+// The saved filters are replayed to every reader of the dashboard, so each
+// part of them is bounded: how many dimensions, how long a name, a value and
+// a range label may be, and (maxFilterValues) how many values a dimension
+// may pick.
+const (
+	maxFilterDimensions  = 20
+	maxFilterNameLength  = 100
+	maxFilterValueLength = 500
+	maxRangeLabelLength  = 200
+)
 
 // Filter values per dimension are capped where the analytics query caps
 // them, so a saved filter is one every card can run.
@@ -58,9 +70,10 @@ func checkPlacement(position string, input *gen.PlacementInput, chartType string
 		return fmt.Sprintf("%s: position must not be negative", position)
 	case input.W < minimum.w || input.H < minimum.h:
 		return fmt.Sprintf("%s: a %s card is at least %d columns by %d rows", position, chartName(chartType), minimum.w, minimum.h)
-	case input.X+input.W > gridColumns:
+	// Compared without adding, so absurd sizes cannot wrap around the check.
+	case input.W > gridColumns || input.X > gridColumns-input.W:
 		return fmt.Sprintf("%s: the card runs past the grid's %d columns", position, gridColumns)
-	case input.Y+input.H > maxGridRow:
+	case input.H > maxGridRow || input.Y > maxGridRow-input.H:
 		return fmt.Sprintf("%s: the card sits past row %d", position, maxGridRow)
 	}
 	return ""
@@ -84,16 +97,24 @@ func checkFilters(filters *gen.DashboardFilters) string {
 	if reason := checkRange(filters.Range); reason != "" {
 		return reason
 	}
+	if len(filters.Values) > maxFilterDimensions {
+		return fmt.Sprintf("filters.values: at most %d dimensions", maxFilterDimensions)
+	}
 	for field, values := range filters.Values {
-		if strings.TrimSpace(field) == "" {
+		switch {
+		case strings.TrimSpace(field) == "":
 			return "filters.values: a dimension name is empty"
-		}
-		if len(values) > maxFilterValues {
+		case utf8.RuneCountInString(field) > maxFilterNameLength:
+			return fmt.Sprintf("filters.values: a dimension name is at most %d characters", maxFilterNameLength)
+		case len(values) > maxFilterValues:
 			return fmt.Sprintf("filters.values.%s: at most %d values", field, maxFilterValues)
 		}
 		for _, value := range values {
-			if strings.TrimSpace(value) == "" {
+			switch {
+			case strings.TrimSpace(value) == "":
 				return fmt.Sprintf("filters.values.%s: a value is empty", field)
+			case utf8.RuneCountInString(value) > maxFilterValueLength:
+				return fmt.Sprintf("filters.values.%s: a value is at most %d characters", field, maxFilterValueLength)
 			}
 		}
 	}
@@ -129,6 +150,9 @@ func checkRange(r *gen.DashboardRange) string {
 		}
 		if !from.Before(to) {
 			return "filters.range: from must be before to"
+		}
+		if r.Label != nil && utf8.RuneCountInString(*r.Label) > maxRangeLabelLength {
+			return fmt.Sprintf("filters.range.label: at most %d characters", maxRangeLabelLength)
 		}
 	case r.Label != nil:
 		return "filters.range.label: a label only names an absolute range"

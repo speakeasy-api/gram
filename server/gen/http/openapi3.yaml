@@ -102014,27 +102014,35 @@ components:
             properties:
                 h:
                     type: integer
+                    description: Height in rows; each chart type also has a minimum
                     format: int64
                     minimum: 1
+                    maximum: 10000
                 id:
                     type: string
                     description: The existing placement, when the card is already on the dashboard
                     format: uuid
                 w:
                     type: integer
+                    description: Width in columns; each chart type also has a minimum, so x + w stays within 12
                     format: int64
                     minimum: 1
+                    maximum: 12
                 widget_id:
                     type: string
                     format: uuid
                 x:
                     type: integer
+                    description: Column the card starts at, on a 12-column grid
                     format: int64
                     minimum: 0
+                    maximum: 11
                 "y":
                     type: integer
+                    description: Row the card starts at
                     format: int64
                     minimum: 0
+                    maximum: 9999
             description: A card's place in a layout being saved. With an id it moves or resizes the existing card; without one it adds the widget as a new card.
             required:
                 - widget_id
