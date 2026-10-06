@@ -258,7 +258,7 @@ main() {
     # Never overwrite the Speakeasy SDK generator CLI, which installs a binary
     # with the same name.
     if [ -e "$install_path" ] && ! is_control_plane_cli "$install_path" && ! is_legacy_cli "$install_path"; then
-        error "$install_path already exists and is not the Speakeasy AI Control Plane CLI. It looks like the Speakeasy SDK CLI, which also installs a 'speakeasy' binary. Install to another directory by setting INSTALL_DIR, for example: curl -fsSL https://go.getgram.ai/cli.sh | INSTALL_DIR=\"\$HOME/.local/bin\" bash"
+        error "$install_path already exists and is not the Speakeasy AI Control Plane CLI. It looks like the Speakeasy SDK CLI, which also installs a 'speakeasy' binary. Install to another directory by setting INSTALL_DIR, for example: curl -fsSL https://ai.speakeasy.com/cli.sh | INSTALL_DIR=\"\$HOME/.local/bin\" bash"
     fi
 
     # Construct download URLs. Releases made before the CLI was renamed only

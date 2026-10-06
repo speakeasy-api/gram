@@ -254,7 +254,7 @@ async function init(argv: string[]): Promise<void> {
     // AI Control Plane CLI marker. The installer puts the CLI in
     // ${INSTALL_DIR:-/usr/local/bin}, so authenticate with that path rather
     // than whatever `speakeasy` comes first on PATH.
-    await $`speakeasy --control-plane-cli 2>/dev/null | grep -qx speakeasy-ai-control-plane-cli || (curl -fsSL https://go.getgram.ai/cli.sh | bash && "\${INSTALL_DIR:-/usr/local/bin}/speakeasy" auth)`;
+    await $`speakeasy --control-plane-cli 2>/dev/null | grep -qx speakeasy-ai-control-plane-cli || (curl -fsSL https://ai.speakeasy.com/cli.sh | bash && "\${INSTALL_DIR:-/usr/local/bin}/speakeasy" auth)`;
   }
 
   let successMessage = `All done! Run \`cd ${dir} && ${packageManager} run build\` to build your first Gram Function.`;
