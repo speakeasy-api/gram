@@ -23,6 +23,8 @@ import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { getPresetRange } from "@/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
+import { useProject } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
@@ -187,6 +189,9 @@ const MAX_COUNTS_WINDOW_MS = 31 * 24 * 60 * 60 * 1000;
 const NO_ASSISTANT = "none";
 
 export default function RiskEvents(): JSX.Element {
+  const project = useProject();
+  const { hasScope } = useRBAC();
+  const canReadAssistants = hasScope("assistant:read", undefined, project.id);
   const client = useSdkClient();
   const gramProject = useProjectSlugForRequests();
   const organization = useOrganization();
@@ -380,12 +385,17 @@ export default function RiskEvents(): JSX.Element {
   // Powers the assistant filter options; "No assistant" is always offered so
   // findings missing user attribution can be surfaced even before any
   // assistant exists in the project.
-  const { data: assistantsData } = useAssistantsList(undefined, undefined, {
-    throwOnError: false,
-  });
+  const { data: assistantsData } = useAssistantsList(
+    { gramProject: project.slug },
+    undefined,
+    {
+      enabled: canReadAssistants,
+      throwOnError: false,
+    },
+  );
   const assistants = useMemo(
-    () => assistantsData?.assistants ?? [],
-    [assistantsData?.assistants],
+    () => (canReadAssistants ? (assistantsData?.assistants ?? []) : []),
+    [assistantsData?.assistants, canReadAssistants],
   );
 
   // Page-supplied option lists for the schema's select/text dimensions.

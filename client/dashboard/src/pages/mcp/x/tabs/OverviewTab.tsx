@@ -34,6 +34,13 @@ export function OverviewTab({
         slug: mcpServer.slug,
         name: mcpServer.name ?? "MCP Server",
       }}
+      // Tool Logs cannot currently filter a tunneled target by id. Treating
+      // it as hosted or shadow would silently show the wrong server's calls.
+      logsTarget={
+        mcpServer.tunneledMcpServerId
+          ? null
+          : { type: "hosted", id: mcpServer.slug }
+      }
     />
   ) : null;
 

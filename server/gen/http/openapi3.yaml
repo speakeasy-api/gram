@@ -7547,6 +7547,113 @@ paths:
             x-speakeasy-name-override: deleteRole
             x-speakeasy-react-hook:
                 name: DeleteRole
+    /rpc/access.explainResourceAccess:
+        get:
+            description: 'Explain whether one organization member can connect to, view, and manage one resource, and which rules decide it. The decision comes from the same evaluation as runtime enforcement. A gateway is refused: nothing checks access on its own id, so check each server it fronts instead. Like listIdentityAccess it describes one person''s access, so it takes a session only: API keys are not checked against grants and would see any member''s rules.'
+            operationId: explainResourceAccess
+            parameters:
+                - allowEmptyValue: true
+                  description: The kind of resource to explain.
+                  in: query
+                  name: resource_kind
+                  required: true
+                  schema:
+                    description: The kind of resource to explain.
+                    enum:
+                        - mcp
+                    type: string
+                - allowEmptyValue: true
+                  description: The resource to explain.
+                  in: query
+                  name: resource_id
+                  required: true
+                  schema:
+                    description: The resource to explain.
+                    type: string
+                - allowEmptyValue: true
+                  description: The organization member whose access to explain.
+                  in: query
+                  name: user_id
+                  required: true
+                  schema:
+                    description: The organization member whose access to explain.
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ExplainResourceAccessResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: explainResourceAccess access
+            tags:
+                - access
+            x-speakeasy-name-override: explainResourceAccess
+            x-speakeasy-react-hook:
+                name: ExplainResourceAccess
     /rpc/access.getRole:
         get:
             description: Get a role by ID.
@@ -20291,6 +20398,213 @@ paths:
             x-speakeasy-name-override: switchScopes
             x-speakeasy-react-hook:
                 name: SwitchScopes
+    /rpc/auth.transferIn:
+        get:
+            description: 'Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code''s account (login CSRF). A request with both or neither, and any failed check, lands on this host''s login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.'
+            operationId: authTransferIn
+            parameters:
+                - allowEmptyValue: true
+                  description: 'Start mode: the platform host that holds the session to move here (e.g. app.getgram.ai)'
+                  in: query
+                  name: source_host
+                  schema:
+                    description: 'Start mode: the platform host that holds the session to move here (e.g. app.getgram.ai)'
+                    type: string
+                - allowEmptyValue: true
+                  description: 'Callback mode: the opaque one-time transfer code from the source host''s transferOut endpoint'
+                  in: query
+                  name: code
+                  schema:
+                    description: 'Callback mode: the opaque one-time transfer code from the source host''s transferOut endpoint'
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional URL path to land on once the session is established on this host
+                  in: query
+                  name: redirect
+                  schema:
+                    description: Optional URL path to land on once the session is established on this host
+                    type: string
+            responses:
+                "307":
+                    description: Temporary Redirect response.
+                    headers:
+                        Gram-Session:
+                            description: Session header
+                            schema:
+                                description: Session header
+                                type: string
+                        Location:
+                            description: 'The URL to redirect to: the source host''s transferOut (start mode), the requested page (callback mode), or this host''s login page when a check fails'
+                            schema:
+                                description: 'The URL to redirect to: the source host''s transferOut (start mode), the requested page (callback mode), or this host''s login page when a check fails'
+                                type: string
+                        Set-Cookie:
+                            description: The new authentication session on this host. Set only when callback mode succeeds.
+                            schema:
+                                description: The new authentication session on this host. Set only when callback mode succeeds.
+                                type: string
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            summary: transferIn auth
+            tags:
+                - auth
+            x-speakeasy-name-override: transferIn
+            x-speakeasy-react-hook:
+                disabled: true
+    /rpc/auth.transferOut:
+        get:
+            description: Step 2/3 (authorize) of a cross-domain session transfer, on the source platform host. Reached from Step 1/3, transferIn's start mode on the target host; redirects to Step 3/3, transferIn's callback mode there. Authenticates the session from the session cookie or header, checks that its active organization's default host is the target, and stores a one-time transfer code bound to the browser's nonce. Only an ordinary session whose organization lives on the target host can transfer. On any failure the browser is sent to a login page with a signin_error code instead of an error. See the flow diagram in server/internal/auth/transfer.go.
+            operationId: authTransferOut
+            parameters:
+                - allowEmptyValue: true
+                  description: The target platform host to transfer the session to (e.g. ai.speakeasy.com)
+                  in: query
+                  name: target_host
+                  schema:
+                    description: The target platform host to transfer the session to (e.g. ai.speakeasy.com)
+                    type: string
+                - allowEmptyValue: true
+                  description: The browser binding nonce from the target host's transferIn start mode
+                  in: query
+                  name: nonce
+                  schema:
+                    description: The browser binding nonce from the target host's transferIn start mode
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional URL path to redirect to after the transfer completes on the target host
+                  in: query
+                  name: redirect
+                  schema:
+                    description: Optional URL path to redirect to after the transfer completes on the target host
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "307":
+                    description: Temporary Redirect response.
+                    headers:
+                        Location:
+                            description: 'The URL to redirect to: the target host''s transferIn callback with the transfer code, or a login page when the transfer cannot continue'
+                            schema:
+                                description: 'The URL to redirect to: the target host''s transferIn callback with the transfer code, or a login page when the transfer cannot continue'
+                                type: string
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            summary: transferOut auth
+            tags:
+                - auth
+            x-speakeasy-name-override: transferOut
+            x-speakeasy-react-hook:
+                disabled: true
     /rpc/businessMemories.contentScopes:
         get:
             description: List the complete content-scope tree and distinct-memory counts for the active project. Requires organization admin.
@@ -21737,6 +22051,121 @@ paths:
             x-speakeasy-name-override: load
             x-speakeasy-react-hook:
                 name: LoadChat
+    /rpc/chat.loadOverview:
+        get:
+            description: Load authorized chat overview metadata by exact ID without reading messages or recording a transcript-open audit event.
+            operationId: loadChatOverview
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the chat
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the chat
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Chat Sessions token header
+                  in: header
+                  name: Gram-Chat-Session
+                  schema:
+                    description: Chat Sessions token header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ChatOverview'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - chat_sessions_token_header_Gram-Chat-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: loadChatOverview chat
+            tags:
+                - chat
+            x-speakeasy-name-override: loadOverview
+            x-speakeasy-react-hook:
+                name: LoadChatOverview
+                type: query
     /rpc/chat.setPinned:
         post:
             description: Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.
@@ -84095,7 +84524,7 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter (MCP scopes only).
+                    description: Project filter (MCP, environment, and assistant scopes).
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
@@ -84108,6 +84537,7 @@ components:
                         - org
                         - environment
                         - skill
+                        - assistant
                         - risk_policy
                         - chat
                         - agent
@@ -86134,6 +86564,11 @@ components:
                 originating_client:
                     type: string
                     description: The supported client that originated a chat routed through the source, when known
+                participants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ChatParticipant'
+                    description: Distinct observed conversation participants across the session.
                 pinned:
                     type: boolean
                     description: True when the chat is pinned
@@ -86146,6 +86581,15 @@ components:
                     items:
                         $ref: '#/components/schemas/RiskSegment'
                     description: 'Present only when `risk_only` was requested: contiguous runs of returned messages, each spanning a risk finding and its surrounding context. Use each segment''s cursors to expand it.'
+                slack_channel_id:
+                    type: string
+                    description: Observed Slack channel associated with this session.
+                slack_channel_name:
+                    type: string
+                    description: Observed Slack channel name as reported by the captured envelope.
+                slack_team_id:
+                    type: string
+                    description: Observed Slack workspace associated with this session.
                 source:
                     type: string
                     description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
@@ -86297,6 +86741,11 @@ components:
                 model:
                     type: string
                     description: The model that generated the message
+                participants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ChatParticipant'
+                    description: Observed per-message conversation participants, independent of message ownership.
                 prompt_id:
                     type: string
                     description: The agent prompt/turn ID associated with this message, when available.
@@ -86362,6 +86811,11 @@ components:
                 originating_client:
                     type: string
                     description: The supported client that originated a chat routed through the source, when known
+                participants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ChatParticipant'
+                    description: Distinct observed conversation participants across the session.
                 pinned:
                     type: boolean
                     description: True when the chat is pinned
@@ -86369,6 +86823,15 @@ components:
                     type: integer
                     description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
                     format: int64
+                slack_channel_id:
+                    type: string
+                    description: Observed Slack channel associated with this session.
+                slack_channel_name:
+                    type: string
+                    description: Observed Slack channel name as reported by the captured envelope.
+                slack_team_id:
+                    type: string
+                    description: Observed Slack workspace associated with this session.
                 source:
                     type: string
                     description: 'The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)'
@@ -86416,6 +86879,27 @@ components:
                 - created_at
                 - updated_at
                 - last_message_timestamp
+        ChatParticipant:
+            type: object
+            properties:
+                display_name:
+                    type: string
+                    description: Directory display name at capture time.
+                provider:
+                    type: string
+                    description: Directory provider that identifies this conversation participant.
+                provider_team_id:
+                    type: string
+                    description: Workspace resolved from the organization directory, when unambiguous.
+                provider_user_id:
+                    type: string
+                    description: Provider identity observed in the message envelope.
+                user_id:
+                    type: string
+                    description: Explicitly mapped Gram person at capture time; this attribution grants no permissions.
+            required:
+                - provider
+                - provider_user_id
         ChatSessionLink:
             type: object
             properties:
@@ -86427,7 +86911,7 @@ components:
                     description: Whether the continuation exists as a captured chat the caller can read, i.e. whether the child side is navigable.
                 child_chat_id:
                     type: string
-                    description: Chat id derived for the continuation. Absent when the continuation's session id was unknowable at move time (e.g. Cursor mints ids server-side) — or when the caller's visibility scope cannot read the child, which is deliberately indistinguishable.
+                    description: Chat id of the child session in this relationship. Absent when its session id was unknowable when the relationship was recorded (e.g. Cursor mints ids server-side) — or when the caller's visibility scope cannot read the child, which is deliberately indistinguishable.
                     format: uuid
                 child_title:
                     type: string
@@ -86441,13 +86925,13 @@ components:
                     description: Hostname of the machine the move happened on, when known.
                 kind:
                     type: string
-                    description: Link kind. Currently always 'move'.
+                    description: 'Link kind: move for continuations, recall for recalled context, or subagent for a helper session.'
                 parent_captured:
                     type: boolean
                     description: Whether the parent exists as a captured chat the caller can read, i.e. whether the parent side is navigable.
                 parent_chat_id:
                     type: string
-                    description: Chat id of the session the move originated from. Absent when the caller's visibility scope cannot read the parent — a masked end exposes no identity, matching parent_captured.
+                    description: Chat id of the parent session in this relationship. Absent when the caller's visibility scope cannot read the parent — a masked end exposes no identity, matching parent_captured.
                     format: uuid
                 parent_title:
                     type: string
@@ -87519,7 +88003,7 @@ components:
                         - oin
                 org_url:
                     type: string
-                    description: Okta org URL, for example https://example.okta.com. Must be https with no path; the host must be an Okta-owned domain.
+                    description: Okta org URL, for example https://example.okta.com. Must be https on an Okta-owned domain with no path, except an Admin Console URL with an /admin path, which resolves to its org.
             required:
                 - org_url
         CreateIngressRequestBody:
@@ -90753,6 +91237,156 @@ components:
                     example: dev@acme.corp
             required:
                 - email
+        ExplainResourceAccessResult:
+            type: object
+            properties:
+                levels:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExplainedAccessLevel'
+                    description: The decision for use, view and manage, in that order.
+                visibility:
+                    type: string
+                    description: 'Who may connect without a rule. public: connecting is not checked against rules. private: rules decide. disabled: nobody can connect.'
+                    enum:
+                        - public
+                        - private
+                        - disabled
+            required:
+                - visibility
+                - levels
+        ExplainedAccessDirectorySource:
+            type: object
+            properties:
+                attribute_key:
+                    type: string
+                    description: The directory attribute, for an attribute mapping.
+                attribute_value:
+                    type: string
+                    description: The attribute value the member's profile matched, for an attribute mapping.
+                directory_group_name:
+                    type: string
+                    description: The directory group, for a group mapping.
+                source_kind:
+                    type: string
+                    description: Whether membership of a directory group or a directory attribute value mapped the role.
+                    enum:
+                        - group
+                        - attribute
+            required:
+                - source_kind
+        ExplainedAccessLevel:
+            type: object
+            properties:
+                allowed:
+                    type: boolean
+                    description: Whether the rules give the member this access.
+                level:
+                    type: string
+                    description: The access being explained.
+                    enum:
+                        - use
+                        - view
+                        - manage
+                rules:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExplainedAccessRule'
+                    description: Every rule matching this access, deciding rules first.
+                tool_access:
+                    type: string
+                    description: 'For use: whether every tool, only some, or none are reachable.'
+                    enum:
+                        - all
+                        - some
+                        - none
+            required:
+                - level
+                - allowed
+                - rules
+        ExplainedAccessRule:
+            type: object
+            properties:
+                applies_to:
+                    type: string
+                    description: Whether the rule names this resource, every resource in its project, or every resource of its kind.
+                    enum:
+                        - resource
+                        - project
+                        - all_resources
+                directory_sources:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExplainedAccessDirectorySource'
+                    description: The directory role mappings giving the member this role, including when they also hold it directly. Returned only to organization administrators, because attribute values can carry personal data.
+                display_name:
+                    type: string
+                    description: Human-readable name for the principal.
+                dispositions:
+                    type: array
+                    items:
+                        type: string
+                        enum:
+                            - read_only
+                            - destructive
+                            - idempotent
+                            - open_world
+                    description: Tool annotations the rule is narrowed to, when it is not the whole resource.
+                effect:
+                    type: string
+                    description: 'How the rule shaped the decision. allows: proves the access. overrides: a rule made directly to the member that proves the access despite a block from a role or everyone. overridden: a block such a rule overrides. blocks: takes the access away. blocked: an allow that matches but that a block keeps from counting. limits: a block taking away some of the resource''s tools.'
+                    enum:
+                        - allows
+                        - overrides
+                        - overridden
+                        - blocks
+                        - blocked
+                        - limits
+                kind:
+                    type: string
+                    description: What the principal identifies.
+                    enum:
+                        - everyone
+                        - role
+                        - user
+                        - unknown
+                level:
+                    type: string
+                    description: The access the rule gives, or the access a "blocked_" rule takes away. "all" is a grant covering every permission.
+                    enum:
+                        - use
+                        - view
+                        - manage
+                        - blocked
+                        - blocked_view
+                        - blocked_manage
+                        - all
+                principal_urn:
+                    type: string
+                    description: Canonical principal URN holding the rule.
+                reason:
+                    type: string
+                    description: 'Why a blocked rule made directly to the member did not override the block. wildcard_direct_grant: it covers every resource. narrower_direct_grant: it constrains something the tool does not carry. own_exclusion: the member''s own block applies.'
+                    enum:
+                        - wildcard_direct_grant
+                        - narrower_direct_grant
+                        - own_exclusion
+                tools:
+                    type: array
+                    items:
+                        type: string
+                    description: Tool names the rule is narrowed to, when it is not the whole resource.
+                via_directory_mapping:
+                    type: boolean
+                    description: Whether the member holds this role only through a directory role mapping.
+            required:
+                - principal_urn
+                - kind
+                - display_name
+                - level
+                - applies_to
+                - effect
+                - via_directory_mapping
         ExportMcpMetadataRequestBody:
             type: object
             properties:
@@ -96541,6 +97175,10 @@ components:
                         - skill:blocked_read
                         - skill:write
                         - skill:blocked_write
+                        - assistant:read
+                        - assistant:blocked_read
+                        - assistant:write
+                        - assistant:blocked_write
                         - plugin:write
                         - plugin:blocked_write
                         - risk_policy:evaluate
@@ -96590,6 +97228,10 @@ components:
                             - skill:blocked_read
                             - skill:write
                             - skill:blocked_write
+                            - assistant:read
+                            - assistant:blocked_read
+                            - assistant:write
+                            - assistant:blocked_write
                             - plugin:write
                             - plugin:blocked_write
                             - risk_policy:evaluate
@@ -99245,6 +99887,9 @@ components:
                 audience:
                     type: string
                     description: The resource app's Cross App Access issuer URL as configured in the identity provider; the audience of the identity assertion. Present once confirmed.
+                authorization_server_issuer:
+                    type: string
+                    description: The server's authorization server issuer; the Issuer URL to enter when enabling Cross App Access on a resource app. Omitted when unknown.
                 broken_reason:
                     type: string
                     description: 'Present when state is broken. audience_mismatch: legacy value, no longer emitted; the administrator-confirmed Okta audience may differ from the server''s authorization server issuer; scope_not_allowed: the connection does not allow the requested scopes; client_auth_failed: the identity provider rejected the agent app''s client authentication; downstream_rejected: the identity provider issued the assertion but the server''s authorization server refused it.'
@@ -104964,6 +105609,10 @@ components:
                         - skill:blocked_read
                         - skill:write
                         - skill:blocked_write
+                        - assistant:read
+                        - assistant:blocked_read
+                        - assistant:write
+                        - assistant:blocked_write
                         - plugin:write
                         - plugin:blocked_write
                         - risk_policy:evaluate
@@ -105271,6 +105920,8 @@ components:
                         - environment:blocked_write
                         - skill:blocked_read
                         - skill:blocked_write
+                        - assistant:blocked_read
+                        - assistant:blocked_write
                         - plugin:blocked_write
                         - risk_policy:bypass
                         - workload:blocked_read
@@ -105284,6 +105935,7 @@ components:
                         - mcp
                         - environment
                         - skill
+                        - assistant
                         - risk_policy
                         - chat
                         - agent
@@ -105314,6 +105966,10 @@ components:
                         - skill:blocked_read
                         - skill:write
                         - skill:blocked_write
+                        - assistant:read
+                        - assistant:blocked_read
+                        - assistant:write
+                        - assistant:blocked_write
                         - plugin:write
                         - plugin:blocked_write
                         - risk_policy:evaluate
@@ -105801,7 +106457,7 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter (MCP scopes only). When set with resource_id='*', grants access to all servers in the project.
+                    description: Project filter (MCP, environment, and assistant scopes). When set with resource_id='*', grants access to every resource of the kind in the project.
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
@@ -105814,6 +106470,7 @@ components:
                         - org
                         - environment
                         - skill
+                        - assistant
                         - risk_policy
                         - chat
                         - agent

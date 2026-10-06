@@ -35,7 +35,11 @@ import {
 } from "react-router";
 import { orgRoutePaths } from "@/routes";
 import { isPortablePath, resolvePortablePath } from "@/lib/portable-path";
-import { safeRedirectPath, UNAUTHENTICATED_PATHS } from "@/lib/session-expired";
+import {
+  isServerRenderedPath,
+  safeRedirectPath,
+  UNAUTHENTICATED_PATHS,
+} from "@/lib/session-expired";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -200,7 +204,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // An organization that lives on another platform host is used there, on the
   // same page. auth.info names that host only for an ordinary session whose
   // active organization belongs elsewhere; session cookies are host-only, so
-  // the user signs in once on the new host.
+  // the session is handed over with a session transfer.
   // A URL naming another of the user's organizations switches scope first;
   // the move then follows the organization the switch selects.
   const urlNamesOtherOrganization = Boolean(
@@ -350,6 +354,9 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // freshly authenticated user to a foreign origin.
   const redirectParam = safeRedirectPath(searchParams.get("redirect"));
   if (redirectParam) {
+    if (isServerRenderedPath(redirectParam)) {
+      return <ServerRenderedRedirect to={redirectParam} />;
+    }
     return <Navigate to={redirectParam} replace />;
   } else if (isSlugExempt) {
     // Fall through to render children
@@ -413,6 +420,16 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     </SessionContext.Provider>
   );
 };
+
+// A return target the server renders (see isServerRenderedPath) is loaded
+// with a full navigation. A router <Navigate> would keep the dashboard in
+// charge of a path it has no route for.
+function ServerRenderedRedirect({ to }: { to: string }): JSX.Element {
+  useEffect(() => {
+    window.location.replace(to);
+  }, [to]);
+  return <AuthPendingScreen />;
+}
 
 function OrganizationScopeSwitch({
   organizationId,

@@ -557,6 +557,30 @@ func (q *Queries) ListProjectsByOrganizationPage(ctx context.Context, arg ListPr
 	return items, nil
 }
 
+const lockOtherActiveProject = `-- name: LockOtherActiveProject :one
+SELECT id
+FROM projects
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND id <> $2
+LIMIT 1
+FOR SHARE
+`
+
+type LockOtherActiveProjectParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// FOR SHARE waits for an in-flight project delete, then rechecks the row, so a
+// concurrently deleted project is not reported as still active.
+func (q *Queries) LockOtherActiveProject(ctx context.Context, arg LockOtherActiveProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockOtherActiveProject, arg.OrganizationID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockProjectForEMADeletion = `-- name: LockProjectForEMADeletion :one
 SELECT id FROM projects WHERE id = $1 AND organization_id = $2 AND deleted IS FALSE FOR UPDATE
 `

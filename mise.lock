@@ -244,6 +244,7 @@ url = "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.
 url_api = "https://api.github.com/repos/FiloSottile/mkcert/releases/assets/63709957"
 
 [tools."github:FiloSottile/mkcert"."platforms.linux-x64"]
+checksum = "blake3:2337bf318a54e40d6fb36ee89306f031fcecc00e02dad69afa2bc2b579959f80"
 url = "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64"
 url_api = "https://api.github.com/repos/FiloSottile/mkcert/releases/assets/63709955"
 
@@ -897,7 +898,17 @@ checksum = "sha256:7f9af294f0867e6b39f51d0ebeb9b30c900dedd2fa1faee56f23aedb5e9b8
 url = "https://github.com/jdx/pitchfork/releases/download/v2.22.0/pitchfork-aarch64-unknown-linux-gnu.tar.gz"
 url_api = "https://api.github.com/repos/jdx/pitchfork/releases/assets/519295415"
 
+[tools.pitchfork."platforms.linux-arm64-musl"]
+checksum = "sha256:7f9af294f0867e6b39f51d0ebeb9b30c900dedd2fa1faee56f23aedb5e9b8f75"
+url = "https://github.com/jdx/pitchfork/releases/download/v2.22.0/pitchfork-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/pitchfork/releases/assets/519295415"
+
 [tools.pitchfork."platforms.linux-x64"]
+checksum = "sha256:fd682a6efccd6d39a532157c26c306585cde07370fd96ddc2bfa6904248a977f"
+url = "https://github.com/jdx/pitchfork/releases/download/v2.22.0/pitchfork-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/jdx/pitchfork/releases/assets/519295975"
+
+[tools.pitchfork."platforms.linux-x64-musl"]
 checksum = "sha256:fd682a6efccd6d39a532157c26c306585cde07370fd96ddc2bfa6904248a977f"
 url = "https://github.com/jdx/pitchfork/releases/download/v2.22.0/pitchfork-x86_64-unknown-linux-gnu.tar.gz"
 url_api = "https://api.github.com/repos/jdx/pitchfork/releases/assets/519295975"

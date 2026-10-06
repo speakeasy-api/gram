@@ -7,6 +7,8 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
+  within,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
@@ -38,6 +40,10 @@ const testState = vi.hoisted(() => ({
   writes: [] as { kind: string; request: Record<string, unknown> }[],
   /** Whether the viewer holds project:write on the project. */
   projectWrite: false,
+  /** What the cards' filter bar holds. */
+  pageContext: {} as Record<string, unknown>,
+  /** What the Widgets tab last asked of the cards' filter bar. */
+  pageFilterConfig: undefined as Record<string, unknown> | undefined,
 }));
 
 type Write = "create" | "update" | "duplicate" | "delete";
@@ -154,7 +160,45 @@ vi.mock("@gram/client/react-query/members.js", () => ({
     },
   }),
 }));
-vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => ({}),
+}));
+// The Window control is the dashboard's date picker; its natural-language
+// parsing needs a session and a server, which nothing here exercises.
+vi.mock("@/components/DashboardTimeRangePicker", () => ({
+  TimeRangePicker: ({
+    preset,
+    customRange,
+    customRangeLabel,
+    onPresetChange,
+  }: {
+    preset: string | null;
+    customRange: { from: Date; to: Date } | null;
+    customRangeLabel: string | null;
+    onPresetChange: (preset: string) => void;
+  }) => (
+    <select
+      aria-label="Window"
+      value={customRange ? "custom" : (preset ?? "")}
+      onChange={(event) => onPresetChange(event.target.value)}
+    >
+      {customRange ? (
+        <option value="custom">
+          {customRangeLabel ??
+            `${customRange.from.toISOString()} – ${customRange.to.toISOString()}`}
+        </option>
+      ) : null}
+      {["15m", "1h", "4h", "1d", "2d", "3d", "7d", "15d", "30d", "90d"].map(
+        (value) => (
+          <option key={value} value={value}>
+            {value}
+          </option>
+        ),
+      )}
+    </select>
+  ),
+}));
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ status: testState.flagStatus }),
@@ -210,11 +254,32 @@ vi.mock("./useDimensionValues", () => ({
     isFetching: false,
   }),
 }));
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({ explore: { href: () => "/explore" } }),
+}));
 vi.mock("@/components/page-templates", () => ({
   WorkbenchPage: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
-vi.mock("@/components/page-layout", () => ({
-  Page: { Eyebrow: () => null },
+vi.mock("@/components/page-layout", async () => {
+  const { Toolbar } = await import("@/components/ui/Toolbar");
+  return { Page: { Eyebrow: () => null, Toolbar } };
+});
+// The cards' filter bar is the shared one, tested with usePageFilters.
+vi.mock("./usePageFilters", () => ({
+  usePageFilters: (config: Record<string, unknown>) => {
+    testState.pageFilterConfig = config;
+    return {
+      toolbar: {
+        schema: [],
+        values: {},
+        optionsById: {},
+        onChange: () => {},
+        onClear: () => {},
+        onClearAll: () => {},
+      },
+      context: testState.pageContext,
+    };
+  },
 }));
 vi.mock("@/components/release-stage-badge", () => ({
   ReleaseStageBadge: ({ stage }: { stage: string }) => <span>{stage}</span>,
@@ -274,6 +339,26 @@ const toolCalls: AnalyticsDataset = {
   ],
 };
 
+// Cards mount as they scroll into view; here every card is in view.
+class VisibleObserver {
+  private readonly callback: IntersectionObserverCallback;
+  constructor(callback: IntersectionObserverCallback) {
+    this.callback = callback;
+  }
+  observe(target: Element) {
+    this.callback(
+      [{ isIntersecting: true, target } as IntersectionObserverEntry],
+      this as unknown as IntersectionObserver,
+    );
+  }
+  disconnect() {}
+  unobserve() {}
+  takeRecords() {
+    return [];
+  }
+}
+vi.stubGlobal("IntersectionObserver", VisibleObserver);
+
 /** Where the router is, and a way to step back through its history. */
 const nav = { pathname: "", search: "", back: () => {} };
 
@@ -323,6 +408,7 @@ describe("Explore", () => {
     testState.listPending = false;
     testState.writes = [];
     testState.projectWrite = false;
+    testState.pageContext = {};
   });
 
   afterEach(() => {
@@ -564,9 +650,10 @@ describe("Explore", () => {
       expect(
         screen.getByRole("combobox", { name: "Dataset" }).textContent,
       ).toBe("tool_calls");
-      expect(screen.getByRole("combobox", { name: "Window" }).textContent).toBe(
-        "Last 7 days",
-      );
+      expect(
+        (screen.getByRole("combobox", { name: "Window" }) as HTMLSelectElement)
+          .value,
+      ).toBe("7d");
       expect(screen.queryByText("Nothing has run yet")).toBeNull();
 
       // A table needs only the summary shape, asked exactly as linked.
@@ -584,6 +671,22 @@ describe("Explore", () => {
       expect(summary!.to.getTime() - summary!.from.getTime()).toBe(
         7 * 86_400_000,
       );
+    });
+
+    it("runs a linked absolute range, and will not save it as a widget", () => {
+      const from = Date.UTC(2026, 8, 14, 10);
+      const to = Date.UTC(2026, 8, 14, 12);
+      renderExplore(linkTo({ ...toolCallsTable, range: { from, to } }));
+
+      const asked = testState.bodies.find((body) => body !== null);
+      expect(asked?.from.getTime()).toBe(from);
+      expect(asked?.to.getTime()).toBe(to);
+      expect(
+        (screen.getByRole("combobox", { name: "Window" }) as HTMLSelectElement)
+          .value,
+      ).toBe("custom");
+      const save = screen.getByRole("button", { name: "Save widget" });
+      expect((save as HTMLButtonElement).disabled).toBe(true);
     });
 
     it("runs a linked query once a refreshed catalog can answer it", () => {
@@ -722,7 +825,7 @@ describe("Explore", () => {
       expect(screen.getByRole("button", { name: "Run query" })).toBeTruthy();
     });
 
-    it("narrows the list by name", () => {
+    it("narrows the list by name", async () => {
       testState.widgets = [
         storedWidget("w-1", "Slow tools", p95ByTool),
         storedWidget(
@@ -738,13 +841,18 @@ describe("Explore", () => {
       fireEvent.change(screen.getByPlaceholderText("Search widgets"), {
         target: { value: "slow" },
       });
+      // The toolbar's search applies on the next tick.
+      await waitFor(() =>
+        expect(screen.queryByText("Sessions by user")).toBeNull(),
+      );
       expect(screen.getByText("Slow tools")).toBeTruthy();
-      expect(screen.queryByText("Sessions by user")).toBeNull();
 
       fireEvent.change(screen.getByPlaceholderText("Search widgets"), {
         target: { value: "nothing like it" },
       });
-      expect(screen.getByText("No widgets match these filters.")).toBeTruthy();
+      expect(
+        await screen.findByText("No widgets match these filters."),
+      ).toBeTruthy();
     });
 
     it("opens a widget from the list in Explore, restored exactly, and runs it", () => {
@@ -757,9 +865,10 @@ describe("Explore", () => {
       expect(
         screen.getByRole("combobox", { name: "Dataset" }).textContent,
       ).toBe("tool_calls");
-      expect(screen.getByRole("combobox", { name: "Window" }).textContent).toBe(
-        "Last 7 days",
-      );
+      expect(
+        (screen.getByRole("combobox", { name: "Window" }) as HTMLSelectElement)
+          .value,
+      ).toBe("7d");
       expect(urlSpec()).toMatchObject(p95ByTool);
 
       const summary = testState.bodies.findLast((body) => body !== null);
@@ -772,6 +881,96 @@ describe("Explore", () => {
         "disabled",
         true,
       );
+    });
+
+    it("draws each widget as a card on its own saved question, and keeps the view in the URL", () => {
+      testState.widgets = [
+        storedWidget("w-1", "Slow tools", p95ByTool),
+        storedWidget("w-2", "Sessions by user", {
+          ...p95ByTool,
+          dataset: "sessions",
+          measures: [{ op: "count", field: "" }],
+          dimensions: ["user"],
+          orderBy: "",
+        }),
+      ];
+      renderExplore();
+      showWidgets();
+      testState.bodies = [];
+      fireEvent.click(screen.getByRole("radio", { name: "Grid view" }));
+
+      expect(param("view")).toBe("cards");
+      expect(screen.getByRole("region", { name: "Slow tools" })).toBeTruthy();
+      expect(
+        screen.getByRole("region", { name: "Sessions by user" }),
+      ).toBeTruthy();
+      expect(screen.queryByRole("table")).toBeNull();
+      const asked = testState.bodies
+        .filter((body) => body !== null)
+        .map((body) => body.dataset);
+      expect(asked).toContain("tool_calls");
+      expect(asked).toContain("sessions");
+    });
+
+    it("fetches the cards' filter options only in the cards view, from the widgets' datasets", () => {
+      testState.widgets = [
+        storedWidget("w-1", "Slow tools", { ...p95ByTool, window: "90d" }),
+      ];
+      renderExplore("/explore?tab=widgets");
+      expect(testState.pageFilterConfig?.optionsEnabled).toBe(false);
+
+      fireEvent.click(screen.getByRole("radio", { name: "Grid view" }));
+      expect(testState.pageFilterConfig).toMatchObject({
+        optionsEnabled: true,
+        optionsDatasets: ["tool_calls"],
+        optionsWindow: "90d",
+      });
+    });
+
+    it("opens a card the filter bar narrowed as the question it ran, not the saved widget", () => {
+      const byUser: ExploreSpec = {
+        ...p95ByTool,
+        dataset: "sessions",
+        measures: [{ op: "count", field: "" }],
+        dimensions: ["user"],
+        orderBy: "",
+      };
+      testState.widgets = [storedWidget("w-1", "Sessions by user", byUser)];
+      testState.pageContext = { filters: { user: ["ann"] } };
+      renderExplore("/explore?tab=widgets&view=cards");
+
+      const card = screen.getByRole("region", { name: "Sessions by user" });
+      fireEvent.click(
+        within(card).getByRole("button", { name: /Open in Explore/ }),
+      );
+      expect(param("widget")).toBeNull();
+      expect(urlSpec()?.filters).toEqual([
+        { field: "user", operator: "in", values: ["ann"] },
+      ]);
+    });
+
+    it("opens a card's widget in the builder, and filters cards as it filters rows", async () => {
+      testState.widgets = [
+        storedWidget("w-1", "Slow tools", p95ByTool),
+        storedWidget("w-2", "Other tools", p95ByTool),
+      ];
+      renderExplore("/explore?tab=widgets&view=cards");
+      fireEvent.change(screen.getByPlaceholderText("Search widgets"), {
+        target: { value: "slow" },
+      });
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("region", { name: "Other tools" }),
+        ).toBeNull(),
+      );
+
+      const card = screen.getByRole("region", { name: "Slow tools" });
+      fireEvent.click(
+        within(card).getByRole("button", { name: /Open in Explore/ }),
+      );
+      expect(param("tab")).toBeNull();
+      expect(param("widget")).toBe("w-1");
+      expect(urlSpec()).toMatchObject(p95ByTool);
     });
 
     it("saves the builder as a widget with a description, then has it open", () => {
@@ -795,7 +994,7 @@ describe("Explore", () => {
         description: "Who runs the most sessions",
         dataset: "sessions",
         query: {
-          window: "24h",
+          window: "1d",
           grain: "none",
           ungrouped: false,
           dimensions: ["user"],

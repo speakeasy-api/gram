@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -21,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 const (
@@ -113,13 +113,7 @@ func buildAssistantClientMetadataDocument(clientID, clientName, clientURI, redir
 }
 
 func issuerSupportsAssistantCIMD(metadata *externalmcp.OAuthDiscoveryResult) bool {
-	if metadata == nil || !metadata.ClientIDMetadataDocumentSupported {
-		return false
-	}
-	if methods := metadata.TokenEndpointAuthMethodsSupported; len(methods) > 0 && !slices.Contains(methods, mcpOAuthTokenEndpointAuthNone) {
-		return false
-	}
-	return true
+	return metadata != nil && remotesessions.SupportsClientIDMetadataDocument(metadata.ClientIDMetadataDocumentSupported, metadata.TokenEndpointAuthMethodsSupported)
 }
 
 func (s *Service) assistantCIMDAllowed(ctx context.Context, orgID, orgSlug string) bool {

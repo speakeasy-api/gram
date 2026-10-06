@@ -3,6 +3,7 @@ import { Text } from "@/components/ui/Text";
 import { X } from "lucide-react";
 import type { JSX } from "react";
 import type { ResourceType, ScopeRule } from "./types";
+import { isProjectScopedResourceType } from "./types";
 
 /**
  * What one permission applies to, as a single control.
@@ -43,10 +44,10 @@ export function PermissionScopeControl({
 }): JSX.Element | null {
   if (!allowRule) return null;
 
-  const everything = isProjectScoped(resourceType)
+  const everything = isProjectScopedResourceType(resourceType)
     ? "All projects"
     : "All servers";
-  const specific = isProjectScoped(resourceType)
+  const specific = isProjectScopedResourceType(resourceType)
     ? "Specific projects…"
     : "Specific servers…";
 
@@ -99,8 +100,4 @@ export function PermissionScopeControl({
       ))}
     </>
   );
-}
-
-function isProjectScoped(resourceType: ResourceType): boolean {
-  return resourceType === "project" || resourceType === "skill";
 }

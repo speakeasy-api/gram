@@ -167,6 +167,34 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WorkUnitsTrend", "type": "query"}`)
 	})
 
+	Method("loadChatOverview", func() {
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ChatSessionsToken)
+		Security(security.ByKey, security.ProjectSlug, func() { Scope("producer") })
+		Description("Load authorized chat overview metadata by exact ID without reading messages or recording a transcript-open audit event.")
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			security.ChatSessionsTokenPayload()
+			security.ByKeyPayload()
+			Attribute("id", String, "The ID of the chat")
+			Required("id")
+		})
+		Result(ChatOverview)
+		HTTP(func() {
+			GET("/rpc/chat.loadOverview")
+			Param("id")
+			security.SessionHeader()
+			security.ProjectHeader()
+			security.ChatSessionsTokenHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "loadChatOverview")
+		Meta("openapi:extension:x-speakeasy-name-override", "loadOverview")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LoadChatOverview", "type": "query"}`)
+	})
+
 	Method("loadChat", func() {
 		// Reachable with a producer-scoped API key (in addition to a dashboard
 		// session or chat-session token) so backend integrations can pull chat
@@ -511,17 +539,17 @@ var WorkUnitsTrendResult = Type("WorkUnitsTrendResult", func() {
 })
 
 var ChatSessionLink = Type("ChatSessionLink", func() {
-	Attribute("parent_chat_id", String, "Chat id of the session the move originated from. Absent when the caller's visibility scope cannot read the parent — a masked end exposes no identity, matching parent_captured.", func() {
+	Attribute("parent_chat_id", String, "Chat id of the parent session in this relationship. Absent when the caller's visibility scope cannot read the parent — a masked end exposes no identity, matching parent_captured.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("child_chat_id", String, "Chat id derived for the continuation. Absent when the continuation's session id was unknowable at move time (e.g. Cursor mints ids server-side) — or when the caller's visibility scope cannot read the child, which is deliberately indistinguishable.", func() {
+	Attribute("child_chat_id", String, "Chat id of the child session in this relationship. Absent when its session id was unknowable when the relationship was recorded (e.g. Cursor mints ids server-side) — or when the caller's visibility scope cannot read the child, which is deliberately indistinguishable.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("parent_title", String, "Title of the parent chat, when it has been captured and titled and the caller's visibility scope can read it.")
 	Attribute("child_title", String, "Title of the child chat, when it has been captured and titled and the caller's visibility scope can read it.")
 	Attribute("parent_captured", Boolean, "Whether the parent exists as a captured chat the caller can read, i.e. whether the parent side is navigable.")
 	Attribute("child_captured", Boolean, "Whether the continuation exists as a captured chat the caller can read, i.e. whether the child side is navigable.")
-	Attribute("kind", String, "Link kind. Currently always 'move'.")
+	Attribute("kind", String, "Link kind: move for continuations, recall for recalled context, or subagent for a helper session.")
 	Attribute("target_harness", String, "Harness the session was moved to (e.g. cursor, codex, claude-code).")
 	Attribute("source_surface", String, "Harness the session originated in, when known.")
 	Attribute("actor_email", String, "Email of the person who initiated the move, when known.")
@@ -577,6 +605,10 @@ var SummarizeToolCallResult = Type("SummarizeToolCallResult", func() {
 })
 
 var ChatOverview = Type("ChatOverview", func() {
+	Attribute("slack_team_id", String, "Observed Slack workspace associated with this session.")
+	Attribute("slack_channel_id", String, "Observed Slack channel associated with this session.")
+	Attribute("slack_channel_name", String, "Observed Slack channel name as reported by the captured envelope.")
+	Attribute("participants", ArrayOf(ChatParticipant), "Distinct observed conversation participants across the session.")
 	Attribute("id", String, "The ID of the chat")
 	Attribute("title", String, "The title of the chat")
 	Attribute("user_id", String, "The ID of the user who created the chat")
@@ -615,6 +647,15 @@ var ChatOverview = Type("ChatOverview", func() {
 	})
 
 	Required("id", "title", "num_messages", "created_at", "updated_at", "last_message_timestamp")
+})
+
+var ChatParticipant = Type("ChatParticipant", func() {
+	Attribute("provider", String, "Directory provider that identifies this conversation participant.")
+	Attribute("provider_user_id", String, "Provider identity observed in the message envelope.")
+	Attribute("provider_team_id", String, "Workspace resolved from the organization directory, when unambiguous.")
+	Attribute("user_id", String, "Explicitly mapped Gram person at capture time; this attribution grants no permissions.")
+	Attribute("display_name", String, "Directory display name at capture time.")
+	Required("provider", "provider_user_id")
 })
 
 var Chat = Type("Chat", func() {
@@ -688,6 +729,7 @@ var ChatMessage = Type("ChatMessage", func() {
 	Attribute("prompt_id", String, "The agent prompt/turn ID associated with this message, when available.")
 	Attribute("user_id", String, "The ID of the user who created the message")
 	Attribute("external_user_id", String, "The ID of the external user who created the message")
+	Attribute("participants", ArrayOf(ChatParticipant), "Observed per-message conversation participants, independent of message ownership.")
 	Attribute("created_at", String, func() {
 		Description("When the message was created.")
 		Format(FormatDateTime)
