@@ -2,6 +2,7 @@ package roledistribution_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -28,17 +29,23 @@ func TestRoleDistributionPipeline_ProjectlessOrganizationAcknowledges(t *testing
 
 // createProjectAndPublish creates a project and runs PublishFirstProject in
 // one transaction, as project creation does, and returns the new outbox rows.
-func createProjectAndPublish(ctx context.Context, t *testing.T, tx pgx.Tx, org, slug string) int64 {
-	t.Helper()
+func createProjectAndPublish(ctx context.Context, tx pgx.Tx, org, slug string) (int64, error) {
 	before, err := testrepo.New(tx).PipelineCountRoleDistributionOutbox(ctx)
-	require.NoError(t, err)
+	if err != nil {
+		return 0, fmt.Errorf("count outbox before: %w", err)
+	}
 	projectID := uuid.New()
-	_, err = testrepo.New(tx).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{ID: projectID, OrganizationID: org, Name: slug, Slug: slug})
-	require.NoError(t, err)
-	require.NoError(t, requests.PublishFirstProject(ctx, tx, org, projectID))
+	if _, err := testrepo.New(tx).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{ID: projectID, OrganizationID: org, Name: slug, Slug: slug}); err != nil {
+		return 0, fmt.Errorf("create project: %w", err)
+	}
+	if err := requests.PublishFirstProject(ctx, tx, org, projectID); err != nil {
+		return 0, fmt.Errorf("publish first project: %w", err)
+	}
 	after, err := testrepo.New(tx).PipelineCountRoleDistributionOutbox(ctx)
-	require.NoError(t, err)
-	return after - before
+	if err != nil {
+		return 0, fmt.Errorf("count outbox after: %w", err)
+	}
+	return after - before, nil
 }
 
 func TestPublishFirstProject(t *testing.T) {
@@ -51,7 +58,8 @@ func TestPublishFirstProject(t *testing.T) {
 		tx, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: PublishFirstProject runs inside the caller's project creation transaction.
 		require.NoError(t, err)
 		defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-		published := createProjectAndPublish(ctx, t, tx, org, slug)
+		published, err := createProjectAndPublish(ctx, tx, org, slug)
+		require.NoError(t, err)
 		require.NoError(t, tx.Commit(ctx))
 		return published
 	}
@@ -81,16 +89,24 @@ func TestPublishFirstProject_WaitsForConcurrentDelete(t *testing.T) {
 	creation, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: Concurrent project creation must wait for the delete decision.
 	require.NoError(t, err)
 	defer func() { _ = creation.Rollback(context.WithoutCancel(ctx)) }()
-	result := make(chan int64, 1)
-	go func() { result <- createProjectAndPublish(ctx, t, creation, org, "replacement") }()
+	type outcome struct {
+		published int64
+		err       error
+	}
+	result := make(chan outcome, 1)
+	go func() {
+		published, err := createProjectAndPublish(ctx, creation, org, "replacement")
+		result <- outcome{published: published, err: err}
+	}()
 	require.Eventually(t, func() bool {
 		blocked, err := testrepo.New(f.db).RolloutBlockedBackends(ctx, int32(deletion.Conn().PgConn().PID()))
 		return err == nil && len(blocked) > 0
 	}, 5*time.Second, 10*time.Millisecond, "creation must wait on the in-flight delete")
 	require.NoError(t, deletion.Commit(ctx))
 	select {
-	case published := <-result:
-		require.EqualValues(t, 1, published, "the replacement is the only active project once the delete commits")
+	case got := <-result:
+		require.NoError(t, got.err)
+		require.EqualValues(t, 1, got.published, "the replacement is the only active project once the delete commits")
 	case <-ctx.Done():
 		t.Fatal("creation did not finish:", ctx.Err())
 	}
