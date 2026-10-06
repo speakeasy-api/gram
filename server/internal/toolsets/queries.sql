@@ -425,3 +425,18 @@ WHERE t.project_id = @project_id
 -- name: DeleteAssistantToolsetsByToolset :exec
 DELETE FROM assistant_toolsets
 WHERE toolset_id = @toolset_id AND project_id = @project_id;
+-- name: BeginCloneInsertSavepoint :exec
+SAVEPOINT clone_toolset_insert;
+
+-- name: RollbackCloneInsertSavepoint :exec
+ROLLBACK TO SAVEPOINT clone_toolset_insert;
+
+-- name: ReleaseCloneInsertSavepoint :exec
+RELEASE SAVEPOINT clone_toolset_insert;
+
+-- name: UpdateHostedMCPNetworkPolicy :execrows
+UPDATE mcp_servers
+SET name = sqlc.arg(name), slug = sqlc.arg(slug), visibility = sqlc.arg(visibility),
+    user_session_issuer_id = sqlc.narg(user_session_issuer_id), network_access_mode = sqlc.narg(network_access_mode),
+    updated_at = clock_timestamp()
+WHERE id = sqlc.arg(id) AND project_id = sqlc.arg(project_id) AND toolset_id = sqlc.arg(id) AND deleted IS FALSE;
