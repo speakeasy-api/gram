@@ -1,6 +1,8 @@
 package mcpservers_test
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -23,6 +25,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk/policylifecycle"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -87,6 +91,107 @@ func TestDeleteMcpServer(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestDeleteMcpServer_SoftDeletesLifecycleBoundRiskPolicy(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	firstBackendID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	first, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name:              "policy owner",
+		RemoteMcpServerID: &firstBackendID,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	firstID := uuid.MustParse(first.ID)
+
+	secondBackendID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	second, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name:              "remaining policy target",
+		RemoteMcpServerID: &secondBackendID,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	secondID := uuid.MustParse(second.ID)
+
+	lifecyclePolicy := seedMCPScopedRiskPolicy(t, ctx, ti, "lifecycle policy", []uuid.UUID{firstID})
+	multiServerPolicy := seedMCPScopedRiskPolicy(t, ctx, ti, "shared policy", []uuid.UUID{firstID, secondID})
+	beforeDeletes, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyDelete)
+	require.NoError(t, err)
+
+	err = ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: first.ID})
+	require.NoError(t, err)
+
+	queries := riskrepo.New(ti.conn)
+	_, err = queries.GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{
+		ID:        lifecyclePolicy.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	name, err := queries.GetRiskPolicyNameIncludingDeleted(ctx, riskrepo.GetRiskPolicyNameIncludingDeletedParams{
+		ID:        lifecyclePolicy.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, lifecyclePolicy.Name, name)
+
+	_, err = queries.GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{
+		ID:        multiServerPolicy.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err, "a policy with another live target must survive")
+
+	afterDeletes, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyDelete)
+	require.NoError(t, err)
+	require.Equal(t, beforeDeletes+1, afterDeletes)
+}
+
+func TestRiskPolicyLifecycleRepair_SoftDeletesExistingOrphans(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	backendID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	server, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name:              "legacy policy owner",
+		RemoteMcpServerID: &backendID,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	serverID := uuid.MustParse(server.ID)
+	policy := seedMCPScopedRiskPolicy(t, ctx, ti, "legacy orphan", []uuid.UUID{serverID})
+
+	_, err = mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{
+		ID:        serverID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	beforeDeletes, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyDelete)
+	require.NoError(t, err)
+	cleaner := policylifecycle.NewCleaner(audit.NewLogger())
+	deleted, err := cleaner.RepairOrphans(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{policy.ID}, deleted)
+
+	_, err = riskrepo.New(ti.conn).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{
+		ID:        policy.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	afterDeletes, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyDelete)
+	require.NoError(t, err)
+	require.Equal(t, beforeDeletes+1, afterDeletes)
+
+	deleted, err = cleaner.RepairOrphans(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Empty(t, deleted, "the repair must be idempotent")
 }
 
 func TestDeleteMcpServer_DetachesFromPlugins(t *testing.T) {
@@ -507,4 +612,49 @@ func TestDeleteMcpServer_DetachesFromAssistants(t *testing.T) {
 	updated, err := core.UpdateAssistant(ctx, *authCtx.ProjectID, reloaded.ID, &name, nil, nil, nil, []*types.AssistantMCPServerRef{{McpServerSlug: reloaded.MCPServers[0].ServerSlug.String}}, nil, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, name, updated.Name)
+}
+
+func seedMCPScopedRiskPolicy(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	name string,
+	serverIDs []uuid.UUID,
+) riskrepo.RiskPolicy {
+	t.Helper()
+
+	servers := make([]map[string]string, 0, len(serverIDs))
+	for _, serverID := range serverIDs {
+		servers = append(servers, map[string]string{"mcp_server_id": serverID.String()})
+	}
+	scope, err := json.Marshal(map[string]any{"servers": servers})
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	policy, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:                   uuid.New(),
+		ProjectID:            *authCtx.ProjectID,
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		Name:                 name,
+		PolicyType:           "standard",
+		Sources:              []string{"gitleaks"},
+		PresidioEntities:     nil,
+		AnalyzerConfig:       []byte(`{}`),
+		PromptInjectionRules: nil,
+		DisabledRules:        nil,
+		CustomRuleIds:        nil,
+		McpScope:             scope,
+		Enabled:              true,
+		Action:               "flag",
+		AudienceType:         "everyone",
+		ShadowMcpDisposition: pgtype.Text{String: "", Valid: false},
+		AutoName:             false,
+		UserMessage:          pgtype.Text{String: "", Valid: false},
+		Prompt:               pgtype.Text{String: "", Valid: false},
+		ModelConfig:          nil,
+		Score:                pgtype.Float8{Float64: 0, Valid: false},
+	})
+	require.NoError(t, err)
+	return policy
 }

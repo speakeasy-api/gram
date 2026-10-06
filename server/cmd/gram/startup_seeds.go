@@ -11,9 +11,11 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry/oktaseed"
+	"github.com/speakeasy-api/gram/server/internal/risk/policylifecycle"
 )
 
 // startupSeeds lists the reference data every worker keeps applied. To ship
@@ -33,6 +35,14 @@ func startupSeeds(logger *slog.Logger, db *pgxpool.Pool) []activities.StartupSee
 					return fmt.Errorf("apply okta catalog seed: %w", err)
 				}
 				return nil
+			},
+		},
+		{
+			Name:    policylifecycle.OrphanRepairSeedName,
+			Version: policylifecycle.OrphanRepairSeedVersion,
+			Apply: func(ctx context.Context) error {
+				_, err := policylifecycle.NewCleaner(audit.NewLogger()).RepairOrphans(ctx, db)
+				return err
 			},
 		},
 	}

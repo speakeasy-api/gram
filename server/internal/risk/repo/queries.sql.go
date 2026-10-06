@@ -3273,6 +3273,75 @@ func (q *Queries) ListLatestToolCallBlocksByMessageIDs(ctx context.Context, arg 
 	return items, nil
 }
 
+const listLifecycleBoundRiskPoliciesByMCPServer = `-- name: ListLifecycleBoundRiskPoliciesByMCPServer :many
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+FROM risk_policies
+WHERE project_id = $1
+  AND deleted IS FALSE
+  AND COALESCE((mcp_scope->>'all_servers')::boolean, FALSE) IS FALSE
+  AND jsonb_array_length(COALESCE(mcp_scope->'servers', '[]'::jsonb)) = 1
+  AND mcp_scope @> jsonb_build_object(
+    'servers',
+    jsonb_build_array(jsonb_build_object('mcp_server_id', $2::text))
+  )
+ORDER BY id
+`
+
+type ListLifecycleBoundRiskPoliciesByMCPServerParams struct {
+	ProjectID   uuid.UUID
+	McpServerID string
+}
+
+// A policy belongs to one server's lifecycle only when that server is its
+// sole explicit target. Multi-server and all-server policies survive one
+// target's deletion.
+func (q *Queries) ListLifecycleBoundRiskPoliciesByMCPServer(ctx context.Context, arg ListLifecycleBoundRiskPoliciesByMCPServerParams) ([]RiskPolicy, error) {
+	rows, err := q.db.Query(ctx, listLifecycleBoundRiskPoliciesByMCPServer, arg.ProjectID, arg.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicy
+	for rows.Next() {
+		var i RiskPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Enabled,
+			&i.Name,
+			&i.PolicyType,
+			&i.Sources,
+			&i.PresidioEntities,
+			&i.AnalyzerConfig,
+			&i.McpScope,
+			&i.PromptInjectionRules,
+			&i.DisabledRules,
+			&i.CustomRuleIds,
+			&i.Action,
+			&i.AudienceType,
+			&i.ShadowMcpDisposition,
+			&i.AutoName,
+			&i.UserMessage,
+			&i.Prompt,
+			&i.ModelConfig,
+			&i.Score,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMetaMCPServerIDsContainingMCPServer = `-- name: ListMetaMCPServerIDsContainingMCPServer :many
 SELECT gateway.id
 FROM meta_mcp_server_members AS member
@@ -3308,6 +3377,128 @@ func (q *Queries) ListMetaMCPServerIDsContainingMCPServer(ctx context.Context, a
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrphanedLifecycleBoundRiskPoliciesByProject = `-- name: ListOrphanedLifecycleBoundRiskPoliciesByProject :many
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+FROM risk_policies AS policy
+WHERE policy.project_id = $1
+  AND policy.deleted IS FALSE
+  AND COALESCE((policy.mcp_scope->>'all_servers')::boolean, FALSE) IS FALSE
+  AND jsonb_array_length(COALESCE(policy.mcp_scope->'servers', '[]'::jsonb)) = 1
+  AND NOT EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(policy.mcp_scope->'servers') AS target
+    WHERE EXISTS (
+      SELECT 1
+      FROM mcp_servers AS server
+      WHERE server.project_id = policy.project_id
+        AND server.id::text = target->>'mcp_server_id'
+        AND server.deleted IS FALSE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM meta_mcp_servers AS gateway
+      WHERE gateway.project_id = policy.project_id
+        AND gateway.id::text = target->>'mcp_server_id'
+        AND gateway.deleted IS FALSE
+    )
+  )
+ORDER BY policy.id
+`
+
+func (q *Queries) ListOrphanedLifecycleBoundRiskPoliciesByProject(ctx context.Context, projectID uuid.UUID) ([]RiskPolicy, error) {
+	rows, err := q.db.Query(ctx, listOrphanedLifecycleBoundRiskPoliciesByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicy
+	for rows.Next() {
+		var i RiskPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Enabled,
+			&i.Name,
+			&i.PolicyType,
+			&i.Sources,
+			&i.PresidioEntities,
+			&i.AnalyzerConfig,
+			&i.McpScope,
+			&i.PromptInjectionRules,
+			&i.DisabledRules,
+			&i.CustomRuleIds,
+			&i.Action,
+			&i.AudienceType,
+			&i.ShadowMcpDisposition,
+			&i.AutoName,
+			&i.UserMessage,
+			&i.Prompt,
+			&i.ModelConfig,
+			&i.Score,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectIDsWithOrphanedLifecycleBoundRiskPolicies = `-- name: ListProjectIDsWithOrphanedLifecycleBoundRiskPolicies :many
+SELECT DISTINCT policy.project_id
+FROM risk_policies AS policy
+WHERE policy.deleted IS FALSE
+  AND COALESCE((policy.mcp_scope->>'all_servers')::boolean, FALSE) IS FALSE
+  AND jsonb_array_length(COALESCE(policy.mcp_scope->'servers', '[]'::jsonb)) = 1
+  AND NOT EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(policy.mcp_scope->'servers') AS target
+    WHERE EXISTS (
+      SELECT 1
+      FROM mcp_servers AS server
+      WHERE server.project_id = policy.project_id
+        AND server.id::text = target->>'mcp_server_id'
+        AND server.deleted IS FALSE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM meta_mcp_servers AS gateway
+      WHERE gateway.project_id = policy.project_id
+        AND gateway.id::text = target->>'mcp_server_id'
+        AND gateway.deleted IS FALSE
+    )
+  )
+ORDER BY policy.project_id
+`
+
+func (q *Queries) ListProjectIDsWithOrphanedLifecycleBoundRiskPolicies(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProjectIDsWithOrphanedLifecycleBoundRiskPolicies)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -6151,65 +6342,4 @@ func (q *Queries) UpsertRiskPolicyEvalReview(ctx context.Context, arg UpsertRisk
 		&i.Deleted,
 	)
 	return i, err
-}
-
-const deleteRiskPoliciesByMcpServerID = `-- name: DeleteRiskPoliciesByMcpServerID :many
-DELETE FROM risk_policies
-WHERE project_id = $1
-  AND deleted IS FALSE
-  AND mcp_scope IS NOT NULL
-  AND mcp_scope::jsonb @> jsonb_build_object('servers', jsonb_build_array(jsonb_build_object('mcp_server_id', $2::text)))
-RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
-`
-
-type DeleteRiskPoliciesByMcpServerIDParams struct {
-	ProjectID   uuid.UUID
-	McpServerID uuid.UUID
-}
-
-func (q *Queries) DeleteRiskPoliciesByMcpServerID(ctx context.Context, arg DeleteRiskPoliciesByMcpServerIDParams) ([]RiskPolicy, error) {
-	rows, err := q.db.Query(ctx, deleteRiskPoliciesByMcpServerID, arg.ProjectID, arg.McpServerID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []RiskPolicy
-	for rows.Next() {
-		var i RiskPolicy
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.OrganizationID,
-			&i.Enabled,
-			&i.Name,
-			&i.PolicyType,
-			&i.Sources,
-			&i.PresidioEntities,
-			&i.AnalyzerConfig,
-			&i.McpScope,
-			&i.PromptInjectionRules,
-			&i.DisabledRules,
-			&i.CustomRuleIds,
-			&i.Action,
-			&i.AudienceType,
-			&i.ShadowMcpDisposition,
-			&i.AutoName,
-			&i.UserMessage,
-			&i.Prompt,
-			&i.ModelConfig,
-			&i.Score,
-			&i.Version,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }

@@ -51,6 +51,7 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/risk/policylifecycle"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -1097,12 +1098,20 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeUnexpected, err, "failed to detach assistant mcp servers").LogError(ctx, logger)
 	}
 
-	// Delete risk policies that are scoped to this MCP server. These policies
-	// are bound to the server lifecycle and should be cleaned up when the
-	// server is deleted to avoid orphaned policies pointing to non-existent servers.
-	deletedPolicies, err := s.deleteRiskPoliciesForMCPServer(ctx, dbtx, authCtx, deleted.ID, logger)
+	deletedPolicies, err := policylifecycle.NewCleaner(s.audit).SoftDeleteForMCPServer(
+		ctx,
+		dbtx,
+		authCtx.ActiveOrganizationID,
+		*authCtx.ProjectID,
+		deleted.ID,
+		policylifecycle.Actor{
+			Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			DisplayName: authCtx.Email,
+			Slug:        nil,
+		},
+	)
 	if err != nil {
-		return err
+		return oops.E(oops.CodeUnexpected, err, "clean up mcp server risk policies").LogError(ctx, logger)
 	}
 
 	// The mcp_endpoints.mcp_server_id FK has ON DELETE CASCADE, but that only
@@ -1296,16 +1305,19 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	// Post-commit, best-effort: RFC 7009 for the orphaned grants.
 	s.revoker.RevokeAllDetached(ctx, orphanCreds)
 
-	// Post-commit, best-effort: Schedule asynchronous cleanup of risk policy results.
-	// The risk package will handle the cleanup workflow for deleted policies.
-	for _, policyID := range deletedPolicies {
-		// Note: We don't have direct access to the RiskPolicyResultsCleaner here,
-		// but the background workflow will handle cleanup when policies are deleted.
-		// This is a best-effort operation that happens asynchronously.
-		logger.DebugContext(ctx, "risk policy deleted with mcp server",
-			attr.SlogRiskPolicyID(policyID.String()),
-			attr.SlogMcpServerID(deleted.ID.String()),
-		)
+	if s.temporalEnv != nil {
+		cleaner := background.TemporalRiskPolicyResultsCleaner{
+			TemporalEnv: s.temporalEnv,
+			Logger:      logger,
+		}
+		for _, policyID := range deletedPolicies {
+			if err := cleaner.Clean(ctx, *authCtx.ProjectID, policyID); err != nil {
+				logger.ErrorContext(ctx, "trigger lifecycle-bound risk policy results cleanup",
+					attr.SlogRiskPolicyID(policyID.String()),
+					attr.SlogError(err),
+				)
+			}
+		}
 	}
 
 	if err := s.reconcileMcpServerCustomDomains(ctx, rootDomainIDs(rootEndpoints)); err != nil {
@@ -1602,73 +1614,4 @@ func verifyServerReferenceOwnership(
 	}
 
 	return nil
-}
-
-// RiskPolicyResultsCleaner triggers asynchronous cleanup of risk policy results.
-// This interface is defined here to avoid circular dependencies with the risk package.
-type RiskPolicyResultsCleaner interface {
-	Clean(ctx context.Context, projectID, policyID uuid.UUID) error
-}
-
-// deleteRiskPoliciesForMCPServer deletes all risk policies that are scoped to
-// the given MCP server. Returns the deleted policy IDs for cleanup and audit logging.
-func (s *Service) deleteRiskPoliciesForMCPServer(
-	ctx context.Context,
-	dbtx pgx.Tx,
-	authCtx *contextvalues.AuthContext,
-	mcpServerID uuid.UUID,
-	logger *slog.Logger,
-) ([]uuid.UUID, error) {
-	// Execute the deletion query directly
-	const deleteSQL = `
-		DELETE FROM risk_policies
-		WHERE project_id = $1
-		  AND deleted IS FALSE
-		  AND mcp_scope IS NOT NULL
-		  AND mcp_scope::jsonb @> jsonb_build_object('servers', jsonb_build_array(jsonb_build_object('mcp_server_id', $2::text)))
-		RETURNING id, name, organization_id
-	`
-
-	rows, err := dbtx.Query(ctx, deleteSQL, *authCtx.ProjectID, mcpServerID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "delete risk policies for mcp server").LogError(ctx, logger)
-	}
-	defer rows.Close()
-
-	var deletedPolicyIDs []uuid.UUID
-	for rows.Next() {
-		var policyID uuid.UUID
-		var policyName string
-		var orgID string
-		if err := rows.Scan(&policyID, &policyName, &orgID); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "scan deleted risk policy").LogError(ctx, logger)
-		}
-		deletedPolicyIDs = append(deletedPolicyIDs, policyID)
-
-		// Log the policy deletion in the audit trail
-		if err := s.audit.LogRiskPolicyDelete(ctx, dbtx, audit.LogRiskPolicyDeleteEvent{
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			ProjectID:        *authCtx.ProjectID,
-			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName: authCtx.Email,
-			ActorSlug:        nil,
-			RiskPolicyID:     policyID,
-			RiskPolicyName:   policyName,
-		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "log risk policy deletion").LogError(ctx, logger)
-		}
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "iterate deleted risk policies").LogError(ctx, logger)
-	}
-
-	if len(deletedPolicyIDs) > 0 {
-		logger.InfoContext(ctx, "deleted risk policies for mcp server",
-			attr.SlogMcpServerID(mcpServerID.String()),
-			"deleted_policy_count", len(deletedPolicyIDs),
-		)
-	}
-
-	return deletedPolicyIDs, nil
 }

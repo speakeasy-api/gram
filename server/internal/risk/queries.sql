@@ -225,6 +225,75 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: ListLifecycleBoundRiskPoliciesByMCPServer :many
+-- A policy belongs to one server's lifecycle only when that server is its
+-- sole explicit target. Multi-server and all-server policies survive one
+-- target's deletion.
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND COALESCE((mcp_scope->>'all_servers')::boolean, FALSE) IS FALSE
+  AND jsonb_array_length(COALESCE(mcp_scope->'servers', '[]'::jsonb)) = 1
+  AND mcp_scope @> jsonb_build_object(
+    'servers',
+    jsonb_build_array(jsonb_build_object('mcp_server_id', @mcp_server_id::text))
+  )
+ORDER BY id;
+
+-- name: ListProjectIDsWithOrphanedLifecycleBoundRiskPolicies :many
+SELECT DISTINCT policy.project_id
+FROM risk_policies AS policy
+WHERE policy.deleted IS FALSE
+  AND COALESCE((policy.mcp_scope->>'all_servers')::boolean, FALSE) IS FALSE
+  AND jsonb_array_length(COALESCE(policy.mcp_scope->'servers', '[]'::jsonb)) = 1
+  AND NOT EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(policy.mcp_scope->'servers') AS target
+    WHERE EXISTS (
+      SELECT 1
+      FROM mcp_servers AS server
+      WHERE server.project_id = policy.project_id
+        AND server.id::text = target->>'mcp_server_id'
+        AND server.deleted IS FALSE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM meta_mcp_servers AS gateway
+      WHERE gateway.project_id = policy.project_id
+        AND gateway.id::text = target->>'mcp_server_id'
+        AND gateway.deleted IS FALSE
+    )
+  )
+ORDER BY policy.project_id;
+
+-- name: ListOrphanedLifecycleBoundRiskPoliciesByProject :many
+SELECT *
+FROM risk_policies AS policy
+WHERE policy.project_id = @project_id
+  AND policy.deleted IS FALSE
+  AND COALESCE((policy.mcp_scope->>'all_servers')::boolean, FALSE) IS FALSE
+  AND jsonb_array_length(COALESCE(policy.mcp_scope->'servers', '[]'::jsonb)) = 1
+  AND NOT EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(policy.mcp_scope->'servers') AS target
+    WHERE EXISTS (
+      SELECT 1
+      FROM mcp_servers AS server
+      WHERE server.project_id = policy.project_id
+        AND server.id::text = target->>'mcp_server_id'
+        AND server.deleted IS FALSE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM meta_mcp_servers AS gateway
+      WHERE gateway.project_id = policy.project_id
+        AND gateway.id::text = target->>'mcp_server_id'
+        AND gateway.deleted IS FALSE
+    )
+  )
+ORDER BY policy.id;
+
 -- name: DeleteRiskPolicyBypassRequestsByPolicy :exec
 UPDATE risk_policy_bypass_requests
 SET deleted_at = clock_timestamp()
@@ -2186,12 +2255,4 @@ UPDATE chat_messages
 SET external_user_id = @external_user_id
 WHERE id = @id
   AND project_id = @project_id;
-
--- name: DeleteRiskPoliciesByMcpServerID :many
-DELETE FROM risk_policies
-WHERE project_id = @project_id
-  AND deleted IS FALSE
-  AND mcp_scope IS NOT NULL
-  AND mcp_scope::jsonb @> jsonb_build_object('servers', jsonb_build_array(jsonb_build_object('mcp_server_id', @mcp_server_id::text)))
-RETURNING *;
 
