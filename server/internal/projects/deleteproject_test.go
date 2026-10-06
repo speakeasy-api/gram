@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
@@ -72,7 +73,7 @@ func TestProjectsService_DeleteProject_RetainsMCPFindingEvidence(t *testing.T) {
 		ProjectID:      project.ID,
 		MatchEncrypted: "encrypted evidence",
 		CreatedAt:      conv.ToPGTimestamptz(now),
-		ExpiresAt:      conv.ToPGTimestamptz(now.Add(24 * time.Hour)),
+		ExpiresAt:      conv.ToPGTimestamptz(now.Add(90 * 24 * time.Hour)),
 	}))
 	executionID := uuid.NewString()
 	require.NoError(t, evidenceRepo.InsertMCPExecutionEvidence(ctx, riskrepo.InsertMCPExecutionEvidenceParams{
@@ -82,11 +83,13 @@ func TestProjectsService_DeleteProject_RetainsMCPFindingEvidence(t *testing.T) {
 		Phase:            "request",
 		PayloadEncrypted: "encrypted payload",
 		CreatedAt:        conv.ToPGTimestamptz(now),
-		ExpiresAt:        conv.ToPGTimestamptz(now.Add(24 * time.Hour)),
+		ExpiresAt:        conv.ToPGTimestamptz(now.Add(90 * 24 * time.Hour)),
 	}))
 
 	require.NoError(t, ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{ID: project.ID.String()}))
-	_, err := evidenceRepo.GetMCPFindingEvidence(ctx, riskrepo.GetMCPFindingEvidenceParams{
+	_, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, project.ID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = evidenceRepo.GetMCPFindingEvidence(ctx, riskrepo.GetMCPFindingEvidenceParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      project.ID,
 		FindingID:      findingID,
