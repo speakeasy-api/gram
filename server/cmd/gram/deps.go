@@ -58,6 +58,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -75,6 +76,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -1151,6 +1153,7 @@ func newTriggersApp(
 	platformHosts map[string]string,
 	slackClient *slack_client.SlackClient,
 	cacheImpl cache.Cache,
+	identities *assistantidentity.Service,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
 	return bgtriggers.NewApp(
@@ -1185,8 +1188,19 @@ func newTriggersApp(
 		platformHosts,
 		slackClient,
 		cacheImpl,
+		identities,
 		bgtriggers.NewNoopDispatcher(logger),
 	)
+}
+
+// newAssistantIdentities binds assistant trigger workloads to the deployment's
+// Gram signing issuer, the same origin mcpauthz.New takes.
+func newAssistantIdentities(c *cli.Context, auditLogger *audit.Logger) *assistantidentity.Service {
+	issuerURL := c.String("authz-issuer-url")
+	inv.Require("assistant identity issuer",
+		"authz-issuer-url is a Gram issuer origin", mcpauthz.ValidateIssuerOrigin(issuerURL, c.String("environment") == "local"),
+	)
+	return assistantidentity.New(issuerURL, auditLogger)
 }
 
 func newAuditLogger() *audit.Logger {

@@ -98,11 +98,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	}
 	logger = logger.With(attr.SlogMetaMcpServerID(metaServer.ID.String()))
 
-	// Stamped provisionally with the surface's newest revision so responses
-	// that bail before body parsing still carry a version; once the request
-	// is parsed it is re-stamped with the revision in effect.
 	supportedMeta := mcpversions.SupportedMetaServer()
-	w.Header().Set(mcpversions.HTTPHeader, supportedMeta[len(supportedMeta)-1])
 
 	prepared := prepareMCPRequest(w, r, metamcp.MaxBodyBytes, supportedMeta)
 
@@ -134,13 +130,6 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		validationErr := validateMetaDeclaredProtocolVersion(&req, r.Header.Get(mcpversions.HTTPHeader))
 		if validationErr == nil {
 			validationErr = validateRequestMetadata(r.Header, &req, resolution)
-		}
-		// The response header names the revision in effect on this surface,
-		// even when a declarationError encodes the body under another
-		// revision's rules: the header advertises what the surface serves,
-		// and the surface does not serve a revision outside its supported set.
-		if validationErr != nil {
-			w.Header().Set(mcpversions.HTTPHeader, resolution.InEffect)
 		}
 		handled, err := s.handleProtocolVersionValidation(
 			r,
@@ -178,8 +167,6 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	if err := validateMCPRequestEnvelope(ctx, logger, prepared, oops.CodeRequestTooLarge, "meta mcp request body exceeds 1 MiB"); err != nil {
 		return err
 	}
-	w.Header().Set(mcpversions.HTTPHeader, resolution.InEffect)
-
 	gate := &metaGateContext{
 		projectID:    mcpEndpoint.ProjectID,
 		metaServerID: metaServer.ID,

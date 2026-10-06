@@ -1204,11 +1204,7 @@ func seedRegistrationLifecycle(t *testing.T, ctx context.Context, conn *pgxpool.
 		ConnectionID:   connectionID.String(),
 		Generation:     generation.String(),
 	}
-	project := ResolvedProject{
-		ID:   projectRow.ID,
-		Name: projectRow.Name,
-		Slug: projectRow.Slug,
-	}
+	project := ResolvedProject{ID: projectRow.ID, Name: projectRow.Name, Slug: projectRow.Slug}
 	return principal, project
 }
 

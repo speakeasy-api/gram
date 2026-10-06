@@ -37,7 +37,7 @@ func TestProductFeatureNameContract(t *testing.T) {
 		productfeatures.FeaturePlatformMCP, productfeatures.FeatureCustomerManagedEncryptionKeys,
 		productfeatures.FeatureRemoteSessionAutoRefresh, productfeatures.FeatureRemoteSessionAutoRefreshEnforced,
 		productfeatures.FeatureConsentToolFiltering, productfeatures.FeatureSessionPortability,
-		productfeatures.FeatureNetworkIngress, productfeatures.FeatureAutomaticRoleDistribution,
+		productfeatures.FeatureNetworkIngress,
 	}, document.Components.Schemas["SetOrganizationFeatureRequestBody"].Properties["feature_name"].Enum)
 }
 
@@ -77,7 +77,6 @@ func TestClientSnapshot_ReturnsCompleteProductFeatureState(t *testing.T) {
 		SessionPortabilityEnabled:               false,
 		NetworkIngressEnabled:                   false,
 		DeviceAgent:                             true,
-		AutomaticRoleDistribution:               false,
 	}, ti.client.Snapshot(ctx, orgID))
 }
 

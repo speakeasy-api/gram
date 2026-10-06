@@ -3287,22 +3287,25 @@ const resetAssistantThreadEventToPending = `-- name: ResetAssistantThreadEventTo
 UPDATE assistant_thread_events
 SET
   status = $1,
-  last_error = $2,
+  attempts = GREATEST(0, attempts - CASE WHEN $2::boolean THEN 1 ELSE 0 END),
+  last_error = $3,
   updated_at = clock_timestamp()
-WHERE id = $3
-  AND project_id = $4
+WHERE id = $4
+  AND project_id = $5
 `
 
 type ResetAssistantThreadEventToPendingParams struct {
-	PendingStatus string
-	LastError     pgtype.Text
-	EventID       uuid.UUID
-	ProjectID     uuid.UUID
+	PendingStatus  string
+	RestoreAttempt bool
+	LastError      pgtype.Text
+	EventID        uuid.UUID
+	ProjectID      uuid.UUID
 }
 
 func (q *Queries) ResetAssistantThreadEventToPending(ctx context.Context, arg ResetAssistantThreadEventToPendingParams) error {
 	_, err := q.db.Exec(ctx, resetAssistantThreadEventToPending,
 		arg.PendingStatus,
+		arg.RestoreAttempt,
 		arg.LastError,
 		arg.EventID,
 		arg.ProjectID,

@@ -2675,6 +2675,7 @@ type RemoteProtectedResource struct {
 	DpopBoundAccessTokensRequired         pgtype.Bool
 	DpopSigningAlgValuesSupported         []string
 	TlsClientCertificateBoundAccessTokens pgtype.Bool
+	ScopeOverride                         []string
 	ChallengeScopes                       []string
 	ChallengeScopesSeenAt                 pgtype.Timestamptz
 	Metadata                              []byte
@@ -2834,6 +2835,7 @@ type RemoteSessionIssuer struct {
 	BackchannelLogoutSupported                 pgtype.Bool
 	AuthorizationResponseIssParameterSupported pgtype.Bool
 	ScopeOverride                              []string
+	OmitScopeFallback                          pgtype.Bool
 	ResourceIndicatorSupported                 pgtype.Bool
 	Oidc                                       bool
 	Passthrough                                bool

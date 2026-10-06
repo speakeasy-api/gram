@@ -25,6 +25,8 @@ For small edits, run the narrowest package script that proves the change. For sh
 
 ### General Guidelines
 
+- Name the actual state or behavior in identifiers and UI copy, not relative labels such as `legacy` or `modern`. For example, use `agentIdentityIsNotConfigured` for an assistant without an agent identity. Choose the name from the actual condition. Preserve externally contracted values, including metric labels used by queries or alerts, unless the change includes a compatibility plan.
+
 - Use the `aube` package manager
 - When interacting with the server, use the `@gram/client` package (this is an alias to `client/dashboard/src/sdk/src/...`)
 - The document `client/dashboard/src/sdk/REACT_QUERY.md` is very helpful for understanding how to use React Query hooks that come with the SDK.

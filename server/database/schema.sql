@@ -2359,6 +2359,10 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   -- Operator-pinned scope request, sent verbatim in place of the discovered
   -- scope set. NULL is unset; an empty array on create or update clears it.
   scope_override TEXT[],
+  -- When true, a login that would otherwise fall back to scopes_supported
+  -- omits the scope parameter so the authorization server applies its
+  -- default. NULL or false sends the list.
+  omit_scope_fallback BOOLEAN,
   -- Whether the issuer accepts the RFC 8707 resource parameter. NULL until
   -- learned. False once a login succeeded only after the resource parameter
   -- was dropped, or when an operator states it.
@@ -3632,6 +3636,10 @@ WHERE mcp_slug IS NOT NULL AND custom_domain_id IS NOT NULL AND deleted IS FALSE
 CREATE UNIQUE INDEX IF NOT EXISTS toolsets_mcp_slug_null_custom_domain_id_key
 ON toolsets (mcp_slug)
 WHERE mcp_slug IS NOT NULL AND custom_domain_id IS NULL AND deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS toolsets_user_session_issuer_id_idx
+ON toolsets (user_session_issuer_id)
+WHERE user_session_issuer_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS toolset_versions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -6420,6 +6428,12 @@ CREATE TABLE IF NOT EXISTS remote_protected_resources (
   dpop_signing_alg_values_supported TEXT[],
   tls_client_certificate_bound_access_tokens BOOLEAN,
 
+  -- Operator-pinned scopes for logins to this resource, sent as written plus
+  -- the feature scopes the issuer advertises. Beats every discovered source;
+  -- scopes the resource no longer advertises are flagged, not dropped. NULL
+  -- is unset. Written by its own upsert, never by discovery.
+  scope_override TEXT[],
+
   -- The scope parameter of the last WWW-Authenticate challenge the resource
   -- answered with (RFC 6750 §3), and when. NULL until one is seen.
   challenge_scopes TEXT[],
@@ -7047,6 +7061,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_meta_mcp_server_id_ke
 
 CREATE INDEX IF NOT EXISTS plugin_servers_meta_mcp_server_id_idx
   ON plugin_servers (meta_mcp_server_id);
+
+-- Every other mcp_server_id index leads with plugin_id. Not partial on
+-- deleted: the RESTRICT FK check ignores it and would fall back to a scan.
+CREATE INDEX IF NOT EXISTS plugin_servers_mcp_server_id_idx
+  ON plugin_servers (mcp_server_id)
+  WHERE mcp_server_id IS NOT NULL;
 
 -- Controls who receives a plugin. Reuses the RBAC principal URN pattern
 -- (role:slug, user:id, or * for all org members).

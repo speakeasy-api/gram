@@ -16,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -45,7 +44,7 @@ type workosMembershipEventPayload struct {
 // in the IdP) surfaces as organization_membership.updated with
 // status=inactive, not as a delete event. Anything else upserts, and a later
 // update with status=active restores access through that path.
-func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (postCommitEffects, error) {
+func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, event events.Event) (postCommitEffects, error) {
 	var none postCommitEffects
 
 	payload, err := decodeWorkOSMembershipPayload(event)
@@ -111,7 +110,7 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 // upsertOrganizationMembership records an active membership and declaratively
 // syncs the member's WorkOS role assignments. Caller owns the
 // ShouldProcessEvent guard.
-func upsertOrganizationMembership(ctx context.Context, dbtx database.DBTX, organizationID string, gramUserID string, event events.Event, payload workosMembershipEventPayload) error {
+func upsertOrganizationMembership(ctx context.Context, dbtx pgx.Tx, organizationID string, gramUserID string, event events.Event, payload workosMembershipEventPayload) error {
 	if err := orgrepo.New(dbtx).UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
 		OrganizationID:     organizationID,
 		UserID:             conv.ToPGTextEmpty(gramUserID),

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -115,6 +116,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		nil,
 		nil,
 		cache.NoopCache,
+		assistantidentity.New("https://platform.example.invalid", auditLogger),
 	)
 
 	svc := triggers.NewService(

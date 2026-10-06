@@ -1,7 +1,3 @@
--- name: PipelineEnableRoleDistribution :exec
-INSERT INTO organization_features (organization_id, feature_name)
-VALUES (@organization_id, 'automatic-role-distribution');
-
 -- name: PipelineCountRoleDistributionOutbox :one
 SELECT count(*) FROM publish_outbox
 WHERE topic = 'gram.role_distribution.v1.RoleDistributionSetupRequestedV1';
@@ -55,15 +51,35 @@ CASE WHEN n > 103 THEN clock_timestamp() ELSE NULL END
 FROM generate_series(1, 105) n;
 
 -- name: RolloutInsertLocalRoles :exec
--- Simulate pre-rollout roles created while distribution was disabled; pagination must discover them.
+-- Existing roles must be discovered by paginated bootstrap.
 INSERT INTO organization_roles (organization_id, workos_slug, workos_name, workos_created_at, workos_updated_at, deleted_at)
 SELECT @organization_id, 'rollout-local-' || n, 'Rollout Local ' || n, clock_timestamp(), clock_timestamp(),
 CASE WHEN n > 103 THEN clock_timestamp() ELSE NULL END
 FROM generate_series(1, 105) n;
 
 -- name: RolloutRejectOutbox :exec
--- Prove rollout flag rolls back if enqueue fails.
-ALTER TABLE publish_outbox ADD CONSTRAINT reject_rollout_outbox CHECK (topic != 'gram.role_distribution.v1.RoleDistributionSetupRequestedV1') NOT VALID;
+-- Reject the continuation after 100 setup rows to prove page atomicity.
+DO $install$
+DECLARE baseline bigint;
+BEGIN
+  SELECT count(*) INTO baseline FROM publish_outbox
+  WHERE topic = 'gram.role_distribution.v1.RoleDistributionSetupRequestedV1';
+  CREATE FUNCTION reject_bootstrap_continuation() RETURNS trigger LANGUAGE plpgsql AS $fn$
+  BEGIN
+    IF NEW.topic = 'gram.role_distribution.v1.RoleDistributionSetupRequestedV1'
+      AND (SELECT count(*) FROM publish_outbox WHERE topic = NEW.topic) >= TG_ARGV[0]::bigint THEN
+      RAISE EXCEPTION 'injected bootstrap continuation failure' USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+  END $fn$;
+  EXECUTE format('CREATE TRIGGER reject_bootstrap_continuation BEFORE INSERT ON publish_outbox FOR EACH ROW EXECUTE FUNCTION reject_bootstrap_continuation(%L)', baseline + 100);
+END
+$install$;
+
+-- name: RejectCatchUpSecondOrganizationFixture :exec
+-- Allow the first selected organization, then fail to prove catch-up rollback.
+ALTER TABLE publish_outbox ADD CONSTRAINT reject_catchup_second_organization_fixture
+CHECK (organization_id <> 'org-never-enabled') NOT VALID;
 
 -- name: RolloutBlockedBackends :many
 -- Observe real lock dependencies without relying on production query text.

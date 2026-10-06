@@ -72,22 +72,27 @@ pub struct RuntimeHost {
     pub thread_idle_ttl: Duration,
     pub mcp_http_client: reqwest::Client,
     pub spill_root: PathBuf,
-    /// Fallback bearer used only when `/threads/turn` arrives with no
-    /// `auth_token` so the bootstrap fetch still has a credential.
-    pub initial_token: String,
+    /// Serializes admission/enqueue with eviction and task-exit cleanup.
+    pub admission: tokio::sync::Mutex<()>,
 }
 
-/// Live per-thread state. Concurrent first-turn requests for the same
-/// thread race through an `OnceCell` so only one bootstrap fetch and one
-/// task spawn happen.
+/// A message and its opaque bearer, handed to an idle thread loop. A thread
+/// admits one turn at a time: the backend keeps every later event pending
+/// until the thread is idle again, so no accepted input waits behind a turn
+/// that could fail, and every credential is minted just before its turn runs.
+pub struct QueuedTurn {
+    pub input: RunnerContent,
+    pub token: String,
+    pub mcp_servers: Option<Vec<McpServer>>,
+}
+
+/// Live per-thread state, shared by successive queued turns.
 pub struct ConfiguredThread {
     pub thread_id: String,
     pub chat_id: String,
     pub idle_since: Arc<Mutex<Option<Instant>>>,
-    pub inbox_tx: UnboundedSender<RunnerContent>,
+    pub inbox_tx: UnboundedSender<QueuedTurn>,
     pub task_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
-    pub tokens: TokenRegistry,
-    pub mcp_cmd_tx: mpsc::Sender<McpCmd>,
     /// Broadcasts user interrupts into the thread's agent loop. Bumping the
     /// generation cancels whatever checkpoint the turn in flight captured at
     /// its start; a bump while the thread is idle is inert, because the next
@@ -97,21 +102,37 @@ pub struct ConfiguredThread {
 
 impl ConfiguredThread {
     pub fn idle_for(&self) -> Duration {
-        let guard = match self.idle_since.lock() {
-            Ok(g) => g,
-            Err(_) => return Duration::ZERO,
-        };
+        let guard = self
+            .idle_since
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         match *guard {
             None => Duration::ZERO,
             Some(t) => Instant::now().saturating_duration_since(t),
         }
     }
 
-    pub fn enqueue(&self, input: RunnerContent) -> Result<(), RunnerError> {
+    pub fn enqueue(
+        &self,
+        input: RunnerContent,
+        token: String,
+        mcp_servers: Option<Vec<McpServer>>,
+    ) -> Result<(), RunnerError> {
+        let mut idle = self
+            .idle_since
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if idle.is_none() {
+            return Err(RunnerError::InvocationBusy);
+        }
         self.inbox_tx
-            .send(input)
+            .send(QueuedTurn {
+                input,
+                token,
+                mcp_servers,
+            })
             .map_err(|_| RunnerError::SubmitInput("loop inbox closed".into()))?;
-        mark_busy(&self.idle_since);
+        *idle = None;
         Ok(())
     }
 
@@ -128,13 +149,13 @@ impl ConfiguredThread {
     /// Returns whether there was a turn to stop — input enqueued, or a driver
     /// step still running. A warm thread between turns has nothing in flight,
     /// and the bump is inert until a turn checkpoints the generation, so it
-    /// answers false. A poisoned idle clock answers true: claiming a stop that
-    /// did nothing is the safer error.
+    /// answers false. The scalar idle clock can safely recover a poisoned lock.
     pub fn interrupt(&self) -> bool {
-        let busy = match self.idle_since.lock() {
-            Ok(guard) => guard.is_none(),
-            Err(_) => true,
-        };
+        let busy = self
+            .idle_since
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_none();
         self.cancellation.interrupt();
         busy
     }
@@ -143,7 +164,7 @@ impl ConfiguredThread {
 pub async fn build_host(
     identity: Arc<SpanIdentity>,
     server_url: String,
-    initial_token: String,
+    _initial_token: String,
     thread_idle_ttl: Duration,
 ) -> Result<Arc<RuntimeHost>, RunnerError> {
     let mut default_headers = http::HeaderMap::new();
@@ -178,7 +199,7 @@ pub async fn build_host(
         thread_idle_ttl,
         mcp_http_client,
         spill_root,
-        initial_token,
+        admission: tokio::sync::Mutex::new(()),
     });
 
     // Background eviction task: walks the threads map and drops any whose
@@ -225,6 +246,7 @@ pub fn snapshot_threads(host: &RuntimeHost) -> Vec<(String, String, Duration)> {
 }
 
 async fn sweep_idle(host: &Arc<RuntimeHost>) {
+    let _admission = host.admission.lock().await;
     let ttl = host.thread_idle_ttl;
     let mut to_evict = Vec::new();
     for entry in host.threads.iter() {
@@ -236,8 +258,19 @@ async fn sweep_idle(host: &Arc<RuntimeHost>) {
         }
     }
     for thread_id in to_evict {
-        evict_thread(host, &thread_id);
+        if lookup_thread(host, &thread_id).is_some_and(|thread| thread.idle_for() > ttl) {
+            evict_thread(host, &thread_id);
+        }
     }
+}
+
+fn remove_thread_if_current(
+    host: &RuntimeHost,
+    id: &str,
+    expected: &Arc<OnceCell<Arc<ConfiguredThread>>>,
+) {
+    host.threads
+        .remove_if(id, |_, current| Arc::ptr_eq(current, expected));
 }
 
 fn evict_thread(host: &RuntimeHost, thread_id: &str) {
@@ -247,9 +280,11 @@ fn evict_thread(host: &RuntimeHost, thread_id: &str) {
         tracing::info!(thread_id = %thread_id, "evicting thread");
         // Closing the inbox causes run_loop to return; abort the task
         // for prompt teardown of any blocked compactor / model call.
-        if let Ok(mut handle_slot) = thread.task_handle.lock()
-            && let Some(handle) = handle_slot.take()
-        {
+        let mut handle_slot = thread
+            .task_handle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(handle) = handle_slot.take() {
             handle.abort();
         }
     }
@@ -266,7 +301,10 @@ fn reap_oldest_idle(host: &RuntimeHost) {
         .iter()
         .filter_map(|entry| {
             let thread = entry.value().get()?;
-            let guard = thread.idle_since.lock().ok()?;
+            let guard = thread
+                .idle_since
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let since = (*guard)?;
             Some((thread.thread_id.clone(), since))
         })
@@ -277,13 +315,15 @@ fn reap_oldest_idle(host: &RuntimeHost) {
     }
 }
 
-/// First-turn bootstrap path. Concurrent /turn requests for the same thread
-/// race through the `OnceCell`; only one wins the bootstrap fetch and task
-/// spawn. Subsequent turns rotate the existing thread's bearer slot.
+/// Initializes warm state from an already-authenticated bootstrap. The caller
+/// holds the host admission lock through enqueue, excluding eviction. Later
+/// invocations still validate bootstrap but keep the existing driver/history;
+/// their bearer and MCP configuration change only when dequeued by the loop.
 pub async fn ensure_thread(
     host: &Arc<RuntimeHost>,
     thread_id: &str,
-    auth_token: Option<String>,
+    bootstrap: ThreadBootstrap,
+    bearer: String,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
     let cell = host
         .threads
@@ -291,31 +331,24 @@ pub async fn ensure_thread(
         .or_insert_with(|| Arc::new(OnceCell::new()))
         .clone();
 
-    let bearer = auth_token
-        .filter(|t| !t.is_empty())
-        .unwrap_or_else(|| host.initial_token.clone());
-
-    let mut initialized = false;
-    let thread = cell
+    let result = cell
         .get_or_try_init(|| async {
-            initialized = true;
             // Reap skips busy threads and our own (still-uninitialized)
             // OnceCell, so worst case is a no-op.
             reap_oldest_idle(host);
             let tokens = TokenRegistry::new(bearer.clone());
-            let bootstrap = host
-                .gram_client
-                .fetch_bootstrap(thread_id, &tokens)
-                .await
-                .map_err(|e| RunnerError::Loop(format!("bootstrap fetch failed: {e}")))?;
             spawn_thread(host, thread_id.to_string(), bootstrap, tokens).await
         })
-        .await?;
-
-    if !initialized && !bearer.is_empty() {
-        thread.tokens.rotate(&bearer)?;
+        .await;
+    match result {
+        Ok(thread) => Ok(thread.clone()),
+        Err(error) => {
+            host.threads.remove_if(thread_id, |_, current| {
+                Arc::ptr_eq(current, &cell) && current.get().is_none()
+            });
+            Err(error)
+        }
     }
-    Ok(thread.clone())
 }
 
 /// Builds a per-thread agent and spawns its tokio task. Each task is wrapped
@@ -327,10 +360,11 @@ async fn spawn_thread(
     bootstrap: ThreadBootstrap,
     tokens: TokenRegistry,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
-    let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<RunnerContent>();
+    let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<QueuedTurn>();
+    let (notice_tx, notice_rx) = mpsc::unbounded_channel::<RunnerContent>();
     let (mcp_inbox_tx, mut mcp_inbox_rx) = mpsc::unbounded_channel::<String>();
 
-    let notice_inbox_tx = inbox_tx.clone();
+    let notice_inbox_tx = notice_tx.clone();
     tokio::spawn(async move {
         while let Some(notice) = mcp_inbox_rx.recv().await {
             if notice_inbox_tx.send(RunnerContent::Text(notice)).is_err() {
@@ -339,7 +373,7 @@ async fn spawn_thread(
         }
     });
 
-    let (mcp_cmd_tx, mcp_catalog) = spawn_mcp_actor(
+    let (mcp_cmd_tx, mcp_catalog, mcp_known_tools) = spawn_mcp_actor(
         host.gram_client.clone(),
         host.mcp_http_client.clone(),
         &thread_id,
@@ -441,7 +475,7 @@ async fn spawn_thread(
             mcp_cmd_tx.clone(),
         ))
         .with(tools::inspect_asset::InspectAssetTool::new(
-            inbox_tx.clone(),
+            notice_tx.clone(),
         ));
 
     // MCP tools resolve by name but are never advertised: the declared tool
@@ -452,6 +486,7 @@ async fn spawn_thread(
     let compose_source = agentkit_tool_compose::ComposeTool::wrap(HiddenCatalogSource::new(
         mcp_catalog,
         mcp_cmd_tx.clone(),
+        mcp_known_tools,
     ))
     .with_source(native_tools.merge(agentkit_tool_fs::registry()))
     .with_source(UnknownToolSource);
@@ -515,10 +550,15 @@ async fn spawn_thread(
     let evict_thread_id = thread_id.clone();
     let loop_thread_id = thread_id.clone();
 
+    let eviction_cell = host
+        .threads
+        .get(&thread_id)
+        .map(|entry| entry.value().clone());
+    let loop_mcp_cmd = mcp_cmd_tx.clone();
     let task_handle = tokio::spawn(async move {
         let outcome = AssertUnwindSafe(run_loop(
             driver,
-            inbox_rx,
+            (inbox_rx, notice_rx, tokens, Some(loop_mcp_cmd)),
             loop_idle,
             turn_end_compactor,
             loop_thread_id,
@@ -543,7 +583,10 @@ async fn spawn_thread(
         }
         // Drop the entry on exit so a stale ConfiguredThread doesn't keep
         // holding state for a dead task.
-        host_for_eviction.threads.remove(&evict_thread_id);
+        let _admission = host_for_eviction.admission.lock().await;
+        if let Some(cell) = eviction_cell {
+            remove_thread_if_current(&host_for_eviction, &evict_thread_id, &cell);
+        }
     });
 
     let configured = Arc::new(ConfiguredThread {
@@ -552,8 +595,6 @@ async fn spawn_thread(
         idle_since,
         inbox_tx,
         task_handle: Mutex::new(Some(task_handle)),
-        tokens,
-        mcp_cmd_tx,
         cancellation,
     });
     Ok(configured)
@@ -574,7 +615,12 @@ fn mcp_disclosure_item(servers: &[McpServer]) -> String {
 
 async fn run_loop<S>(
     mut driver: LoopDriver<S>,
-    mut inbox: UnboundedReceiver<RunnerContent>,
+    (mut inbox, mut notices, tokens, mcp_cmd): (
+        UnboundedReceiver<QueuedTurn>,
+        UnboundedReceiver<RunnerContent>,
+        TokenRegistry,
+        Option<mpsc::Sender<McpCmd>>,
+    ),
     idle_since: Arc<Mutex<Option<Instant>>>,
     turn_end_compactor: Option<PersistingCompactor>,
     thread_id: String,
@@ -604,23 +650,40 @@ where
                 } else if let Some(compactor) = &turn_end_compactor {
                     compact_at_turn_end(compactor, &driver).await;
                 }
-                mark_idle(&idle_since);
+                let mut idle = idle_since
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                *idle = if inbox.is_empty() {
+                    Some(Instant::now())
+                } else {
+                    None
+                };
             }
             LoopStep::Interrupt(LoopInterrupt::AwaitingInput(req)) => {
-                let drained = drain(&mut inbox);
-                let items = if !drained.is_empty() {
-                    drained_into_items(drained)
-                } else {
-                    match inbox.recv().await {
-                        Some(msg) => vec![user_content_item(&msg)],
-                        None => return Ok("inbox closed"),
-                    }
+                let Some(turn) = inbox.recv().await else {
+                    return Ok("inbox closed");
                 };
+                if let Some(cmd) = &mcp_cmd {
+                    let (reply, ack) = tokio::sync::oneshot::channel();
+                    cmd.send(McpCmd::TurnBoundary {
+                        token: turn.token,
+                        desired: turn.mcp_servers,
+                        reply,
+                    })
+                    .await
+                    .map_err(|_| RunnerError::Loop("MCP actor closed".into()))?;
+                    ack.await
+                        .map_err(|_| RunnerError::Loop("MCP boundary failed".into()))??;
+                } else {
+                    tokens.rotate(turn.token)?;
+                }
+                let mut items = vec![user_content_item(&turn.input)];
+                items.extend(drained_into_items(drain(&mut notices)));
                 mark_busy(&idle_since);
                 req.submit(&mut driver, items)?;
             }
             LoopStep::Interrupt(LoopInterrupt::AfterToolResult(info)) => {
-                let drained = drain(&mut inbox);
+                let drained = drain(&mut notices);
                 if !drained.is_empty() {
                     info.submit(&mut driver, drained_into_items(drained))?;
                 }
@@ -669,15 +732,9 @@ fn drain(inbox: &mut UnboundedReceiver<RunnerContent>) -> Vec<RunnerContent> {
 }
 
 fn mark_busy(idle_since: &Arc<Mutex<Option<Instant>>>) {
-    if let Ok(mut slot) = idle_since.lock() {
-        *slot = None;
-    }
-}
-
-fn mark_idle(idle_since: &Arc<Mutex<Option<Instant>>>) {
-    if let Ok(mut slot) = idle_since.lock() {
-        *slot = Some(Instant::now());
-    }
+    *idle_since
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
 }
 
 /// Builds a user item from a content union. Text maps to `TextPart`s and
@@ -809,6 +866,265 @@ mod tests {
     use super::*;
     use crate::http_layer::{TokenRegistry, build_bootstrap_client};
 
+    #[derive(Clone)]
+    struct QueueTestModel {
+        tokens: TokenRegistry,
+        seen: mpsc::UnboundedSender<(String, Vec<String>)>,
+        finish: Arc<tokio::sync::Semaphore>,
+    }
+
+    #[async_trait::async_trait]
+    impl agentkit_loop::ModelAdapter for QueueTestModel {
+        type Session = Self;
+        async fn start_session(&self, _: SessionConfig) -> Result<Self, agentkit_loop::LoopError> {
+            Ok(self.clone())
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ModelSession for QueueTestModel {
+        type Turn = QueueTestTurn;
+        async fn begin_turn(
+            &mut self,
+            request: agentkit_loop::TurnRequest,
+            _: Option<agentkit_core::TurnCancellation>,
+        ) -> Result<Self::Turn, agentkit_loop::LoopError> {
+            let messages = request
+                .transcript
+                .iter()
+                .filter(|item| item.kind == ItemKind::User)
+                .flat_map(|item| item.parts.iter())
+                .filter_map(|part| match part {
+                    Part::Text(text) => Some(text.text.clone()),
+                    _ => None,
+                })
+                .collect();
+            self.seen
+                .send((self.tokens.current().unwrap(), messages))
+                .unwrap();
+            Ok(QueueTestTurn {
+                finish: self.finish.clone(),
+                emitted: false,
+            })
+        }
+    }
+
+    struct QueueTestTurn {
+        finish: Arc<tokio::sync::Semaphore>,
+        emitted: bool,
+    }
+
+    #[async_trait::async_trait]
+    impl agentkit_loop::ModelTurn for QueueTestTurn {
+        async fn next_event(
+            &mut self,
+            _: Option<agentkit_core::TurnCancellation>,
+        ) -> Result<Option<agentkit_loop::ModelTurnEvent>, agentkit_loop::LoopError> {
+            if self.emitted {
+                return Ok(None);
+            }
+            self.finish.acquire().await.unwrap().forget();
+            self.emitted = true;
+            Ok(Some(agentkit_loop::ModelTurnEvent::Finished(
+                agentkit_loop::ModelTurnResult {
+                    model: None,
+                    response_id: None,
+                    finish_reason: FinishReason::Completed,
+                    output_items: vec![],
+                    usage: None,
+                    metadata: Default::default(),
+                },
+            )))
+        }
+    }
+
+    #[tokio::test]
+    async fn queued_messages_rotate_existing_bearer_only_between_turns() {
+        // Exercise the real terminal compactor and its awaited persistence,
+        // gating the HTTP response rather than relying on a timing window.
+        let (persist_tx, mut persisted) = mpsc::unbounded_channel();
+        let persist_finish = Arc::new(tokio::sync::Semaphore::new(0));
+        let release_persist = persist_finish.clone();
+        let app = axum::Router::new().route(
+            "/rpc/assistants.recordCompactedGeneration",
+            axum::routing::post(move |headers: http::HeaderMap| {
+                let seen = persist_tx.clone();
+                let release = release_persist.clone();
+                async move {
+                    seen.send(
+                        headers
+                            .get("authorization")
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .to_string(),
+                    )
+                    .unwrap();
+                    release.acquire().await.unwrap().forget();
+                    http::StatusCode::NO_CONTENT
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let persist_server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let tokens = TokenRegistry::new("initial");
+        let (seen, mut observations) = mpsc::unbounded_channel();
+        let finish = Arc::new(tokio::sync::Semaphore::new(0));
+        let terminal = PersistingCompactor::new(
+            agentkit_compaction::StrategyCompactor::builder()
+                .trigger(|_, _| None)
+                .strategy(agentkit_compaction::DropReasoningStrategy::new())
+                .build()
+                .unwrap(),
+            GramBootstrapClient::new(
+                format!("http://{addr}"),
+                build_bootstrap_client(reqwest::Client::new()),
+            ),
+            tokens.clone(),
+            "shared-thread".into(),
+            None,
+        );
+        let driver = Agent::builder()
+            .model(QueueTestModel {
+                tokens: tokens.clone(),
+                seen,
+                finish: finish.clone(),
+            })
+            .build()
+            .unwrap()
+            .start(SessionConfig::new("shared-thread"))
+            .await
+            .unwrap();
+        let (tx, rx) = mpsc::unbounded_channel();
+        let (_notice_tx, notices) = mpsc::unbounded_channel();
+        let (cmd_tx, mut cmd_rx) = mpsc::channel(4);
+        let (boundary_tx, mut boundaries) = mpsc::unbounded_channel();
+        let boundary_tokens = tokens.clone();
+        let _actor = tokio::spawn(async move {
+            while let Some(McpCmd::TurnBoundary {
+                token,
+                desired,
+                reply,
+            }) = cmd_rx.recv().await
+            {
+                boundary_tx.send((token.clone(), desired)).unwrap();
+                boundary_tokens.rotate(token).unwrap();
+                reply.send(Ok(())).unwrap();
+            }
+        });
+        let task = tokio::spawn(run_loop(
+            driver,
+            (rx, notices, tokens.clone(), Some(cmd_tx)),
+            Arc::new(Mutex::new(None)),
+            Some(terminal),
+            "shared-thread".into(),
+        ));
+        tx.send(QueuedTurn {
+            input: RunnerContent::Text("Alice".into()),
+            token: "token-a".into(),
+            mcp_servers: None,
+        })
+        .unwrap();
+        let first_boundary = boundaries.recv().await.unwrap();
+        assert_eq!(first_boundary.0, "token-a");
+        assert!(first_boundary.1.is_none());
+        let a = tokio::time::timeout(Duration::from_secs(5), observations.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(a, ("token-a".into(), vec!["Alice".into()]));
+        tx.send(QueuedTurn {
+            input: RunnerContent::Text("Bob".into()),
+            token: "token-b".into(),
+            mcp_servers: Some(vec![McpServer {
+                id: "next-turn-only".into(),
+                url: "https://example.com/mcp".into(),
+                headers: Default::default(),
+            }]),
+        })
+        .unwrap();
+        assert_eq!(tokens.current().unwrap(), "token-a");
+        assert!(observations.try_recv().is_err());
+        assert!(
+            boundaries.try_recv().is_err(),
+            "queued config must not reach the actor during the preceding turn"
+        );
+        finish.add_permits(1);
+        assert_eq!(persisted.recv().await.unwrap(), "Bearer token-a");
+        assert_eq!(tokens.current().unwrap(), "token-a");
+        assert!(
+            boundaries.try_recv().is_err(),
+            "the next boundary must wait for preceding compaction persistence"
+        );
+        persist_finish.add_permits(1);
+        let next_boundary = boundaries.recv().await.unwrap();
+        assert_eq!(next_boundary.0, "token-b");
+        assert_eq!(next_boundary.1.unwrap()[0].id, "next-turn-only");
+        let b = tokio::time::timeout(Duration::from_secs(5), observations.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(b, ("token-b".into(), vec!["Alice".into(), "Bob".into()]));
+        finish.add_permits(1);
+        assert_eq!(persisted.recv().await.unwrap(), "Bearer token-b");
+        persist_finish.add_permits(1);
+        drop(tx);
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(5), task)
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap(),
+            "inbox closed"
+        );
+        persist_server.abort();
+    }
+
+    #[tokio::test]
+    async fn failed_boundary_ack_does_not_submit_input() {
+        let tokens = TokenRegistry::new("prior");
+        let (seen, mut observations) = mpsc::unbounded_channel();
+        let driver = Agent::builder()
+            .model(QueueTestModel {
+                tokens: tokens.clone(),
+                seen,
+                finish: Arc::new(tokio::sync::Semaphore::new(0)),
+            })
+            .build()
+            .unwrap()
+            .start(SessionConfig::new("T"))
+            .await
+            .unwrap();
+        let (tx, rx) = mpsc::unbounded_channel();
+        let (_notice_tx, notices) = mpsc::unbounded_channel();
+        let (cmd, mut commands) = mpsc::channel(1);
+        let task = tokio::spawn(run_loop(
+            driver,
+            (rx, notices, tokens.clone(), Some(cmd)),
+            Arc::new(Mutex::new(None)),
+            None,
+            "T".into(),
+        ));
+        tx.send(QueuedTurn {
+            input: RunnerContent::Text("must not run".into()),
+            token: "next".into(),
+            mcp_servers: None,
+        })
+        .unwrap();
+        let McpCmd::TurnBoundary { reply, .. } = commands.recv().await.unwrap() else {
+            panic!("expected boundary");
+        };
+        reply
+            .send(Err(RunnerError::Loop("invalid MCP header".into())))
+            .unwrap();
+        assert!(task.await.unwrap().is_err());
+        assert!(observations.try_recv().is_err());
+        assert_eq!(tokens.current().unwrap(), "prior");
+    }
+
     fn empty_host() -> Arc<RuntimeHost> {
         let http_client = reqwest::Client::new();
         let gram_client = GramBootstrapClient::new(
@@ -829,13 +1145,12 @@ mod tests {
                 .build()
                 .expect("MCP HTTP client should build"),
             spill_root: PathBuf::from("/tmp/runtime-test-spill"),
-            initial_token: String::new(),
+            admission: tokio::sync::Mutex::new(()),
         })
     }
 
     fn insert_thread(host: &RuntimeHost, thread_id: &str, idle_since: Option<Instant>) {
-        let (inbox_tx, _inbox_rx) = mpsc::unbounded_channel::<RunnerContent>();
-        let (mcp_cmd_tx, _mcp_cmd_rx) = mpsc::channel::<McpCmd>(1);
+        let (inbox_tx, _inbox_rx) = mpsc::unbounded_channel::<QueuedTurn>();
         let handle = tokio::spawn(async {});
         let configured = Arc::new(ConfiguredThread {
             thread_id: thread_id.to_string(),
@@ -843,8 +1158,6 @@ mod tests {
             idle_since: Arc::new(Mutex::new(idle_since)),
             inbox_tx,
             task_handle: Mutex::new(Some(handle)),
-            tokens: TokenRegistry::new(""),
-            mcp_cmd_tx,
             cancellation: CancellationController::new(),
         });
         let cell = Arc::new(OnceCell::new());
@@ -852,6 +1165,34 @@ mod tests {
             .map_err(|_| ())
             .expect("OnceCell should accept first set");
         host.threads.insert(thread_id.to_string(), cell);
+    }
+
+    #[tokio::test]
+    async fn old_task_cleanup_preserves_replacement_cell() {
+        let host = empty_host();
+        insert_thread(&host, "T", Some(Instant::now()));
+        let old = host.threads.get("T").unwrap().value().clone();
+        insert_thread(&host, "T", Some(Instant::now()));
+        remove_thread_if_current(&host, "T", &old);
+        assert!(host.threads.contains_key("T"));
+    }
+
+    #[tokio::test]
+    async fn sweep_waits_for_admission_and_rechecks_busy_state() {
+        let host = empty_host();
+        insert_thread(
+            &host,
+            "T",
+            Some(Instant::now() - host.thread_idle_ttl - Duration::from_secs(1)),
+        );
+        let guard = host.admission.lock().await;
+        let sweep = sweep_idle(&host);
+        tokio::pin!(sweep);
+        assert!(futures::poll!(&mut sweep).is_pending());
+        mark_busy(&lookup_thread(&host, "T").unwrap().idle_since);
+        drop(guard);
+        sweep.await;
+        assert!(host.threads.contains_key("T"));
     }
 
     #[tokio::test]
