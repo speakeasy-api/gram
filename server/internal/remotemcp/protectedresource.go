@@ -2,10 +2,13 @@ package remotemcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -76,17 +79,7 @@ func recordProtectedResource(ctx context.Context, db repo.DBTX, projectID uuid.U
 	// Keep this check at the write boundary so every discovery path rejects
 	// mismatches, including identifiers differing only by a trailing slash.
 	if !doc.ValidForResource(resourceURL) {
-		_, err := repo.New(db).RecordRemoteProtectedResourceFetchError(ctx, repo.RecordRemoteProtectedResourceFetchErrorParams{
-			ProjectID:          projectID,
-			OrganizationID:     orgID,
-			ResourceIdentifier: resourceURL,
-			MetadataUrl:        doc.MetadataURL,
-			MetadataLastError:  protectedResourceMismatchMessage,
-		})
-		if err != nil {
-			return fmt.Errorf("record remote protected resource mismatch: %w", err)
-		}
-		return nil
+		return recordProtectedResourceError(ctx, db, projectID, orgID, resourceURL, doc.MetadataURL, protectedResourceMismatchMessage)
 	}
 
 	_, err := repo.New(db).UpsertRemoteProtectedResource(ctx, repo.UpsertRemoteProtectedResourceParams{
@@ -107,20 +100,44 @@ func recordProtectedResource(ctx context.Context, db repo.DBTX, projectID uuid.U
 		Metadata:                              string(doc.Raw),
 	})
 	if err != nil {
+		if isProtectedResourceDataError(err) {
+			// Go accepts JSON values (including escaped NULs and large numbers)
+			// that PostgreSQL cannot store in jsonb or extracted text columns.
+			// Record a safe fetch failure so on-use probes keep their backoff.
+			return recordProtectedResourceError(ctx, db, projectID, orgID, resourceURL, doc.MetadataURL, "The metadata document contains values that cannot be stored.")
+		}
 		return fmt.Errorf("upsert remote protected resource: %w", err)
 	}
 	return nil
 }
 
+func isProtectedResourceDataError(err error) bool {
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	if !ok {
+		return false
+	}
+	switch pgErr.Code {
+	case pgerrcode.UntranslatableCharacter, pgerrcode.CharacterNotInRepertoire,
+		pgerrcode.InvalidTextRepresentation, pgerrcode.NumericValueOutOfRange:
+		return true
+	default:
+		return false
+	}
+}
+
 // recordProtectedResourceFetchError stores the public-safe reason the last
 // read of resourceURL failed.
 func recordProtectedResourceFetchError(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL string, probeErr *wellknown.ProtectedResourceDiscoveryError) error {
+	return recordProtectedResourceError(ctx, db, projectID, orgID, resourceURL, probeErr.ProbeURL, probeErr.UserMessage())
+}
+
+func recordProtectedResourceError(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL, metadataURL, message string) error {
 	_, err := repo.New(db).RecordRemoteProtectedResourceFetchError(ctx, repo.RecordRemoteProtectedResourceFetchErrorParams{
 		ProjectID:          projectID,
 		OrganizationID:     orgID,
 		ResourceIdentifier: resourceURL,
-		MetadataUrl:        probeErr.ProbeURL,
-		MetadataLastError:  probeErr.UserMessage(),
+		MetadataUrl:        metadataURL,
+		MetadataLastError:  message,
 	})
 	if err != nil {
 		return fmt.Errorf("record remote protected resource fetch error: %w", err)
