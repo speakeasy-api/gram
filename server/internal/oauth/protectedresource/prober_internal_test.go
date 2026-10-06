@@ -18,7 +18,7 @@ func TestProbeOnUseSkipsPlainHTTP(t *testing.T) {
 	// A nil database and policy prove no probe is started.
 	p := NewProber(nil, nil)
 	started := make(chan struct{}, 1)
-	p.afterDetached = func() { started <- struct{}{} }
+	p.beforeDetached = func() { started <- struct{}{} }
 
 	p.ProbeOnUse(t.Context(), testenv.NewLogger(t), uuid.New(), "org", "http://rs.example.test/mcp")
 

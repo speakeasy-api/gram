@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -35,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oktaissuer"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -250,6 +252,10 @@ type snapshot struct {
 
 	// discoverScopes applies the resource's advertised scopes, per the rollout flag.
 	discoverScopes bool
+
+	// now is when the snapshot was read; cached advertised scopes older than
+	// a login would still trust are dropped against it.
+	now time.Time
 }
 
 // resourceKey is a remote-backed server's protected resource row key.
@@ -268,7 +274,9 @@ func (snap *snapshot) resourceScopes(sv repo.ListEligibleServersRow) remotesessi
 	if !ok {
 		return out
 	}
-	out.Pin, out.ChallengeScopes, out.ScopesSupported = row.ScopeOverride, row.ChallengeScopes, row.ScopesSupported
+	// A login trusts a cached advertised list for seven days and then falls
+	// through to the issuer; the pin and challenge scopes stand regardless.
+	out.Pin, out.ChallengeScopes, out.ScopesSupported = row.ScopeOverride, row.ChallengeScopes, protectedresource.LastGoodAdvertisedScopes(row.ScopesSupported, row.MetadataFetchedAt, snap.now)
 	return out
 }
 
@@ -320,6 +328,7 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID,
 		deepLink:       deepLink(connection),
 		resources:      map[resourceKey]repo.ListRemoteProtectedResourceScopesRow{},
 		discoverScopes: remotesessions.ResourceScopeDiscoveryEnabled(ctx, logger, s.features, organizationID, organizationSlug),
+		now:            time.Now(),
 	}
 	servers := make([]repo.ListEligibleServersRow, 0, len(all))
 	seen := map[uuid.UUID]bool{}
@@ -510,11 +519,15 @@ func (s *Service) List(ctx context.Context, payload *srv.ListPayload) (*srv.List
 	if err != nil {
 		return nil, err
 	}
-	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "load organization").LogError(ctx, logger)
+	// The slug only targets the scope discovery flag, which reads as off for
+	// an unreadable organization rather than failing the page.
+	organizationSlug := ""
+	if org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, authCtx.ActiveOrganizationID); err != nil {
+		logger.WarnContext(ctx, "read organization for scope discovery flag", attr.SlogError(err))
+	} else {
+		organizationSlug = org.Slug
 	}
-	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID, org.Slug)
+	snap, err := s.load(ctx, logger, authCtx.ActiveOrganizationID, organizationSlug)
 	if err != nil {
 		return nil, err
 	}

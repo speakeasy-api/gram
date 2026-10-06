@@ -35,7 +35,7 @@ const (
 )
 
 // DiscoveryCodeTimeout is the ProtectedResourceDiscoveryError code for a probe
-// whose deadline expired before a response was received.
+// whose deadline expired during the probe, before or while reading the response.
 const DiscoveryCodeTimeout = "timeout"
 
 // errReadProbeBody marks a probe failure that happened while consuming the

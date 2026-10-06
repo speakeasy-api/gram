@@ -6,10 +6,10 @@ package remotesessions_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -104,7 +104,6 @@ func seedProtectedResource(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 // scopes; nil scopes serve a 404. hits counts metadata reads.
 func fakeResource(t *testing.T, scopes []string) (*httptest.Server, *atomic.Int32) {
 	t.Helper()
-	var origin string
 	hits := new(atomic.Int32)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != wellknown.OAuthProtectedResourcePath {
@@ -116,11 +115,16 @@ func fakeResource(t *testing.T, scopes []string) (*httptest.Server, *atomic.Int3
 			http.NotFound(w, r)
 			return
 		}
+		// Serialized here so an empty list reads as [] rather than [""].
+		advertised, err := json.Marshal(scopes)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"resource":"` + origin + `","authorization_servers":["` + syntheticIssuerURL + `"],"scopes_supported":["` + strings.Join(scopes, `","`) + `"]}`))
+		_, _ = w.Write([]byte(`{"resource":"http://` + r.Host + `","authorization_servers":["` + syntheticIssuerURL + `"],"scopes_supported":` + string(advertised) + `}`))
 	}))
 	t.Cleanup(server.Close)
-	origin = server.URL
 	return server, hits
 }
 
@@ -382,14 +386,15 @@ func TestListClients_ReadsCachedResourceRowWithoutProbing(t *testing.T) {
 
 	// The consent card reads the row by the login's server, with or without
 	// the client claiming the resource.
-	byServer, ok := env.mgr.CachedResourceScopesForServer(ctx, env.projectID, env.mcpServerID, true)
+	byServer, byServerURL, ok := env.mgr.CachedResourceScopesForServer(ctx, env.projectID, env.mcpServerID, true)
 	require.True(t, ok)
+	require.Equal(t, resource.URL, byServerURL)
 	require.Equal(t, []string{"files:read"}, byServer.Pin)
 	require.Equal(t, []string{"c"}, byServer.ChallengeScopes)
 	require.Equal(t, []string{"files:read", "files:write"}, byServer.ScopesSupported)
 	require.False(t, byServer.Live)
 	require.True(t, byServer.UseDiscovered)
-	_, ok = env.mgr.CachedResourceScopesForServer(ctx, env.projectID, uuid.NullUUID{}, true)
+	_, _, ok = env.mgr.CachedResourceScopesForServer(ctx, env.projectID, uuid.NullUUID{}, true)
 	require.False(t, ok, "a login with no server has no row")
 	require.EqualValues(t, 0, hits.Load())
 

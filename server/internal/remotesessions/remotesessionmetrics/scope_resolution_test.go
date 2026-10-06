@@ -5,11 +5,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata/metricdatatest"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -33,17 +33,18 @@ func TestScopeResolution_PinsInstrumentsAndDimensions(t *testing.T) {
 		byName[metric.Name] = metric
 	}
 
-	counter, ok := byName[meterScopeResolution]
+	// Dashboards query these names and keys literally.
+	counter, ok := byName["gram.remote_session.scope_resolution"]
 	require.True(t, ok)
 	metricdatatest.AssertHasAttributes(t, counter,
-		attr.OAuthScopeSource(ScopeSourceLiveResource),
-		attr.OAuthResourceProbeOutcome(protectedresource.ProbeOutcomeFetched),
+		attribute.String("gram.oauth.scope_source", "live_resource"),
+		attribute.String("gram.oauth.resource_probe_outcome", "fetched"),
 	)
 
-	histogram, ok := byName[meterResourceProbe]
+	histogram, ok := byName["gram.remote_session.resource_probe.duration"]
 	require.True(t, ok)
 	require.Equal(t, "s", histogram.Unit)
-	metricdatatest.AssertHasAttributes(t, histogram, attr.OAuthResourceProbeOutcome(protectedresource.ProbeOutcomeFetched))
+	metricdatatest.AssertHasAttributes(t, histogram, attribute.String("gram.oauth.resource_probe_outcome", "fetched"))
 	data, ok := histogram.Data.(metricdata.Histogram[float64])
 	require.True(t, ok)
 	require.Len(t, data.DataPoints, 1)

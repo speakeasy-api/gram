@@ -35,6 +35,22 @@ func blockingResource(t *testing.T) (*httptest.Server, <-chan struct{}) {
 	return server, reached
 }
 
+// validResource is a resource whose metadata document names itself and
+// advertises files:read.
+func validResource(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != wellknown.OAuthProtectedResourcePath {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"resource":"http://` + r.Host + `","authorization_servers":["https://as.example.test"],"scopes_supported":["files:read"]}`))
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
 // A login whose probe outruns its budget records the failure and reports timeout.
 func TestResolveForLogin_TimeoutRecordsError(t *testing.T) {
 	t.Parallel()
@@ -101,17 +117,7 @@ func TestResolveForLogin_NoSlot(t *testing.T) {
 func TestResolveForLogin_FetchedRecordsRowAndCheck(t *testing.T) {
 	t.Parallel()
 	ctx, env := newProberEnv(t)
-	var origin string
-	resource := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != wellknown.OAuthProtectedResourcePath {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"resource":"` + origin + `","authorization_servers":["https://as.example.test"],"scopes_supported":["files:read"]}`))
-	}))
-	t.Cleanup(resource.Close)
-	origin = resource.URL
+	resource := validResource(t)
 
 	got := env.prober.ResolveForLogin(ctx, testenv.NewLogger(t), env.projectID, env.organizationID, resource.URL)
 

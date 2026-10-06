@@ -93,7 +93,7 @@ func createConsentRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.
 
 // attachConsentRemoteMcpServer binds a remote-backed mcp_server to issuerID
 // so clients on that issuer derive serverURL as their resource.
-func attachConsentRemoteMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, issuerID uuid.UUID, slug, serverURL string) {
+func attachConsentRemoteMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, issuerID uuid.UUID, slug, serverURL string) uuid.UUID {
 	t.Helper()
 	remoteServer, err := remotemcp_repo.New(conn).CreateServer(ctx, remotemcp_repo.CreateServerParams{
 		ID:            uuid.New(),
@@ -102,7 +102,7 @@ func attachConsentRemoteMcpServer(t *testing.T, ctx context.Context, conn *pgxpo
 		Url:           serverURL,
 	})
 	require.NoError(t, err)
-	_, err = mcpservers_repo.New(conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
+	server, err := mcpservers_repo.New(conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
 		ID:                  uuid.New(),
 		ProjectID:           projectID,
 		Name:                conv.ToPGText(slug),
@@ -112,6 +112,7 @@ func attachConsentRemoteMcpServer(t *testing.T, ctx context.Context, conn *pgxpo
 		UserSessionIssuerID: conv.ToNullUUID(issuerID),
 	})
 	require.NoError(t, err)
+	return server.ID
 }
 
 // mintConsentEndpointState builds the resolved endpoint (with an endpoint-
@@ -294,11 +295,12 @@ func seedSharedUpstreamEndpoint(t *testing.T, slug string) (context.Context, con
 
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	other := createUserSessionIssuer(t, ctx, ti.conn, projectID)
-	attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, shared, slug+"-srv-a", consentUpstreamA+"/")
+	serverA := attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, shared, slug+"-srv-a", consentUpstreamA+"/")
 	attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, other, slug+"-srv-b", consentUpstreamB)
 
 	endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, shared, slug)
-	// As resolveUpstreamResource reads it: the registered URL, verbatim.
+	// As the endpoint resolves: server A, and the registered URL, verbatim.
+	endpoint.McpServerID = conv.ToNullUUID(serverA)
 	endpoint.UpstreamResource = consentUpstreamA + "/"
 
 	return ctx, consentActionFixture{

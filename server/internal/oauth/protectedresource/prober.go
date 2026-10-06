@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
@@ -128,6 +129,9 @@ type Prober struct {
 	// now is the clock the debounce, freshness rules, and probe timing read.
 	now func() time.Time
 
+	// record persists a document a login probe read; Record outside tests.
+	record func(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL string, doc wellknown.OAuthProtectedResourceMetadata) error
+
 	// beforeDetached runs synchronously before detached work starts; tests only.
 	beforeDetached func()
 
@@ -144,6 +148,7 @@ func NewProber(db *pgxpool.Pool, policy *guardian.Policy) *Prober {
 		loginSlots:     make(chan struct{}, loginProbeSlots),
 		loginBudget:    loginProbeBudget,
 		now:            time.Now,
+		record:         Record,
 		beforeDetached: nil,
 		afterDetached:  nil,
 	}
@@ -213,36 +218,47 @@ func (p *Prober) ProbeOnUse(ctx context.Context, logger *slog.Logger, projectID 
 				logger.ErrorContext(ctx, "protected resource probe panicked", attr.SlogError(fmt.Errorf("%v", rec)))
 			}
 		}()
-		if err := p.refresh(ctx, projectID, organizationID, resourceURL, now); err != nil {
-			p.checked.CompareAndDelete(key, c)
+		current, err := p.refresh(ctx, projectID, organizationID, resourceURL, now)
+		if err != nil {
 			logger.ErrorContext(ctx, "refresh protected resource on use", attr.SlogError(err))
+		}
+		// A row left failing is revisited after loginErrorBackoff, which the
+		// next use decides from the row, not from a check that would hold
+		// it for probeRecheck.
+		if err != nil || !current {
+			p.checked.CompareAndDelete(key, c)
 		}
 		p.sweep(p.now())
 	}()
 }
 
-// refresh probes resourceURL unless its row is still current. Only database
-// failures are returned; a failed probe is recorded on the row.
-func (p *Prober) refresh(ctx context.Context, projectID uuid.UUID, organizationID string, resourceURL string, now time.Time) error {
+// refresh probes resourceURL unless its row is still current. current
+// reports that the row stands as a successful read (it was fresh, or was
+// just recorded from a valid document); a failed probe is recorded on the
+// row and reported as not current. Only database failures are returned.
+func (p *Prober) refresh(ctx context.Context, projectID uuid.UUID, organizationID string, resourceURL string, now time.Time) (current bool, err error) {
 	existing, err := repo.New(p.db).GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: projectID, ResourceIdentifier: resourceURL})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 	case err != nil:
-		return fmt.Errorf("get remote protected resource: %w", err)
+		return false, fmt.Errorf("get remote protected resource: %w", err)
 	default:
 		if !refreshDue(&existing, now) {
-			return nil
+			return !existing.MetadataLastErrorAt.Time.After(existing.MetadataFetchedAt.Time), nil
 		}
 	}
 
 	doc, _, err := wellknown.DiscoverProtectedResourceMetadata(ctx, p.policy, resourceURL)
 	if err != nil {
 		if typed, ok := errors.AsType[*wellknown.ProtectedResourceDiscoveryError](err); ok {
-			return RecordFetchError(ctx, p.db, projectID, organizationID, resourceURL, typed)
+			return false, RecordFetchError(ctx, p.db, projectID, organizationID, resourceURL, typed)
 		}
-		return nil
+		return false, nil
 	}
-	return Record(ctx, p.db, projectID, organizationID, resourceURL, doc)
+	if err := Record(ctx, p.db, projectID, organizationID, resourceURL, doc); err != nil {
+		return false, err
+	}
+	return doc.ValidForResource(resourceURL), nil
 }
 
 // refreshDue reports whether an on-use probe should read the row's resource
@@ -331,8 +347,9 @@ func (p *Prober) ResolveForLogin(ctx context.Context, logger *slog.Logger, proje
 	writeCtx, cancelWrite := context.WithTimeout(context.WithoutCancel(ctx), recordWriteBudget)
 	defer cancelWrite()
 	if err != nil {
-		// The user left: nothing was learned about the resource, so nothing is recorded.
-		if errors.Is(ctx.Err(), context.Canceled) {
+		// The login's own context ended (the user left, or its deadline
+		// passed): nothing was learned about the resource, so nothing is recorded.
+		if ctx.Err() != nil {
 			cached.Outcome = ProbeOutcomeCancelled
 			return cached
 		}
@@ -347,20 +364,24 @@ func (p *Prober) ResolveForLogin(ctx context.Context, logger *slog.Logger, proje
 		}
 		return cached
 	}
-	if recordErr := Record(writeCtx, p.db, projectID, organizationID, resourceURL, doc); recordErr != nil {
+	recordErr := p.record(writeCtx, p.db, projectID, organizationID, resourceURL, doc)
+	if recordErr != nil {
 		logger.ErrorContext(ctx, "record protected resource", attr.SlogError(recordErr))
 	}
 	if !doc.ValidForResource(resourceURL) {
 		cached.Outcome = ProbeOutcomeError
 		return cached
 	}
-	// The proxy's next use of this server needs no row read for an hour. A
-	// check a proxy goroutine holds stays its own, so it is never removed
-	// from under it.
-	key := projectID.String() + " " + resourceURL
-	c := &check{at: now}
-	if v, loaded := p.checked.LoadOrStore(key, c); loaded {
-		p.checked.CompareAndSwap(key, v, c)
+	// Once the row holds this read, the proxy's next use of this server
+	// needs no row read for an hour. A write that failed leaves no check, so
+	// the proxy's next use reads the row and probes again. A check a proxy
+	// goroutine holds stays its own, so it is never removed from under it.
+	if recordErr == nil {
+		key := projectID.String() + " " + resourceURL
+		c := &check{at: now}
+		if v, loaded := p.checked.LoadOrStore(key, c); loaded {
+			p.checked.CompareAndSwap(key, v, c)
+		}
 	}
 	p.sweep(now)
 	return LoginResolution{Row: existing, ScopesSupported: doc.ScopesSupported, Live: true, Outcome: ProbeOutcomeFetched, ProbeDuration: cached.ProbeDuration}
@@ -383,8 +404,17 @@ func loginSkip(row *repo.RemoteProtectedResource, now time.Time) (ProbeOutcome, 
 // LastGoodScopes is the row's advertised list when a read captured one
 // within loginLastGoodWindow; nil otherwise.
 func LastGoodScopes(row *repo.RemoteProtectedResource, now time.Time) []string {
-	if row == nil || row.ScopesSupported == nil || !row.MetadataFetchedAt.Valid || now.Sub(row.MetadataFetchedAt.Time) > loginLastGoodWindow {
+	if row == nil {
 		return nil
 	}
-	return row.ScopesSupported
+	return LastGoodAdvertisedScopes(row.ScopesSupported, row.MetadataFetchedAt, now)
+}
+
+// LastGoodAdvertisedScopes is LastGoodScopes over a row's advertised list
+// and the time it was read, for rows read into another shape.
+func LastGoodAdvertisedScopes(scopesSupported []string, fetchedAt pgtype.Timestamptz, now time.Time) []string {
+	if scopesSupported == nil || !fetchedAt.Valid || now.Sub(fetchedAt.Time) > loginLastGoodWindow {
+		return nil
+	}
+	return scopesSupported
 }

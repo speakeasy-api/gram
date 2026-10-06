@@ -1925,6 +1925,18 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
   AND usi.deleted IS FALSE
 ORDER BY c.id ASC;
 
+-- name: ListRemoteSessionClientIDsForUserSessionIssuer :many
+-- The clients bound to a user session issuer in the tenant, as ListRemoteSessionClientsForUserSessionIssuer
+-- admits them. A login decides whether its endpoint's resource belongs to
+-- the selected client against this set of siblings.
+SELECT c.id
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+WHERE link.user_session_issuer_id = @user_session_issuer_id
+  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+  AND c.deleted IS FALSE
+ORDER BY c.id ASC;
+
 -- name: GetRemoteURLForMcpServer :one
 -- The upstream URL a remote-backed MCP server proxies to, which is the
 -- protected resource its logins are for. No row for a tunneled or hosted server.

@@ -1401,10 +1401,18 @@ func (s *Service) buildRemoteSessionCards(
 	}
 	clients = s.remoteChallengeMgr.WithCatalogBranding(ctx, clients)
 	// Cards read the cached resource row only; the login probes. The row is
-	// the one the login resolves (keyed by the endpoint's server URL); a
-	// client's own claimed resource stands in only when there is no server.
+	// the one the login resolves (keyed by the endpoint's server URL) and,
+	// as at login, it decides only for a client whose grant is qualified to
+	// that resource among the bound clients. A gateway, a tunneled or hosted
+	// server, or a client whose grant goes elsewhere is decided by its
+	// authorization server alone; a client's own claimed resource never
+	// stands in, because no login reads it.
 	discoverScopes := s.remoteChallengeMgr.ResourceScopeDiscoveryEnabled(ctx, endpoint.OrganizationID)
-	serverResource, hasServerResource := s.remoteChallengeMgr.CachedResourceScopesForServer(ctx, endpoint.ProjectID, endpoint.McpServerID, discoverScopes)
+	serverResource, serverResourceURL, hasServerResource := s.remoteChallengeMgr.CachedResourceScopesForServer(ctx, endpoint.ProjectID, endpoint.McpServerID, discoverScopes)
+	boundIDs := make([]uuid.UUID, 0, len(clients))
+	for i := range clients {
+		boundIDs = append(boundIDs, clients[i].ID)
+	}
 
 	// Single round-trip for connection state across all cards. Empty when
 	// the subject hasn't been stamped yet (early render before IDP /
@@ -1480,9 +1488,15 @@ func (s *Service) buildRemoteSessionCards(
 			validationReason = inactiveReason(issuerDisplay)
 		}
 		tokenActive, tokenExpiresAt, tokenExpiresIn := tokenLine(renderedAt, state.Token, state.AccessExpiresAt)
-		resourceScopes := c.CachedResourceScopes(discoverScopes)
+		resourceScopes := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: discoverScopes}
 		if hasServerResource {
-			resourceScopes = serverResource
+			applies, err := s.remoteChallengeMgr.ResourceAppliesToClient(ctx, c.ID, boundIDs, serverResourceURL)
+			if err != nil {
+				return nil, fmt.Errorf("decide resource ownership for consent card: %w", err)
+			}
+			if applies {
+				resourceScopes = serverResource
+			}
 		}
 		requested := c.RequestedScopes(resourceScopes).Scopes
 		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable

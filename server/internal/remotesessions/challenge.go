@@ -703,26 +703,27 @@ func ResourceScopeDiscoveryEnabled(ctx context.Context, logger *slog.Logger, fea
 
 // CachedResourceScopesForServer is the protected resource row of a
 // remote-backed MCP server as it stands, keyed the way a login for that
-// server resolves it, for callers that must not probe. ok is false when the
-// server is not remote-backed or its resource has no row.
-func (m *ChallengeManager) CachedResourceScopesForServer(ctx context.Context, projectID uuid.UUID, mcpServerID uuid.NullUUID, useDiscovered bool) (ResourceScopes, bool) {
+// server resolves it, for callers that must not probe. resourceURL is the
+// server's upstream URL the row is keyed by. ok is false when the server is
+// not remote-backed or its resource has no row.
+func (m *ChallengeManager) CachedResourceScopesForServer(ctx context.Context, projectID uuid.UUID, mcpServerID uuid.NullUUID, useDiscovered bool) (scopes ResourceScopes, resourceURL string, ok bool) {
 	none := ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: useDiscovered}
 	if !mcpServerID.Valid {
-		return none, false
+		return none, "", false
 	}
 	resourceURL, err := remotesessions_repo.New(m.db).GetRemoteURLForMcpServer(ctx, remotesessions_repo.GetRemoteURLForMcpServerParams{McpServerID: mcpServerID.UUID, ProjectID: projectID})
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			m.logger.ErrorContext(ctx, "get remote url for mcp server", attr.SlogError(err), attr.SlogProjectID(projectID.String()))
 		}
-		return none, false
+		return none, "", false
 	}
 	row, err := remotemcprepo.New(m.db).GetRemoteProtectedResource(ctx, remotemcprepo.GetRemoteProtectedResourceParams{ProjectID: projectID, ResourceIdentifier: resourceURL})
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			m.logger.ErrorContext(ctx, "get remote protected resource for mcp server", attr.SlogError(err), attr.SlogProjectID(projectID.String()))
 		}
-		return none, false
+		return none, resourceURL, false
 	}
 	return ResourceScopes{
 		Pin:             row.ScopeOverride,
@@ -730,26 +731,62 @@ func (m *ChallengeManager) CachedResourceScopesForServer(ctx context.Context, pr
 		ScopesSupported: protectedresource.LastGoodScopes(&row, time.Now()),
 		Live:            false,
 		UseDiscovered:   useDiscovered,
-	}, true
+	}, resourceURL, true
+}
+
+// ResourceAppliesToClient reports whether the protected resource at
+// resourceURL (an endpoint's upstream) is the one a login for clientID
+// qualifies its grant to, judged among the clients bound to the same
+// endpoint (siblingIDs): the client derives it from its own servers, or is
+// the one bound client that may claim it. A client whose grant goes
+// elsewhere, or unqualified because an owning sibling holds the resource,
+// is decided by its own authorization server, not this resource's row.
+func (m *ChallengeManager) ResourceAppliesToClient(ctx context.Context, clientID uuid.UUID, siblingIDs []uuid.UUID, resourceURL string) (bool, error) {
+	resource, err := m.ResourceForClientAtUpstream(ctx, clientID, siblingIDs, resourceURL)
+	if err != nil {
+		return false, err
+	}
+	return resource != "" && sameUpstream(resource, resourceURL), nil
 }
 
 // loginResourceScopes resolves the protected resource row of the MCP server
 // the login is for, probing it within the login budget. An organization not
-// enrolled (discover false), a login with no remote-backed server, or a
+// enrolled (discover false), a login with no remote-backed server, a server
+// whose resource the selected client's grant is not qualified to, or a
 // manager without a prober has no row.
-func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent ParentChallenge, discover bool) (ResourceScopes, protectedresource.LoginResolution) {
+func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent ParentChallenge, client Client, discover bool) (ResourceScopes, protectedresource.LoginResolution) {
 	none := ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: false}
 	skipped := protectedresource.LoginResolution{Row: nil, ScopesSupported: nil, Live: false, Outcome: protectedresource.ProbeOutcomeNotApplicable, ProbeDuration: 0}
 	if m.protectedResources == nil || !parent.McpServerID.Valid || !discover {
 		return none, skipped
 	}
-	resourceURL, err := remotesessions_repo.New(m.db).GetRemoteURLForMcpServer(ctx, remotesessions_repo.GetRemoteURLForMcpServerParams{McpServerID: parent.McpServerID.UUID, ProjectID: parent.ProjectID})
+	q := remotesessions_repo.New(m.db)
+	resourceURL, err := q.GetRemoteURLForMcpServer(ctx, remotesessions_repo.GetRemoteURLForMcpServerParams{McpServerID: parent.McpServerID.UUID, ProjectID: parent.ProjectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return none, skipped
 	case err != nil:
 		m.logger.ErrorContext(ctx, "get remote url for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()))
 		skipped.Outcome = protectedresource.ProbeOutcomeError
+		return none, skipped
+	}
+	siblingIDs, err := q.ListRemoteSessionClientIDsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientIDsForUserSessionIssuerParams{
+		UserSessionIssuerID: parent.UserSessionIssuerID,
+		ProjectID:           parent.ProjectID,
+		OrganizationID:      parent.OrganizationID,
+	})
+	if err != nil {
+		m.logger.ErrorContext(ctx, "list sibling clients for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()))
+		skipped.Outcome = protectedresource.ProbeOutcomeError
+		return none, skipped
+	}
+	applies, err := m.ResourceAppliesToClient(ctx, client.ID, siblingIDs, resourceURL)
+	if err != nil {
+		m.logger.ErrorContext(ctx, "decide resource ownership for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()), attr.SlogRemoteSessionClientID(client.ID.String()))
+		skipped.Outcome = protectedresource.ProbeOutcomeError
+		return none, skipped
+	}
+	if !applies {
 		return none, skipped
 	}
 	resolved := m.protectedResources.ResolveForLogin(ctx, m.logger, parent.ProjectID, parent.OrganizationID, resourceURL)
@@ -1171,7 +1208,7 @@ func (m *ChallengeManager) mintAuthorization(
 		return "", fmt.Errorf("parse authorization_endpoint: %w", err)
 	}
 
-	resource, resolved := m.loginResourceScopes(ctx, parent, discover)
+	resource, resolved := m.loginResourceScopes(ctx, parent, client, discover)
 	resolution := client.RequestedScopes(resource)
 	scopes := resolution.Scopes
 	trace.SpanFromContext(ctx).SetAttributes(attr.OAuthScopeSource(resolution.Source), attr.OAuthResourceProbeOutcome(resolved.Outcome))
@@ -1194,7 +1231,12 @@ func (m *ChallengeManager) mintAuthorization(
 		)
 	}
 	if len(resolution.Widened) > 0 {
-		m.logger.DebugContext(ctx, "requested scope widens the chosen scope base",
+		// Widening an operator's pin is worth seeing; widening a discovered base is routine.
+		logWidened := m.logger.DebugContext
+		if resolution.Source == remotesessionmetrics.ScopeSourceResourcePin {
+			logWidened = m.logger.InfoContext
+		}
+		logWidened(ctx, "requested scope widens the chosen scope base",
 			attr.SlogProjectID(parent.ProjectID.String()),
 			attr.SlogOrganizationID(parent.OrganizationID),
 			attr.SlogOAuthIssuer(client.IssuerURL),
@@ -1256,8 +1298,13 @@ func (m *ChallengeManager) mintAuthorization(
 	// Harmless to a plain OAuth server and required for an OpenID one to
 	// bind the ID token to this request.
 	q.Set("nonce", nonce)
-	if len(scopes) > 0 {
+	switch {
+	case len(scopes) > 0:
 		q.Set("scope", strings.Join(scopes, " "))
+	case resolution.Source == remotesessionmetrics.ScopeSourceIssuerOmitted:
+		// The operator chose to send no scope; one baked into the
+		// authorization endpoint's query would defeat that.
+		q.Del("scope")
 	}
 	if client.Audience != "" {
 		q.Set("audience", client.Audience)
