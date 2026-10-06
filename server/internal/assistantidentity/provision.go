@@ -5,232 +5,199 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+
+	"github.com/speakeasy-api/gram/server/internal/agentownership"
+	"github.com/speakeasy-api/gram/server/internal/agents/lifecycle"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
-	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-type provisioningMetadata struct {
-	CreatorUserID           *string   `json:"creator_user_id"`
-	ConsentUserID           string    `json:"consent_user_id"`
-	ProvisioningActorUserID string    `json:"provisioning_actor_user_id"`
-	AgentID                 uuid.UUID `json:"agent_id"`
-	Generation              int64     `json:"generation"`
-}
-
-// Provision creates an agent identity, or returns the existing eligible
-// binding. The caller owns the transaction, including assistant configuration.
-// A failed call must roll back the transaction, never commit its partial writes.
-type AgentSelection struct {
-	AgentID uuid.UUID
-	Name    string
-}
-
-func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) (Binding, error) {
-	return s.ProvisionWithAgent(ctx, tx, p, AgentSelection{AgentID: uuid.Nil, Name: ""})
-}
-
-func (s *Service) ProvisionWithAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams, selection AgentSelection) (Binding, error) {
-	if s == nil {
-		return Binding{}, ErrInvalidIdentity
-	}
-	if selection.AgentID != uuid.Nil && selection.Name != "" {
-		return Binding{}, ErrInvalidIdentity
+// Provision points an assistant at an agent and binds its existing root
+// triggers: a new agent, or the existing one p.AgentID names. An assistant
+// that already has a binding only gets its unbound root triggers bound. The
+// caller owns the transaction; a failed call must roll it back.
+//
+// A new agent starts with the project-wide ceiling from initialGrants. Users
+// refine that policy on the agent afterwards; it is never re-synchronised.
+func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) error {
+	if p.ActorUserID == "" || p.ActorUserID == urn.AllUsersPrincipalID {
+		return ErrActorIneligible
 	}
 	q := repo.New(tx)
-	if p.ActorUserID == "" || p.ActorUserID == urn.AllUsersPrincipalID {
-		return Binding{}, ErrActorIneligible
-	}
-	if err := LockLiveProject(ctx, tx, p.OrganizationID, p.ProjectID); err != nil {
-		return Binding{}, err
-	}
-	if err := lockAssistant(ctx, q, p.OrganizationID, p.ProjectID, p.AssistantID); err != nil {
-		return Binding{}, err
-	}
-	assistant, err := q.GetAssistant(ctx, repo.GetAssistantParams{OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, AssistantID: p.AssistantID})
+	assistant, err := q.LockAssistant(ctx, repo.LockAssistantParams{ProjectID: p.ProjectID, AssistantID: p.AssistantID})
 	if err != nil {
-		return Binding{}, resourceError("load assistant", err)
+		return resourceError("lock assistant", err)
 	}
-	if assistant.Deleted || !assistant.ProjectLive {
-		return Binding{}, ErrTombstoned
-	}
-	owner := p.ActorUserID
-	if assistant.CreatedByUserID.Valid && assistant.CreatedByUserID.String != "" {
-		owner = assistant.CreatedByUserID.String
-	}
-	members := []string{p.ActorUserID, owner}
-	selectedOwner := ""
-	if selection.AgentID != uuid.Nil {
-		candidate, err := agentrepo.New(tx).GetAgentByID(ctx, agentrepo.GetAgentByIDParams{OrganizationID: p.OrganizationID, ID: selection.AgentID})
-		if err != nil {
-			return Binding{}, resourceError("read selected agent owner", err)
-		}
-		selectedOwner = candidate.OwnerUserID
-		members = append(members, selectedOwner)
-	}
-	slices.Sort(members)
-	for _, member := range slices.Compact(members) {
-		if _, err := q.LockActor(ctx, repo.LockActorParams{OrganizationID: p.OrganizationID, UserID: member}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return Binding{}, ErrActorIneligible
-			}
-			return Binding{}, fmt.Errorf("lock provisioning membership: %w", err)
-		}
-	}
-	old, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{CaptureSuspended: false, OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, AssistantID: p.AssistantID})
-	if err == nil {
-		if selection.AgentID != uuid.Nil && selection.AgentID != old.OriginalAgentID {
-			return Binding{}, ErrInvalidIdentity
-		}
-		if !old.Eligible {
-			return Binding{}, ErrTombstoned
-		}
-		if err := s.bindExistingRoots(ctx, tx, p); err != nil {
-			return Binding{}, err
-		}
-		return bindingFromRow(p.OrganizationID, p.ProjectID, old), nil
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return Binding{}, fmt.Errorf("read assistant history: %w", err)
-	}
-	capabilities, err := ConfiguredCapabilities(ctx, tx, p.OrganizationID, p.ProjectID, p.AssistantID)
-	if err != nil {
-		return Binding{}, err
-	}
-	principals, err := authz.ResolveUserPrincipals(ctx, tx, p.OrganizationID, p.ActorUserID)
-	if err != nil {
-		return Binding{}, fmt.Errorf("resolve provisioning actor policy: %w", err)
-	}
-	actorPolicy, err := authz.LoadGrants(ctx, tx, p.OrganizationID, principals)
-	if err != nil {
-		return Binding{}, fmt.Errorf("load provisioning actor policy: %w", err)
-	}
-	grants, err := runtimepolicy.DelegableGrants(capabilities, actorPolicy, actorPolicy)
-	if err != nil {
-		return Binding{}, fmt.Errorf("bound assistant grants: %w", err)
+	if assistant.OrganizationID != p.OrganizationID {
+		return fmt.Errorf("lock assistant: %w", ErrNotFound)
 	}
 
+	if p.AgentID != uuid.Nil && p.AgentName != "" {
+		return ErrInvalidIdentity
+	}
+	existing, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{ProjectID: p.ProjectID, AssistantID: p.AssistantID})
+	switch {
+	case err == nil:
+		if p.AgentName != "" || (p.AgentID != uuid.Nil && p.AgentID != existing.OriginalAgentID) {
+			return ErrInvalidIdentity
+		}
+		return s.bindExistingRoots(ctx, tx, p)
+	case !errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("read assistant binding: %w", err)
+	}
+
+	actor := urn.NewPrincipal(urn.PrincipalTypeUser, p.ActorUserID)
 	var agent agentrepo.Agent
-	if selection.AgentID != uuid.Nil {
-		agent, err = agentrepo.New(tx).GetAgentByIDForUpdate(ctx, agentrepo.GetAgentByIDForUpdateParams{OrganizationID: p.OrganizationID, ID: selection.AgentID})
+	var grants []authz.Grant
+	if p.AgentID != uuid.Nil {
+		// An existing agent keeps its policy; it only gains administration of
+		// the assistant it now backs.
+		agent, err = s.selectAgent(ctx, tx, p)
 		if err != nil {
-			return Binding{}, resourceError("load selected agent", err)
+			return err
 		}
-		if agent.OwnerUserID != p.ActorUserID && !authz.GrantsSatisfy(actorPolicy, authz.Check{Scope: authz.ScopeAgentAuthorize, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil}) {
-			return Binding{}, ErrActorIneligible
-		}
-		// Membership locks precede the agent lock; reject an intervening transfer.
-		if agent.OwnerUserID != selectedOwner {
-			return Binding{}, ErrActorIneligible
-		}
-		if !agent.ProjectID.Valid || agent.ProjectID.UUID != p.ProjectID || agent.RevokedAt.Valid || agent.SuspendedAt.Valid || agent.OwnerReassignmentRequiredAt.Valid {
-			return Binding{}, ErrInvalidIdentity
-		}
+		grants = assistantSelfAdminGrants(p.AssistantID)
 	} else {
-		name := strings.TrimSpace(selection.Name)
-		if name == "" {
-			name = "Assistant " + p.AssistantID.String()
+		agent, err = s.createAgent(ctx, tx, p, conv.FromPGTextOrEmpty[string](assistant.CreatedByUserID), actor)
+		if err != nil {
+			return err
 		}
-		agent, err = agentrepo.New(tx).CreateAgent(ctx, agentrepo.CreateAgentParams{
-			OrganizationID: p.OrganizationID, ProjectID: uuid.NullUUID{UUID: p.ProjectID, Valid: true},
-			OwnerUserID: owner, Name: name,
+		grants = initialGrants(p.ProjectID, p.AssistantID)
+	}
+	agentURN := urn.NewAgentIdentity(agent.ID.String())
+	agents := agentrepo.New(tx)
+	for _, grant := range grants {
+		selector, err := json.Marshal(grant.Selector)
+		if err != nil {
+			return fmt.Errorf("encode assistant agent grant: %w", err)
+		}
+		row, err := agents.CreateAgentPolicyGrant(ctx, agentrepo.CreateAgentPolicyGrantParams{
+			OrganizationID: p.OrganizationID, AgentID: agent.ID, Scope: string(grant.Scope), Selectors: selector,
 		})
 		if err != nil {
-			return Binding{}, fmt.Errorf("create assistant agent: %w", err)
+			return fmt.Errorf("write assistant agent grant: %w", err)
 		}
-		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
-		for _, grant := range grants {
-			selector, err := json.Marshal(grant.Selector)
-			if err != nil {
-				return Binding{}, fmt.Errorf("encode assistant grant: %w", err)
-			}
-			if _, err := accessrepo.New(tx).InsertPrincipalGrantIfAbsent(ctx, accessrepo.InsertPrincipalGrantIfAbsentParams{
-				OrganizationID: p.OrganizationID, PrincipalUrn: principal, Scope: string(grant.Scope), Selectors: selector,
-			}); err != nil {
-				return Binding{}, fmt.Errorf("write assistant grant: %w", err)
-			}
+		if err := s.audit.LogAgentPolicyGrant(ctx, tx, audit.LogAgentPolicyGrantEvent{
+			OrganizationID: p.OrganizationID, AgentURN: agentURN, Actor: actor, ActorDisplayName: nil,
+			Action: audit.ActionAgentPolicyGrantCreate, Name: agent.Name, Before: nil,
+			After: &audit.AgentPolicyGrantSnapshot{ID: row.ID, Scope: row.Scope, Effect: "allow", Selector: grant.Selector},
+		}); err != nil {
+			return fmt.Errorf("audit assistant agent grant: %w", err)
 		}
 	}
+
 	if _, err := q.CreateAssistantBinding(ctx, repo.CreateAssistantBindingParams{
 		OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, AssistantID: p.AssistantID, AgentID: agent.ID,
 	}); err != nil {
-		return Binding{}, fmt.Errorf("create assistant binding: %w", err)
+		return fmt.Errorf("create assistant binding: %w", err)
 	}
-	metadata, err := json.Marshal(provisioningMetadata{CreatorUserID: nullableString(assistant.CreatedByUserID.String, assistant.CreatedByUserID.Valid), ConsentUserID: p.ActorUserID, ProvisioningActorUserID: p.ActorUserID, AgentID: agent.ID, Generation: 1})
-	if err != nil {
-		return Binding{}, fmt.Errorf("encode provisioning provenance: %w", err)
-	}
-	if err := q.RecordProvisioning(ctx, repo.RecordProvisioningParams{
-		OrganizationID: p.OrganizationID, ProjectID: uuid.NullUUID{UUID: p.ProjectID, Valid: true},
-		ActorUserID: p.ActorUserID, AssistantID: p.AssistantID.String(), Metadata: metadata,
+	if err := s.audit.LogAssistantIdentityProvision(ctx, tx, audit.LogAssistantIdentityProvisionEvent{
+		OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, Actor: actor, ActorDisplayName: nil, ActorSlug: nil,
+		AssistantURN: urn.NewAssistant(p.AssistantID), AssistantName: assistant.Name, AgentURN: agentURN,
 	}); err != nil {
-		return Binding{}, fmt.Errorf("record provisioning provenance: %w", err)
+		return fmt.Errorf("audit assistant identity provisioning: %w", err)
 	}
-	if err := s.bindExistingRoots(ctx, tx, p); err != nil {
-		return Binding{}, err
-	}
-	return Binding{OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, AssistantID: p.AssistantID, AgentID: agent.ID, Generation: 1}, nil
+	return s.bindExistingRoots(ctx, tx, p)
 }
 
-// ConfiguredCapabilities derives only concrete runtime capabilities from the
-// persisted configuration. Empty configuration produces an empty policy.
-func ConfiguredCapabilities(ctx context.Context, tx pgx.Tx, org string, project, assistant uuid.UUID) ([]authz.Grant, error) {
-	q := repo.New(tx)
-	a, err := q.GetAssistant(ctx, repo.GetAssistantParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})
+// createAgent creates the assistant's agent, owned by the assistant's creator
+// (the actor when the creator is unknown).
+func (s *Service) createAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams, creator string, actor urn.Principal) (agentrepo.Agent, error) {
+	owner := creator
+	if owner == "" {
+		owner = p.ActorUserID
+	}
+	name := p.AgentName
+	if name == "" {
+		name = "Assistant " + p.AssistantID.String()
+	}
+	agent, err := agentrepo.New(tx).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: p.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: p.ProjectID, Valid: true},
+		OwnerUserID:    owner,
+		Name:           name,
+	})
 	if err != nil {
-		return nil, resourceError("load configured assistant", err)
+		return agentrepo.Agent{}, fmt.Errorf("create assistant agent: %w", err)
 	}
-	if a.Deleted || !a.ProjectLive {
-		return nil, ErrTombstoned
+	if err := s.audit.LogAgent(ctx, tx, audit.LogAgentEvent{
+		OrganizationID: p.OrganizationID, AgentURN: urn.NewAgentIdentity(agent.ID.String()), Actor: actor, ActorDisplayName: nil,
+		Action: audit.ActionAgentCreate, Name: agent.Name, Before: nil, After: agentownership.AgentAuditSnapshot(agent),
+	}); err != nil {
+		return agentrepo.Agent{}, fmt.Errorf("audit assistant agent: %w", err)
 	}
-	servers, err := q.ListConfiguredMCPServers(ctx, repo.ListConfiguredMCPServersParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})
+	return agent, nil
+}
+
+// selectAgent locks an existing agent of the assistant's project for the
+// assistant to point at. Like any other use of an agent, the actor must own it
+// or hold agent:authorize on it.
+func (s *Service) selectAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams) (agentrepo.Agent, error) {
+	agent, err := agentrepo.New(tx).GetAgentByIDForUpdate(ctx, agentrepo.GetAgentByIDForUpdateParams{OrganizationID: p.OrganizationID, ID: p.AgentID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return agentrepo.Agent{}, ErrAgentUnauthorized
+	}
 	if err != nil {
-		return nil, fmt.Errorf("load configured MCP servers: %w", err)
+		return agentrepo.Agent{}, fmt.Errorf("lock selected agent: %w", err)
 	}
-	skills, err := q.ListConfiguredSkills(ctx, repo.ListConfiguredSkillsParams{OrganizationID: org, ProjectID: project, AssistantID: uuid.NullUUID{UUID: assistant, Valid: true}})
-	if err != nil {
-		return nil, fmt.Errorf("load configured skills: %w", err)
+	if agent.OwnerUserID != p.ActorUserID {
+		principals, err := authz.ResolveUserPrincipals(ctx, tx, p.OrganizationID, p.ActorUserID)
+		if err != nil {
+			return agentrepo.Agent{}, fmt.Errorf("resolve actor principals: %w", err)
+		}
+		grants, err := authz.LoadGrants(ctx, tx, p.OrganizationID, principals)
+		if err != nil {
+			return agentrepo.Agent{}, fmt.Errorf("load actor grants: %w", err)
+		}
+		if !authz.GrantsSatisfy(grants, authz.Check{Scope: authz.ScopeAgentAuthorize, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil}) {
+			return agentrepo.Agent{}, ErrAgentUnauthorized
+		}
 	}
-	grants := make([]authz.Grant, 0, len(servers)*2+len(skills))
-	for _, id := range servers {
-		grants = append(grants, authz.NewGrant(authz.ScopeMCPConnect, id.String()), authz.NewGrant(authz.ScopeMCPRead, id.String()))
+	if !agent.ProjectID.Valid || agent.ProjectID.UUID != p.ProjectID || lifecycle.Derive(agent) != lifecycle.Active || agent.OwnerReassignmentRequiredAt.Valid {
+		return agentrepo.Agent{}, ErrInvalidIdentity
 	}
-	if len(skills) > 0 {
-		grants = append(grants, authz.NewGrant(authz.ScopeSkillRead, project.String()))
+	return agent, nil
+}
+
+// initialGrants is the dedicated agent's starting ceiling: every MCP server
+// and skill in the assistant's project, plus administration of the assistant
+// itself.
+func initialGrants(project, assistant uuid.UUID) []authz.Grant {
+	projectMCP := authz.NewSelector(authz.ScopeMCPConnect, authz.WildcardResource)
+	projectMCP[authz.SelectorKeyProjectID] = project.String()
+	grants := []authz.Grant{
+		authz.NewGrantWithSelector(authz.ScopeMCPConnect, projectMCP),
+		authz.NewGrantWithSelector(authz.ScopeMCPRead, projectMCP),
+		// Skill selectors carry no project dimension; the project ID is the
+		// resource the project-wide skill:read check names.
+		authz.NewGrant(authz.ScopeSkillRead, project.String()),
 	}
-	for _, id := range skills {
-		grants = append(grants, authz.NewGrant(authz.ScopeSkillRead, id.String()))
-	}
-	return grants, nil
+	return append(grants, assistantSelfAdminGrants(assistant)...)
+}
+
+// assistantSelfAdminGrants lets the agent administer exactly its own
+// assistant; assistant:write implies assistant:read.
+func assistantSelfAdminGrants(assistant uuid.UUID) []authz.Grant {
+	return []authz.Grant{authz.NewGrant(authz.ScopeAssistantWrite, assistant.String())}
 }
 
 func (s *Service) bindExistingRoots(ctx context.Context, tx pgx.Tx, p ProvisionParams) error {
-	roots, err := repo.New(tx).ListAssistantRoots(ctx, repo.ListAssistantRootsParams{OrganizationID: p.OrganizationID, ProjectID: p.ProjectID, AssistantID: p.AssistantID.String()})
+	// Locks every root in ID order before any issuer lock is taken.
+	roots, err := repo.New(tx).ListAssistantRoots(ctx, repo.ListAssistantRootsParams{ProjectID: p.ProjectID, AssistantID: p.AssistantID.String()})
 	if err != nil {
-		return fmt.Errorf("list assistant roots: %w", err)
+		return fmt.Errorf("list assistant root triggers: %w", err)
 	}
 	for _, root := range roots {
-		if err := s.BindRootTrigger(ctx, tx, p.OrganizationID, p.ProjectID, root); err != nil {
+		if err := s.bindRoot(ctx, tx, p.ProjectID, root, false, auditActor{principal: urn.NewPrincipal(urn.PrincipalTypeUser, p.ActorUserID), displayName: nil}); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func lockAssistant(ctx context.Context, q *repo.Queries, org string, project, assistant uuid.UUID) error {
-	if org == "" || project == uuid.Nil {
-		return ErrInvalidIdentity
-	}
-	if _, err := q.LockAssistant(ctx, repo.LockAssistantParams{OrganizationID: org, ProjectID: project, AssistantID: assistant}); err != nil {
-		return resourceError("lock identity assistant", err)
 	}
 	return nil
 }
@@ -240,27 +207,4 @@ func resourceError(operation string, err error) error {
 		return fmt.Errorf("%s: %w", operation, ErrNotFound)
 	}
 	return fmt.Errorf("%s: %w", operation, err)
-}
-
-func nullableString(value string, valid bool) *string {
-	if !valid {
-		return nil
-	}
-	return &value
-}
-
-func bindingFromRow(org string, project uuid.UUID, b repo.GetAssistantBindingRow) Binding {
-	return Binding{OrganizationID: org, ProjectID: project, AssistantID: b.OriginalAssistantID, AgentID: b.OriginalAgentID, Generation: b.Generation}
-}
-
-// LockLiveProject protects a provisioning transaction from project deletion
-// without serializing independent provisioners. A failed lock requires rollback.
-func LockLiveProject(ctx context.Context, tx pgx.Tx, org string, project uuid.UUID) error {
-	if org == "" || project == uuid.Nil {
-		return ErrInvalidIdentity
-	}
-	if _, err := repo.New(tx).LockLiveProject(ctx, repo.LockLiveProjectParams{OrganizationID: org, ProjectID: project}); err != nil {
-		return resourceError("lock live identity project", err)
-	}
-	return nil
 }

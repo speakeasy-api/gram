@@ -954,31 +954,32 @@ WITH locked AS (
     , (
         stripe_checkout_idempotency_key IS NOT NULL
         AND stripe_checkout_billing_cycle_anchor IS NOT NULL
-        AND stripe_checkout_expires_at > $1::timestamptz
-        AND right(stripe_checkout_idempotency_key, length($2::text) + 1) = ':' || $2::text
+        AND stripe_checkout_idempotency_key IS DISTINCT FROM $1::text
+        AND stripe_checkout_expires_at > $2::timestamptz
+        AND right(stripe_checkout_idempotency_key, length($3::text) + 1) = ':' || $3::text
       ) AS reuse_existing_intent
   FROM billing_metadata
-  WHERE organization_id = $3::text
-    AND stripe_customer_id = $4::text
+  WHERE organization_id = $4::text
+    AND stripe_customer_id = $5::text
   FOR UPDATE
 ), prepared AS (
   UPDATE billing_metadata AS metadata
   SET
       stripe_checkout_idempotency_key = CASE
         WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_idempotency_key
-        ELSE $5::text
+        ELSE $6::text
       END
     , stripe_checkout_billing_cycle_anchor = CASE
         WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_billing_cycle_anchor
-        ELSE $6::timestamptz
+        ELSE $7::timestamptz
       END
     , stripe_checkout_trial_end = CASE
         WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_trial_end
-        ELSE $7::timestamptz
+        ELSE $8::timestamptz
       END
     , stripe_checkout_expires_at = CASE
         WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_expires_at
-        ELSE $8::timestamptz
+        ELSE $9::timestamptz
       END
     , stripe_checkout_session_id = CASE
         WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_session_id
@@ -992,17 +993,17 @@ WITH locked AS (
   WHERE metadata.id = locked.id
     AND metadata.stripe_subscription_id IS NULL
     -- A known expired session rotates only after the caller verifies it. A
-    -- lifecycle-stale intent rotates only after the caller expires its remote
-    -- session and authorizes this exact old intent key.
+    -- obsolete intent rotates only after the caller expires its remote session
+    -- or Stripe rejects its trial end, and authorizes this exact old intent key.
     AND (
       locked.reuse_existing_intent
-      OR locked.stripe_checkout_session_id = $9::text
-      OR locked.stripe_checkout_idempotency_key = $10::text
+      OR locked.stripe_checkout_session_id = $10::text
+      OR locked.stripe_checkout_idempotency_key = $1::text
       OR (
         locked.stripe_checkout_session_id IS NULL
         AND (
           locked.stripe_checkout_idempotency_key IS NULL
-          OR locked.stripe_checkout_expires_at <= $1::timestamptz
+          OR locked.stripe_checkout_expires_at <= $2::timestamptz
         )
       )
     )
@@ -1029,6 +1030,7 @@ FROM prepared
 `
 
 type PrepareStripeCheckoutIntentParams struct {
+	ReplaceLifecycleIntentKey        pgtype.Text
 	PreparedAt                       pgtype.Timestamptz
 	TrialFingerprint                 string
 	OrganizationID                   string
@@ -1038,7 +1040,6 @@ type PrepareStripeCheckoutIntentParams struct {
 	StripeCheckoutTrialEnd           pgtype.Timestamptz
 	StripeCheckoutExpiresAt          pgtype.Timestamptz
 	ReplaceExpiredSessionID          pgtype.Text
-	ReplaceLifecycleIntentKey        pgtype.Text
 }
 
 type PrepareStripeCheckoutIntentRow struct {
@@ -1058,6 +1059,7 @@ type PrepareStripeCheckoutIntentRow struct {
 // intent may be replaced only while no subscription has been activated.
 func (q *Queries) PrepareStripeCheckoutIntent(ctx context.Context, arg PrepareStripeCheckoutIntentParams) (PrepareStripeCheckoutIntentRow, error) {
 	row := q.db.QueryRow(ctx, prepareStripeCheckoutIntent,
+		arg.ReplaceLifecycleIntentKey,
 		arg.PreparedAt,
 		arg.TrialFingerprint,
 		arg.OrganizationID,
@@ -1067,7 +1069,6 @@ func (q *Queries) PrepareStripeCheckoutIntent(ctx context.Context, arg PrepareSt
 		arg.StripeCheckoutTrialEnd,
 		arg.StripeCheckoutExpiresAt,
 		arg.ReplaceExpiredSessionID,
-		arg.ReplaceLifecycleIntentKey,
 	)
 	var i PrepareStripeCheckoutIntentRow
 	err := row.Scan(

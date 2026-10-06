@@ -15,20 +15,12 @@ type Assistant struct {
 	ProjectID string
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string
-	// Whether this assistant has never configured, active, or tombstoned workload
-	// identity bindings. This is configuration state, not permission to execute.
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
 	IdentityState *string
-	// The dedicated agent ID for an active identity binding.
+	// The assistant's dedicated agent ID, when it has one.
 	AgentID *string
-	// Detail-only identity health and rollout information. Configuration is not
-	// permission or consent.
-	IdentityDiagnostics *AssistantIdentityDiagnostics
-	// Present only on an explicit identity upgrade response: upgraded creates the
-	// first binding, repaired provisions missing live roots, unchanged preserves
-	// existing bindings. Not a permission grant or OAuth consent.
-	IdentityUpgradeOutcome *string
-	// The current or last retained assistant identity binding generation.
-	IdentityGeneration *int64
 	// The assistant name.
 	Name string
 	// The model identifier used by the assistant.

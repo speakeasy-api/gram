@@ -68,11 +68,10 @@ var File_gram_authz_v1_challenge_ch_writer_proto protoreflect.FileDescriptor
 
 const file_gram_authz_v1_challenge_ch_writer_proto_rawDesc = "" +
 	"\n" +
-	"'gram/authz/v1/challenge_ch_writer.proto\x12\rgram.authz.v1\x1a\x1bgcp/pubsub/v1/options.proto\"M\n" +
-	"\x11ChallengeCHWriter:8\x92\xb5\x184\x12\x04\b\x80\xf5$\x18\x01\"\x02\b<2\t\n" +
+	"'gram/authz/v1/challenge_ch_writer.proto\x12\rgram.authz.v1\x1a\x1bgcp/pubsub/v1/options.proto\"I\n" +
+	"\x11ChallengeCHWriter:4\x92\xb5\x180\x12\x04\b\x80\xf5$\x18\x01\"\x02\b<2\t\n" +
 	"\x02\b\n" +
-	"\x12\x03\b\xd8\x04J\x02\x10\n" +
-	"R\x17gram.authz.v1.ChallengeB?Z=github.com/speakeasy-api/gram/infra/gen/gram/authz/v1;authzv1b\beditionsp\xe9\a"
+	"\x12\x03\b\xd8\x04R\x17gram.authz.v1.ChallengeB?Z=github.com/speakeasy-api/gram/infra/gen/gram/authz/v1;authzv1b\beditionsp\xe9\a"
 
 var file_gram_authz_v1_challenge_ch_writer_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_gram_authz_v1_challenge_ch_writer_proto_goTypes = []any{

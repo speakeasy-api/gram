@@ -899,75 +899,6 @@ func (q *Queries) FailAssistantThreadEvent(ctx context.Context, arg FailAssistan
 	return err
 }
 
-const failPendingExecutionEvent = `-- name: FailPendingExecutionEvent :execrows
-UPDATE assistant_thread_events
-SET status = $1, last_error = $2, updated_at = clock_timestamp()
-WHERE id = $3 AND project_id = $4 AND assistant_thread_id = $5
-  AND status = $6 AND deleted IS FALSE
-`
-
-type FailPendingExecutionEventParams struct {
-	FailedStatus  string
-	LastError     pgtype.Text
-	EventID       uuid.UUID
-	ProjectID     uuid.UUID
-	ThreadID      uuid.UUID
-	PendingStatus string
-}
-
-func (q *Queries) FailPendingExecutionEvent(ctx context.Context, arg FailPendingExecutionEventParams) (int64, error) {
-	result, err := q.db.Exec(ctx, failPendingExecutionEvent,
-		arg.FailedStatus,
-		arg.LastError,
-		arg.EventID,
-		arg.ProjectID,
-		arg.ThreadID,
-		arg.PendingStatus,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const findLegacyWakeRequester = `-- name: FindLegacyWakeRequester :many
-SELECT DISTINCT actor_id::text
-FROM audit_logs
-WHERE organization_id = $1 AND project_id = $2::uuid
-  AND subject_id = $3::text AND subject_type = 'trigger_instance'
-  AND action = 'wake:scheduled' AND actor_type = 'user'
-  AND actor_id NOT IN ('', 'system', '*')
-LIMIT 2
-`
-
-type FindLegacyWakeRequesterParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	TriggerID      string
-}
-
-// Legacy scheduling audits can identify the original human actor. Multiple
-// distinct actors are ambiguous; callers retain legacy behavior instead of guessing.
-func (q *Queries) FindLegacyWakeRequester(ctx context.Context, arg FindLegacyWakeRequesterParams) ([]string, error) {
-	rows, err := q.db.Query(ctx, findLegacyWakeRequester, arg.OrganizationID, arg.ProjectID, arg.TriggerID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var actor_id string
-		if err := rows.Scan(&actor_id); err != nil {
-			return nil, err
-		}
-		items = append(items, actor_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getActiveAssistantRuntimeByThreadID = `-- name: GetActiveAssistantRuntimeByThreadID :one
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE assistant_thread_id = $1
@@ -1057,42 +988,6 @@ func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (Get
 	return i, err
 }
 
-const getAssistantExecutionReplyOrigin = `-- name: GetAssistantExecutionReplyOrigin :one
-SELECT e.normalized_payload_json, e.trigger_instance_id
-FROM assistant_thread_events e
-JOIN assistant_threads t ON t.id = e.assistant_thread_id AND t.project_id = e.project_id AND t.assistant_id = e.assistant_id
-JOIN assistants a ON a.id = t.assistant_id AND a.project_id = t.project_id
-WHERE e.assistant_id = $1 AND e.assistant_thread_id = $2
- AND e.project_id = $3 AND a.organization_id = $4
- AND e.event_id = $5 AND NOT e.deleted AND NOT a.deleted AND a.deleted_at IS NULL AND a.status = 'active' AND NOT t.deleted AND t.deleted_at IS NULL
-`
-
-type GetAssistantExecutionReplyOriginParams struct {
-	AssistantID    uuid.UUID
-	ThreadID       uuid.UUID
-	ProjectID      uuid.UUID
-	OrganizationID string
-	EventID        string
-}
-
-type GetAssistantExecutionReplyOriginRow struct {
-	NormalizedPayloadJson []byte
-	TriggerInstanceID     uuid.NullUUID
-}
-
-func (q *Queries) GetAssistantExecutionReplyOrigin(ctx context.Context, arg GetAssistantExecutionReplyOriginParams) (GetAssistantExecutionReplyOriginRow, error) {
-	row := q.db.QueryRow(ctx, getAssistantExecutionReplyOrigin,
-		arg.AssistantID,
-		arg.ThreadID,
-		arg.ProjectID,
-		arg.OrganizationID,
-		arg.EventID,
-	)
-	var i GetAssistantExecutionReplyOriginRow
-	err := row.Scan(&i.NormalizedPayloadJson, &i.TriggerInstanceID)
-	return i, err
-}
-
 const getAssistantForClientMetadataDocument = `-- name: GetAssistantForClientMetadataDocument :one
 SELECT
   a.id,
@@ -1176,70 +1071,6 @@ func (q *Queries) GetAssistantForDispatch(ctx context.Context, assistantID uuid.
 		&i.DeletedAt,
 	)
 	return i, err
-}
-
-const getAssistantIdentityHealth = `-- name: GetAssistantIdentityHealth :one
-SELECT CASE WHEN b.id IS NULL THEN 'legacy'
- WHEN b.deleted OR b.agent_id IS NULL OR b.assistant_id IS NULL OR b.project_ref_id IS NULL
-   OR g.id IS NULL OR g.deleted OR g.revoked_at IS NOT NULL OR g.owner_reassignment_required_at IS NOT NULL
-   OR (a.created_by_user_id IS NOT NULL AND g.owner_user_id IS DISTINCT FROM a.created_by_user_id) THEN 'unavailable'
- WHEN g.suspended_at IS NOT NULL THEN 'suspended'
- WHEN NOT EXISTS (SELECT 1 FROM users u JOIN organization_user_relationships m ON m.user_id = u.id AND m.organization_id = a.organization_id WHERE u.id = g.owner_user_id AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL AND NOT m.deleted) THEN 'unavailable'
- ELSE 'ready' END::text AS health
-FROM assistants a
-LEFT JOIN LATERAL (SELECT id, organization_id, project_id, project_ref_organization_id, project_ref_id, original_assistant_id, assistant_ref_organization_id, assistant_ref_project_id, assistant_id, original_agent_id, agent_ref_organization_id, agent_ref_project_id, agent_id, generation, created_at, updated_at, deleted_at, deleted FROM assistant_agent_bindings ab
- WHERE ab.organization_id = a.organization_id AND ab.project_id = a.project_id AND ab.original_assistant_id = a.id
- ORDER BY ab.generation DESC LIMIT 1) b ON true
-LEFT JOIN agents g ON g.id = b.agent_id AND g.organization_id = a.organization_id AND g.project_id = a.project_id
-WHERE a.organization_id = $1 AND a.project_id = $2 AND a.id = $3 AND NOT a.deleted
-`
-
-type GetAssistantIdentityHealthParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	AssistantID    uuid.UUID
-}
-
-func (q *Queries) GetAssistantIdentityHealth(ctx context.Context, arg GetAssistantIdentityHealthParams) (string, error) {
-	row := q.db.QueryRow(ctx, getAssistantIdentityHealth, arg.OrganizationID, arg.ProjectID, arg.AssistantID)
-	var health string
-	err := row.Scan(&health)
-	return health, err
-}
-
-const getAssistantIdentityUpgradeOutcome = `-- name: GetAssistantIdentityUpgradeOutcome :one
-SELECT CASE
- WHEN NOT EXISTS (SELECT 1 FROM assistant_agent_bindings b
-   WHERE b.organization_id = $1 AND b.project_id = $2
-     AND b.original_assistant_id = $3::uuid) THEN 'upgraded'
- WHEN EXISTS (SELECT 1 FROM trigger_instances t
-   WHERE t.organization_id = $1 AND t.project_id = $2
-     AND t.target_kind = 'assistant' AND t.target_ref = $3::text
-     AND NOT t.deleted AND t.status = 'active' AND t.definition_slug <> 'wake'
-     AND NOT EXISTS (SELECT 1 FROM trigger_workload_bindings b
-       WHERE b.organization_id = t.organization_id AND b.project_id = t.project_id
-         AND b.original_trigger_id = t.id))
-   OR NOT EXISTS (SELECT 1 FROM trigger_instances t
-     WHERE t.organization_id = $1 AND t.project_id = $2
-       AND t.target_kind = 'assistant' AND t.target_ref = $3::text
-       AND NOT t.deleted AND t.definition_slug = 'dashboard') THEN 'repaired'
- ELSE 'unchanged'
-END::text AS outcome
-`
-
-type GetAssistantIdentityUpgradeOutcomeParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	AssistantID    uuid.UUID
-}
-
-// Called only after locking the assistant. Retained binding history is never
-// treated as missing authority; Provision still validates it before commit.
-func (q *Queries) GetAssistantIdentityUpgradeOutcome(ctx context.Context, arg GetAssistantIdentityUpgradeOutcomeParams) (string, error) {
-	row := q.db.QueryRow(ctx, getAssistantIdentityUpgradeOutcome, arg.OrganizationID, arg.ProjectID, arg.AssistantID)
-	var outcome string
-	err := row.Scan(&outcome)
-	return outcome, err
 }
 
 const getAssistantIgnoringDeleted = `-- name: GetAssistantIgnoringDeleted :one
@@ -1557,64 +1388,6 @@ func (q *Queries) GetAssistantThreadIDByCorrelation(ctx context.Context, arg Get
 	return id, err
 }
 
-const getEnqueuedAssistantThread = `-- name: GetEnqueuedAssistantThread :one
-SELECT assistant_thread_id FROM assistant_thread_events
-WHERE project_id = $1 AND assistant_id = $2
-  AND event_id = $3 AND deleted IS FALSE
-`
-
-type GetEnqueuedAssistantThreadParams struct {
-	ProjectID   uuid.UUID
-	AssistantID uuid.UUID
-	EventID     string
-}
-
-func (q *Queries) GetEnqueuedAssistantThread(ctx context.Context, arg GetEnqueuedAssistantThreadParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, getEnqueuedAssistantThread, arg.ProjectID, arg.AssistantID, arg.EventID)
-	var assistant_thread_id uuid.UUID
-	err := row.Scan(&assistant_thread_id)
-	return assistant_thread_id, err
-}
-
-const getLastAssistantIdentityEvent = `-- name: GetLastAssistantIdentityEvent :one
-SELECT e.event_id, e.status,
- COALESCE(e.normalized_payload_json->'_gram_execution'->>'mode', 'legacy')::text AS execution_mode,
- COALESCE(e.normalized_payload_json->'_gram_execution'->>'fallback_reason', '')::text AS fallback_reason,
- COALESCE(e.normalized_payload_json->'_gram_execution'->>'human_user_id', '')::text AS initiating_user_id
-FROM assistant_thread_events e
-JOIN assistants a ON a.id = e.assistant_id AND a.project_id = e.project_id
-WHERE a.organization_id = $1 AND e.project_id = $2 AND e.assistant_id = $3
- AND NOT e.deleted AND NOT a.deleted
-ORDER BY e.created_at DESC, e.id DESC LIMIT 1
-`
-
-type GetLastAssistantIdentityEventParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	AssistantID    uuid.UUID
-}
-
-type GetLastAssistantIdentityEventRow struct {
-	EventID          string
-	Status           string
-	ExecutionMode    string
-	FallbackReason   string
-	InitiatingUserID string
-}
-
-func (q *Queries) GetLastAssistantIdentityEvent(ctx context.Context, arg GetLastAssistantIdentityEventParams) (GetLastAssistantIdentityEventRow, error) {
-	row := q.db.QueryRow(ctx, getLastAssistantIdentityEvent, arg.OrganizationID, arg.ProjectID, arg.AssistantID)
-	var i GetLastAssistantIdentityEventRow
-	err := row.Scan(
-		&i.EventID,
-		&i.Status,
-		&i.ExecutionMode,
-		&i.FallbackReason,
-		&i.InitiatingUserID,
-	)
-	return i, err
-}
-
 const getLatestAssistantRuntimeByThreadID = `-- name: GetLatestAssistantRuntimeByThreadID :one
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE assistant_thread_id = $1
@@ -1738,35 +1511,6 @@ func (q *Queries) GetManagedAssistantByProject(ctx context.Context, projectID uu
 		&i.UpdatedAt,
 		&i.DeletedAt,
 	)
-	return i, err
-}
-
-const getNextPendingExecutionEvent = `-- name: GetNextPendingExecutionEvent :one
-SELECT e.id, e.event_id, e.normalized_payload_json
-FROM assistant_thread_events e
-JOIN assistant_threads t ON t.id = e.assistant_thread_id AND t.project_id = e.project_id
-WHERE e.project_id = $1 AND e.assistant_thread_id = $2
-  AND e.status = $3 AND e.deleted IS FALSE AND t.deleted IS FALSE
-ORDER BY e.created_at ASC
-LIMIT 1
-`
-
-type GetNextPendingExecutionEventParams struct {
-	ProjectID     uuid.UUID
-	ThreadID      uuid.UUID
-	PendingStatus string
-}
-
-type GetNextPendingExecutionEventRow struct {
-	ID                    uuid.UUID
-	EventID               string
-	NormalizedPayloadJson []byte
-}
-
-func (q *Queries) GetNextPendingExecutionEvent(ctx context.Context, arg GetNextPendingExecutionEventParams) (GetNextPendingExecutionEventRow, error) {
-	row := q.db.QueryRow(ctx, getNextPendingExecutionEvent, arg.ProjectID, arg.ThreadID, arg.PendingStatus)
-	var i GetNextPendingExecutionEventRow
-	err := row.Scan(&i.ID, &i.EventID, &i.NormalizedPayloadJson)
 	return i, err
 }
 
@@ -1956,129 +1700,6 @@ func (q *Queries) ListActiveAssistantRuntimes(ctx context.Context, activeState s
 	return items, nil
 }
 
-const listAssistantIdentityRoots = `-- name: ListAssistantIdentityRoots :many
-SELECT t.id, t.definition_slug, t.status, COALESCE(b.generation, 0)::bigint AS generation,
- CASE WHEN b.id IS NULL THEN 'missing'
- WHEN b.deleted OR b.trigger_id IS NULL OR b.project_ref_id IS NULL
-   OR b.subject <> ('assistant-trigger:' || b.original_trigger_id::text)
-   OR NOT EXISTS (SELECT 1 FROM projects p WHERE p.organization_id = t.organization_id AND p.id = b.project_ref_id AND NOT p.deleted)
-   OR b.assistant_binding_id IS NULL OR b.workload_issuer_id IS NULL
-   OR ab.deleted OR ab.agent_id IS NULL OR b.assistant_binding_generation <> ab.generation
-   OR i.id IS NULL OR i.deleted OR i.allow_wildcard_admission OR i.issuer <> $1 OR i.jwks_uri <> $2
-   OR NOT EXISTS (SELECT 1 FROM workload_identity_admissions adm WHERE adm.organization_id = t.organization_id AND adm.project_id = t.project_id
-     AND adm.workload_issuer_id = b.workload_issuer_id AND adm.subject = b.subject AND adm.match_kind = 'exact' AND NOT adm.deleted)
-   OR NOT EXISTS (SELECT 1 FROM workload_agent_assignments wa WHERE wa.organization_id = t.organization_id
-     AND wa.workload_issuer_id = b.workload_issuer_id AND wa.subject = b.subject AND wa.match_kind = 'exact' AND NOT wa.deleted AND wa.agent_id = ab.agent_id)
- THEN 'unavailable' ELSE 'ready' END::text AS state
-FROM trigger_instances t
-LEFT JOIN LATERAL (SELECT id, organization_id, project_id, project_ref_organization_id, project_ref_id, original_trigger_id, trigger_ref_organization_id, trigger_ref_project_id, trigger_id, original_assistant_binding_id, assistant_binding_ref_organization_id, assistant_binding_ref_project_id, assistant_binding_id, assistant_binding_generation, original_workload_issuer_id, workload_issuer_ref_organization_id, workload_issuer_ref_project_id, workload_issuer_id, subject, generation, created_at, updated_at, deleted_at, deleted FROM trigger_workload_bindings tb
- WHERE tb.organization_id = t.organization_id AND tb.project_id = t.project_id AND tb.original_trigger_id = t.id
- ORDER BY tb.generation DESC LIMIT 1) b ON true
-LEFT JOIN assistant_agent_bindings ab ON ab.id = b.assistant_binding_id AND ab.organization_id = t.organization_id AND ab.project_id = t.project_id
-LEFT JOIN workload_issuers i ON i.id = b.workload_issuer_id AND i.organization_id = t.organization_id AND i.project_id = t.project_id
-WHERE t.organization_id = $3 AND t.project_id = $4 AND t.target_kind = 'assistant' AND t.target_ref = $5::text
- AND NOT t.deleted AND t.definition_slug <> 'wake'
-ORDER BY t.id LIMIT 101
-`
-
-type ListAssistantIdentityRootsParams struct {
-	PlatformIssuer  string
-	PlatformJwksUri string
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	AssistantID     string
-}
-
-type ListAssistantIdentityRootsRow struct {
-	ID             uuid.UUID
-	DefinitionSlug string
-	Status         string
-	Generation     int64
-	State          string
-}
-
-func (q *Queries) ListAssistantIdentityRoots(ctx context.Context, arg ListAssistantIdentityRootsParams) ([]ListAssistantIdentityRootsRow, error) {
-	rows, err := q.db.Query(ctx, listAssistantIdentityRoots,
-		arg.PlatformIssuer,
-		arg.PlatformJwksUri,
-		arg.OrganizationID,
-		arg.ProjectID,
-		arg.AssistantID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListAssistantIdentityRootsRow
-	for rows.Next() {
-		var i ListAssistantIdentityRootsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.DefinitionSlug,
-			&i.Status,
-			&i.Generation,
-			&i.State,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAssistantIdentityStates = `-- name: ListAssistantIdentityStates :many
-SELECT DISTINCT ON (b.original_assistant_id)
- b.original_assistant_id, b.original_agent_id, b.generation,
- (b.deleted OR b.assistant_id IS NULL OR b.agent_id IS NULL OR b.project_ref_id IS NULL
- OR g.id IS NULL OR g.deleted OR g.revoked_at IS NOT NULL OR g.owner_reassignment_required_at IS NOT NULL
- OR (a.created_by_user_id IS NOT NULL AND g.owner_user_id IS DISTINCT FROM a.created_by_user_id))::boolean AS tombstoned
-FROM assistant_agent_bindings b
-LEFT JOIN assistants a ON a.id = b.assistant_id AND a.organization_id = b.organization_id AND a.project_id = b.project_id
-LEFT JOIN agents g ON g.id = b.agent_id AND g.organization_id = b.organization_id AND g.project_id = b.project_id
-WHERE b.project_id = $1 AND b.original_assistant_id = ANY($2::uuid[])
-ORDER BY b.original_assistant_id, b.generation DESC
-`
-
-type ListAssistantIdentityStatesParams struct {
-	ProjectID    uuid.UUID
-	AssistantIds []uuid.UUID
-}
-
-type ListAssistantIdentityStatesRow struct {
-	OriginalAssistantID uuid.UUID
-	OriginalAgentID     uuid.UUID
-	Generation          int64
-	Tombstoned          bool
-}
-
-func (q *Queries) ListAssistantIdentityStates(ctx context.Context, arg ListAssistantIdentityStatesParams) ([]ListAssistantIdentityStatesRow, error) {
-	rows, err := q.db.Query(ctx, listAssistantIdentityStates, arg.ProjectID, arg.AssistantIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListAssistantIdentityStatesRow
-	for rows.Next() {
-		var i ListAssistantIdentityStatesRow
-		if err := rows.Scan(
-			&i.OriginalAssistantID,
-			&i.OriginalAgentID,
-			&i.Generation,
-			&i.Tombstoned,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listAssistantPendingThreads = `-- name: ListAssistantPendingThreads :many
 SELECT t.id, t.project_id
 FROM assistant_threads t
@@ -2246,6 +1867,48 @@ func (q *Queries) ListAssistants(ctx context.Context, projectID uuid.UUID) ([]Li
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAttachmentTargetIDs = `-- name: ListAttachmentTargetIDs :many
+SELECT t.id
+FROM toolsets t
+WHERE t.project_id = $1
+  AND t.slug = ANY($2::TEXT[])
+  AND t.deleted IS FALSE
+UNION ALL
+SELECT ms.id
+FROM mcp_servers ms
+WHERE ms.project_id = $1
+  AND ms.slug = ANY($3::TEXT[])
+  AND ms.deleted IS FALSE
+`
+
+type ListAttachmentTargetIDsParams struct {
+	ProjectID      uuid.UUID
+	ToolsetSlugs   []string
+	McpServerSlugs []string
+}
+
+// Resolves the toolsets and MCP servers a write would attach so the handler
+// can authorize them first. Read-only: the write locks them itself.
+func (q *Queries) ListAttachmentTargetIDs(ctx context.Context, arg ListAttachmentTargetIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listAttachmentTargetIDs, arg.ProjectID, arg.ToolsetSlugs, arg.McpServerSlugs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -3256,38 +2919,6 @@ func (q *Queries) LoadThreadContextV2(ctx context.Context, arg LoadThreadContext
 		&i.BackendMetadataJson,
 		&i.State,
 		&i.WarmUntil,
-	)
-	return i, err
-}
-
-const lockAssistantIdentityAnchor = `-- name: LockAssistantIdentityAnchor :one
-SELECT id, organization_id, name, created_by_user_id, status
-FROM assistants WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-FOR UPDATE
-`
-
-type LockAssistantIdentityAnchorParams struct {
-	AssistantID uuid.UUID
-	ProjectID   uuid.UUID
-}
-
-type LockAssistantIdentityAnchorRow struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	Name            string
-	CreatedByUserID pgtype.Text
-	Status          string
-}
-
-func (q *Queries) LockAssistantIdentityAnchor(ctx context.Context, arg LockAssistantIdentityAnchorParams) (LockAssistantIdentityAnchorRow, error) {
-	row := q.db.QueryRow(ctx, lockAssistantIdentityAnchor, arg.AssistantID, arg.ProjectID)
-	var i LockAssistantIdentityAnchorRow
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.Name,
-		&i.CreatedByUserID,
-		&i.Status,
 	)
 	return i, err
 }

@@ -46,6 +46,9 @@ var ErrCustomerNotFound = errors.New("stripe customer not found or deleted")
 // ErrSubscriptionNotFound indicates that a subscription is missing in Stripe.
 var ErrSubscriptionNotFound = errors.New("stripe subscription not found")
 
+// ErrCheckoutTrialEndInvalid means Stripe rejected the trial_end parameter.
+var ErrCheckoutTrialEndInvalid = errors.New("stripe checkout trial end is invalid")
+
 // ErrCustomerLookupUnavailable indicates that no live customer lookup is configured.
 var ErrCustomerLookupUnavailable = errors.New("stripe customer lookup is unavailable")
 
@@ -693,6 +696,11 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 
 	session, err := c.api.createCheckoutSession(ctx, params)
 	if err != nil {
+		if stripeErr, ok := errors.AsType[*stripesdk.Error](err); ok &&
+			stripeErr.HTTPStatusCode == 400 && stripeErr.Type == stripesdk.ErrorTypeInvalidRequest &&
+			stripeErr.Param == "subscription_data[trial_end]" {
+			err = errors.Join(ErrCheckoutTrialEndInvalid, err)
+		}
 		return nil, fmt.Errorf("create Stripe Checkout session: %w", err)
 	}
 	return &CheckoutSession{ID: session.ID, URL: session.URL}, nil

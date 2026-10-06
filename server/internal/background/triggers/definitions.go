@@ -90,9 +90,6 @@ type Task struct {
 	EventJSON         []byte
 	RawPayload        []byte
 
-	// SlackExecution is selected by trusted ingress, never decoded from EventJSON.
-	SlackExecution *SlackExecutionSelection
-
 	// ThreadBackfill, when set, asks Dispatch to add conversation messages the
 	// target has not seen to EventJSON before delivery.
 	ThreadBackfill *ThreadBackfill

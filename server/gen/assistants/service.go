@@ -23,11 +23,13 @@ type Service interface {
 	GetAssistant(context.Context, *GetAssistantPayload) (res *types.Assistant, err error)
 	// Create an assistant.
 	CreateAssistant(context.Context, *CreateAssistantPayload) (res *types.Assistant, err error)
-	// Explicitly upgrade one assistant in NEVER_CONFIGURED state or repair missing
-	// live trigger bindings for its existing identity. Requires authorized project
-	// write access and enabled provisioning. Idempotent; never widens existing
-	// policy or restores revoked identities. Existing assistants are never
-	// upgraded implicitly.
+	// Give an existing assistant an agent and per-trigger workload identities. By
+	// default a new agent is created with access to every MCP server and skill in
+	// the project and to administering this assistant. Passing agent_id points the
+	// assistant at an existing agent of the project instead; that agent keeps its
+	// policy and gains administration of this assistant. Either way the agent is
+	// managed like any other agent afterwards. Existing assistants are never
+	// upgraded implicitly; repeating the upgrade is safe.
 	UpgradeAssistantIdentity(context.Context, *UpgradeAssistantIdentityPayload) (res *types.Assistant, err error)
 	// Update an assistant.
 	UpdateAssistant(context.Context, *UpdateAssistantPayload) (res *types.Assistant, err error)
@@ -239,9 +241,10 @@ type UpdateAssistantPayload struct {
 type UpgradeAssistantIdentityPayload struct {
 	// The assistant ID.
 	ID string
-	// Existing agent identity to use instead of creating one.
+	// An existing agent of the project to use instead of creating one. Requires
+	// owning the agent or agent:authorize on it.
 	AgentID *string
-	// Name for a new agent identity. Mutually exclusive with agent_id.
+	// The name of the new agent. Cannot be combined with agent_id.
 	AgentName        *string
 	SessionToken     *string
 	ProjectSlugInput *string

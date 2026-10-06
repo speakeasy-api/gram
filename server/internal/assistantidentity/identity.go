@@ -1,5 +1,8 @@
-// Package assistantidentity owns durable assistant authority. Management services
-// call its transaction-aware mutations; runtime execution is deliberately absent.
+// Package assistantidentity connects assistants to the ordinary agent and
+// workload identity model. An assistant points at one dedicated agent and each
+// of its root triggers points at one workload identity (issuer and subject).
+// Those resources stay owned and edited through their own management surfaces;
+// this package never treats them as system-owned.
 package assistantidentity
 
 import (
@@ -9,57 +12,64 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 )
 
-// State distinguishes untouched legacy resources from permanently withdrawn authority.
+// State is an assistant's workload identity configuration state.
 type State string
 
 const (
+	// NeverConfigured assistants keep the legacy owner-scoped behaviour.
 	NeverConfigured State = "NEVER_CONFIGURED"
-	Active          State = "ACTIVE"
-	Unavailable     State = "UNAVAILABLE"
-	Tombstoned      State = "TOMBSTONED"
+
+	// Active assistants point at a dedicated agent that is currently usable.
+	Active State = "ACTIVE"
+
+	// Unavailable assistants point at an agent that is suspended, revoked, or
+	// deleted, or a trigger whose workload identity no longer resolves.
+	Unavailable State = "UNAVAILABLE"
 )
 
 var (
 	ErrInvalidIdentity = errors.New("invalid assistant identity")
-	ErrBrokenMapping   = errors.New("broken assistant workload mapping")
-	ErrTombstoned      = errors.New("assistant authority is tombstoned")
-	ErrActorIneligible = errors.New("assistant identity actor is not an active member")
+	ErrActorIneligible = errors.New("assistant identity requires a user actor")
 	ErrNotFound        = errors.New("assistant identity resource not found")
+	// ErrAgentUnauthorized covers both an agent the actor may not authorize
+	// and one that does not exist, so neither can be told apart.
+	ErrAgentUnauthorized = errors.New("actor cannot authorize the selected agent")
 )
 
-// ProvisionParams identifies the authenticated consenting human. ActorUserID is
-// supplied by the authorized service, never taken from a request body. The
-// original creator is independently loaded from the assistant's durable row.
+// ProvisionParams identifies the assistant and the authenticated user who
+// configures its identity. ActorUserID is supplied by the authorized service,
+// never taken from a request body.
 type ProvisionParams struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
 	AssistantID    uuid.UUID
 	ActorUserID    string
+	// AgentID points the assistant at an existing agent instead of creating
+	// one. AgentName names a new agent. At most one is set.
+	AgentID   uuid.UUID
+	AgentName string
 }
 
-// Binding identifies the exclusive, project-scoped agent for an assistant.
-type Binding struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	AssistantID    uuid.UUID
-	AgentID        uuid.UUID
-	Generation     int64
+// AssistantState is the configuration state of one assistant. AgentID is set
+// whenever the assistant points at an agent, including when it is Unavailable.
+type AssistantState struct {
+	State   State
+	AgentID *uuid.UUID
 }
 
-// Identity is a captured authority incarnation, not a bearer credential.
+// Identity is a resolved workload identity, not a bearer credential.
 type Identity struct {
-	OrganizationID      string    `json:"organization_id"`
-	ProjectID           uuid.UUID `json:"project_id"`
-	AssistantID         uuid.UUID `json:"assistant_id"`
-	AgentID             uuid.UUID `json:"agent_id"`
-	TriggerID           uuid.UUID `json:"trigger_id"`
-	IssuerID            uuid.UUID `json:"issuer_id"`
-	Subject             string    `json:"subject"`
-	AssistantGeneration int64     `json:"assistant_generation"`
-	TriggerGeneration   int64     `json:"trigger_generation"`
+	OrganizationID string    `json:"organization_id"`
+	ProjectID      uuid.UUID `json:"project_id"`
+	AssistantID    uuid.UUID `json:"assistant_id"`
+	AgentID        uuid.UUID `json:"agent_id"`
+	TriggerID      uuid.UUID `json:"trigger_id"`
+	IssuerID       uuid.UUID `json:"issuer_id"`
+	Subject        string    `json:"subject"`
 }
 
 // Resolution has an identity only in the active state.

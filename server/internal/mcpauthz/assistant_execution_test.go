@@ -18,13 +18,13 @@ func executionForTest() assistantidentity.Execution {
 	policy := json.RawMessage(`{"requested":[],"effective":[]}`)
 	digest := sha256.Sum256(policy)
 	return assistantidentity.Execution{
-		Version: 1, Issuer: "https://gram.example", ThreadID: uuid.New(), EventID: "event-test", Mode: assistantidentity.ExecutionWorkload,
-		Identity: assistantidentity.Identity{OrganizationID: "org-test", ProjectID: uuid.New(), AssistantID: uuid.New(), AgentID: uuid.New(), TriggerID: uuid.New(), IssuerID: uuid.New(), Subject: "assistant-trigger:stable", AssistantGeneration: 1, TriggerGeneration: 1},
+		Version: 1, Issuer: "https://gram.example", ThreadID: uuid.New(), EventID: "event-test", HumanUserID: "user-test",
+		Identity: assistantidentity.Identity{OrganizationID: "org-test", ProjectID: uuid.New(), AssistantID: uuid.New(), AgentID: uuid.New(), TriggerID: uuid.New(), IssuerID: uuid.New(), Subject: "assistant-trigger:stable"},
 		Ceiling:  assistantidentity.CeilingSnapshot{EncodingVersion: runtimepolicy.CurrentDelegatedPolicyVersion, Policy: policy, Digest: hex.EncodeToString(digest[:])},
 	}
 }
 
-func TestAssistantExecutionTokenNamespacesAndGate(t *testing.T) {
+func TestAssistantExecutionTokenNamespaces(t *testing.T) {
 	t.Parallel()
 	issuer, _ := issuerForTest(t)
 	execution := executionForTest()
@@ -41,10 +41,6 @@ func TestAssistantExecutionTokenNamespacesAndGate(t *testing.T) {
 	wire, ok := parsed.Claims.(jwt.MapClaims)
 	require.True(t, ok)
 	require.NotContains(t, wire, "user_id")
-	execution.HumanUserID = "human-a"
-	require.Error(t, execution.Check(), "workload cannot smuggle a human actor")
-	execution.Mode = assistantidentity.ExecutionWorkloadHuman
-	require.NoError(t, execution.Check())
 }
 
 func TestAssistantExecutionRejectsConfusedOrMalformedSignedClaims(t *testing.T) {
@@ -69,7 +65,7 @@ func TestAssistantExecutionRejectsConfusedOrMalformedSignedClaims(t *testing.T) 
 		}},
 		{"unknown version", func(c *AssistantExecutionClaims, h map[string]any) { c.Execution.Version = 99 }},
 		{"missing expiration", func(c *AssistantExecutionClaims, h map[string]any) { c.ExpiresAt = nil }},
-		{"fabricated human", func(c *AssistantExecutionClaims, h map[string]any) { c.Execution.HumanUserID = "owner" }},
+		{"missing human", func(c *AssistantExecutionClaims, h map[string]any) { c.Execution.HumanUserID = "" }},
 		{"corrupt ceiling", func(c *AssistantExecutionClaims, h map[string]any) { c.Execution.Ceiling.Digest = "invalid" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

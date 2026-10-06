@@ -133,8 +133,12 @@ type Service struct {
 	// authenticationHostBaseURL is the authentication host's base URL, empty
 	// when none is configured. Set by AttachAuthenticationHost.
 	authenticationHostBaseURL string
-	siteURL                   *url.URL
-	posthog                   *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	// platformHosts maps the deployment's extra first-party hosts, by
+	// canonical host, to the base URL rendered for requests on them. Set by
+	// SetPlatformHosts; nil means the server URL is the only platform host.
+	platformHosts map[string]string
+	siteURL       *url.URL
+	posthog       *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	// features resolves flag-controlled behavior (the managed assistant's
 	// Platform MCP toolset variant). Wired from the environment-aware
 	// provider: the posthog client in production, the CSV-backed in-memory
@@ -475,6 +479,7 @@ func NewService(
 		serverURL:                 serverURL,
 		callbackOrigins:           remotesessions.CallbackOrigins{Outbound: nil, Registration: nil},
 		authenticationHostBaseURL: "",
+		platformHosts:             nil,
 		siteURL:                   siteURL,
 		posthog:                   posthog,
 		features:                  features,
@@ -731,6 +736,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/token", oops.ErrHandle(service.logger, service.HandleToken).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/revoke", oops.ErrHandle(service.logger, service.HandleRevoke).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
+
+	attachSharedAuthorizationServers(mux, service)
 }
 
 // HandleRemoteLoginCallback is the chi handler at
@@ -1147,14 +1154,16 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// - authToken: from Authorization header (for OAuth flows)
 	// - sessionToken: from Gram-Chat-Session header (for chat session fallback on non-OAuth endpoints)
 	authToken := httpheaders.AuthorizationBearerToken(r)
-	if assistanttokens.IsExecutionToken(httpheaders.AuthorizationOrChatSessionToken(r)) {
+	privateAuthResource := toolset.ID
+	isExecution := assistanttokens.IsExecutionToken(httpheaders.AuthorizationOrChatSessionToken(r))
+	if isExecution {
 		authToken = httpheaders.AuthorizationOrChatSessionToken(r)
-		// Never forward an execution envelope as an external OAuth bearer. Those
-		// flows remain closed until confidential invocation-bound consent exists.
+		privateAuthResource = cfg.rbacResourceID
+		// Execution tokens are never forwarded to an external OAuth upstream.
 		if toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid {
 			return oops.C(oops.CodeUnauthorized)
 		}
-		boundCtx, err := s.assistantTokens.AuthorizeBusiness(ctx, httpheaders.AuthorizationOrChatSessionToken(r), cfg.rbacResourceID, nil)
+		boundCtx, err := s.assistantTokens.AuthorizeBusiness(ctx, authToken, cfg.rbacResourceID)
 		if err != nil {
 			return fmt.Errorf("authorize business runtime request: %w", err)
 		}
@@ -1219,11 +1228,6 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		if err != nil {
 			return err
 		}
-		ctx, err = assistanttokens.RefreshBusinessExecution(ctx)
-		if err != nil {
-			return fmt.Errorf("refresh assistant execution policy: %w", err)
-		}
-		r = r.WithContext(ctx)
 		tokenInputs, err = appendRemoteSessionTokenInputs(tokenInputs, gateTokens)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for issuer-gated toolset").LogError(ctx, s.logger)
@@ -1254,7 +1258,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 				})
 			}
 		case !cfg.isPublic:
-			ctx, err = s.RequirePrivateIdentityAuth(ctx, w, r, false, cfg.rbacResourceID, oauthProtectedResourceURL)
+			ctx, err = s.RequirePrivateIdentityAuth(ctx, w, r, false, privateAuthResource, oauthProtectedResourceURL)
 			if err != nil {
 				return err
 			}
@@ -1393,7 +1397,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// described toolset, unchanged.
 	var wrapperRBACResourceID string
 	var wrapperIsPublic *bool
-	if cfg.mcpServerID != nil || assistanttokens.IsExecutionToken(httpheaders.AuthorizationOrChatSessionToken(r)) {
+	if cfg.mcpServerID != nil || isExecution {
 		wrapperRBACResourceID = cfg.rbacResourceID.String()
 		isPublic := cfg.isPublic
 		wrapperIsPublic = &isPublic
@@ -1927,7 +1931,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 	}
 
 	if assistanttokens.IsExecutionToken(token) {
-		authorizedCtx, err := s.assistantTokens.AuthorizeBusiness(ctx, token, oauthResourceID, nil)
+		authorizedCtx, err := s.assistantTokens.AuthorizeBusiness(ctx, token, oauthResourceID)
 		if err != nil {
 			return ctx, fmt.Errorf("authorize business credential: %w", err)
 		}

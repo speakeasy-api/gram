@@ -2191,24 +2191,19 @@ func EncodeEnsureManagedAssistantError(encoder func(context.Context, http.Respon
 // *AssistantResponseBody from a value of type *types.Assistant.
 func marshalTypesAssistantToAssistantResponseBody(v *types.Assistant) *AssistantResponseBody {
 	res := &AssistantResponseBody{
-		ID:                     v.ID,
-		ProjectID:              v.ProjectID,
-		CreatedByUserID:        v.CreatedByUserID,
-		IdentityState:          v.IdentityState,
-		AgentID:                v.AgentID,
-		IdentityUpgradeOutcome: v.IdentityUpgradeOutcome,
-		IdentityGeneration:     v.IdentityGeneration,
-		Name:                   v.Name,
-		Model:                  v.Model,
-		Instructions:           v.Instructions,
-		WarmTTLSeconds:         v.WarmTTLSeconds,
-		MaxConcurrency:         v.MaxConcurrency,
-		Status:                 v.Status,
-		CreatedAt:              v.CreatedAt,
-		UpdatedAt:              v.UpdatedAt,
-	}
-	if v.IdentityDiagnostics != nil {
-		res.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(v.IdentityDiagnostics)
+		ID:              v.ID,
+		ProjectID:       v.ProjectID,
+		CreatedByUserID: v.CreatedByUserID,
+		IdentityState:   v.IdentityState,
+		AgentID:         v.AgentID,
+		Name:            v.Name,
+		Model:           v.Model,
+		Instructions:    v.Instructions,
+		WarmTTLSeconds:  v.WarmTTLSeconds,
+		MaxConcurrency:  v.MaxConcurrency,
+		Status:          v.Status,
+		CreatedAt:       v.CreatedAt,
+		UpdatedAt:       v.UpdatedAt,
 	}
 	if v.Toolsets != nil {
 		res.Toolsets = make([]*AssistantToolsetRefResponseBody, len(v.Toolsets))
@@ -2245,53 +2240,6 @@ func marshalTypesAssistantToAssistantResponseBody(v *types.Assistant) *Assistant
 		}
 	} else {
 		res.Skills = []*AssistantSkillRefResponseBody{}
-	}
-
-	return res
-}
-
-// marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody
-// builds a value of type *AssistantIdentityDiagnosticsResponseBody from a
-// value of type *types.AssistantIdentityDiagnostics.
-func marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(v *types.AssistantIdentityDiagnostics) *AssistantIdentityDiagnosticsResponseBody {
-	if v == nil {
-		return nil
-	}
-	res := &AssistantIdentityDiagnosticsResponseBody{
-		Health:               v.Health,
-		BindingsTruncated:    v.BindingsTruncated,
-		LastEventID:          v.LastEventID,
-		LastExecutionMode:    v.LastExecutionMode,
-		LastFallbackReason:   v.LastFallbackReason,
-		LastEventStatus:      v.LastEventStatus,
-		LastInitiatingUserID: v.LastInitiatingUserID,
-	}
-	if v.Bindings != nil {
-		res.Bindings = make([]*AssistantIdentityBindingResponseBody, len(v.Bindings))
-		for i, val := range v.Bindings {
-			if val == nil {
-				res.Bindings[i] = nil
-				continue
-			}
-			res.Bindings[i] = marshalTypesAssistantIdentityBindingToAssistantIdentityBindingResponseBody(val)
-		}
-	} else {
-		res.Bindings = []*AssistantIdentityBindingResponseBody{}
-	}
-
-	return res
-}
-
-// marshalTypesAssistantIdentityBindingToAssistantIdentityBindingResponseBody
-// builds a value of type *AssistantIdentityBindingResponseBody from a value of
-// type *types.AssistantIdentityBinding.
-func marshalTypesAssistantIdentityBindingToAssistantIdentityBindingResponseBody(v *types.AssistantIdentityBinding) *AssistantIdentityBindingResponseBody {
-	res := &AssistantIdentityBindingResponseBody{
-		TriggerID:     v.TriggerID,
-		TriggerKind:   v.TriggerKind,
-		TriggerStatus: v.TriggerStatus,
-		State:         v.State,
-		Generation:    v.Generation,
 	}
 
 	return res

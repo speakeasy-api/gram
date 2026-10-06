@@ -330,6 +330,37 @@ type AssistantPrincipal struct {
 	ThreadID    uuid.UUID
 }
 
+type assistantInvokerKey struct{}
+
+// WithAssistantInvoker records the user an agent-backed assistant invocation
+// acts for. It is attribution, not authentication: the request still
+// authorizes as the agent's workload principal.
+func WithAssistantInvoker(ctx context.Context, userID string) context.Context {
+	return context.WithValue(ctx, assistantInvokerKey{}, userID)
+}
+
+// AssistantInvoker returns the user recorded by WithAssistantInvoker.
+func AssistantInvoker(ctx context.Context) (string, bool) {
+	userID, ok := ctx.Value(assistantInvokerKey{}).(string)
+	return userID, ok && userID != ""
+}
+
+type assistantBusinessResourceKey struct{}
+
+// WithAssistantBusinessResource pins the upstream resource an assistant
+// execution's business request was authorized for. Only a session recorded
+// for that resource can serve the request.
+func WithAssistantBusinessResource(ctx context.Context, resource string) context.Context {
+	return context.WithValue(ctx, assistantBusinessResourceKey{}, resource)
+}
+
+// AssistantBusinessResource returns the resource pinned by
+// WithAssistantBusinessResource.
+func AssistantBusinessResource(ctx context.Context) (string, bool) {
+	resource, ok := ctx.Value(assistantBusinessResourceKey{}).(string)
+	return resource, ok && resource != ""
+}
+
 func SetAssistantPrincipal(ctx context.Context, value AssistantPrincipal) context.Context {
 	return context.WithValue(ctx, AssistantPrincipalKey, value)
 }

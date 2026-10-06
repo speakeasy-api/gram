@@ -1,5 +1,7 @@
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
@@ -35,9 +37,16 @@ export function AssistantIdentitySettings({
     enabled: confirming,
     throwOnError: false,
   });
-  const agents = agentsQuery.data ?? [];
+  // Only agents the user can authorize, active in the assistant's project, can
+  // back it.
+  const agents = (agentsQuery.data ?? []).filter(
+    (agent) =>
+      agent.projectId === assistant.projectId &&
+      agent.lifecycle === "active" &&
+      agent.permissions.authorize,
+  );
   const creating = selectedIdentity === "new";
-  const nameTaken = agents.some(
+  const nameTaken = (agentsQuery.data ?? []).some(
     (agent) => agent.name.toLowerCase() === agentName.trim().toLowerCase(),
   );
   const attributionName = creating
@@ -53,12 +62,19 @@ export function AssistantIdentitySettings({
       setConfirming(false);
       void invalidateAllAssistantsList(queryClient);
       onUpdated?.();
-      toast.success("Workloads set up");
+      toast.success("Agent identity set up");
     },
     onError: (error) => {
       if (error.message.includes("already uses this name")) {
         toast.error(
-          "This identity name is already taken. Choose a different name.",
+          "An agent already uses this name. Choose a different name.",
+        );
+        void agentsQuery.refetch();
+        return;
+      }
+      if (error.message.includes("already backs another assistant")) {
+        toast.error(
+          "This agent already backs another assistant. Choose a different agent.",
         );
         void agentsQuery.refetch();
         return;
@@ -72,7 +88,6 @@ export function AssistantIdentitySettings({
     assistant.identityState === "NEVER_CONFIGURED";
   const canUpgrade =
     hasScope("project:write", assistant.projectId) &&
-    identityFlag.status === "enabled" &&
     agentIdentityIsNotConfigured;
 
   if (identityFlag.status !== "enabled") return null;
@@ -83,30 +98,25 @@ export function AssistantIdentitySettings({
   return (
     <div className="space-y-4">
       <Text small muted>
-        This assistant has no agent identity configured. Actions are attributed
-        to the owner.
+        This assistant has no agent identity. It acts as the person who messages
+        it in the dashboard, and as its creator everywhere else.
       </Text>
       {canUpgrade && (
         <Button size="sm" onClick={() => setConfirming(true)}>
-          Set up workloads
+          Set up agent identity
         </Button>
       )}
       <Dialog open={confirming} onOpenChange={setConfirming}>
         <Dialog.Content>
           <Dialog.Header>
-            <Dialog.Title>Set up workloads</Dialog.Title>
+            <Dialog.Title>Set up agent identity</Dialog.Title>
             <Dialog.Description>
-              Choose the agent identity for {assistant.name}.
+              Choose the agent {assistant.name} runs as.
             </Dialog.Description>
           </Dialog.Header>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <label
-                htmlFor="assistant-agent-selection"
-                className="text-sm font-medium"
-              >
-                Agent identity
-              </label>
+              <Label htmlFor="assistant-agent-selection">Agent</Label>
               <select
                 id="assistant-agent-selection"
                 value={selectedIdentity}
@@ -114,7 +124,7 @@ export function AssistantIdentitySettings({
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                 disabled={upgrade.isPending}
               >
-                <option value="new">Create new</option>
+                <option value="new">Create a new agent</option>
                 {agents.map((agent) => (
                   <option key={agent.id} value={agent.id}>
                     {agent.name}
@@ -124,19 +134,14 @@ export function AssistantIdentitySettings({
             </div>
             {creating && (
               <div className="space-y-2">
-                <label
-                  htmlFor="assistant-agent-name"
-                  className="text-sm font-medium"
-                >
-                  Identity name
-                </label>
-                <input
+                <Label htmlFor="assistant-agent-name">Agent name</Label>
+                <Input
                   id="assistant-agent-name"
                   value={agentName}
-                  onChange={(event) => setAgentName(event.target.value)}
+                  onChange={setAgentName}
                   maxLength={120}
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                   disabled={upgrade.isPending}
+                  error={nameTaken}
                   aria-invalid={nameTaken}
                   aria-describedby={
                     nameTaken ? "assistant-agent-name-error" : undefined
@@ -147,16 +152,15 @@ export function AssistantIdentitySettings({
                     id="assistant-agent-name-error"
                     className="text-sm text-destructive"
                   >
-                    An identity already uses this name. Choose a different name
-                    or select the existing identity.
+                    An agent already uses this name. Choose a different name or
+                    select the existing agent.
                   </p>
                 )}
               </div>
             )}
             {agentsQuery.isError && (
               <Text small muted>
-                Could not load agent identities. Close this dialog and try
-                again.
+                Could not load agents. Close this dialog and try again.
               </Text>
             )}
             {attributionName && (
@@ -168,6 +172,11 @@ export function AssistantIdentitySettings({
                 </span>
               </div>
             )}
+            <Text small muted>
+              {creating
+                ? "A new agent starts with access to every MCP server and skill in this project and can administer this assistant. You can narrow its access afterwards like any other agent."
+                : "The agent keeps its current access and can also administer this assistant. You can change its access afterwards like any other agent."}
+            </Text>
           </div>
           <Dialog.Footer>
             <Button
@@ -233,7 +242,8 @@ function ConfiguredIdentity({ assistant }: { assistant: Assistant }) {
       {canManageMappings && mappings.data?.members.length === 0 && (
         <div className="space-y-2">
           <Text small muted>
-            Link assistant permissions to the user prompting it:
+            Map Slack members to people in your organization so the assistant
+            uses the connected accounts of whoever messages it in Slack:
           </Text>
           <Link
             className="text-sm font-medium underline underline-offset-4"

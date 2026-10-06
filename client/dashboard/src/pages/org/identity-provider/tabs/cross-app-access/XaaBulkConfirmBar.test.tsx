@@ -33,6 +33,7 @@ describe("XaaBulkConfirmBar", () => {
   it("blocks confirmation until a valid audience is entered", () => {
     const { onConfirm } = renderBar({ selectedCount: 3 });
     expect(screen.getByText("Confirm 3 selected servers")).toBeTruthy();
+    expect(screen.getByText(/share a confirmation/)).toBeTruthy();
     const button = submit("Confirm 3 servers");
     expect(button.hasAttribute("disabled")).toBe(true);
 

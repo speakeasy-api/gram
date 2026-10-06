@@ -41,9 +41,10 @@ type CreateAssistantRequestBody struct {
 type UpgradeAssistantIdentityRequestBody struct {
 	// The assistant ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Existing agent identity to use instead of creating one.
+	// An existing agent of the project to use instead of creating one. Requires
+	// owning the agent or agent:authorize on it.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// Name for a new agent identity. Mutually exclusive with agent_id.
+	// The name of the new agent. Cannot be combined with agent_id.
 	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
 }
 
@@ -114,20 +115,12 @@ type GetAssistantResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	// Whether this assistant has never configured, active, or tombstoned workload
-	// identity bindings. This is configuration state, not permission to execute.
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
-	// The dedicated agent ID for an active identity binding.
+	// The assistant's dedicated agent ID, when it has one.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// Detail-only identity health and rollout information. Configuration is not
-	// permission or consent.
-	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
-	// Present only on an explicit identity upgrade response: upgraded creates the
-	// first binding, repaired provisions missing live roots, unchanged preserves
-	// existing bindings. Not a permission grant or OAuth consent.
-	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
-	// The current or last retained assistant identity binding generation.
-	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -161,20 +154,12 @@ type CreateAssistantResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	// Whether this assistant has never configured, active, or tombstoned workload
-	// identity bindings. This is configuration state, not permission to execute.
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
-	// The dedicated agent ID for an active identity binding.
+	// The assistant's dedicated agent ID, when it has one.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// Detail-only identity health and rollout information. Configuration is not
-	// permission or consent.
-	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
-	// Present only on an explicit identity upgrade response: upgraded creates the
-	// first binding, repaired provisions missing live roots, unchanged preserves
-	// existing bindings. Not a permission grant or OAuth consent.
-	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
-	// The current or last retained assistant identity binding generation.
-	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -208,20 +193,12 @@ type UpgradeAssistantIdentityResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	// Whether this assistant has never configured, active, or tombstoned workload
-	// identity bindings. This is configuration state, not permission to execute.
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
-	// The dedicated agent ID for an active identity binding.
+	// The assistant's dedicated agent ID, when it has one.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// Detail-only identity health and rollout information. Configuration is not
-	// permission or consent.
-	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
-	// Present only on an explicit identity upgrade response: upgraded creates the
-	// first binding, repaired provisions missing live roots, unchanged preserves
-	// existing bindings. Not a permission grant or OAuth consent.
-	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
-	// The current or last retained assistant identity binding generation.
-	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -255,20 +232,12 @@ type UpdateAssistantResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	// Whether this assistant has never configured, active, or tombstoned workload
-	// identity bindings. This is configuration state, not permission to execute.
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
-	// The dedicated agent ID for an active identity binding.
+	// The assistant's dedicated agent ID, when it has one.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// Detail-only identity health and rollout information. Configuration is not
-	// permission or consent.
-	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
-	// Present only on an explicit identity upgrade response: upgraded creates the
-	// first binding, repaired provisions missing live roots, unchanged preserves
-	// existing bindings. Not a permission grant or OAuth consent.
-	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
-	// The current or last retained assistant identity binding generation.
-	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -327,20 +296,12 @@ type GetManagedAssistantResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	// Whether this assistant has never configured, active, or tombstoned workload
-	// identity bindings. This is configuration state, not permission to execute.
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
-	// The dedicated agent ID for an active identity binding.
+	// The assistant's dedicated agent ID, when it has one.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// Detail-only identity health and rollout information. Configuration is not
-	// permission or consent.
-	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
-	// Present only on an explicit identity upgrade response: upgraded creates the
-	// first binding, repaired provisions missing live roots, unchanged preserves
-	// existing bindings. Not a permission grant or OAuth consent.
-	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
-	// The current or last retained assistant identity binding generation.
-	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -374,20 +335,12 @@ type EnsureManagedAssistantResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	// Whether this assistant has never configured, active, or tombstoned workload
-	// identity bindings. This is configuration state, not permission to execute.
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
-	// The dedicated agent ID for an active identity binding.
+	// The assistant's dedicated agent ID, when it has one.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// Detail-only identity health and rollout information. Configuration is not
-	// permission or consent.
-	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
-	// Present only on an explicit identity upgrade response: upgraded creates the
-	// first binding, repaired provisions missing live roots, unchanged preserves
-	// existing bindings. Not a permission grant or OAuth consent.
-	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
-	// The current or last retained assistant identity binding generation.
-	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -2280,20 +2233,12 @@ type AssistantResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
-	// Whether this assistant has never configured, active, or tombstoned workload
-	// identity bindings. This is configuration state, not permission to execute.
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
 	IdentityState *string `form:"identity_state,omitempty" json:"identity_state,omitempty" xml:"identity_state,omitempty"`
-	// The dedicated agent ID for an active identity binding.
+	// The assistant's dedicated agent ID, when it has one.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
-	// Detail-only identity health and rollout information. Configuration is not
-	// permission or consent.
-	IdentityDiagnostics *AssistantIdentityDiagnosticsResponseBody `form:"identity_diagnostics,omitempty" json:"identity_diagnostics,omitempty" xml:"identity_diagnostics,omitempty"`
-	// Present only on an explicit identity upgrade response: upgraded creates the
-	// first binding, repaired provisions missing live roots, unchanged preserves
-	// existing bindings. Not a permission grant or OAuth consent.
-	IdentityUpgradeOutcome *string `form:"identity_upgrade_outcome,omitempty" json:"identity_upgrade_outcome,omitempty" xml:"identity_upgrade_outcome,omitempty"`
-	// The current or last retained assistant identity binding generation.
-	IdentityGeneration *int64 `form:"identity_generation,omitempty" json:"identity_generation,omitempty" xml:"identity_generation,omitempty"`
 	// The assistant name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The model identifier used by the assistant.
@@ -2316,44 +2261,6 @@ type AssistantResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// Last update timestamp.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
-// AssistantIdentityDiagnosticsResponseBody is used to define fields on
-// response body types.
-type AssistantIdentityDiagnosticsResponseBody struct {
-	// legacy, ready, suspended, or unavailable; ready only describes identity
-	// configuration.
-	Health string `json:"health"`
-	// At most 100 current trigger roots, including roots without a binding.
-	Bindings []*AssistantIdentityBindingResponseBody `json:"bindings"`
-	// More roots exist than are returned.
-	BindingsTruncated bool `json:"bindings_truncated"`
-	// Most recent persisted event ID; not a token.
-	LastEventID *string `json:"last_event_id,omitempty"`
-	// Captured mode of the most recent event, or legacy. Not a prediction for the
-	// next message.
-	LastExecutionMode *string `json:"last_execution_mode,omitempty"`
-	// Bounded reason for autonomous execution when no delegating user was resolved.
-	LastFallbackReason *string `json:"last_fallback_reason,omitempty"`
-	// Persisted processing status, not a tool permission or consent verdict.
-	LastEventStatus *string `json:"last_event_status,omitempty"`
-	// Selected human delegator, absent for autonomous work; never the acting agent.
-	LastInitiatingUserID *string `json:"last_initiating_user_id,omitempty"`
-}
-
-// AssistantIdentityBindingResponseBody is used to define fields on response
-// body types.
-type AssistantIdentityBindingResponseBody struct {
-	// Exact trigger root ID.
-	TriggerID string `json:"trigger_id"`
-	// Trigger definition slug.
-	TriggerKind string `json:"trigger_kind"`
-	// Current trigger status.
-	TriggerStatus string `json:"trigger_status"`
-	// ready, missing, or unavailable. Never interprets missing authority as legacy.
-	State string `json:"state"`
-	// Retained workload binding generation, zero if never configured.
-	Generation int64 `json:"generation"`
 }
 
 // AssistantToolsetRefResponseBody is used to define fields on response body
@@ -2445,24 +2352,19 @@ func NewListAssistantsResponseBody(res *assistants.ListAssistantsResult) *ListAs
 // the "getAssistant" endpoint of the "assistants" service.
 func NewGetAssistantResponseBody(res *types.Assistant) *GetAssistantResponseBody {
 	body := &GetAssistantResponseBody{
-		ID:                     res.ID,
-		ProjectID:              res.ProjectID,
-		CreatedByUserID:        res.CreatedByUserID,
-		IdentityState:          res.IdentityState,
-		AgentID:                res.AgentID,
-		IdentityUpgradeOutcome: res.IdentityUpgradeOutcome,
-		IdentityGeneration:     res.IdentityGeneration,
-		Name:                   res.Name,
-		Model:                  res.Model,
-		Instructions:           res.Instructions,
-		WarmTTLSeconds:         res.WarmTTLSeconds,
-		MaxConcurrency:         res.MaxConcurrency,
-		Status:                 res.Status,
-		CreatedAt:              res.CreatedAt,
-		UpdatedAt:              res.UpdatedAt,
-	}
-	if res.IdentityDiagnostics != nil {
-		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CreatedByUserID: res.CreatedByUserID,
+		IdentityState:   res.IdentityState,
+		AgentID:         res.AgentID,
+		Name:            res.Name,
+		Model:           res.Model,
+		Instructions:    res.Instructions,
+		WarmTTLSeconds:  res.WarmTTLSeconds,
+		MaxConcurrency:  res.MaxConcurrency,
+		Status:          res.Status,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
@@ -2507,24 +2409,19 @@ func NewGetAssistantResponseBody(res *types.Assistant) *GetAssistantResponseBody
 // of the "createAssistant" endpoint of the "assistants" service.
 func NewCreateAssistantResponseBody(res *types.Assistant) *CreateAssistantResponseBody {
 	body := &CreateAssistantResponseBody{
-		ID:                     res.ID,
-		ProjectID:              res.ProjectID,
-		CreatedByUserID:        res.CreatedByUserID,
-		IdentityState:          res.IdentityState,
-		AgentID:                res.AgentID,
-		IdentityUpgradeOutcome: res.IdentityUpgradeOutcome,
-		IdentityGeneration:     res.IdentityGeneration,
-		Name:                   res.Name,
-		Model:                  res.Model,
-		Instructions:           res.Instructions,
-		WarmTTLSeconds:         res.WarmTTLSeconds,
-		MaxConcurrency:         res.MaxConcurrency,
-		Status:                 res.Status,
-		CreatedAt:              res.CreatedAt,
-		UpdatedAt:              res.UpdatedAt,
-	}
-	if res.IdentityDiagnostics != nil {
-		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CreatedByUserID: res.CreatedByUserID,
+		IdentityState:   res.IdentityState,
+		AgentID:         res.AgentID,
+		Name:            res.Name,
+		Model:           res.Model,
+		Instructions:    res.Instructions,
+		WarmTTLSeconds:  res.WarmTTLSeconds,
+		MaxConcurrency:  res.MaxConcurrency,
+		Status:          res.Status,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
@@ -2570,24 +2467,19 @@ func NewCreateAssistantResponseBody(res *types.Assistant) *CreateAssistantRespon
 // service.
 func NewUpgradeAssistantIdentityResponseBody(res *types.Assistant) *UpgradeAssistantIdentityResponseBody {
 	body := &UpgradeAssistantIdentityResponseBody{
-		ID:                     res.ID,
-		ProjectID:              res.ProjectID,
-		CreatedByUserID:        res.CreatedByUserID,
-		IdentityState:          res.IdentityState,
-		AgentID:                res.AgentID,
-		IdentityUpgradeOutcome: res.IdentityUpgradeOutcome,
-		IdentityGeneration:     res.IdentityGeneration,
-		Name:                   res.Name,
-		Model:                  res.Model,
-		Instructions:           res.Instructions,
-		WarmTTLSeconds:         res.WarmTTLSeconds,
-		MaxConcurrency:         res.MaxConcurrency,
-		Status:                 res.Status,
-		CreatedAt:              res.CreatedAt,
-		UpdatedAt:              res.UpdatedAt,
-	}
-	if res.IdentityDiagnostics != nil {
-		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CreatedByUserID: res.CreatedByUserID,
+		IdentityState:   res.IdentityState,
+		AgentID:         res.AgentID,
+		Name:            res.Name,
+		Model:           res.Model,
+		Instructions:    res.Instructions,
+		WarmTTLSeconds:  res.WarmTTLSeconds,
+		MaxConcurrency:  res.MaxConcurrency,
+		Status:          res.Status,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
@@ -2632,24 +2524,19 @@ func NewUpgradeAssistantIdentityResponseBody(res *types.Assistant) *UpgradeAssis
 // of the "updateAssistant" endpoint of the "assistants" service.
 func NewUpdateAssistantResponseBody(res *types.Assistant) *UpdateAssistantResponseBody {
 	body := &UpdateAssistantResponseBody{
-		ID:                     res.ID,
-		ProjectID:              res.ProjectID,
-		CreatedByUserID:        res.CreatedByUserID,
-		IdentityState:          res.IdentityState,
-		AgentID:                res.AgentID,
-		IdentityUpgradeOutcome: res.IdentityUpgradeOutcome,
-		IdentityGeneration:     res.IdentityGeneration,
-		Name:                   res.Name,
-		Model:                  res.Model,
-		Instructions:           res.Instructions,
-		WarmTTLSeconds:         res.WarmTTLSeconds,
-		MaxConcurrency:         res.MaxConcurrency,
-		Status:                 res.Status,
-		CreatedAt:              res.CreatedAt,
-		UpdatedAt:              res.UpdatedAt,
-	}
-	if res.IdentityDiagnostics != nil {
-		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CreatedByUserID: res.CreatedByUserID,
+		IdentityState:   res.IdentityState,
+		AgentID:         res.AgentID,
+		Name:            res.Name,
+		Model:           res.Model,
+		Instructions:    res.Instructions,
+		WarmTTLSeconds:  res.WarmTTLSeconds,
+		MaxConcurrency:  res.MaxConcurrency,
+		Status:          res.Status,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
@@ -2716,24 +2603,19 @@ func NewInterruptTurnResponseBody(res *assistants.InterruptTurnResult) *Interrup
 // result of the "getManagedAssistant" endpoint of the "assistants" service.
 func NewGetManagedAssistantResponseBody(res *types.Assistant) *GetManagedAssistantResponseBody {
 	body := &GetManagedAssistantResponseBody{
-		ID:                     res.ID,
-		ProjectID:              res.ProjectID,
-		CreatedByUserID:        res.CreatedByUserID,
-		IdentityState:          res.IdentityState,
-		AgentID:                res.AgentID,
-		IdentityUpgradeOutcome: res.IdentityUpgradeOutcome,
-		IdentityGeneration:     res.IdentityGeneration,
-		Name:                   res.Name,
-		Model:                  res.Model,
-		Instructions:           res.Instructions,
-		WarmTTLSeconds:         res.WarmTTLSeconds,
-		MaxConcurrency:         res.MaxConcurrency,
-		Status:                 res.Status,
-		CreatedAt:              res.CreatedAt,
-		UpdatedAt:              res.UpdatedAt,
-	}
-	if res.IdentityDiagnostics != nil {
-		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CreatedByUserID: res.CreatedByUserID,
+		IdentityState:   res.IdentityState,
+		AgentID:         res.AgentID,
+		Name:            res.Name,
+		Model:           res.Model,
+		Instructions:    res.Instructions,
+		WarmTTLSeconds:  res.WarmTTLSeconds,
+		MaxConcurrency:  res.MaxConcurrency,
+		Status:          res.Status,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))
@@ -2778,24 +2660,19 @@ func NewGetManagedAssistantResponseBody(res *types.Assistant) *GetManagedAssista
 // result of the "ensureManagedAssistant" endpoint of the "assistants" service.
 func NewEnsureManagedAssistantResponseBody(res *types.Assistant) *EnsureManagedAssistantResponseBody {
 	body := &EnsureManagedAssistantResponseBody{
-		ID:                     res.ID,
-		ProjectID:              res.ProjectID,
-		CreatedByUserID:        res.CreatedByUserID,
-		IdentityState:          res.IdentityState,
-		AgentID:                res.AgentID,
-		IdentityUpgradeOutcome: res.IdentityUpgradeOutcome,
-		IdentityGeneration:     res.IdentityGeneration,
-		Name:                   res.Name,
-		Model:                  res.Model,
-		Instructions:           res.Instructions,
-		WarmTTLSeconds:         res.WarmTTLSeconds,
-		MaxConcurrency:         res.MaxConcurrency,
-		Status:                 res.Status,
-		CreatedAt:              res.CreatedAt,
-		UpdatedAt:              res.UpdatedAt,
-	}
-	if res.IdentityDiagnostics != nil {
-		body.IdentityDiagnostics = marshalTypesAssistantIdentityDiagnosticsToAssistantIdentityDiagnosticsResponseBody(res.IdentityDiagnostics)
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		CreatedByUserID: res.CreatedByUserID,
+		IdentityState:   res.IdentityState,
+		AgentID:         res.AgentID,
+		Name:            res.Name,
+		Model:           res.Model,
+		Instructions:    res.Instructions,
+		WarmTTLSeconds:  res.WarmTTLSeconds,
+		MaxConcurrency:  res.MaxConcurrency,
+		Status:          res.Status,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
 	if res.Toolsets != nil {
 		body.Toolsets = make([]*AssistantToolsetRefResponseBody, len(res.Toolsets))

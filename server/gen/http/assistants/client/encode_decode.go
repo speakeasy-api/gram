@@ -2379,24 +2379,19 @@ func DecodeEnsureManagedAssistantResponse(decoder func(*http.Response) goahttp.D
 // *types.Assistant from a value of type *AssistantResponseBody.
 func unmarshalAssistantResponseBodyToTypesAssistant(v *AssistantResponseBody) *types.Assistant {
 	res := &types.Assistant{
-		ID:                     *v.ID,
-		ProjectID:              *v.ProjectID,
-		CreatedByUserID:        v.CreatedByUserID,
-		IdentityState:          v.IdentityState,
-		AgentID:                v.AgentID,
-		IdentityUpgradeOutcome: v.IdentityUpgradeOutcome,
-		IdentityGeneration:     v.IdentityGeneration,
-		Name:                   *v.Name,
-		Model:                  *v.Model,
-		Instructions:           *v.Instructions,
-		WarmTTLSeconds:         *v.WarmTTLSeconds,
-		MaxConcurrency:         *v.MaxConcurrency,
-		Status:                 *v.Status,
-		CreatedAt:              *v.CreatedAt,
-		UpdatedAt:              *v.UpdatedAt,
-	}
-	if v.IdentityDiagnostics != nil {
-		res.IdentityDiagnostics = unmarshalAssistantIdentityDiagnosticsResponseBodyToTypesAssistantIdentityDiagnostics(v.IdentityDiagnostics)
+		ID:              *v.ID,
+		ProjectID:       *v.ProjectID,
+		CreatedByUserID: v.CreatedByUserID,
+		IdentityState:   v.IdentityState,
+		AgentID:         v.AgentID,
+		Name:            *v.Name,
+		Model:           *v.Model,
+		Instructions:    *v.Instructions,
+		WarmTTLSeconds:  *v.WarmTTLSeconds,
+		MaxConcurrency:  *v.MaxConcurrency,
+		Status:          *v.Status,
+		CreatedAt:       *v.CreatedAt,
+		UpdatedAt:       *v.UpdatedAt,
 	}
 	res.Toolsets = make([]*types.AssistantToolsetRef, len(v.Toolsets))
 	for i, val := range v.Toolsets {
@@ -2421,49 +2416,6 @@ func unmarshalAssistantResponseBodyToTypesAssistant(v *AssistantResponseBody) *t
 			continue
 		}
 		res.Skills[i] = unmarshalAssistantSkillRefResponseBodyToTypesAssistantSkillRef(val)
-	}
-
-	return res
-}
-
-// unmarshalAssistantIdentityDiagnosticsResponseBodyToTypesAssistantIdentityDiagnostics
-// builds a value of type *types.AssistantIdentityDiagnostics from a value of
-// type *AssistantIdentityDiagnosticsResponseBody.
-func unmarshalAssistantIdentityDiagnosticsResponseBodyToTypesAssistantIdentityDiagnostics(v *AssistantIdentityDiagnosticsResponseBody) *types.AssistantIdentityDiagnostics {
-	if v == nil {
-		return nil
-	}
-	res := &types.AssistantIdentityDiagnostics{
-		Health:               *v.Health,
-		BindingsTruncated:    *v.BindingsTruncated,
-		LastEventID:          v.LastEventID,
-		LastExecutionMode:    v.LastExecutionMode,
-		LastFallbackReason:   v.LastFallbackReason,
-		LastEventStatus:      v.LastEventStatus,
-		LastInitiatingUserID: v.LastInitiatingUserID,
-	}
-	res.Bindings = make([]*types.AssistantIdentityBinding, len(v.Bindings))
-	for i, val := range v.Bindings {
-		if val == nil {
-			res.Bindings[i] = nil
-			continue
-		}
-		res.Bindings[i] = unmarshalAssistantIdentityBindingResponseBodyToTypesAssistantIdentityBinding(val)
-	}
-
-	return res
-}
-
-// unmarshalAssistantIdentityBindingResponseBodyToTypesAssistantIdentityBinding
-// builds a value of type *types.AssistantIdentityBinding from a value of type
-// *AssistantIdentityBindingResponseBody.
-func unmarshalAssistantIdentityBindingResponseBodyToTypesAssistantIdentityBinding(v *AssistantIdentityBindingResponseBody) *types.AssistantIdentityBinding {
-	res := &types.AssistantIdentityBinding{
-		TriggerID:     *v.TriggerID,
-		TriggerKind:   *v.TriggerKind,
-		TriggerStatus: *v.TriggerStatus,
-		State:         *v.State,
-		Generation:    *v.Generation,
 	}
 
 	return res

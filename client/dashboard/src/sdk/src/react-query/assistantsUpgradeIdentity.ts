@@ -54,7 +54,7 @@ export type AssistantsUpgradeIdentityMutationError =
  * upgradeAssistantIdentity assistants
  *
  * @remarks
- * Explicitly upgrade one assistant in NEVER_CONFIGURED state or repair missing live trigger bindings for its existing identity. Requires authorized project write access and enabled provisioning. Idempotent; never widens existing policy or restores revoked identities. Existing assistants are never upgraded implicitly.
+ * Give an existing assistant an agent and per-trigger workload identities. By default a new agent is created with access to every MCP server and skill in the project and to administering this assistant. Passing agent_id points the assistant at an existing agent of the project instead; that agent keeps its policy and gains administration of this assistant. Either way the agent is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.
  */
 export function useAssistantsUpgradeIdentityMutation(
   options?: MutationHookOptions<

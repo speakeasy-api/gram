@@ -584,10 +584,10 @@ webhooks:
                                 - subject_type
                             type: object
                 required: true
-    audit_log.assistant_credential_use_event_v1:
+    audit_log.assistant_identity_event_v1:
         post:
-            description: Emitted when a delegated assistant selects an existing consenting human credential; contains attribution only
-            operationId: audit_log.assistant_credential_use_event_v1
+            description: Emitted when workload identity is configured for an assistant
+            operationId: audit_log.assistant_identity_event_v1
             requestBody:
                 content:
                     application/json:

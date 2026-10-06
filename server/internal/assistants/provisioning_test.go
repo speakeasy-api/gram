@@ -1,9 +1,6 @@
 package assistants
 
 import (
-	"encoding/json"
-	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"testing"
 
 	"github.com/google/uuid"
@@ -13,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -25,24 +21,18 @@ import (
 func newProvisioningCore(t *testing.T, conn *pgxpool.Pool) *ServiceCore {
 	t.Helper()
 	logger := testenv.NewLogger(t)
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService)
-	flags := new(feature.InMemory)
-	flags.SetFlag(feature.FlagAgentIdentityCredentials, "org-test", true)
-	core.SetFeatureProvider(flags)
-	return core
+	return NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 }
 
 func newProvisioningProject(t *testing.T, conn *pgxpool.Pool, slug string) uuid.UUID {
 	t.Helper()
-	seedIdentityCreationMembers(t, conn)
-
+	seedIdentityMembers(t, conn)
 	proj, err := projectsrepo.New(conn).CreateProject(t.Context(), projectsrepo.CreateProjectParams{
 		Name:           slug,
 		Slug:           slug,
 		OrganizationID: "org-test",
 	})
 	require.NoError(t, err)
-	seedProvisioningAccess(t, conn, proj.ID, "user-1", "user-2", "user-test")
 	return proj.ID
 }
 
@@ -201,14 +191,4 @@ func TestEnableManagedAssistantFailsWhenNameTaken(t *testing.T) {
 	// The feature stays off — no mapping was created.
 	_, err = core.GetManagedAssistant(ctx, projectID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-}
-
-func seedProvisioningAccess(t *testing.T, conn *pgxpool.Pool, project uuid.UUID, users ...string) {
-	t.Helper()
-	selector, err := json.Marshal(authz.NewSelector(authz.ScopeProjectWrite, project.String()))
-	require.NoError(t, err)
-	for _, id := range users {
-		_, err = accessrepo.New(conn).InsertPrincipalGrantIfAbsent(t.Context(), accessrepo.InsertPrincipalGrantIfAbsentParams{OrganizationID: "org-test", PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, id), Scope: string(authz.ScopeProjectWrite), Selectors: selector})
-		require.NoError(t, err)
-	}
 }

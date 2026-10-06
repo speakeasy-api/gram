@@ -9,7 +9,13 @@ const mocks = vi.hoisted(() => ({
   canWrite: true,
   canManageMappings: true,
   members: [] as unknown[],
-  agents: [] as { id: string; name: string }[],
+  agents: [] as {
+    id: string;
+    name: string;
+    projectId?: string;
+    lifecycle: string;
+    permissions: { authorize: boolean };
+  }[],
   flagStatus: "enabled",
   agentData: { name: "Example agent" } as { name: string } | undefined,
   success: vi.fn(),
@@ -84,11 +90,6 @@ const assistant: Assistant = {
   createdAt: new Date(),
   updatedAt: new Date(),
   identityState: "NEVER_CONFIGURED",
-  identityDiagnostics: {
-    health: "legacy",
-    bindings: [],
-    bindingsTruncated: false,
-  },
 };
 function setup(value: Assistant = assistant) {
   render(
@@ -112,10 +113,17 @@ beforeEach(() => {
 describe("Assistant identity management", () => {
   it("warns about a matching name without overriding server uniqueness checks", () => {
     mocks.agents = [
-      { id: "existing-agent", name: assistant.name.toUpperCase() },
+      {
+        id: "existing-agent",
+        name: assistant.name.toUpperCase(),
+        lifecycle: "active",
+        permissions: { authorize: true },
+      },
     ];
     setup();
-    fireEvent.click(screen.getByRole("button", { name: "Set up workloads" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Set up agent identity" }),
+    );
     expect(
       (
         screen.getByRole("button", {
@@ -123,8 +131,8 @@ describe("Assistant identity management", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(false);
-    expect(screen.getByText(/An identity already uses this name/)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Identity name"), {
+    expect(screen.getByText(/An agent already uses this name/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Agent name"), {
       target: { value: "New identity" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Confirm setup" }));
@@ -138,13 +146,43 @@ describe("Assistant identity management", () => {
     });
   });
   it("submits the selected existing identity without creating another", () => {
-    mocks.agents = [{ id: "existing-agent", name: "Shared identity" }];
+    mocks.agents = [
+      {
+        id: "existing-agent",
+        name: "Shared identity",
+        projectId: assistant.projectId,
+        lifecycle: "active",
+        permissions: { authorize: true },
+      },
+      {
+        id: "other-project-agent",
+        name: "Other project identity",
+        projectId: "33333333-3333-4333-8333-333333333333",
+        lifecycle: "active",
+        permissions: { authorize: true },
+      },
+      {
+        id: "unauthorized-agent",
+        name: "Unauthorized identity",
+        projectId: assistant.projectId,
+        lifecycle: "active",
+        permissions: { authorize: false },
+      },
+    ];
     setup();
-    fireEvent.click(screen.getByRole("button", { name: "Set up workloads" }));
-    fireEvent.change(screen.getByLabelText("Agent identity"), {
+    fireEvent.click(
+      screen.getByRole("button", { name: "Set up agent identity" }),
+    );
+    fireEvent.change(screen.getByLabelText("Agent"), {
       target: { value: "existing-agent" },
     });
-    expect(screen.queryByLabelText("Identity name")).toBeNull();
+    expect(screen.queryByLabelText("Agent name")).toBeNull();
+    expect(
+      screen.queryByRole("option", { name: "Other project identity" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("option", { name: "Unauthorized identity" }),
+    ).toBeNull();
     expect(screen.getByText("Actions will be attributed to")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Confirm setup" }));
     expect(mocks.mutate).toHaveBeenCalledWith({
@@ -157,11 +195,11 @@ describe("Assistant identity management", () => {
     });
   });
 
-  it("shows owner attribution and identity setup before confirmation", () => {
+  it("explains who an assistant without an agent identity acts as", () => {
     setup();
     expect(
       screen.getByText(
-        "This assistant has no agent identity configured. Actions are attributed to the owner.",
+        "This assistant has no agent identity. It acts as the person who messages it in the dashboard, and as its creator everywhere else.",
       ),
     ).toBeTruthy();
     expect(
@@ -169,7 +207,9 @@ describe("Assistant identity management", () => {
         /health|generation|thread history|workload bindings|trigger (?:id|status|details)/i,
       ),
     ).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Set up workloads" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Set up agent identity" }),
+    );
     expect(mocks.mutate).not.toHaveBeenCalled();
     expect(screen.queryByText(assistant.id)).toBeNull();
     expect(screen.queryByText(assistant.projectId)).toBeNull();
@@ -187,7 +227,7 @@ describe("Assistant identity management", () => {
     mocks.canWrite = false;
     setup();
     expect(
-      screen.queryByRole("button", { name: "Set up workloads" }),
+      screen.queryByRole("button", { name: "Set up agent identity" }),
     ).toBeNull();
   });
   it("respects the existing organization feature gate", () => {
@@ -202,13 +242,13 @@ describe("Assistant identity management", () => {
     ).toBe("/identities/agent%3Aexample-agent");
     expect(screen.queryByText("example-agent")).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Set up workloads" }),
+      screen.queryByRole("button", { name: "Set up agent identity" }),
     ).toBeNull();
   });
   it("links to Slack mapping setup when no mappings exist", () => {
     setup({ ...assistant, identityState: "ACTIVE", agentId: "example-agent" });
     expect(
-      screen.getByText("Link assistant permissions to the user prompting it:"),
+      screen.getByText(/Map Slack members to people in your organization/),
     ).toBeTruthy();
     expect(
       screen
@@ -240,16 +280,11 @@ it("keeps the assigned identity link when its name is unavailable", () => {
   ).toContain("assigned-agent");
 });
 
-it("allows legacy setup without optional diagnostics", () => {
-  setup({ ...assistant, identityDiagnostics: undefined });
-  expect(screen.getByRole("button", { name: "Set up workloads" })).toBeTruthy();
-});
-
 it("reports a server-side name collision without permission guidance", () => {
   setup();
-  mocks.onError?.(new Error("an agent identity already uses this name"));
+  mocks.onError?.(new Error("an agent already uses this name"));
   expect(mocks.error).toHaveBeenCalledWith(
-    "This identity name is already taken. Choose a different name.",
+    "An agent already uses this name. Choose a different name.",
   );
   expect(mocks.refetchAgents).toHaveBeenCalled();
 });

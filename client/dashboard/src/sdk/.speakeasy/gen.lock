@@ -37,6 +37,7 @@ trackedFiles:
   src/funcs/accessCreateRole.ts: {}
   src/funcs/accessDeleteDirectoryRoleMapping.ts: {}
   src/funcs/accessDeleteRole.ts: {}
+  src/funcs/accessExplainResourceAccess.ts: {}
   src/funcs/accessGetRole.ts: {}
   src/funcs/accessGetShadowMCPInventoryServer.ts: {}
   src/funcs/accessListAIDetectionUsers.ts: {}
@@ -171,6 +172,8 @@ trackedFiles:
   src/funcs/authLogout.ts: {}
   src/funcs/authRegister.ts: {}
   src/funcs/authSwitchScopes.ts: {}
+  src/funcs/authTransferIn.ts: {}
+  src/funcs/authTransferOut.ts: {}
   src/funcs/businessMemoriesList.ts: {}
   src/funcs/businessMemoriesListContentScopes.ts: {}
   src/funcs/businessMemoriesSearch.ts: {}
@@ -183,6 +186,7 @@ trackedFiles:
   src/funcs/chatListSessionLinks.ts: {}
   src/funcs/chatListSources.ts: {}
   src/funcs/chatLoad.ts: {}
+  src/funcs/chatLoadOverview.ts: {}
   src/funcs/chatSessionsCreate.ts: {}
   src/funcs/chatSessionsRevoke.ts: {}
   src/funcs/chatSetPinned.ts: {}
@@ -866,8 +870,6 @@ trackedFiles:
   src/models/components/archiveskillrequestbody.ts: {}
   src/models/components/asset.ts: {}
   src/models/components/assistant.ts: {}
-  src/models/components/assistantidentitybinding.ts: {}
-  src/models/components/assistantidentitydiagnostics.ts: {}
   src/models/components/assistantmcpserverref.ts: {}
   src/models/components/assistantmemory.ts: {}
   src/models/components/assistantsessionsummary.ts: {}
@@ -902,6 +904,7 @@ trackedFiles:
   src/models/components/chatcontentpart.ts: {}
   src/models/components/chatmessage.ts: {}
   src/models/components/chatoverview.ts: {}
+  src/models/components/chatparticipant.ts: {}
   src/models/components/chatsessionlink.ts: {}
   src/models/components/chatsummary.ts: {}
   src/models/components/chattotals.ts: {}
@@ -1046,6 +1049,10 @@ trackedFiles:
   src/models/components/evolveform.ts: {}
   src/models/components/evolveresult.ts: {}
   src/models/components/exchangerequestbody.ts: {}
+  src/models/components/explainedaccessdirectorysource.ts: {}
+  src/models/components/explainedaccesslevel.ts: {}
+  src/models/components/explainedaccessrule.ts: {}
+  src/models/components/explainresourceaccessresult.ts: {}
   src/models/components/exportmcpmetadatarequestbody.ts: {}
   src/models/components/exprcompileresult.ts: {}
   src/models/components/externalcredentialsummary.ts: {}
@@ -1952,6 +1959,8 @@ trackedFiles:
   src/models/operations/attachusersessionissuer.ts: {}
   src/models/operations/authcallback.ts: {}
   src/models/operations/authlogin.ts: {}
+  src/models/operations/authtransferin.ts: {}
+  src/models/operations/authtransferout.ts: {}
   src/models/operations/beginslackdirectoryconnection.ts: {}
   src/models/operations/cancelstripesubscription.ts: {}
   src/models/operations/captureevent.ts: {}
@@ -2114,6 +2123,7 @@ trackedFiles:
   src/models/operations/enterdemo.ts: {}
   src/models/operations/evaluatepromptguardrail.ts: {}
   src/models/operations/evolvedeployment.ts: {}
+  src/models/operations/explainresourceaccess.ts: {}
   src/models/operations/exportmcpmetadata.ts: {}
   src/models/operations/fetchglobalremotesessionissuermetadata.ts: {}
   src/models/operations/fetchimagefromurl.ts: {}
@@ -2431,6 +2441,7 @@ trackedFiles:
   src/models/operations/listwidgets.ts: {}
   src/models/operations/listworkloadidentities.ts: {}
   src/models/operations/loadchat.ts: {}
+  src/models/operations/loadchatoverview.ts: {}
   src/models/operations/logout.ts: {}
   src/models/operations/markriskresultsfalsepositive.ts: {}
   src/models/operations/migrateorganizationremotesessionissuer.ts: {}
@@ -2929,6 +2940,8 @@ trackedFiles:
   src/react-query/ensureMcpServerReview.ts: {}
   src/react-query/enterDemo.ts: {}
   src/react-query/evolveDeployment.ts: {}
+  src/react-query/explainResourceAccess.core.ts: {}
+  src/react-query/explainResourceAccess.ts: {}
   src/react-query/exportMcpMetadata.ts: {}
   src/react-query/featuresSet.ts: {}
   src/react-query/fetchGlobalRemoteSessionIssuerMetadata.ts: {}
@@ -3216,6 +3229,8 @@ trackedFiles:
   src/react-query/liteLLMInstances.ts: {}
   src/react-query/loadChat.core.ts: {}
   src/react-query/loadChat.ts: {}
+  src/react-query/loadChatOverview.core.ts: {}
+  src/react-query/loadChatOverview.ts: {}
   src/react-query/logout.ts: {}
   src/react-query/managedDevices.core.ts: {}
   src/react-query/managedDevices.ts: {}
@@ -4168,6 +4183,37 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   authLogin:
     speakeasy-default-auth-login:
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  authTransferIn:
+    speakeasy-default-auth-transfer-in:
+      parameters:
+        query:
+          token: "<value>"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  authTransferOut:
+    speakeasy-default-auth-transfer-out:
+      parameters:
+        query:
+          target_host: "<value>"
+          nonce: "<value>"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  authTransferStart:
+    speakeasy-default-auth-transfer-start:
+      parameters:
+        query:
+          source_host: "<value>"
       responses:
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
@@ -6189,6 +6235,20 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  explainResourceAccess:
+    speakeasy-default-explain-resource-access:
+      parameters:
+        query:
+          resource_kind: "mcp"
+          resource_id: "<id>"
+          user_id: "<id>"
+      responses:
+        "200":
+          application/json: {"levels": [], "visibility": "disabled"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   exportMcpMetadata:
     speakeasy-default-export-mcp-metadata:
       requestBody:
@@ -9991,6 +10051,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  loadChatOverview:
+    speakeasy-default-load-chat-overview:
+      parameters:
+        query:
+          id: "<id>"
+      responses:
+        "200":
+          application/json: {"created_at": "2024-05-09T08:14:27.583Z", "id": "<id>", "last_message_timestamp": "2024-04-22T18:34:22.441Z", "num_messages": 700522, "title": "<value>", "updated_at": "2025-07-09T08:42:49.462Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   logout:
     speakeasy-default-logout:
       responses:

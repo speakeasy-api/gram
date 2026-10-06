@@ -21,6 +21,9 @@ vi.mock("nuqs", async () => {
 });
 vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project" }) }));
 vi.mock("@/routes", () => ({ useRoutes: () => ({}) }));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasScope: () => true }),
+}));
 vi.mock("@/components/require-scope", () => ({ RequireScope: () => null }));
 vi.mock("@gram/client/react-query/triggers.js", () => ({
   useTriggers: () => ({}),

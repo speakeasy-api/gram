@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n+gram/plugins/v1/publication_scheduler.proto\x12\x0fgram.plugins.v1\x1a\x1bgcp/pubsub/v1/options.proto\"[\n\x14PublicationScheduler:C\x92\xb5\x18?\x12\x04\x08\x80\xf5$\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04J\x02\x10\nR$gram.plugins.v1.PublicationRequestedBCZAgithub.com/speakeasy-api/gram/infra/gen/gram/plugins/v1;pluginsv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n+gram/plugins/v1/publication_scheduler.proto\x12\x0fgram.plugins.v1\x1a\x1bgcp/pubsub/v1/options.proto\"W\n\x14PublicationScheduler:?\x92\xb5\x18;\x12\x04\x08\x80\xf5$\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04R$gram.plugins.v1.PublicationRequestedBCZAgithub.com/speakeasy-api/gram/infra/gen/gram/plugins/v1;pluginsv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,7 +34,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'ZAgithub.com/speakeasy-api/gram/infra/gen/gram/plugins/v1;pluginsv1'
   _globals['_PUBLICATIONSCHEDULER']._loaded_options = None
-  _globals['_PUBLICATIONSCHEDULER']._serialized_options = b'\222\265\030?\022\004\010\200\365$\"\002\010<2\t\n\002\010\n\022\003\010\330\004J\002\020\nR$gram.plugins.v1.PublicationRequested'
+  _globals['_PUBLICATIONSCHEDULER']._serialized_options = b'\222\265\030;\022\004\010\200\365$\"\002\010<2\t\n\002\010\n\022\003\010\330\004R$gram.plugins.v1.PublicationRequested'
   _globals['_PUBLICATIONSCHEDULER']._serialized_start=93
-  _globals['_PUBLICATIONSCHEDULER']._serialized_end=184
+  _globals['_PUBLICATIONSCHEDULER']._serialized_end=180
 # @@protoc_insertion_point(module_scope)

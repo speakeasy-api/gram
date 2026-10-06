@@ -31,9 +31,10 @@ type assistantToolCallAudit struct {
 // recordAssistantToolCallAudit writes an audit log entry for a tool call made
 // by an assistant runtime. It is invoked on dispatch — after tool resolution
 // succeeds and before the tool executes — so the trail records the attempt
-// regardless of the tool's outcome. Bound executions attribute the acting agent
-// separately from the delegating human. Legacy executions retain their user
-// actor. The assistant itself is the subject. Tool calls run outside any database transaction, so
+// regardless of the tool's outcome. An agent-backed turn is attributed to its
+// agent, with the workload identity and the user it acted for; any other turn
+// to the user stamped on the auth context by the assistant token authorizer.
+// The assistant itself is the subject. Tool calls run outside any database transaction, so
 // the pool is used directly and a failed audit write is logged but never
 // fails the tool call.
 func recordAssistantToolCallAudit(
@@ -44,30 +45,27 @@ func recordAssistantToolCallAudit(
 	in assistantToolCallAudit,
 ) {
 	var actor urn.Principal
-	var displayName *string
-	var identity *audit.AssistantExecutionAttribution
-	if execution, ok := assistanttokens.BusinessExecution(ctx); ok {
-		if execution.Identity.OrganizationID != in.organizationID || execution.Identity.ProjectID != in.projectID || execution.Identity.AssistantID != in.principal.AssistantID || execution.ThreadID != in.principal.ThreadID {
-			logger.WarnContext(ctx, "skipping assistant tool call audit log: execution identity mismatch", attr.SlogToolName(in.toolName))
-			return
-		}
-		actor = urn.NewPrincipal(urn.PrincipalTypeAgent, execution.Identity.AgentID.String())
-		identity = &audit.AssistantExecutionAttribution{AgentID: execution.Identity.AgentID, TriggerID: execution.Identity.TriggerID, WorkloadIssuerID: execution.Identity.IssuerID, WorkloadSubject: execution.Identity.Subject, InitiatingUserID: execution.HumanUserID, CredentialOwnerUserID: "", EventID: execution.InvocationEventID()}
+	var actorDisplayName *string
+	var execution *audit.AssistantExecutionAttribution
+	if e, ok := assistanttokens.ExecutionFromContext(ctx); ok {
+		actor = urn.NewPrincipal(urn.PrincipalTypeAgent, e.Identity.AgentID.String())
+		execution = &audit.AssistantExecutionAttribution{TriggerID: e.Identity.TriggerID, WorkloadIssuerID: e.Identity.IssuerID, WorkloadSubject: e.Identity.Subject, EventID: e.EventID, InvokerUserID: e.HumanUserID}
 	} else {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		if !ok || authCtx == nil || authCtx.UserID == "" {
-			logger.WarnContext(ctx, "skipping assistant tool call audit log: no auth context", attr.SlogToolName(in.toolName))
+			logger.WarnContext(ctx, "skipping assistant tool call audit log: no auth context",
+				attr.SlogToolName(in.toolName))
 			return
 		}
 		actor = urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
-		displayName = authCtx.Email
+		actorDisplayName = authCtx.Email
 	}
 
 	err := auditLogger.LogAssistantToolCall(ctx, db, audit.LogAssistantToolCallEvent{
 		OrganizationID:   in.organizationID,
 		ProjectID:        in.projectID,
 		Actor:            actor,
-		ActorDisplayName: displayName,
+		ActorDisplayName: actorDisplayName,
 		ActorSlug:        nil,
 		AssistantURN:     urn.NewAssistant(in.principal.AssistantID),
 		Thread:           in.principal.ThreadID,
@@ -76,7 +74,7 @@ func recordAssistantToolCallAudit(
 		ToolName:         in.toolName,
 		ToolURN:          in.toolURN,
 		Params:           in.params,
-		Identity:         identity,
+		Execution:        execution,
 	})
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to record assistant tool call audit log",

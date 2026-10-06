@@ -77,43 +77,27 @@ WHERE organization_id = @organization_id
 RETURNING *;
 
 -- name: TransferAgent :one
-WITH changed AS (
-UPDATE agents AS a
+UPDATE agents
 SET owner_user_id = @owner_user_id,
     updated_at = clock_timestamp()
-WHERE a.organization_id = @organization_id
-  AND a.id = @id
-  AND a.deleted IS FALSE
-  AND a.owner_reassignment_required_at IS NULL
-  AND a.owner_user_id <> @owner_user_id
-RETURNING a.*
-), withdrawn AS (
- UPDATE assistant_agent_bindings b
- SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
- FROM changed g
- WHERE b.organization_id = g.organization_id AND b.original_agent_id = g.id AND NOT b.deleted
-)
-SELECT * FROM changed;
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND deleted IS FALSE
+  AND owner_reassignment_required_at IS NULL
+  AND owner_user_id <> @owner_user_id
+RETURNING *;
 
 -- name: ReassignAgent :one
-WITH changed AS (
-UPDATE agents AS a
+UPDATE agents
 SET owner_user_id = @owner_user_id,
     owner_reassignment_required_at = NULL,
     owner_reassignment_reason = NULL,
     updated_at = clock_timestamp()
-WHERE a.organization_id = @organization_id
-  AND a.id = @id
-  AND a.deleted IS FALSE
-  AND a.owner_reassignment_required_at IS NOT NULL
-RETURNING a.*
-), withdrawn AS (
- UPDATE assistant_agent_bindings b
- SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
- FROM changed g
- WHERE b.organization_id = g.organization_id AND b.original_agent_id = g.id AND NOT b.deleted
-)
-SELECT * FROM changed;
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND deleted IS FALSE
+  AND owner_reassignment_required_at IS NOT NULL
+RETURNING *;
 
 -- name: LatchAgentsForOwnerLossByUser :many
 UPDATE agents

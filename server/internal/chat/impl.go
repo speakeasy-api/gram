@@ -304,6 +304,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	}
 
 	rows, err := querier.ListChats(ctx, repo.ListChatsParams{
+		ChatID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ProjectID:         *authCtx.ProjectID,
 		ExternalUserID:    externalUserID,
 		UserID:            userID,
@@ -362,6 +363,15 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		}
 	}
 
+	result, err := s.chatOverviews(ctx, authCtx, rows, externalUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &gen.ListChatsResult{Chats: result, Total: int(total)}, nil
+}
+
+// chatOverviews enriches authorized session metadata without reading transcripts.
+func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.AuthContext, rows []repo.ListChatsRow, externalUserID, userID string) ([]*gen.ChatOverview, error) {
 	result := make([]*gen.ChatOverview, 0, len(rows))
 	for _, row := range rows {
 		lastMessageTimestamp := row.CreatedAt.Time.Format(time.RFC3339)
@@ -371,6 +381,10 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		riskCount := int(row.RiskFindingsCount)
 		pinned := row.PinnedAt.Valid
 		result = append(result, &gen.ChatOverview{
+			SlackTeamID:          nil,
+			SlackChannelID:       nil,
+			SlackChannelName:     nil,
+			Participants:         nil,
 			ID:                   row.ID.String(),
 			UserID:               conv.FromPGText[string](row.UserID),
 			ExternalUserID:       conv.FromPGText[string](row.ExternalUserID),
@@ -407,7 +421,30 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		s.logger.WarnContext(ctx, "failed to enrich chats with work units", attr.SlogError(err))
 	}
 
-	return &gen.ListChatsResult{Chats: result, Total: int(total)}, nil
+	ids := make([]uuid.UUID, len(rows))
+	for i := range rows {
+		ids[i] = rows[i].ID
+	}
+	participants, _, err := s.chatParticipants(ctx, *authCtx.ProjectID, ids, nil)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load chat participants").LogError(ctx, s.logger)
+	}
+	channels, err := s.repo.ListChatSlackChannels(ctx, repo.ListChatSlackChannelsParams{ProjectID: *authCtx.ProjectID, ChatIds: ids, ExternalUserID: externalUserID, UserID: userID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load chat channels").LogError(ctx, s.logger)
+	}
+	byID := make(map[string]repo.ListChatSlackChannelsRow, len(channels))
+	for _, channel := range channels {
+		byID[channel.ID.String()] = channel
+	}
+	for _, chat := range result {
+		chat.Participants = participants[chat.ID]
+		channel := byID[chat.ID]
+		chat.SlackTeamID = conv.PtrEmpty(channel.SlackTeamID)
+		chat.SlackChannelID = conv.PtrEmpty(channel.SlackChannelID)
+		chat.SlackChannelName = conv.PtrEmpty(channel.SlackChannelName)
+	}
+	return result, nil
 }
 
 const assistantSessionSummaryMetricsBatch = 1000
@@ -1007,6 +1044,45 @@ func (s *Service) loadAuthorizedChat(ctx context.Context, authCtx *contextvalues
 	return chat, nil
 }
 
+// LoadChatOverview returns metadata using the same exact-resource authorization as LoadChat.
+func (s *Service) LoadChatOverview(ctx context.Context, payload *gen.LoadChatOverviewPayload) (*gen.ChatOverview, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	chatID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID")
+	}
+	if _, err := s.loadAuthorizedChat(ctx, authCtx, chatID, chatAccessRead); err != nil {
+		return nil, err
+	}
+	rows, err := s.repo.ListChats(ctx, repo.ListChatsParams{
+		ChatID:         uuid.NullUUID{UUID: chatID, Valid: true},
+		ProjectID:      *authCtx.ProjectID,
+		ExternalUserID: "", UserID: "",
+		FromTime: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		ToTime:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		Search:   "", AssistantID: "", SourceKind: "", ExcludeSourceKind: "", HasRiskFilter: "",
+		MinRiskScore: -1, Pinned: "", Sources: nil, AccountType: "", SortBy: "last_message_timestamp", SortOrder: "desc", PageLimit: 1, PageOffset: 0,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load chat overview").LogError(ctx, s.logger)
+	}
+	if len(rows) == 0 {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	chats, err := s.chatOverviews(ctx, authCtx, rows, externalUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	return chats[0], nil
+}
+
 func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*gen.Chat, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -1108,6 +1184,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 			// findings without the server exposing internal seq positions.
 			isRisk := r.IsRisk
 			resultMessages[i] = &gen.ChatMessage{
+				Participants:   nil,
 				ID:             r.ID.String(),
 				Seq:            r.Seq,
 				IsRisk:         &isRisk,
@@ -1152,6 +1229,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 			r := rows[i]
 			toolCalls := string(r.ToolCalls)
 			resultMessages[i] = &gen.ChatMessage{
+				Participants:   nil,
 				ID:             r.ID.String(),
 				Seq:            r.Seq,
 				IsRisk:         nil, // is_risk is a risk_only-mode signal
@@ -1346,8 +1424,39 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 	}
 
+	if chat.CapturedSurface != "" {
+		source = &chat.CapturedSurface
+		originatingClient = nil
+	}
+	messageIDs := make([]uuid.UUID, len(resultMessages))
+	for i, message := range resultMessages {
+		messageIDs[i] = uuid.MustParse(message.ID)
+	}
+	participants, messageParticipants, err := s.chatParticipants(ctx, *authCtx.ProjectID, []uuid.UUID{chat.ID}, messageIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load message participants").LogError(ctx, s.logger)
+	}
+	for _, message := range resultMessages {
+		message.Participants = messageParticipants[message.ID]
+	}
+	channelExternalUserID, channelUserID, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	channels, err := s.repo.ListChatSlackChannels(ctx, repo.ListChatSlackChannelsParams{ProjectID: *authCtx.ProjectID, ChatIds: []uuid.UUID{chat.ID}, ExternalUserID: channelExternalUserID, UserID: channelUserID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load chat channel").LogError(ctx, s.logger)
+	}
+	var channel repo.ListChatSlackChannelsRow
+	if len(channels) > 0 {
+		channel = channels[0]
+	}
 	pinned := chat.PinnedAt.Valid
 	result := &gen.Chat{
+		SlackTeamID:          conv.PtrEmpty(channel.SlackTeamID),
+		SlackChannelID:       conv.PtrEmpty(channel.SlackChannelID),
+		SlackChannelName:     conv.PtrEmpty(channel.SlackChannelName),
+		Participants:         participants[chat.ID.String()],
 		ID:                   chat.ID.String(),
 		Title:                chat.Title.String,
 		UserID:               &chat.UserID.String,
@@ -2762,6 +2871,7 @@ func (s *Service) buildGenMessages(ctx context.Context, rows []repo.ChatMessage)
 func (s *Service) buildGenMessage(ctx context.Context, m repo.ChatMessage) *gen.ChatMessage {
 	toolCalls := string(m.ToolCalls)
 	return &gen.ChatMessage{
+		Participants:   nil,
 		ID:             m.ID.String(),
 		Seq:            m.Seq,
 		IsRisk:         nil, // is_risk is a risk_only-mode signal

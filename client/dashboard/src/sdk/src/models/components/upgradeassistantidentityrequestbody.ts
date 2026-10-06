@@ -7,11 +7,11 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type UpgradeAssistantIdentityRequestBody = {
   /**
-   * Existing agent identity to use instead of creating one.
+   * An existing agent of the project to use instead of creating one. Requires owning the agent or agent:authorize on it.
    */
   agentId?: string | undefined;
   /**
-   * Name for a new agent identity. Mutually exclusive with agent_id.
+   * The name of the new agent. Cannot be combined with agent_id.
    */
   agentName?: string | undefined;
   /**

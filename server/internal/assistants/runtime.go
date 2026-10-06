@@ -563,6 +563,7 @@ const (
 	turnOutcomeRuntimeUnhealthyExhausted turnOutcome = "runtime_unhealthy_exhausted"
 	turnOutcomeHistoryCorrupted          turnOutcome = "history_corrupted"
 	turnOutcomeCompletionFailed          turnOutcome = "completion_failed"
+	turnOutcomeIdentityRejected          turnOutcome = "identity_rejected"
 	turnOutcomeTransient                 turnOutcome = "transient"
 )
 
@@ -576,6 +577,8 @@ func turnErrorBucket(err error) turnOutcome {
 		return turnOutcomeHistoryCorrupted
 	case errors.Is(err, ErrCompletionFailed):
 		return turnOutcomeCompletionFailed
+	case errors.Is(err, ErrTurnIdentity):
+		return turnOutcomeIdentityRejected
 	default:
 		return turnOutcomeTransient
 	}

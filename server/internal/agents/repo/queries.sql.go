@@ -727,24 +727,16 @@ func (q *Queries) ListManagedAgents(ctx context.Context, organizationID string) 
 }
 
 const reassignAgent = `-- name: ReassignAgent :one
-WITH changed AS (
-UPDATE agents AS a
+UPDATE agents
 SET owner_user_id = $1,
     owner_reassignment_required_at = NULL,
     owner_reassignment_reason = NULL,
     updated_at = clock_timestamp()
-WHERE a.organization_id = $2
-  AND a.id = $3
-  AND a.deleted IS FALSE
-  AND a.owner_reassignment_required_at IS NOT NULL
-RETURNING a.id, a.organization_id, a.owner_user_id, a.project_id, a.name, a.suspended_at, a.revoked_at, a.owner_reassignment_required_at, a.owner_reassignment_reason, a.created_at, a.updated_at, a.deleted_at, a.deleted
-), withdrawn AS (
- UPDATE assistant_agent_bindings b
- SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
- FROM changed g
- WHERE b.organization_id = g.organization_id AND b.original_agent_id = g.id AND NOT b.deleted
-)
-SELECT id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted FROM changed
+WHERE organization_id = $2
+  AND id = $3
+  AND deleted IS FALSE
+  AND owner_reassignment_required_at IS NOT NULL
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type ReassignAgentParams struct {
@@ -753,25 +745,9 @@ type ReassignAgentParams struct {
 	ID             uuid.UUID
 }
 
-type ReassignAgentRow struct {
-	ID                          uuid.UUID
-	OrganizationID              string
-	OwnerUserID                 string
-	ProjectID                   uuid.NullUUID
-	Name                        string
-	SuspendedAt                 pgtype.Timestamptz
-	RevokedAt                   pgtype.Timestamptz
-	OwnerReassignmentRequiredAt pgtype.Timestamptz
-	OwnerReassignmentReason     pgtype.Text
-	CreatedAt                   pgtype.Timestamptz
-	UpdatedAt                   pgtype.Timestamptz
-	DeletedAt                   pgtype.Timestamptz
-	Deleted                     bool
-}
-
-func (q *Queries) ReassignAgent(ctx context.Context, arg ReassignAgentParams) (ReassignAgentRow, error) {
+func (q *Queries) ReassignAgent(ctx context.Context, arg ReassignAgentParams) (Agent, error) {
 	row := q.db.QueryRow(ctx, reassignAgent, arg.OwnerUserID, arg.OrganizationID, arg.ID)
-	var i ReassignAgentRow
+	var i Agent
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -998,23 +974,15 @@ func (q *Queries) SuspendAgent(ctx context.Context, arg SuspendAgentParams) (Age
 }
 
 const transferAgent = `-- name: TransferAgent :one
-WITH changed AS (
-UPDATE agents AS a
+UPDATE agents
 SET owner_user_id = $1,
     updated_at = clock_timestamp()
-WHERE a.organization_id = $2
-  AND a.id = $3
-  AND a.deleted IS FALSE
-  AND a.owner_reassignment_required_at IS NULL
-  AND a.owner_user_id <> $1
-RETURNING a.id, a.organization_id, a.owner_user_id, a.project_id, a.name, a.suspended_at, a.revoked_at, a.owner_reassignment_required_at, a.owner_reassignment_reason, a.created_at, a.updated_at, a.deleted_at, a.deleted
-), withdrawn AS (
- UPDATE assistant_agent_bindings b
- SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
- FROM changed g
- WHERE b.organization_id = g.organization_id AND b.original_agent_id = g.id AND NOT b.deleted
-)
-SELECT id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted FROM changed
+WHERE organization_id = $2
+  AND id = $3
+  AND deleted IS FALSE
+  AND owner_reassignment_required_at IS NULL
+  AND owner_user_id <> $1
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type TransferAgentParams struct {
@@ -1023,25 +991,9 @@ type TransferAgentParams struct {
 	ID             uuid.UUID
 }
 
-type TransferAgentRow struct {
-	ID                          uuid.UUID
-	OrganizationID              string
-	OwnerUserID                 string
-	ProjectID                   uuid.NullUUID
-	Name                        string
-	SuspendedAt                 pgtype.Timestamptz
-	RevokedAt                   pgtype.Timestamptz
-	OwnerReassignmentRequiredAt pgtype.Timestamptz
-	OwnerReassignmentReason     pgtype.Text
-	CreatedAt                   pgtype.Timestamptz
-	UpdatedAt                   pgtype.Timestamptz
-	DeletedAt                   pgtype.Timestamptz
-	Deleted                     bool
-}
-
-func (q *Queries) TransferAgent(ctx context.Context, arg TransferAgentParams) (TransferAgentRow, error) {
+func (q *Queries) TransferAgent(ctx context.Context, arg TransferAgentParams) (Agent, error) {
 	row := q.db.QueryRow(ctx, transferAgent, arg.OwnerUserID, arg.OrganizationID, arg.ID)
-	var i TransferAgentRow
+	var i Agent
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,

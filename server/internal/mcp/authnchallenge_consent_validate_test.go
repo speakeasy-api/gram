@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"io"
 	"net/http"
@@ -131,6 +132,11 @@ func (m *validationMember) drain() []validationMemberRequest {
 }
 
 func (m *validationMember) serve(w http.ResponseWriter, r *http.Request) {
+	// The proxy's background metadata probe is not MCP traffic.
+	if r.URL.Path == wellknown.OAuthProtectedResourcePath {
+		http.NotFound(w, r)
+		return
+	}
 	body, _ := io.ReadAll(r.Body)
 	var rpc struct {
 		JSONRPC string          `json:"jsonrpc"`

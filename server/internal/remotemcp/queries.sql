@@ -165,3 +165,111 @@ WHERE remote_mcp_server_id = @remote_mcp_server_id
         SELECT remote_mcp_servers.id FROM remote_mcp_servers
         WHERE remote_mcp_servers.project_id = @project_id AND remote_mcp_servers.deleted IS FALSE
     );
+
+-- Remote Protected Resources
+
+-- name: UpsertRemoteProtectedResource :one
+-- Records an RFC 9728 document read for resource_identifier. scopes_supported
+-- and bearer_methods_supported stay NULL when the document omits them; an
+-- empty array means the document advertised none. A successful read clears
+-- the last fetch error.
+INSERT INTO remote_protected_resources (
+    project_id,
+    organization_id,
+    resource_identifier,
+    metadata_url,
+    authorization_servers,
+    scopes_supported,
+    bearer_methods_supported,
+    resource_name,
+    resource_documentation,
+    resource_policy_uri,
+    resource_tos_uri,
+    dpop_bound_access_tokens_required,
+    dpop_signing_alg_values_supported,
+    tls_client_certificate_bound_access_tokens,
+    metadata,
+    metadata_fetched_at
+)
+VALUES (
+    @project_id,
+    @organization_id,
+    @resource_identifier::text,
+    NULLIF(@metadata_url::text, ''),
+    sqlc.narg(authorization_servers)::text[],
+    sqlc.narg(scopes_supported)::text[],
+    sqlc.narg(bearer_methods_supported)::text[],
+    NULLIF(@resource_name::text, ''),
+    NULLIF(@resource_documentation::text, ''),
+    NULLIF(@resource_policy_uri::text, ''),
+    NULLIF(@resource_tos_uri::text, ''),
+    sqlc.narg(dpop_bound_access_tokens_required)::boolean,
+    sqlc.narg(dpop_signing_alg_values_supported)::text[],
+    sqlc.narg(tls_client_certificate_bound_access_tokens)::boolean,
+    NULLIF(@metadata::text, '')::jsonb,
+    clock_timestamp()
+)
+ON CONFLICT (project_id, resource_identifier) WHERE deleted IS FALSE DO UPDATE
+SET
+    organization_id = EXCLUDED.organization_id,
+    metadata_url = EXCLUDED.metadata_url,
+    authorization_servers = EXCLUDED.authorization_servers,
+    scopes_supported = EXCLUDED.scopes_supported,
+    bearer_methods_supported = EXCLUDED.bearer_methods_supported,
+    resource_name = EXCLUDED.resource_name,
+    resource_documentation = EXCLUDED.resource_documentation,
+    resource_policy_uri = EXCLUDED.resource_policy_uri,
+    resource_tos_uri = EXCLUDED.resource_tos_uri,
+    dpop_bound_access_tokens_required = EXCLUDED.dpop_bound_access_tokens_required,
+    dpop_signing_alg_values_supported = EXCLUDED.dpop_signing_alg_values_supported,
+    tls_client_certificate_bound_access_tokens = EXCLUDED.tls_client_certificate_bound_access_tokens,
+    metadata = EXCLUDED.metadata,
+    metadata_fetched_at = clock_timestamp(),
+    metadata_last_error = NULL,
+    metadata_last_error_at = NULL,
+    updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: RecordRemoteProtectedResourceFetchError :one
+-- Records why the last read of resource_identifier failed without touching
+-- what an earlier read advertised. Creates the row when none exists.
+INSERT INTO remote_protected_resources (
+    project_id,
+    organization_id,
+    resource_identifier,
+    metadata_url,
+    metadata_last_error,
+    metadata_last_error_at
+)
+VALUES (
+    @project_id,
+    @organization_id,
+    @resource_identifier::text,
+    NULLIF(@metadata_url::text, ''),
+    @metadata_last_error::text,
+    clock_timestamp()
+)
+ON CONFLICT (project_id, resource_identifier) WHERE deleted IS FALSE DO UPDATE
+SET
+    metadata_url = COALESCE(EXCLUDED.metadata_url, remote_protected_resources.metadata_url),
+    metadata_last_error = EXCLUDED.metadata_last_error,
+    metadata_last_error_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: RecordRemoteProtectedResourceChallengeScopes :execrows
+UPDATE remote_protected_resources
+SET
+    challenge_scopes = @challenge_scopes::text[],
+    challenge_scopes_seen_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+    AND resource_identifier = @resource_identifier::text
+    AND deleted IS FALSE;
+
+-- name: GetRemoteProtectedResource :one
+SELECT *
+FROM remote_protected_resources
+WHERE project_id = @project_id
+    AND resource_identifier = @resource_identifier::text
+    AND deleted IS FALSE;

@@ -203,6 +203,7 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 	}
 
 	rows, err := s.chats.ListChats(ctx, chatrepo.ListChatsParams{
+		ChatID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ProjectID:      list.projectID,
 		HasRiskFilter:  chatListHasRiskFilter(list.risk),
 		MinRiskScore:   -1,
