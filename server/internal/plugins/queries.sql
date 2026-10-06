@@ -1201,3 +1201,8 @@ SELECT pg_advisory_xact_lock(8241243);
 
 -- name: GetRoleSetupBlockedPIDFixture :one
 SELECT COALESCE((SELECT pid FROM pg_catalog.pg_stat_activity WHERE datname = current_database() AND @blocker::int = ANY(pg_blocking_pids(pid)) ORDER BY pid LIMIT 1), 0)::integer AS pid;
+-- name: LockPluginAssignmentTarget :one
+SELECT * FROM plugins
+WHERE id = sqlc.arg(id) AND organization_id = sqlc.arg(organization_id)
+  AND project_id = sqlc.arg(project_id) AND deleted IS FALSE
+FOR UPDATE;

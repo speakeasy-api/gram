@@ -2284,6 +2284,39 @@ func (q *Queries) LockMarketplaceSettings(ctx context.Context, projectID uuid.UU
 	return i, err
 }
 
+const lockPluginAssignmentTarget = `-- name: LockPluginAssignmentTarget :one
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted FROM plugins
+WHERE id = $1 AND organization_id = $2
+  AND project_id = $3 AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockPluginAssignmentTargetParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) LockPluginAssignmentTarget(ctx context.Context, arg LockPluginAssignmentTargetParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, lockPluginAssignmentTarget, arg.ID, arg.OrganizationID, arg.ProjectID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.AutoCreated,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const lockRoleSetupPauseFixture = `-- name: LockRoleSetupPauseFixture :exec
 SELECT pg_advisory_xact_lock(8241243)
 `
