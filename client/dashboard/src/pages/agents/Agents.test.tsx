@@ -33,7 +33,8 @@ function setup() {
       ),
   };
 }
-vi.mock("./AgentAPIKeys", () => ({
+vi.mock("./AgentAPIKeys", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./AgentAPIKeys")>()),
   AgentAPIKeys: ({
     creation,
     onCreate,

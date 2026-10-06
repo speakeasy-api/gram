@@ -38,7 +38,7 @@ import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
-import { AgentAPIKeys } from "./AgentAPIKeys";
+import { AgentAPIKeys, agentIssuanceBlocked } from "./AgentAPIKeys";
 import { ProvisionWizard } from "./provision/ProvisionWizard";
 import { AgentReview } from "./provision/AgentReview";
 import { AgentPolicySection } from "./AgentPolicySection";
@@ -320,6 +320,7 @@ function AgentSettings({
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [credentialBusy, setCredentialBusy] = useState(false);
+  const credentialsFlag = useFeatureFlag(FEATURE_FLAGS.agentCredentials);
   const queryClient = useQueryClient();
   const organization = useOrganization();
   const sdk = useSdkClient();
@@ -409,7 +410,15 @@ function AgentSettings({
       <AgentReview
         agent={agentQuery.data}
         scopeLabel={organization.name}
-        canIssue={agentQuery.data.permissions.authorize}
+        // The same rule the keys panel applies: ownership alone would offer
+        // the button for a suspended agent, or with the credential rollout
+        // off, and the click would then fail.
+        canIssue={
+          agentIssuanceBlocked(
+            agentQuery.data,
+            credentialsFlag.status === "enabled",
+          ) === null
+        }
         onIssueKey={() => setSearchParams({ id: agentID, credential: "new" })}
         panels={{
           identity: <AgentIdentityPanel agent={agentQuery.data} />,

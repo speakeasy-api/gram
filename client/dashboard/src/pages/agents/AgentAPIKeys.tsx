@@ -48,6 +48,36 @@ import { discoverKeyServerGrants } from "./agent-key-discovery";
 
 const security = { sessionHeaderGramSession: "" };
 
+/**
+ * Why this agent cannot be issued a key, or null when it can.
+ *
+ * One rule, because more than one surface offers the action: the keys panel
+ * and the provisioning review both put an "Issue a key" button on screen, and
+ * a button enabled by a weaker test than the one that runs on submit is a
+ * button that fails after the click.
+ *
+ * It names the condition that actually blocks rather than listing all four:
+ * three of them are not things the reader can act on.
+ */
+export function agentIssuanceBlocked(
+  agent: ManagedAgent,
+  credentialsEnabled: boolean,
+): string | null {
+  if (!credentialsEnabled) {
+    return "Issuing agent keys is not enabled for this organization.";
+  }
+  if (!agent.permissions.authorize) {
+    return "You do not have permission to issue keys for this agent.";
+  }
+  if (agent.lifecycle !== "active") {
+    return `This agent is ${agent.lifecycle}, so it cannot be issued new keys.`;
+  }
+  if (agent.ownerReassignmentRequiredAt) {
+    return "This agent needs a new owner before it can be issued keys.";
+  }
+  return null;
+}
+
 export function AgentAPIKeys({
   agent,
   creation = false,
@@ -163,23 +193,8 @@ function AgentAPIKeysContent({
   const enabled = flag.status === "enabled";
   const rolloutEnabled = useRef(enabled);
   const canManage = agent.permissions.authorize;
-  const canIssue =
-    enabled &&
-    canManage &&
-    agent.lifecycle === "active" &&
-    !agent.ownerReassignmentRequiredAt;
-  // Name the condition that actually blocks issuance. Listing all four left
-  // the reader to work out which one applied to the agent in front of them,
-  // and three of the four are not things they can act on.
-  const issuanceBlocked: string | null = !enabled
-    ? "Issuing agent keys is not enabled for this organization."
-    : !canManage
-      ? "You do not have permission to issue keys for this agent."
-      : agent.lifecycle !== "active"
-        ? `This agent is ${agent.lifecycle}, so it cannot be issued new keys.`
-        : agent.ownerReassignmentRequiredAt
-          ? "This agent needs a new owner before it can be issued keys."
-          : null;
+  const issuanceBlocked = agentIssuanceBlocked(agent, enabled);
+  const canIssue = issuanceBlocked === null;
   const [open, setOpen] = useState(creation);
   const [step, setStep] = useState(0);
   const [inventory, setInventory] = useState<KeyServer[]>([]);
