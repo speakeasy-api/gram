@@ -48,6 +48,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/cmd/tools/sweep_false_positives/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 
 	"github.com/speakeasy-api/gram/server/internal/risk/presidiofp"
 	"github.com/speakeasy-api/gram/server/internal/uuidv7"
@@ -195,61 +197,6 @@ func parseFlags() (config, error) {
 	return cfg, nil
 }
 
-// selectPage walks risk_results in id order. It only fetches rows whose rule_id
-// has a false-positive catalog (presidiofp.RuleIDs) and that are still active
-// (found, not excluded, not already swept), within the id/time window.
-//
-// chat_message_id comes along for the context pass: rules like the NHS one need
-// the text the match was found in, which is re-read from the anchoring message
-// (see selectMessages). Rows anchored to a content part instead carry NULL and
-// simply never get a context verdict.
-const selectPage = `
-SELECT id, rule_id, match, chat_message_id
-FROM risk_results
-WHERE organization_id = $1
-  AND project_id = $2
-  AND ($3::uuid IS NULL OR risk_policy_id = $3)
-  AND found IS TRUE
-  AND excluded_at IS NULL
-  AND false_positive_at IS NULL
-  AND rule_id = ANY($4::text[])
-  AND id > $5
-  AND id < $6
-ORDER BY id
-LIMIT $7
-`
-
-// selectMessages re-reads the payload a finding was scanned in, for the
-// catalogs that classify on surrounding text rather than on the matched value.
-//
-// Both the message body and its tool calls are concatenated because a finding
-// can sit in either, and the context catalogs only ever suppress on the
-// *absence* of a signal — handing them more text can only keep more findings.
-// The per-column cap keeps a pathological message from dominating a page; the
-// prefix is far longer than any payload the scanner accepts.
-//
-// The project_id predicate is redundant — these ids came from risk_results rows
-// already scoped to the project — but it keeps the tool's "every read is tenant
-// scoped" property true of each statement on its own.
-const selectMessages = `
-SELECT id
-     , left(content, 262144) || ' ' || left(coalesce(tool_calls::text, ''), 262144)
-FROM chat_messages
-WHERE project_id = $1
-  AND id = ANY($2::uuid[])
-`
-
-// markBatch flags the accumulated false positives. The id/reason pairs arrive
-// as parallel arrays; the false_positive_at IS NULL recheck keeps it idempotent.
-const markBatch = `
-UPDATE risk_results r
-SET false_positive_at = now()
-  , false_positive_reason = t.reason
-FROM unnest($1::uuid[], $2::text[]) AS t(id, reason)
-WHERE r.id = t.id
-  AND r.false_positive_at IS NULL
-`
-
 // candidate is a row that the value-only pass did not classify but whose rule
 // could still be resolved once the surrounding text is known.
 type candidate struct {
@@ -274,18 +221,14 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, cfg config) (report, error) 
 	upper := uuidv7.LowerBound(cfg.to)
 	cursor := cfg.cursor
 
-	var policyArg any
-	if cfg.policyID.Valid {
-		policyArg = cfg.policyID.UUID
-	}
+	queries := repo.New(pool)
 
 	for {
 		if err := ctx.Err(); err != nil {
 			return rep, fmt.Errorf("sweep interrupted at %s: %w", cursor, err)
 		}
 
-		rows, err := pool.Query(ctx, selectPage,
-			cfg.orgID, cfg.projectID, policyArg, ruleIDs, cursor, upper, cfg.batchSize)
+		rows, err := queries.ListSweepCandidates(ctx, repo.ListSweepCandidatesParams{OrganizationID: cfg.orgID, ProjectID: cfg.projectID, PolicyID: cfg.policyID, RuleIds: ruleIDs, Cursor: cursor, UpperBound: upper, PageSize: cfg.batchSize})
 		if err != nil {
 			return rep, fmt.Errorf("select page after %s: %w", cursor, err)
 		}
@@ -296,17 +239,8 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, cfg config) (report, error) 
 			candidates []candidate
 			n          int
 		)
-		for rows.Next() {
-			var (
-				id        uuid.UUID
-				ruleID    string
-				match     *string
-				messageID uuid.NullUUID
-			)
-			if err := rows.Scan(&id, &ruleID, &match, &messageID); err != nil {
-				rows.Close()
-				return rep, fmt.Errorf("scan row: %w", err)
-			}
+		for _, row := range rows {
+			id, ruleID, match, messageID := row.ID, row.RuleID.String, conv.FromPGText[string](row.Match), row.ChatMessageID
 			n++
 			cursor = id
 			if match == nil {
@@ -334,11 +268,6 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, cfg config) (report, error) 
 				messageID: messageID.UUID,
 			})
 		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return rep, fmt.Errorf("iterate page: %w", err)
-		}
-		rows.Close()
 
 		if len(candidates) > 0 {
 			texts, err := loadMessageTexts(ctx, pool, cfg.projectID, candidates)
@@ -368,11 +297,11 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, cfg config) (report, error) 
 		rep.lastCursor = cursor
 
 		if len(ids) > 0 && !cfg.dryRun {
-			tag, err := pool.Exec(ctx, markBatch, ids, reasons)
+			updated, err := queries.MarkSweepBatch(ctx, repo.MarkSweepBatchParams{Ids: ids, Reasons: reasons, ProjectID: cfg.projectID, OrganizationID: cfg.orgID})
 			if err != nil {
 				return rep, fmt.Errorf("mark batch ending at %s: %w", cursor, err)
 			}
-			rep.updated += tag.RowsAffected()
+			rep.updated += updated
 		}
 
 		log.Printf("scanned=%d flagged=%d updated=%d cursor=%s",
@@ -400,25 +329,14 @@ func loadMessageTexts(ctx context.Context, pool *pgxpool.Pool, projectID uuid.UU
 		messageIDs = append(messageIDs, c.messageID)
 	}
 
-	rows, err := pool.Query(ctx, selectMessages, projectID, messageIDs)
+	rows, err := repo.New(pool).ListMessageTexts(ctx, repo.ListMessageTextsParams{ProjectID: conv.ToNullUUID(projectID), MessageIds: messageIDs})
 	if err != nil {
 		return nil, fmt.Errorf("select messages: %w", err)
 	}
-	defer rows.Close()
 
 	out := make(map[uuid.UUID]string, len(messageIDs))
-	for rows.Next() {
-		var (
-			id   uuid.UUID
-			text string
-		)
-		if err := rows.Scan(&id, &text); err != nil {
-			return nil, fmt.Errorf("scan message: %w", err)
-		}
-		out[id] = text
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate messages: %w", err)
+	for _, row := range rows {
+		out[row.ID] = row.MessageText
 	}
 	return out, nil
 }
