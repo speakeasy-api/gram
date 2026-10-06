@@ -22,8 +22,26 @@ var ErrTooManyDelegableGrantCandidates = errors.New("too many delegable grant ca
 // Optional resource constraints narrow candidates before containment, so an
 // unrelated exclusion does not hide a safe concrete candidate.
 func DelegableGrants(agent, owner, caller []authz.Grant, constraints ...authz.Selector) ([]authz.Grant, error) {
+	return delegableGrants(agent, owner, caller, false, constraints)
+}
+
+// DelegableGrantsWithExclusions returns what DelegableGrants does, except that
+// an exclusion narrower than a candidate is carried into the result instead of
+// removing the candidate. A wildcard allow overlapping one blocked resource
+// stays delegable, paired with the exclusion for that resource.
+func DelegableGrantsWithExclusions(agent, owner, caller []authz.Grant) ([]authz.Grant, error) {
+	return delegableGrants(agent, owner, caller, true, nil)
+}
+
+func delegableGrants(agent, owner, caller []authz.Grant, carryExclusions bool, constraints []authz.Selector) ([]authz.Grant, error) {
 	candidates := make(map[string]authz.Grant)
+	visited := make(map[string]struct{})
 	for _, grant := range agent {
+		// Exclusions are restrictions, not authority to delegate. They reach a
+		// delegated policy only when carried alongside the allow they narrow.
+		if authz.IsBlocklistScope(grant.Scope) {
+			continue
+		}
 		selector := grant.Selector
 		compatible := true
 		for _, constraint := range constraints {
@@ -50,7 +68,19 @@ func DelegableGrants(agent, owner, caller []authz.Grant, constraints ...authz.Se
 						continue
 					}
 					candidate := authz.Grant{PrincipalUrn: "", Scope: scope, Selector: narrowed}
-					policy, err := NewDelegatedPolicy(CurrentDelegatedPolicyVersion, []authz.Grant{candidate})
+					key, err := delegableGrantKey(candidate)
+					if err != nil {
+						return nil, err
+					}
+					if _, seen := visited[key]; seen {
+						continue
+					}
+					visited[key] = struct{}{}
+					delegated, ok := delegationFor(candidate, carryExclusions, agent, owner, caller)
+					if !ok {
+						continue
+					}
+					policy, err := NewDelegatedPolicy(CurrentDelegatedPolicyVersion, delegated)
 					if err != nil {
 						continue
 					}
@@ -61,11 +91,13 @@ func DelegableGrants(agent, owner, caller []authz.Grant, constraints ...authz.Se
 					if !safe {
 						continue
 					}
-					encoded, err := json.Marshal(narrowed)
-					if err != nil {
-						return nil, fmt.Errorf("encode delegable selector: %w", err)
+					for _, grant := range delegated {
+						key, err := delegableGrantKey(grant)
+						if err != nil {
+							return nil, err
+						}
+						candidates[key] = grant
 					}
-					candidates[string(scope)+"\x00"+string(encoded)] = candidate
 					if len(candidates) > MaxDelegableGrantCandidates {
 						return nil, ErrTooManyDelegableGrantCandidates
 					}
@@ -81,15 +113,53 @@ func DelegableGrants(agent, owner, caller []authz.Grant, constraints ...authz.Se
 	return result, nil
 }
 
+func delegableGrantKey(grant authz.Grant) (string, error) {
+	encoded, err := json.Marshal(grant.Selector)
+	if err != nil {
+		return "", fmt.Errorf("encode delegable selector: %w", err)
+	}
+	return string(grant.Scope) + "\x00" + string(encoded), nil
+}
+
+// delegationFor returns candidate plus, when carrying, the exclusion withdrawing
+// each live parent restriction that overlaps it. It reports false when an
+// exclusion would withdraw the whole candidate. Nothing is carried when the
+// exclusion scope cannot be delegated, so the candidate falls back to failing
+// containment.
+func delegationFor(candidate authz.Grant, carryExclusions bool, policies ...[]authz.Grant) ([]authz.Grant, bool) {
+	delegated := []authz.Grant{candidate}
+	exclusion, ok := authz.ExclusionScopeFor(candidate.Scope)
+	if !carryExclusions || !ok || !IsRuntimeScopeSafe(CurrentRuntimeScopeRegistryVersion, exclusion) {
+		return delegated, true
+	}
+	for _, policy := range policies {
+		for _, overlap := range liveOverlaps(policy, candidate, exclusion) {
+			if overlap.StrictMatches(candidate.Selector) {
+				return nil, false
+			}
+			if !slices.ContainsFunc(delegated[1:], func(existing authz.Grant) bool { return maps.Equal(existing.Selector, overlap) }) {
+				delegated = append(delegated, authz.Grant{PrincipalUrn: "", Scope: exclusion, Selector: overlap})
+			}
+		}
+	}
+	return delegated, true
+}
+
 // DelegationContained proves that the entire delegated selector set, including
 // all implied scopes, is allowed by every parent policy. Instance authorization
 // alone is insufficient: a narrower exclusion may overlap a broad delegation
-// without matching its dimensionless check. Such overlap fails closed because
-// delegated policies cannot encode exclusions, unless a direct grant naming the
-// resource outranks the inherited restriction. Discovery and issuance share
-// this check so neither can broaden a parent's effective permissions.
+// without matching its dimensionless check. Such overlap fails closed unless
+// the delegated policy carries an exclusion covering it, or a direct grant
+// naming the resource outranks the inherited restriction. Delegated exclusions
+// only narrow, so they need no parent authority of their own. Discovery and
+// issuance share this check so neither can broaden a parent's effective
+// permissions.
 func DelegationContained(delegated DelegatedPolicy, policies ...[]authz.Grant) (bool, error) {
-	for _, grant := range delegated.RuntimeGrants() {
+	grants := delegated.RuntimeGrants()
+	for _, grant := range grants {
+		if authz.IsBlocklistScope(grant.Scope) {
+			continue
+		}
 		for _, policy := range policies {
 			if !authz.GrantsContainSelector(policy, grant.Scope, grant.Selector) {
 				return false, nil
@@ -98,26 +168,42 @@ func DelegationContained(delegated DelegatedPolicy, policies ...[]authz.Grant) (
 			if !hasExclusion {
 				continue
 			}
-			// A direct grant naming the concrete resource outranks restrictions
-			// inherited from roles or user:all, exactly as it does at runtime.
-			// The principal's own restrictions are never outranked.
-			directlyGranted := authz.ExclusionYieldsToDirectGrants(grant.Scope) &&
-				authz.GrantsContainSelector(authz.DirectOverrideGrants(policy), grant.Scope, grant.Selector)
-			for _, restriction := range policy {
-				// Root is deliberately not an exclusion, matching authz's evaluator.
-				if !slices.Contains(authz.ScopeImplicationClosure(restriction.Scope), exclusion) {
-					continue
-				}
-				if directlyGranted && !authz.IsDirectGrant(restriction) {
-					continue
-				}
-				if _, overlaps := intersectSelectors(grant.Selector, restriction.Selector); overlaps {
+			for _, overlap := range liveOverlaps(policy, grant, exclusion) {
+				covered := slices.ContainsFunc(grants, func(carried authz.Grant) bool {
+					return carried.Scope == exclusion && carried.Selector.StrictMatches(overlap)
+				})
+				if !covered {
 					return false, nil
 				}
 			}
 		}
 	}
 	return true, nil
+}
+
+// liveOverlaps returns the part of grant each restriction in policy withdraws
+// at runtime. Root is deliberately not an exclusion, matching authz's
+// evaluator. A direct grant naming the restricted resource outranks
+// restrictions inherited from roles or user:all, exactly as it does at
+// runtime; the principal's own restrictions are never outranked.
+func liveOverlaps(policy []authz.Grant, grant authz.Grant, exclusion authz.Scope) []authz.Selector {
+	var overlaps []authz.Selector
+	for _, restriction := range policy {
+		if !slices.Contains(authz.ScopeImplicationClosure(restriction.Scope), exclusion) {
+			continue
+		}
+		overlap, ok := intersectSelectors(grant.Selector, restriction.Selector)
+		if !ok {
+			continue
+		}
+		outranked := !authz.IsDirectGrant(restriction) &&
+			authz.ExclusionYieldsToDirectGrants(grant.Scope) &&
+			authz.GrantsContainSelector(authz.DirectOverrideGrants(policy), grant.Scope, overlap)
+		if !outranked {
+			overlaps = append(overlaps, overlap)
+		}
+	}
+	return overlaps
 }
 
 // A selector is a conjunction of exact values or wildcards. Intersection keeps

@@ -158,7 +158,7 @@ func (s *Service) SnapshotCeiling(ctx context.Context, db DB, expected Identity)
 	if err != nil {
 		return CeilingSnapshot{}, fmt.Errorf("load ceiling agent policy: %w", err)
 	}
-	grants, err := runtimepolicy.DelegableGrants(policy, policy, policy)
+	grants, err := runtimepolicy.DelegableGrantsWithExclusions(policy, policy, policy)
 	if err != nil {
 		return CeilingSnapshot{}, fmt.Errorf("derive assistant ceiling: %w", err)
 	}
