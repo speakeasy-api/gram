@@ -183,8 +183,50 @@ describe("move guard", () => {
     );
   });
 
-  it("ignores a corrupt record", () => {
-    sessionStorage.setItem("organizationHostMoves", "{not json");
+  it("lets the same move happen again once the window has passed", () => {
+    const key = moveKey("org-1", "https://ai.example.com/acme");
+    expect(recordMove(key, 1_000)).toBe(true);
+
+    expect(alreadyMoved(key, 1_000)).toBe(true);
+    expect(alreadyMoved(key, 15_999)).toBe(true);
+    expect(alreadyMoved(key, 16_000)).toBe(false);
+  });
+
+  it("keeps the guard on if the clock goes backwards", () => {
+    const key = moveKey("org-1", "https://ai.example.com/acme");
+    recordMove(key, 50_000);
+    expect(alreadyMoved(key, 40_000)).toBe(true);
+  });
+
+  it("drops expired moves when recording a new one", () => {
+    const old = moveKey("org-1", "https://ai.example.com/acme");
+    const fresh = moveKey("org-2", "https://ai.example.com/acme");
+    recordMove(old, 0);
+    recordMove(fresh, 60_000);
+
+    expect(
+      Object.keys(
+        JSON.parse(sessionStorage.getItem("organizationHostMoveTimes")!),
+      ),
+    ).toEqual([fresh]);
+  });
+
+  it("ignores the old permanent move list", () => {
+    sessionStorage.setItem(
+      "organizationHostMoves",
+      JSON.stringify(["org-1 ai.example.com"]),
+    );
+    expect(alreadyMoved(moveKey("org-1", "https://ai.example.com/acme"))).toBe(
+      false,
+    );
+  });
+
+  it.each([
+    ["corrupt JSON", "{not json"],
+    ["a list", JSON.stringify(["org-1 ai.example.com"])],
+    ["a non-numeric time", JSON.stringify({ "org-1 ai.example.com": "now" })],
+  ])("ignores a record holding %s", (_name, stored) => {
+    sessionStorage.setItem("organizationHostMoveTimes", stored);
     expect(alreadyMoved(moveKey("org-1", "https://ai.example.com/acme"))).toBe(
       false,
     );

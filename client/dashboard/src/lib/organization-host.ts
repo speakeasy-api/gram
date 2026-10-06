@@ -12,24 +12,33 @@
  *   never gets a dashboard URL, so it never moves),
  * - that host differs from the current host,
  * - the current path is not exempt (below),
- * - and this tab has not already recorded a move of this organization to that
- *   host in sessionStorage.
+ * - and this tab has not recorded a move of this organization to that host in
+ *   sessionStorage within the last HOST_MOVE_WINDOW_MS.
  *
- * The move is recorded before the browser leaves, so at most one automatic
- * transfer per organization and host happens per tab. Any failure along the
- * way (an expired code, a missing or overwritten nonce cookie, a session
- * store error, or an organization host that is not a configured platform
- * host) ends on the other host's login page, or leaves the tab here, and
- * never starts a second automatic transfer. The checks here
- * are the browser's own guard: the target must be an absolute https URL (http
- * only from an http page) on another host, and a tab moves an organization at
- * most once to a given host, so two hosts that disagree can never bounce a tab
- * back and forth.
+ * The move is recorded before the browser leaves, so a tab that comes straight
+ * back makes no second automatic transfer. Any failure along the way (an
+ * expired code, a missing or overwritten nonce cookie, a session store error,
+ * or an organization host that is not a configured platform host) ends on the
+ * other host's login page, or leaves the tab here, and never starts a second
+ * automatic transfer. The checks here are the browser's own guard: the target
+ * must be an absolute https URL (http only from an http page) on another host,
+ * and a tab moves an organization to a given host at most once per window, so
+ * two hosts that disagree can never bounce a tab back and forth. The window
+ * only has to outlast one round of redirects; once it passes, a person who
+ * comes back to this host is moved again.
  */
 
 import { isCliAuthFlowLocation } from "@/lib/cli-auth-flow";
 
-const HOST_MOVES_KEY = "organizationHostMoves";
+// Moves are stored as { [moveKey]: epoch ms }. The key differs from the old
+// permanent list ("organizationHostMoves") so tabs holding it are not stuck.
+const HOST_MOVES_KEY = "organizationHostMoveTimes";
+
+/**
+ * How long a recorded move blocks another automatic move of the same
+ * organization to the same host. A redirect loop repeats within seconds.
+ */
+const HOST_MOVE_WINDOW_MS = 15_000;
 
 /**
  * Pages that finish a hand-off and stay on the host they were opened on. Each
@@ -92,17 +101,29 @@ export function organizationHostRedirectTarget(
   return `${target.origin}/rpc/auth.transferIn?${params.toString()}`;
 }
 
-function moves(): string[] {
+function moves(): Record<string, number> {
   try {
     const parsed = JSON.parse(
-      sessionStorage.getItem(HOST_MOVES_KEY) ?? "[]",
+      sessionStorage.getItem(HOST_MOVES_KEY) ?? "{}",
     ) as unknown;
-    return Array.isArray(parsed)
-      ? parsed.filter((move): move is string => typeof move === "string")
-      : [];
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        (entry): entry is [string, number] =>
+          typeof entry[1] === "number" && Number.isFinite(entry[1]),
+      ),
+    );
   } catch {
-    return [];
+    return {};
   }
+}
+
+/** Whether a move recorded at movedAt still blocks a move at now. */
+function recent(movedAt: number, now: number): boolean {
+  // A clock that went backwards counts as recent, which keeps the guard on.
+  return now - movedAt < HOST_MOVE_WINDOW_MS;
 }
 
 /**
@@ -114,20 +135,27 @@ export function moveKey(organizationId: string, target: string): string {
   return `${organizationId} ${new URL(target).host}`;
 }
 
-/** Whether this tab already made the move from this host. */
-export function alreadyMoved(key: string): boolean {
-  return moves().includes(key);
+/** Whether this tab made the move from this host within the window. */
+export function alreadyMoved(key: string, now = Date.now()): boolean {
+  const movedAt = moves()[key];
+  return movedAt !== undefined && recent(movedAt, now);
 }
 
 /**
  * Records the move in this host's tab storage before leaving, so a tab that
- * comes back here with the same organization is not sent off again. Returns
- * false when storage is unavailable: without the guard the move is not safe
- * to make.
+ * comes straight back here with the same organization is not sent off again.
+ * Expired entries are dropped. Returns false when storage is unavailable:
+ * without the guard the move is not safe to make.
  */
-export function recordMove(key: string): boolean {
+export function recordMove(key: string, now = Date.now()): boolean {
   try {
-    sessionStorage.setItem(HOST_MOVES_KEY, JSON.stringify([...moves(), key]));
+    const kept = Object.entries(moves()).filter(([, movedAt]) =>
+      recent(movedAt, now),
+    );
+    sessionStorage.setItem(
+      HOST_MOVES_KEY,
+      JSON.stringify({ ...Object.fromEntries(kept), [key]: now }),
+    );
     return true;
   } catch {
     return false;
