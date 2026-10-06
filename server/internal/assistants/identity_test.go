@@ -91,6 +91,14 @@ func TestCreateAssistantProvisionsDedicatedAgent(t *testing.T) {
 	allowed, err := authz.GrantsAuthorize(policy, authz.MCPCheck(authz.ScopeMCPConnect, anyServer, uuid.NewString()))
 	require.NoError(t, err)
 	require.False(t, allowed, "the ceiling is limited to the assistant's project")
+	for _, scope := range []authz.Scope{authz.ScopeAssistantRead, authz.ScopeAssistantWrite} {
+		allowed, err = authz.GrantsAuthorize(policy, authz.AssistantCheck(scope, record.ID.String(), project.String()))
+		require.NoError(t, err)
+		require.True(t, allowed, scope)
+	}
+	allowed, err = authz.GrantsAuthorize(policy, authz.AssistantCheck(authz.ScopeAssistantWrite, uuid.NewString(), project.String()))
+	require.NoError(t, err)
+	require.False(t, allowed, "the agent administers only its own assistant")
 
 	provisioned, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionAssistantIdentityProvision)
 	require.NoError(t, err)

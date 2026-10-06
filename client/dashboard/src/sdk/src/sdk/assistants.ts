@@ -235,7 +235,7 @@ export class Assistants extends ClientSDK {
    * upgradeAssistantIdentity assistants
    *
    * @remarks
-   * Give an existing assistant its own dedicated agent and per-trigger workload identities. The agent starts with access to every MCP server and skill in the project and is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.
+   * Give an existing assistant its own dedicated agent and per-trigger workload identities. The agent starts with access to every MCP server and skill in the project and to administering this assistant, and is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.
    */
   async upgradeIdentity(
     request: UpgradeAssistantIdentityRequest,

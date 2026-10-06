@@ -120,13 +120,10 @@ func initialGrants(project, assistant uuid.UUID) []authz.Grant {
 	return append(grants, assistantSelfAdminGrants(assistant)...)
 }
 
-// assistantSelfAdminGrants scopes assistant administration to exactly one
-// assistant.
-//
-// TODO(AIM-409): grant assistant:* narrowed to this assistant once the
-// assistant scopes and resource kind land on main.
-func assistantSelfAdminGrants(uuid.UUID) []authz.Grant {
-	return nil
+// assistantSelfAdminGrants lets the agent administer exactly its own
+// assistant; assistant:write implies assistant:read.
+func assistantSelfAdminGrants(assistant uuid.UUID) []authz.Grant {
+	return []authz.Grant{authz.NewGrant(authz.ScopeAssistantWrite, assistant.String())}
 }
 
 func (s *Service) bindExistingRoots(ctx context.Context, tx pgx.Tx, p ProvisionParams) error {

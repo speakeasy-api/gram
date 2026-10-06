@@ -1404,8 +1404,8 @@ BEGIN
     (demo.det_uuid('gram-demo-assistant-legacy'), demo_org, proj_a, demo_user_ids[1],
      'Legacy assistant', 'anthropic/claude-sonnet-4.6', 'Help summarize project activity.');
 
-  -- The dedicated agent starts with the project-wide ceiling provisioning
-  -- grants: every MCP server and skill in the assistant's project.
+  -- The dedicated agent starts with the grants provisioning gives it: every
+  -- MCP server and skill in the assistant's project, and its own assistant.
   INSERT INTO agents (id, organization_id, project_id, owner_user_id, name)
   VALUES (demo.det_uuid('gram-demo-assistant-agent'), demo_org, proj_a,
           demo_user_ids[1], 'Identity-bound assistant agent');
@@ -1421,7 +1421,11 @@ BEGIN
      jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*', 'project_id', proj_a::text)),
     (demo.det_uuid('gram-demo-assistant-agent-grant-skill-read'), demo_org,
      'agent:' || demo.det_uuid('gram-demo-assistant-agent')::text, 'skill:read',
-     jsonb_build_object('resource_kind', 'skill', 'resource_id', proj_a::text));
+     jsonb_build_object('resource_kind', 'skill', 'resource_id', proj_a::text)),
+    (demo.det_uuid('gram-demo-assistant-agent-grant-assistant-write'), demo_org,
+     'agent:' || demo.det_uuid('gram-demo-assistant-agent')::text, 'assistant:write',
+     jsonb_build_object('resource_kind', 'assistant',
+                        'resource_id', demo.det_uuid('gram-demo-assistant-bound')::text));
 
   INSERT INTO trigger_instances
     (id, organization_id, project_id, definition_slug, name, target_kind, target_ref, target_display)
@@ -3395,8 +3399,8 @@ Channel context stays in the Raw view.
 
   SELECT count(*) INTO stray FROM principal_grants
   WHERE organization_id = demo_org AND principal_urn LIKE 'agent:%';
-  IF stray <> 5 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 5 scoped agent grants, found %', stray;
+  IF stray <> 6 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 6 scoped agent grants, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM principal_grants
@@ -3663,7 +3667,7 @@ Channel context stays in the Raw view.
     AND r.definition_slug = 'dashboard' AND r.target_kind = 'assistant' AND r.target_ref = a.id::text
     AND t.subject = 'assistant-trigger:' || r.id::text
     AND (SELECT count(*) FROM principal_grants g
-      WHERE g.organization_id = demo_org AND g.principal_urn = 'agent:' || ag.id::text) = 3;
+      WHERE g.organization_id = demo_org AND g.principal_urn = 'agent:' || ag.id::text) = 4;
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: identity-bound assistant root is incoherent';
   END IF;

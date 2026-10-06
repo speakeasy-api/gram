@@ -12651,7 +12651,7 @@ paths:
       x-speakeasy-name-override: update
   /rpc/assistants.upgradeIdentity:
     post:
-      description: Give an existing assistant its own dedicated agent and per-trigger workload identities. The agent starts with access to every MCP server and skill in the project and is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.
+      description: Give an existing assistant its own dedicated agent and per-trigger workload identities. The agent starts with access to every MCP server and skill in the project and to administering this assistant, and is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.
       operationId: upgradeAssistantIdentity
       parameters:
         - allowEmptyValue: true
