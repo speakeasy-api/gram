@@ -114,17 +114,17 @@ describe("buildUpdateIssuerForm", () => {
     expect("scopeOverride" in form).toBe(false);
   });
 
-  it("sets the scope override from comma-separated input", () => {
+  it("sets the scope override from the picked scopes, trimmed", () => {
     const form = buildUpdateIssuerForm({
       ...baseState,
-      scopeOverride: " openid,  mcp_api , ,refresh_token ",
+      scopeOverride: [" openid", "mcp_api ", " ", "refresh_token"],
     });
 
     expect(form.scopeOverride).toEqual(["openid", "mcp_api", "refresh_token"]);
   });
 
-  it("clears the scope override with an empty array when blanked", () => {
-    const form = buildUpdateIssuerForm({ ...baseState, scopeOverride: "  " });
+  it("clears the scope override with an empty array when emptied", () => {
+    const form = buildUpdateIssuerForm({ ...baseState, scopeOverride: [] });
 
     expect(form.scopeOverride).toEqual([]);
   });

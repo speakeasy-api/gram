@@ -120,7 +120,9 @@ function savedForm(): Record<string, unknown> {
 
 describe("issuer settings scope section", () => {
   const toggle = () =>
-    screen.getByRole("switch", { name: "Send no scope when nothing is known" });
+    screen.getByRole("switch", {
+      name: "Request no scopes when none are configured",
+    });
   const save = () =>
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 

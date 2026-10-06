@@ -37,18 +37,20 @@ describe("issuer overview scope fallback", () => {
   // NULL and false both read as the default.
   it("reads an unset or false setting as sending the supported scopes", () => {
     render(<OverviewTab issuer={issuer()} />);
-    expect(value("Scope fallback").textContent).toContain(
-      "Send supported scopes",
+    expect(value("When no scopes are configured").textContent).toContain(
+      "Request every advertised scope",
     );
     cleanup();
     render(<OverviewTab issuer={issuer(false)} />);
-    expect(value("Scope fallback").textContent).toContain(
-      "Send supported scopes",
+    expect(value("When no scopes are configured").textContent).toContain(
+      "Request every advertised scope",
     );
   });
 
   it("reads true as sending none", () => {
     render(<OverviewTab issuer={issuer(true)} />);
-    expect(value("Scope fallback").textContent).toContain("Send none");
+    expect(value("When no scopes are configured").textContent).toContain(
+      "Request no scopes",
+    );
   });
 });

@@ -33,13 +33,19 @@ it("renders stable explicit labels and nullable capability semantics", () => {
 it("reads an unset scope fallback as the default and true as sending none", () => {
   render(<IssuerConfiguration issuer={issuer} />);
   expect(
-    within(value("Scope fallback")).getByText("Send supported scopes"),
+    within(value("When no scopes are configured")).getByText(
+      "Request every advertised scope",
+    ),
   ).toBeTruthy();
   cleanup();
   render(
     <IssuerConfiguration issuer={{ ...issuer, omitScopeFallback: true }} />,
   );
-  expect(within(value("Scope fallback")).getByText("Send none")).toBeTruthy();
+  expect(
+    within(value("When no scopes are configured")).getByText(
+      "Request no scopes",
+    ),
+  ).toBeTruthy();
 });
 it("omits project ownership", () => {
   render(<IssuerConfiguration issuer={issuer} />);

@@ -3,6 +3,7 @@ import { RequireScope } from "@/components/require-scope";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Label } from "@/components/ui/Label";
+import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
@@ -15,7 +16,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { ExistingIssuerLink } from "../../ExistingIssuerLink";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   EndpointsFields,
@@ -54,8 +55,16 @@ export function SettingsTab({
   // Seeded from the saved override: buildUpdateIssuerForm always sends it and
   // reads a blank field as "clear", so any other seed would drop the override
   // on the next unrelated save.
-  const [scopeOverride, setScopeOverride] = useState(
-    (issuer.scopeOverride ?? []).join(", "),
+  const [scopeOverride, setScopeOverride] = useState<string[]>(
+    issuer.scopeOverride ?? [],
+  );
+  // Typed scopes join the list so the menu shows every selection.
+  const scopeOptions = useMemo(
+    () =>
+      [...new Set([...(issuer.scopesSupported ?? []), ...scopeOverride])].map(
+        (scope) => ({ label: scope, value: scope }),
+      ),
+    [issuer.scopesSupported, scopeOverride],
   );
   // Undefined until the operator flips the switch, so it tracks the saved
   // value and a save only sends the flag when it was deliberately changed:
@@ -367,13 +376,31 @@ export function SettingsTab({
 
       <SettingsSection
         title="Scopes"
-        description="The override is requested exactly as written when a sign-in has no client scope, challenge scope or advertised resource scopes. Leave blank to fall back to the provider's supported scopes, unless the switch below is on."
+        description="A sign-in takes its scopes from the client, the server's challenge, or the protected resource. When none of those name any, the override below is requested exactly as chosen."
       >
-        <SettingsField
-          label="Scope override (comma-separated)"
-          value={scopeOverride}
-          onChange={setScopeOverride}
-        />
+        <div className="flex flex-col gap-1.5">
+          <Label id="scope-override-label" htmlFor="scope-override">
+            Scope override
+          </Label>
+          <MultiSelect
+            id="scope-override"
+            aria-labelledby="scope-override-label"
+            options={scopeOptions}
+            value={scopeOverride}
+            onValueChange={setScopeOverride}
+            placeholder="No override"
+            emptyIndicator="Type a scope to add it."
+            badgeClassName="normal-case tracking-normal"
+            maxCount={8}
+            creatable
+            caseSensitiveCreate
+            hideSelectAll
+          />
+          <Text small muted>
+            Choose from the scopes this provider advertises, or type one to add
+            it.
+          </Text>
+        </div>
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-3">
             <Switch
@@ -382,14 +409,15 @@ export function SettingsTab({
               onCheckedChange={setOmitScopeFallback}
             />
             <Label id="omit-scope-fallback-label">
-              Send no scope when nothing is known
+              Request no scopes when none are configured
             </Label>
           </div>
           <Text small muted>
-            By default a sign-in with no other scope source requests every scope
-            this provider advertises. Turn this on to send no scope and let the
-            provider apply its default. Some providers reject a sign-in with no
-            scope. This affects only clients without their own scopes.
+            When a sign-in has no client scope, challenge scope, resource
+            scopes, or override, every scope this provider advertises is
+            requested. Turn this on to request no scopes in that case and let
+            the provider apply its defaults. Some providers reject a sign-in
+            that requests no scopes.
           </Text>
         </div>
       </SettingsSection>

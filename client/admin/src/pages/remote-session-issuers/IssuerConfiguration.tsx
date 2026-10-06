@@ -41,7 +41,7 @@ const captured = (v?: string[] | null): string =>
   v == null ? "Not captured" : v.length ? v.join(", ") : "None advertised";
 // NULL and false both read as the default.
 const scopeFallback = (v?: boolean): string =>
-  v ? "Send none" : "Send supported scopes";
+  v ? "Request no scopes" : "Request every advertised scope";
 const supported = (v?: boolean): string =>
   v === undefined ? "Not captured" : v ? "Supported" : "Not supported";
 export function IssuerConfiguration({
@@ -107,7 +107,10 @@ export function IssuerConfiguration({
         ["Passthrough", supported(issuer.passthrough)],
         ["Resource Indicator", supported(issuer.resourceIndicatorSupported)],
         ["Scope Override", list(issuer.scopeOverride)],
-        ["Scope fallback", scopeFallback(issuer.omitScopeFallback)],
+        [
+          "When no scopes are configured",
+          scopeFallback(issuer.omitScopeFallback),
+        ],
       ],
     ],
     [
