@@ -1057,8 +1057,8 @@ type Selector struct {
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).
 	Tool *string
-	// Project filter (MCP scopes only). When set with resource_id='*', grants
-	// access to all servers in the project.
+	// Project filter (MCP, environment, and assistant scopes). When set with
+	// resource_id='*', grants access to every resource of the kind in the project.
 	ProjectID *string
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.

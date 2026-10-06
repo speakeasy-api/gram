@@ -2536,7 +2536,11 @@ export function useOnboardingTools(): {
   const { hasScope } = useRBAC();
   const draft = useAssistantDraft();
   const organizationId = session.activeOrganizationId;
-  const canWriteAssistant = hasScope("assistant:write", project.id);
+  const canWriteAssistant = hasScope(
+    "assistant:write",
+    draft.assistantId ?? project.id,
+    project.id,
+  );
   const canReadProject = hasScope("project:read", project.id);
   const canWriteProject = hasScope("project:write", project.id);
   const canReadMCP = hasScope("mcp:read", project.id);

@@ -52,13 +52,6 @@ func TestServiceRequiresAssistantGrants(t *testing.T) {
 
 	assistantID := uuid.NewString()
 	for name, call := range map[string]func(context.Context) error{
-		"list": func(ctx context.Context) error {
-			_, err := svc.ListAssistants(ctx, &gen.ListAssistantsPayload{
-				SessionToken:     nil,
-				ProjectSlugInput: nil,
-			})
-			return err
-		},
 		"get": func(ctx context.Context) error {
 			_, err := svc.GetAssistant(ctx, &gen.GetAssistantPayload{
 				ID:               assistantID,
@@ -103,13 +96,6 @@ func TestServiceRequiresAssistantGrants(t *testing.T) {
 				ProjectSlugInput: nil,
 			})
 		},
-		"getManaged": func(ctx context.Context) error {
-			_, err := svc.GetManagedAssistant(ctx, &gen.GetManagedAssistantPayload{
-				SessionToken:     nil,
-				ProjectSlugInput: nil,
-			})
-			return err
-		},
 		"ensureManaged": func(ctx context.Context) error {
 			_, err := svc.EnsureManagedAssistant(ctx, &gen.EnsureManagedAssistantPayload{
 				SessionToken:     nil,
@@ -124,7 +110,7 @@ func TestServiceRequiresAssistantGrants(t *testing.T) {
 		})
 	}
 
-	readCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAssistantRead, projectID.String()))
+	readCtx := authztest.WithExactGrants(t, ctx, assistantReadGrant(projectID))
 	_, err := svc.ListAssistants(readCtx, &gen.ListAssistantsPayload{
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
@@ -142,18 +128,67 @@ func TestServiceRequiresAssistantGrants(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
+func createTestAssistant(t *testing.T, svc *Service, ctx context.Context, name string) *types.Assistant {
+	t.Helper()
+	assistant, err := svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             name,
+		Model:            "openai/gpt-4o-mini",
+		Instructions:     "",
+		Toolsets:         nil,
+		McpServers:       nil,
+		WarmTTLSeconds:   nil,
+		MaxConcurrency:   nil,
+		Status:           nil,
+	})
+	require.NoError(t, err)
+	return assistant
+}
+
 func TestServiceProjectGrantsDoNotAuthorizeAssistants(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID := newRBACService(t)
+	createTestAssistant(t, svc, authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID)), "Assistant")
 	ctx = authztest.WithExactGrants(t, ctx,
 		authz.NewGrant(authz.ScopeProjectRead, projectID.String()),
 		authz.NewGrant(authz.ScopeProjectWrite, projectID.String()),
 	)
 
-	_, err := svc.ListAssistants(ctx, &gen.ListAssistantsPayload{})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	listed, err := svc.ListAssistants(ctx, &gen.ListAssistantsPayload{SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Empty(t, listed.Assistants)
 	_, err = svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{Name: "Assistant", Model: "openai/gpt-4o-mini"})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestServiceAssistantGrantNarrowedToOneAssistant(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID := newRBACService(t)
+	writerCtx := authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
+	target := createTestAssistant(t, svc, writerCtx, "Target")
+	other := createTestAssistant(t, svc, writerCtx, "Other")
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAssistantWrite, target.ID))
+
+	listed, err := svc.ListAssistants(ctx, &gen.ListAssistantsPayload{SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.Assistants, 1)
+	require.Equal(t, target.ID, listed.Assistants[0].ID)
+
+	_, err = svc.GetAssistant(ctx, &gen.GetAssistantPayload{ID: target.ID, SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	_, err = svc.UpdateAssistant(ctx, &gen.UpdateAssistantPayload{ID: target.ID, Name: new("Renamed")})
+	require.NoError(t, err)
+
+	_, err = svc.GetAssistant(ctx, &gen.GetAssistantPayload{ID: other.ID, SessionToken: nil, ProjectSlugInput: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = svc.UpdateAssistant(ctx, &gen.UpdateAssistantPayload{ID: other.ID, Name: new("Renamed")})
+	requireOopsCode(t, err, oops.CodeForbidden)
+	requireOopsCode(t, svc.DeleteAssistant(ctx, &gen.DeleteAssistantPayload{ID: other.ID, SessionToken: nil, ProjectSlugInput: nil}), oops.CodeForbidden)
+	_, err = svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{Name: "New", Model: "openai/gpt-4o-mini"})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
@@ -161,7 +196,7 @@ func TestServiceCreateAssistantMapsInvalidToolsetToBadRequest(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID := newRBACService(t)
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAssistantWrite, projectID.String()))
+	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
 
 	_, err := svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
 		SessionToken:     nil,
@@ -183,7 +218,7 @@ func TestServiceCreateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_mcp_autoenable")
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAssistantWrite, projectID.String()))
+	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
 
 	toolsetsQ := toolsetsRepo.New(conn)
 	ts, err := toolsetsQ.CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
@@ -230,11 +265,39 @@ func TestServiceCreateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	require.Equal(t, "private", server.Visibility, "assistant attachment must also enable the hosted wrapper")
 }
 
+func TestServiceAttachingRequiresMCPConnect(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_attach_requires_connect")
+	ts, err := toolsetsRepo.New(conn).CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
+		OrganizationID: "org-test",
+		ProjectID:      projectID,
+		Name:           "Slack",
+		Slug:           "slack",
+		McpSlug:        pgtype.Text{String: "org-test-slack-connect", Valid: true},
+		McpEnabled:     true,
+	})
+	require.NoError(t, err)
+	toolsets := []*types.AssistantToolsetRef{{ToolsetSlug: ts.Slug, EnvironmentSlug: nil}}
+
+	writerCtx := authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
+	_, err = svc.CreateAssistant(writerCtx, &gen.CreateAssistantPayload{Name: "Attached", Model: "openai/gpt-4o-mini", Toolsets: toolsets})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	assistant := createTestAssistant(t, svc, writerCtx, "Plain")
+	_, err = svc.UpdateAssistant(writerCtx, &gen.UpdateAssistantPayload{ID: assistant.ID, Toolsets: toolsets})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	connectCtx := authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), authz.NewGrant(authz.ScopeMCPConnect, ts.ID.String()))
+	_, err = svc.UpdateAssistant(connectCtx, &gen.UpdateAssistantPayload{ID: assistant.ID, Toolsets: toolsets})
+	require.NoError(t, err)
+}
+
 func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_mcp_autoenable_update")
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAssistantWrite, projectID.String()))
+	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
 
 	toolsetsQ := toolsetsRepo.New(conn)
 	ts, err := toolsetsQ.CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
@@ -301,7 +364,7 @@ func TestServiceAttachRemoteMcpServerToAssistant(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_attach_mcp_server")
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAssistantWrite, projectID.String()))
+	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
 
 	// Seed a remote-backed mcp_server with a Gram-hosted endpoint, mirroring
 	// how the dashboard registers an external "Remote MCP" server.
@@ -391,7 +454,7 @@ func TestAssistantsService_AttachMCPServer_RejectsUnreachable(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_attach_mcp_server_reject")
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAssistantWrite, projectID.String()))
+	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
 
 	remote, err := remotemcpRepo.New(conn).CreateServer(t.Context(), remotemcpRepo.CreateServerParams{
 		ID:            uuid.New(),

@@ -54,7 +54,7 @@ export function AssistantOverviewSettings({
   const queryClient = useQueryClient();
   const project = useProject();
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("assistant:write", project.id);
+  const canWrite = hasScope("assistant:write", assistant.id, project.id);
 
   const [draft, setDraft] = useState<OverviewDraft | null>(null);
   const editing = draft !== null;

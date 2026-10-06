@@ -24,12 +24,24 @@ import (
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
 
+func projectAssistantGrant(scope authz.Scope, projectID uuid.UUID) authz.Grant {
+	return authz.NewGrantWithSelector(scope, authz.Selector{
+		authz.SelectorKeyResourceKind: authz.ResourceKindAssistant,
+		authz.SelectorKeyResourceID:   authz.WildcardResource,
+		authz.SelectorKeyProjectID:    projectID.String(),
+	})
+}
+
+func mcpConnectGrant() authz.Grant {
+	return authz.NewGrant(authz.ScopeMCPConnect, authz.WildcardResource)
+}
+
 func assistantWriteGrant(projectID uuid.UUID) authz.Grant {
-	return authz.NewGrant(authz.ScopeAssistantWrite, projectID.String())
+	return projectAssistantGrant(authz.ScopeAssistantWrite, projectID)
 }
 
 func assistantReadGrant(projectID uuid.UUID) authz.Grant {
-	return authz.NewGrant(authz.ScopeAssistantRead, projectID.String())
+	return projectAssistantGrant(authz.ScopeAssistantRead, projectID)
 }
 
 func skillReadGrant(projectID uuid.UUID) authz.Grant {

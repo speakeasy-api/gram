@@ -47,7 +47,7 @@ function stopLinkNavigation(e: MouseEvent<HTMLDivElement>) {
 export function AssistantsRoot(): JSX.Element {
   const project = useProject();
   return (
-    <RequireScope scope="assistant:read" resourceId={project.id} level="page">
+    <RequireScope scope="assistant:read" projectId={project.id} level="page">
       <Outlet />
     </RequireScope>
   );
@@ -74,6 +74,7 @@ function AssistantsEmptyState({
       <RequireScope
         scope="assistant:write"
         resourceId={projectId}
+        projectId={projectId}
         level="component"
         reason="You don't have permission to create assistants."
       >
@@ -92,7 +93,6 @@ export default function AssistantsIndex(): JSX.Element {
   const routes = useRoutes();
   const project = useProject();
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("assistant:write", project.id);
   const canManageTriggers = hasScope("project:write", project.id);
   const [activeTab] = useQueryState(
     "tab",
@@ -146,6 +146,7 @@ export default function AssistantsIndex(): JSX.Element {
           <RequireScope
             scope="assistant:write"
             resourceId={project.id}
+            projectId={project.id}
             level="component"
             reason="You don't have permission to create assistants."
           >
@@ -171,7 +172,6 @@ export default function AssistantsIndex(): JSX.Element {
             showNoMatches={showNoMatches}
             search={search}
             assistants={filteredAssistants}
-            canWrite={canWrite}
           />
         </Page.Section.Body>
       </Page.Section>
@@ -204,13 +204,11 @@ function AssistantsBody({
   showNoMatches,
   search,
   assistants,
-  canWrite,
 }: {
   isLoading: boolean;
   showNoMatches: boolean;
   search: string;
   assistants: Assistant[];
-  canWrite: boolean;
 }): JSX.Element {
   if (isLoading) {
     return (
@@ -234,11 +232,7 @@ function AssistantsBody({
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
       {assistants.map((assistant) => (
-        <AssistantCard
-          key={assistant.id}
-          assistant={assistant}
-          canWrite={canWrite}
-        />
+        <AssistantCard key={assistant.id} assistant={assistant} />
       ))}
     </div>
   );
@@ -290,14 +284,11 @@ function AssistantToolsets({ assistant }: { assistant: Assistant }) {
   );
 }
 
-function AssistantCard({
-  assistant,
-  canWrite,
-}: {
-  assistant: Assistant;
-  canWrite: boolean;
-}) {
+function AssistantCard({ assistant }: { assistant: Assistant }) {
   const routes = useRoutes();
+  const project = useProject();
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("assistant:write", assistant.id, project.id);
   const queryClient = useQueryClient();
 
   const deleteAssistant = useAssistantsDeleteMutation({

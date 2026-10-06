@@ -3,6 +3,8 @@ package authz
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -40,72 +42,65 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 		})
 	}
 
-	assistantDefaults, err := assistantSystemRoleDefaults(ctx, db, principals)
+	assistantDefaults, err := assistantSystemRoleDefaults(ctx, db, principals, grantRows)
 	if err != nil {
 		return nil, err
 	}
 
-	return withAssistantSystemRoleDefaults(grantRows, principals, assistantDefaults), nil
+	return withAssistantSystemRoleDefaults(grantRows, assistantDefaults), nil
 }
 
-func assistantSystemRoleDefaults(ctx context.Context, db accessrepo.DBTX, principals []urn.Principal) (map[string][]Scope, error) {
-	hasLegacySystemRole := false
+// assistantSystemRoleDefaults returns the assistant scopes each built-in role
+// principal holds by default, keyed by the principals that lack stored
+// assistant grants. Organizations seeded before the assistant scopes existed
+// have no persisted rows for them, and system-role grants are immutable, so the
+// defaults are supplied at load time instead. The global roles are only looked
+// up when such a principal is present, which keeps the extra query off
+// organizations seeded with the current defaults.
+func assistantSystemRoleDefaults(ctx context.Context, db accessrepo.DBTX, principals []urn.Principal, grants []Grant) (map[string][]Scope, error) {
+	missing := make(map[string]struct{})
 	for _, principal := range principals {
-		if principal.Type == urn.PrincipalTypeRole && (principal.ID == SystemRoleAdmin || principal.ID == SystemRoleMember) {
-			hasLegacySystemRole = true
-			break
+		if principal.Type != urn.PrincipalTypeRole || !strings.HasPrefix(principal.ID, "global:") {
+			continue
+		}
+		key := principal.String()
+		if !slices.ContainsFunc(grants, func(grant Grant) bool {
+			return grant.PrincipalUrn == key && ResourceKindForScope(grant.Scope) == ResourceKindAssistant
+		}) {
+			missing[key] = struct{}{}
 		}
 	}
-	if !hasLegacySystemRole {
+	if len(missing) == 0 {
 		return nil, nil
 	}
 
-	defaults := make(map[string][]Scope, 2)
 	roles, err := accessrepo.New(db).ListGlobalRoles(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list global system roles: %w", err)
 	}
-	scopesBySlug := map[string][]Scope{
-		SystemRoleAdmin:  {ScopeAssistantRead, ScopeAssistantWrite},
-		SystemRoleMember: {ScopeAssistantRead},
-	}
+	defaults := make(map[string][]Scope, len(missing))
 	for _, role := range roles {
-		scopes, ok := scopesBySlug[role.WorkosSlug]
-		if !ok || role.Deleted || role.WorkosDeleted {
+		roleGrants, ok := SystemRoleGrants[role.WorkosSlug]
+		key := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+role.ID.String()).String()
+		if _, isMissing := missing[key]; !ok || !isMissing || role.Deleted || role.WorkosDeleted {
 			continue
 		}
-		principal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+role.ID.String())
-		defaults[principal.String()] = scopes
+		for _, grant := range roleGrants {
+			if scope := Scope(grant.Scope); ResourceKindForScope(scope) == ResourceKindAssistant {
+				defaults[key] = append(defaults[key], scope)
+			}
+		}
 	}
-	if len(defaults) != len(scopesBySlug) {
-		return nil, fmt.Errorf("global system roles are incomplete")
-	}
-
 	return defaults, nil
 }
 
-func withAssistantSystemRoleDefaults(grants []Grant, principals []urn.Principal, scopesByPrincipal map[string][]Scope) []Grant {
-	for _, principal := range principals {
-		scopes, ok := scopesByPrincipal[principal.String()]
-		if !ok {
-			continue
-		}
+func withAssistantSystemRoleDefaults(grants []Grant, scopesByPrincipal map[string][]Scope) []Grant {
+	for principal, scopes := range scopesByPrincipal {
 		for _, scope := range scopes {
-			found := false
-			for _, grant := range grants {
-				if grant.Scope == scope && grant.Effect == PolicyEffectAllow && grant.Selector[SelectorKeyResourceKind] == ResourceKindAssistant && grant.Selector[SelectorKeyResourceID] == WildcardResource {
-					found = true
-					break
-				}
-			}
-			if found {
-				continue
-			}
 			grant := NewGrant(scope, WildcardResource)
-			grant.PrincipalUrn = principal.String()
+			grant.PrincipalUrn = principal
 			grants = append(grants, grant)
 		}
 	}
-
 	return grants
 }

@@ -84317,7 +84317,7 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter (MCP scopes only).
+                    description: Project filter (MCP, environment, and assistant scopes).
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
@@ -84330,6 +84330,7 @@ components:
                         - org
                         - environment
                         - skill
+                        - assistant
                         - risk_policy
                         - chat
                         - agent
@@ -96967,6 +96968,10 @@ components:
                         - skill:blocked_read
                         - skill:write
                         - skill:blocked_write
+                        - assistant:read
+                        - assistant:blocked_read
+                        - assistant:write
+                        - assistant:blocked_write
                         - plugin:write
                         - plugin:blocked_write
                         - risk_policy:evaluate
@@ -97016,6 +97021,10 @@ components:
                             - skill:blocked_read
                             - skill:write
                             - skill:blocked_write
+                            - assistant:read
+                            - assistant:blocked_read
+                            - assistant:write
+                            - assistant:blocked_write
                             - plugin:write
                             - plugin:blocked_write
                             - risk_policy:evaluate
@@ -105393,6 +105402,10 @@ components:
                         - skill:blocked_read
                         - skill:write
                         - skill:blocked_write
+                        - assistant:read
+                        - assistant:blocked_read
+                        - assistant:write
+                        - assistant:blocked_write
                         - plugin:write
                         - plugin:blocked_write
                         - risk_policy:evaluate
@@ -105700,6 +105713,8 @@ components:
                         - environment:blocked_write
                         - skill:blocked_read
                         - skill:blocked_write
+                        - assistant:blocked_read
+                        - assistant:blocked_write
                         - plugin:blocked_write
                         - risk_policy:bypass
                         - workload:blocked_read
@@ -105713,6 +105728,7 @@ components:
                         - mcp
                         - environment
                         - skill
+                        - assistant
                         - risk_policy
                         - chat
                         - agent
@@ -105743,6 +105759,10 @@ components:
                         - skill:blocked_read
                         - skill:write
                         - skill:blocked_write
+                        - assistant:read
+                        - assistant:blocked_read
+                        - assistant:write
+                        - assistant:blocked_write
                         - plugin:write
                         - plugin:blocked_write
                         - risk_policy:evaluate
@@ -106230,7 +106250,7 @@ components:
                         - open_world
                 project_id:
                     type: string
-                    description: Project filter (MCP scopes only). When set with resource_id='*', grants access to all servers in the project.
+                    description: Project filter (MCP, environment, and assistant scopes). When set with resource_id='*', grants access to every resource of the kind in the project.
                 resource_id:
                     type: string
                     description: The resource identifier, or '*' for all resources of this kind.
@@ -106243,6 +106263,7 @@ components:
                         - org
                         - environment
                         - skill
+                        - assistant
                         - risk_policy
                         - chat
                         - agent

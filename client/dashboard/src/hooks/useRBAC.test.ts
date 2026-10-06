@@ -304,17 +304,19 @@ describe("hasScopeInGrants", () => {
     subScopes: ["skill:read"],
   };
 
-  it("keeps assistant read, write, and denied roles distinct", () => {
+  it("keeps assistant read, write, and project roles distinct", () => {
+    const projectAssistants = {
+      resourceKind: "assistant",
+      resourceId: "*",
+      projectId: "project_a",
+    };
     const readOnly = [
-      {
-        scope: "assistant:read",
-        selectors: [{ resourceKind: "assistant", resourceId: "project_a" }],
-      },
+      { scope: "assistant:read", selectors: [projectAssistants] },
     ];
     const writer = [
       {
         scope: "assistant:write",
-        selectors: [{ resourceKind: "assistant", resourceId: "project_a" }],
+        selectors: [projectAssistants],
         subScopes: ["assistant:read"],
       },
     ];
@@ -326,20 +328,49 @@ describe("hasScopeInGrants", () => {
       },
     ];
 
-    expect(hasScopeInGrants(readOnly, "assistant:read", "project_a")).toBe(
+    expect(
+      hasScopeInGrants(readOnly, "assistant:read", "a1", "project_a"),
+    ).toBe(true);
+    expect(
+      hasScopeInGrants(readOnly, "assistant:write", "a1", "project_a"),
+    ).toBe(false);
+    expect(hasScopeInGrants(writer, "assistant:write", "a1", "project_a")).toBe(
       true,
     );
-    expect(hasScopeInGrants(readOnly, "assistant:write", "project_a")).toBe(
+    expect(hasScopeInGrants(writer, "assistant:write", "a1", "project_b")).toBe(
       false,
     );
-    expect(hasScopeInGrants(writer, "assistant:read", "project_a")).toBe(true);
-    expect(hasScopeInGrants(writer, "assistant:write", "project_a")).toBe(true);
-    expect(hasScopeInGrants(projectWriter, "assistant:read", "project_a")).toBe(
-      false,
-    );
+    expect(
+      hasScopeInGrants(projectWriter, "assistant:read", "a1", "project_a"),
+    ).toBe(false);
   });
 
-  it("limits assistant grants and exclusions to the selected project", () => {
+  it("narrows an assistant grant to one assistant", () => {
+    const grants = [
+      {
+        scope: "assistant:write",
+        selectors: [{ resourceKind: "assistant", resourceId: "a1" }],
+        subScopes: ["assistant:read"],
+      },
+    ];
+
+    expect(hasScopeInGrants(grants, "assistant:write", "a1", "project_a")).toBe(
+      true,
+    );
+    expect(hasScopeInGrants(grants, "assistant:write", "a2", "project_a")).toBe(
+      false,
+    );
+    // Creating needs a project-wide grant: the check names the project.
+    expect(
+      hasScopeInGrants(grants, "assistant:write", "project_a", "project_a"),
+    ).toBe(false);
+    // Any assistant in the project opens the assistant pages.
+    expect(
+      hasScopeInGrants(grants, "assistant:read", undefined, "project_a"),
+    ).toBe(true);
+  });
+
+  it("applies assistant exclusions to the assistant they name", () => {
     const grants = [
       {
         scope: "assistant:write",
@@ -348,15 +379,19 @@ describe("hasScopeInGrants", () => {
       },
       {
         scope: "assistant:blocked_read",
-        selectors: [{ resourceKind: "assistant", resourceId: "project_a" }],
+        selectors: [{ resourceKind: "assistant", resourceId: "a1" }],
       },
     ];
 
-    expect(hasScopeInGrants(grants, "assistant:read", "project_a")).toBe(false);
-    expect(hasScopeInGrants(grants, "assistant:write", "project_a")).toBe(
+    expect(hasScopeInGrants(grants, "assistant:read", "a1", "project_a")).toBe(
       false,
     );
-    expect(hasScopeInGrants(grants, "assistant:read", "project_b")).toBe(true);
+    expect(hasScopeInGrants(grants, "assistant:write", "a1", "project_a")).toBe(
+      false,
+    );
+    expect(hasScopeInGrants(grants, "assistant:read", "a2", "project_a")).toBe(
+      true,
+    );
   });
 
   it("applies an unrestricted exclusion to an unscoped check", () => {

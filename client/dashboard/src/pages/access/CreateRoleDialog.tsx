@@ -52,6 +52,7 @@ import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
 import type { ActivePanel, ResourceType, RoleGrant, ScopeRule } from "./types";
 import {
+  isProjectFilteredResourceType,
   isProjectSelectableResourceType,
   isUnrestrictedResourceType,
 } from "./types";
@@ -99,10 +100,13 @@ function getAllowLevel(
 /** Map an allow level to the panels available for exception rules. */
 function getDenyPanels(
   allowLevel: string | null,
-  projectSelectable = false,
+  resourceType?: ResourceType,
 ): ActivePanel[] {
-  if (projectSelectable) {
+  if (resourceType && isProjectSelectableResourceType(resourceType)) {
     return allowLevel === "all" ? ["servers"] : [];
+  }
+  if (resourceType && isProjectFilteredResourceType(resourceType)) {
+    return allowLevel === "all" ? ["projects"] : [];
   }
 
   switch (allowLevel) {
@@ -640,9 +644,7 @@ export function CreateRoleDialog({
   const allowLevel = getAllowLevel(editingGrantRules);
   const denyAllowedPanels = getDenyPanels(
     allowLevel,
-    editingScopeDef
-      ? isProjectSelectableResourceType(editingScopeDef.resourceType)
-      : false,
+    editingScopeDef?.resourceType,
   );
   const stepOffset =
     dialogStep === "form" ? "translate-x-0" : "-translate-x-full";
@@ -803,9 +805,7 @@ export function CreateRoleDialog({
                         denyRules.length === 0 &&
                         getDenyPanels(
                           getAllowLevel(grant.rules),
-                          isProjectSelectableResourceType(
-                            scopeDef.resourceType,
-                          ),
+                          scopeDef.resourceType,
                         ).length > 0
                       }
                       disabled={false}

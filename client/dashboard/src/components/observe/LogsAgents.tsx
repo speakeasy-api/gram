@@ -205,7 +205,6 @@ function OwnSessionsNotice(): JSX.Element | null {
 export function LogsAgentsContent(): JSX.Element {
   const project = useProject();
   const { hasScope } = useRBAC();
-  const canReadAssistant = hasScope("assistant:read", project.id);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [offset, setOffset] = useState(0);
@@ -305,12 +304,14 @@ export function LogsAgentsContent(): JSX.Element {
 
   const searchQuery = urlSearch ?? "";
   const assistantId = isUuid(urlAssistantId) ? urlAssistantId : "";
+  const canReadAssistant =
+    !!assistantId && hasScope("assistant:read", assistantId, project.id);
 
   const { data: assistantData } = useAssistantsGet(
     { id: assistantId, gramProject: project.slug },
     undefined,
     {
-      enabled: canReadAssistant && !!assistantId,
+      enabled: canReadAssistant,
       retry: false,
       throwOnError: false,
       refetchOnWindowFocus: false,

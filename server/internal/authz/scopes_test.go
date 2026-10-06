@@ -226,22 +226,18 @@ func TestSystemRolesIncludeAssistantScopes(t *testing.T) {
 	require.NotContains(t, member, string(ScopeAssistantWrite))
 }
 
-func TestGrantsHasAccess_assistantWriteSatisfiesAssistantRead(t *testing.T) {
+func TestGrantsSatisfy_assistantWriteSatisfiesAssistantRead(t *testing.T) {
 	t.Parallel()
 
-	projectID := "0196cbd1-9328-74e7-b7bb-6e5357565573"
-	grants := []Grant{NewGrant(ScopeAssistantWrite, projectID)}
-	grant, _, _ := evaluateGrants(grants, Check{Scope: ScopeAssistantRead, ResourceID: projectID}.expand())
-	require.NotNil(t, grant)
+	grants := []Grant{NewGrant(ScopeAssistantWrite, "assistant_1")}
+	require.True(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")))
 }
 
-func TestGrantsHasAccess_assistantReadDoesNotSatisfyAssistantWrite(t *testing.T) {
+func TestGrantsSatisfy_assistantReadDoesNotSatisfyAssistantWrite(t *testing.T) {
 	t.Parallel()
 
-	projectID := "0196cbd1-9328-74e7-b7bb-6e5357565573"
-	grants := []Grant{NewGrant(ScopeAssistantRead, projectID)}
-	grant, _, _ := evaluateGrants(grants, Check{Scope: ScopeAssistantWrite, ResourceID: projectID}.expand())
-	require.Nil(t, grant)
+	grants := []Grant{NewGrant(ScopeAssistantRead, "assistant_1")}
+	require.False(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")))
 }
 
 func TestCheckExpand_orgRead(t *testing.T) {

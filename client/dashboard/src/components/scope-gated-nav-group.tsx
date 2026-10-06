@@ -12,6 +12,8 @@ export interface ScopeGatedNavEntry {
   scope?: Scope | Scope[];
   /** Optional resource ID to check the scopes against. */
   resourceId?: string;
+  /** Optional project the resource belongs to, for project-wide grants. */
+  projectId?: string;
   /** Display text override; see `CollapsibleNavItem`'s `label`. */
   label?: string;
 }
@@ -42,7 +44,7 @@ export function ScopeGatedNavGroup({
   const visible = items.filter((entry) => {
     if (entry.scope === undefined) return true;
     const scopes = Array.isArray(entry.scope) ? entry.scope : [entry.scope];
-    return hasAnyScope(scopes, entry.resourceId);
+    return hasAnyScope(scopes, entry.resourceId, entry.projectId);
   });
 
   const first = visible[0];

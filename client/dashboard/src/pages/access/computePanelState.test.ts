@@ -106,17 +106,17 @@ describe("computePanelState", () => {
       });
     });
 
-    it("assistant resource type selects projects", () => {
+    it("assistant resource type selects projects through projectId", () => {
       const result = computePanelState(
         [
-          { resourceKind: "assistant", resourceId: "proj-1" },
-          { resourceKind: "assistant", resourceId: "proj-2" },
+          { resourceKind: "assistant", resourceId: "*", projectId: "proj-1" },
+          { resourceKind: "assistant", resourceId: "*", projectId: "proj-2" },
         ] as unknown as Selector[],
         "assistant",
       );
       expect(result).toEqual({
-        activePanel: "servers",
-        selectedServerIds: ["proj-1", "proj-2"],
+        activePanel: "projects",
+        selectedProjectIds: ["proj-1", "proj-2"],
         label: "2 projects selected",
       });
     });

@@ -81,7 +81,7 @@ export function ChatRoot(): ReactElement {
   // The page IS the chat, so hide the floating dock across the /chat subtree.
   useHideInsightsDock();
   return (
-    <RequireScope scope="assistant:read" resourceId={project.id} level="page">
+    <RequireScope scope="assistant:read" projectId={project.id} level="page">
       <Outlet />
     </RequireScope>
   );

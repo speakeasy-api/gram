@@ -126,7 +126,7 @@ func (s *Service) ListTriggerInstances(ctx context.Context, _ *gen.ListTriggerIn
 }
 
 func (s *Service) ListTriggerEvents(ctx context.Context, payload *gen.ListTriggerEventsPayload) (*gen.ListTriggerEventsResult, error) {
-	authCtx, err := requireProjectAuthContext(ctx)
+	authCtx, err := s.requireAccess(ctx, authz.ScopeProjectRead)
 	if err != nil {
 		return nil, err
 	}

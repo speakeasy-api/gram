@@ -19,7 +19,12 @@ export default function NewAssistantPage(): JSX.Element {
   }, [searchParams, setOpen, setSearchParams]);
 
   return (
-    <RequireScope scope="assistant:write" resourceId={project.id} level="page">
+    <RequireScope
+      scope="assistant:write"
+      resourceId={project.id}
+      projectId={project.id}
+      level="page"
+    >
       <NewAssistantOnboarding />
     </RequireScope>
   );

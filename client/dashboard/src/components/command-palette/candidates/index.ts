@@ -73,7 +73,7 @@ export function useLauncherCandidates({
   // mcp:write-only reader would pass that one and then have the request
   // refused. Named on the project, as the server checks it.
   const canBrowseCatalog = hasScope("project:read", project.id);
-  const canReadAssistants = hasScope("assistant:read", project.id);
+  const canReadAssistants = hasScope("assistant:read", undefined, project.id);
 
   const projectEnabled = enabled && inProject;
 

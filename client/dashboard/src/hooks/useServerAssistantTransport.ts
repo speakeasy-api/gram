@@ -75,12 +75,14 @@ export function useServerAssistantTransport(
   // The demo org advertises the full scope set so pages are browsable, but
   // enforcement is read-only — never auto-fire the write-scoped provisioning
   // path there (it would 403 and toast on every page load).
+  // Any assistant grant in the project opens the dock; the server authorizes
+  // the managed assistant itself.
   const canRead =
-    !!targetProjectId && hasScope("assistant:read", targetProjectId);
+    !!targetProjectId && hasScope("assistant:read", undefined, targetProjectId);
   const canCreate =
     !!targetProjectId &&
     organization.slug !== DEMO_ORG_SLUG &&
-    hasScope("assistant:write", targetProjectId);
+    hasScope("assistant:write", targetProjectId, targetProjectId);
 
   // The fetcher reads the project from the X-Gram-Project header, but react-
   // query only differentiates by query key — pass projectSlug into the request

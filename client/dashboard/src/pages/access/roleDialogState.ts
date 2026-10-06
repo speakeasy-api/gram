@@ -1,4 +1,8 @@
-import { isProjectSelectableResourceType } from "./types";
+import {
+  isProjectFilteredResourceType,
+  isProjectScopedResourceType,
+  isProjectSelectableResourceType,
+} from "./types";
 import type { PolicyEffect, ResourceType, RoleGrant } from "./types";
 import type { Selector } from "@gram/client/models/components/selector.js";
 
@@ -138,7 +142,7 @@ export function computeRuleLabel(
   projects: ProjectRef[],
 ): string {
   if (selectors === null) {
-    return isProjectSelectableResourceType(resourceType)
+    return isProjectScopedResourceType(resourceType)
       ? "All projects"
       : "All servers";
   }
@@ -170,7 +174,7 @@ export function computeRuleLabel(
     return `${projectSels.length} projects`;
   }
 
-  // Project-selectable resource types (project, skill, assistant) store a
+  // Project-selectable resource types (project, skill) store a
   // project id in resourceId, so the remaining selectors name projects rather
   // than servers.
   if (isProjectSelectableResourceType(resourceType)) {
@@ -183,8 +187,11 @@ export function computeRuleLabel(
     return `${selectors.length} projects`;
   }
 
-  if (selectors.length === 1) return "1 server";
-  return `${selectors.length} servers`;
+  const noun = isProjectFilteredResourceType(resourceType)
+    ? resourceType
+    : "server";
+  if (selectors.length === 1) return `1 ${noun}`;
+  return `${selectors.length} ${noun}s`;
 }
 
 /** Plain-English tooltip describing what a rule does. */
@@ -228,8 +235,11 @@ export function computeRuleTooltip(
       const name = projects.find(
         (p) => p.id === projectSels[0]!.projectId!,
       )?.name;
+      const resources = isProjectFilteredResourceType(resourceType)
+        ? `${resourceType}s`
+        : "servers";
       return name
-        ? `${verb} access to all servers in ${name}`
+        ? `${verb} access to all ${resources} in ${name}`
         : `${verb} access to 1 project`;
     }
     return `${verb} access to ${projectSels.length} projects`;
@@ -256,6 +266,9 @@ export function computeRuleTooltip(
       : `${verb} access to ${selectors.length} projects`;
   }
 
-  if (selectors.length === 1) return `${verb} access to 1 server`;
-  return `${verb} access to ${selectors.length} servers`;
+  const noun = isProjectFilteredResourceType(resourceType)
+    ? resourceType
+    : "server";
+  if (selectors.length === 1) return `${verb} access to 1 ${noun}`;
+  return `${verb} access to ${selectors.length} ${noun}s`;
 }

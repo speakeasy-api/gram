@@ -47,6 +47,7 @@ const scopeDefinitions = [
     description: "Create and modify assistants within the project.",
     resourceType: "assistant",
     visibility: "user_visible",
+    agentEligible: true,
     exclusionScope: "assistant:blocked_write",
   },
 ] satisfies ScopeDefinition[];
@@ -192,12 +193,12 @@ describe("role grant round-trip (grantsFromRole → sdkGrantsFromForm)", () => {
     ]);
   });
 
-  it("round-trips project-selectable assistant rules and exceptions", () => {
+  it("round-trips project-filtered assistant rules and exceptions", () => {
     const assistantSelectors = [
-      { resourceKind: "assistant", resourceId: "project_123" },
+      { resourceKind: "assistant", resourceId: "*", projectId: "project_123" },
     ] as unknown as Role["grants"][number]["selectors"];
     const assistantExclusions = [
-      { resourceKind: "assistant", resourceId: "project_456" },
+      { resourceKind: "assistant", resourceId: "assistant_456" },
     ] as unknown as Role["grants"][number]["selectors"];
     const r = role([
       {
@@ -215,11 +216,17 @@ describe("role grant round-trip (grantsFromRole → sdkGrantsFromForm)", () => {
     ).toEqual([
       {
         scope: "assistant:write",
-        selectors: [{ resourceKind: "assistant", resourceId: "project_123" }],
+        selectors: [
+          {
+            resourceKind: "assistant",
+            resourceId: "*",
+            projectId: "project_123",
+          },
+        ],
       },
       {
         scope: "assistant:blocked_write",
-        selectors: [{ resourceKind: "assistant", resourceId: "project_456" }],
+        selectors: [{ resourceKind: "assistant", resourceId: "assistant_456" }],
       },
     ]);
   });

@@ -370,7 +370,8 @@ export function CommandPalette(): JSX.Element {
   // Project Assistant and resource search are project-scoped. At the org level
   // (no project in the URL) the palette still works for navigating org pages.
   const inProject = Boolean(projectSlug);
-  const canAskAssistant = inProject && hasScope("assistant:read", project.id);
+  const canAskAssistant =
+    inProject && hasScope("assistant:read", undefined, project.id);
 
   // Recents are scoped per user so a shared browser profile doesn't leak
   // history. Gate the session lookup on `isOpen` so we don't poll auth.info on

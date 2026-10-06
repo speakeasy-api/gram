@@ -119,6 +119,9 @@ var allowedSelectorKeys = map[string]map[string]bool{
 	ResourceKindEnvironment: {
 		SelectorKeyProjectID: true,
 	},
+	ResourceKindAssistant: {
+		SelectorKeyProjectID: true,
+	},
 	ResourceKindRiskPolicy: {
 		SelectorKeyServerURL:      true,
 		SelectorKeyServerIdentity: true,

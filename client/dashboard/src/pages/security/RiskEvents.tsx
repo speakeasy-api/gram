@@ -191,7 +191,7 @@ const NO_ASSISTANT = "none";
 export default function RiskEvents(): JSX.Element {
   const project = useProject();
   const { hasScope } = useRBAC();
-  const canReadAssistants = hasScope("assistant:read", project.id);
+  const canReadAssistants = hasScope("assistant:read", undefined, project.id);
   const client = useSdkClient();
   const gramProject = useProjectSlugForRequests();
   const organization = useOrganization();

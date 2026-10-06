@@ -19,6 +19,8 @@ export interface ProjectNavRoute {
   scope: Scope[];
   /** Resource selected for this route's scope check, when applicable. */
   resourceId?: string;
+  /** Project the route's resources belong to, for project-wide grants. */
+  projectId?: string;
 }
 
 /**
@@ -68,7 +70,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       {
         route: routes.chat,
         scope: ["assistant:read"],
-        resourceId: projectId,
+        projectId,
       },
       { route: routes.identities, scope: observe },
       ...(agentManagementFlag.status === "enabled"
@@ -100,7 +102,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
             {
               route: routes.assistants,
               scope: ["assistant:read"] as Scope[],
-              resourceId: projectId,
+              projectId,
             },
           ]
         : []),

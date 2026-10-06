@@ -42,7 +42,7 @@ export default function Home(): JSX.Element {
               compact variant drops pinned/recents — history lives on /chat. */}
           <RequireScope
             scope="assistant:read"
-            resourceId={projectId}
+            projectId={projectId}
             level="section"
           >
             <div className="w-full pt-2 pb-6">

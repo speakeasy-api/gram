@@ -156,11 +156,11 @@ export function AssistantMCPServersSection({
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="text-eyebrow">MCP Servers ({attached.length})</div>
         <RequireScope
-          scope={["assistant:write", "project:write"]}
-          all
-          resourceId={project.id}
+          scope="assistant:write"
+          resourceId={assistant.id}
+          projectId={project.id}
           level="component"
-          reason="You need assistant write and project write access to attach MCP servers."
+          reason="You need assistant write access to attach MCP servers."
         >
           <Button
             variant="tertiary"
@@ -185,6 +185,7 @@ export function AssistantMCPServersSection({
           {attached.map((ref) => (
             <AttachedServerRow
               key={`${ref.kind}:${ref.slug}`}
+              assistantId={assistant.id}
               serverRef={ref}
               environments={environments.map((env) => env.slug)}
               disabled={update.isPending}
@@ -209,12 +210,14 @@ export function AssistantMCPServersSection({
 }
 
 function AttachedServerRow({
+  assistantId,
   serverRef,
   environments,
   disabled,
   onEnvironmentChange,
   onRemove,
 }: {
+  assistantId: string;
   serverRef: AttachedRef;
   environments: string[];
   disabled: boolean;
@@ -251,9 +254,9 @@ function AttachedServerRow({
         />
       </div>
       <RequireScope
-        scope={["assistant:write", "project:write"]}
-        all
-        resourceId={project.id}
+        scope="assistant:write"
+        resourceId={assistantId}
+        projectId={project.id}
         level="component"
         className="mt-2 w-full"
       >

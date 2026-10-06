@@ -273,12 +273,12 @@ describe("useProjectNavRoutes", () => {
         expect.objectContaining({
           route: routes.chat,
           scope: ["assistant:read"],
-          resourceId: "project_a",
+          projectId: "project_a",
         }),
         expect.objectContaining({
           route: routes.assistants,
           scope: ["assistant:read"],
-          resourceId: "project_a",
+          projectId: "project_a",
         }),
       ]),
     );

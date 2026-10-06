@@ -50,7 +50,11 @@ export function AssistantDraftPanel(): JSX.Element {
   const routes = useRoutes();
   const project = useProject();
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("assistant:write", project.id);
+  const canWrite = hasScope(
+    "assistant:write",
+    draft.assistantId ?? project.id,
+    project.id,
+  );
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useQueryState(
     "tab",
@@ -110,7 +114,8 @@ export function AssistantDraftPanel(): JSX.Element {
         </Text>
         <RequireScope
           scope="assistant:write"
-          resourceId={project.id}
+          resourceId={draft.assistantId ?? project.id}
+          projectId={project.id}
           level="component"
           reason="You don't have permission to delete assistants."
         >

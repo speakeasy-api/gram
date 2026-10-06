@@ -852,7 +852,7 @@ function CardActions({ children }: { children: ReactNode }) {
 function ExploreWithAIButton({ onClick }: { onClick: () => void }) {
   const project = useProject();
   const { hasScope } = useRBAC();
-  if (!hasScope("assistant:read", project.id)) return null;
+  if (!hasScope("assistant:read", undefined, project.id)) return null;
 
   return (
     <button
