@@ -156,10 +156,11 @@ export function AssistantMCPServersSection({
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="text-eyebrow">MCP Servers ({attached.length})</div>
         <RequireScope
-          scope="project:write"
+          scope={["assistant:write", "project:write"]}
+          all
           resourceId={project.id}
           level="component"
-          reason="You need project write access to attach MCP servers."
+          reason="You need assistant write and project write access to attach MCP servers."
         >
           <Button
             variant="tertiary"
@@ -250,7 +251,8 @@ function AttachedServerRow({
         />
       </div>
       <RequireScope
-        scope="project:write"
+        scope={["assistant:write", "project:write"]}
+        all
         resourceId={project.id}
         level="component"
         className="mt-2 w-full"

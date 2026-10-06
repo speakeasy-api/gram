@@ -2,7 +2,7 @@ import { CollapsibleNavGroup, CollapsibleNavItem } from "@/components/nav-menu";
 import { ReleaseStage } from "@/components/release-stage-badge";
 import { useRBAC } from "@/hooks/useRBAC";
 import { AppRoute } from "@/routes";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import React from "react";
 
 /** A nav sub-item plus the scopes that make it visible. */

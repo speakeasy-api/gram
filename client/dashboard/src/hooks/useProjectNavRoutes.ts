@@ -65,7 +65,11 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     const observe: Scope[] = ["project:read"];
     return [
       { route: routes.home, scope: read },
-      { route: routes.chat, scope: read },
+      {
+        route: routes.chat,
+        scope: ["assistant:read"],
+        resourceId: projectId,
+      },
       { route: routes.identities, scope: observe },
       ...(agentManagementFlag.status === "enabled"
         ? [{ route: routes.agents, scope: [] }]
@@ -92,7 +96,13 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         : []),
       { route: routes.mcp, scope: ["mcp:read", "mcp:write"] },
       ...(isAssistantsEnabled
-        ? [{ route: routes.assistants, scope: read }]
+        ? [
+            {
+              route: routes.assistants,
+              scope: ["assistant:read"] as Scope[],
+              resourceId: projectId,
+            },
+          ]
         : []),
       {
         route: routes.skills,

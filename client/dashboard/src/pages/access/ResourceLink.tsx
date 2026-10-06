@@ -2,6 +2,7 @@ import { Text } from "@/components/ui/Text";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import {
   Blocks,
+  Bot,
   Building2,
   ChevronRight,
   FolderOpen,
@@ -63,6 +64,11 @@ export function ResourceLink({
     label = proj?.name ?? resourceId;
     IconEl = FolderOpen;
     to = proj ? `/${orgSlug}/projects/${proj.slug}` : null;
+  } else if (resourceKind === "assistant") {
+    const proj = projectMap.get(resourceId);
+    label = proj?.name ?? resourceId;
+    IconEl = Bot;
+    to = proj ? `/${orgSlug}/projects/${proj.slug}/assistants` : null;
   } else if (resourceKind === "mcp") {
     IconEl = Plug;
     // Grants use resource_kind "mcp" for both server flavors: the resource id

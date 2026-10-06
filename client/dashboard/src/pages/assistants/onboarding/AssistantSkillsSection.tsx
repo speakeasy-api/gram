@@ -145,11 +145,11 @@ export function AssistantSkillsSection(): JSX.Element {
           Skills ({attached.length})
         </Text>
         <RequireScope
-          scope={["skill:read", "project:write"]}
+          scope={["skill:read", "assistant:write", "project:write"]}
           all
           resourceId={project.id}
           level="component"
-          reason="You need skill read and project write access to attach skills."
+          reason="You need skill read, assistant write, and project write access to attach skills."
         >
           <Button
             variant="tertiary"
@@ -269,7 +269,7 @@ function AttachedSkillRow({
         </Badge>
       </div>
       <RequireScope
-        scope={["skill:read", "project:write"]}
+        scope={["skill:read", "assistant:write", "project:write"]}
         all
         resourceId={project.id}
         level="component"

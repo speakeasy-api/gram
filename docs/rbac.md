@@ -62,6 +62,8 @@ org:read
 org:admin
 project:read
 project:write
+assistant:read
+assistant:write
 mcp:read
 mcp:write
 mcp:connect
@@ -84,6 +86,8 @@ const (
 	ScopeOrgAdmin           Scope = "org:admin"
 	ScopeProjectRead        Scope = "project:read"
 	ScopeProjectWrite       Scope = "project:write"
+	ScopeAssistantRead      Scope = "assistant:read"
+	ScopeAssistantWrite     Scope = "assistant:write"
 	ScopeMCPRead            Scope = "mcp:read"
 	ScopeMCPWrite           Scope = "mcp:write"
 	ScopeMCPConnect         Scope = "mcp:connect"
@@ -123,6 +127,8 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeOrgAdmin:           nil,
 	ScopeProjectRead:        {ScopeProjectWrite},
 	ScopeProjectWrite:       nil,
+	ScopeAssistantRead:      {ScopeAssistantWrite},
+	ScopeAssistantWrite:     nil,
 	ScopeMCPRead:            {ScopeMCPWrite},
 	ScopeMCPWrite:           nil,
 	ScopeMCPConnect:         {ScopeMCPRead, ScopeMCPWrite},
@@ -187,6 +193,7 @@ A selector narrows a grant to the resource it applies to. Every persisted select
 
 - `org:*` -> `org`
 - `project:*` -> `project`
+- `assistant:*` -> `assistant` (the `resource_id` is the project UUID)
 - `mcp:*` -> `mcp`
 - `mcp:*` -> `external_mcp` (differentiator between MCPs hosted by us and external ones)
 - `skill:*` -> `skill` (the `resource_id` is the project UUID)
@@ -559,6 +566,8 @@ org:admin
 org:read
 project:read
 project:write
+assistant:read
+assistant:write
 mcp:read
 mcp:write
 mcp:connect
@@ -574,6 +583,7 @@ plugin:write
 ```text
 org:read
 project:read
+assistant:read
 mcp:read
 mcp:connect
 skill:read
@@ -591,7 +601,7 @@ Embedded onboarding configuration requires `org:admin` independently of task ass
 
 Use this table when answering "what grant is required to use this dashboard feature?" It records the dashboard's page and action gates, but server-side checks remain authoritative. When a row lists multiple scopes separated by `OR`, any one of those grants can open the surface. Scope expansion still applies: `org:admin` implies `org:read`, `project:write` implies `project:read`, `mcp:write` implies `mcp:read` and `mcp:connect`, `environment:write` implies `environment:read`, `skill:write` implies `skill:read`, and `workload:write` implies `workload:read`.
 
-Selectors matter. A project-scoped feature needs the grant selector to match the active project. An MCP feature needs the selector to match the target MCP server or toolset. An unrestricted selector for the scope family covers every resource in that family.
+Selectors matter. A project-scoped or assistant feature needs the grant selector to match the active project. An MCP feature needs the selector to match the target MCP server or toolset. An unrestricted selector for the scope family covers every resource in that family.
 
 | Dashboard feature or question                                                            | Required grant(s)                                                                                            | Selector target                                                                    | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

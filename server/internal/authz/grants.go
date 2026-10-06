@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -132,6 +133,10 @@ func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID 
 				WorkosLastEventID: conv.ToPGTextEmpty(""),
 			}); err != nil {
 				return fmt.Errorf("seed %s role: %w", roleSlug, err)
+			}
+			existingRole, err = q.GetGlobalRoleBySlug(ctx, roleSlug)
+			if err != nil {
+				return fmt.Errorf("reload %s role: %w", roleSlug, err)
 			}
 		}
 
