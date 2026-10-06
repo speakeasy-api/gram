@@ -154,7 +154,7 @@ Settings tab; the Scope fallback row reads Every advertised scope. Its client
 sets its own scopes and is flagged as a legacy callback client. Platform admins
 see the legacy callback warning with its Migrate button on the client's pages
 and the compatibility-mode switch on its Settings tab; everyone else sees
-neither. The Settings tab also warns that the client's scopes have no effect.
+neither.
 Browser verification: `[~]`.
 
 ### Upstream session validation outcomes
