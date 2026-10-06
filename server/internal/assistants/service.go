@@ -882,6 +882,37 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 	return out, nil
 }
 
+// AttachmentTargetIDs resolves the toolset and MCP server slugs a create or
+// update would attach to their IDs, so the caller can authorize them before
+// the write. Unknown slugs are skipped; the write itself rejects them.
+func (s *ServiceCore) AttachmentTargetIDs(ctx context.Context, projectID uuid.UUID, toolsets []*types.AssistantToolsetRef, mcpServers []*types.AssistantMCPServerRef) ([]uuid.UUID, error) {
+	toolsetSlugs := make([]string, 0, len(toolsets))
+	for _, ref := range toolsets {
+		if ref != nil {
+			toolsetSlugs = append(toolsetSlugs, ref.ToolsetSlug)
+		}
+	}
+	serverSlugs := make([]string, 0, len(mcpServers))
+	for _, ref := range mcpServers {
+		if ref != nil {
+			serverSlugs = append(serverSlugs, ref.McpServerSlug)
+		}
+	}
+	if len(toolsetSlugs) == 0 && len(serverSlugs) == 0 {
+		return nil, nil
+	}
+
+	ids, err := assistantrepo.New(s.db).ListAttachmentTargetIDs(ctx, assistantrepo.ListAttachmentTargetIDsParams{
+		ProjectID:      projectID,
+		ToolsetSlugs:   toolsetSlugs,
+		McpServerSlugs: serverSlugs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve assistant attachment targets: %w", err)
+	}
+	return ids, nil
+}
+
 // resolvedMcpServerInsert captures the FK values we need to write one row in
 // assistant_mcp_servers for a single (mcp_server_slug, environment_slug?) ref.
 type resolvedMcpServerInsert struct {

@@ -137,6 +137,11 @@ func ListAudienceOptionsAccessPath() string {
 	return "/rpc/access.listAudienceOptions"
 }
 
+// ExplainResourceAccessAccessPath returns the URL path to the access service explainResourceAccess HTTP endpoint.
+func ExplainResourceAccessAccessPath() string {
+	return "/rpc/access.explainResourceAccess"
+}
+
 // RequestAccessAccessPath returns the URL path to the access service requestAccess HTTP endpoint.
 func RequestAccessAccessPath() string {
 	return "/rpc/access.requestAccess"

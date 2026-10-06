@@ -119,6 +119,8 @@ type toolExposureRefusal struct {
 	// UnknownTools names the tools that caused the refusal, so the caller can
 	// say which ones to correct instead of retrying the whole batch blind.
 	UnknownTools []string `json:"unknown_tools,omitempty"`
+	// Preview carries the slugs an unconfirmed server creation would create.
+	Preview *MCPFromFunctionsPreview `json:"preview,omitempty"`
 }
 
 func toolExposureToolResult(err error) (*mcp.CallToolResult, bool) {
@@ -129,7 +131,7 @@ func toolExposureToolResult(err error) (*mcp.CallToolResult, bool) {
 	var exposure *MCPToolExposureError
 	switch {
 	case errors.As(err, &exposure):
-		result.Code, result.Message, result.UnknownTools = exposure.Code, exposure.Message, exposure.UnknownTools
+		result.Code, result.Message, result.UnknownTools, result.Preview = exposure.Code, exposure.Message, exposure.UnknownTools, exposure.Preview
 	case errors.Is(err, ErrForbidden):
 		result.Code = "forbidden"
 		result.Message = "That project or MCP server is not one this caller can read."

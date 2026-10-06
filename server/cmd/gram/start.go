@@ -846,7 +846,6 @@ func newStartCommand() *cli.Command {
 					db,
 					c.String("environment"),
 					c.String("openrouter-provisioning-key"),
-					openRouterKeyRefresher,
 					productFeatures,
 					billingTracker,
 					encryptionClient,
@@ -1179,7 +1178,7 @@ func newStartCommand() *cli.Command {
 				RAG: ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager,
 				ShadowMCP: shadowMCPClient, MCPRisk: mcpPolicyEvaluator, Audit: auditLogger, PlatformExtras: assistantPlatformExtras,
 				PlatformFeatureChecker: platformFeatureChecker, PlatformToolsets: platformToolsets,
-				Identity: identityResolver, Challenges: remoteChallengeManager, CallbackOrigins: callbackOrigins,
+				Identity: identityResolver, Challenges: remoteChallengeManager, CallbackOrigins: callbackOrigins, PlatformHosts: platformHosts,
 			})
 			if err != nil {
 				return err
@@ -1511,6 +1510,7 @@ func newStartCommand() *cli.Command {
 					SignInRedirectURL:          auth.FormSignInRedirectURL(c.String("site-url")),
 					Environment:                c.String("environment"),
 					NewOrganizationDefaultHost: orgHosts.NewOrganizationDefaultHost(),
+					OrgHosts:                   orgHosts,
 				},
 				authzEngine,
 				billingRepo,
@@ -1823,6 +1823,7 @@ func newStartCommand() *cli.Command {
 				NetworkAccessAdmission:   networkIngressAdmission,
 				PublicationRequests:      plugins.PublicationRequests{Enabled: publicationEmit},
 				TemporalEnv:              temporalEnv,
+				ProjectCore:              projects.NewCore(logger.With(attr.SlogComponent("projects")), auditLogger, temporalEnv, pluginsGitHub != nil),
 				Skills:                   skillsService,
 				SkillInsights:            telemetryrepo.New(chDB),
 				RiskPolicyApprovals:      mcpApprovalService,

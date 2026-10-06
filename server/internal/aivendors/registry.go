@@ -8,8 +8,9 @@ package aivendors
 // no recourse. Be generous — an extra document costs a string comparison.
 //
 // Verify every document live before it lands (HTTP 200, valid JSON, client_id
-// equal to URL, token_endpoint_auth_method "none") and record the date above
-// the product. Every product with Signatures is also a scan target.
+// equal to URL, token_endpoint_auth_method "none" or absent OR
+// "private_key_jwt" with exactly one of jwks or jwks_uri) and record the date
+// above the product. Every product with Signatures is also a scan target.
 //
 // Declaration order is load-bearing: wildcards match in order, so reordering
 // can change which entry a client_id is attributed to.
@@ -458,6 +459,62 @@ var registry = []Product{
 		Documents: []Document{{
 			URL:         "https://github.com/copilot/cli/client-metadata.json",
 			DisplayName: "GitHub Copilot CLI",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-10-05 against Conductor 0.90.1 (macOS aarch64 DMG): HTTP
+	// 200, a self-referential client_id, and token_endpoint_auth_method "none".
+	// Shorter (/oauth/client.json), invented-segment, and sibling-file paths
+	// all return 404, so this is an exact entry, not a pattern. A desktop app
+	// (Tauri shell orchestrating Claude Code + Codex), with a hosted callback
+	// matching Skydive's shape, not loopback. CFBundleIdentifier is the exact
+	// install signal; the process name is generic but kept on purpose (matching
+	// convention in goose, pi, crush, qwen above). No binaries: the CLI shim
+	// in Contents/Resources/bin is not installed onto PATH. ~/.conductor is the
+	// user config directory per Conductor's settings docs; .conductor/ in the
+	// repository root are per-repo workspace settings.
+	{
+		ID:          "conductor",
+		VendorKey:   "conductor",
+		DisplayName: "Conductor",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    []string{"com.conductor.app"},
+			Binaries:     nil,
+			ConfigDirs:   []string{"~/.conductor"},
+			ProcessNames: []string{"conductor"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Documents: []Document{{
+			URL:         "https://api.conductor.build/oauth/client-metadata.json",
+			DisplayName: "Conductor",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-10-05: HTTP 200, self-referential client_id,
+	// token_endpoint_auth_method "private_key_jwt" with jwks_uri. This is a
+	// wildcard: Vercel Connect mints one document per connector, with
+	// server-generated IDs (scl_...). Sibling paths return 404 (/connectors,
+	// /connectors/a/b), so the namespace is bounded. The single redirect_uri
+	// is Vercel's own /callback. client_name is user-chosen (the connector
+	// owner's chosen name); the consent page shows it alongside the
+	// connect.vercel.com origin, which is the verifiable trust anchor. The
+	// catalog DisplayName ("Vercel Connect") attributes the client in the
+	// dashboard.
+	{
+		ID:              "vercel-connect",
+		VendorKey:       "vercel",
+		DisplayName:     "Vercel Connect",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Documents: []Document{{
+			URL:         "https://connect.vercel.com/connectors/*",
+			DisplayName: "Vercel Connect (connectors)",
 			Enabled:     true,
 		}},
 	},

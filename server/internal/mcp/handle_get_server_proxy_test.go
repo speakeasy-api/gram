@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -91,6 +92,11 @@ func TestRuntimeMethods_RemoteBacked_ProxiedUpstream(t *testing.T) {
 	}
 	var hits []upstreamHit
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The proxy's background metadata probe is not MCP traffic.
+		if r.URL.Path == wellknown.OAuthProtectedResourcePath {
+			http.NotFound(w, r)
+			return
+		}
 		hits = append(hits, upstreamHit{
 			method:  r.Method,
 			accept:  r.Header.Get("Accept"),

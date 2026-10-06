@@ -201,8 +201,7 @@ func setupProductionPaygChatKeyReconciler(t *testing.T, causes []string) (*activ
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	production := openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
-		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
 	)
 	return activities.NewReconcilePaygOpenRouterChatKey(testenv.NewLogger(t), db, production), db, organizationID, recorder
 }

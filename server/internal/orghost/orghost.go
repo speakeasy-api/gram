@@ -82,6 +82,34 @@ func (r *Resolver) ServerURL(defaultHost pgtype.Text) *url.URL {
 	return r.resolve(defaultHost, r.cfg.ServerURL)
 }
 
+// StoredPlatformHost returns the server and dashboard base URLs of the platform
+// host an organization's stored default_host names. ok is false when the value
+// is NULL, no longer names the server URL's host or a configured platform host,
+// or names the server host while no dashboard URL is configured. Callers that
+// move a browser to the organization's host use it so that they never act on
+// the legacy fallback.
+func (r *Resolver) StoredPlatformHost(defaultHost pgtype.Text) (serverURL, siteURL *url.URL, ok bool) {
+	host, ok := storedHost(defaultHost)
+	if !ok {
+		return nil, nil, false
+	}
+	if host == r.serverHost {
+		if r.cfg.ServerURL == nil || r.cfg.SiteURL == nil {
+			return nil, nil, false
+		}
+		return clone(r.cfg.ServerURL), clone(r.cfg.SiteURL), true
+	}
+	baseURL, ok := r.cfg.PlatformHosts[host]
+	if !ok {
+		return nil, nil, false
+	}
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, nil, false
+	}
+	return parsed, clone(parsed), true
+}
+
 func (r *Resolver) resolve(defaultHost pgtype.Text, configured *url.URL) *url.URL {
 	if host, ok := storedHost(defaultHost); ok {
 		// The server URL's own host keeps the configured URL, so a local
@@ -132,4 +160,23 @@ func clone(u *url.URL) *url.URL {
 	}
 	copied := *u
 	return &copied
+}
+
+// IsPlatformHost reports whether host is the server URL's host or a configured
+// extra platform host, and returns its configured base URL if so.
+func (r *Resolver) IsPlatformHost(host string) (baseURL string, ok bool) {
+	canonical, err := requestorigin.CanonicalHost(host)
+	if err != nil {
+		return "", false
+	}
+	if canonical == r.serverHost {
+		if r.cfg.ServerURL == nil {
+			return "", false
+		}
+		return r.cfg.ServerURL.String(), true
+	}
+	if baseURL, ok := r.cfg.PlatformHosts[canonical]; ok {
+		return baseURL, true
+	}
+	return "", false
 }

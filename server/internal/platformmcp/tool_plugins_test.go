@@ -12,9 +12,9 @@ import (
 // pluginReadToolNames are the plugin tools the managed assistant may call.
 var pluginReadToolNames = []string{"list_plugins", "get_plugin", "list_plugin_assignments"}
 
-// pluginMutationToolNames change who receives a plugin or what it carries and
-// stay external-only.
-var pluginMutationToolNames = []string{operationSetPluginAssignments, operationRepublishPlugin, "distribute_mcp_to_plugin", "remove_mcp_from_plugin"}
+// pluginMutationToolNames change who receives a plugin, what it carries, what
+// it is called, or whether it is republished, and stay external-only.
+var pluginMutationToolNames = []string{operationSetPluginAssignments, operationCreatePlugin, operationRenamePlugin, operationRepublishPlugin, "distribute_mcp_to_plugin", "remove_mcp_from_plugin"}
 
 // requirePluginToolAudiences asserts the audience split every plugin tool
 // registration must keep, whether the plugins service is composed or absent.

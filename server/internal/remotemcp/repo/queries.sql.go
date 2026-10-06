@@ -219,6 +219,52 @@ func (q *Queries) DeleteServerHeader(ctx context.Context, arg DeleteServerHeader
 	return i, err
 }
 
+const getRemoteProtectedResource = `-- name: GetRemoteProtectedResource :one
+SELECT id, project_id, organization_id, resource_identifier, metadata_url, authorization_servers, scopes_supported, bearer_methods_supported, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, dpop_bound_access_tokens_required, dpop_signing_alg_values_supported, tls_client_certificate_bound_access_tokens, challenge_scopes, challenge_scopes_seen_at, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
+FROM remote_protected_resources
+WHERE project_id = $1
+    AND resource_identifier = $2::text
+    AND deleted IS FALSE
+`
+
+type GetRemoteProtectedResourceParams struct {
+	ProjectID          uuid.UUID
+	ResourceIdentifier string
+}
+
+func (q *Queries) GetRemoteProtectedResource(ctx context.Context, arg GetRemoteProtectedResourceParams) (RemoteProtectedResource, error) {
+	row := q.db.QueryRow(ctx, getRemoteProtectedResource, arg.ProjectID, arg.ResourceIdentifier)
+	var i RemoteProtectedResource
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.ResourceIdentifier,
+		&i.MetadataUrl,
+		&i.AuthorizationServers,
+		&i.ScopesSupported,
+		&i.BearerMethodsSupported,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.DpopBoundAccessTokensRequired,
+		&i.DpopSigningAlgValuesSupported,
+		&i.TlsClientCertificateBoundAccessTokens,
+		&i.ChallengeScopes,
+		&i.ChallengeScopesSeenAt,
+		&i.Metadata,
+		&i.MetadataFetchedAt,
+		&i.MetadataLastError,
+		&i.MetadataLastErrorAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getServerByID = `-- name: GetServerByID :one
 SELECT id, project_id, name, slug, transport_type, url, created_at, updated_at, deleted_at, deleted
 FROM remote_mcp_servers
@@ -484,6 +530,106 @@ func (q *Queries) ListServersByProjectID(ctx context.Context, projectID uuid.UUI
 	return items, nil
 }
 
+const recordRemoteProtectedResourceChallengeScopes = `-- name: RecordRemoteProtectedResourceChallengeScopes :execrows
+UPDATE remote_protected_resources
+SET
+    challenge_scopes = $1::text[],
+    challenge_scopes_seen_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = $2
+    AND resource_identifier = $3::text
+    AND deleted IS FALSE
+`
+
+type RecordRemoteProtectedResourceChallengeScopesParams struct {
+	ChallengeScopes    []string
+	ProjectID          uuid.UUID
+	ResourceIdentifier string
+}
+
+func (q *Queries) RecordRemoteProtectedResourceChallengeScopes(ctx context.Context, arg RecordRemoteProtectedResourceChallengeScopesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordRemoteProtectedResourceChallengeScopes, arg.ChallengeScopes, arg.ProjectID, arg.ResourceIdentifier)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recordRemoteProtectedResourceFetchError = `-- name: RecordRemoteProtectedResourceFetchError :one
+INSERT INTO remote_protected_resources (
+    project_id,
+    organization_id,
+    resource_identifier,
+    metadata_url,
+    metadata_last_error,
+    metadata_last_error_at
+)
+VALUES (
+    $1,
+    $2,
+    $3::text,
+    NULLIF($4::text, ''),
+    $5::text,
+    clock_timestamp()
+)
+ON CONFLICT (project_id, resource_identifier) WHERE deleted IS FALSE DO UPDATE
+SET
+    metadata_url = COALESCE(EXCLUDED.metadata_url, remote_protected_resources.metadata_url),
+    metadata_last_error = EXCLUDED.metadata_last_error,
+    metadata_last_error_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+RETURNING id, project_id, organization_id, resource_identifier, metadata_url, authorization_servers, scopes_supported, bearer_methods_supported, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, dpop_bound_access_tokens_required, dpop_signing_alg_values_supported, tls_client_certificate_bound_access_tokens, challenge_scopes, challenge_scopes_seen_at, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
+`
+
+type RecordRemoteProtectedResourceFetchErrorParams struct {
+	ProjectID          uuid.UUID
+	OrganizationID     string
+	ResourceIdentifier string
+	MetadataUrl        string
+	MetadataLastError  string
+}
+
+// Records why the last read of resource_identifier failed without touching
+// what an earlier read advertised. Creates the row when none exists.
+func (q *Queries) RecordRemoteProtectedResourceFetchError(ctx context.Context, arg RecordRemoteProtectedResourceFetchErrorParams) (RemoteProtectedResource, error) {
+	row := q.db.QueryRow(ctx, recordRemoteProtectedResourceFetchError,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ResourceIdentifier,
+		arg.MetadataUrl,
+		arg.MetadataLastError,
+	)
+	var i RemoteProtectedResource
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.ResourceIdentifier,
+		&i.MetadataUrl,
+		&i.AuthorizationServers,
+		&i.ScopesSupported,
+		&i.BearerMethodsSupported,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.DpopBoundAccessTokensRequired,
+		&i.DpopSigningAlgValuesSupported,
+		&i.TlsClientCertificateBoundAccessTokens,
+		&i.ChallengeScopes,
+		&i.ChallengeScopesSeenAt,
+		&i.Metadata,
+		&i.MetadataFetchedAt,
+		&i.MetadataLastError,
+		&i.MetadataLastErrorAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const updateServer = `-- name: UpdateServer :one
 UPDATE remote_mcp_servers
 SET
@@ -590,6 +736,138 @@ func (q *Queries) UpdateServerHeader(ctx context.Context, arg UpdateServerHeader
 		&i.IsSecret,
 		&i.Value,
 		&i.ValueFromRequestHeader,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertRemoteProtectedResource = `-- name: UpsertRemoteProtectedResource :one
+
+INSERT INTO remote_protected_resources (
+    project_id,
+    organization_id,
+    resource_identifier,
+    metadata_url,
+    authorization_servers,
+    scopes_supported,
+    bearer_methods_supported,
+    resource_name,
+    resource_documentation,
+    resource_policy_uri,
+    resource_tos_uri,
+    dpop_bound_access_tokens_required,
+    dpop_signing_alg_values_supported,
+    tls_client_certificate_bound_access_tokens,
+    metadata,
+    metadata_fetched_at
+)
+VALUES (
+    $1,
+    $2,
+    $3::text,
+    NULLIF($4::text, ''),
+    $5::text[],
+    $6::text[],
+    $7::text[],
+    NULLIF($8::text, ''),
+    NULLIF($9::text, ''),
+    NULLIF($10::text, ''),
+    NULLIF($11::text, ''),
+    $12::boolean,
+    $13::text[],
+    $14::boolean,
+    NULLIF($15::text, '')::jsonb,
+    clock_timestamp()
+)
+ON CONFLICT (project_id, resource_identifier) WHERE deleted IS FALSE DO UPDATE
+SET
+    organization_id = EXCLUDED.organization_id,
+    metadata_url = EXCLUDED.metadata_url,
+    authorization_servers = EXCLUDED.authorization_servers,
+    scopes_supported = EXCLUDED.scopes_supported,
+    bearer_methods_supported = EXCLUDED.bearer_methods_supported,
+    resource_name = EXCLUDED.resource_name,
+    resource_documentation = EXCLUDED.resource_documentation,
+    resource_policy_uri = EXCLUDED.resource_policy_uri,
+    resource_tos_uri = EXCLUDED.resource_tos_uri,
+    dpop_bound_access_tokens_required = EXCLUDED.dpop_bound_access_tokens_required,
+    dpop_signing_alg_values_supported = EXCLUDED.dpop_signing_alg_values_supported,
+    tls_client_certificate_bound_access_tokens = EXCLUDED.tls_client_certificate_bound_access_tokens,
+    metadata = EXCLUDED.metadata,
+    metadata_fetched_at = clock_timestamp(),
+    metadata_last_error = NULL,
+    metadata_last_error_at = NULL,
+    updated_at = clock_timestamp()
+RETURNING id, project_id, organization_id, resource_identifier, metadata_url, authorization_servers, scopes_supported, bearer_methods_supported, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, dpop_bound_access_tokens_required, dpop_signing_alg_values_supported, tls_client_certificate_bound_access_tokens, challenge_scopes, challenge_scopes_seen_at, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertRemoteProtectedResourceParams struct {
+	ProjectID                             uuid.UUID
+	OrganizationID                        string
+	ResourceIdentifier                    string
+	MetadataUrl                           string
+	AuthorizationServers                  []string
+	ScopesSupported                       []string
+	BearerMethodsSupported                []string
+	ResourceName                          string
+	ResourceDocumentation                 string
+	ResourcePolicyUri                     string
+	ResourceTosUri                        string
+	DpopBoundAccessTokensRequired         pgtype.Bool
+	DpopSigningAlgValuesSupported         []string
+	TlsClientCertificateBoundAccessTokens pgtype.Bool
+	Metadata                              string
+}
+
+// Remote Protected Resources
+// Records an RFC 9728 document read for resource_identifier. scopes_supported
+// and bearer_methods_supported stay NULL when the document omits them; an
+// empty array means the document advertised none. A successful read clears
+// the last fetch error.
+func (q *Queries) UpsertRemoteProtectedResource(ctx context.Context, arg UpsertRemoteProtectedResourceParams) (RemoteProtectedResource, error) {
+	row := q.db.QueryRow(ctx, upsertRemoteProtectedResource,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ResourceIdentifier,
+		arg.MetadataUrl,
+		arg.AuthorizationServers,
+		arg.ScopesSupported,
+		arg.BearerMethodsSupported,
+		arg.ResourceName,
+		arg.ResourceDocumentation,
+		arg.ResourcePolicyUri,
+		arg.ResourceTosUri,
+		arg.DpopBoundAccessTokensRequired,
+		arg.DpopSigningAlgValuesSupported,
+		arg.TlsClientCertificateBoundAccessTokens,
+		arg.Metadata,
+	)
+	var i RemoteProtectedResource
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.ResourceIdentifier,
+		&i.MetadataUrl,
+		&i.AuthorizationServers,
+		&i.ScopesSupported,
+		&i.BearerMethodsSupported,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.DpopBoundAccessTokensRequired,
+		&i.DpopSigningAlgValuesSupported,
+		&i.TlsClientCertificateBoundAccessTokens,
+		&i.ChallengeScopes,
+		&i.ChallengeScopesSeenAt,
+		&i.Metadata,
+		&i.MetadataFetchedAt,
+		&i.MetadataLastError,
+		&i.MetadataLastErrorAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

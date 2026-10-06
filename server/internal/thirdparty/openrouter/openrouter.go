@@ -390,10 +390,6 @@ type ExistingKeyLookup interface {
 // billing lock perform the associated reads and write on that same session.
 type DBTX = repo.DBTX
 
-type KeyRefresher interface {
-	ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType KeyType, limit *int) error
-}
-
 type OpenRouter struct {
 	provisioningKey string
 	env             string
@@ -402,7 +398,6 @@ type OpenRouter struct {
 	repo            *repo.Queries
 	orgRepo         *orgRepo.Queries
 	orClient        *guardian.HTTPClient
-	refresher       KeyRefresher
 	featureClient   *productfeatures.Client
 	enc             *encryption.Client
 	// baseURL is OpenRouterBaseURL outside of tests.
@@ -436,7 +431,7 @@ func WithTestBaseURL(baseURL string) (Option, error) {
 	}, nil
 }
 
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker, enc *encryption.Client, options ...Option) *OpenRouter {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, featureClient *productfeatures.Client, tracking billing.Tracker, enc *encryption.Client, options ...Option) *OpenRouter {
 	orClient := guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
 
 	openRouter := &OpenRouter{
@@ -447,7 +442,6 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolic
 		repo:            repo.New(db),
 		orgRepo:         orgRepo.New(db),
 		orClient:        orClient,
-		refresher:       refresher,
 		featureClient:   featureClient,
 		enc:             enc,
 		baseURL:         OpenRouterBaseURL,
@@ -571,6 +565,13 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := o.repo.WithTx(dbtx)
+	// Hold the billing lock across the tier read, the upstream create and the
+	// insert. A billing change either commits first and is read here, or waits
+	// and then finds the stored key to update. Billing before provisioning is
+	// the order every caller that takes both locks uses.
+	if err := AcquireAPIKeyBillingTransactionLock(ctx, dbtx, orgID, keyType); err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "error locking openrouter key billing").LogError(ctx, o.logger)
+	}
 	if err := AcquireAPIKeyProvisioningTransactionLock(ctx, dbtx, orgID, keyType); err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "error locking openrouter key provisioning").LogError(ctx, o.logger)
 	}
@@ -639,12 +640,6 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to store openrouter key data").LogError(ctx, o.logger)
-	}
-
-	if o.refresher != nil {
-		if err := o.refresher.ScheduleOpenRouterKeyRefresh(ctx, orgID, keyType, nil); err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "error scheduling open router key refresh").LogError(ctx, o.logger)
-		}
 	}
 
 	return *keyResponse.Key, nil
@@ -1177,6 +1172,16 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 		return 0, 0, fmt.Errorf("read openrouter key for usage: %w", keyErr)
 	}
 
+	// OpenRouter rejects a disabled key's own credentials with 401, so its
+	// usage is read through the provisioning key instead.
+	if EffectiveDisabled(key.Disabled, key.DisableCauses) {
+		used, _, err := o.fetchKeyUsage(ctx, "/v1/keys/"+url.PathEscape(key.KeyHash), o.provisioningKey)
+		if err != nil {
+			return 0, limit, fmt.Errorf("read disabled key usage: %w", err)
+		}
+		return used, limit, nil
+	}
+
 	apiKey, err := o.keyMaterial(key)
 	if err != nil {
 		return 0, limit, fmt.Errorf("resolve openrouter key material: %w", err)
@@ -1198,13 +1203,20 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 // openrouter_api_keys in a single SQL query) can skip the org/key DB lookups
 // in GetCreditsUsed.
 func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, *int64, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+"/v1/key", nil)
+	return o.fetchKeyUsage(ctx, "/v1/key", apiKey)
+}
+
+// fetchKeyUsage reads a key's monthly usage and limit from path, which is
+// either `/v1/key` authorized by the key itself or `/v1/keys/:hash`
+// authorized by the provisioning key. Both return the same key object.
+func (o *OpenRouter) fetchKeyUsage(ctx context.Context, path string, bearer string) (float64, *int64, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+path, nil)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to build openrouter key usage request", attr.SlogError(err))
 		return 0, nil, fmt.Errorf("build key usage request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Authorization", "Bearer "+bearer)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := o.orClient.Do(req)

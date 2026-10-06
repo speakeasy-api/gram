@@ -241,7 +241,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if serviceEnv == "local" {
 		openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 	} else {
-		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, serviceEnv, c.String("openrouter-provisioning-key"), nil, productFeatures, billingTracker, enc)
+		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, serviceEnv, c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc)
 	}
 
 	tigrisStore, stop, err := newTigrisStore(ctx, c, logger)
@@ -363,7 +363,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		RAG: ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager,
 		ShadowMCP: shadowMCPClient, MCPRisk: mcpRiskEvaluator, Audit: auditLogger,
 		PlatformExtras: platformExtras, PlatformFeatureChecker: productFeatures.PlatformFeatureCheck,
-		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: remoteSessionDeps.Challenges, CallbackOrigins: callbackOrigins,
+		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: remoteSessionDeps.Challenges, CallbackOrigins: callbackOrigins, PlatformHosts: platformHosts,
 	})
 	if err != nil {
 		return err

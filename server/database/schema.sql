@@ -3744,6 +3744,11 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
 
 -- Create the chats table to track individual chat conversations
 CREATE TABLE IF NOT EXISTS chats (
+  -- Durable specialization observed in captured delivery envelopes.
+  session_surface TEXT,
+  slack_team_id TEXT,
+  slack_channel_id TEXT,
+  slack_channel_name TEXT,
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
@@ -5031,6 +5036,10 @@ CREATE TABLE IF NOT EXISTS slack_directory_memberships (
 
 CREATE UNIQUE INDEX IF NOT EXISTS slack_directory_memberships_org_team_user_key
 ON slack_directory_memberships (organization_id, slack_team_id, slack_user_id);
+
+-- Captured delivery envelopes may identify a sender without a workspace hint.
+CREATE INDEX IF NOT EXISTS slack_directory_memberships_org_user_idx
+ON slack_directory_memberships (organization_id, slack_user_id);
 
 -- Map a Slack member to an existing person in the same organization. Reassign
 -- by revoking the old row and inserting a new one to preserve the previous owner.
@@ -6381,6 +6390,66 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS remote_mcp_servers_project_id_id_key
 ON remote_mcp_servers (project_id, id);
 
+-- RFC 9728 protected resource metadata, one row per resource identifier the
+-- project's remote MCP servers connect to. The resource's scopes are what a
+-- login requests when its client sets none. The resource_* display members on
+-- remote_session_clients predate this table and stay until a contract
+-- migration drops them.
+CREATE TABLE IF NOT EXISTS remote_protected_resources (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+
+  -- The document's resource value (RFC 9728 §3.3), matched exactly: /mcp and
+  -- /mcp/ may be different resources.
+  resource_identifier TEXT NOT NULL CHECK (resource_identifier <> ''),
+  -- The well-known URL the document was last read from.
+  metadata_url TEXT,
+
+  -- Array members are NULL when the document omits them, which is distinct
+  -- from an empty array: the former says nothing, the latter advertises none.
+  authorization_servers TEXT[],
+  scopes_supported TEXT[],
+  bearer_methods_supported TEXT[],
+  resource_name TEXT,
+  resource_documentation TEXT,
+  resource_policy_uri TEXT,
+  resource_tos_uri TEXT,
+  -- Token-binding requirements a client must honour. NULL when not advertised.
+  dpop_bound_access_tokens_required BOOLEAN,
+  dpop_signing_alg_values_supported TEXT[],
+  tls_client_certificate_bound_access_tokens BOOLEAN,
+
+  -- The scope parameter of the last WWW-Authenticate challenge the resource
+  -- answered with (RFC 6750 §3), and when. NULL until one is seen.
+  challenge_scopes TEXT[],
+  challenge_scopes_seen_at timestamptz,
+
+  -- The last document captured, verbatim.
+  metadata JSONB,
+  -- When discovery last wrote the columns above. NULL until captured.
+  metadata_fetched_at timestamptz,
+  -- The public-safe reason the most recent fetch went wrong and when; a
+  -- successful fetch clears both.
+  metadata_last_error TEXT,
+  metadata_last_error_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT remote_protected_resources_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_protected_resources_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_protected_resources_project_id_resource_identifier_key
+ON remote_protected_resources (project_id, resource_identifier)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_protected_resources_project_id_id_key
+ON remote_protected_resources (project_id, id);
+
 
 -- Headers sent to a remote MCP server when proxying requests. Either value
 -- (a static/system-defined value) or value_from_request_header (pass-through
@@ -7455,6 +7524,25 @@ CREATE TABLE IF NOT EXISTS risk_finding_evidence (
 
 CREATE INDEX IF NOT EXISTS risk_finding_evidence_expires_at_idx
 ON risk_finding_evidence (expires_at, organization_id, project_id, finding_id);
+
+-- Encrypted scanned payload of one MCP execution phase, so findings can be
+-- shown in context. Positions of the phase's findings index into it.
+CREATE TABLE IF NOT EXISTS risk_execution_evidence (
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  execution_id TEXT NOT NULL,
+  phase TEXT NOT NULL,
+  payload_encrypted TEXT NOT NULL,
+  created_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  expires_at timestamptz NOT NULL,
+
+  CONSTRAINT risk_execution_evidence_pkey PRIMARY KEY (organization_id, project_id, execution_id, phase),
+  CONSTRAINT risk_execution_evidence_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects(organization_id, id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS risk_execution_evidence_expires_at_idx
+ON risk_execution_evidence (expires_at, organization_id, project_id, execution_id, phase);
 
 -- risk_policy_eval_reviews is the durable "regression set" for a prompt-based
 -- risk policy: a reviewer's ground-truth verdict on whether a given chat session
@@ -9589,8 +9677,8 @@ CREATE TABLE IF NOT EXISTS chat_session_links (
   -- closing NULL-child edges if such a continuation is captured later.
   parent_session_id TEXT NOT NULL,
   child_session_id TEXT,
-  -- Edge kind. Only 'move' is written today; reserved for future
-  -- evidence-based kinds (e.g. a proven handoff-URL continuation).
+  -- Edge kind: move, recall, or subagent. Subagent edges are directed from
+  -- the parent to its helper and require evidence from a delivery envelope.
   kind TEXT NOT NULL DEFAULT 'move',
   target_harness TEXT NOT NULL,
   source_surface TEXT,
@@ -10381,3 +10469,32 @@ CREATE TABLE IF NOT EXISTS widgets (
 
 CREATE INDEX IF NOT EXISTS widgets_project_id_updated_at_idx
 ON widgets (project_id, updated_at DESC) WHERE deleted IS FALSE;
+
+-- Observed conversation participants are independent of message ownership and
+-- billing attribution. Directory resolution is a snapshot, not an auth grant.
+CREATE TABLE IF NOT EXISTS chat_message_participants (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  chat_id uuid,
+  message_id uuid,
+  provider TEXT NOT NULL,
+  provider_user_id TEXT NOT NULL,
+  provider_team_id TEXT,
+  user_id TEXT,
+  display_name TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT chat_message_participants_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_message_participants_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT chat_message_participants_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE SET NULL,
+  CONSTRAINT chat_message_participants_message_id_fkey FOREIGN KEY (message_id) REFERENCES chat_messages (id) ON DELETE SET NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS chat_message_participants_message_provider_user_key
+ON chat_message_participants (project_id, message_id, provider, provider_user_id);
+CREATE INDEX IF NOT EXISTS chat_message_participants_project_chat_idx
+ON chat_message_participants (project_id, chat_id);
+
+CREATE INDEX IF NOT EXISTS chat_message_participants_chat_id_idx
+ON chat_message_participants (chat_id);
+CREATE INDEX IF NOT EXISTS chat_message_participants_message_id_idx
+ON chat_message_participants (message_id);

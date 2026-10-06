@@ -544,6 +544,10 @@ type BusinessMemory struct {
 }
 
 type Chat struct {
+	SessionSurface              pgtype.Text
+	SlackTeamID                 pgtype.Text
+	SlackChannelID              pgtype.Text
+	SlackChannelName            pgtype.Text
 	ID                          uuid.UUID
 	ProjectID                   uuid.UUID
 	OrganizationID              string
@@ -644,6 +648,20 @@ type ChatMessage struct {
 	Replayed          bool
 	CreatedAt         pgtype.Timestamptz
 	RiskAnalyzedAt    pgtype.Timestamptz
+}
+
+type ChatMessageParticipant struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	ChatID         uuid.NullUUID
+	MessageID      uuid.NullUUID
+	Provider       string
+	ProviderUserID string
+	ProviderTeamID pgtype.Text
+	UserID         pgtype.Text
+	DisplayName    pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type ChatResolution struct {
@@ -2613,6 +2631,34 @@ type RemoteMcpServerHeader struct {
 	Deleted                bool
 }
 
+type RemoteProtectedResource struct {
+	ID                                    uuid.UUID
+	ProjectID                             uuid.UUID
+	OrganizationID                        string
+	ResourceIdentifier                    string
+	MetadataUrl                           pgtype.Text
+	AuthorizationServers                  []string
+	ScopesSupported                       []string
+	BearerMethodsSupported                []string
+	ResourceName                          pgtype.Text
+	ResourceDocumentation                 pgtype.Text
+	ResourcePolicyUri                     pgtype.Text
+	ResourceTosUri                        pgtype.Text
+	DpopBoundAccessTokensRequired         pgtype.Bool
+	DpopSigningAlgValuesSupported         []string
+	TlsClientCertificateBoundAccessTokens pgtype.Bool
+	ChallengeScopes                       []string
+	ChallengeScopesSeenAt                 pgtype.Timestamptz
+	Metadata                              []byte
+	MetadataFetchedAt                     pgtype.Timestamptz
+	MetadataLastError                     pgtype.Text
+	MetadataLastErrorAt                   pgtype.Timestamptz
+	CreatedAt                             pgtype.Timestamptz
+	UpdatedAt                             pgtype.Timestamptz
+	DeletedAt                             pgtype.Timestamptz
+	Deleted                               bool
+}
+
 type RemoteSession struct {
 	ID                     uuid.UUID
 	GrantGeneration        int64
@@ -2809,6 +2855,17 @@ type RiskExclusion struct {
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 	Deleted        bool
+}
+
+type RiskExecutionEvidence struct {
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	ExecutionID      string
+	Phase            string
+	PayloadEncrypted string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	ExpiresAt        pgtype.Timestamptz
 }
 
 type RiskFindingEvidence struct {

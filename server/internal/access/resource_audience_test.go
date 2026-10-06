@@ -60,6 +60,12 @@ func seedProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organiza
 func seedRemoteMCPServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) string {
 	t.Helper()
 
+	return seedRemoteMCPServerWithVisibility(t, ctx, conn, organizationID, "private")
+}
+
+func seedRemoteMCPServerWithVisibility(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, visibility string) string {
+	t.Helper()
+
 	fixtures := testrepo.New(conn)
 	projectID := seedProject(t, ctx, conn, organizationID)
 
@@ -78,7 +84,7 @@ func seedRemoteMCPServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 		ID:         serverID,
 		ProjectID:  projectID,
 		ToolsetID:  uuid.NullUUID{UUID: toolsetID, Valid: true},
-		Visibility: "private",
+		Visibility: visibility,
 	})
 	require.NoError(t, err)
 	return serverID.String()

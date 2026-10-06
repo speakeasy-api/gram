@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ExploreSpec } from "./exploreModel";
 import {
   differsFromWidget,
+  specFromStoredWidget,
   specFromWidget,
   widgetFromSpec,
   widgetKey,
@@ -189,6 +190,20 @@ describe("widgetKey and differsFromWidget", () => {
     expect(differsFromWidget({ ...rows, chartType: "bar" }, stored)).toBe(
       false,
     );
-    expect(differsFromWidget({ ...rows, window: "24h" }, stored)).toBe(true);
+    expect(differsFromWidget({ ...rows, window: "1d" }, stored)).toBe(true);
+  });
+
+  it("open a widget saved with the builder's old spelling of a day as 1d, unchanged", () => {
+    const stored = {
+      dataset: "sessions",
+      ...widgetFromSpec({ ...spec, window: "1d" }),
+    };
+    const legacy = {
+      ...stored,
+      query: { ...stored.query, window: "24h" },
+    };
+    const opened = specFromStoredWidget(legacy);
+    expect(opened?.window).toBe("1d");
+    expect(differsFromWidget(opened!, legacy)).toBe(false);
   });
 });

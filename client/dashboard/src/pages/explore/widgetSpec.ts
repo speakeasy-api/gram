@@ -7,7 +7,6 @@ import {
   isFilterOperator,
   isMeasureOp,
   isRowsMode,
-  isWindowPreset,
   MAX_LIMIT,
   measureAlias,
   queryDimensions,
@@ -15,6 +14,7 @@ import {
   type ExploreSpec,
   type FilterDraft,
   type MeasureDraft,
+  windowPreset,
 } from "./exploreModel";
 
 // A widget keeps the builder state split the way the widgets service reads
@@ -84,15 +84,10 @@ export function specFromWidget(
   visualization: Record<string, unknown>,
 ): ExploreSpec | null {
   const chartType = visualization.type;
-  const {
-    window,
-    dimensions,
-    measures,
-    filters,
-    order_by: orderBy,
-    limit,
-  } = query;
-  if (!isChartType(chartType) || !isWindowPreset(window)) return null;
+  const { dimensions, measures, filters, order_by: orderBy, limit } = query;
+  // An older spelling of a window opens as today's, and saves back as it.
+  const window = windowPreset(query.window);
+  if (!isChartType(chartType) || window === null) return null;
   if (!isStringArray(dimensions ?? [])) return null;
   const limitValue = limit ?? 0;
   if (
@@ -171,13 +166,20 @@ export function widgetKey(spec: ExploreSpec): string {
   return JSON.stringify([spec.dataset, widgetFromSpec(spec)]);
 }
 
-/** Whether the builder holds anything the widget does not. */
+/**
+ * Whether the builder holds anything the widget does not. An absolute range
+ * is always a difference: a widget keeps a relative window.
+ */
 export function differsFromWidget(
   spec: ExploreSpec,
   widget: StoredWidget,
 ): boolean {
   const saved = specFromStoredWidget(widget);
-  return saved === null || widgetKey(saved) !== widgetKey(spec);
+  return (
+    saved === null ||
+    spec.range !== undefined ||
+    widgetKey(saved) !== widgetKey(spec)
+  );
 }
 
 function listOf(value: unknown): unknown[] {
