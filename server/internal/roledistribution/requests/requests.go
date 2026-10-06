@@ -4,6 +4,7 @@ package requests
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -82,12 +83,15 @@ func ResumeOrganization(ctx context.Context, tx pgx.Tx, organizationID string) e
 // so this is the trigger that distributes roles created before any project.
 // Concurrent first projects may each publish; setup reuses plugins and assignments.
 func PublishFirstProject(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID) error {
-	var first bool
-	if err := tx.QueryRow(ctx, `SELECT NOT EXISTS (SELECT 1 FROM projects WHERE organization_id = $1 AND deleted IS FALSE AND id <> $2)`, organizationID, projectID).Scan(&first); err != nil {
-		return fmt.Errorf("check first organization project: %w", err)
-	}
-	if !first {
+	// FOR SHARE waits for an in-flight project delete, then rechecks the row,
+	// so a concurrently deleted project cannot suppress the bootstrap.
+	var other uuid.UUID
+	err := tx.QueryRow(ctx, `SELECT id FROM projects WHERE organization_id = $1 AND deleted IS FALSE AND id <> $2 LIMIT 1 FOR SHARE`, organizationID, projectID).Scan(&other)
+	if err == nil {
 		return nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("check first organization project: %w", err)
 	}
 	return ResumeOrganization(ctx, tx, organizationID)
 }
