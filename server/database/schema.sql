@@ -10497,7 +10497,7 @@ CREATE TABLE IF NOT EXISTS dashboards (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT dashboards_pkey PRIMARY KEY (id),
-  CONSTRAINT dashboards_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
+  CONSTRAINT dashboards_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS dashboards_project_id_updated_at_idx
@@ -10526,9 +10526,11 @@ CREATE TABLE IF NOT EXISTS dashboard_widgets (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT dashboard_widgets_pkey PRIMARY KEY (id),
-  CONSTRAINT dashboard_widgets_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT dashboard_widgets_dashboard_id_fkey FOREIGN KEY (dashboard_id) REFERENCES dashboards (id) ON DELETE CASCADE,
-  CONSTRAINT dashboard_widgets_widget_id_fkey FOREIGN KEY (widget_id) REFERENCES widgets (id) ON DELETE CASCADE
+  -- The columns are NOT NULL, so a physical delete of a project, dashboard
+  -- or widget has to remove its cards first; the services do.
+  CONSTRAINT dashboard_widgets_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL,
+  CONSTRAINT dashboard_widgets_dashboard_id_fkey FOREIGN KEY (dashboard_id) REFERENCES dashboards (id) ON DELETE SET NULL,
+  CONSTRAINT dashboard_widgets_widget_id_fkey FOREIGN KEY (widget_id) REFERENCES widgets (id) ON DELETE SET NULL
 );
 
 -- Loading a dashboard's cards, and asking which dashboards a widget is on.
@@ -10536,6 +10538,10 @@ CREATE INDEX IF NOT EXISTS dashboard_widgets_dashboard_id_idx
 ON dashboard_widgets (dashboard_id);
 CREATE INDEX IF NOT EXISTS dashboard_widgets_widget_id_idx
 ON dashboard_widgets (widget_id);
+
+-- The widgets list asks which dashboards each of a project's widgets is on.
+CREATE INDEX IF NOT EXISTS dashboard_widgets_project_id_widget_id_idx
+ON dashboard_widgets (project_id, widget_id);
 
 -- Observed conversation participants are independent of message ownership and
 -- billing attribution. Directory resolution is a snapshot, not an auth grant.

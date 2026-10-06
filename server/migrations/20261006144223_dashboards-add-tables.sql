@@ -12,7 +12,7 @@ CREATE TABLE "dashboards" (
   "deleted_at" timestamptz NULL,
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
-  CONSTRAINT "dashboards_organization_id_project_id_fkey" FOREIGN KEY ("organization_id", "project_id") REFERENCES "projects" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE
+  CONSTRAINT "dashboards_organization_id_project_id_fkey" FOREIGN KEY ("organization_id", "project_id") REFERENCES "projects" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE SET NULL
 );
 -- Create index "dashboards_project_id_updated_at_idx" to table: "dashboards"
 CREATE INDEX "dashboards_project_id_updated_at_idx" ON "dashboards" ("project_id", "updated_at" DESC) WHERE (deleted IS FALSE);
@@ -30,11 +30,13 @@ CREATE TABLE "dashboard_widgets" (
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "dashboard_widgets_dashboard_id_fkey" FOREIGN KEY ("dashboard_id") REFERENCES "dashboards" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "dashboard_widgets_organization_id_project_id_fkey" FOREIGN KEY ("organization_id", "project_id") REFERENCES "projects" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "dashboard_widgets_widget_id_fkey" FOREIGN KEY ("widget_id") REFERENCES "widgets" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
+  CONSTRAINT "dashboard_widgets_dashboard_id_fkey" FOREIGN KEY ("dashboard_id") REFERENCES "dashboards" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "dashboard_widgets_organization_id_project_id_fkey" FOREIGN KEY ("organization_id", "project_id") REFERENCES "projects" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE SET NULL,
+  CONSTRAINT "dashboard_widgets_widget_id_fkey" FOREIGN KEY ("widget_id") REFERENCES "widgets" ("id") ON UPDATE NO ACTION ON DELETE SET NULL
 );
 -- Create index "dashboard_widgets_dashboard_id_idx" to table: "dashboard_widgets"
 CREATE INDEX "dashboard_widgets_dashboard_id_idx" ON "dashboard_widgets" ("dashboard_id");
+-- Create index "dashboard_widgets_project_id_widget_id_idx" to table: "dashboard_widgets"
+CREATE INDEX "dashboard_widgets_project_id_widget_id_idx" ON "dashboard_widgets" ("project_id", "widget_id");
 -- Create index "dashboard_widgets_widget_id_idx" to table: "dashboard_widgets"
 CREATE INDEX "dashboard_widgets_widget_id_idx" ON "dashboard_widgets" ("widget_id");
