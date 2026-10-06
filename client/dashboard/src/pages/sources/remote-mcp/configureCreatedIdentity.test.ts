@@ -146,14 +146,17 @@ describe("configureCreatedRemoteMcpIdentity", () => {
           createProvider: expect.objectContaining({
             issuer: "https://id.example.com",
           }),
-          clientConfiguration: expect.objectContaining({
-            scope: ["resource.read"],
-          }),
         }),
       },
       undefined,
       undefined,
     );
+    // Discovered scopes are not copied onto the client; each sign-in
+    // resolves them live.
+    expect(
+      mocks.commit.mock.calls[0]![0].commitServerIdentityConfigurationForm
+        .clientConfiguration.scope,
+    ).toBeUndefined();
     expect(mocks.commit.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.updateServer.mock.invocationCallOrder[0]!,
     );

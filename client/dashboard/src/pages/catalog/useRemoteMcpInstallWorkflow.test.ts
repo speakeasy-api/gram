@@ -689,14 +689,17 @@ describe("useRemoteMcpInstallWorkflow", () => {
           createProvider: expect.objectContaining({
             issuer: "https://id.example.com",
           }),
-          clientConfiguration: expect.objectContaining({
-            scope: ["resource.read"],
-          }),
         }),
       },
       undefined,
       undefined,
     );
+    // Discovered scopes are not copied onto the client; each sign-in
+    // resolves them live.
+    expect(
+      mockCommitIdentity.mock.calls[0]![0].commitServerIdentityConfigurationForm
+        .clientConfiguration.scope,
+    ).toBeUndefined();
     expect(mockMcpServersUpdate).toHaveBeenCalledOnce();
     expect(mockCommitIdentity.mock.invocationCallOrder[0]).toBeLessThan(
       mockMcpServersUpdate.mock.invocationCallOrder[0]!,
