@@ -22,6 +22,7 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -166,6 +167,9 @@ func TestRiskPolicyLifecycleRepair_SoftDeletesExistingOrphans(t *testing.T) {
 	require.NoError(t, err)
 	serverID := uuid.MustParse(server.ID)
 	policy := seedMCPScopedRiskPolicy(t, ctx, ti, "legacy orphan", []uuid.UUID{serverID})
+	platformPolicy := seedMCPScopedRiskPolicy(t, ctx, ti, "platform policy", []uuid.UUID{
+		platformtools.PlatformToolsetID(platformtools.PlatformMCPReadToolsetSlug),
+	})
 
 	_, err = mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{
 		ID:        serverID,
@@ -185,6 +189,11 @@ func TestRiskPolicyLifecycleRepair_SoftDeletesExistingOrphans(t *testing.T) {
 		ProjectID: *authCtx.ProjectID,
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = riskrepo.New(ti.conn).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{
+		ID:        platformPolicy.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err, "a platform toolset policy has no server row but is not orphaned")
 	afterDeletes, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyDelete)
 	require.NoError(t, err)
 	require.Equal(t, beforeDeletes+1, afterDeletes)

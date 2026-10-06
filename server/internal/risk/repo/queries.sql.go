@@ -3391,7 +3391,7 @@ WHERE policy.project_id = $1
   AND policy.deleted IS FALSE
   AND COALESCE((policy.mcp_scope->>'all_servers')::boolean, FALSE) IS FALSE
   AND jsonb_array_length(COALESCE(policy.mcp_scope->'servers', '[]'::jsonb)) = 1
-  AND NOT EXISTS (
+  AND EXISTS (
     SELECT 1
     FROM jsonb_array_elements(policy.mcp_scope->'servers') AS target
     WHERE EXISTS (
@@ -3399,14 +3399,14 @@ WHERE policy.project_id = $1
       FROM mcp_servers AS server
       WHERE server.project_id = policy.project_id
         AND server.id::text = target->>'mcp_server_id'
-        AND server.deleted IS FALSE
+        AND server.deleted IS TRUE
     )
     OR EXISTS (
       SELECT 1
       FROM meta_mcp_servers AS gateway
       WHERE gateway.project_id = policy.project_id
         AND gateway.id::text = target->>'mcp_server_id'
-        AND gateway.deleted IS FALSE
+        AND gateway.deleted IS TRUE
     )
   )
 ORDER BY policy.id
@@ -3465,7 +3465,7 @@ FROM risk_policies AS policy
 WHERE policy.deleted IS FALSE
   AND COALESCE((policy.mcp_scope->>'all_servers')::boolean, FALSE) IS FALSE
   AND jsonb_array_length(COALESCE(policy.mcp_scope->'servers', '[]'::jsonb)) = 1
-  AND NOT EXISTS (
+  AND EXISTS (
     SELECT 1
     FROM jsonb_array_elements(policy.mcp_scope->'servers') AS target
     WHERE EXISTS (
@@ -3473,14 +3473,14 @@ WHERE policy.deleted IS FALSE
       FROM mcp_servers AS server
       WHERE server.project_id = policy.project_id
         AND server.id::text = target->>'mcp_server_id'
-        AND server.deleted IS FALSE
+        AND server.deleted IS TRUE
     )
     OR EXISTS (
       SELECT 1
       FROM meta_mcp_servers AS gateway
       WHERE gateway.project_id = policy.project_id
         AND gateway.id::text = target->>'mcp_server_id'
-        AND gateway.deleted IS FALSE
+        AND gateway.deleted IS TRUE
     )
   )
 ORDER BY policy.project_id
