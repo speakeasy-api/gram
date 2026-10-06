@@ -196,3 +196,5 @@ WHERE project_id = @project_id
   )
 ORDER BY embedding <=> @query_embedding
 LIMIT @result_limit;
+-- name: EnableFilteredVectorScan :exec
+SET LOCAL hnsw.iterative_scan = strict_order;

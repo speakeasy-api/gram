@@ -319,7 +319,7 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 	// expands the candidate window when toolset or tag filters remove candidates,
 	// while strict_order preserves distance ordering. SET LOCAL confines this
 	// behavior to the current search transaction.
-	if _, err := dbtx.Exec(ctx, "SET LOCAL hnsw.iterative_scan = strict_order"); err != nil {
+	if err := repo.New(dbtx).EnableFilteredVectorScan(ctx); err != nil {
 		return nil, fmt.Errorf("configure filtered tool search: %w", err)
 	}
 	queries := repo.New(dbtx)

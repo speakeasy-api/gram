@@ -1316,6 +1316,24 @@ func (q *Queries) LockLiveMCPServersInOrganization(ctx context.Context, arg Lock
 	return items, nil
 }
 
+const lockLiveRemoteMCPSource = `-- name: LockLiveRemoteMCPSource :one
+SELECT TRUE FROM remote_mcp_servers
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockLiveRemoteMCPSourceParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LockLiveRemoteMCPSource(ctx context.Context, arg LockLiveRemoteMCPSourceParams) (bool, error) {
+	row := q.db.QueryRow(ctx, lockLiveRemoteMCPSource, arg.ID, arg.ProjectID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const lockMCPServerByIDAndProjectID = `-- name: LockMCPServerByIDAndProjectID :one
 SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
@@ -1720,6 +1738,26 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const updateMCPServerNetworkAccessMode = `-- name: UpdateMCPServerNetworkAccessMode :execrows
+UPDATE mcp_servers SET network_access_mode = $1, updated_at = clock_timestamp()
+WHERE mcp_servers.id = $2 AND mcp_servers.project_id = $3 AND mcp_servers.deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = mcp_servers.project_id AND p.deleted IS FALSE)
+`
+
+type UpdateMCPServerNetworkAccessModeParams struct {
+	NetworkAccessMode pgtype.Text
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+}
+
+func (q *Queries) UpdateMCPServerNetworkAccessMode(ctx context.Context, arg UpdateMCPServerNetworkAccessModeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateMCPServerNetworkAccessMode, arg.NetworkAccessMode, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateMCPServerToolMetadata = `-- name: UpdateMCPServerToolMetadata :one

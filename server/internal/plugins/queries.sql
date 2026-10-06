@@ -1201,3 +1201,39 @@ SELECT pg_advisory_xact_lock(8241243);
 
 -- name: GetRoleSetupBlockedPIDFixture :one
 SELECT COALESCE((SELECT pid FROM pg_catalog.pg_stat_activity WHERE datname = current_database() AND @blocker::int = ANY(pg_blocking_pids(pid)) ORDER BY pid LIMIT 1), 0)::integer AS pid;
+-- name: LockPluginAssignmentTarget :one
+SELECT * FROM plugins
+WHERE id = sqlc.arg(id) AND organization_id = sqlc.arg(organization_id)
+  AND project_id = sqlc.arg(project_id) AND deleted IS FALSE
+FOR UPDATE;
+-- name: HasProjectMarketplaceConnection :one
+SELECT EXISTS (
+  SELECT 1 FROM plugin_github_connections c
+  JOIN projects p ON p.id = c.project_id
+  WHERE c.project_id = sqlc.arg(project_id) AND p.organization_id = sqlc.arg(organization_id) AND p.deleted IS FALSE
+);
+
+-- name: ListOrganizationMarketplaceProjects :many
+SELECT c.project_id FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id
+WHERE p.organization_id = sqlc.arg(organization_id) AND p.deleted IS FALSE
+  AND c.project_id > sqlc.arg(cursor)
+ORDER BY c.project_id ASC LIMIT sqlc.arg(page_size);
+
+-- name: BeginDefaultPluginSavepoint :exec
+SAVEPOINT ensure_default_plugin_insert;
+
+-- name: RollbackDefaultPluginSavepoint :exec
+ROLLBACK TO SAVEPOINT ensure_default_plugin_insert;
+
+-- name: ReleaseDefaultPluginSavepoint :exec
+RELEASE SAVEPOINT ensure_default_plugin_insert;
+
+-- name: BeginGitHubConnectionSavepoint :exec
+SAVEPOINT upsert_github_connection;
+
+-- name: RollbackGitHubConnectionSavepoint :exec
+ROLLBACK TO SAVEPOINT upsert_github_connection;
+
+-- name: ReleaseGitHubConnectionSavepoint :exec
+RELEASE SAVEPOINT upsert_github_connection;

@@ -530,6 +530,24 @@ func (q *Queries) ListServersByProjectID(ctx context.Context, projectID uuid.UUI
 	return items, nil
 }
 
+const lockLiveProjectForOrganization = `-- name: LockLiveProjectForOrganization :one
+SELECT id FROM projects
+WHERE id = $1 AND organization_id = $2 AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockLiveProjectForOrganizationParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockLiveProjectForOrganization(ctx context.Context, arg LockLiveProjectForOrganizationParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockLiveProjectForOrganization, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const recordRemoteProtectedResourceChallengeScopes = `-- name: RecordRemoteProtectedResourceChallengeScopes :execrows
 UPDATE remote_protected_resources
 SET

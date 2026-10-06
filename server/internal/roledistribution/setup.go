@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	roledistributionrepo "github.com/speakeasy-api/gram/server/internal/roledistribution/repo"
 	"github.com/speakeasy-api/gram/server/internal/roledistribution/requests"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -26,16 +27,12 @@ import (
 func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publication plugins.PublicationRequests, guard *admission.Guard, roleURN string, organizationID string) (bool, error) {
 	// Resolve external rollout state before taking database locks. The selected
 	// project and organization are revalidated inside the transaction.
-	var projectID uuid.UUID
-	var organizationSlug, projectSlug string
-	err := db.QueryRow(ctx, `SELECT p.id, o.slug, p.slug FROM projects p
- JOIN organization_metadata o ON o.id = p.organization_id
- WHERE p.organization_id = $1 AND p.deleted IS FALSE AND o.disabled_at IS NULL
- ORDER BY p.created_at, p.id LIMIT 1`, organizationID).Scan(&projectID, &organizationSlug, &projectSlug)
+	project, err := roledistributionrepo.New(db).GetSetupProject(ctx, organizationID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return false, fmt.Errorf("select role setup project: %w", err)
 	}
-	rollout, rolloutErr := guard.Resolve(ctx, organizationID, organizationSlug, projectSlug)
+	projectID := project.ID
+	rollout, rolloutErr := guard.Resolve(ctx, organizationID, project.OrganizationSlug, project.ProjectSlug)
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin role plugin setup: %w", err)
@@ -53,16 +50,15 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 		return false, nil
 	}
 	// This row lock serializes completion with disabling the rollout feature.
-	var featureID int64
-	err = tx.QueryRow(ctx, `SELECT id FROM organization_features WHERE organization_id = $1 AND feature_name = 'automatic-role-distribution' AND deleted IS FALSE FOR UPDATE`, organizationID).Scan(&featureID)
+	queries := roledistributionrepo.New(tx)
+	_, err = queries.LockEnabledFeature(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return skip()
 	}
 	if err != nil {
 		return false, fmt.Errorf("lock role setup feature gate: %w", err)
 	}
-	var activeOrganization string
-	err = tx.QueryRow(ctx, `SELECT id FROM organization_metadata WHERE id = $1 AND disabled_at IS NULL FOR SHARE`, organizationID).Scan(&activeOrganization)
+	_, err = queries.LockActiveOrganization(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return skip()
 	}
@@ -80,9 +76,9 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 	var name string
 	switch parts[1] {
 	case "global":
-		err = tx.QueryRow(ctx, `SELECT workos_name FROM global_roles WHERE id = $1 AND deleted IS FALSE AND workos_deleted IS FALSE AND 'role:global:' || id::text = $2 FOR SHARE`, roleID, roleURN).Scan(&name)
+		name, err = queries.LockGlobalRole(ctx, roledistributionrepo.LockGlobalRoleParams{RoleID: roleID, RoleUrn: roleURN})
 	case "organization":
-		err = tx.QueryRow(ctx, `SELECT workos_name FROM organization_roles WHERE id = $1 AND organization_id = $2 AND deleted IS FALSE AND workos_deleted IS FALSE AND 'role:organization:' || id::text = $3 FOR SHARE`, roleID, organizationID, roleURN).Scan(&name)
+		name, err = queries.LockOrganizationRole(ctx, roledistributionrepo.LockOrganizationRoleParams{RoleID: roleID, OrganizationID: organizationID, RoleUrn: roleURN})
 	default:
 		return skip()
 	}
@@ -102,8 +98,7 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 	if err := admission.LockProject(ctx, tx, projectID); err != nil {
 		return false, fmt.Errorf("lock role setup distribution admission: %w", err)
 	}
-	var currentProjectID uuid.UUID
-	err = tx.QueryRow(ctx, `SELECT id FROM projects WHERE organization_id = $1 AND deleted IS FALSE ORDER BY created_at, id LIMIT 1 FOR SHARE`, organizationID).Scan(&currentProjectID)
+	currentProjectID, err := queries.LockFirstProject(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return skip()
 	}
@@ -114,16 +109,15 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 		return false, fmt.Errorf("role distribution default project changed during setup")
 	}
 	slug := conv.ToSlug(name)
-	var pluginID uuid.UUID
 	created := false
 	// Assignment writers lock the parent plugin FOR UPDATE. Reuse that lock to
 	// preserve concurrent admin edits and prevent assigning a deleted plugin.
-	err = tx.QueryRow(ctx, `SELECT id FROM plugins WHERE organization_id = $1 AND project_id = $2 AND deleted IS FALSE AND slug = $3 FOR UPDATE`, organizationID, projectID, slug).Scan(&pluginID)
+	pluginID, err := queries.LockPluginBySlug(ctx, roledistributionrepo.LockPluginBySlugParams{OrganizationID: organizationID, ProjectID: projectID, Slug: slug})
 	if errors.Is(err, pgx.ErrNoRows) {
 		created = true
 		pluginID = uuid.New()
 		// The existing slug constraint rejects empty or overlong normalized names.
-		_, err = tx.Exec(ctx, `INSERT INTO plugins (id, organization_id, project_id, name, slug, auto_created) VALUES ($1, $2, $3, $4, $5, true)`, pluginID, organizationID, projectID, name, slug)
+		err = queries.CreateRolePlugin(ctx, roledistributionrepo.CreateRolePluginParams{ID: pluginID, OrganizationID: organizationID, ProjectID: projectID, Name: name, Slug: slug})
 	}
 	if err != nil {
 		return false, fmt.Errorf("find or create role plugin: %w", err)
@@ -158,7 +152,7 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 			return false, fmt.Errorf("audit role plugin creation: %w", err)
 		}
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn) VALUES ($1, $2, $3) ON CONFLICT (plugin_id, principal_urn) DO NOTHING`, pluginID, organizationID, roleURN); err != nil {
+	if err := queries.AssignRolePlugin(ctx, roledistributionrepo.AssignRolePluginParams{PluginID: pluginID, OrganizationID: organizationID, ProjectID: projectID, PrincipalUrn: roleURN}); err != nil {
 		return false, fmt.Errorf("add role plugin assignment: %w", err)
 	}
 	if !alreadyAssigned {

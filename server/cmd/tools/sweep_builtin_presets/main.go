@@ -47,6 +47,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/cmd/tools/sweep_builtin_presets/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/uuidv7"
 )
@@ -190,39 +192,6 @@ func parseFlags() (config, error) {
 	return cfg, nil
 }
 
-// selectPage walks risk_results in id order. It only fetches rows whose rule_id
-// is scoped by the preset catalog — either an exact id (Library.RuleIDs) or a
-// "prefix*" family exposed as a SQL LIKE pattern (Library.RuleIDGlobs, see
-// likeGlobs) — and that are still active (found, not excluded, not already
-// swept), within the id/time window. source and match are fetched because the
-// catalog classifies on all three axes.
-const selectPage = `
-SELECT id, source, rule_id, match
-FROM risk_results
-WHERE organization_id = $1
-  AND project_id = $2
-  AND ($3::uuid IS NULL OR risk_policy_id = $3)
-  AND found IS TRUE
-  AND excluded_at IS NULL
-  AND false_positive_at IS NULL
-  AND (rule_id = ANY($4::text[]) OR rule_id LIKE ANY($5::text[]))
-  AND id > $6
-  AND id < $7
-ORDER BY id
-LIMIT $8
-`
-
-// markBatch flags the accumulated false positives. The id/reason pairs arrive
-// as parallel arrays; the false_positive_at IS NULL recheck keeps it idempotent.
-const markBatch = `
-UPDATE risk_results r
-SET false_positive_at = now()
-  , false_positive_reason = t.reason
-FROM unnest($1::uuid[], $2::text[]) AS t(id, reason)
-WHERE r.id = t.id
-  AND r.false_positive_at IS NULL
-`
-
 // likeGlobs turns the catalog's "prefix*" rule-id globs into SQL LIKE patterns
 // (e.g. "secret.stripe_*" -> "secret.stripe_%"). The LIKE clause is only a scan
 // pre-filter: Library.Reason re-checks every fetched row, so a pattern that
@@ -250,18 +219,14 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, cfg config, lib *presetlib.L
 	upper := uuidv7.LowerBound(cfg.to)
 	cursor := cfg.cursor
 
-	var policyArg any
-	if cfg.policyID.Valid {
-		policyArg = cfg.policyID.UUID
-	}
+	queries := repo.New(pool)
 
 	for {
 		if err := ctx.Err(); err != nil {
 			return rep, fmt.Errorf("sweep interrupted at %s: %w", cursor, err)
 		}
 
-		rows, err := pool.Query(ctx, selectPage,
-			cfg.orgID, cfg.projectID, policyArg, ruleIDs, globs, cursor, upper, cfg.batchSize)
+		rows, err := queries.ListSweepCandidates(ctx, repo.ListSweepCandidatesParams{OrganizationID: cfg.orgID, ProjectID: cfg.projectID, PolicyID: cfg.policyID, RuleIds: ruleIDs, RuleGlobs: globs, Cursor: cursor, UpperBound: upper, PageSize: cfg.batchSize})
 		if err != nil {
 			return rep, fmt.Errorf("select page after %s: %w", cursor, err)
 		}
@@ -271,17 +236,8 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, cfg config, lib *presetlib.L
 			reasons []string
 			n       int
 		)
-		for rows.Next() {
-			var (
-				id     uuid.UUID
-				source string
-				ruleID string
-				match  *string
-			)
-			if err := rows.Scan(&id, &source, &ruleID, &match); err != nil {
-				rows.Close()
-				return rep, fmt.Errorf("scan row: %w", err)
-			}
+		for _, row := range rows {
+			id, source, ruleID, match := row.ID, row.Source, row.RuleID.String, conv.FromPGText[string](row.Match)
 			n++
 			cursor = id
 			if match == nil {
@@ -294,23 +250,18 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, cfg config, lib *presetlib.L
 				rep.byReason[reason]++
 			}
 		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return rep, fmt.Errorf("iterate page: %w", err)
-		}
-		rows.Close()
 
 		rep.scanned += int64(n)
 		rep.flagged += int64(len(ids))
 
 		if len(ids) > 0 && !cfg.dryRun {
-			tag, err := pool.Exec(ctx, markBatch, ids, reasons)
+			updated, err := queries.MarkSweepBatch(ctx, repo.MarkSweepBatchParams{Ids: ids, Reasons: reasons, ProjectID: cfg.projectID, OrganizationID: cfg.orgID})
 			if err != nil {
 				// Do NOT advance rep.lastCursor: this batch's rows were not
 				// stamped, so a resume must re-scan from the previous cursor.
 				return rep, fmt.Errorf("mark batch ending at %s: %w", cursor, err)
 			}
-			rep.updated += tag.RowsAffected()
+			rep.updated += updated
 		}
 
 		// Advance the resume cursor only after the batch's write has succeeded

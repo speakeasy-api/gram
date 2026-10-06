@@ -61,8 +61,7 @@ func EnsureDefaultPlugin(ctx context.Context, tx pgx.Tx, organizationID string, 
 		return nil, fmt.Errorf("get default plugin: %w", err)
 	}
 
-	const savepoint = "ensure_default_plugin_insert"
-	if _, err := tx.Exec(ctx, "SAVEPOINT "+savepoint); err != nil {
+	if err := q.BeginDefaultPluginSavepoint(ctx); err != nil {
 		return nil, fmt.Errorf("begin savepoint: %w", err)
 	}
 
@@ -75,7 +74,7 @@ func EnsureDefaultPlugin(ctx context.Context, tx pgx.Tx, organizationID string, 
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			switch pgErr.ConstraintName {
 			case "plugins_project_id_is_default_key":
-				if _, err := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT "+savepoint); err != nil {
+				if err := q.RollbackDefaultPluginSavepoint(ctx); err != nil {
 					return nil, fmt.Errorf("rollback savepoint after race: %w", err)
 				}
 				plugin, err := q.GetDefaultPlugin(ctx, repo.GetDefaultPluginParams{
@@ -87,7 +86,7 @@ func EnsureDefaultPlugin(ctx context.Context, tx pgx.Tx, organizationID string, 
 				}
 				return &EnsureDefaultPluginResult{Plugin: plugin, Created: false}, nil
 			case "plugins_organization_id_project_id_slug_key":
-				if _, err := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT "+savepoint); err != nil {
+				if err := q.RollbackDefaultPluginSavepoint(ctx); err != nil {
 					return nil, fmt.Errorf("rollback savepoint after slug conflict: %w", err)
 				}
 				plugin, err := q.PromoteToDefaultPlugin(ctx, repo.PromoteToDefaultPluginParams{
@@ -103,7 +102,7 @@ func EnsureDefaultPlugin(ctx context.Context, tx pgx.Tx, organizationID string, 
 		return nil, fmt.Errorf("create default plugin: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, "RELEASE SAVEPOINT "+savepoint); err != nil {
+	if err := q.ReleaseDefaultPluginSavepoint(ctx); err != nil {
 		return nil, fmt.Errorf("release savepoint: %w", err)
 	}
 

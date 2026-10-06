@@ -1634,3 +1634,15 @@ WHERE project_id = @project_id::uuid
   AND id = ANY(@ids::uuid[])
   AND kind = 'chat_attachment'
   AND deleted IS FALSE;
+-- name: EnableHostedMCPForToolsets :exec
+UPDATE mcp_servers AS server
+SET visibility = CASE WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END,
+    updated_at = clock_timestamp()
+FROM toolsets AS toolset
+WHERE server.id = toolset.id AND server.toolset_id = toolset.id
+  AND server.project_id = sqlc.arg(project_id) AND toolset.project_id = sqlc.arg(project_id)
+  AND toolset.id = ANY(sqlc.arg(toolset_ids)::uuid[]) AND toolset.mcp_enabled IS TRUE
+  AND toolset.deleted IS FALSE AND server.deleted IS FALSE AND server.visibility = 'disabled';
+
+-- name: LockChatForCompaction :exec
+SELECT 1 FROM chats WHERE id = sqlc.arg(chat_id) AND project_id = sqlc.arg(project_id) FOR UPDATE;

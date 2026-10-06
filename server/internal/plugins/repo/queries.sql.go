@@ -165,6 +165,24 @@ func (q *Queries) AgeRoleSetupProjectFixture(ctx context.Context, id uuid.UUID) 
 	return err
 }
 
+const beginDefaultPluginSavepoint = `-- name: BeginDefaultPluginSavepoint :exec
+SAVEPOINT ensure_default_plugin_insert
+`
+
+func (q *Queries) BeginDefaultPluginSavepoint(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, beginDefaultPluginSavepoint)
+	return err
+}
+
+const beginGitHubConnectionSavepoint = `-- name: BeginGitHubConnectionSavepoint :exec
+SAVEPOINT upsert_github_connection
+`
+
+func (q *Queries) BeginGitHubConnectionSavepoint(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, beginGitHubConnectionSavepoint)
+	return err
+}
+
 const createDefaultPlugin = `-- name: CreateDefaultPlugin :one
 INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
 VALUES ($1, $2, 'Default', 'default', TRUE)
@@ -1042,6 +1060,26 @@ func (q *Queries) HasPluginMembershipForToolset(ctx context.Context, arg HasPlug
 	return column_1, err
 }
 
+const hasProjectMarketplaceConnection = `-- name: HasProjectMarketplaceConnection :one
+SELECT EXISTS (
+  SELECT 1 FROM plugin_github_connections c
+  JOIN projects p ON p.id = c.project_id
+  WHERE c.project_id = $1 AND p.organization_id = $2 AND p.deleted IS FALSE
+)
+`
+
+type HasProjectMarketplaceConnectionParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) HasProjectMarketplaceConnection(ctx context.Context, arg HasProjectMarketplaceConnectionParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasProjectMarketplaceConnection, arg.ProjectID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const isDefaultProject = `-- name: IsDefaultProject :one
 SELECT (
   SELECT p.id
@@ -1317,6 +1355,40 @@ func (q *Queries) ListAgentPluginCompatibilityIssuesForProject(ctx context.Conte
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationMarketplaceProjects = `-- name: ListOrganizationMarketplaceProjects :many
+SELECT c.project_id FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id
+WHERE p.organization_id = $1 AND p.deleted IS FALSE
+  AND c.project_id > $2
+ORDER BY c.project_id ASC LIMIT $3
+`
+
+type ListOrganizationMarketplaceProjectsParams struct {
+	OrganizationID string
+	Cursor         uuid.UUID
+	PageSize       int32
+}
+
+func (q *Queries) ListOrganizationMarketplaceProjects(ctx context.Context, arg ListOrganizationMarketplaceProjectsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOrganizationMarketplaceProjects, arg.OrganizationID, arg.Cursor, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -2284,6 +2356,39 @@ func (q *Queries) LockMarketplaceSettings(ctx context.Context, projectID uuid.UU
 	return i, err
 }
 
+const lockPluginAssignmentTarget = `-- name: LockPluginAssignmentTarget :one
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted FROM plugins
+WHERE id = $1 AND organization_id = $2
+  AND project_id = $3 AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockPluginAssignmentTargetParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) LockPluginAssignmentTarget(ctx context.Context, arg LockPluginAssignmentTargetParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, lockPluginAssignmentTarget, arg.ID, arg.OrganizationID, arg.ProjectID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.AutoCreated,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const lockRoleSetupPauseFixture = `-- name: LockRoleSetupPauseFixture :exec
 SELECT pg_advisory_xact_lock(8241243)
 `
@@ -2361,6 +2466,24 @@ func (q *Queries) PromoteToDefaultPlugin(ctx context.Context, arg PromoteToDefau
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const releaseDefaultPluginSavepoint = `-- name: ReleaseDefaultPluginSavepoint :exec
+RELEASE SAVEPOINT ensure_default_plugin_insert
+`
+
+func (q *Queries) ReleaseDefaultPluginSavepoint(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, releaseDefaultPluginSavepoint)
+	return err
+}
+
+const releaseGitHubConnectionSavepoint = `-- name: ReleaseGitHubConnectionSavepoint :exec
+RELEASE SAVEPOINT upsert_github_connection
+`
+
+func (q *Queries) ReleaseGitHubConnectionSavepoint(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, releaseGitHubConnectionSavepoint)
+	return err
 }
 
 const removeAllPluginAssignments = `-- name: RemoveAllPluginAssignments :execrows
@@ -2628,6 +2751,24 @@ func (q *Queries) RevokeSkillDistributionsByPlugin(ctx context.Context, arg Revo
 		return nil, err
 	}
 	return items, nil
+}
+
+const rollbackDefaultPluginSavepoint = `-- name: RollbackDefaultPluginSavepoint :exec
+ROLLBACK TO SAVEPOINT ensure_default_plugin_insert
+`
+
+func (q *Queries) RollbackDefaultPluginSavepoint(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, rollbackDefaultPluginSavepoint)
+	return err
+}
+
+const rollbackGitHubConnectionSavepoint = `-- name: RollbackGitHubConnectionSavepoint :exec
+ROLLBACK TO SAVEPOINT upsert_github_connection
+`
+
+func (q *Queries) RollbackGitHubConnectionSavepoint(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, rollbackGitHubConnectionSavepoint)
+	return err
 }
 
 const setPluginAutoCreatedFixture = `-- name: SetPluginAutoCreatedFixture :exec

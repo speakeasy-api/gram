@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -117,8 +118,8 @@ func (s *Service) reconcileHostedNetworkAccess(ctx context.Context, tx pgx.Tx, a
 		}
 	} else {
 		previous := canonical
-		updated, updateErr := tx.Exec(ctx, `UPDATE mcp_servers SET name = $1, slug = $2, visibility = $3, user_session_issuer_id = $4, network_access_mode = $5, updated_at = clock_timestamp() WHERE id = $6 AND project_id = $7 AND toolset_id = $6 AND deleted IS FALSE`, after.Name, after.McpSlug, hostedVisibility(after), after.UserSessionIssuerID, networkaccess.Storage(mode), after.ID, after.ProjectID)
-		if updateErr != nil || updated.RowsAffected() != 1 {
+		updated, updateErr := repo.New(tx).UpdateHostedMCPNetworkPolicy(ctx, repo.UpdateHostedMCPNetworkPolicyParams{Name: conv.ToPGText(after.Name), Slug: after.McpSlug, Visibility: hostedVisibility(after), UserSessionIssuerID: after.UserSessionIssuerID, NetworkAccessMode: networkaccess.Storage(mode), ID: after.ID, ProjectID: after.ProjectID})
+		if updateErr != nil || updated != 1 {
 			return oops.E(oops.CodeUnexpected, updateErr, "update hosted MCP network policy")
 		}
 		canonical, err = servers.GetMCPServerByIDAndProjectID(ctx, mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: after.ID, ProjectID: after.ProjectID})

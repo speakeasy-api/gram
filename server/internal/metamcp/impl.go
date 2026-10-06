@@ -498,11 +498,11 @@ func UpdateMetaMCPServerNetworkAccessModeInTransaction(ctx context.Context, tx p
 	if err != nil {
 		return repo.MetaMcpServer{}, fmt.Errorf("lock gateway: %w", err)
 	}
-	updated, err := tx.Exec(ctx, `UPDATE meta_mcp_servers SET network_access_mode = $1, updated_at = clock_timestamp() WHERE id = $2 AND organization_id = $3 AND project_id = $4 AND deleted IS FALSE`, networkaccess.Storage(mode), serverID, organizationID, projectID)
+	updated, err := queries.UpdateMetaMCPServerNetworkAccessMode(ctx, repo.UpdateMetaMCPServerNetworkAccessModeParams{NetworkAccessMode: networkaccess.Storage(mode), ID: serverID, OrganizationID: organizationID, ProjectID: projectID})
 	if err != nil {
 		return repo.MetaMcpServer{}, fmt.Errorf("update gateway network access mode: %w", err)
 	}
-	if updated.RowsAffected() != 1 {
+	if updated != 1 {
 		return repo.MetaMcpServer{}, pgx.ErrNoRows
 	}
 	after, err := queries.GetMetaMCPServer(ctx, repo.GetMetaMCPServerParams{ID: serverID, OrganizationID: organizationID, ProjectID: projectID})

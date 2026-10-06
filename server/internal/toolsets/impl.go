@@ -936,27 +936,26 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		nameCandidates = append(nameCandidates, fmt.Sprintf("%s_copy%d", originalToolset.Name, i))
 	}
 
-	for i, candidateName := range nameCandidates {
+	for _, candidateName := range nameCandidates {
 		baseParams.Name = candidateName
 		baseParams.Slug = conv.ToSlug(candidateName)
 
-		savepointName := fmt.Sprintf("clone_toolset_insert_%d", i)
-		if _, err := dbtx.Exec(ctx, "SAVEPOINT "+savepointName); err != nil {
+		if err := tr.BeginCloneInsertSavepoint(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to clone toolset").LogError(ctx, logger)
 		}
 
 		clonedToolset, err = tr.CreateToolset(ctx, baseParams)
 		if err == nil {
-			if _, releaseErr := dbtx.Exec(ctx, "RELEASE SAVEPOINT "+savepointName); releaseErr != nil {
+			if releaseErr := tr.ReleaseCloneInsertSavepoint(ctx); releaseErr != nil {
 				return nil, oops.E(oops.CodeUnexpected, releaseErr, "failed to clone toolset").LogError(ctx, logger)
 			}
 			break
 		}
 
-		if _, rollbackErr := dbtx.Exec(ctx, "ROLLBACK TO SAVEPOINT "+savepointName); rollbackErr != nil {
+		if rollbackErr := tr.RollbackCloneInsertSavepoint(ctx); rollbackErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, rollbackErr, "failed to clone toolset").LogError(ctx, logger)
 		}
-		if _, releaseErr := dbtx.Exec(ctx, "RELEASE SAVEPOINT "+savepointName); releaseErr != nil {
+		if releaseErr := tr.ReleaseCloneInsertSavepoint(ctx); releaseErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, releaseErr, "failed to clone toolset").LogError(ctx, logger)
 		}
 

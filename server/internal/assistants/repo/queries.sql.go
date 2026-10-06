@@ -846,6 +846,27 @@ func (q *Queries) DeleteProjectManagedAssistant(ctx context.Context, projectID u
 	return err
 }
 
+const enableHostedMCPForToolsets = `-- name: EnableHostedMCPForToolsets :exec
+UPDATE mcp_servers AS server
+SET visibility = CASE WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END,
+    updated_at = clock_timestamp()
+FROM toolsets AS toolset
+WHERE server.id = toolset.id AND server.toolset_id = toolset.id
+  AND server.project_id = $1 AND toolset.project_id = $1
+  AND toolset.id = ANY($2::uuid[]) AND toolset.mcp_enabled IS TRUE
+  AND toolset.deleted IS FALSE AND server.deleted IS FALSE AND server.visibility = 'disabled'
+`
+
+type EnableHostedMCPForToolsetsParams struct {
+	ProjectID  uuid.UUID
+	ToolsetIds []uuid.UUID
+}
+
+func (q *Queries) EnableHostedMCPForToolsets(ctx context.Context, arg EnableHostedMCPForToolsetsParams) error {
+	_, err := q.db.Exec(ctx, enableHostedMCPForToolsets, arg.ProjectID, arg.ToolsetIds)
+	return err
+}
+
 const enableMCPForToolsets = `-- name: EnableMCPForToolsets :exec
 UPDATE toolsets
 SET mcp_enabled = TRUE,
@@ -2921,6 +2942,20 @@ func (q *Queries) LoadThreadContextV2(ctx context.Context, arg LoadThreadContext
 		&i.WarmUntil,
 	)
 	return i, err
+}
+
+const lockChatForCompaction = `-- name: LockChatForCompaction :exec
+SELECT 1 FROM chats WHERE id = $1 AND project_id = $2 FOR UPDATE
+`
+
+type LockChatForCompactionParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LockChatForCompaction(ctx context.Context, arg LockChatForCompactionParams) error {
+	_, err := q.db.Exec(ctx, lockChatForCompaction, arg.ChatID, arg.ProjectID)
+	return err
 }
 
 const lookupActiveAssistantRuntimeV2 = `-- name: LookupActiveAssistantRuntimeV2 :one

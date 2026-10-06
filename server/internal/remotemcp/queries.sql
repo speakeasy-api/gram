@@ -273,3 +273,7 @@ FROM remote_protected_resources
 WHERE project_id = @project_id
     AND resource_identifier = @resource_identifier::text
     AND deleted IS FALSE;
+-- name: LockLiveProjectForOrganization :one
+SELECT id FROM projects
+WHERE id = sqlc.arg(project_id) AND organization_id = sqlc.arg(organization_id) AND deleted IS FALSE
+FOR UPDATE;

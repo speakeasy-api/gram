@@ -21,6 +21,15 @@ type AddToolsetPromptTemplatesParams struct {
 	PromptName       string
 }
 
+const beginCloneInsertSavepoint = `-- name: BeginCloneInsertSavepoint :exec
+SAVEPOINT clone_toolset_insert
+`
+
+func (q *Queries) BeginCloneInsertSavepoint(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, beginCloneInsertSavepoint)
+	return err
+}
+
 const checkMCPSlugAvailability = `-- name: CheckMCPSlugAvailability :one
 SELECT EXISTS (
   SELECT 1
@@ -1394,6 +1403,24 @@ func (q *Queries) ListToolsetsWithVersionsByOrganization(ctx context.Context, or
 	return items, nil
 }
 
+const releaseCloneInsertSavepoint = `-- name: ReleaseCloneInsertSavepoint :exec
+RELEASE SAVEPOINT clone_toolset_insert
+`
+
+func (q *Queries) ReleaseCloneInsertSavepoint(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, releaseCloneInsertSavepoint)
+	return err
+}
+
+const rollbackCloneInsertSavepoint = `-- name: RollbackCloneInsertSavepoint :exec
+ROLLBACK TO SAVEPOINT clone_toolset_insert
+`
+
+func (q *Queries) RollbackCloneInsertSavepoint(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, rollbackCloneInsertSavepoint)
+	return err
+}
+
 const setToolsetCustomDomain = `-- name: SetToolsetCustomDomain :exec
 UPDATE toolsets
 SET
@@ -1509,6 +1536,40 @@ func (q *Queries) ToolsetHasExternalMCPProxy(ctx context.Context, arg ToolsetHas
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const updateHostedMCPNetworkPolicy = `-- name: UpdateHostedMCPNetworkPolicy :execrows
+UPDATE mcp_servers
+SET name = $1, slug = $2, visibility = $3,
+    user_session_issuer_id = $4, network_access_mode = $5,
+    updated_at = clock_timestamp()
+WHERE id = $6 AND project_id = $7 AND toolset_id = $6 AND deleted IS FALSE
+`
+
+type UpdateHostedMCPNetworkPolicyParams struct {
+	Name                pgtype.Text
+	Slug                pgtype.Text
+	Visibility          string
+	UserSessionIssuerID uuid.NullUUID
+	NetworkAccessMode   pgtype.Text
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+func (q *Queries) UpdateHostedMCPNetworkPolicy(ctx context.Context, arg UpdateHostedMCPNetworkPolicyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateHostedMCPNetworkPolicy,
+		arg.Name,
+		arg.Slug,
+		arg.Visibility,
+		arg.UserSessionIssuerID,
+		arg.NetworkAccessMode,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateToolset = `-- name: UpdateToolset :one

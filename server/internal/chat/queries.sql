@@ -2185,3 +2185,8 @@ FROM ancestry ORDER BY root_id, (slack_channel_id IS NULL), depth;
 -- name: LockChatRowForTest :exec
 -- Test fixture: hold the lock an ordinary helper capture takes on its own row.
 SELECT id FROM chats WHERE id = @id AND project_id = @project_id FOR NO KEY UPDATE;
+-- name: AcquireToolSummaryLock :exec
+SELECT pg_advisory_lock(sqlc.arg(lock_key)::bigint);
+
+-- name: ReleaseToolSummaryLock :exec
+SELECT pg_advisory_unlock(sqlc.arg(lock_key)::bigint);

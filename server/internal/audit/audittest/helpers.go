@@ -111,7 +111,7 @@ func RejectAction(ctx context.Context, dbtx repo.DBTX, action audit.Action) erro
 		literal,
 	)
 
-	if _, err := dbtx.Exec(ctx, stmt); err != nil {
+	if _, err := dbtx.Exec(ctx, stmt); err != nil { //nolint:forbidigo // GG015: fault injection requires DDL with a caller-selected CHECK constraint; PostgreSQL cannot bind parameters in constraint definitions.
 		return fmt.Errorf("reject audit action %s: %w", action, err)
 	}
 

@@ -2187,3 +2187,7 @@ SET external_user_id = @external_user_id
 WHERE id = @id
   AND project_id = @project_id;
 
+-- name: LockExactAudienceGrants :exec
+SELECT id FROM principal_grants
+WHERE organization_id = sqlc.arg(organization_id) AND scope = sqlc.arg(scope) AND selectors = sqlc.arg(selectors)
+ORDER BY id FOR UPDATE;

@@ -664,3 +664,12 @@ WHERE p.organization_id = @organization_id
   AND s.visibility <> 'disabled'
   AND s.slug IS NOT NULL
 ORDER BY s.project_id, s.slug;
+-- name: LockLiveRemoteMCPSource :one
+SELECT TRUE FROM remote_mcp_servers
+WHERE id = sqlc.arg(id) AND project_id = sqlc.arg(project_id) AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: UpdateMCPServerNetworkAccessMode :execrows
+UPDATE mcp_servers SET network_access_mode = sqlc.arg(network_access_mode), updated_at = clock_timestamp()
+WHERE mcp_servers.id = sqlc.arg(id) AND mcp_servers.project_id = sqlc.arg(project_id) AND mcp_servers.deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = mcp_servers.project_id AND p.deleted IS FALSE);

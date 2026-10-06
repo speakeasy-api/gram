@@ -17,9 +17,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/pipeline"
+	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/riskfindingscols/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 // DefaultBatchSize is the number of rows fetched per source page and mutated
@@ -64,55 +67,6 @@ type SourceRow struct {
 	AssistantID string
 }
 
-// selectPage walks risk_results in id order (uuidv7). The id is used ONLY as a
-// keyset pagination/resume key (id > cursor); it is deliberately NOT used to
-// prune the time window (a row's uuidv7 id and its created_at are minted at
-// slightly different instants, so the id timestamp is not a sound bound for a
-// created_at filter). Time bounds are enforced exactly by the created_at
-// predicates ($3/$4).
-//
-// Optional filters use the "$n IS NULL OR col = $n" idiom so a single prepared
-// statement serves every filter combination.
-//
-// found IS TRUE AND rule_id IS NOT NULL mirrors both the live outbox emission
-// and the riskfindings backfill source: only those rows exist in ClickHouse,
-// so mutating any other id would be wasted work.
-//
-// The chat_messages LEFT JOIN misses only for content-part-anchored findings
-// (message-anchored rows cannot dangle: the FK cascades the risk_results row
-// away with its message); COALESCE then falls back to the finding's own
-// created_at, matching the ClickHouse column DEFAULT. The assistant lookup
-// mirrors the live GetAssistantThreadAssistantIDByChatID query
-// (chat/queries.sql): a live (deleted IS FALSE) assistant_threads row whose
-// chat_id matches the scanned message's chat, with ORDER BY id LIMIT 1 making
-// the pick deterministic should a chat ever back multiple threads.
-const selectPage = `
-SELECT r.id,
-       r.created_at,
-       COALESCE(cm.created_at, r.created_at) AS message_created_at,
-       COALESCE(at.assistant_id::text, '') AS assistant_id
-FROM risk_results r
-LEFT JOIN chat_messages cm
-  ON cm.id = r.chat_message_id
-LEFT JOIN LATERAL (
-    SELECT t.assistant_id
-    FROM assistant_threads t
-    WHERE t.chat_id = cm.chat_id
-      AND t.deleted IS FALSE
-    ORDER BY t.id
-    LIMIT 1
-) at ON TRUE
-WHERE ($1::text IS NULL OR r.organization_id = $1)
-  AND ($2::uuid IS NULL OR r.project_id = $2)
-  AND ($3::timestamptz IS NULL OR r.created_at >= $3)
-  AND ($4::timestamptz IS NULL OR r.created_at < $4)
-  AND r.id > $5
-  AND r.found IS TRUE
-  AND r.rule_id IS NOT NULL
-ORDER BY r.id
-LIMIT $6
-`
-
 // Source reads enrichment tuples from Postgres page by page and publishes them
 // to the pipeline. It tracks the last processed id so an interrupted run can
 // resume.
@@ -151,20 +105,18 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 		cursor = c
 	}
 
-	// nil interface values become SQL NULL, disabling the optional filters.
-	var fromArg, toArg any
+	// Invalid nullable values disable the optional filters.
+	var fromArg, toArg pgtype.Timestamptz
 	if from, ok := criteria[CriteriaFrom].(time.Time); ok {
-		fromArg = from
+		fromArg = conv.ToPGTimestamptz(from)
 	}
 	if to, ok := criteria[CriteriaTo].(time.Time); ok {
-		toArg = to
+		toArg = conv.ToPGTimestamptz(to)
 	}
-	var orgArg, projectArg any
-	if org != "" {
-		orgArg = org
-	}
+	orgArg := conv.ToPGTextEmpty(org)
+	var projectArg uuid.NullUUID
 	if projectID, ok := criteria[CriteriaProjectID].(uuid.UUID); ok {
-		projectArg = projectID
+		projectArg = conv.ToNullUUID(projectID)
 	}
 
 	for {
@@ -172,33 +124,23 @@ func (s *Source) Read(ctx context.Context, criteria pipeline.Criteria, out chan<
 			return fmt.Errorf("read interrupted at %s: %w", cursor, err)
 		}
 
-		rows, err := s.pool.Query(ctx, selectPage, orgArg, projectArg, fromArg, toArg, cursor, batchSize)
+		rows, err := repo.New(s.pool).ListSourcePage(ctx, repo.ListSourcePageParams{OrganizationID: orgArg, ProjectID: projectArg, FromTime: fromArg, ToTime: toArg, Cursor: cursor, PageSize: conv.SafeInt32(batchSize)})
 		if err != nil {
 			return fmt.Errorf("query page after %s: %w", cursor, err)
 		}
 
 		n := 0
-		for rows.Next() {
-			var r SourceRow
-			if err := rows.Scan(&r.ID, &r.CreatedAt, &r.MessageCreatedAt, &r.AssistantID); err != nil {
-				rows.Close()
-				return fmt.Errorf("scan row after %s: %w", cursor, err)
-			}
+		for _, row := range rows {
+			r := SourceRow{ID: row.ID, CreatedAt: row.CreatedAt.Time, MessageCreatedAt: row.MessageCreatedAt.Time, AssistantID: row.AssistantID}
 			cursor = r.ID
 			n++
 
 			select {
 			case out <- r:
 			case <-ctx.Done():
-				rows.Close()
 				return fmt.Errorf("publish interrupted at %s: %w", cursor, ctx.Err())
 			}
 		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return fmt.Errorf("iterate page after %s: %w", cursor, err)
-		}
-		rows.Close()
 
 		s.scanned += int64(n)
 		// This is the read position, not a safe resume point: rows up to here

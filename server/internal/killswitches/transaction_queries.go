@@ -23,7 +23,7 @@ func (q lifecycleTransactionQueries) Exec(ctx context.Context, sql string, argum
 	if err := validateLifecycleTransactionCall(sql, arguments); err != nil {
 		return pgconn.CommandTag{}, err
 	}
-	tag, err := q.db.Exec(ctx, sql, arguments...)
+	tag, err := q.db.Exec(ctx, sql, arguments...) //nolint:forbidigo // GG015: DBTX middleware validates and forwards SQLc-generated statements; it cannot replace arbitrary statements with a fixed query.
 	if err != nil {
 		return tag, fmt.Errorf("execute lifecycle transaction query: %w", err)
 	}
@@ -34,7 +34,7 @@ func (q lifecycleTransactionQueries) Query(ctx context.Context, sql string, args
 	if err := validateLifecycleTransactionCall(sql, args); err != nil {
 		return nil, err
 	}
-	rows, err := q.db.Query(ctx, sql, args...)
+	rows, err := q.db.Query(ctx, sql, args...) //nolint:forbidigo // GG015: DBTX middleware validates and forwards SQLc-generated statements; it cannot replace arbitrary statements with a fixed query.
 	if err != nil {
 		return nil, fmt.Errorf("query lifecycle transaction: %w", err)
 	}
@@ -45,7 +45,7 @@ func (q lifecycleTransactionQueries) QueryRow(ctx context.Context, sql string, a
 	if err := validateLifecycleTransactionCall(sql, args); err != nil {
 		return rejectedLifecycleQueryRow{err: err}
 	}
-	return lifecycleQueryRow{row: q.db.QueryRow(ctx, sql, args...)}
+	return lifecycleQueryRow{row: q.db.QueryRow(ctx, sql, args...)} //nolint:forbidigo // GG015: DBTX middleware validates and forwards SQLc-generated statements; it cannot replace arbitrary statements with a fixed query.
 }
 
 type lifecycleQueryRow struct {

@@ -11,6 +11,7 @@ import (
 	publicationv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
+	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 )
 
@@ -71,29 +72,9 @@ func (h *OrganizationPublicationHandler) publishPage(ctx context.Context, organi
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	rows, err := tx.Query(ctx, `SELECT c.project_id
-		FROM plugin_github_connections c
-		JOIN projects p ON p.id = c.project_id
-		WHERE p.organization_id = $1
-		  AND p.deleted IS FALSE
-		  AND c.project_id > $2
-		ORDER BY c.project_id ASC
-		LIMIT $3`, organizationID, cursor, organizationPublicationPageSize+1)
+	projectIDs, err := repo.New(tx).ListOrganizationMarketplaceProjects(ctx, repo.ListOrganizationMarketplaceProjectsParams{OrganizationID: organizationID, Cursor: cursor, PageSize: organizationPublicationPageSize + 1})
 	if err != nil {
 		return fmt.Errorf("list organization marketplace projects: %w", err)
-	}
-	projectIDs := make([]uuid.UUID, 0, organizationPublicationPageSize+1)
-	for rows.Next() {
-		var projectID uuid.UUID
-		if err := rows.Scan(&projectID); err != nil {
-			rows.Close()
-			return fmt.Errorf("scan organization marketplace project: %w", err)
-		}
-		projectIDs = append(projectIDs, projectID)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("read organization marketplace projects: %w", err)
 	}
 
 	hasContinuation := len(projectIDs) > organizationPublicationPageSize

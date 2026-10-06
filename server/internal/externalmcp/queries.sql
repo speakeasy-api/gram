@@ -334,3 +334,12 @@ UPDATE mcp_registries SET enabled = @enabled WHERE id = @id;
 
 -- name: SetMCPRegistryURLFixture :exec
 UPDATE mcp_registries SET url = @url WHERE id = @id;
+-- name: EnsureNativeCatalogSource :exec
+INSERT INTO mcp_registries
+  (id, name, url, source_type, auth_profile, enabled, certification_state, source_key)
+VALUES (sqlc.arg(id), 'Speakeasy', sqlc.arg(url), 'native_v1', 'none', true, 'certified', 'speakeasy')
+ON CONFLICT (id) DO NOTHING;
+
+-- name: ValidateNativeCatalogSource :one
+SELECT (url = sqlc.arg(url) AND source_type = 'native_v1' AND auth_profile = 'none' AND source_key = 'speakeasy')::boolean AS valid
+FROM mcp_registries WHERE id = sqlc.arg(id);

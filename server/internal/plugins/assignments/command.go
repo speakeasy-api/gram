@@ -46,28 +46,7 @@ func Lock(ctx context.Context, tx pgx.Tx, organizationID string, projectID, plug
 	if tx == nil || organizationID == "" || projectID == uuid.Nil || pluginID == uuid.Nil {
 		return pluginsrepo.Plugin{}, ErrInvalid
 	}
-	var plugin pluginsrepo.Plugin
-	err := tx.QueryRow(ctx, `
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
-FROM plugins
-WHERE id = $1
-  AND organization_id = $2
-  AND project_id = $3
-  AND deleted IS FALSE
-FOR UPDATE`, pluginID, organizationID, projectID).Scan(
-		&plugin.ID,
-		&plugin.OrganizationID,
-		&plugin.ProjectID,
-		&plugin.Name,
-		&plugin.Slug,
-		&plugin.Description,
-		&plugin.IsDefault,
-		&plugin.AutoCreated,
-		&plugin.CreatedAt,
-		&plugin.UpdatedAt,
-		&plugin.DeletedAt,
-		&plugin.Deleted,
-	)
+	plugin, err := pluginsrepo.New(tx).LockPluginAssignmentTarget(ctx, pluginsrepo.LockPluginAssignmentTargetParams{ID: pluginID, OrganizationID: organizationID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return pluginsrepo.Plugin{}, ErrNotFound
 	}
