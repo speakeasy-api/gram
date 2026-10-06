@@ -4,7 +4,6 @@ import {
   MoreActions,
   type Action as MoreActionsItem,
 } from "@/components/ui/MoreActions";
-import { SearchBar } from "@/components/ui/SearchBar";
 import {
   Select,
   SelectContent,
@@ -32,13 +31,26 @@ import {
 } from "lucide-react";
 import { useMemo, useState, type JSX } from "react";
 import { useLocation, useSearchParams } from "react-router";
-import { ViewToggle } from "@/components/ui/ViewToggle";
+import { Page } from "@/components/page-layout";
+import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
 import { WidgetCards } from "./WidgetCards";
-import { longestWindow, type ExploreSpec } from "./exploreModel";
+import { findDataset, longestWindow, type ExploreSpec } from "./exploreModel";
+import { pageCanFilter } from "./pageContext";
+import { usePageFilters, type PageFilterField } from "./usePageFilters";
 import { useCanEditWidget } from "./useCanEditWidget";
 import { useCreatorName } from "./useCreatorName";
 import { useWidgetMutations } from "./useWidgetMutations";
 import { DeleteWidgetDialog, WidgetDetailsDialog } from "./WidgetDialogs";
+
+// The fields the cards' filter bar may offer, in order: the dimensions most
+// questions about agent activity are cut by.
+const CARD_FILTER_FIELDS: readonly PageFilterField[] = [
+  { field: "user", label: "User" },
+  { field: "surface", label: "Agent" },
+  { field: "model", label: "Model" },
+  { field: "mcp_server", label: "MCP server" },
+  { field: "status", label: "Status" },
+];
 
 // The sort the list opens on: the server's own order, most recently updated
 // first.
@@ -114,6 +126,26 @@ export function WidgetList({
     () => longestWindow(widgets.map((widget) => widget.query.window)),
     [widgets],
   );
+  // The cards' filter bar offers the fields some widget can be filtered by,
+  // settled on the project's widgets rather than the ones the search leaves,
+  // so it does not change under someone typing. It shows in the cards view
+  // only, and asks for its options only there.
+  const catalog = useAnalyticsDescribe().data?.datasets;
+  const cardFields = useMemo(
+    () =>
+      CARD_FILTER_FIELDS.filter(({ field }) =>
+        datasets.some((name) =>
+          pageCanFilter(findDataset(catalog ?? [], name), field),
+        ),
+      ),
+    [catalog, datasets],
+  );
+  const cardFilters = usePageFilters({
+    fields: cardFields,
+    optionsWindow,
+    optionsDatasets: datasets,
+    optionsEnabled: view === "cards",
+  });
 
   // The same actions on a row and on a card.
   const actionsFor = (widget: Widget): MoreActionsItem[] => [
@@ -286,47 +318,54 @@ export function WidgetList({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <SearchBar
-          value={search}
-          onChange={setSearch}
-          placeholder="Search widgets"
-          className="w-72"
-        />
-        <Select value={createdBy} onValueChange={setCreatedBy}>
-          <SelectTrigger className="w-44" aria-label="Created by">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ANYONE}>Created by anyone</SelectItem>
-            <SelectItem value={ME}>Created by me</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={dataset} onValueChange={setDataset}>
-          <SelectTrigger className="w-44" aria-label="Dataset">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_DATASETS}>All datasets</SelectItem>
-            {datasets.map((name) => (
-              <SelectItem key={name} value={name}>
-                {name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <div className="ml-auto">
-          <ViewToggle
+      {/* The list's own controls on one row; in the cards view, the
+          shared filter bar the cards answer within on the next. */}
+      <Page.Toolbar>
+        <Page.Toolbar.Row>
+          <Page.Toolbar.Search
+            value={search}
+            onChange={setSearch}
+            placeholder="Search widgets"
+          />
+          <Page.Toolbar.Leading>
+            <Select value={createdBy} onValueChange={setCreatedBy}>
+              <SelectTrigger className="h-10 w-44" aria-label="Created by">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ANYONE}>Created by anyone</SelectItem>
+                <SelectItem value={ME}>Created by me</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={dataset} onValueChange={setDataset}>
+              <SelectTrigger className="h-10 w-44" aria-label="Dataset">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_DATASETS}>All datasets</SelectItem>
+                {datasets.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Page.Toolbar.Leading>
+          <Page.Toolbar.ViewAs
             value={view === "cards" ? "grid" : "table"}
             onChange={(mode) => setView(mode === "grid" ? "cards" : "list")}
           />
-        </div>
-      </div>
+        </Page.Toolbar.Row>
+        {view === "cards" ? (
+          <Page.Toolbar.Row>
+            <Page.Toolbar.Filters {...cardFilters.toolbar} />
+          </Page.Toolbar.Row>
+        ) : null}
+      </Page.Toolbar>
       {view === "cards" ? (
         <WidgetCards
           widgets={rows}
-          datasets={datasets}
-          optionsWindow={optionsWindow}
+          page={cardFilters.context}
           actionsFor={actionsFor}
           onOpen={(spec, widgetId) =>
             confirmLeave(() => onOpenQuery(spec, widgetId ?? null))

@@ -1,77 +1,36 @@
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import type { Widget } from "@gram/client/models/components/widget.js";
-import { Page } from "@/components/page-layout";
-import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
-import { useEffect, useMemo, useRef, useState, type JSX } from "react";
-import { findDataset, type ChartType, type WindowPreset } from "./exploreModel";
-import { pageCanFilter } from "./pageContext";
-import { usePageFilters, type PageFilterField } from "./usePageFilters";
+import { useEffect, useRef, useState, type JSX } from "react";
+import type { ChartType } from "./exploreModel";
+import type { PageContext } from "./pageContext";
 import {
   WidgetPlaceholder,
   WidgetView,
   type OpenInExplore,
 } from "./WidgetView";
 
-// The fields the cards' filter bar may offer, in order: the dimensions most
-// questions about agent activity are cut by. The bar shows only those a
-// widget on screen can be filtered by.
-const CARD_FILTER_FIELDS: readonly PageFilterField[] = [
-  { field: "user", label: "User" },
-  { field: "surface", label: "Agent" },
-  { field: "model", label: "Model" },
-  { field: "mcp_server", label: "MCP server" },
-  { field: "status", label: "Status" },
-];
-
 /**
  * The project's widgets drawn as cards, in the order and under the search
- * and filters the list shows, beneath the dashboard's shared filter bar. A
- * card answers its own saved question over its own window until the bar
- * picks a date range, and narrows by whatever the bar filters on. A card's
- * actions are the list row's, and opening one goes through the same check
- * for edits not yet saved.
+ * and filters the list shows. A card answers its own saved question over
+ * its own window until the toolbar's filter bar picks a date range, and
+ * narrows by whatever that bar filters on. A card's actions are the list
+ * row's, and opening one goes through the same check for edits not yet
+ * saved.
  */
 export function WidgetCards({
   widgets,
-  datasets,
-  optionsWindow,
+  page,
   actionsFor,
   onOpen,
 }: {
   widgets: Widget[];
-  /**
-   * Every dataset the project's widgets ask, for which filters apply and
-   * where their values come from.
-   */
-  datasets: readonly string[];
-  /** The longest window the project's widgets ask, to read values over. */
-  optionsWindow?: WindowPreset | undefined;
+  /** What the Widgets tab's filter bar holds. */
+  page: PageContext;
   actionsFor: (widget: Widget) => Action[];
   onOpen: OpenInExplore;
 }): JSX.Element {
-  const catalog = useAnalyticsDescribe().data?.datasets;
-  // Settled on the project's widgets rather than the ones the search leaves,
-  // so the bar does not change under someone typing.
-  const fields = useMemo(
-    () =>
-      CARD_FILTER_FIELDS.filter(({ field }) =>
-        datasets.some((name) =>
-          pageCanFilter(findDataset(catalog ?? [], name), field),
-        ),
-      ),
-    [catalog, datasets],
-  );
-  const page = usePageFilters({
-    fields,
-    optionsWindow,
-    optionsDatasets: datasets,
-  });
-
   return (
-    <div className="flex flex-col gap-4">
-      <Page.Toolbar>
-        <Page.Toolbar.Filters {...page.toolbar} />
-      </Page.Toolbar>
+    <>
       {widgets.length === 0 ? (
         <p className="text-muted-foreground py-10 text-center text-sm">
           No widgets match these filters.
@@ -85,7 +44,7 @@ export function WidgetCards({
             >
               <WidgetView
                 widget={widget}
-                page={page.context}
+                page={page}
                 className="h-full"
                 onOpen={onOpen}
                 actions={
@@ -99,7 +58,7 @@ export function WidgetCards({
           ))}
         </div>
       )}
-    </div>
+    </>
   );
 }
 

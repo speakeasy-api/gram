@@ -52,6 +52,12 @@ export interface PageFilterConfig {
    * any catalog dataset that has the field.
    */
   optionsDatasets?: readonly string[] | undefined;
+  /**
+   * Whether the bar's options are fetched. A page that holds the bar's
+   * state while hiding it turns this off, so nothing is asked of a bar
+   * nobody can open. On by default.
+   */
+  optionsEnabled?: boolean | undefined;
 }
 
 /** The window options are read over when the page names none. */
@@ -151,7 +157,7 @@ export function usePageFilters(config: PageFilterConfig): {
 
 /** Each field's values over the page's range, as filter options. */
 function useFieldOptions(
-  { fields, optionsWindow, optionsDatasets }: PageFilterConfig,
+  { fields, optionsWindow, optionsDatasets, optionsEnabled }: PageFilterConfig,
   date: DateRangeValue,
 ): OptionsById {
   const client = useGramContext();
@@ -170,7 +176,15 @@ function useFieldOptions(
   }));
   const results = useQueries({
     queries: sources.map(({ field, dataset }) =>
-      dimensionValuesQuery(client, project.id, dataset, field, from, to, true),
+      dimensionValuesQuery(
+        client,
+        project.id,
+        dataset,
+        field,
+        from,
+        to,
+        optionsEnabled ?? true,
+      ),
     ),
   });
   const out: OptionsById = {};

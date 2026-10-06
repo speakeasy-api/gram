@@ -7,6 +7,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -41,6 +42,8 @@ const testState = vi.hoisted(() => ({
   projectWrite: false,
   /** What the cards' filter bar holds. */
   pageContext: {} as Record<string, unknown>,
+  /** What the Widgets tab last asked of the cards' filter bar. */
+  pageFilterConfig: undefined as Record<string, unknown> | undefined,
 }));
 
 type Write = "create" | "update" | "duplicate" | "delete";
@@ -257,14 +260,26 @@ vi.mock("@/routes", () => ({
 vi.mock("@/components/page-templates", () => ({
   WorkbenchPage: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
-vi.mock("@/components/page-layout", () => {
-  const Toolbar = ({ children }: { children: ReactNode }) => <>{children}</>;
-  Toolbar.Filters = () => <div aria-label="Card filters" />;
+vi.mock("@/components/page-layout", async () => {
+  const { Toolbar } = await import("@/components/ui/Toolbar");
   return { Page: { Eyebrow: () => null, Toolbar } };
 });
 // The cards' filter bar is the shared one, tested with usePageFilters.
 vi.mock("./usePageFilters", () => ({
-  usePageFilters: () => ({ toolbar: {}, context: testState.pageContext }),
+  usePageFilters: (config: Record<string, unknown>) => {
+    testState.pageFilterConfig = config;
+    return {
+      toolbar: {
+        schema: [],
+        values: {},
+        optionsById: {},
+        onChange: () => {},
+        onClear: () => {},
+        onClearAll: () => {},
+      },
+      context: testState.pageContext,
+    };
+  },
 }));
 vi.mock("@/components/release-stage-badge", () => ({
   ReleaseStageBadge: ({ stage }: { stage: string }) => <span>{stage}</span>,
@@ -810,7 +825,7 @@ describe("Explore", () => {
       expect(screen.getByRole("button", { name: "Run query" })).toBeTruthy();
     });
 
-    it("narrows the list by name", () => {
+    it("narrows the list by name", async () => {
       testState.widgets = [
         storedWidget("w-1", "Slow tools", p95ByTool),
         storedWidget(
@@ -826,13 +841,18 @@ describe("Explore", () => {
       fireEvent.change(screen.getByPlaceholderText("Search widgets"), {
         target: { value: "slow" },
       });
+      // The toolbar's search applies on the next tick.
+      await waitFor(() =>
+        expect(screen.queryByText("Sessions by user")).toBeNull(),
+      );
       expect(screen.getByText("Slow tools")).toBeTruthy();
-      expect(screen.queryByText("Sessions by user")).toBeNull();
 
       fireEvent.change(screen.getByPlaceholderText("Search widgets"), {
         target: { value: "nothing like it" },
       });
-      expect(screen.getByText("No widgets match these filters.")).toBeTruthy();
+      expect(
+        await screen.findByText("No widgets match these filters."),
+      ).toBeTruthy();
     });
 
     it("opens a widget from the list in Explore, restored exactly, and runs it", () => {
@@ -892,6 +912,21 @@ describe("Explore", () => {
       expect(asked).toContain("sessions");
     });
 
+    it("fetches the cards' filter options only in the cards view, from the widgets' datasets", () => {
+      testState.widgets = [
+        storedWidget("w-1", "Slow tools", { ...p95ByTool, window: "90d" }),
+      ];
+      renderExplore("/explore?tab=widgets");
+      expect(testState.pageFilterConfig?.optionsEnabled).toBe(false);
+
+      fireEvent.click(screen.getByRole("radio", { name: "Grid view" }));
+      expect(testState.pageFilterConfig).toMatchObject({
+        optionsEnabled: true,
+        optionsDatasets: ["tool_calls"],
+        optionsWindow: "90d",
+      });
+    });
+
     it("opens a card the filter bar narrowed as the question it ran, not the saved widget", () => {
       const byUser: ExploreSpec = {
         ...p95ByTool,
@@ -914,7 +949,7 @@ describe("Explore", () => {
       ]);
     });
 
-    it("opens a card's widget in the builder, and filters cards as it filters rows", () => {
+    it("opens a card's widget in the builder, and filters cards as it filters rows", async () => {
       testState.widgets = [
         storedWidget("w-1", "Slow tools", p95ByTool),
         storedWidget("w-2", "Other tools", p95ByTool),
@@ -923,7 +958,11 @@ describe("Explore", () => {
       fireEvent.change(screen.getByPlaceholderText("Search widgets"), {
         target: { value: "slow" },
       });
-      expect(screen.queryByRole("region", { name: "Other tools" })).toBeNull();
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("region", { name: "Other tools" }),
+        ).toBeNull(),
+      );
 
       const card = screen.getByRole("region", { name: "Slow tools" });
       fireEvent.click(

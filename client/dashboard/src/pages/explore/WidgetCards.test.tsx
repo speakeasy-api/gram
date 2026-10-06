@@ -1,14 +1,7 @@
 import type { Widget } from "@gram/client/models/components/widget.js";
 import { act, cleanup, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PageFilterConfig } from "./usePageFilters";
 import { WidgetCards } from "./WidgetCards";
-
-const testState = vi.hoisted(() => ({
-  /** The filter bar the cards last asked for. */
-  config: undefined as PageFilterConfig | undefined,
-}));
 
 // Each card's answer is WidgetView's, tested on its own; here a card only
 // has to exist once it is mounted.
@@ -19,23 +12,6 @@ vi.mock("./WidgetView", () => ({
   WidgetPlaceholder: ({ chartType }: { chartType: string }) => (
     <div data-testid="placeholder" data-chart-type={chartType} />
   ),
-}));
-
-// The filter bar is the shared one, tested with usePageFilters; here it
-// only has to be there.
-vi.mock("./usePageFilters", () => ({
-  usePageFilters: (config: PageFilterConfig) => {
-    testState.config = config;
-    return { toolbar: {}, context: {} };
-  },
-}));
-vi.mock("@/components/page-layout", () => {
-  const Toolbar = ({ children }: { children: ReactNode }) => <>{children}</>;
-  Toolbar.Filters = () => <div aria-label="Filters" />;
-  return { Page: { Toolbar } };
-});
-vi.mock("@gram/client/react-query/analyticsDescribe.js", () => ({
-  useAnalyticsDescribe: () => ({ data: { datasets: [] } }),
 }));
 
 /** An observer the test reports intersections through, by hand. */
@@ -84,7 +60,7 @@ describe("WidgetCards", () => {
     render(
       <WidgetCards
         widgets={[widget("w-1", "First"), widget("w-2", "Second")]}
-        datasets={["sessions"]}
+        page={{}}
         actionsFor={() => []}
         onOpen={() => {}}
       />,
@@ -111,7 +87,7 @@ describe("WidgetCards", () => {
     render(
       <WidgetCards
         widgets={[]}
-        datasets={[]}
+        page={{}}
         actionsFor={() => []}
         onOpen={() => {}}
       />,
@@ -123,7 +99,7 @@ describe("WidgetCards", () => {
     render(
       <WidgetCards
         widgets={[widget("w-1", "Tile"), widget("w-2", "Chart", "line")]}
-        datasets={["sessions"]}
+        page={{}}
         actionsFor={() => []}
         onOpen={() => {}}
       />,
@@ -133,22 +109,5 @@ describe("WidgetCards", () => {
         .getAllByTestId("placeholder")
         .map((placeholder) => placeholder.dataset.chartType),
     ).toEqual(["number", "line"]);
-  });
-
-  it("reads the bar's values from the project's datasets, over its longest window", () => {
-    render(
-      <WidgetCards
-        widgets={[widget("w-1", "First")]}
-        datasets={["sessions", "tool_calls"]}
-        optionsWindow="90d"
-        actionsFor={() => []}
-        onOpen={() => {}}
-      />,
-    );
-    expect(testState.config?.optionsDatasets).toEqual([
-      "sessions",
-      "tool_calls",
-    ]);
-    expect(testState.config?.optionsWindow).toBe("90d");
   });
 });
