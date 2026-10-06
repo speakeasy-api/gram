@@ -8,9 +8,10 @@ option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1
 
 message GitleaksEnforcer {
   // The handler ACKs scanner and reply-write failures because redelivery cannot
-  // rescue an inline scan. Only undecodable or malformed requests stay unacked
-  // and retry until retention expires. Those payloads contain raw content and
-  // require restricted access and retention.
+  // rescue an inline scan. Only undecodable or malformed requests, or a
+  // consumer crash or lost ack lease, leave a request unacked; it then retries
+  // until retention expires. The payloads contain raw content and require
+  // restricted access and retention.
   option (gcp.pubsub.v1.subscription) = {
     topic: "gram.risk.v1.GitleaksEnforcement"
     ack_deadline: {seconds: 10}
