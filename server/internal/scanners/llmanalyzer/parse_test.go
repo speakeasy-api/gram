@@ -291,3 +291,38 @@ func TestParseVerdict_CompactReasoningIsCapped(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 500, utf8.RuneCountInString(verdict.Risks[llmanalyzer.KeySecretsLeak].Reasoning))
 }
+
+func TestParseVerdict_CompactPartialMarkersLeaveUnmarkedRiskEmpty(t *testing.T) {
+	t.Parallel()
+
+	// Two flagged risks, a marker for only one: the marked risk gets its sentence
+	// and the unmarked one stays empty rather than inheriting the whole string.
+	verdict, err := llmanalyzer.ParseVerdict(`{"destructive_tool_call": 1, "prompt_injection": 0, "secrets_leak": 1, "personal_data_leak": 0,` +
+		` "reasoning": "secrets_leak: An API key is printed in plaintext."}`)
+	require.NoError(t, err)
+	require.Equal(t, "An API key is printed in plaintext.", verdict.Risks[llmanalyzer.KeySecretsLeak].Reasoning)
+	require.Empty(t, verdict.Risks[llmanalyzer.KeyDestructiveToolCall].Reasoning)
+}
+
+func TestParseVerdict_CompactMarkerAfterPunctuation(t *testing.T) {
+	t.Parallel()
+
+	// No space after the period: the second marker still starts a segment.
+	verdict, err := llmanalyzer.ParseVerdict(`{"destructive_tool_call": 0, "prompt_injection": 1, "secrets_leak": 1, "personal_data_leak": 0,` +
+		` "reasoning": "secrets_leak: A token is printed.prompt_injection: The text overrides the agent."}`)
+	require.NoError(t, err)
+	require.Equal(t, "A token is printed.", verdict.Risks[llmanalyzer.KeySecretsLeak].Reasoning)
+	require.Equal(t, "The text overrides the agent.", verdict.Risks[llmanalyzer.KeyPromptInjection].Reasoning)
+}
+
+func TestParseVerdict_CompactQuotedKeyNameIsNotAMarker(t *testing.T) {
+	t.Parallel()
+
+	// A key name quoted inside a sentence (preceded by '"') must not split the
+	// reasoning; the flagged prompt_injection risk has no marker of its own.
+	verdict, err := llmanalyzer.ParseVerdict(`{"destructive_tool_call": 0, "prompt_injection": 1, "secrets_leak": 1, "personal_data_leak": 0,` +
+		` "reasoning": "secrets_leak: The tool output contains a \"prompt_injection:\" header next to a token."}`)
+	require.NoError(t, err)
+	require.Equal(t, `The tool output contains a "prompt_injection:" header next to a token.`, verdict.Risks[llmanalyzer.KeySecretsLeak].Reasoning)
+	require.Empty(t, verdict.Risks[llmanalyzer.KeyPromptInjection].Reasoning)
+}

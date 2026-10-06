@@ -136,10 +136,11 @@ func attachTopLevelReasoning(risks map[string]RiskVerdict, raw json.RawMessage) 
 }
 
 // splitReasoningByKey breaks "secrets_leak: a b. prompt_injection: c d." into
-// {"secrets_leak": "a b.", "prompt_injection": "c d."}. Markers are matched at
-// the start of the string or after whitespace so a key name quoted inside a
-// sentence is not taken as a new segment. Returns an empty map when no marker
-// is found.
+// {"secrets_leak": "a b.", "prompt_injection": "c d."}. A marker counts at the
+// start of the string or after whitespace or sentence punctuation (the model
+// sometimes drops the space after a period), so a key name that is part of a
+// longer word or quoted inside a sentence is not taken as a new segment.
+// Returns an empty map when no marker is found.
 func splitReasoningByKey(text string) map[string]string {
 	type marker struct {
 		key   string
@@ -155,7 +156,7 @@ func splitReasoningByKey(text string) map[string]string {
 				break
 			}
 			i += from
-			if i == 0 || text[i-1] == ' ' || text[i-1] == '\n' || text[i-1] == '\t' {
+			if i == 0 || isMarkerBoundary(text[i-1]) {
 				markers = append(markers, marker{key: key, start: i, body: i + len(key) + 1})
 			}
 			from = i + len(key)
@@ -182,6 +183,15 @@ func splitReasoningByKey(text string) map[string]string {
 		out[m.key] = segment
 	}
 	return out
+}
+
+// isMarkerBoundary reports whether a "<key>:" marker may start right after c.
+func isMarkerBoundary(c byte) bool {
+	switch c {
+	case ' ', '\n', '\t', '\r', '.', ';', '!', '?', ',':
+		return true
+	}
+	return false
 }
 
 // capReasoning trims and bounds a reasoning string to maxReasoningRunes.

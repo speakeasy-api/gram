@@ -1,6 +1,6 @@
 # LLM risk analyzer (`llmanalyzer`)
 
-Proof of concept. A merged Qwen3.5-4B fine-tune served on Baseten evaluates
+Proof of concept. A merged Qwen3.5-9B fine-tune served on Baseten evaluates
 one message for four risks in a single call. The multivariate PostHog flag
 `gram-risk-llm-analyzer` (`feature.FlagRiskLLMAnalyzer`) selects an
 organization's **engine mode**: `off` keeps the gitleaks, Presidio,
@@ -413,7 +413,7 @@ Read by `gram streams` only (`riskLLMFlags` in `server/cmd/gram/flags_risk.go`):
 | ----------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GRAM_RISK_LLM_URL`     | `--risk-llm-url`     | OpenAI-compatible base URL **including `/v1`**, e.g. `https://<baseten-host>/environments/production/sync/v1`. Must be `https` in every environment (`Config.Validate`). Empty disables the analyzer. |
 | `GRAM_RISK_LLM_API_KEY` | `--risk-llm-api-key` | Bearer token. Required when the URL is set.                                                                                                                                                           |
-| `GRAM_RISK_LLM_MODEL`   | `--risk-llm-model`   | Served model name; must equal the deployment's `--served-model-name`. Default `risk-judge-4b`.                                                                                                        |
+| `GRAM_RISK_LLM_MODEL`   | `--risk-llm-model`   | Served model name; must equal the deployment's `--served-model-name`. Default `risk-judge-9b`.                                                                                                        |
 
 Timeout (15 s), max tokens (1024) and retry policy are code
 constants. With an empty URL, streams logs
@@ -531,7 +531,7 @@ lives in streams. All three need the same environment.
    [env]
    GRAM_RISK_LLM_URL = "https://<baseten-host>/environments/production/sync/v1"
    GRAM_RISK_LLM_API_KEY = "<key>"
-   # GRAM_RISK_LLM_MODEL = "risk-judge-4b"   # only if the served name differs
+   # GRAM_RISK_LLM_MODEL = "risk-judge-9b"   # only if the served name differs
    ```
 
    The URL must be `https`, even locally. A vLLM or Unsloth Studio server on
