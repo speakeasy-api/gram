@@ -13,6 +13,7 @@ import (
 	roledistributionv1 "github.com/speakeasy-api/gram/infra/gen/gram/role_distribution/v1"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/roledistribution/repo"
 )
 
 // Request identifies exactly one setup, global fanout, or organization bootstrap.
@@ -66,7 +67,7 @@ func PublishAll(ctx context.Context, tx pgx.Tx, data []byte) error {
 // LockOrganization serializes attempts and bounded expansion with staff toggles,
 // including an enable when no feature row exists yet. Take this before row locks.
 func LockOrganization(ctx context.Context, tx pgx.Tx, organizationID string) error {
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('role-distribution-setup:' || $1, 0))`, organizationID); err != nil {
+	if err := repo.New(tx).LockOrganization(ctx, organizationID); err != nil {
 		return fmt.Errorf("lock organization role distribution: %w", err)
 	}
 	return nil
