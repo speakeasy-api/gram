@@ -350,7 +350,14 @@ func TestSaveDashboardLayout(t *testing.T) {
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "placements[0]: a placement is required")
 
-		// Cards cannot sit on top of each other, and there are only so many.
+		// Cards cannot sit on top of each other — not even one the layout does
+		// not name, which keeps its place — and there are only so many.
+		resting := addCard(t, ctx, ti, dashboard.ID, chart.ID)
+		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(&tileCard.ID, tile.ID.String(), resting.X, resting.Y, 3, 2)))
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "placements[0] overlaps card "+resting.ID+", not in this layout")
+		_, err = ti.service.RemoveDashboardWidget(ctx, &gen.RemoveDashboardWidgetPayload{ID: dashboard.ID, PlacementID: resting.ID, SessionToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
 		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, tileAt(0, 0, 3, 2), chartAt(2, 1, 6, 3)))
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "placements[1] overlaps placements[0]")

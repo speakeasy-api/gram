@@ -323,9 +323,27 @@ func (s *Service) SaveDashboardLayout(ctx context.Context, payload *gen.SaveDash
 			}
 			cards = append(cards, card{placed: placed{position: position, input: input}, placementID: id})
 		}
-		laid := make([]placed, len(cards))
-		for i, c := range cards {
-			laid[i] = c.placed
+		// Cards the layout does not name keep their place, so the named ones
+		// must fit around them as well as around each other: a layout saved
+		// from an older view cannot be dropped on top of a card added since.
+		named := make(map[uuid.UUID]bool, len(cards))
+		for _, c := range cards {
+			named[c.placementID] = true
+		}
+		// The resting cards go first, so an overlap is reported against the
+		// named card that would land on one.
+		laid := make([]placed, 0, len(existing))
+		for _, current := range existing {
+			if named[current.ID] {
+				continue
+			}
+			laid = append(laid, placed{
+				position: fmt.Sprintf("card %s, not in this layout", current.ID),
+				input:    &gen.PlacementInput{ID: current.ID.String(), WidgetID: current.WidgetID.String(), X: int(current.X), Y: int(current.Y), W: int(current.W), H: int(current.H)},
+			})
+		}
+		for _, c := range cards {
+			laid = append(laid, c.placed)
 		}
 		if reason := checkOverlaps(laid); reason != "" {
 			return repo.Dashboard{}, oops.E(oops.CodeBadRequest, nil, "%s", reason)
