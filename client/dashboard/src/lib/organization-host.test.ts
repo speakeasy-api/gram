@@ -24,7 +24,7 @@ function transfer(
   return `${origin}/rpc/auth.transferIn?${params.toString()}`;
 }
 
-const PAGE = "/acme/mcp/servers?tab=logs&q=a%20b#recent";
+const PAGE = "/acme/mcp/servers?tab=logs&q=a%20b";
 
 describe("organizationHostRedirectTarget", () => {
   it("starts a session transfer on the organization's host", () => {
@@ -33,7 +33,7 @@ describe("organizationHostRedirectTarget", () => {
     ).toBe(transfer("https://ai.example.com", PAGE));
   });
 
-  it("encodes the path, query and hash into the redirect parameter", () => {
+  it("encodes the path and query into the redirect parameter", () => {
     const target = organizationHostRedirectTarget("https://ai.example.com", {
       ...current,
       pathname: "/acme/a b/&c",
@@ -46,9 +46,20 @@ describe("organizationHostRedirectTarget", () => {
     expect([...url.searchParams.keys()]).toEqual(["source_host", "redirect"]);
     expect(url.searchParams.get("source_host")).toBe("app.example.com");
     expect(url.searchParams.get("redirect")).toBe(
-      "/acme/a b/&c?x=1&redirect=%2Fevil#frag?y=2",
+      "/acme/a b/&c?x=1&redirect=%2Fevil",
     );
     expect(url.hash).toBe("");
+  });
+
+  it("never puts the hash in the server-visible transfer URL", () => {
+    const target = organizationHostRedirectTarget("https://ai.example.com", {
+      ...current,
+      hash: "#access_token=secret",
+    });
+    expect(target).not.toContain("secret");
+    expect(new URL(target!).searchParams.get("redirect")).toBe(
+      "/acme/mcp/servers?tab=logs&q=a%20b",
+    );
   });
 
   it("ignores any path on the dashboard URL", () => {

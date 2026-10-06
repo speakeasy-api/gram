@@ -66,8 +66,9 @@ function allowedProtocol(target: string, current: string): boolean {
 
 /**
  * The URL that starts a session transfer to the organization's host and lands
- * on the current path, query and hash there, or undefined when the dashboard
- * should stay where it is.
+ * on the current path and query there, or undefined when the dashboard should
+ * stay where it is. The hash is dropped: the transfer URL is server-visible and
+ * logged, and a fragment can carry secrets that never left the browser before.
  */
 export function organizationHostRedirectTarget(
   dashboardUrl: string | undefined,
@@ -86,7 +87,7 @@ export function organizationHostRedirectTarget(
 
   const params = new URLSearchParams({
     source_host: current.host,
-    redirect: current.pathname + current.search + current.hash,
+    redirect: current.pathname + current.search,
   });
   return `${target.origin}/rpc/auth.transferIn?${params.toString()}`;
 }

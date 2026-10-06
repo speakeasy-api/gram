@@ -687,11 +687,14 @@ describe("AuthProvider organization host", () => {
   const ORG_HOST = "https://ai.example.test";
   const PAGE = "/test-org/mcp?tab=logs#recent";
 
-  /** The session transfer to the organization's host that lands on page. */
+  /**
+   * The session transfer to the organization's host that lands on page. The
+   * hash never goes into the server-visible transfer URL.
+   */
   const transferTo = (page: string) =>
     `${ORG_HOST}/rpc/auth.transferIn?${new URLSearchParams({
       source_host: window.location.host,
-      redirect: page,
+      redirect: page.split("#")[0]!,
     }).toString()}`;
 
   beforeEach(() => {
@@ -712,7 +715,7 @@ describe("AuthProvider organization host", () => {
     replaceSpy = undefined;
   });
 
-  it("hands the session to the organization's host with a transfer that keeps the path, query and hash", async () => {
+  it("hands the session to the organization's host with a transfer that keeps the path and query", async () => {
     mocks.sessionData.mockReturnValue(
       gatedSession({
         whitelisted: true,
