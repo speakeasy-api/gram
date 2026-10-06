@@ -188,7 +188,12 @@ function IdentityDetailContent(): JSX.Element {
             of the viewport with nothing under it. */}
         <div className="bg-background flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8 pb-16 lg:flex-row lg:gap-8">
           <IdentityRail
-            items={identityRailItems(routes, encodedUrn ?? "", location.search)}
+            items={identityRailItems(
+              routes,
+              encodedUrn ?? "",
+              location.search,
+              identity.kind,
+            )}
             // Narrow, the rail is a scrollable row above the content: hiding
             // it left the other sub-pages reachable only by editing the URL.
             className="border-border -mx-2 shrink-0 flex-row overflow-x-auto border-b px-2 pb-1 lg:sticky lg:top-8 lg:mx-0 lg:w-44 lg:flex-col lg:self-start lg:overflow-visible lg:border-b-0 lg:px-0 lg:pb-0"

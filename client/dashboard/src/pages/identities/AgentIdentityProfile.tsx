@@ -7,11 +7,7 @@ import {
   AgentIdentityAudit,
   AgentIdentityChallenges,
 } from "./AgentIdentityActivity";
-import {
-  IdentityPanel,
-  IdentityPanelEmpty,
-  IdentityPanelRow,
-} from "./IdentityPanel";
+import { IdentityPanel, IdentityPanelRow } from "./IdentityPanel";
 import { IdentitySection } from "./IdentitySection";
 
 /** Agent data is keyed by its principal, never by its human owner's identifiers. */
@@ -25,7 +21,7 @@ export function AgentIdentityProfile({
   switch (section) {
     case "access":
       return (
-        <IdentitySection title="Access">
+        <IdentitySection title="Permissions">
           <AgentIdentityPermissions agent={agent} />
           <AgentIdentityChallenges agent={agent} />
         </IdentitySection>
@@ -40,41 +36,18 @@ export function AgentIdentityProfile({
     case "connections":
       return (
         <IdentitySection
-          title="Connections"
+          title="Sessions"
           meta="Current agent sessions across the organization"
         >
           <ManagedAgentSessions agent={agent} />
         </IdentitySection>
       );
     case "devices":
+      // An agent holds keys, not provider logins and not machines. The
+      // managed-device panel that sat here could only ever say so.
       return (
-        <IdentitySection title="Accounts & devices">
+        <IdentitySection title="Keys">
           <AgentAPIKeys agent={agent} />
-          <IdentityPanel title="Managed devices">
-            <IdentityPanelEmpty>
-              Device assignments are recorded for people. No device inventory is
-              attributed to registered agents.
-            </IdentityPanelEmpty>
-          </IdentityPanel>
-        </IdentitySection>
-      );
-    case "security":
-      return (
-        <IdentitySection title="Security">
-          <AgentIdentityChallenges agent={agent} />
-          <AgentTelemetryUnavailable section="Risk findings" />
-        </IdentitySection>
-      );
-    case "usage":
-      return (
-        <IdentitySection title="Usage">
-          <AgentTelemetryUnavailable section="Usage" />
-        </IdentitySection>
-      );
-    case "cost":
-      return (
-        <IdentitySection title="Cost">
-          <AgentTelemetryUnavailable section="Cost" />
         </IdentitySection>
       );
     default:
@@ -104,19 +77,4 @@ export function AgentIdentityProfile({
         </IdentitySection>
       );
   }
-}
-
-function AgentTelemetryUnavailable({
-  section,
-}: {
-  section: string;
-}): JSX.Element {
-  return (
-    <IdentityPanel title={section}>
-      <IdentityPanelEmpty>
-        {section} cannot currently be queried by registered agent identity.
-        These figures are unavailable for this agent.
-      </IdentityPanelEmpty>
-    </IdentityPanel>
-  );
 }

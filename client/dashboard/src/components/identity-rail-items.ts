@@ -18,8 +18,52 @@ export function identityRailItems(
    * resets the filters the reader just set.
    */
   search = "",
+  /**
+   * An agent is not a person, and three of the people tabs have nothing to
+   * read for one: usage, cost and risk findings are all keyed by a human
+   * subject, so each rendered a panel whose only content was a sentence
+   * explaining that it had no content. A tab that can never fill is worse
+   * than a missing one — it costs a click to learn nothing.
+   */
+  kind?: string,
 ): IdentityRailItem[] {
   const detail = routes.identities.detail;
+  if (kind === "agent") {
+    return [
+      {
+        key: "overview",
+        title: "Overview",
+        href: `${detail.overview.href(encodedUrn)}${search}`,
+        active: detail.overview.active,
+      },
+      {
+        key: "access",
+        title: "Permissions",
+        href: `${detail.access.href(encodedUrn)}${search}`,
+        active: detail.access.active,
+      },
+      {
+        // The agent's keys. It holds no provider logins and no managed
+        // machines, so this is not "accounts & devices" for an agent.
+        key: "devices",
+        title: "Keys",
+        href: `${detail.devices.href(encodedUrn)}${search}`,
+        active: detail.devices.active,
+      },
+      {
+        key: "connections",
+        title: "Sessions",
+        href: `${detail.connections.href(encodedUrn)}${search}`,
+        active: detail.connections.active,
+      },
+      {
+        key: "activity",
+        title: "Activity",
+        href: `${detail.activity.href(encodedUrn)}${search}`,
+        active: detail.activity.active,
+      },
+    ];
+  }
   return [
     {
       key: "overview",
