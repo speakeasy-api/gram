@@ -236,6 +236,29 @@ func TestRemoteLoginCallback_InvalidTargetAtTokenEndpointRetriesWithoutResource(
 	require.Equal(t, resource, session.Resource.String, "the resource is still recorded so the grant stays routable")
 }
 
+// An issuer set to send no scope strips a scope baked into its authorization
+// endpoint on both legs of an invalid_target retry.
+func TestRemoteLoginCallback_InvalidTargetRetryKeepsScopeOmission(t *testing.T) {
+	t.Parallel()
+
+	var exchanges atomic.Int64
+	_, env, first, err := driveSyntheticLogin(t, "invalid-target-omit", resourceRejectingToken(&exchanges),
+		withResource("https://member.example.com/mcp"),
+		withIssuerScopes("baked", "other"),
+		withOmitScopeFallback(),
+		withAuthorizeQuery("?scope=baked"),
+	)
+	require.NoError(t, err)
+	firstLeg, err := url.Parse(env.authURL)
+	require.NoError(t, err)
+	require.False(t, firstLeg.Query().Has("scope"), "the first leg strips the endpoint's scope")
+
+	retryLocation(t, first)
+	retryLeg, err := url.Parse(first.Header().Get("Location"))
+	require.NoError(t, err)
+	require.False(t, retryLeg.Query().Has("scope"), "the retry leg keeps the omission")
+}
+
 // A second invalid_target fails the login rather than minting a third leg, and records nothing.
 func TestRemoteLoginCallback_InvalidTargetOnRetryLegIsRefused(t *testing.T) {
 	t.Parallel()

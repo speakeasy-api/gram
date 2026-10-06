@@ -208,10 +208,14 @@ func (env syntheticExpiryEnv) callback(t *testing.T, rawQuery string) (*httptest
 // syntheticLoginOptions shapes the issuer, client, and callback of a
 // synthetic login; the zero value is the plain AIS-115 fixture.
 type syntheticLoginOptions struct {
-	legacyCallbackURL          bool
-	issuerScopes               []string
-	clientScope                []string
-	scopeOverride              []string
+	legacyCallbackURL bool
+	issuerScopes      []string
+	clientScope       []string
+	scopeOverride     []string
+	// omitScopeFallback sets the issuer to send no scope where its catalogue is the last resort.
+	omitScopeFallback bool
+	// authorizeQuery is appended to the issuer's authorization endpoint, e.g. a baked-in scope.
+	authorizeQuery             string
 	issParameterSupported      pgtype.Bool
 	resourceIndicatorSupported pgtype.Bool
 	resource                   string
@@ -323,6 +327,14 @@ func withClientScope(scopes ...string) syntheticLoginOption {
 
 func withScopeOverride(scopes ...string) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.scopeOverride = scopes }
+}
+
+func withOmitScopeFallback() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.omitScopeFallback = true }
+}
+
+func withAuthorizeQuery(query string) syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.authorizeQuery = query }
 }
 
 func withIssParameterSupported(supported bool) syntheticLoginOption {
@@ -541,7 +553,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		Issuer:                            conv.Default(options.issuerURL, issuerURL),
 		Name:                              pgtype.Text{String: "", Valid: false},
 		LogoAssetID:                       uuid.NullUUID{},
-		AuthorizationEndpoint:             conv.ToPGText("https://idp.example.com/authorize"),
+		AuthorizationEndpoint:             conv.ToPGText("https://idp.example.com/authorize" + options.authorizeQuery),
 		TokenEndpoint:                     conv.ToPGText(tokenServer.URL),
 		RegistrationEndpoint:              pgtype.Text{String: "", Valid: false},
 		JwksUri:                           conv.ToPGTextEmpty(jwksURI),
@@ -560,6 +572,11 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		Metadata:                   options.issuerMetadata,
 	})
 	require.NoError(t, err)
+	if options.omitScopeFallback {
+		// No write API yet; the column is set by SQL, as operators do today.
+		_, err = ti.conn.Exec(ctx, "UPDATE remote_session_issuers SET omit_scope_fallback = TRUE WHERE id = $1", issuer.ID)
+		require.NoError(t, err)
+	}
 	if !options.issuerMetadataFetchedAt.IsZero() {
 		require.NoError(t, q.SetRemoteSessionIssuerMetadataTracking(ctx, repo.SetRemoteSessionIssuerMetadataTrackingParams{
 			Metadata:             string(options.issuerMetadata),

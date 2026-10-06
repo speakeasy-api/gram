@@ -168,6 +168,9 @@ type RemoteLoginState struct {
 	// ResourceRetried marks the single retry leg the callback mints after an
 	// invalid_target answer. A retry leg that is refused again fails the login.
 	ResourceRetried bool `json:"resource_retried,omitempty"`
+	// OmitScope records that the operator chose to send no scope, so the
+	// retry leg also strips one baked into the authorization endpoint.
+	OmitScope bool `json:"omit_scope,omitempty"`
 	// ExpectedIssuer is what the RFC 9207 iss parameter must equal; empty skips the check.
 	ExpectedIssuer string `json:"expected_issuer,omitempty"`
 	// Nonce is echoed by the ID token; empty for states minted before it existed.
@@ -1212,6 +1215,7 @@ func (m *ChallengeManager) mintAuthorization(
 
 	var (
 		scopes      []string
+		omitScope   bool
 		resolution  ScopeResolution
 		resource    ResourceScopes
 		resolved    protectedresource.LoginResolution
@@ -1220,10 +1224,12 @@ func (m *ChallengeManager) mintAuthorization(
 	if retry {
 		// The retry leg is the same login: it asks for what the first leg did.
 		scopes = slices.Clone(retryOf.Scopes)
+		omitScope = retryOf.OmitScope
 	} else {
 		resource, resolved, resourceURL = m.loginResourceScopes(ctx, parent, client, discover)
 		resolution = client.RequestedScopes(resource)
 		scopes = resolution.Scopes
+		omitScope = resolution.Source == remotesessionmetrics.ScopeSourceIssuerOmitted
 		trace.SpanFromContext(ctx).SetAttributes(attr.OAuthScopeSource(resolution.Source), attr.OAuthResourceProbeOutcome(resolved.Outcome))
 		m.scopeMetrics.Record(ctx, resolution.Source, resolved.Outcome)
 		if resolved.ProbeDuration > 0 {
@@ -1300,6 +1306,7 @@ func (m *ChallengeManager) mintAuthorization(
 		Scopes:                scopes,
 		OmitResource:          omitResource,
 		ResourceRetried:       retry,
+		OmitScope:             omitScope,
 		ExpectedIssuer:        expectedIssuer,
 		Nonce:                 nonce,
 		BrowserCookieID:       parent.BrowserCookieID,
@@ -1323,7 +1330,7 @@ func (m *ChallengeManager) mintAuthorization(
 	switch {
 	case len(scopes) > 0:
 		q.Set("scope", strings.Join(scopes, " "))
-	case resolution.Source == remotesessionmetrics.ScopeSourceIssuerOmitted:
+	case omitScope:
 		// The operator chose to send no scope; one baked into the
 		// authorization endpoint's query would defeat that.
 		q.Del("scope")
