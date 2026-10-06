@@ -52,8 +52,8 @@ function PathConnector({
     <span className="border-neutral-default flex-1 border-t border-dashed" />
   );
   return (
-    <div className="flex flex-col items-center gap-1.5 px-1.5">
-      <div className="flex w-full items-center">
+    <div className="flex flex-col items-center gap-1.5 px-1.5 py-2 @xl:py-0">
+      <div className="flex w-24 items-center @xl:w-full">
         {link.blocked ? (
           <>
             {blockedFrom === "left" ? solid : dashed}
@@ -98,8 +98,9 @@ export function CallPath({
   );
   const response = result.phase === "response";
   return (
-    <div className="bg-card border p-4">
-      <div className="grid grid-cols-[minmax(0,1fr)_104px_minmax(0,1fr)_104px_minmax(0,1fr)] items-center">
+    <div className="bg-card @container border p-4">
+      {/* Stacks on narrow sheets so each name keeps the full width. */}
+      <div className="grid grid-cols-1 items-center @xl:grid-cols-[minmax(0,1fr)_104px_minmax(0,1fr)_104px_minmax(0,1fr)]">
         <PathNode
           eyebrow="Client"
           name={result.userId ?? "Unknown user"}
