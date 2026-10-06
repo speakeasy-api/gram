@@ -108,7 +108,7 @@ func TestService_Transfer_RoundTrip(t *testing.T) {
 
 	result, err := transferIn(ctx, instance, "https://"+testExtraPlatformHost, code)
 	require.NoError(t, err)
-	require.Equal(t, "/", result.Location)
+	require.Equal(t, "https://"+testExtraPlatformHost, result.Location)
 	require.NotEqual(t, source.SessionID, result.SessionToken)
 
 	minted, err := instance.sessionManager.GetSession(ctx, result.SessionToken)
@@ -159,4 +159,20 @@ func TestService_TransferIn_NonMemberDoesNotConsume(t *testing.T) {
 	require.NoError(t, instance.createTestOrganization(ctx, userInfo.Organizations[0], userInfo.UserID))
 	_, err = transferIn(ctx, instance, "https://"+testExtraPlatformHost, code)
 	require.NoError(t, err)
+}
+
+func TestService_TransferIn_NoActiveOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, instance, userInfo := newTransferInstance(t, false)
+	userInfo.Organizations[0].ID = ""
+	ctx, _ = transferSession(t, ctx, instance, userInfo, "")
+	code := transferOutCode(t, ctx, instance)
+
+	result, err := transferIn(ctx, instance, "https://"+testExtraPlatformHost, code)
+	require.NoError(t, err)
+
+	minted, err := instance.sessionManager.GetSession(ctx, result.SessionToken)
+	require.NoError(t, err)
+	require.Empty(t, minted.ActiveOrganizationID)
 }

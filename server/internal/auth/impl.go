@@ -1906,12 +1906,16 @@ func (s *Service) TransferIn(ctx context.Context, payload *gen.TransferInPayload
 		return nil, oops.E(oops.CodeUnauthorized, err, "invalid or expired transfer token").LogWarn(ctx, logger)
 	}
 
-	isMember, err := s.identity.IsOrganizationMember(ctx, record.ActiveOrganizationID, record.UserID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to check organization membership").LogError(ctx, logger)
-	}
-	if !isMember {
-		return nil, oops.E(oops.CodeForbidden, nil, "user no longer has access to organization").LogWarn(ctx, logger)
+	// A session with no active organization, or one in the shared demo
+	// organization (which has no membership rows), has no membership to check.
+	if record.ActiveOrganizationID != "" && record.ActiveOrganizationID != constants.DemoOrganizationID {
+		isMember, err := s.identity.IsOrganizationMember(ctx, record.ActiveOrganizationID, record.UserID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to check organization membership").LogError(ctx, logger)
+		}
+		if !isMember {
+			return nil, oops.E(oops.CodeForbidden, nil, "user no longer has access to organization").LogWarn(ctx, logger)
+		}
 	}
 
 	// Consume only after every check passes, so a transient failure above
@@ -1941,8 +1945,8 @@ func (s *Service) TransferIn(ctx context.Context, payload *gen.TransferInPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to store session").LogError(ctx, logger)
 	}
 
-	// Build the redirect URL.
-	redirect := "/"
+	// Like Callback, land on this host's dashboard unless a path was given.
+	redirect := s.platformHostURL(ctx, s.cfg.SignInRedirectURL)
 	if payload.Redirect != nil && *payload.Redirect != "" {
 		// Sanitize the redirect to prevent open redirects.
 		sanitized := safeRedirectPath(*payload.Redirect, "")
