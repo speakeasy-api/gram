@@ -74,8 +74,9 @@ func deviceAgentInstallScript(controlPlane, key string, mode deviceAgentRunMode)
 	case deviceAgentRunModeEphemeral:
 		config.Environment = "ephemeral"
 		config.AutoUpdate = "disabled"
-		run = `  # 3) Sync once and exit. Run "$BIN_DIR/speakeasyd" sync --once to sync again.
-  "$BIN_DIR/speakeasyd" sync --once`
+		run = `  # 3) Sync once and exit, then say how to sync again.
+  "$BIN_DIR/speakeasyd" sync --once
+  echo "To sync again, run: $BIN_DIR/speakeasyd sync --once"`
 	case deviceAgentRunModeService:
 		run = `  # 3) Install and start the background service for this account, and
   #    keep it running after logout.

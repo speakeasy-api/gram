@@ -381,7 +381,7 @@ describe("Provisioning a device agent", () => {
     ).toBeTruthy();
     // The review-first form spends the same code without piping it to a shell.
     expect(
-      screen.getByText(/setup_code -o gram-device-agent\.sh\)$/),
+      screen.getByText(/setup_code' -o "\$f" && echo "Saved to \$f"$/),
     ).toBeTruthy();
   });
 

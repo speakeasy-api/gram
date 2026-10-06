@@ -165,21 +165,22 @@ export function undelegableScopesMessage(missingScopes: string[]): string {
   return `You cannot delegate ${scopes} to this agent. Check the agent's policy, and that you and its owner hold these permissions.`;
 }
 
-/** Where a reviewed script is saved; deleted once it has run. */
-export const REVIEW_FILE = "gram-device-agent.sh";
+/** The single-use script URL inside a one-line install command. */
+const INSTALL_URL = /^https?:\/\/[^\s']+\/agent-mcp\/install\/[A-Za-z0-9_-]+$/;
 
 /**
- * The one-line command as download-then-run. The file holds the key, so it is
- * created owner-only (after removing any old file, which would keep its mode)
- * and removed after the run, keeping the exit status.
+ * The one-line command as download-then-run, or null if it holds no install
+ * URL. The script holds the key, so it goes to a fresh owner-only mktemp file
+ * (no existing path is reused) and is removed after the run, keeping the exit
+ * status. Both lines must run in the same shell, which holds `$f`.
  */
-export function reviewCommands(command: string): {
-  fetch: string;
-  run: string;
-} {
-  const url = command.replace(/^curl -fsSL /, "").replace(/ \| sh$/, "");
+export function reviewCommands(
+  command: string,
+): { fetch: string; run: string } | null {
+  const url = command.split(" ").find((token) => INSTALL_URL.test(token));
+  if (!url) return null;
   return {
-    fetch: `rm -f ${REVIEW_FILE} && (umask 077 && curl -fsSL ${url} -o ${REVIEW_FILE})`,
-    run: `(sh ${REVIEW_FILE}; rc=$?; rm -f ${REVIEW_FILE}; exit $rc)`,
+    fetch: `f=$(mktemp ./gram-device-agent.XXXXXX) && curl -fsSL '${url}' -o "$f" && echo "Saved to $f"`,
+    run: `(sh "$f"; rc=$?; rm -f "$f"; exit $rc)`,
   };
 }

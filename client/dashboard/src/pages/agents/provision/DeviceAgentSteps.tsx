@@ -16,11 +16,7 @@ import {
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useState, type JSX } from "react";
-import {
-  REVIEW_FILE,
-  reviewCommands,
-  type DeviceAgentRunMode,
-} from "./device-agent";
+import { reviewCommands, type DeviceAgentRunMode } from "./device-agent";
 import { Copyable } from "./StepProvision";
 import { WizardStepHeader } from "./WizardChrome";
 
@@ -112,7 +108,7 @@ export function StepProvisionDeviceAgent({
         />
         <Text muted small>
           {mode === "ephemeral"
-            ? "Syncs once and exits. To sync again, run speakeasyd sync --once; the setup link works only once."
+            ? "Syncs once and exits. The script prints the command to sync again; the setup link works only once."
             : "Installs a background service for the account that runs it, and keeps it running after logout. Run it as that account, not as root."}
         </Text>
       </div>
@@ -167,9 +163,10 @@ export function StepProvisionDeviceAgent({
                 <>
                   <Copyable value={review.fetch} label="download command" />
                   <Text muted small>
-                    Read {REVIEW_FILE}, then run it. The file carries the key,
-                    so it is readable only by you, and this deletes it once it
-                    has run, whether or not the install succeeded.
+                    Read the saved file, then run it from the same shell. The
+                    file carries the key, so it is readable only by you, and
+                    this deletes it once it has run, whether or not the install
+                    succeeded.
                   </Text>
                   <Copyable value={review.run} label="run command" />
                 </>

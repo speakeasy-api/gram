@@ -37,6 +37,8 @@ func TestDeviceAgentInstallScriptEphemeralRunsOnce(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Contains(t, script, `"$BIN_DIR/speakeasyd" sync --once`)
+	// $BIN_DIR is expanded by the script, so the user sees a usable path.
+	require.Contains(t, script, `echo "To sync again, run: $BIN_DIR/speakeasyd sync --once"`)
 	require.NotContains(t, script, "-service install")
 	require.NotContains(t, script, "enable-linger")
 	require.Equal(t, deviceAgentManagedConfig{
@@ -103,5 +105,7 @@ func TestDeviceAgentInstallScriptRemovesTheKeyWhenInstallFails(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, script, `if [ "$status" -ne 0 ] && [ -n "$KEY_WRITTEN" ]; then $SUDO rm -f "$MANAGED"`)
 	// Set before the file is created, so a failed write is cleaned up too.
-	require.Less(t, strings.Index(script, "KEY_WRITTEN=1"), strings.Index(script, `install -m 0600`))
+	flag := strings.Index(script, "KEY_WRITTEN=1")
+	require.NotEqual(t, -1, flag, "the cleanup flag must be set")
+	require.Less(t, flag, strings.Index(script, `install -m 0600`))
 }

@@ -211,19 +211,23 @@ describe("device agent purpose gate", () => {
 });
 
 describe("review-first commands", () => {
-  const { fetch, run } = reviewCommands(
+  const commands = reviewCommands(
     "curl -fsSL https://gram.example.test/agent-mcp/install/code_1 | sh",
   );
 
-  it("creates the key-bearing file owner-only, replacing any old one", () => {
-    expect(fetch).toBe(
-      "rm -f gram-device-agent.sh && (umask 077 && curl -fsSL https://gram.example.test/agent-mcp/install/code_1 -o gram-device-agent.sh)",
+  it("downloads to a fresh owner-only file, never an existing path", () => {
+    expect(commands?.fetch).toBe(
+      `f=$(mktemp ./gram-device-agent.XXXXXX) && curl -fsSL 'https://gram.example.test/agent-mcp/install/code_1' -o "$f" && echo "Saved to $f"`,
     );
   });
 
   it("removes the file whether or not the run succeeds, keeping its status", () => {
-    expect(run).toBe(
-      "(sh gram-device-agent.sh; rc=$?; rm -f gram-device-agent.sh; exit $rc)",
-    );
+    expect(commands?.run).toBe(`(sh "$f"; rc=$?; rm -f "$f"; exit $rc)`);
+  });
+
+  it("offers nothing when the command holds no install URL", () => {
+    expect(
+      reviewCommands("curl -fsSL https://gram.example.test/other | sh"),
+    ).toBeNull();
   });
 });
