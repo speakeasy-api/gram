@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -71,6 +72,13 @@ const maxVerdictCandidates = 64
 // and accepts each value either as {"score": 0|1, "reasoning": "..."} or as a
 // bare score. Scores may be numbers, numeric strings or booleans. Any other
 // shape yields an error wrapping ErrParse.
+//
+// The compact reply format (risk-judge-9b) uses bare scores plus one optional
+// top-level "reasoning" string covering the flagged risks, written as
+// "<key>: <sentence> <key>: <sentence>". That string is split by key and
+// attached to the matching risks; a reasoning that names no key is attached
+// to every flagged risk. Per-risk reasoning from the nested format wins when
+// both are present.
 func ParseVerdict(text string) (Verdict, error) {
 	object, err := findVerdictObject(text)
 	if err != nil {
@@ -90,7 +98,109 @@ func ParseVerdict(text string) (Verdict, error) {
 		risks[key] = risk
 	}
 
+	if raw, ok := object["reasoning"]; ok {
+		attachTopLevelReasoning(risks, raw)
+	}
+
 	return Verdict{Risks: risks, Raw: text}, nil
+}
+
+// attachTopLevelReasoning fills empty Reasoning fields of flagged risks from
+// the compact format's top-level "reasoning" string. Advisory like per-risk
+// reasoning: a non-string value is ignored, never an error.
+func attachTopLevelReasoning(risks map[string]RiskVerdict, raw json.RawMessage) {
+	var text string
+	if err := json.Unmarshal(raw, &text); err != nil {
+		return
+	}
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return
+	}
+
+	byKey := splitReasoningByKey(text)
+	for _, key := range riskKeys {
+		risk := risks[key]
+		if risk.Score != 1 || risk.Reasoning != "" {
+			continue
+		}
+		reasoning, ok := byKey[key]
+		if !ok {
+			if len(byKey) > 0 {
+				continue
+			}
+			reasoning = text // no key markers at all: the whole string applies
+		}
+		risks[key] = RiskVerdict{Score: 1, Reasoning: capReasoning(reasoning)}
+	}
+}
+
+// splitReasoningByKey breaks "secrets_leak: a b. prompt_injection: c d." into
+// {"secrets_leak": "a b.", "prompt_injection": "c d."}. A marker counts at the
+// start of the string or after whitespace or sentence punctuation (the model
+// sometimes drops the space after a period), so a key name that is part of a
+// longer word or quoted inside a sentence is not taken as a new segment.
+// Returns an empty map when no marker is found.
+func splitReasoningByKey(text string) map[string]string {
+	type marker struct {
+		key   string
+		start int // index of the key
+		body  int // index just past "key:"
+	}
+	var markers []marker
+	for _, key := range riskKeys {
+		from := 0
+		for {
+			i := strings.Index(text[from:], key+":")
+			if i < 0 {
+				break
+			}
+			i += from
+			if i == 0 || isMarkerBoundary(text[i-1]) {
+				markers = append(markers, marker{key: key, start: i, body: i + len(key) + 1})
+			}
+			from = i + len(key)
+		}
+	}
+	if len(markers) == 0 {
+		return map[string]string{}
+	}
+	sort.Slice(markers, func(i, j int) bool { return markers[i].start < markers[j].start })
+
+	out := make(map[string]string, len(markers))
+	for i, m := range markers {
+		end := len(text)
+		if i+1 < len(markers) {
+			end = markers[i+1].start
+		}
+		segment := strings.TrimSpace(text[m.body:end])
+		if segment == "" {
+			continue
+		}
+		if prev, ok := out[m.key]; ok { // repeated key: keep both sentences
+			segment = prev + " " + segment
+		}
+		out[m.key] = segment
+	}
+	return out
+}
+
+// isMarkerBoundary reports whether a "<key>:" marker may start right after c.
+func isMarkerBoundary(c byte) bool {
+	switch c {
+	case ' ', '\n', '\t', '\r', '.', ';', '!', '?', ',':
+		return true
+	}
+	return false
+}
+
+// capReasoning trims and bounds a reasoning string to maxReasoningRunes.
+func capReasoning(reasoning string) string {
+	reasoning = strings.TrimSpace(reasoning)
+	if utf8.RuneCountInString(reasoning) > maxReasoningRunes {
+		reasoning = string([]rune(reasoning)[:maxReasoningRunes])
+	}
+	return reasoning
 }
 
 // findVerdictObject returns the first JSON object in text that carries every
@@ -207,11 +317,7 @@ func parseRiskVerdict(raw json.RawMessage) (RiskVerdict, error) {
 	if err := json.Unmarshal(nested.Reasoning, &reasoning); err != nil {
 		reasoning = ""
 	}
-	reasoning = strings.TrimSpace(reasoning)
-	if utf8.RuneCountInString(reasoning) > maxReasoningRunes {
-		reasoning = string([]rune(reasoning)[:maxReasoningRunes])
-	}
-	return RiskVerdict{Score: score, Reasoning: reasoning}, nil
+	return RiskVerdict{Score: score, Reasoning: capReasoning(reasoning)}, nil
 }
 
 // parseScore coerces a JSON number, numeric string or boolean into 0 or 1.

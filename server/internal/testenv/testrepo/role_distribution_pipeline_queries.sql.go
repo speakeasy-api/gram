@@ -73,16 +73,6 @@ func (q *Queries) PipelineDeletePluginAssignments(ctx context.Context, arg Pipel
 	return err
 }
 
-const pipelineEnableRoleDistribution = `-- name: PipelineEnableRoleDistribution :exec
-INSERT INTO organization_features (organization_id, feature_name)
-VALUES ($1, 'automatic-role-distribution')
-`
-
-func (q *Queries) PipelineEnableRoleDistribution(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, pipelineEnableRoleDistribution, organizationID)
-	return err
-}
-
 const pipelineEngineeringPlugin = `-- name: PipelineEngineeringPlugin :one
 SELECT id FROM plugins WHERE project_id = $1 AND name = 'Engineering'
 `
@@ -140,6 +130,17 @@ type PipelineRenamePluginParams struct {
 
 func (q *Queries) PipelineRenamePlugin(ctx context.Context, arg PipelineRenamePluginParams) error {
 	_, err := q.db.Exec(ctx, pipelineRenamePlugin, arg.ID, arg.ProjectID)
+	return err
+}
+
+const rejectCatchUpSecondOrganizationFixture = `-- name: RejectCatchUpSecondOrganizationFixture :exec
+ALTER TABLE publish_outbox ADD CONSTRAINT reject_catchup_second_organization_fixture
+CHECK (organization_id <> 'org-never-enabled') NOT VALID
+`
+
+// Allow the first selected organization, then fail to prove catch-up rollback.
+func (q *Queries) RejectCatchUpSecondOrganizationFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, rejectCatchUpSecondOrganizationFixture)
 	return err
 }
 
@@ -215,17 +216,32 @@ CASE WHEN n > 103 THEN clock_timestamp() ELSE NULL END
 FROM generate_series(1, 105) n
 `
 
-// Simulate pre-rollout roles created while distribution was disabled; pagination must discover them.
+// Existing roles must be discovered by paginated bootstrap.
 func (q *Queries) RolloutInsertLocalRoles(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, rolloutInsertLocalRoles, organizationID)
 	return err
 }
 
 const rolloutRejectOutbox = `-- name: RolloutRejectOutbox :exec
-ALTER TABLE publish_outbox ADD CONSTRAINT reject_rollout_outbox CHECK (topic != 'gram.role_distribution.v1.RoleDistributionSetupRequestedV1') NOT VALID
+DO $install$
+DECLARE baseline bigint;
+BEGIN
+  SELECT count(*) INTO baseline FROM publish_outbox
+  WHERE topic = 'gram.role_distribution.v1.RoleDistributionSetupRequestedV1';
+  CREATE FUNCTION reject_bootstrap_continuation() RETURNS trigger LANGUAGE plpgsql AS $fn$
+  BEGIN
+    IF NEW.topic = 'gram.role_distribution.v1.RoleDistributionSetupRequestedV1'
+      AND (SELECT count(*) FROM publish_outbox WHERE topic = NEW.topic) >= TG_ARGV[0]::bigint THEN
+      RAISE EXCEPTION 'injected bootstrap continuation failure' USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+  END $fn$;
+  EXECUTE format('CREATE TRIGGER reject_bootstrap_continuation BEFORE INSERT ON publish_outbox FOR EACH ROW EXECUTE FUNCTION reject_bootstrap_continuation(%L)', baseline + 100);
+END
+$install$
 `
 
-// Prove rollout flag rolls back if enqueue fails.
+// Reject the continuation after 100 setup rows to prove page atomicity.
 func (q *Queries) RolloutRejectOutbox(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, rolloutRejectOutbox)
 	return err

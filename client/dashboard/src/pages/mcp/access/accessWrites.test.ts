@@ -325,6 +325,20 @@ describe("addPrincipalsWrite", () => {
     expect(write.message).toBe("2 principals can now connect to this server.");
   });
 
+  it("names roles as roles and grants only Connect", () => {
+    const write = addPrincipalsWrite([], ["role:global:1"], "Example server");
+    expect(write.entries).toEqual([
+      { principalUrn: "role:global:1", level: "use" },
+    ]);
+    expect(write.message).toBe("1 role can now connect to Example server.");
+    expect(
+      addPrincipalsWrite([], ["role:global:1", "role:global:2"]).message,
+    ).toBe("2 roles can now connect to this server.");
+    expect(addPrincipalsWrite([], ["role:global:1", "user:2"]).message).toBe(
+      "2 principals can now connect to this server.",
+    );
+  });
+
   it("names one person as a person", () => {
     const { direct } = state([entry({ principalUrn: "user:1" })]);
 

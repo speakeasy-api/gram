@@ -38,6 +38,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
@@ -296,10 +297,10 @@ func TestServePublic_McpEndpoint_ToolsetBacked_UnsupportedVersionPrecedesIssuerA
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, issuerID)
 
 	w, err := servePublicHTTP(t, t.Context(), ti, endpointSlug, toolsListBody(), "", map[string]string{
-		mcpversions.HTTPHeader: mcpversions.Version20260728,
+		mcpversions.HTTPHeader: unservedProtocolVersion,
 	})
 	require.NoError(t, err)
-	requireUnsupportedProtocolVersionResponse(t, w, mcpversions.Version20260728, mcpversions.SupportedHostedToolset())
+	requireUnsupportedProtocolVersionResponse(t, w, unservedProtocolVersion, mcpversions.SupportedHostedToolset())
 	require.Empty(t, w.Header().Get("WWW-Authenticate"))
 }
 
@@ -433,6 +434,11 @@ func TestServePublic_McpEndpoint_RemoteBacked_Proxies(t *testing.T) {
 
 	done := make(chan struct{}, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The proxy's background metadata probe is not MCP traffic.
+		if r.URL.Path == wellknown.OAuthProtectedResourcePath {
+			http.NotFound(w, r)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{},"serverInfo":{"name":"upstream","version":"1.0"}}}`))
 		done <- struct{}{}

@@ -44,7 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/catalog"
@@ -73,7 +73,7 @@ type Service struct {
 
 	// sharedHosts are the hosts the deployment serves shared authorization
 	// servers on, which the token endpoints it lists are derived from.
-	sharedHosts usersessions.SharedAuthorizationServerHosts
+	sharedHosts authserver.Hosts
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -86,7 +86,7 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	sharedHosts usersessions.SharedAuthorizationServerHosts,
+	sharedHosts authserver.Hosts,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("workloadpolicy.api"))
 	return &Service{
@@ -268,7 +268,7 @@ func (s *Service) ListTokenEndpoints(ctx context.Context, payload *gen.ListToken
 			s.logger.WarnContext(ctx, "skip user session issuer without a served shared authorization server", attr.SlogError(err))
 			continue
 		}
-		tokenEndpoint, err := usersessions.SharedTokenEndpoint(issuerURL)
+		tokenEndpoint, err := authserver.SharedTokenEndpoint(issuerURL)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to build token endpoint").LogError(ctx, s.logger)
 		}
@@ -388,8 +388,8 @@ func normalizeAdmissionName(raw string) (string, error) {
 	return name, nil
 }
 
-// issuerSnapshot is the audited state of an issuer row.
-func issuerSnapshot(row repo.WorkloadIssuer) *audit.WorkloadIssuerSnapshot {
+// IssuerSnapshot is the audited state of an issuer row.
+func IssuerSnapshot(row repo.WorkloadIssuer) *audit.WorkloadIssuerSnapshot {
 	return &audit.WorkloadIssuerSnapshot{
 		Name:                   row.Name,
 		Issuer:                 row.Issuer,
@@ -401,9 +401,9 @@ func issuerSnapshot(row repo.WorkloadIssuer) *audit.WorkloadIssuerSnapshot {
 	}
 }
 
-// admissionSnapshot is the audited state of an admission row, under the issuer
+// AdmissionSnapshot is the audited state of an admission row, under the issuer
 // it names and the agent its (issuer, match_kind, subject) tuple is assigned.
-func admissionSnapshot(row repo.WorkloadIdentityAdmission, issuer repo.WorkloadIssuer, assignedAgentID string) *audit.WorkloadAdmissionSnapshot {
+func AdmissionSnapshot(row repo.WorkloadIdentityAdmission, issuer repo.WorkloadIssuer, assignedAgentID string) *audit.WorkloadAdmissionSnapshot {
 	return &audit.WorkloadAdmissionSnapshot{
 		Issuer:          issuer.Issuer,
 		IssuerName:      issuer.Name,
@@ -495,7 +495,7 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 		ActorSlug:           nil,
 		IssuerURN:           urn.NewWorkloadIssuer(row.ID),
 		IssuerName:          row.Name,
-		IssuerSnapshotAfter: issuerSnapshot(row),
+		IssuerSnapshotAfter: IssuerSnapshot(row),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording workload issuer registration").LogError(ctx, s.logger)
 	}
@@ -642,8 +642,8 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *gen.UpdateIssuerPay
 		ActorSlug:            nil,
 		IssuerURN:            urn.NewWorkloadIssuer(row.ID),
 		IssuerName:           row.Name,
-		IssuerSnapshotBefore: issuerSnapshot(existing),
-		IssuerSnapshotAfter:  issuerSnapshot(row),
+		IssuerSnapshotBefore: IssuerSnapshot(existing),
+		IssuerSnapshotAfter:  IssuerSnapshot(row),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording workload issuer update").LogError(ctx, s.logger)
 	}
@@ -745,7 +745,7 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 			ActorSlug:               nil,
 			AdmissionURN:            urn.NewWorkloadAdmission(admission.ID),
 			AdmissionDisplayName:    admission.Subject,
-			AdmissionSnapshotBefore: admissionSnapshot(admission, existing, assignedAgent),
+			AdmissionSnapshotBefore: AdmissionSnapshot(admission, existing, assignedAgent),
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error recording cascaded workload withdrawal").LogError(ctx, s.logger)
 		}
@@ -768,7 +768,7 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 		ActorSlug:            nil,
 		IssuerURN:            urn.NewWorkloadIssuer(deleted.ID),
 		IssuerName:           deleted.Name,
-		IssuerSnapshotBefore: issuerSnapshot(deleted),
+		IssuerSnapshotBefore: IssuerSnapshot(deleted),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording workload issuer withdrawal").LogError(ctx, s.logger)
 	}
@@ -936,7 +936,7 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 		ActorSlug:              nil,
 		AdmissionURN:           urn.NewWorkloadAdmission(admission.ID),
 		AdmissionDisplayName:   admission.Subject,
-		AdmissionSnapshotAfter: admissionSnapshot(admission, issuerRow, agent.ID.String()),
+		AdmissionSnapshotAfter: AdmissionSnapshot(admission, issuerRow, agent.ID.String()),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording workload admission").LogError(ctx, s.logger)
 	}
@@ -1131,8 +1131,8 @@ func (s *Service) UpdateSubject(ctx context.Context, payload *gen.UpdateSubjectP
 		ActorSlug:               nil,
 		AdmissionURN:            urn.NewWorkloadAdmission(updated.ID),
 		AdmissionDisplayName:    updated.Subject,
-		AdmissionSnapshotBefore: admissionSnapshot(existing, issuerRow, agentBefore),
-		AdmissionSnapshotAfter:  admissionSnapshot(updated, issuerRow, agentAfter),
+		AdmissionSnapshotBefore: AdmissionSnapshot(existing, issuerRow, agentBefore),
+		AdmissionSnapshotAfter:  AdmissionSnapshot(updated, issuerRow, agentAfter),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording workload admission update").LogError(ctx, s.logger)
 	}
@@ -1267,7 +1267,7 @@ func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubj
 		ActorSlug:               nil,
 		AdmissionURN:            urn.NewWorkloadAdmission(withdrawn.ID),
 		AdmissionDisplayName:    withdrawn.Subject,
-		AdmissionSnapshotBefore: admissionSnapshot(withdrawn, issuerRow, assignedAgent),
+		AdmissionSnapshotBefore: AdmissionSnapshot(withdrawn, issuerRow, assignedAgent),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording workload withdrawal").LogError(ctx, s.logger)
 	}

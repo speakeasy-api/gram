@@ -2047,6 +2047,26 @@ func TestHooksConfigHashTracksBinaryReleaseMetadata(t *testing.T) {
 	require.NotEqual(t, hooksConfigHash(current), hooksConfigHash(changedTargets))
 }
 
+// Recording the published marketplace name must never read as a hooks change:
+// the publish path stamps it into every persisted snapshot (carried, skipped,
+// and observability-disabled ones included), so a hash that covered it would
+// regenerate hooks across the fleet, or past the rollout gate.
+func TestHooksConfigHashIgnoresPublishedMarketplaceName(t *testing.T) {
+	t.Parallel()
+
+	snapshot, err := marshalHooksConfig(hooksConfigSnapshot(GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}))
+	require.NoError(t, err)
+
+	stamped, err := naming.WithPublishedMarketplaceName(snapshot, "acme-speakeasy")
+	require.NoError(t, err)
+	restamped, err := naming.WithPublishedMarketplaceName(stamped, "renamed-speakeasy")
+	require.NoError(t, err)
+
+	require.NotEmpty(t, storedHooksConfigHash(snapshot))
+	require.Equal(t, storedHooksConfigHash(snapshot), storedHooksConfigHash(stamped))
+	require.Equal(t, storedHooksConfigHash(snapshot), storedHooksConfigHash(restamped))
+}
+
 // Substring assertions cannot catch shell quoting regressions — run bash -n
 // over every generated shell script.
 func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
@@ -3187,12 +3207,16 @@ func TestGeneratePlatformMCPPackageGatesRemoteURLProviderAttachment(t *testing.T
 	require.NotEmpty(t, content)
 	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
 	workflow := string(content)
-	// Attachment registers a client dynamically, so an upstream that answers
-	// with a challenge but advertises no dynamic registration (an API key or
-	// Basic upstream, or OAuth without DCR) must not be offered it.
+	// Attachment obtains a client automatically, through dynamic registration
+	// or a client ID metadata document, so an upstream that answers with a
+	// challenge but advertises neither (an API key or Basic upstream, or OAuth
+	// without either path) must not be offered it, while a provider offering
+	// either must not be presented as needing manual setup.
 	for _, required := range []string{
-		"`authentication: authentication_required` and `oauth_discovery: available_dcr`",
-		"`oauth_discovery: available`",
+		"`authentication: authentication_required` with `oauth_discovery: available_dcr` or `oauth_discovery: available_cimd`",
+		"`client_id_metadata_document`",
+		"automatic sign-in setup, not manual setup",
+		"`oauth_discovery: available` (`automatic_client_registration: none`)",
 		"incomplete or absent OAuth discovery",
 		"Service Account credential through the dashboard setup URL",
 		"do not attempt attachment",
@@ -3321,7 +3345,7 @@ func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 		"pending or incomplete registration", "must not be reported as already present or complete",
 		"Skip provider attachment for anonymous servers",
 		"inspection reports an authentication requirement and advertises a supported identity provider",
-		"`authentication: authentication_required`", "`oauth_discovery: available_dcr`",
+		"`authentication: authentication_required`", "`oauth_discovery: available_dcr`", "`oauth_discovery: available_cimd`",
 		"`available` alone or `incomplete` does not establish support",
 		"list_projects", "find_mcp", "get_mcp", "inspect_mcp_candidate",
 		"register_remote_mcp", "Never copy local credentials",

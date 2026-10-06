@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -934,14 +935,18 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 		return false, false, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, s.logger)
 	}
 
-	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
+	ctx = roledelivery.WithProjectAdmission(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, rollout, rolloutErr)
+	pluginCreated, err := plugins.AttachToDefaultAndRolePluginsAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		McpServerID:    uuid.NullUUID{UUID: server.ID, Valid: true},
 		DisplayName:    ServerDisplayName(server),
-	})
+	}, s.distributionAdmission)
 	if err != nil {
+		if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {
+			return false, false, oops.E(oops.CodeConflict, err, "direct-remote distribution is not admitted")
+		}
 		return false, false, oops.E(oops.CodeUnexpected, err, "attach mcp server to default plugin").LogError(ctx, s.logger)
 	}
 

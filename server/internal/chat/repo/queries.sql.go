@@ -1356,6 +1356,57 @@ func (q *Queries) GetMaxGenerationForChat(ctx context.Context, arg GetMaxGenerat
 	return generation, err
 }
 
+const getMessagesForPublication = `-- name: GetMessagesForPublication :many
+SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+WHERE m.project_id = $1::uuid AND m.id = ANY($2::uuid[])
+ORDER BY m.seq
+`
+
+type GetMessagesForPublicationParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+type GetMessagesForPublicationRow struct {
+	ID        uuid.UUID
+	ChatID    uuid.UUID
+	Role      string
+	CreatedAt pgtype.Timestamptz
+	Source    pgtype.Text
+	Replayed  bool
+}
+
+// Read authoritative identity and attribution in the write transaction.
+// Content is fetched by consumers, never serialized into these events.
+func (q *Queries) GetMessagesForPublication(ctx context.Context, arg GetMessagesForPublicationParams) ([]GetMessagesForPublicationRow, error) {
+	rows, err := q.db.Query(ctx, getMessagesForPublication, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetMessagesForPublicationRow
+	for rows.Next() {
+		var i GetMessagesForPublicationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.Role,
+			&i.CreatedAt,
+			&i.Source,
+			&i.Replayed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getOldestChatCreatedAt = `-- name: GetOldestChatCreatedAt :one
 SELECT MIN(created_at)::timestamptz AS created_at
 FROM chats

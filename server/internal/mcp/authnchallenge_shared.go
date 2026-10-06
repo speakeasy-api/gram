@@ -27,7 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
-	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -37,7 +37,7 @@ const sharedIssuerIDParam = "issuerID"
 
 // sharedAuthorizationServerPattern is the chi route pattern every shared
 // authorization server endpoint extends.
-const sharedAuthorizationServerPattern = usersessions.SharedAuthorizationServerPathPrefix + "{" + sharedIssuerIDParam + "}"
+const sharedAuthorizationServerPattern = authserver.SharedPathPrefix + "{" + sharedIssuerIDParam + "}"
 
 // sharedResourceLogMaxBytes bounds how much of a rejected resource indicator
 // is logged. Legitimate values are MCP server URLs well under this; the bound
@@ -97,7 +97,7 @@ func (a *sharedAuthorizationServer) urls() (AuthorizationServerURLs, error) {
 
 // consentPath is the path of the authorization server's consent page.
 func (a *sharedAuthorizationServer) consentPath() string {
-	return usersessions.SharedAuthorizationServerPath(a.issuerID) + "/connect"
+	return authserver.SharedPath(a.issuerID) + "/connect"
 }
 
 // consentURL is the consent page URL for the challenge stateID.
@@ -151,8 +151,8 @@ func (s *Service) SetPlatformHosts(hosts map[string]string) {
 
 // sharedAuthorizationServerHosts are the hosts this service serves shared
 // authorization servers on.
-func (s *Service) sharedAuthorizationServerHosts() usersessions.SharedAuthorizationServerHosts {
-	return usersessions.SharedAuthorizationServerHosts{
+func (s *Service) sharedAuthorizationServerHosts() authserver.Hosts {
+	return authserver.Hosts{
 		ServerURL:                 s.serverURL.String(),
 		AuthenticationHostBaseURL: s.authenticationHostBaseURL,
 		PlatformHosts:             s.platformHosts,
@@ -211,7 +211,7 @@ func (s *Service) sharedIssuerForRequest(r *http.Request) (*sharedIssuer, error)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load user session issuer").LogError(ctx, logger)
 	}
-	if !usersessions.IssuerInSharedMode(row.UserSessionIssuer) {
+	if !authserver.IssuerInSharedMode(row.UserSessionIssuer) {
 		return nil, notFound
 	}
 	authorizationServer, err := s.sharedAuthorizationServerFor(row.UserSessionIssuer)

@@ -269,6 +269,15 @@ VALUES (
   , @created_at
 );
 
+-- name: GetMessagesForPublication :many
+-- Read authoritative identity and attribution in the write transaction.
+-- Content is fetched by consumers, never serialized into these events.
+SELECT m.id, m.chat_id, m.role, m.created_at, m.source, m.replayed
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+WHERE m.project_id = @project_id::uuid AND m.id = ANY(@ids::uuid[])
+ORDER BY m.seq;
+
 -- name: UpsertCorrelatedChatMessage :one
 -- Returns persisted metering fields and distinguishes initial inserts from
 -- native-hook promotions, which must not emit another storage reading.

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocation, useSearchParams } from "react-router";
 import { specProblem, type ExploreSpec } from "./exploreModel";
 import {
+  DASHBOARD_PARAM,
   encodeSpec,
   parseSpec,
   QUERY_PARAM,
@@ -42,10 +43,11 @@ export function useQueryUrl(
   /** Record that a query ran and returned. */
   ran: (spec: ExploreSpec) => void;
   /**
-   * Open a widget in the builder as a new entry, switching to the Explore
-   * tab; a null spec keeps the builder's.
+   * Open a question in the builder as a new entry, switching to the Explore
+   * tab: a saved widget by its id, or, with a null id, a question of its
+   * own. A null spec keeps the builder's.
    */
-  open: (spec: ExploreSpec | null, widgetId: string) => void;
+  open: (spec: ExploreSpec | null, widgetId: string | null) => void;
   /** Change which widget the builder has open, in place. */
   setWidgetId: (widgetId: string | null) => void;
 } {
@@ -99,12 +101,16 @@ export function useQueryUrl(
   );
 
   const open = useCallback(
-    (next: ExploreSpec | null, id: string) => {
+    (next: ExploreSpec | null, id: string | null) => {
       setParams((prev) => {
         const out = new URLSearchParams(prev);
         if (next) out.set(QUERY_PARAM, encodeSpec(next));
-        out.set(WIDGET_PARAM, id);
+        if (id === null) out.delete(WIDGET_PARAM);
+        else out.set(WIDGET_PARAM, id);
+        // Opening a question lands on the Explore tab, leaving whatever the
+        // other tabs had open.
         out.delete(TAB_PARAM);
+        out.delete(DASHBOARD_PARAM);
         return out;
       });
     },

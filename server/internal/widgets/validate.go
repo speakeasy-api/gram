@@ -71,26 +71,54 @@ type Visualization struct {
 	Options json.RawMessage `json:"options"`
 }
 
-// windows are the relative windows a widget may ask over. A widget is a
-// recurring question and keeps its own window wherever it is shown, so it
-// follows you forward in time; absolute ranges are what the shareable URL
-// is for.
+// windows are the relative windows a widget may ask over: the dashboard's
+// date-range presets, so a widget and the page it sits on speak the same
+// vocabulary. A widget is a recurring question and keeps its own window
+// wherever it is shown, so it follows you forward in time; absolute ranges
+// are what the shareable URL is for.
 var windows = map[string]time.Duration{
+	"15m": 15 * time.Minute,
 	"1h":  time.Hour,
-	"24h": 24 * time.Hour,
+	"4h":  4 * time.Hour,
+	"1d":  24 * time.Hour,
+	"2d":  2 * 24 * time.Hour,
+	"3d":  3 * 24 * time.Hour,
 	"7d":  7 * 24 * time.Hour,
+	"15d": 15 * 24 * time.Hour,
 	"30d": 30 * 24 * time.Hour,
 	"90d": 90 * 24 * time.Hour,
+	// The builder's first spelling of a day, before it took the dashboard's
+	// presets. Widgets saved with it still read; new ones save "1d".
+	"24h": 24 * time.Hour,
 }
 
-// validate returns what is wrong with a widget, or "" when it works: the
+// windowNames lists the windows a widget can be saved with, for messages.
+const windowNames = "15m, 1h, 4h, 1d, 2d, 3d, 7d, 15d, 30d, 90d"
+
+// CanonicalWindow returns the spelling a relative window is saved with, for
+// a dashboard's date range to share a widget's vocabulary: "24h", the
+// builder's old spelling of a day, reads as "1d". ok is false for a window
+// a widget cannot be saved with.
+func CanonicalWindow(window string) (string, bool) {
+	if _, ok := windows[window]; !ok {
+		return "", false
+	}
+	if window == "24h" {
+		return "1d", true
+	}
+	return window, true
+}
+
+// Validate returns what is wrong with a widget, or "" when it works: the
 // question is planned against the catalog, then the chart is checked against
 // the question. Used on save, so a mistake is rejected immediately, and on
 // read, so a catalog change is visible breakage naming what went missing
 // instead of quietly wrong numbers. An error is a failure that is not the
 // widget's fault: a write fails with it as a server error, and a read logs
-// it and reports only that the widget could not be validated.
-func validate(catalog *analytics.Catalog, dataset string, rawQuery, rawVisualization []byte, now time.Time) (string, error) {
+// it and reports only that the widget could not be validated. Exported for
+// another service that stores a widget's shape, such as dashboards copying
+// cards into saved widgets.
+func Validate(catalog *analytics.Catalog, dataset string, rawQuery, rawVisualization []byte, now time.Time) (string, error) {
 	query, err := decodeQuery(rawQuery)
 	if err != nil {
 		return "invalid query: " + err.Error(), nil
@@ -109,7 +137,7 @@ func validate(catalog *analytics.Catalog, dataset string, rawQuery, rawVisualiza
 func validateQuery(catalog *analytics.Catalog, dataset string, query Query, now time.Time) (string, error) {
 	window, ok := windows[query.Window]
 	if !ok {
-		return fmt.Sprintf("window %q is not one of 1h, 24h, 7d, 30d, 90d", query.Window), nil
+		return fmt.Sprintf("window %q is not one of %s", query.Window, windowNames), nil
 	}
 
 	req := analytics.Request{

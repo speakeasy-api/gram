@@ -58,7 +58,7 @@ function renderRow(result: RiskResult, mcpFindingNames?: MCPFindingNames) {
         policyName="Secrets policy"
         policyScore={9.1}
         mcpFindingNames={mcpFindingNames}
-        onSelectChat={vi.fn<(chatId: string | null) => void>()}
+        onSelect={vi.fn<(findingId: string) => void>()}
         selection={{
           selectedIds: new Set(),
           selectedCount: 0,
@@ -151,7 +151,8 @@ describe("RiskEventsRow with an MCP finding", () => {
 
     expect(screen.getByText("MCP")).toBeTruthy();
     expect(screen.getByText("Issue tracker gateway")).toBeTruthy();
-    expect(screen.getByText("Hosted MCP · create_issue · Logged")).toBeTruthy();
+    expect(screen.getByText("create_issue · Hosted MCP")).toBeTruthy();
+    expect(screen.getByText("Logged")).toBeTruthy();
     expect(screen.getByText("operator@example.test")).toBeTruthy();
     expect(screen.getByText("Click to reveal")).toBeTruthy();
     expect(screen.queryByText("Untitled")).toBeNull();

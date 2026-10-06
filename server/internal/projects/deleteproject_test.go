@@ -54,7 +54,8 @@ func TestProjectsService_DeleteProject_CreatesAuditLog(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
-func TestProjectsService_DeleteProject_RemovesMCPFindingEvidence(t *testing.T) {
+// Evidence outlives a deleted project and ages out with the 90-day sweep.
+func TestProjectsService_DeleteProject_RetainsMCPFindingEvidence(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestProjectsService(t)
@@ -72,17 +73,37 @@ func TestProjectsService_DeleteProject_RemovesMCPFindingEvidence(t *testing.T) {
 		ProjectID:      project.ID,
 		MatchEncrypted: "encrypted evidence",
 		CreatedAt:      conv.ToPGTimestamptz(now),
-		ExpiresAt:      conv.ToPGTimestamptz(now.Add(24 * time.Hour)),
+		ExpiresAt:      conv.ToPGTimestamptz(now.Add(90 * 24 * time.Hour)),
+	}))
+	executionID := uuid.NewString()
+	require.NoError(t, evidenceRepo.InsertMCPExecutionEvidence(ctx, riskrepo.InsertMCPExecutionEvidenceParams{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        project.ID,
+		ExecutionID:      executionID,
+		Phase:            "request",
+		PayloadEncrypted: "encrypted payload",
+		CreatedAt:        conv.ToPGTimestamptz(now),
+		ExpiresAt:        conv.ToPGTimestamptz(now.Add(90 * 24 * time.Hour)),
 	}))
 
 	require.NoError(t, ti.service.DeleteProject(ctx, &gen.DeleteProjectPayload{ID: project.ID.String()}))
-	_, err := evidenceRepo.GetMCPFindingEvidence(ctx, riskrepo.GetMCPFindingEvidenceParams{
+	_, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, project.ID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = evidenceRepo.GetMCPFindingEvidence(ctx, riskrepo.GetMCPFindingEvidenceParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      project.ID,
 		FindingID:      findingID,
 		Now:            conv.ToPGTimestamptz(now),
 	})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.NoError(t, err)
+	_, err = evidenceRepo.GetMCPExecutionEvidence(ctx, riskrepo.GetMCPExecutionEvidenceParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      project.ID,
+		ExecutionID:    executionID,
+		Phase:          "request",
+		Now:            conv.ToPGTimestamptz(now),
+	})
+	require.NoError(t, err)
 }
 
 func TestProjectsService_DeleteProject_InvalidIDDoesNotCreateAuditLog(t *testing.T) {

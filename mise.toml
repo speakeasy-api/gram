@@ -120,7 +120,7 @@ TEMPORAL_ADDRESS = "{{env.TEMPORAL_HOST}}:{{env.TEMPORAL_PORT}}"
 ## /v1). An empty URL disables it; real values belong in mise.local.toml.
 ## Runbook: server/internal/scanners/llmanalyzer/README.md (Local development).
 GRAM_RISK_LLM_URL = ""
-GRAM_RISK_LLM_MODEL = "risk-judge-4b"
+GRAM_RISK_LLM_MODEL = "risk-judge-9b"
 GRAM_RISK_LLM_API_KEY = ""
 
 ##########################################

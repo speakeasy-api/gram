@@ -53,14 +53,8 @@ type ProtectedResourceDiscoveryError struct {
 }
 
 func (e *ProtectedResourceDiscoveryError) Error() string {
-	switch {
-	case e.ProbeURL == "":
-		return e.cause.Error()
-	case e.Status > 0:
-		return fmt.Sprintf("discover %s: HTTP %d: %s", e.ProbeURL, e.Status, e.cause)
-	default:
-		return fmt.Sprintf("discover %s: %s", e.ProbeURL, e.cause)
-	}
+	// The wrapped cause may contain a transport URL, including credentials.
+	return e.UserMessage()
 }
 
 func (e *ProtectedResourceDiscoveryError) Unwrap() error { return e.cause }
@@ -113,29 +107,30 @@ func (e *ProtectedResourceDiscoveryError) Code() string {
 
 // UserMessage returns a public-facing summary suitable for surfacing in the
 // dashboard. Callers should render it verbatim — it intentionally names the
-// probed URL and HTTP status so operators have enough context to act.
+// probed URL (without credentials, query, or fragment) and HTTP status.
 func (e *ProtectedResourceDiscoveryError) UserMessage() string {
+	probeURL := urls.DiagnosticURL(e.ProbeURL)
 	switch e.Code() {
 	case "invalid_url":
 		return "Could not compute OAuth protected resource metadata URL for the remote MCP server"
 	case "host_blocked":
 		return "Host is not allowed by network policy"
 	case "timeout":
-		return fmt.Sprintf("Timed out probing OAuth protected resource metadata at %s", e.ProbeURL)
+		return fmt.Sprintf("Timed out probing OAuth protected resource metadata at %s", probeURL)
 	case "not_found":
-		return fmt.Sprintf("OAuth protected resource metadata not advertised at %s", e.ProbeURL)
+		return fmt.Sprintf("OAuth protected resource metadata not advertised at %s", probeURL)
 	case "malformed":
-		return fmt.Sprintf("OAuth protected resource metadata at %s was not a valid RFC 9728 document", e.ProbeURL)
+		return fmt.Sprintf("OAuth protected resource metadata at %s was not a valid RFC 9728 document", probeURL)
 	case "http_error":
-		return fmt.Sprintf("Unexpected HTTP %d from %s", e.Status, e.ProbeURL)
+		return fmt.Sprintf("Unexpected HTTP %d from %s", e.Status, probeURL)
 	default:
 		if _, ok := errors.AsType[*tls.CertificateVerificationError](e.cause); ok {
-			return fmt.Sprintf("TLS certificate verification failed probing %s", e.ProbeURL)
+			return fmt.Sprintf("TLS certificate verification failed probing %s", probeURL)
 		}
 		if _, ok := errors.AsType[*tls.RecordHeaderError](e.cause); ok {
-			return fmt.Sprintf("TLS handshake failed probing %s", e.ProbeURL)
+			return fmt.Sprintf("TLS handshake failed probing %s", probeURL)
 		}
-		return fmt.Sprintf("Could not reach OAuth protected resource metadata at %s", e.ProbeURL)
+		return fmt.Sprintf("Could not reach OAuth protected resource metadata at %s", probeURL)
 	}
 }
 
@@ -147,17 +142,12 @@ func (e *ProtectedResourceDiscoveryError) UserMessage() string {
 // On any failure, returns a *[ProtectedResourceDiscoveryError] carrying the
 // probed URL plus enough context to render a typed code and message.
 //
-// Per RFC 9728 §3.1, when the resource URL includes a path component the
-// well-known document may live at either "<origin>/.well-known/oauth-protected-resource<path>"
-// (path-style) or "<origin>/.well-known/oauth-protected-resource" (origin-style).
-// This helper attempts the path-style candidate first; any failure there — 404,
-// other 4xx, 5xx, a malformed body, or a transport error — falls through to the
-// origin-style candidate. The path-style URL is our own speculative guess, not a
-// canonical location, and non-compliant upstreams (notably SPA catch-alls) answer
-// it with a 500 or an HTML page rather than a 404. Only the final, origin-style
-// candidate's error is surfaced, so a genuine fault at the canonical location is
-// never masked by a fallback probe. Resource URLs without a path component skip
-// straight to origin-style. The whole sequence shares a single
+// RFC 9728 §3.1 derives the well-known URL from the resource identifier,
+// inserting the well-known path before the resource path. For diagnostics,
+// this helper also tries an origin-style fallback after any path-style failure.
+// A fallback document is not necessarily valid for the requested resource:
+// callers using its contents must check ValidForResource. The whole sequence
+// shares a single
 // discoverProtectedResourceTimeout budget.
 func DiscoverProtectedResourceMetadata(ctx context.Context, policy *guardian.Policy, resourceURL string) (OAuthProtectedResourceMetadata, []string, error) {
 	candidates, err := protectedResourceProbeCandidates(resourceURL)
@@ -249,6 +239,7 @@ func attemptProtectedResourceProbe(ctx context.Context, client *guardian.HTTPCli
 		}
 	}
 	doc.Raw = json.RawMessage(body)
+	doc.MetadataURL = probeURL
 
 	return doc, nil
 }
@@ -256,13 +247,8 @@ func attemptProtectedResourceProbe(ctx context.Context, client *guardian.HTTPCli
 // protectedResourceProbeCandidates returns the ordered list of RFC 9728
 // well-known URLs to probe for a given resource URL.
 //
-// Per RFC 9728 §3.1, when the resource URL has a non-empty path component the
-// metadata document may live at either the path-style location
-// ("<origin>/.well-known/oauth-protected-resource<path>") or the origin-style
-// location ("<origin>/.well-known/oauth-protected-resource"). Both forms are
-// returned in that order so callers can attempt path-style first and fall
-// back to origin-style only on a 404. Resource URLs whose path is empty or
-// "/" collapse to a single origin-style candidate.
+// The first candidate is the RFC 9728 §3.1 location; the optional second
+// candidate is a speculative origin fallback retained for diagnostics.
 func protectedResourceProbeCandidates(resourceURL string) ([]string, error) {
 	u, err := url.Parse(resourceURL)
 	if err != nil {
@@ -277,14 +263,20 @@ func protectedResourceProbeCandidates(resourceURL string) ([]string, error) {
 
 	originStyle := (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: OAuthProtectedResourcePath}).String()
 
-	// Strip any trailing slash so "<origin>/" collapses to no path and only
-	// origin-style is probed.
-	path := strings.TrimSuffix(u.Path, "/")
-	if path == "" {
+	// Only a slash immediately following the host is removed (§3.1).
+	// Preserve path suffixes, escaped path bytes, and the query component.
+	path := u.EscapedPath()
+	if path == "/" {
+		path = ""
+	}
+	pathStyle := originStyle + path
+	if u.RawQuery != "" || u.ForceQuery {
+		pathStyle += "?" + u.RawQuery
+	}
+	if pathStyle == originStyle {
 		return []string{originStyle}, nil
 	}
 
-	pathStyle := (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: OAuthProtectedResourcePath + path}).String()
 	return []string{pathStyle, originStyle}, nil
 }
 

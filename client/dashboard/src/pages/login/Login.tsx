@@ -1,6 +1,7 @@
 import { useSession } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { buildLoginRedirectURL } from "@/lib/utils";
+import { isServerRenderedPath } from "@/lib/session-expired";
 import { AuthShell } from "./components/auth-shell";
 import { LoginPanel } from "./components/login-panel";
 import { useSearchParams, useNavigate } from "react-router";
@@ -26,7 +27,7 @@ export default function Login(): JSX.Element {
         window.location.href = buildLoginRedirectURL(redirectTo);
         return;
       }
-      if (redirectTo && /^\/mcp\/[^/?#]+\/install([?#]|$)/.test(redirectTo)) {
+      if (redirectTo && isServerRenderedPath(redirectTo)) {
         // Server-rendered install page, not a dashboard route.
         window.location.replace(redirectTo);
       } else if (redirectTo) {

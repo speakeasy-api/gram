@@ -14,7 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -63,7 +63,7 @@ func setShared(t *testing.T, ctx context.Context, ti *testInstance, issuer users
 	t.Helper()
 
 	updated, err := testrepo.New(ti.conn).SetUserSessionIssuerAuthorizationServerModeFixture(ctx, testrepo.SetUserSessionIssuerAuthorizationServerModeFixtureParams{
-		AuthorizationServerMode: string(usersessions.AuthorizationServerModeShared),
+		AuthorizationServerMode: string(authserver.ModeShared),
 		PinnedIssuerUrl:         pgtype.Text{String: pinnedIssuerURL, Valid: pinnedIssuerURL != ""},
 		IssuerID:                issuer.ID,
 		OrganizationID:          ti.orgID,
@@ -120,7 +120,7 @@ func TestListTokenEndpoints_LeavesOutIssuersPinnedToAnUnservedHost(t *testing.T)
 	ctx, ti := newTestService(t)
 
 	issuer := newOrganizationIssuer(t, ctx, ti, "elsewhere")
-	setShared(t, ctx, ti, issuer, "https://elsewhere.example.com"+usersessions.SharedAuthorizationServerPath(issuer.ID))
+	setShared(t, ctx, ti, issuer, "https://elsewhere.example.com"+authserver.SharedPath(issuer.ID))
 
 	result, err := ti.service.ListTokenEndpoints(withoutProject(t, ctx), listTokenEndpointsPayload())
 	require.NoError(t, err)

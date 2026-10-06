@@ -687,6 +687,16 @@ describe("AuthProvider organization host", () => {
   const ORG_HOST = "https://ai.example.test";
   const PAGE = "/test-org/mcp?tab=logs#recent";
 
+  /**
+   * The session transfer to the organization's host that lands on page. The
+   * hash never goes into the server-visible transfer URL.
+   */
+  const transferTo = (page: string) =>
+    `${ORG_HOST}/rpc/auth.transferIn?${new URLSearchParams({
+      source_host: window.location.host,
+      redirect: page.split("#")[0]!,
+    }).toString()}`;
+
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
@@ -705,7 +715,7 @@ describe("AuthProvider organization host", () => {
     replaceSpy = undefined;
   });
 
-  it("moves to the organization's host keeping the path, query and hash", async () => {
+  it("hands the session to the organization's host with a transfer that keeps the path and query", async () => {
     mocks.sessionData.mockReturnValue(
       gatedSession({
         whitelisted: true,
@@ -716,10 +726,24 @@ describe("AuthProvider organization host", () => {
     renderGate(PAGE);
 
     await waitFor(() => {
-      expect(replaceSpy).toHaveBeenCalledWith(`${ORG_HOST}${PAGE}`);
+      expect(replaceSpy).toHaveBeenCalledWith(transferTo(PAGE));
     });
     expect(replaceSpy).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId("app")).toBeNull();
+  });
+
+  it("never moves an organization on the legacy host (no dashboard URL)", () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: undefined,
+      }),
+    );
+
+    renderGate(PAGE);
+
+    expect(screen.getByTestId("app")).toBeTruthy();
+    expect(replaceSpy).not.toHaveBeenCalled();
   });
 
   it("stays when the organization's host is the current host", () => {
@@ -818,7 +842,7 @@ describe("AuthProvider organization host", () => {
         organizationId: OTHER_ORG.id,
       });
     });
-    expect(replaceSpy).not.toHaveBeenCalledWith(`${ORG_HOST}${otherPage}`);
+    expect(replaceSpy).not.toHaveBeenCalledWith(transferTo(otherPage));
   });
 
   it("stays when the dashboard URL is not absolute", () => {
@@ -880,10 +904,51 @@ describe("AuthProvider organization host", () => {
     await waitFor(() => {
       expect(replaceSpy).toHaveBeenCalledTimes(2);
     });
-    expect(replaceSpy).toHaveBeenLastCalledWith(`${ORG_HOST}${otherPage}`);
+    expect(replaceSpy).toHaveBeenLastCalledWith(transferTo(otherPage));
   });
 
-  it("does not move a tab to the same host twice", async () => {
+  it("records the move before leaving, so a failed transfer that comes straight back does not move again", async () => {
+    // Source host: the organization lives on ORG_HOST.
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+    let recordedBeforeLeaving = false;
+    replaceSpy?.mockImplementation(() => {
+      recordedBeforeLeaving = (
+        sessionStorage.getItem("organizationHostMoveTimes") ?? ""
+      ).includes("ai.example.test");
+    });
+
+    renderGate(PAGE);
+    await waitFor(() => {
+      expect(replaceSpy).toHaveBeenCalledWith(transferTo(PAGE));
+    });
+    expect(recordedBeforeLeaving).toBe(true);
+    cleanup();
+
+    // The transfer failed (say the code expired) and the tab is back on the
+    // source host with the same session: it stays and renders the app.
+    renderGate(PAGE);
+    expect(screen.getByTestId("app")).toBeTruthy();
+
+    // Destination host: auth.info names no other host, so nothing moves.
+    cleanup();
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: undefined,
+      }),
+    );
+    renderGate(PAGE);
+    expect(screen.getByTestId("app")).toBeTruthy();
+
+    expect(replaceSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not move a tab that comes straight back to the same host", async () => {
     mocks.sessionData.mockReturnValue(
       gatedSession({
         whitelisted: true,
@@ -902,5 +967,80 @@ describe("AuthProvider organization host", () => {
 
     expect(screen.getByTestId("app")).toBeTruthy();
     expect(replaceSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("moves a tab that comes back to this host after the guard window", async () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+    const start = Date.now();
+    const now = vi.spyOn(Date, "now").mockReturnValue(start);
+    try {
+      renderGate(PAGE);
+      await waitFor(() => {
+        expect(replaceSpy).toHaveBeenCalledTimes(1);
+      });
+      cleanup();
+
+      // The person returns to the old host later in the same tab.
+      now.mockReturnValue(start + 16_000);
+      renderGate(PAGE);
+      await waitFor(() => {
+        expect(replaceSpy).toHaveBeenCalledTimes(2);
+      });
+      expect(replaceSpy).toHaveBeenLastCalledWith(transferTo(PAGE));
+    } finally {
+      now.mockRestore();
+    }
+  });
+});
+
+describe("AuthProvider server-rendered return targets", () => {
+  const INSTALL_PAGE = "/mcp/linear/install?domain=custom";
+  const LOGIN_WITH_INSTALL_PAGE = `/login?redirect=${encodeURIComponent(INSTALL_PAGE)}`;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    replaceSpy = vi
+      .spyOn(window.location, "replace")
+      .mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    cleanup();
+    replaceSpy?.mockRestore();
+    replaceSpy = undefined;
+  });
+
+  // /mcp/<slug>/install is rendered by the server, not the dashboard. Routing
+  // to it client-side would make the provider read "mcp" as an org slug and
+  // bounce the signed-in user to their org's home page.
+  it("loads an install page return target from the server", async () => {
+    mocks.sessionData.mockReturnValue(gatedSession({ whitelisted: true }));
+
+    renderGate(LOGIN_WITH_INSTALL_PAGE);
+
+    await waitFor(() => {
+      expect(replaceSpy).toHaveBeenCalledWith(INSTALL_PAGE);
+    });
+    expect(replaceSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("location").textContent).toBe(
+      LOGIN_WITH_INSTALL_PAGE,
+    );
+    expect(screen.queryByTestId("app")).toBeNull();
+  });
+
+  it("still routes a dashboard return target client-side", () => {
+    mocks.sessionData.mockReturnValue(gatedSession({ whitelisted: true }));
+
+    renderGate("/login?redirect=%2Ftest-org%2Fsettings");
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/test-org/settings",
+    );
+    expect(replaceSpy).not.toHaveBeenCalled();
   });
 });

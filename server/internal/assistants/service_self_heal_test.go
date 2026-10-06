@@ -103,14 +103,14 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 
 	var stopCalls atomic.Int64
 	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
 	corruption := fmt.Errorf("%w: execute fly turn request: status=400 body=provider error: messages: tool_use_id has no corresponding tool_use block", ErrHistoryCorrupted)
 	backend := testRuntimeBackend{
 		backend:    runtimeBackendFlyIO,
 		runTurnErr: corruption,
 		stopCalls:  &stopCalls,
 	}
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger), nil, newTestAuditLogger())
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { _ = chatWriterShutdown(ctx) })
 	core.SetChatMessageWriter(chatWriter)
@@ -216,14 +216,14 @@ func TestServiceCoreSkipsSelfHealAfterFirstRetry(t *testing.T) {
 
 	var stopCalls atomic.Int64
 	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
 	corruption := fmt.Errorf("%w: provider error: messages: tool_use_id has no corresponding tool_use block", ErrHistoryCorrupted)
 	backend := testRuntimeBackend{
 		backend:    runtimeBackendFlyIO,
 		runTurnErr: corruption,
 		stopCalls:  &stopCalls,
 	}
-	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger), nil, newTestAuditLogger())
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
 	chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, conn, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { _ = chatWriterShutdown(ctx) })
 	core.SetChatMessageWriter(chatWriter)

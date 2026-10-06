@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
@@ -349,6 +350,22 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		attr.SlogProjectID(authCtx.ProjectID.String()),
 		attr.SlogProjectSlug(conv.PtrValOr(authCtx.ProjectSlug, "")),
 	)
+
+	// A user-provided variable is supplied through an MCP-<name> request
+	// header (or MCP-<display name>), and the hosted runtime never reads a
+	// standard MCP request header such as Mcp-Name as a variable, so such a
+	// name could never receive a value.
+	for _, config := range payload.EnvironmentConfigs {
+		if config == nil || config.ProvidedBy != providedByUser {
+			continue
+		}
+		if httpheaders.IsReservedVariableHeaderName(config.VariableName) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "variable name %q is reserved: its %s request header is a standard MCP protocol header", config.VariableName, httpheaders.VariableHeaderName(config.VariableName)).LogWarn(ctx, logger)
+		}
+		if config.HeaderDisplayName != nil && httpheaders.IsReservedVariableHeaderName(*config.HeaderDisplayName) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "header display name %q for variable %q is reserved: its %s request header is a standard MCP protocol header", *config.HeaderDisplayName, config.VariableName, httpheaders.VariableHeaderName(*config.HeaderDisplayName)).LogWarn(ctx, logger)
+		}
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {

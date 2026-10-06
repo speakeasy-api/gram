@@ -23,6 +23,14 @@ type Service interface {
 	GetAssistant(context.Context, *GetAssistantPayload) (res *types.Assistant, err error)
 	// Create an assistant.
 	CreateAssistant(context.Context, *CreateAssistantPayload) (res *types.Assistant, err error)
+	// Give an existing assistant an agent and per-trigger workload identities. By
+	// default a new agent is created with access to every MCP server and skill in
+	// the project and to administering this assistant. Passing agent_id points the
+	// assistant at an existing agent of the project instead; that agent keeps its
+	// policy and gains administration of this assistant. Either way the agent is
+	// managed like any other agent afterwards. Existing assistants are never
+	// upgraded implicitly; repeating the upgrade is safe.
+	UpgradeAssistantIdentity(context.Context, *UpgradeAssistantIdentityPayload) (res *types.Assistant, err error)
 	// Update an assistant.
 	UpdateAssistant(context.Context, *UpdateAssistantPayload) (res *types.Assistant, err error)
 	// Delete an assistant.
@@ -68,7 +76,7 @@ const ServiceName = "assistants"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant", "sendMessage", "interruptTurn", "getManagedAssistant", "ensureManagedAssistant"}
+var MethodNames = [10]string{"listAssistants", "getAssistant", "createAssistant", "upgradeAssistantIdentity", "updateAssistant", "deleteAssistant", "sendMessage", "interruptTurn", "getManagedAssistant", "ensureManagedAssistant"}
 
 // CreateAssistantPayload is the payload type of the assistants service
 // createAssistant method.
@@ -226,6 +234,20 @@ type UpdateAssistantPayload struct {
 	MaxConcurrency *int
 	// The assistant status.
 	Status *string
+}
+
+// UpgradeAssistantIdentityPayload is the payload type of the assistants
+// service upgradeAssistantIdentity method.
+type UpgradeAssistantIdentityPayload struct {
+	// The assistant ID.
+	ID string
+	// An existing agent of the project to use instead of creating one. Requires
+	// owning the agent or agent:authorize on it.
+	AgentID *string
+	// The name of the new agent. Cannot be combined with agent_id.
+	AgentName        *string
+	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

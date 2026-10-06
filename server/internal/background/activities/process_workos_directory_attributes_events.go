@@ -51,7 +51,7 @@ type workosDirectoryGroupMembershipEventPayload struct {
 }
 
 // handleDirectoryUserEvent applies a dsync.user.* event.
-func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (postCommitEffects, error) {
+func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, event events.Event) (postCommitEffects, error) {
 	var none postCommitEffects
 
 	var payload workosDirectoryUserEventPayload
@@ -240,7 +240,7 @@ func upsertDirectoryUser(ctx context.Context, dbtx database.DBTX, event events.E
 // directory user maps to a Gram user with a live organization relationship,
 // deprovisions that user's access, mirroring what an
 // organization_membership.deleted event does.
-func deactivateDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, payload workosDirectoryUserEventPayload) (postCommitEffects, error) {
+func deactivateDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, event events.Event, payload workosDirectoryUserEventPayload) (postCommitEffects, error) {
 	var none postCommitEffects
 
 	org, err := organizationsrepo.New(dbtx).GetOrganizationByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))

@@ -17,7 +17,7 @@ Gram's RBAC is a scope-and-selector model. The server ships with a fixed set of 
 
 **Scope.** A named permission that authorizes an operation on a particular kind of resource.
 
-**Resource type.** The kind of resource a scope protects — currently `org`, `project`, or `mcp`. Every scope has exactly one resource type.
+**Resource type.** The kind of resource a scope protects — for example `org`, `project`, `assistant`, or `mcp`. Every scope has exactly one resource type.
 
 **Scope expansion.** Higher-privilege scopes satisfy lower-privilege ones. In the read/write/connect family the privilege order is `write > read > connect`: `mcp:write` satisfies a `mcp:read` check, and either `mcp:read` or `mcp:write` satisfies a `mcp:connect` check (`connect` is the broadest, easiest-to-satisfy gate). The mapping lives in `scopeExpansions` in `authz/scopes.go` — key = required scope, value = higher-privilege scopes that also satisfy it.
 
@@ -31,7 +31,7 @@ Gram's RBAC is a scope-and-selector model. The server ships with a fixed set of 
 
 **Principal precedence.** Blocklist exclusions (`*:blocked_*`) normally subtract from allows regardless of which principal holds either. One exception: a grant made directly to the user (`user:<id>`) that names a concrete resource (`resource_id` not `*`) outranks a block the user inherits from a role or `user:all`. Agent grants never outrank, because agent owners can write them without being administrators. The user's own blocks always apply, wildcard direct grants never outrank, roles and `user:all` share one level, a narrowed direct grant outranks only as far as it reaches, and `risk_policy:bypass` is never outranked. The rule lives in `server/internal/authz/precedence.go` (`IsDirectGrant`, `DirectOverrideGrants`, `ExclusionYieldsToDirectGrants`) and is mirrored in `ListAccessibleMCPServersForUser` / `ListAccessibleSkillsForUser`, `runtimepolicy.DelegationContained`, `access.listGrants` (`direct_selectors`), and the dashboard's `useRBAC` and per-server access list. Any new code that evaluates exclusions outside `authz.Engine` must apply it too.
 
-**Dimensions.** Optional narrowing keys on a `Check` beyond `resource_id`. Today: `tool` and `disposition` for MCP scopes (see [server/internal/authz/checks.go](server/internal/authz/checks.go) and `MCPToolCallCheck`). Allowed keys per scope family are enforced by `ValidateSelector`; new dimensions must be added to `allowedSelectorKeys` in `selector.go`.
+**Dimensions.** Optional narrowing keys on a `Check` beyond `resource_id`. Today: `tool` and `disposition` for MCP scopes (see [server/internal/authz/checks.go](server/internal/authz/checks.go) and `MCPToolCallCheck`), and `project_id` for MCP, environment, and assistant scopes. A `project_id` dimension is how a per-resource check inherits project-wide grants: the check names the resource and its project, so `{"resource_id":"*","project_id":P}` covers every resource in P while `{"resource_id":R}` covers only R (`MCPCheck`, `AssistantCheck`). Allowed keys per scope family are enforced by `ValidateSelector`; new dimensions must be added to `allowedSelectorKeys` in `selector.go`.
 
 **Disposition.** A snake_case bucket derived from MCP tool annotation hints — `read_only`, `destructive`, `idempotent`, `open_world`. Constants live in `authz/selector.go`; `conv.DispositionFromAnnotations(annotations)` is the canonical conversion from `*types.ToolAnnotations`.
 
@@ -67,7 +67,7 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 
 **Error model.** `errors.go` defines sentinel errors (`ErrDenied`, `ErrMissingGrants`, `ErrNoChecks`, `ErrInvalidCheck`) and typed errors (`DeniedError`, `InvalidCheckError`). The engine maps these to `oops` codes — `ErrDenied` → `oops.CodeForbidden`, everything else → `oops.CodeUnexpected` with a logged message.
 
-**Grant loading.** `LoadGrants(ctx, db, orgID, principals)` reads the principal URN set and returns the flattened `[]Grant`. Called by both `Engine.PrepareContext` (middleware path) and `access.ListGrants` (user-facing). Each row's `selectors` JSONB is parsed via `SelectorFromRow`.
+**Grant loading.** `LoadGrants(ctx, db, orgID, principals)` reads the principal URN set and returns the flattened `[]Grant`. Called by both `Engine.PrepareContext` (middleware path) and `access.ListGrants` (user-facing). Each row's `selectors` JSONB is parsed via `SelectorFromRow`. It also supplies unrestricted `assistant:read`/`assistant:write` defaults for the built-in Admin and Member role principals (`role:global:<id>`), because organizations seeded before the assistant scopes have no stored rows for them and system-role grants are immutable.
 
 **Sync semantics.** `SyncGrants` distinguishes nil from empty: `RoleGrant{Selectors: nil}` writes a single wildcard row; `RoleGrant{Selectors: []Selector{}}` writes nothing (no access). Each non-nil selector is validated by `ValidateSelector` before insert.
 
@@ -132,9 +132,9 @@ The dashboard pages under `client/dashboard/src/pages/access/` render membership
 
 ### Conventions
 
-**`useRBAC` hook.** `client/dashboard/src/hooks/useRBAC.ts` wraps the generated `useGrants` React Query hook and exposes `hasScope(scope, resourceId?)`, `hasAllScopes(scopes, resourceId?)`, `hasAnyScope(scopes, resourceId?)`, plus `isLoading`, `grants`, and `error`. Returns `false` from the `has*` checks while grants are loading. The module also exports `selectorMatches(grant, check)` and `resourceKindForScope(scope)` — direct mirrors of the server-side helpers in `authz/selector.go` — for code that needs parity with backend matching outside the standard `hasScope` flow.
+**`useRBAC` hook.** `client/dashboard/src/hooks/useRBAC.ts` wraps the generated `useGrants` React Query hook and exposes `hasScope(scope, resourceId?, projectId?)`, `hasAllScopes(scopes, resourceId?, projectId?)`, `hasAnyScope(scopes, resourceId?, projectId?)`, plus `isLoading`, `grants`, and `error`. Returns `false` from the `has*` checks while grants are loading. The module also exports `selectorMatches(grant, check)` and `resourceKindForScope(scope)` — direct mirrors of the server-side helpers in `authz/selector.go` — for code that needs parity with backend matching outside the standard `hasScope` flow.
 
-**`RequireScope` component.** `client/dashboard/src/components/require-scope.tsx` is the primary rendering gate. Props: `scope: Scope | Scope[]`, `all?: boolean` (AND vs OR when multiple scopes), `resourceId?: string`, `level: "page" | "section" | "component"`, `children`, and level-specific extras (`fallback` for page/section, `reason`/`className` for component).
+**`RequireScope` component.** `client/dashboard/src/components/require-scope.tsx` is the primary rendering gate. Props: `scope: Scope | Scope[]`, `all?: boolean` (AND vs OR when multiple scopes), `resourceId?: string`, `projectId?: string` (the project the resource belongs to, for scope families with a `project_id` dimension), `level: "page" | "section" | "component"`, `children`, and level-specific extras (`fallback` for page/section, `reason`/`className` for component).
 
 - `level="page"` — renders a full Unauthorized fallback page when the scope is missing.
 - `level="section"` — hides the children entirely.
@@ -237,7 +237,7 @@ Dashboard code should never hand-roll scope checks — use the shared primitives
 
 2. **Multi-scope gates.** Pass an array and set `all` to switch between OR (default) and AND logic: `<RequireScope scope={["org:read", "org:admin"]} level="page">`.
 
-3. **Resource-specific gates.** Pass `resourceId` when the scope only applies to a specific resource: `<RequireScope scope="mcp:write" resourceId={toolsetId} level="component">`.
+3. **Resource-specific gates.** Pass `resourceId` when the scope only applies to a specific resource: `<RequireScope scope="mcp:write" resourceId={toolsetId} level="component">`. For scope families with a `project_id` dimension (assistants), also pass `projectId` so project-wide grants match and grants for other projects do not: `hasScope("assistant:write", assistant.id, project.id)` for one assistant, `hasScope("assistant:write", project.id, project.id)` for project-level actions such as create, and `hasScope("assistant:read", undefined, project.id)` for "any assistant in this project".
 
 4. **Imperative checks — use `useRBAC`.** When you need the scope result as a value (to compute a class name, skip an effect, pick a label), pull from the hook instead of wrapping markup:
 

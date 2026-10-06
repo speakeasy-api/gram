@@ -36,6 +36,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
@@ -50,7 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -894,7 +895,18 @@ func (s *Service) authenticateIssuerGate(
 		surface = mcpmetrics.SurfaceMeta
 	}
 
-	newCtx, subject, toolSelection, refreshable, valErr := s.validateUserSessionToken(ctx, authToken, baseURL, endpoint)
+	var (
+		newCtx        context.Context
+		subject       *urn.SessionSubject
+		toolSelection *toolfilter.SessionSelection
+		refreshable   bool
+		valErr        error
+	)
+	if principalcredential.IsToken(authToken) {
+		newCtx, subject, valErr = s.authenticateIssuerGatePrincipalCredential(ctx, authToken, endpoint)
+	} else {
+		newCtx, subject, toolSelection, refreshable, valErr = s.validateUserSessionToken(ctx, authToken, baseURL, endpoint)
+	}
 	refreshableUserSession := subject != nil && refreshable
 	if subject == nil {
 		// Accept an assistant-runtime JWT, but only when the assistant
@@ -1132,7 +1144,7 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	// keeps its MCP servers on their per-endpoint authorization servers, which
 	// serve regardless of mode, rather than taking them offline.
 	endpoint.sharedAuthorizationServer = nil
-	if usersessions.IssuerInSharedMode(issuer) {
+	if authserver.IssuerInSharedMode(issuer) {
 		shared, err := s.sharedAuthorizationServerFor(issuer)
 		if err != nil {
 			s.logger.ErrorContext(ctx, "shared authorization server is misconfigured, serving per-endpoint authorization servers",

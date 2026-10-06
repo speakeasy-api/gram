@@ -102,20 +102,9 @@ func AdmitPrincipalCredentialWithDBTX(ctx context.Context, tx accessrepo.DBTX) (
 		return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
 	}
 
-	ownerPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, agent.OwnerUserID)
-	ownerPrincipals, err := authz.ResolveUserPrincipals(ctx, tx, authCtx.ActiveOrganizationID, agent.OwnerUserID)
+	ownerPrincipals, ownerEligible, err := ResolveEligibleUser(ctx, tx, authCtx.ActiveOrganizationID, agent.OwnerUserID)
 	if err != nil {
-		if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
-			return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)
-		}
 		return authz.PrincipalCredentialAdmission{}, fmt.Errorf("resolve credential owner: %w", err)
-	}
-	ownerEligible := false
-	for _, principal := range ownerPrincipals {
-		if principal.String() == ownerPrincipal.String() {
-			ownerEligible = true
-			break
-		}
 	}
 	if !ownerEligible {
 		return authz.PrincipalCredentialAdmission{}, oops.C(oops.CodeUnauthorized)

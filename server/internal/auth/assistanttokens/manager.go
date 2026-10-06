@@ -15,7 +15,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -99,23 +101,33 @@ type GenerateInput struct {
 
 type Manager struct {
 	jwtSecret  string
+	db         *pgxpool.Pool
 	tokens     *tokenrepo.Queries
 	orgs       *organizationsrepo.Queries
 	projects   *projectsrepo.Queries
 	users      *usersrepo.Queries
 	authz      *authz.Engine
 	revocation *revocationCache
+
+	// credentials mints and authenticates the principal credentials
+	// agent-backed turns run with; runtimeBindings records which assistant
+	// thread each one was minted for.
+	credentials     *principalcredential.Issuer
+	runtimeBindings cache.Cache
 }
 
-func New(jwtSecret string, db *pgxpool.Pool, authzEngine *authz.Engine) *Manager {
+func New(jwtSecret string, db *pgxpool.Pool, authzEngine *authz.Engine, credentials *principalcredential.Issuer, runtimeBindings cache.Cache) *Manager {
 	return &Manager{
-		jwtSecret:  jwtSecret,
-		tokens:     tokenrepo.New(db),
-		orgs:       organizationsrepo.New(db),
-		projects:   projectsrepo.New(db),
-		users:      usersrepo.New(db),
-		authz:      authzEngine,
-		revocation: newRevocationCache(revocationCacheTTL),
+		credentials:     credentials,
+		runtimeBindings: runtimeBindings,
+		db:              db,
+		jwtSecret:       jwtSecret,
+		tokens:          tokenrepo.New(db),
+		orgs:            organizationsrepo.New(db),
+		projects:        projectsrepo.New(db),
+		users:           usersrepo.New(db),
+		authz:           authzEngine,
+		revocation:      newRevocationCache(revocationCacheTTL),
 	}
 }
 

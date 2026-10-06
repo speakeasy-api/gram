@@ -732,6 +732,34 @@ type CustomDomain struct {
 	Deleted                  bool
 }
 
+type Dashboard struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Description     pgtype.Text
+	Filters         []byte
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
+type DashboardWidget struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	DashboardID    uuid.UUID
+	WidgetID       uuid.UUID
+	X              int32
+	Y              int32
+	W              int32
+	H              int32
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type DataExportRoute struct {
 	ID                uuid.UUID
 	OrganizationID    string
@@ -2631,6 +2659,35 @@ type RemoteMcpServerHeader struct {
 	Deleted                bool
 }
 
+type RemoteProtectedResource struct {
+	ID                                    uuid.UUID
+	ProjectID                             uuid.UUID
+	OrganizationID                        string
+	ResourceIdentifier                    string
+	MetadataUrl                           pgtype.Text
+	AuthorizationServers                  []string
+	ScopesSupported                       []string
+	BearerMethodsSupported                []string
+	ResourceName                          pgtype.Text
+	ResourceDocumentation                 pgtype.Text
+	ResourcePolicyUri                     pgtype.Text
+	ResourceTosUri                        pgtype.Text
+	DpopBoundAccessTokensRequired         pgtype.Bool
+	DpopSigningAlgValuesSupported         []string
+	TlsClientCertificateBoundAccessTokens pgtype.Bool
+	ScopeOverride                         []string
+	ChallengeScopes                       []string
+	ChallengeScopesSeenAt                 pgtype.Timestamptz
+	Metadata                              []byte
+	MetadataFetchedAt                     pgtype.Timestamptz
+	MetadataLastError                     pgtype.Text
+	MetadataLastErrorAt                   pgtype.Timestamptz
+	CreatedAt                             pgtype.Timestamptz
+	UpdatedAt                             pgtype.Timestamptz
+	DeletedAt                             pgtype.Timestamptz
+	Deleted                               bool
+}
+
 type RemoteSession struct {
 	ID                     uuid.UUID
 	GrantGeneration        int64
@@ -2778,6 +2835,7 @@ type RemoteSessionIssuer struct {
 	BackchannelLogoutSupported                 pgtype.Bool
 	AuthorizationResponseIssParameterSupported pgtype.Bool
 	ScopeOverride                              []string
+	OmitScopeFallback                          pgtype.Bool
 	ResourceIndicatorSupported                 pgtype.Bool
 	Oidc                                       bool
 	Passthrough                                bool

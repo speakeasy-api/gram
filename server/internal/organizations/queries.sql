@@ -37,10 +37,6 @@ ON CONFLICT (id) DO UPDATE SET
     -- URLs to another host.
     updated_at = clock_timestamp()
 RETURNING *, (xmax = 0) AS inserted
-), enabled AS (
-    INSERT INTO organization_features (organization_id, feature_name)
-    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -431,10 +427,6 @@ WITH written AS (
 INSERT INTO organization_metadata (id, name, slug, default_host)
 VALUES (@id, @name, @slug, sqlc.narg('default_host')::text)
 RETURNING *, TRUE AS inserted
-), enabled AS (
-    INSERT INTO organization_features (organization_id, feature_name)
-    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -827,10 +819,6 @@ INSERT INTO organization_metadata (
     sqlc.narg('default_host')::text
 )
 RETURNING *, (xmax = 0) AS inserted
-), enabled AS (
-    INSERT INTO organization_features (organization_id, feature_name)
-    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -888,10 +876,6 @@ ON CONFLICT (id) DO UPDATE SET
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     updated_at = clock_timestamp()
 RETURNING *, (xmax = 0) AS inserted
-), enabled AS (
-    INSERT INTO organization_features (organization_id, feature_name)
-    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
