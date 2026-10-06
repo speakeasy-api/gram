@@ -3,8 +3,10 @@ package remotemcp
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -175,4 +177,15 @@ func TestProtectedResourceMismatchMessage(t *testing.T) {
 
 	doc.Resource = ""
 	require.Equal(t, "The metadata document names the resource (empty), not the requested one.", protectedResourceMismatchMessage("https://rs.example.test/mcp", doc))
+
+	doc.Resource = "https://user:secret@rs.example.test/other?token=abc#frag"
+	require.Equal(t, "The metadata document names the resource https://rs.example.test/other, not the requested one.", protectedResourceMismatchMessage("https://rs.example.test/mcp", doc))
+
+	doc.Resource = "urn:example:resource"
+	require.Equal(t, "The metadata document names the resource <invalid URL>, not the requested one.", protectedResourceMismatchMessage("https://rs.example.test/mcp", doc))
+
+	doc.Resource = "https://rs.example.test/" + strings.Repeat("é", 300)
+	got := protectedResourceMismatchMessage("https://rs.example.test/mcp", doc)
+	require.True(t, utf8.ValidString(got))
+	require.Equal(t, 200, utf8.RuneCountInString(strings.TrimSuffix(strings.TrimPrefix(got, "The metadata document names the resource "), "…, not the requested one.")))
 }

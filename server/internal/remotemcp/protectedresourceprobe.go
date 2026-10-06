@@ -42,19 +42,20 @@ const (
 // member or metadata location does not match the server's URL, naming which.
 func protectedResourceMismatchMessage(resourceURL string, doc wellknown.OAuthProtectedResourceMetadata) string {
 	if doc.Resource != resourceURL {
-		return "The metadata document names the resource " + truncateForRecord(doc.Resource) + ", not the requested one."
+		return "The metadata document names the resource " + recordedURL(doc.Resource) + ", not the requested one."
 	}
-	return "The metadata document was read from " + truncateForRecord(doc.MetadataURL) + ", not the resource's well-known location."
+	return "The metadata document was read from " + recordedURL(doc.MetadataURL) + ", not the resource's well-known location."
 }
 
-// truncateForRecord bounds an upstream-supplied value before it is stored.
-func truncateForRecord(v string) string {
+// recordedURL redacts and bounds an upstream-supplied URL before it is stored.
+func recordedURL(v string) string {
 	const limit = 200
+	v = urls.DiagnosticURL(v)
 	if v == "" {
 		return "(empty)"
 	}
-	if len(v) > limit {
-		return v[:limit] + "…"
+	if r := []rune(v); len(r) > limit {
+		return string(r[:limit]) + "…"
 	}
 	return v
 }
