@@ -208,7 +208,7 @@ export class Auth extends ClientSDK {
    * Continues a cross-domain session transfer on the source platform host. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn callback. Only an ordinary session whose active organization lives on the target host can transfer. The session is read from the session cookie or header; on any failure the browser is sent to a login page instead of an error.
    */
   async transferOut(
-    request: AuthTransferOutRequest,
+    request?: AuthTransferOutRequest | undefined,
     options?: RequestOptions,
   ): Promise<AuthTransferOutResponse | undefined> {
     return unwrapAsync(authTransferOut(

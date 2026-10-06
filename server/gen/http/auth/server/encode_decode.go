@@ -1471,20 +1471,19 @@ func DecodeTransferOutRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 	return func(r *http.Request) (*auth.TransferOutPayload, error) {
 		var payload *auth.TransferOutPayload
 		var (
-			targetHost   string
-			nonce        string
+			targetHost   *string
+			nonce        *string
 			redirect     *string
 			sessionToken *string
-			err          error
 		)
 		qp := r.URL.Query()
-		targetHost = qp.Get("target_host")
-		if targetHost == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("target_host", "query string"))
+		targetHostRaw := qp.Get("target_host")
+		if targetHostRaw != "" {
+			targetHost = &targetHostRaw
 		}
-		nonce = qp.Get("nonce")
-		if nonce == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("nonce", "query string"))
+		nonceRaw := qp.Get("nonce")
+		if nonceRaw != "" {
+			nonce = &nonceRaw
 		}
 		redirectRaw := qp.Get("redirect")
 		if redirectRaw != "" {
@@ -1493,9 +1492,6 @@ func DecodeTransferOutRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
-		}
-		if err != nil {
-			return payload, err
 		}
 		payload = NewTransferOutPayload(targetHost, nonce, redirect, sessionToken)
 

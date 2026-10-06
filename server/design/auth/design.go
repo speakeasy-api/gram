@@ -267,7 +267,8 @@ var _ = Service("auth", func() {
 			Attribute("nonce", String, "The browser binding nonce from the target host's transferIn start mode")
 			Attribute("redirect", String, "Optional URL path to redirect to after the transfer completes on the target host")
 			Attribute("session_token", String, "The session to transfer. Defaults to the session cookie.")
-			Required("target_host", "nonce")
+			// Not Required: a missing parameter must reach the handler, which
+			// sends the browser to a login page instead of a 400 error.
 		})
 
 		Result(func() {

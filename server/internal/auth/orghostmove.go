@@ -45,12 +45,8 @@ func (s *Service) organizationHostMove(ctx context.Context, defaultHost pgtype.T
 	if s.cfg.OrgHosts == nil {
 		return none, false
 	}
-	origin, ok := requestorigin.FromContext(ctx)
-	if !ok || origin.Surface != requestorigin.SurfacePlatform {
-		return none, false
-	}
-	current, err := url.Parse(origin.BaseURL)
-	if err != nil || current.Host == "" {
+	current, ok := currentPlatformURL(ctx)
+	if !ok {
 		return none, false
 	}
 	serverURL, siteURL, ok := s.cfg.OrgHosts.StoredPlatformHost(defaultHost)
@@ -64,6 +60,21 @@ func (s *Service) organizationHostMove(ctx context.Context, defaultHost pgtype.T
 		return none, false
 	}
 	return orgHostMove{serverURL: serverURL, siteURL: siteURL, sourceHost: current.Host}, true
+}
+
+// currentPlatformURL is the base URL of the platform host the request arrived
+// on. ok is false for custom domains, private network ingress, and requests
+// with no usable origin.
+func currentPlatformURL(ctx context.Context) (*url.URL, bool) {
+	origin, ok := requestorigin.FromContext(ctx)
+	if !ok || origin.Surface != requestorigin.SurfacePlatform {
+		return nil, false
+	}
+	current, err := url.Parse(origin.BaseURL)
+	if err != nil || current.Host == "" {
+		return nil, false
+	}
+	return current, true
 }
 
 // allowedScheme reports whether a move from a request over current may target

@@ -843,8 +843,8 @@ func ParseEndpoint(
 		authInfoSessionTokenFlag = authInfoFlags.String("session-token", "", "")
 
 		authTransferOutFlags            = flag.NewFlagSet("transfer-out", flag.ExitOnError)
-		authTransferOutTargetHostFlag   = authTransferOutFlags.String("target-host", "REQUIRED", "")
-		authTransferOutNonceFlag        = authTransferOutFlags.String("nonce", "REQUIRED", "")
+		authTransferOutTargetHostFlag   = authTransferOutFlags.String("target-host", "", "")
+		authTransferOutNonceFlag        = authTransferOutFlags.String("nonce", "", "")
 		authTransferOutRedirectFlag     = authTransferOutFlags.String("redirect", "", "")
 		authTransferOutSessionTokenFlag = authTransferOutFlags.String("session-token", "", "")
 

@@ -250,9 +250,9 @@ type TransferInResult struct {
 // method.
 type TransferOutPayload struct {
 	// The target platform host to transfer the session to (e.g. ai.speakeasy.com)
-	TargetHost string
+	TargetHost *string
 	// The browser binding nonce from the target host's transferIn start mode
-	Nonce string
+	Nonce *string
 	// Optional URL path to redirect to after the transfer completes on the target
 	// host
 	Redirect *string

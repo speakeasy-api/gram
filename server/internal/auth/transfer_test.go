@@ -33,15 +33,16 @@ var testTargetBaseURL = "https://" + testExtraPlatformHost
 
 const testTransferRedirect = "/test-org/mcp?tab=logs#recent"
 
-// targetLogin is the login fallback on the target host.
-func targetLogin(redirect string) string {
-	return testTargetBaseURL + "/login?" + url.Values{"redirect": {redirect}}.Encode()
+// loginAt is the login fallback on the dashboard at siteURL.
+func loginAt(siteURL, redirect string) string {
+	return siteURL + "/login?" + url.Values{"redirect": {redirect}}.Encode()
 }
 
+// targetLogin is the login fallback on the target host.
+func targetLogin(redirect string) string { return loginAt(testTargetBaseURL, redirect) }
+
 // sourceLogin is the login fallback on the source host's dashboard.
-func sourceLogin(redirect string) string {
-	return testSiteURL.String() + "/login?" + url.Values{"redirect": {redirect}}.Encode()
-}
+func sourceLogin(redirect string) string { return loginAt(testSiteURL.String(), redirect) }
 
 func atHost(ctx context.Context, baseURL string) context.Context {
 	return requestorigin.WithContext(ctx, originAt(requestorigin.SurfacePlatform, baseURL))
@@ -152,7 +153,7 @@ func newTransfer(t *testing.T, opts transferOptions) (context.Context, *transfer
 	return ctx, &transferFixture{instance: instance, userInfo: userInfo, source: source}
 }
 
-// start runs transferStart in b and returns the nonce from the transferOut
+// start runs transferIn start mode in b and returns the nonce from the transferOut
 // URL it redirects to.
 func (f *transferFixture) start(ctx context.Context, t *testing.T, b *browser) string {
 	t.Helper()
@@ -183,8 +184,8 @@ func callbackPayload(code string, redirect *string) *gen.TransferInPayload {
 
 func outPayload(nonce string) *gen.TransferOutPayload {
 	return &gen.TransferOutPayload{
-		TargetHost:   testExtraPlatformHost,
-		Nonce:        nonce,
+		TargetHost:   new(testExtraPlatformHost),
+		Nonce:        &nonce,
 		Redirect:     new(testTransferRedirect),
 		SessionToken: nil,
 	}
@@ -203,7 +204,7 @@ func codeFrom(t *testing.T, location string) string {
 	return code
 }
 
-// begin runs transferStart and transferOut in a new browser and returns the
+// begin runs transferIn start mode and transferOut in a new browser and returns the
 // transfer code, the nonce, and the browser.
 func (f *transferFixture) begin(ctx context.Context, t *testing.T) (string, string, *browser) {
 	t.Helper()
@@ -287,6 +288,17 @@ func TestService_TransferIn_StartMode(t *testing.T) {
 		}, b.transferCookies())
 	})
 
+	t.Run("accepts the dashboard host as the source and sends it to the server host", func(t *testing.T) {
+		t.Parallel()
+
+		result, err := f.instance.service.TransferIn(auth.WithTransferCookieJar(target, newBrowser()), startPayload(testSiteURL.Host, nil))
+		require.NoError(t, err)
+		location, err := url.Parse(result.Location)
+		require.NoError(t, err)
+		require.Equal(t, testServerURL.Host, location.Host)
+		require.Equal(t, "/rpc/auth.transferOut", location.Path)
+	})
+
 	t.Run("issues a fresh nonce and cookie each time", func(t *testing.T) {
 		t.Parallel()
 
@@ -357,7 +369,7 @@ func TestService_TransferOut_Refusals(t *testing.T) {
 	withTarget := func(host string) func(*transferFixture) *gen.TransferOutPayload {
 		return func(*transferFixture) *gen.TransferOutPayload {
 			p := outPayload("nonce")
-			p.TargetHost = host
+			p.TargetHost = &host
 			return p
 		}
 	}
@@ -386,6 +398,28 @@ func TestService_TransferOut_Refusals(t *testing.T) {
 			},
 			payload: withNonce,
 			want:    targetLogin(testTransferRedirect),
+		},
+		{
+			name: "missing nonce",
+			opts: defaultTransferOptions(),
+			ctx:  sourceCtx,
+			payload: func(*transferFixture) *gen.TransferOutPayload {
+				p := outPayload("")
+				p.Nonce = nil
+				return p
+			},
+			want: targetLogin(testTransferRedirect),
+		},
+		{
+			name: "missing target",
+			opts: defaultTransferOptions(),
+			ctx:  sourceCtx,
+			payload: func(*transferFixture) *gen.TransferOutPayload {
+				p := outPayload("nonce")
+				p.TargetHost = nil
+				return p
+			},
+			want: sourceLogin(testTransferRedirect),
 		},
 		{
 			name:    "empty nonce",
@@ -568,28 +602,43 @@ func TestService_TransferIn_ExpiredCode(t *testing.T) {
 	requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, b))
 }
 
-// Each refusal below must leave the code redeemable by the right browser on
-// the right host.
-func TestService_TransferIn_RefusalsDoNotConsume(t *testing.T) {
+// A code presented on another host is refused but stays redeemable by the
+// right browser on the right host.
+func TestService_TransferIn_WrongHostDoesNotConsume(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	code, _, right := f.begin(ctx, t)
+
+	result := f.in(ctx, t, testServerURL.String(), code, right.clone())
+	require.Nil(t, result.SessionCookie)
+	require.Equal(t, sourceLogin(testTransferRedirect), result.Location)
+
+	f.requireAccepted(ctx, t, f.in(ctx, t, testTargetBaseURL, code, right))
+}
+
+// A browser without the transfer's nonce cookie is refused, and the code is
+// burned: TransferOut is a GET, so a victim can be made to issue a code bound
+// to someone else's nonce, and that code must not stay redeemable if its URL
+// leaks.
+func TestService_TransferIn_BrowserMismatchBurnsCode(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name    string
-		host    string
-		browser func(right *browser, nonce string) *browser
+		browser func(nonce string) *browser
 	}{
-		{"missing nonce cookie", testTargetBaseURL, func(*browser, string) *browser { return newBrowser() }},
-		{"empty nonce cookie", testTargetBaseURL, func(_ *browser, nonce string) *browser {
+		{"missing nonce cookie", func(string) *browser { return newBrowser() }},
+		{"empty nonce cookie", func(nonce string) *browser {
 			b := newBrowser()
 			b.Set(constants.TransferInNonceCookiePrefix+nonceHash(nonce)[:16], "")
 			return b
 		}},
-		{"wrong nonce cookie", testTargetBaseURL, func(_ *browser, nonce string) *browser {
+		{"wrong nonce cookie", func(nonce string) *browser {
 			b := newBrowser()
 			b.Set(constants.TransferInNonceCookiePrefix+nonceHash(nonce)[:16], "another-nonce")
 			return b
 		}},
-		{"wrong target host", testServerURL.String(), func(right *browser, _ string) *browser { return right.clone() }},
 	}
 
 	for _, tt := range tests {
@@ -599,11 +648,8 @@ func TestService_TransferIn_RefusalsDoNotConsume(t *testing.T) {
 			ctx, f := newTransfer(t, defaultTransferOptions())
 			code, nonce, right := f.begin(ctx, t)
 
-			result := f.in(ctx, t, tt.host, code, tt.browser(right, nonce))
-			require.Nil(t, result.SessionCookie)
-			require.Contains(t, result.Location, "/login?redirect=")
-
-			f.requireAccepted(ctx, t, f.in(ctx, t, testTargetBaseURL, code, right))
+			requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, tt.browser(nonce)))
+			requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, right))
 		})
 	}
 }
@@ -631,8 +677,8 @@ func TestService_TransferIn_AnotherTransfersCookieIsRefused(t *testing.T) {
 	_, _, browserA := f.begin(ctx, t)
 	codeB, _, browserB := f.begin(ctx, t)
 
-	// Transfer A's cookie does not satisfy transfer B, even under B's name.
-	requireRefused(t, f.in(ctx, t, testTargetBaseURL, codeB, browserA.clone()))
+	// Transfer A's cookie, even renamed to B's cookie name, does not satisfy
+	// transfer B.
 	renamed := newBrowser()
 	for _, value := range browserA.transferCookies() {
 		for name := range browserB.transferCookies() {
@@ -641,7 +687,10 @@ func TestService_TransferIn_AnotherTransfersCookieIsRefused(t *testing.T) {
 	}
 	requireRefused(t, f.in(ctx, t, testTargetBaseURL, codeB, renamed))
 
-	f.requireAccepted(ctx, t, f.in(ctx, t, testTargetBaseURL, codeB, browserB))
+	// A browser holding only A's cookie under A's name has no cookie for B.
+	codeB2, _, browserB2 := f.begin(ctx, t)
+	requireRefused(t, f.in(ctx, t, testTargetBaseURL, codeB2, browserA.clone()))
+	requireRefused(t, f.in(ctx, t, testTargetBaseURL, codeB2, browserB2)) // the refused code is burned
 }
 
 func TestService_TransferIn_NonMemberDoesNotConsume(t *testing.T) {
@@ -765,8 +814,8 @@ func TestTransfer_HTTP(t *testing.T) {
 	transferInURL := out.Header().Get("Location")
 	require.True(t, strings.HasPrefix(transferInURL, testTargetBaseURL+"/rpc/auth.transferIn?code="), transferInURL)
 
-	// 3a. Without the nonce cookie the target refuses, writes no session, and
-	// clears the transfer's cookie.
+	// 3a. Without the nonce cookie the target refuses, writes no session,
+	// clears the transfer's cookie, and burns the code.
 	refused := serve(testTargetBaseURL, transferInURL)
 	require.Equal(t, http.StatusTemporaryRedirect, refused.Code)
 	require.Equal(t, targetLogin(testTransferRedirect), refused.Header().Get("Location"))
@@ -775,8 +824,21 @@ func TestTransfer_HTTP(t *testing.T) {
 	require.Len(t, cleared, 1)
 	require.Negative(t, cleared[0].MaxAge)
 
-	// 3b. With the nonce cookie the session is established and the cookie
-	// cleared.
+	// That burned the code, so the right cookie no longer helps.
+	burned := serve(testTargetBaseURL, transferInURL, &http.Cookie{Name: nonceCookie.Name, Value: nonceCookie.Value})
+	require.Equal(t, targetLogin(testTransferRedirect), burned.Header().Get("Location"))
+
+	// 3b. A fresh transfer with the nonce cookie establishes the session and
+	// clears the cookie.
+	start = serve(testTargetBaseURL, testTargetBaseURL+"/rpc/auth.transferIn?"+url.Values{
+		"source_host": {testServerURL.Host},
+		"redirect":    {testTransferRedirect},
+	}.Encode())
+	nonceCookies = setCookies(start, constants.TransferInNonceCookiePrefix)
+	require.Len(t, nonceCookies, 1)
+	nonceCookie = nonceCookies[0]
+	out = serve(testServerURL.String(), start.Header().Get("Location"), sessionCookie)
+	transferInURL = out.Header().Get("Location")
 	accepted := serve(testTargetBaseURL, transferInURL, &http.Cookie{Name: nonceCookie.Name, Value: nonceCookie.Value})
 	require.Equal(t, http.StatusTemporaryRedirect, accepted.Code)
 	require.Equal(t, testTargetBaseURL+testTransferRedirect, accepted.Header().Get("Location"))

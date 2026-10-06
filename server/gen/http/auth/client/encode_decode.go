@@ -1758,8 +1758,12 @@ func EncodeTransferOutRequest(encoder func(*http.Request) goahttp.Encoder) func(
 			req.Header.Set("Gram-Session", head)
 		}
 		values := req.URL.Query()
-		values.Add("target_host", p.TargetHost)
-		values.Add("nonce", p.Nonce)
+		if p.TargetHost != nil {
+			values.Add("target_host", *p.TargetHost)
+		}
+		if p.Nonce != nil {
+			values.Add("nonce", *p.Nonce)
+		}
 		if p.Redirect != nil {
 			values.Add("redirect", *p.Redirect)
 		}

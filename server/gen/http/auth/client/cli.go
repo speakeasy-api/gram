@@ -172,13 +172,17 @@ func BuildInfoPayload(authInfoSessionToken string) (*auth.InfoPayload, error) {
 // BuildTransferOutPayload builds the payload for the auth transferOut endpoint
 // from CLI flags.
 func BuildTransferOutPayload(authTransferOutTargetHost string, authTransferOutNonce string, authTransferOutRedirect string, authTransferOutSessionToken string) (*auth.TransferOutPayload, error) {
-	var targetHost string
+	var targetHost *string
 	{
-		targetHost = authTransferOutTargetHost
+		if authTransferOutTargetHost != "" {
+			targetHost = &authTransferOutTargetHost
+		}
 	}
-	var nonce string
+	var nonce *string
 	{
-		nonce = authTransferOutNonce
+		if authTransferOutNonce != "" {
+			nonce = &authTransferOutNonce
+		}
 	}
 	var redirect *string
 	{

@@ -20405,7 +20405,6 @@ paths:
                   description: The target platform host to transfer the session to (e.g. ai.speakeasy.com)
                   in: query
                   name: target_host
-                  required: true
                   schema:
                     description: The target platform host to transfer the session to (e.g. ai.speakeasy.com)
                     type: string
@@ -20413,7 +20412,6 @@ paths:
                   description: The browser binding nonce from the target host's transferIn start mode
                   in: query
                   name: nonce
-                  required: true
                   schema:
                     description: The browser binding nonce from the target host's transferIn start mode
                     type: string

@@ -33,8 +33,8 @@ type TransferRecord struct {
 	WorkOSSessionID string
 	SourceHost      string
 	TargetHost      string
-	// NonceHash is the SHA-256 of the browser binding nonce that transferStart
-	// set as a cookie on the target host. It also names that cookie. Only the
+	// NonceHash is the SHA-256 of the browser binding nonce that transferIn's
+	// start mode set as a cookie on the target host. It also names that cookie. Only the
 	// browser holding the cookie can redeem the code.
 	NonceHash string
 }

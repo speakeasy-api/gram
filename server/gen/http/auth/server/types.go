@@ -3064,7 +3064,7 @@ func NewInfoPayload(sessionToken *string) *auth.InfoPayload {
 }
 
 // NewTransferOutPayload builds a auth service transferOut endpoint payload.
-func NewTransferOutPayload(targetHost string, nonce string, redirect *string, sessionToken *string) *auth.TransferOutPayload {
+func NewTransferOutPayload(targetHost *string, nonce *string, redirect *string, sessionToken *string) *auth.TransferOutPayload {
 	v := &auth.TransferOutPayload{}
 	v.TargetHost = targetHost
 	v.Nonce = nonce

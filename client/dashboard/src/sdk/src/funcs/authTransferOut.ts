@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  */
 export function authTransferOut(
   client: GramCore,
-  request: AuthTransferOutRequest,
+  request?: AuthTransferOutRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -67,7 +67,7 @@ export function authTransferOut(
 
 async function $do(
   client: GramCore,
-  request: AuthTransferOutRequest,
+  request?: AuthTransferOutRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -88,7 +88,8 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(AuthTransferOutRequest$outboundSchema, value),
+    (value) =>
+      z.parse(z.optional(AuthTransferOutRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -100,14 +101,14 @@ async function $do(
   const path = pathToFunc("/rpc/auth.transferOut")();
 
   const query = encodeFormQuery({
-    "nonce": payload.nonce,
-    "redirect": payload.redirect,
-    "target_host": payload.target_host,
+    "nonce": payload?.nonce,
+    "redirect": payload?.redirect,
+    "target_host": payload?.target_host,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),

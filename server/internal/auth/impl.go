@@ -1846,8 +1846,9 @@ func dashboardLoginURL(siteURL, redirect string) string {
 // authenticates the caller's session, checks that the session's active
 // organization lives on the target host, stores a one-time transfer code bound
 // to the nonce from TransferIn's start mode, and redirects to the target
-// host's TransferIn callback. On any failure the browser lands on a login page: the
-// target host's when the target is a platform host, this host's otherwise.
+// host's TransferIn callback. On any failure the browser lands on a login
+// page: the target host's when the target is a platform host, this host's
+// otherwise.
 func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPayload) (*gen.TransferOutResult, error) {
 	logger := s.logger.With(attr.SlogGoaMethod("TransferOut"))
 	redirect := transferRedirect(payload.Redirect)
@@ -1861,17 +1862,18 @@ func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPaylo
 	if s.cfg.OrgHosts == nil {
 		return fail(errors.New("platform hosts not configured"))
 	}
-	targetBaseURL, ok := s.cfg.OrgHosts.IsPlatformHost(payload.TargetHost)
+	targetBaseURL, ok := s.cfg.OrgHosts.IsPlatformHost(conv.PtrValOr(payload.TargetHost, ""))
 	if !ok {
 		return fail(errors.New("target host is not a platform host"))
 	}
 	loginSiteURL = s.dashboardSiteURL(targetBaseURL)
 
-	origin, ok := requestorigin.FromContext(ctx)
-	if !ok || origin.Surface != requestorigin.SurfacePlatform {
+	sourceURL, ok := currentPlatformURL(ctx)
+	if !ok {
 		return fail(errors.New("session transfer only available on platform hosts"))
 	}
-	if payload.Nonce == "" {
+	nonce := conv.PtrValOr(payload.Nonce, "")
+	if nonce == "" {
 		return fail(errors.New("transfer nonce is required"))
 	}
 
@@ -1890,24 +1892,17 @@ func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPaylo
 		return fail(fmt.Errorf("load session: %w", err))
 	}
 
-	sourceURL, err := url.Parse(origin.BaseURL)
-	if err != nil {
-		return fail(fmt.Errorf("parse source origin: %w", err))
-	}
 	targetURL, err := url.Parse(targetBaseURL)
 	if err != nil {
 		return fail(fmt.Errorf("parse target base URL: %w", err))
 	}
-	if sameHost(sourceURL.Host, targetURL.Host) {
-		return fail(errors.New("source and target hosts are the same"))
-	}
-	if !allowedScheme(targetURL.Scheme, sourceURL.Scheme) {
-		return fail(errors.New("transfer would downgrade to http"))
-	}
 
-	// Only an organization with a stored default host on the target moves its
-	// sessions there. NULL means the legacy host, which never transfers, and
-	// neither do organization-less or demo sessions, which have no such host.
+	// Only a session whose organization would move to the target host by the
+	// same rule the login callback and dashboard use transfers there: a stored,
+	// non-NULL default host that is a configured platform host other than this
+	// one, reached without downgrading to http. NULL means the legacy host,
+	// which never transfers, and neither do organization-less or demo
+	// sessions.
 	if session.ActiveOrganizationID == "" {
 		return fail(errors.New("session has no active organization"))
 	}
@@ -1915,12 +1910,12 @@ func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPaylo
 	if err != nil {
 		return fail(fmt.Errorf("load active organization: %w", err))
 	}
-	orgServerURL, _, ok := s.cfg.OrgHosts.StoredPlatformHost(orgMetadata.DefaultHost)
-	if !ok || !sameHost(orgServerURL.Host, targetURL.Host) {
+	move, ok := s.organizationHostMove(ctx, orgMetadata.DefaultHost)
+	if !ok || !sameHost(move.serverURL.Host, targetURL.Host) {
 		return fail(errors.New("target host is not the organization's default host"))
 	}
 
-	code, err := s.transferManager.Create(ctx, session, payload.Nonce, sourceURL.Host, targetURL.Host)
+	code, err := s.transferManager.Create(ctx, session, nonce, sourceURL.Host, targetURL.Host)
 	if err != nil {
 		return fail(fmt.Errorf("create transfer code: %w", err))
 	}
@@ -1928,7 +1923,7 @@ func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPaylo
 	query := url.Values{}
 	query.Set("code", code)
 	query.Set("redirect", redirect)
-	targetURL.Path = strings.TrimRight(targetURL.Path, "/") + "/rpc/auth.transferIn"
+	targetURL.Path = strings.TrimRight(targetURL.Path, "/") + transferInPath
 	targetURL.RawQuery = query.Encode()
 
 	logger.InfoContext(ctx, "initiating session transfer",
@@ -1989,22 +1984,33 @@ func (s *Service) TransferIn(ctx context.Context, payload *gen.TransferInPayload
 	return result, nil
 }
 
+// transferSourceBaseURL resolves the source_host of TransferIn's start mode
+// to the server base URL that holds its session. Besides platform hosts, it
+// accepts the configured dashboard host, whose sessions live on the server
+// host when the two differ.
+func (s *Service) transferSourceBaseURL(sourceHost string) (string, bool) {
+	if baseURL, ok := s.cfg.OrgHosts.IsPlatformHost(sourceHost); ok {
+		return baseURL, true
+	}
+	site, err := url.Parse(s.siteOrigin)
+	if err != nil || site.Host == "" || sourceHost == "" || !sameHost(sourceHost, site.Host) {
+		return "", false
+	}
+	return s.cfg.GramServerURL, s.cfg.GramServerURL != ""
+}
+
 // transferInStart is TransferIn's start mode.
 func (s *Service) transferInStart(ctx context.Context, sourceHost, redirect string) (*gen.TransferInResult, error) {
 	if s.cfg.OrgHosts == nil {
 		return nil, errors.New("platform hosts not configured")
 	}
-	origin, ok := requestorigin.FromContext(ctx)
-	if !ok || origin.Surface != requestorigin.SurfacePlatform {
+	currentURL, ok := currentPlatformURL(ctx)
+	if !ok {
 		return nil, errors.New("session transfer only available on platform hosts")
 	}
-	sourceBaseURL, ok := s.cfg.OrgHosts.IsPlatformHost(sourceHost)
+	sourceBaseURL, ok := s.transferSourceBaseURL(sourceHost)
 	if !ok {
 		return nil, errors.New("source host is not a platform host")
-	}
-	currentURL, err := url.Parse(origin.BaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("parse current origin: %w", err)
 	}
 	sourceURL, err := url.Parse(sourceBaseURL)
 	if err != nil {
@@ -2035,13 +2041,9 @@ func (s *Service) transferInStart(ctx context.Context, sourceHost, redirect stri
 
 // transferInCallback is TransferIn's callback mode.
 func (s *Service) transferInCallback(ctx context.Context, logger *slog.Logger, code, redirect, siteURL string) (*gen.TransferInResult, error) {
-	origin, ok := requestorigin.FromContext(ctx)
-	if !ok || origin.Surface != requestorigin.SurfacePlatform {
+	currentURL, ok := currentPlatformURL(ctx)
+	if !ok {
 		return nil, errors.New("session transfer only available on platform hosts")
-	}
-	currentURL, err := url.Parse(origin.BaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("parse current origin: %w", err)
 	}
 
 	record, err := s.transferManager.Lookup(ctx, code, currentURL.Host)
@@ -2058,6 +2060,14 @@ func (s *Service) transferInCallback(ctx context.Context, logger *slog.Logger, c
 	nonce := jar.Get(cookieName)
 	jar.Clear(cookieName)
 	if !record.BoundTo(nonce) {
+		// Burn the code. TransferOut is a GET, so someone could make a
+		// signed-in victim issue a code bound to a nonce of their choosing;
+		// the victim's browser lands here without that nonce's cookie, and
+		// burning the code now leaves nothing to redeem if the URL leaks. A
+		// browser without the cookie could never redeem it anyway.
+		if err := s.transferManager.Consume(ctx, code); err != nil {
+			logger.WarnContext(ctx, "failed to burn transfer code", attr.SlogError(err))
+		}
 		return nil, errors.New("transfer code was issued for another browser")
 	}
 

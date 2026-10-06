@@ -12,11 +12,11 @@ export type AuthTransferOutRequest = {
   /**
    * The target platform host to transfer the session to (e.g. ai.speakeasy.com)
    */
-  targetHost: string;
+  targetHost?: string | undefined;
   /**
    * The browser binding nonce from the target host's transferIn start mode
    */
-  nonce: string;
+  nonce?: string | undefined;
   /**
    * Optional URL path to redirect to after the transfer completes on the target host
    */
@@ -33,8 +33,8 @@ export type AuthTransferOutResponse = {
 
 /** @internal */
 export type AuthTransferOutRequest$Outbound = {
-  target_host: string;
-  nonce: string;
+  target_host?: string | undefined;
+  nonce?: string | undefined;
   redirect?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
@@ -45,8 +45,8 @@ export const AuthTransferOutRequest$outboundSchema: z.ZodMiniType<
   AuthTransferOutRequest
 > = z.pipe(
   z.object({
-    targetHost: z.string(),
-    nonce: z.string(),
+    targetHost: z.optional(z.string()),
+    nonce: z.optional(z.string()),
     redirect: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),
