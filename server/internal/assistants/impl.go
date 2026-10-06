@@ -34,14 +34,15 @@ import (
 )
 
 type Service struct {
-	tracer           trace.Tracer
-	logger           *slog.Logger
-	auth             *auth.Auth
-	authz            *authz.Engine
-	core             *ServiceCore
-	signaler         WorkflowSignaler
-	bootstrapLimiter *ratelimit.Limiter
-	features         feature.Provider
+	tracer                    trace.Tracer
+	logger                    *slog.Logger
+	auth                      *auth.Auth
+	authz                     *authz.Engine
+	core                      *ServiceCore
+	signaler                  WorkflowSignaler
+	bootstrapLimiter          *ratelimit.Limiter
+	bootstrapAggregateLimiter *ratelimit.Limiter
+	features                  feature.Provider
 }
 
 var (
@@ -70,6 +71,9 @@ func NewService(
 		authz:    authzEngine,
 		core:     core,
 		signaler: signaler,
+		bootstrapAggregateLimiter: ratelimit.New(bootstrapStore, "assistant-bootstrap-aggregate",
+			ratelimit.PerMinute(bootstrapAggregateRatePerMin).WithBurst(bootstrapAggregateBurst),
+			ratelimit.WithMetrics(meterProvider)),
 		bootstrapLimiter: ratelimit.New(bootstrapStore, "assistant-bootstrap",
 			ratelimit.PerMinute(bootstrapRatePerMin).WithBurst(bootstrapRateBurst),
 			ratelimit.WithMetrics(meterProvider)),

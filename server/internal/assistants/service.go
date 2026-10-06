@@ -2168,21 +2168,28 @@ const (
 	// wake captured when it was scheduled.
 	wakeIdentityVersionKey = "identity_version"
 	wakeRequesterUserIDKey = "requester_user_id"
+
+	// mcpAuthEventKindKey and mcpAuthResumeUserIDKey mark an OAuth
+	// continuation and the user whose turn started it. Only the OAuth callback
+	// writes them, on an event that never passes through ingress.
+	mcpAuthEventKindKey    = "gram_event_kind"
+	mcpAuthResumeUserIDKey = "_gram_resume_user_id"
 )
 
 // stampEventSourceKind marks an object payload with its server-assigned
 // source. Any spelling of an identity key that JSON decoding would fold onto
 // it is removed first; only a wake keeps the exact requester fields its own
-// scheduler wrote. Any other JSON value is returned unchanged, and its turn
-// falls back to the thread source.
+// scheduler wrote, and no ingress payload keeps the OAuth continuation keys.
+// Any other JSON value is returned unchanged, and its turn falls back to the
+// thread source.
 func stampEventSourceKind(payload []byte, sourceKind string) ([]byte, error) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(payload, &fields); err != nil || fields == nil {
 		return payload, nil //nolint:nilerr // non-object payloads are valid and stay unstamped
 	}
 	for key := range fields {
-		for _, reserved := range []string{eventSourceKindKey, wakeIdentityVersionKey, wakeRequesterUserIDKey} {
-			kept := sourceKind == sourceKindWake && key == reserved && reserved != eventSourceKindKey
+		for _, reserved := range []string{eventSourceKindKey, wakeIdentityVersionKey, wakeRequesterUserIDKey, mcpAuthEventKindKey, mcpAuthResumeUserIDKey} {
+			kept := sourceKind == sourceKindWake && key == reserved && (reserved == wakeIdentityVersionKey || reserved == wakeRequesterUserIDKey)
 			if strings.EqualFold(key, reserved) && !kept {
 				delete(fields, key)
 			}
@@ -2824,7 +2831,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 
 			// Terminal failure after maxEventAttempts — stop retrying this
 			// event. The warm runtime stays up for subsequent events.
-			if event.Attempts >= maxEventAttempts {
+			if event.Attempts >= maxEventAttempts && !errors.Is(runErr, ErrRuntimeInvocationBusy) {
 				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event exceeded max attempts", "ERROR", runErr)
 				if err := s.failEvent(ctx, thread.ProjectID, event.ID, fmt.Errorf("exceeded %d attempts: %w", maxEventAttempts, runErr)); err != nil {
 					return ProcessThreadEventsResult{}, err
@@ -2845,7 +2852,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			}
 			// Transient turn-level failure (LLM 5xx, MCP blip) — reset event,
 			// keep the warm runtime, let the coordinator re-kick on the next
-			// admit cycle.
+			// admit cycle, after AssistantThreadWorkflow's durable admission backoff.
 			s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_requeued", "assistant event requeued for retry", "WARN", runErr)
 			if err := s.resetEventToPending(ctx, thread.ProjectID, event.ID, runErr); err != nil {
 				return ProcessThreadEventsResult{}, err
@@ -2926,11 +2933,13 @@ func (s *ServiceCore) processEventTurn(
 
 	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
 
-	prompt, actorUserID := "", assistant.CreatedByUserID
+	actorUserID, err := s.turnUserID(ctx, assistant, thread, event)
+	if err != nil {
+		return nil, err
+	}
+	prompt := ""
 	var inputParts []runtimeContentPart
 	if mcpAuthPrompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
-		// MCP auth resumption is a system event with no human sender — act as
-		// the assistant's creator.
 		prompt = mcpAuthPrompt
 	} else {
 		adapter, err := getSourceAdapter(thread.SourceKind)
@@ -2940,10 +2949,6 @@ func (s *ServiceCore) processEventTurn(
 		prompt, err = adapter.DecodeTurn(event)
 		if err != nil {
 			return nil, fmt.Errorf("decode assistant turn: %w", err)
-		}
-		actorUserID, err = s.turnUserID(ctx, assistant, thread, event)
-		if err != nil {
-			return nil, err
 		}
 		// Best-effort: files attached to the triggering message ride along as
 		// vision/text content. Failures degrade to the metadata-only turn.
@@ -3229,6 +3234,8 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	}
 
 	return threadBootstrap{
+		AssistantID:    assistant.ID.String(),
+		ProjectID:      assistant.ProjectID.String(),
 		Model:          assistant.Model,
 		Instructions:   instructions,
 		CompletionsURL: completionsEndpoint.String(),
@@ -3901,10 +3908,11 @@ func (s *ServiceCore) failEvent(ctx context.Context, projectID, eventID uuid.UUI
 
 func (s *ServiceCore) resetEventToPending(ctx context.Context, projectID, eventID uuid.UUID, runErr error) error {
 	err := assistantrepo.New(s.db).ResetAssistantThreadEventToPending(ctx, assistantrepo.ResetAssistantThreadEventToPendingParams{
-		PendingStatus: eventStatusPending,
-		LastError:     conv.ToPGText(runErr.Error()),
-		EventID:       eventID,
-		ProjectID:     projectID,
+		RestoreAttempt: errors.Is(runErr, ErrRuntimeInvocationBusy),
+		PendingStatus:  eventStatusPending,
+		LastError:      conv.ToPGText(runErr.Error()),
+		EventID:        eventID,
+		ProjectID:      projectID,
 	})
 	if err != nil {
 		return fmt.Errorf("reset assistant thread event to pending: %w", err)

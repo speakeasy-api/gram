@@ -1,6 +1,7 @@
 package assistants
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,16 +12,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
-// bootstrapRateBurst caps how many bootstrap calls one assistant can fire
-// in quick succession. Steady state is once per thread per VM lifetime,
-// so anything sustained above this signals either a bug (runner thrash)
-// or token abuse.
+// Bootstrap authenticates each invocation, including retries. Bound per-thread
+// credentials get independent buckets so busy siblings cannot starve each other.
+// Legacy assistant-wide credentials retain the assistant-wide abuse limit.
 const (
 	bootstrapRateBurst    = 60
 	bootstrapRatePerMin   = 60
 	bootstrapMaxBodyBytes = 4 * 1024
+	// One burst covers the schema's max_concurrency of 100 threads.
+	bootstrapAggregateBurst      = 100
+	bootstrapAggregateRatePerMin = 100 * bootstrapRatePerMin
 )
 
 type bootstrapRequest struct {
@@ -71,15 +75,8 @@ func (s *Service) handleGetThreadBootstrap(w http.ResponseWriter, r *http.Reques
 		return oops.E(oops.CodeForbidden, nil, "token thread does not match requested thread")
 	}
 
-	// A Store outage is not a throttle — fail open rather than wedge bootstrap.
-	switch res, err := s.bootstrapLimiter.Allow(ctx, principal.AssistantID.String()); {
-	case err != nil:
-		s.logger.WarnContext(ctx, "bootstrap rate limiter unavailable, allowing",
-			attr.SlogError(err),
-			attr.SlogAssistantID(principal.AssistantID.String()),
-		)
-	case !res.Allowed:
-		return oops.E(oops.CodeRateLimitExceeded, nil, "thread bootstrap rate limit exceeded")
+	if err := s.allowBootstrap(ctx, principal.AssistantID, principal.ThreadID); err != nil {
+		return err
 	}
 
 	result, err := s.core.BuildThreadBootstrap(ctx, projectID, threadID, principal.AssistantID)
@@ -100,6 +97,30 @@ func (s *Service) handleGetThreadBootstrap(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/json")
 	if _, err := w.Write(payload); err != nil {
 		return fmt.Errorf("write bootstrap response: %w", err)
+	}
+	return nil
+}
+
+// Thread-bound credentials take a per-thread bucket first so one hot thread
+// cannot drain the assistant-wide allowance. A Store outage is not a throttle;
+// fail open rather than wedge bootstrap.
+func (s *Service) allowBootstrap(ctx context.Context, assistantID, tokenThreadID uuid.UUID) error {
+	key := assistantID.String()
+	if tokenThreadID == uuid.Nil {
+		return s.allowBootstrapKey(ctx, s.bootstrapLimiter, assistantID, key)
+	}
+	if err := s.allowBootstrapKey(ctx, s.bootstrapLimiter, assistantID, key+":"+tokenThreadID.String()); err != nil {
+		return err
+	}
+	return s.allowBootstrapKey(ctx, s.bootstrapAggregateLimiter, assistantID, key)
+}
+
+func (s *Service) allowBootstrapKey(ctx context.Context, limiter *ratelimit.Limiter, assistantID uuid.UUID, key string) error {
+	switch res, err := limiter.Allow(ctx, key); {
+	case err != nil:
+		s.logger.WarnContext(ctx, "bootstrap rate limiter unavailable, allowing", attr.SlogError(err), attr.SlogAssistantID(assistantID.String()))
+	case !res.Allowed:
+		return oops.E(oops.CodeRateLimitExceeded, nil, "thread bootstrap rate limit exceeded")
 	}
 	return nil
 }

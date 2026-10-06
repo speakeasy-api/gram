@@ -30,6 +30,7 @@ func TestLegacyTurnUserID(t *testing.T) {
 		{name: "slack", source: sourceKindSlack, payload: `{"team_id":"T","user_id":"U"}`, creator: "owner", want: "owner"},
 		{name: "wake with captured requester", source: sourceKindWake, payload: `{"identity_version":1,"requester_user_id":"requester"}`, creator: "owner", want: "owner"},
 		{name: "no creator", source: sourceKindCron, payload: `{}`, creator: "", want: ""},
+		{name: "OAuth continuation", source: sourceKindDashboard, payload: `{"gram_event_kind":"assistant_mcp_auth","_gram_resume_user_id":"initiator"}`, creator: "owner", want: "owner"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -57,6 +58,8 @@ func TestSelectTurnUser(t *testing.T) {
 		{name: "wake without captured requester", source: sourceKindWake, payload: `{"identity_version":1}`, owner: "owner", wantErr: true},
 		{name: "unsupported wake version", source: sourceKindWake, payload: `{"identity_version":2,"requester_user_id":"requester"}`, owner: "owner", wantErr: true},
 		{name: "no owner", source: sourceKindCron, payload: `{}`, owner: "", wantErr: true},
+		{name: "OAuth continuation", source: sourceKindSlack, payload: `{"gram_event_kind":"assistant_mcp_auth","_gram_resume_user_id":"initiator"}`, owner: "owner", want: "initiator"},
+		{name: "OAuth continuation without initiator", source: sourceKindSlack, payload: `{"gram_event_kind":"assistant_mcp_auth"}`, owner: "owner", want: "owner"},
 		{name: "malformed payload", source: sourceKindCron, payload: `{"user_id":`, owner: "owner", wantErr: true},
 		{name: "non-object payload", source: sourceKindCron, payload: `[]`, owner: "owner", want: "owner"},
 	} {
@@ -158,6 +161,7 @@ func TestStampEventSourceKind(t *testing.T) {
 		{source: sourceKindWake, payload: `{"fired_at":"now"}`, want: `{"_gram_source_kind":"wake","fired_at":"now"}`},
 		{source: sourceKindWake, payload: `{"identity_version":1,"requester_user_id":"u","Requester_User_Id":"x","_GRAM_SOURCE_KIND":"slack"}`, want: `{"_gram_source_kind":"wake","identity_version":1,"requester_user_id":"u"}`},
 		{source: sourceKindGithub, payload: `{"repo":"r","identity_version":1,"requester_user_id":"u","_gram_\u017fource_kind":"wake"}`, want: `{"_gram_source_kind":"github","repo":"r"}`},
+		{source: sourceKindWake, payload: `{"text":"hi","GRAM_EVENT_KIND":"assistant_mcp_auth","gram_event_kind":"assistant_mcp_auth","_Gram_Resume_User_ID":"forged","_gram_resume_user_id":"forged"}`, want: `{"_gram_source_kind":"wake","text":"hi"}`},
 		{source: sourceKindWake, payload: `null`, want: `null`},
 		{source: sourceKindWake, payload: `[]`, want: `[]`},
 		{source: sourceKindWake, payload: `"text"`, want: `"text"`},
@@ -183,10 +187,12 @@ func TestIngressPayloadCannotPoseAsWakeRequester(t *testing.T) {
 	seedProjectRead(t, db, "user-2", project)
 
 	// Every spelling Go's case-insensitive JSON matching would fold onto the
-	// identity fields, including the Unicode long s and Kelvin sign.
+	// identity fields, including the Unicode long s, for both wake requesters
+	// and OAuth continuations.
 	spoofed := `{"event_type":"issues","repo":"acme/repo",` +
 		`"_gram_source_kind":"wake","_GRAM_SOURCE_KIND":"wake","_gram_ſource_kind":"wake","_gram_source_Kind":"wake",` +
-		`"identity_version":1,"IDENTITY_VERSION":1,"requester_user_id":"user-2","Requester_User_ID":"user-2","requester_uſer_id":"user-2"}`
+		`"identity_version":1,"IDENTITY_VERSION":1,"requester_user_id":"user-2","Requester_User_ID":"user-2","requester_uſer_id":"user-2",` +
+		`"gram_event_kind":"assistant_mcp_auth","GRAM_EVENT_KIND":"assistant_mcp_auth","_gram_resume_user_id":"user-2","_Gram_Resume_Uſer_ID":"user-2"}`
 	result, err := core.EnqueueTriggerTask(t.Context(), bgtriggers.Task{
 		DefinitionSlug: sourceKindGithub, TargetKind: bgtriggers.TargetKindAssistant, TargetRef: record.ID.String(),
 		EventID: "spoofed-event", CorrelationID: "spoofed-event", EventJSON: []byte(spoofed),

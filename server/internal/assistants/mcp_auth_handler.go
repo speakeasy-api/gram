@@ -89,6 +89,7 @@ func (e *mcpOAuthTokenError) Error() string {
 }
 
 type mcpAuthEventPayload struct {
+	ResumeUserID     string `json:"_gram_resume_user_id,omitempty"`
 	GramEventKind    string `json:"gram_event_kind"`
 	Status           string `json:"status"`
 	ServerID         string `json:"mcp_server_id"`
@@ -268,6 +269,7 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 	}
 
 	payload := mcpAuthEventPayload{
+		ResumeUserID:     claims.UserID,
 		GramEventKind:    mcpAuthEventKind,
 		Status:           mcpAuthStatusSuccess,
 		ServerID:         claims.ServerID,
