@@ -395,7 +395,7 @@ func TestUpdateMetaMcpServer_RewiresProviderClientsOnIssuerChange(t *testing.T) 
 	boundCount := func(issuerID uuid.UUID) int {
 		rows, lerr := rsRepo.ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
 			UserSessionIssuerID: issuerID,
-			ProjectID:           projectID,
+			ProjectID:           conv.ToNullUUID(projectID),
 			OrganizationID:      conv.ToPGText(authCtx.ActiveOrganizationID),
 		})
 		require.NoError(t, lerr)

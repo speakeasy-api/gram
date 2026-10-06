@@ -88,7 +88,7 @@ func attachmentTestClients(t *testing.T, conn *pgxpool.Pool, principal Principal
 	t.Helper()
 	rows, err := remotesessionsrepo.New(conn).ListRemoteSessionClientsForUserSessionIssuer(t.Context(), remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
 		UserSessionIssuerID: userSessionIssuerID,
-		ProjectID:           project.ID,
+		ProjectID:           conv.ToNullUUID(project.ID),
 		OrganizationID:      conv.ToPGText(principal.OrganizationID),
 	})
 	require.NoError(t, err)

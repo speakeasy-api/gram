@@ -934,3 +934,113 @@ func (q *Queries) UpsertRemoteProtectedResource(ctx context.Context, arg UpsertR
 	)
 	return i, err
 }
+
+const upsertRemoteProtectedResourceIfChanged = `-- name: UpsertRemoteProtectedResourceIfChanged :execrows
+INSERT INTO remote_protected_resources (
+    project_id,
+    organization_id,
+    resource_identifier,
+    metadata_url,
+    authorization_servers,
+    scopes_supported,
+    bearer_methods_supported,
+    resource_name,
+    resource_documentation,
+    resource_policy_uri,
+    resource_tos_uri,
+    dpop_bound_access_tokens_required,
+    dpop_signing_alg_values_supported,
+    tls_client_certificate_bound_access_tokens,
+    metadata,
+    metadata_fetched_at
+)
+VALUES (
+    $1,
+    $2,
+    $3::text,
+    NULLIF($4::text, ''),
+    $5::text[],
+    $6::text[],
+    $7::text[],
+    NULLIF($8::text, ''),
+    NULLIF($9::text, ''),
+    NULLIF($10::text, ''),
+    NULLIF($11::text, ''),
+    $12::boolean,
+    $13::text[],
+    $14::boolean,
+    NULLIF($15::text, '')::jsonb,
+    clock_timestamp()
+)
+ON CONFLICT (project_id, resource_identifier) WHERE deleted IS FALSE DO UPDATE
+SET
+    organization_id = EXCLUDED.organization_id,
+    metadata_url = EXCLUDED.metadata_url,
+    authorization_servers = EXCLUDED.authorization_servers,
+    scopes_supported = EXCLUDED.scopes_supported,
+    bearer_methods_supported = EXCLUDED.bearer_methods_supported,
+    resource_name = EXCLUDED.resource_name,
+    resource_documentation = EXCLUDED.resource_documentation,
+    resource_policy_uri = EXCLUDED.resource_policy_uri,
+    resource_tos_uri = EXCLUDED.resource_tos_uri,
+    dpop_bound_access_tokens_required = EXCLUDED.dpop_bound_access_tokens_required,
+    dpop_signing_alg_values_supported = EXCLUDED.dpop_signing_alg_values_supported,
+    tls_client_certificate_bound_access_tokens = EXCLUDED.tls_client_certificate_bound_access_tokens,
+    metadata = EXCLUDED.metadata,
+    metadata_fetched_at = clock_timestamp(),
+    metadata_last_error = NULL,
+    metadata_last_error_at = NULL,
+    updated_at = clock_timestamp()
+WHERE remote_protected_resources.metadata IS DISTINCT FROM EXCLUDED.metadata
+   OR remote_protected_resources.metadata_url IS DISTINCT FROM EXCLUDED.metadata_url
+   OR remote_protected_resources.metadata_last_error_at IS NOT NULL
+   OR remote_protected_resources.metadata_fetched_at IS NULL
+   OR remote_protected_resources.metadata_fetched_at < clock_timestamp() - INTERVAL '24 hours'
+`
+
+type UpsertRemoteProtectedResourceIfChangedParams struct {
+	ProjectID                             uuid.UUID
+	OrganizationID                        string
+	ResourceIdentifier                    string
+	MetadataUrl                           string
+	AuthorizationServers                  []string
+	ScopesSupported                       []string
+	BearerMethodsSupported                []string
+	ResourceName                          string
+	ResourceDocumentation                 string
+	ResourcePolicyUri                     string
+	ResourceTosUri                        string
+	DpopBoundAccessTokensRequired         pgtype.Bool
+	DpopSigningAlgValuesSupported         []string
+	TlsClientCertificateBoundAccessTokens pgtype.Bool
+	Metadata                              string
+}
+
+// UpsertRemoteProtectedResource for a login's read: an existing row is only
+// rewritten when the document or its location changed, a failure is on
+// record, or the last good read is older than a day. jsonb compares by
+// value, so whitespace and key order in the upstream body do not count as a
+// change. Zero rows means the row already held this read.
+func (q *Queries) UpsertRemoteProtectedResourceIfChanged(ctx context.Context, arg UpsertRemoteProtectedResourceIfChangedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertRemoteProtectedResourceIfChanged,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ResourceIdentifier,
+		arg.MetadataUrl,
+		arg.AuthorizationServers,
+		arg.ScopesSupported,
+		arg.BearerMethodsSupported,
+		arg.ResourceName,
+		arg.ResourceDocumentation,
+		arg.ResourcePolicyUri,
+		arg.ResourceTosUri,
+		arg.DpopBoundAccessTokensRequired,
+		arg.DpopSigningAlgValuesSupported,
+		arg.TlsClientCertificateBoundAccessTokens,
+		arg.Metadata,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}

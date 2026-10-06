@@ -1408,7 +1408,12 @@ func (s *Service) buildRemoteSessionCards(
 	// authorization server alone; a client's own claimed resource never
 	// stands in, because no login reads it.
 	discoverScopes := s.remoteChallengeMgr.ResourceScopeDiscoveryEnabled(ctx, endpoint.OrganizationID)
-	serverResource, serverResourceURL, hasServerResource := s.remoteChallengeMgr.CachedResourceScopesForServer(ctx, endpoint.ProjectID, endpoint.McpServerID, discoverScopes)
+	var serverResource remotesessions.ResourceScopes
+	var serverResourceURL string
+	hasServerResource := false
+	if discoverScopes {
+		serverResource, serverResourceURL, hasServerResource = s.remoteChallengeMgr.CachedResourceScopesForServer(ctx, endpoint.ProjectID, endpoint.McpServerID, true)
+	}
 	// One load decides ownership for every card. A lookup fault logs and
 	// the cards keep their issuers' scopes: the reconnect hint this feeds
 	// is best effort and must not fail the page.

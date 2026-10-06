@@ -1,7 +1,6 @@
 package protectedresource
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -63,22 +62,39 @@ const (
 	recordWriteBudget = 5 * time.Second
 )
 
-// ProbeOutcome labels how a login resolved the resource's metadata; the
-// values partition every exit of ResolveForLogin.
+// ProbeOutcome labels how a login resolved the resource's metadata, from
+// ResolveForLogin or from the login deciding not to consult the resource.
 type ProbeOutcome string
 
 const (
 	// ProbeOutcomeSkippedRecentError: the last read failed within loginErrorBackoff.
 	ProbeOutcomeSkippedRecentError ProbeOutcome = "skipped_recent_error"
 
-	// ProbeOutcomeFetched: the document was read and recorded in this login.
+	// ProbeOutcomeFetched: the document was read in this login.
 	ProbeOutcomeFetched ProbeOutcome = "fetched"
 
 	// ProbeOutcomeTimeout: the probe ran out of its budget.
 	ProbeOutcomeTimeout ProbeOutcome = "timeout"
 
-	// ProbeOutcomeError: the probe failed, or the document named another resource.
+	// ProbeOutcomeError: the probe failed upstream.
 	ProbeOutcomeError ProbeOutcome = "error"
+
+	// ProbeOutcomeResourceMismatch: the document named another resource (RFC 9728 §3.3).
+	ProbeOutcomeResourceMismatch ProbeOutcome = "resource_mismatch"
+
+	// ProbeOutcomeDBError: a database read the decision needed failed; the
+	// login falls back to the issuer's scopes.
+	ProbeOutcomeDBError ProbeOutcome = "db_error"
+
+	// ProbeOutcomeDisabled: the organization is not enrolled, or the replica has no prober.
+	ProbeOutcomeDisabled ProbeOutcome = "disabled"
+
+	// ProbeOutcomeNotOwned: another client bound to the endpoint holds the resource.
+	ProbeOutcomeNotOwned ProbeOutcome = "not_owned"
+
+	// ProbeOutcomeSkippedClientScope: the client's own scope decides, so the
+	// resource was not consulted.
+	ProbeOutcomeSkippedClientScope ProbeOutcome = "skipped_client_scope"
 
 	// ProbeOutcomeCancelled: the login's own context ended during the probe
 	// (the user left); nothing is recorded on the row.
@@ -90,9 +106,8 @@ const (
 	// ProbeOutcomeNoRow: the URL is not probed (not HTTPS) and the resource has no row.
 	ProbeOutcomeNoRow ProbeOutcome = "no_row"
 
-	// ProbeOutcomeNotApplicable: the login consulted no resource (no prober,
-	// no remote-backed server, organization not enrolled), or an unprobed
-	// URL whose row stands as is.
+	// ProbeOutcomeNotApplicable: the login has no remote-backed server, or
+	// an unprobed URL whose row stands as is.
 	ProbeOutcomeNotApplicable ProbeOutcome = "not_applicable"
 )
 
@@ -123,7 +138,7 @@ type Prober struct {
 	// now is the clock the debounce, freshness rules, and probe timing read.
 	now func() time.Time
 
-	// record persists a document a login probe read; Record outside tests.
+	// record persists a document a login probe read; RecordIfChanged outside tests.
 	record func(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL string, doc wellknown.OAuthProtectedResourceMetadata) error
 
 	// beforeDetached runs synchronously before detached work starts; tests only.
@@ -142,7 +157,7 @@ func NewProber(db *pgxpool.Pool, policy *guardian.Policy) *Prober {
 		loginSlots:     make(chan struct{}, loginProbeSlots),
 		loginBudget:    loginProbeBudget,
 		now:            time.Now,
-		record:         Record,
+		record:         RecordIfChanged,
 		beforeDetached: nil,
 		afterDetached:  nil,
 	}
@@ -216,11 +231,14 @@ func (p *Prober) ProbeOnUse(ctx context.Context, logger *slog.Logger, projectID 
 		if err != nil {
 			logger.ErrorContext(ctx, "refresh protected resource on use", attr.SlogError(err))
 		}
-		// A row left failing is revisited after loginErrorBackoff, which the
-		// next use decides from the row, not from a check that would hold
-		// it for probeRecheck.
-		if err != nil || !current {
+		// A database fault leaves no check so the next use retries. A row
+		// left failing is held off until loginErrorBackoff passes, not for
+		// the full probeRecheck, and not re-read on every use either.
+		switch {
+		case err != nil:
 			p.checked.CompareAndDelete(key, c)
+		case !current:
+			p.checked.CompareAndSwap(key, c, &check{at: now.Add(loginErrorBackoff - probeRecheck)})
 		}
 		p.sweep(p.now())
 	}()
@@ -289,9 +307,10 @@ type LoginResolution struct {
 
 // ResolveForLogin reads the resource's row and, unless the row failed to
 // read moments ago, probes the resource within loginProbeBudget and records
-// the result. Every login probes: a resource may change what it advertises
-// at any time, so a cached list is only a fallback for a failed probe. It never fails the login: a nil prober, a missing
-// row, or a failed probe degrade to what is cached.
+// the result when it changed. Every login probes: a resource may change what
+// it advertises at any time, so a cached list is only a fallback for a failed
+// probe. It never fails the login: a nil prober, a missing row, or a failed
+// probe degrade to what is cached.
 func (p *Prober) ResolveForLogin(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, organizationID string, resourceURL string) LoginResolution {
 	none := LoginResolution{Row: nil, ScopesSupported: nil, Live: false, Outcome: ProbeOutcomeNotApplicable, ProbeDuration: 0}
 	if p == nil || resourceURL == "" {
@@ -307,7 +326,7 @@ func (p *Prober) ResolveForLogin(ctx context.Context, logger *slog.Logger, proje
 		return none
 	case err != nil:
 		logger.ErrorContext(ctx, "get remote protected resource for login", attr.SlogError(err))
-		none.Outcome = ProbeOutcomeError
+		none.Outcome = ProbeOutcomeDBError
 		return none
 	default:
 		existing = &row
@@ -359,21 +378,18 @@ func (p *Prober) ResolveForLogin(ctx context.Context, logger *slog.Logger, proje
 		}
 		return cached
 	}
-	var recordErr error
-	if !unchangedRead(existing, doc, resourceURL, now) {
-		recordErr = p.record(writeCtx, p.db, projectID, organizationID, resourceURL, doc)
-		if recordErr != nil {
-			logger.ErrorContext(ctx, "record protected resource", attr.SlogError(recordErr))
-		}
+	recordErr := p.record(writeCtx, p.db, projectID, organizationID, resourceURL, doc)
+	if recordErr != nil {
+		logger.ErrorContext(ctx, "record protected resource", attr.SlogError(recordErr))
 	}
 	if !doc.ValidForResource(resourceURL) {
-		cached.Outcome = ProbeOutcomeError
+		cached.Outcome = ProbeOutcomeResourceMismatch
 		return cached
 	}
 	// Once the row holds this read, the proxy's next use of this server
 	// needs no row read for an hour. A write that failed leaves no check, so
-	// the proxy's next use reads the row and probes again. A check a proxy
-	// goroutine holds stays its own, so it is never removed from under it.
+	// the proxy's next use reads the row and probes again. The login's check
+	// replaces any in-flight on-use check; logins probe regardless.
 	if recordErr == nil {
 		key := projectID.String() + " " + resourceURL
 		c := &check{at: now}
@@ -383,23 +399,6 @@ func (p *Prober) ResolveForLogin(ctx context.Context, logger *slog.Logger, proje
 	}
 	p.sweep(now)
 	return LoginResolution{Row: existing, ScopesSupported: doc.ScopesSupported, Live: true, Outcome: ProbeOutcomeFetched, ProbeDuration: cached.ProbeDuration}
-}
-
-// unchangedRead reports whether a login's read repeats what the row already
-// holds, so the write is skipped: the same valid document, recorded without
-// a later failure, and stamped within staleAfter so the row still proves
-// the resource was seen recently.
-func unchangedRead(row *repo.RemoteProtectedResource, doc wellknown.OAuthProtectedResourceMetadata, resourceURL string, now time.Time) bool {
-	if row == nil || !doc.ValidForResource(resourceURL) {
-		return false
-	}
-	if !row.MetadataFetchedAt.Valid || now.Sub(row.MetadataFetchedAt.Time) >= staleAfter {
-		return false
-	}
-	if row.MetadataLastErrorAt.Valid && !row.MetadataLastErrorAt.Time.Before(row.MetadataFetchedAt.Time) {
-		return false
-	}
-	return bytes.Equal(row.Metadata, doc.Raw)
 }
 
 // loginSkip reports whether a login should trust the row as is, and why.

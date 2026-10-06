@@ -603,7 +603,7 @@ func TestAddMetaMcpMember_AutoAttachesProviderClient(t *testing.T) {
 	gatewayClientsForUpstream := func(remoteIssuerID uuid.UUID) int {
 		rows, err := rsRepo.ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
 			UserSessionIssuerID: gatewayIssuerID,
-			ProjectID:           projectID,
+			ProjectID:           conv.ToNullUUID(projectID),
 			OrganizationID:      conv.ToPGText(authCtx.ActiveOrganizationID),
 		})
 		require.NoError(t, err)

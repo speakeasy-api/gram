@@ -72,9 +72,9 @@ func TestResolveForLogin_FailedWriteLeavesProxyFreeToRetry(t *testing.T) {
 }
 
 // An on-use probe that finds the resource failing records the failure and
-// leaves no check, so the next use decides from the row's own backoff rather
-// than waiting out the recheck window.
-func TestProbeOnUse_FailedProbeLeavesNoCheck(t *testing.T) {
+// holds a check only until the error backoff passes, so later uses neither
+// re-read the row on every request nor wait out the recheck window.
+func TestProbeOnUse_FailedProbeHoldsCheckForBackoff(t *testing.T) {
 	t.Parallel()
 	ctx, env := newProberEnv(t)
 	resource := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -89,6 +89,47 @@ func TestProbeOnUse_FailedProbeLeavesNoCheck(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, row.MetadataLastErrorAt.Valid, "the failure is recorded on the row")
 	require.False(t, row.MetadataFetchedAt.Valid)
-	_, checked := env.prober.checked.Load(key)
-	require.False(t, checked, "a failed probe holds no check")
+	v, checked := env.prober.checked.Load(key)
+	require.True(t, checked, "a failed probe holds a check")
+	held, ok := v.(*check)
+	require.True(t, ok)
+	expires := held.at.Add(probeRecheck)
+	require.WithinDuration(t, time.Now().Add(loginErrorBackoff), expires, time.Minute, "the check expires with the error backoff")
+}
+
+// A login's read rewrites the row only when the document changed or a
+// failure is on record; Postgres re-serialising jsonb does not count.
+func TestRecordIfChanged_ComparesStoredDocumentByValue(t *testing.T) {
+	t.Parallel()
+	ctx, env := newProberEnv(t)
+	const resourceURL = "https://rs.example.test/mcp"
+	metadataURL := "https://rs.example.test" + wellknown.OAuthProtectedResourcePath + "/mcp"
+	doc := func(raw string, scopes ...string) wellknown.OAuthProtectedResourceMetadata {
+		return wellknown.OAuthProtectedResourceMetadata{Resource: resourceURL, MetadataURL: metadataURL, ScopesSupported: scopes, Raw: []byte(raw)}
+	}
+	q := repo.New(env.conn)
+	stamp := func() time.Time {
+		row, err := q.GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: env.projectID, ResourceIdentifier: resourceURL})
+		require.NoError(t, err)
+		return row.UpdatedAt.Time
+	}
+
+	require.NoError(t, RecordIfChanged(ctx, env.conn, env.projectID, env.organizationID, resourceURL, doc(`{"resource":"https://rs.example.test/mcp","scopes_supported":["read"]}`, "read")))
+	first := stamp()
+
+	require.NoError(t, RecordIfChanged(ctx, env.conn, env.projectID, env.organizationID, resourceURL, doc(`{ "scopes_supported": ["read"], "resource": "https://rs.example.test/mcp" }`, "read")))
+	require.Equal(t, first, stamp(), "same document, other whitespace and key order: no write")
+
+	require.NoError(t, RecordIfChanged(ctx, env.conn, env.projectID, env.organizationID, resourceURL, doc(`{"resource":"https://rs.example.test/mcp","scopes_supported":["read","write"]}`, "read", "write")))
+	second := stamp()
+	require.True(t, second.After(first), "a changed document is written")
+
+	_, err := q.RecordRemoteProtectedResourceFetchError(ctx, repo.RecordRemoteProtectedResourceFetchErrorParams{ProjectID: env.projectID, OrganizationID: env.organizationID, ResourceIdentifier: resourceURL, MetadataUrl: metadataURL, MetadataLastError: "probe failed"})
+	require.NoError(t, err)
+	failed := stamp()
+	require.NoError(t, RecordIfChanged(ctx, env.conn, env.projectID, env.organizationID, resourceURL, doc(`{"resource":"https://rs.example.test/mcp","scopes_supported":["read","write"]}`, "read", "write")))
+	require.True(t, stamp().After(failed), "a read after a failure clears it even when the document is the same")
+	row, err := q.GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: env.projectID, ResourceIdentifier: resourceURL})
+	require.NoError(t, err)
+	require.False(t, row.MetadataLastErrorAt.Valid)
 }

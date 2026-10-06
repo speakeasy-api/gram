@@ -334,7 +334,7 @@ func countGatewayClientsForUpstream(t *testing.T, ctx context.Context, conn *pgx
 
 	rows, err := remotesessionsrepo.New(conn).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
 		UserSessionIssuerID: gatewayIssuerID,
-		ProjectID:           projectID,
+		ProjectID:           conv.ToNullUUID(projectID),
 		OrganizationID:      conv.ToPGText(organizationID),
 	})
 	require.NoError(t, err)

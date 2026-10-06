@@ -32,7 +32,21 @@ func Record(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resou
 		return recordError(ctx, db, projectID, orgID, resourceURL, doc.MetadataURL, mismatchMessage(resourceURL, doc))
 	}
 
-	_, err := repo.New(db).UpsertRemoteProtectedResource(ctx, repo.UpsertRemoteProtectedResourceParams{
+	return upsert(ctx, db, projectID, orgID, resourceURL, doc, false)
+}
+
+// RecordIfChanged is Record for a login's read: the row is rewritten only
+// when the document changed, a failure is on record, or the last good read
+// is over a day old.
+func RecordIfChanged(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL string, doc wellknown.OAuthProtectedResourceMetadata) error {
+	if !doc.ValidForResource(resourceURL) {
+		return recordError(ctx, db, projectID, orgID, resourceURL, doc.MetadataURL, mismatchMessage(resourceURL, doc))
+	}
+	return upsert(ctx, db, projectID, orgID, resourceURL, doc, true)
+}
+
+func upsert(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resourceURL string, doc wellknown.OAuthProtectedResourceMetadata, onlyIfChanged bool) error {
+	params := repo.UpsertRemoteProtectedResourceParams{
 		ProjectID:                             projectID,
 		OrganizationID:                        orgID,
 		ResourceIdentifier:                    resourceURL,
@@ -48,7 +62,13 @@ func Record(ctx context.Context, db repo.DBTX, projectID uuid.UUID, orgID, resou
 		DpopSigningAlgValuesSupported:         doc.DPoPSigningAlgValuesSupported,
 		TlsClientCertificateBoundAccessTokens: conv.PtrToPGBool(doc.TLSClientCertificateBoundAccessTokens),
 		Metadata:                              string(doc.Raw),
-	})
+	}
+	var err error
+	if onlyIfChanged {
+		_, err = repo.New(db).UpsertRemoteProtectedResourceIfChanged(ctx, repo.UpsertRemoteProtectedResourceIfChangedParams(params))
+	} else {
+		_, err = repo.New(db).UpsertRemoteProtectedResource(ctx, params)
+	}
 	if err != nil {
 		if isDataError(err) {
 			// Go accepts JSON values (including escaped NULs and large numbers)

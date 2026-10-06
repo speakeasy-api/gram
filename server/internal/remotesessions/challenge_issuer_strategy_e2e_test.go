@@ -98,11 +98,20 @@ func TestRemoteLogin_ScopeOverrideIsRequestedVerbatim(t *testing.T) {
 	require.Equal(t, "custom:one custom:two", scopeOf(t, env.authURL))
 	require.Equal(t, []string{"custom:one", "custom:two"}, env.session.Scopes)
 
-	// A client with its own scope keeps it; the override is the issuer-wide fallback.
+	// Without discovery the override still beats the client's own scope.
+	_, legacy := newSyntheticExpiryEnv(t, "scope-override-client-legacy", scopelessToken,
+		withIssuerScopes("channels:history", "openid", "offline_access"),
+		withClientScope("channels:history"),
+		withScopeOverride("custom:one", "custom:two"),
+	)
+	require.Equal(t, "custom:one custom:two", scopeOf(t, legacy.authURL))
+
+	// With discovery a client with its own scope keeps it; the override is the issuer-wide fallback.
 	_, scoped := newSyntheticExpiryEnv(t, "scope-override-client", scopelessToken,
 		withIssuerScopes("channels:history", "openid", "offline_access"),
 		withClientScope("channels:history"),
 		withScopeOverride("custom:one", "custom:two"),
+		withProber(), withLiveResourceScopes(),
 	)
 	require.Equal(t, "channels:history openid offline_access", scopeOf(t, scoped.authURL))
 }

@@ -180,8 +180,8 @@ func TestRemoteLogin_ClientScopeBeatsPin(t *testing.T) {
 		withProber(), withLiveResourceScopes(), withRegistrationTelemetry(),
 	)
 	require.Equal(t, "channels:history openid offline_access", scopeOf(t, env.authURL))
-	require.EqualValues(t, 1, hits.Load(), "a stale row is still refreshed while the client scope decides")
-	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceClientScope, protectedresource.ProbeOutcomeFetched)
+	require.EqualValues(t, 0, hits.Load(), "the client's own scope decides, so the login does not wait on a probe")
+	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceClientScope, protectedresource.ProbeOutcomeSkippedClientScope)
 }
 
 // The resource's last challenge beats the operator's pin.
@@ -347,7 +347,7 @@ func TestRemoteLogin_DiscoveryFlagOffKeepsLegacyResolution(t *testing.T) {
 	)
 	require.Equal(t, "admin openid", scopeOf(t, env.authURL))
 	require.EqualValues(t, 0, hits.Load())
-	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceIssuerCatalogue, protectedresource.ProbeOutcomeNotApplicable)
+	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceIssuerCatalogue, protectedresource.ProbeOutcomeDisabled)
 }
 
 // AIM-288: an issuer with a large catalogue, a client with no scope, and a
@@ -416,12 +416,13 @@ func TestListClients_ReadsCachedResourceRowWithoutProbing(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, clients, 1)
 	c := clients[0]
-	require.Equal(t, []string{"files:read"}, c.ResourceScopeOverride)
-	require.Equal(t, []string{"c"}, c.ResourceChallengeScopes)
-	require.Equal(t, []string{"files:read", "files:write"}, c.ResourceScopesSupported)
 	require.True(t, env.mgr.ResourceScopeDiscoveryEnabled(ctx, env.organizationID))
-	require.Equal(t, []string{"c", "openid"}, c.RequestedScopes(c.CachedResourceScopes(true)).Scopes)
-	require.Equal(t, []string{"admin", "openid"}, c.RequestedScopes(c.CachedResourceScopes(false)).Scopes)
+	claimed, _, ok := env.mgr.CachedResourceScopesForServer(ctx, env.projectID, env.mcpServerID, true)
+	require.True(t, ok)
+	require.Equal(t, byServer, claimed, "the client's own claim does not change the row the card reads")
+	require.Equal(t, []string{"c", "openid"}, c.RequestedScopes(claimed).Scopes)
+	claimed.UseDiscovered = false
+	require.Equal(t, []string{"admin", "openid"}, c.RequestedScopes(claimed).Scopes)
 	require.EqualValues(t, 1, hits.Load(), "listing clients never probes")
 }
 
@@ -438,5 +439,5 @@ func TestRemoteLogin_NoProberIgnoresResourceRow(t *testing.T) {
 	)
 	require.Equal(t, "admin openid", scopeOf(t, env.authURL))
 	require.EqualValues(t, 0, hits.Load())
-	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceIssuerCatalogue, protectedresource.ProbeOutcomeNotApplicable)
+	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceIssuerCatalogue, protectedresource.ProbeOutcomeDisabled)
 }

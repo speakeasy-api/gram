@@ -103,7 +103,7 @@ func (s *Service) claimProtectedResource(ctx context.Context, dbtx pgx.Tx, authC
 		}
 		bound, err := q.ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
 			UserSessionIssuerID: registration.UserSessionIssuerID.UUID,
-			ProjectID:           projectID,
+			ProjectID:           conv.ToNullUUID(projectID),
 			OrganizationID:      conv.ToPGText(authCtx.ActiveOrganizationID),
 		})
 		if err != nil {

@@ -1891,10 +1891,6 @@ SELECT
     i.metadata_fetched_at                  AS metadata_fetched_at,
     i.metadata_last_error_at               AS metadata_last_error_at,
     i.metadata_last_error_url              AS metadata_last_error_url,
-    rpr.scope_override                     AS resource_scope_override,
-    rpr.challenge_scopes                   AS resource_challenge_scopes,
-    rpr.scopes_supported                   AS resource_scopes_supported,
-    rpr.metadata_fetched_at                AS resource_metadata_fetched_at,
     (
       i.metadata IS NOT NULL AND (
         i.introspection_endpoint_auth_methods_supported IS NULL
@@ -1912,10 +1908,6 @@ FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-LEFT JOIN remote_protected_resources AS rpr
-  ON rpr.project_id = @project_id
- AND rpr.resource_identifier = c.resource_identifier
- AND rpr.deleted IS FALSE
 WHERE link.user_session_issuer_id = @user_session_issuer_id
   AND (c.project_id = @project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id)))
   AND (usi.project_id = @project_id OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))

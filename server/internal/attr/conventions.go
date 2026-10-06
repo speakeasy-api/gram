@@ -492,6 +492,9 @@ const (
 	OAuthScopeUnadvertisedKey = attribute.Key("gram.oauth.scope_unadvertised")
 	// OAuthResourceProbeOutcomeKey is how a login resolved its resource's metadata.
 	OAuthResourceProbeOutcomeKey = attribute.Key("gram.oauth.resource_probe_outcome")
+
+	// OAuthResourceProbeDurationMsKey is how long a login's probe of its resource took, in milliseconds.
+	OAuthResourceProbeDurationMsKey = attribute.Key("gram.oauth.resource_probe_duration_ms")
 	// OAuthIssuerScopesSupportedKey lists the scopes an RFC 8414 document advertises.
 	OAuthIssuerScopesSupportedKey     = attribute.Key("gram.oauth.issuer_scopes_supported")
 	OAuthTokenEndpointKey             = attribute.Key("gram.oauth.token_endpoint")
@@ -2047,6 +2050,9 @@ func OAuthResourceProbeOutcome[V ~string](v V) attribute.KeyValue {
 }
 func SlogOAuthResourceProbeOutcome[V ~string](v V) slog.Attr {
 	return slog.String(string(OAuthResourceProbeOutcomeKey), string(v))
+}
+func SlogOAuthResourceProbeDuration(v time.Duration) slog.Attr {
+	return slog.Float64(string(OAuthResourceProbeDurationMsKey), float64(v)/float64(time.Millisecond))
 }
 func SlogOAuthResourceScopesSupported(v []string) slog.Attr {
 	return slog.Any(string(OAuthResourceScopesSupportedKey), v)

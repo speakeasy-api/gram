@@ -275,7 +275,7 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 		attached, err := ti.service.AttachBinding(ctx, attach)
 		require.NoError(t, err)
 		require.Equal(t, mine.ID.String(), attached.RemoteSessionID)
-		discovered, err := repo.New(ti.conn).ListRemoteSessionClientsForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsForUserSessionIssuerParams{ProjectID: *auth.ProjectID, OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), UserSessionIssuerID: config})
+		discovered, err := repo.New(ti.conn).ListRemoteSessionClientsForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsForUserSessionIssuerParams{ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), UserSessionIssuerID: config})
 		require.NoError(t, err)
 		require.Len(t, discovered, 1, "global attachment clients must also be discoverable by MCP")
 		require.Equal(t, mine.RemoteSessionClientID, discovered[0].ClientID)
