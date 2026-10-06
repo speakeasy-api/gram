@@ -3633,6 +3633,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS toolsets_mcp_slug_null_custom_domain_id_key
 ON toolsets (mcp_slug)
 WHERE mcp_slug IS NOT NULL AND custom_domain_id IS NULL AND deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS toolsets_user_session_issuer_id_idx
+ON toolsets (user_session_issuer_id)
+WHERE user_session_issuer_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS toolset_versions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   toolset_id uuid NOT NULL,
