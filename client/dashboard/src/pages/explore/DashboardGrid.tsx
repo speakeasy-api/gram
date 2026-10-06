@@ -44,7 +44,7 @@ export function DashboardGrid({
   /** The project's widgets, which the cards link to. */
   widgets: Widget[];
   canEdit: boolean;
-  /** A layout save is in flight. */
+  /** A layout save is in flight, so no card may move until it lands. */
   saving: boolean;
   /** Save the layout after a card is moved or resized. */
   onSave: (placements: PlacementInput[]) => void;
@@ -61,13 +61,11 @@ export function DashboardGrid({
     [dashboard.widgets, byId],
   );
   // What the grid shows: the saved layout, or the one just edited until its
-  // save lands. Kept apart so a refetch that answers mid-save does not snap
-  // the cards back; once the save is through, the saved layout wins, as it
-  // does when someone else moved a card.
+  // save lands. Kept apart so the cards stay where they were dropped while
+  // the save is in flight; whenever the saved layout changes — the save
+  // landing, or someone else moving a card — it wins.
   const [layout, setLayout] = useState<Layout>(saved);
-  useEffect(() => {
-    if (!saving) setLayout(saved);
-  }, [saved, saving]);
+  useEffect(() => setLayout(saved), [saved]);
   const settle = (next: Layout) => {
     setLayout(next);
     if (!sameLayout(next, dashboard.widgets)) {
@@ -93,13 +91,14 @@ export function DashboardGrid({
             containerPadding: [0, 0],
           }}
           // The header is the handle, as WidgetView draws it; the controls
-          // in it keep their clicks.
+          // in it keep their clicks. One save at a time: the next move waits
+          // for the last to land, so saves cannot overtake each other.
           dragConfig={{
-            enabled: canEdit,
+            enabled: canEdit && !saving,
             handle: "header",
             cancel: "a, button",
           }}
-          resizeConfig={{ enabled: canEdit, handles: ["se"] }}
+          resizeConfig={{ enabled: canEdit && !saving, handles: ["se"] }}
           onDragStop={settle}
           onResizeStop={settle}
         >

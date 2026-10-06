@@ -120,6 +120,25 @@ describe("DashboardGrid", () => {
     ).toBeNull();
   });
 
+  it("holds the cards still while a save is in flight", () => {
+    render(
+      <DashboardGrid
+        dashboard={dashboard([
+          { id: "p-1", widgetId: "w-1", x: 0, y: 0, w: 6, h: 3 },
+        ])}
+        widgets={widgets}
+        canEdit
+        saving
+        onSave={() => {}}
+        onRemove={() => {}}
+        onOpen={() => {}}
+      />,
+    );
+    expect(
+      document.querySelectorAll(".react-grid-item.react-resizable-hide"),
+    ).toHaveLength(1);
+  });
+
   it("takes a card off through its actions", async () => {
     const user = userEvent.setup();
     const { onRemove } = renderGrid();

@@ -36,6 +36,8 @@ const testState = vi.hoisted(() => ({
   widgets: [] as unknown[],
   /** Whether the widget list is still loading. */
   listPending: false,
+  /** Whether the widget list failed to load. */
+  listFailed: false,
   /** Every widget write, in call order. */
   writes: [] as { kind: string; request: Record<string, unknown> }[],
   /** Whether the viewer holds project:write on the project. */
@@ -117,9 +119,15 @@ vi.mock("@gram/client/react-query/widgets.js", () => ({
   useWidgets: () => ({
     isPending: testState.listPending,
     isFetching: testState.listPending,
-    isError: false,
-    data: testState.listPending ? undefined : { widgets: testState.widgets },
-    refetch: vi.fn(),
+    isError: testState.listFailed,
+    data:
+      testState.listPending || testState.listFailed
+        ? undefined
+        : { widgets: testState.widgets },
+    refetch: () => {
+      testState.listFailed = false;
+      return Promise.resolve();
+    },
   }),
   invalidateAllWidgets: () => Promise.resolve(),
 }));
@@ -634,6 +642,7 @@ describe("Explore", () => {
     testState.answers = false;
     testState.widgets = [];
     testState.listPending = false;
+    testState.listFailed = false;
     testState.writes = [];
     testState.projectWrite = false;
     testState.pageContext = {};
@@ -1785,6 +1794,21 @@ describe("Explore", () => {
         screen.getByRole("heading", { name: "Agent activity (copy)" }),
       ).toBeTruthy();
       expect(screen.getByRole("button", { name: "Add widget" })).toBeTruthy();
+    });
+
+    it("says when the widgets behind the cards did not load, and tries again", () => {
+      testState.listFailed = true;
+      testState.dashboards = [
+        dashboard("d-1", "Agent activity", {
+          widgets: [{ id: "p-1", widgetId: "w-1", x: 0, y: 0, w: 6, h: 3 }],
+        }),
+      ];
+      renderExplore("/explore?tab=dashboards&dashboard=d-1");
+
+      expect(screen.getByText("The widgets did not load")).toBeTruthy();
+      expect(screen.queryByRole("list", { name: "Cards" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      expect(testState.listFailed).toBe(false);
     });
 
     it("deletes a dashboard from its page and returns to the list", async () => {

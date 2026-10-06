@@ -30,7 +30,7 @@ export function useDashboardMutations(): {
   removeWidget: (id: string, placementId: string, then?: () => void) => void;
   duplicate: (id: string, then?: (copy: Dashboard) => void) => void;
   remove: (id: string, then?: () => void) => void;
-  /** A write from a dialog or a menu is in flight, so they wait. */
+  /** Any write is in flight, a layout save included, so dialogs and menus wait. */
   pending: boolean;
   /** A layout save is in flight. */
   saving: boolean;
@@ -143,7 +143,8 @@ export function useDashboardMutations(): {
       addMutation.isPending ||
       removeMutation.isPending ||
       duplicateMutation.isPending ||
-      deleteMutation.isPending,
+      deleteMutation.isPending ||
+      layoutMutation.isPending,
     saving: layoutMutation.isPending,
   };
 }

@@ -28,6 +28,8 @@ import type { OpenInExplore } from "./WidgetView";
 export function DashboardPage({
   id,
   widgets,
+  widgetsFailed,
+  onRetryWidgets,
   backHref,
   backState,
   onOpen,
@@ -37,6 +39,9 @@ export function DashboardPage({
   id: string;
   /** The project's widgets, which the cards link to. */
   widgets: Widget[];
+  /** The widget list could not be fetched, so no card can be drawn. */
+  widgetsFailed: boolean;
+  onRetryWidgets: () => void;
   /** Where the list of dashboards is. */
   backHref: string;
   backState: unknown;
@@ -178,6 +183,17 @@ export function DashboardPage({
             editable
               ? "Add a saved widget to start laying it out. Each card can then be dragged and resized."
               : "Its creator has not placed any widgets on it yet."
+          }
+        />
+      ) : widgetsFailed ? (
+        <InlineEmptyState
+          icon="triangle-alert"
+          heading="The widgets did not load"
+          description="The cards are here, but the widgets behind them could not be fetched."
+          action={
+            <Button variant="secondary" size="sm" onClick={onRetryWidgets}>
+              Try again
+            </Button>
           }
         />
       ) : (

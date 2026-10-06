@@ -277,6 +277,8 @@ function ExploreWorkbench({
           <DashboardPage
             id={tab.dashboardId}
             widgets={widgets}
+            widgetsFailed={list.isError && list.data === undefined}
+            onRetryWidgets={() => void list.refetch()}
             backHref={tab.href("dashboards")}
             backState={tab.state}
             onOpen={(dashboard) => tab.go("dashboards", dashboard.id)}
