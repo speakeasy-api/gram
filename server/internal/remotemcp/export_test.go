@@ -8,6 +8,11 @@ func (s *Service) SetBeforeClaim(f func(holderPID uint32, previousURL string)) {
 // SetAfterChallengeScopes runs fn after a challenge-scope observation is written or debounced.
 func (f *ProxyManager) SetAfterChallengeScopes(fn func()) { f.afterChallengeScopes = fn }
 
+// SetBeforeProtectedResourceProbe runs fn synchronously when detached work is scheduled.
+func (f *ProxyManager) SetBeforeProtectedResourceProbe(fn func()) {
+	f.beforeProtectedResourceProbe = fn
+}
+
 // SetAfterProtectedResourceProbe runs fn after a detached on-use probe finishes.
 func (f *ProxyManager) SetAfterProtectedResourceProbe(fn func()) { f.afterProtectedResourceProbe = fn }
 

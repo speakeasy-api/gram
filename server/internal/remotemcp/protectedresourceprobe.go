@@ -96,6 +96,10 @@ func (f *ProxyManager) probeProtectedResourceOnUse(ctx context.Context, logger *
 		return
 	}
 
+	if f.beforeProtectedResourceProbe != nil {
+		f.beforeProtectedResourceProbe()
+	}
+
 	// Only the trace carries over: the probe outlives the request and must not inherit its values.
 	detached := trace.ContextWithSpanContext(context.Background(), trace.SpanContextFromContext(ctx))
 	go func() {

@@ -509,6 +509,8 @@ func TestProxyManager_ProtectedResourceProbeDebouncedPerReplica(t *testing.T) {
 	upstream, hits := probedUpstream(t, probedResourceDocument)
 	server := seedRemoteMcpServerWithURL(t, ctx, ti, upstream.URL)
 	manager, probed := newProbingManager(t, ti)
+	var starts atomic.Int64
+	manager.SetBeforeProtectedResourceProbe(func() { starts.Add(1) })
 	var clock atomic.Int64
 	manager.SetProtectedResourceProbeClock(func() time.Time { return time.Now().Add(time.Duration(clock.Load())) })
 
@@ -517,7 +519,7 @@ func TestProxyManager_ProtectedResourceProbeDebouncedPerReplica(t *testing.T) {
 	first := loadProtectedResource(t, ctx, ti, upstream.URL)
 
 	postInitialize(t, ctx, manager, server)
-	require.Empty(t, probed, "a debounced use starts no detached work")
+	require.EqualValues(t, 1, starts.Load(), "a debounced use schedules no detached work")
 	require.EqualValues(t, 1, hits.Load())
 
 	clock.Store(int64(2 * time.Hour))

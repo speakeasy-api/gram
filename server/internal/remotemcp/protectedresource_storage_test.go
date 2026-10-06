@@ -35,6 +35,8 @@ func TestProxyManager_UnrepresentableProtectedResourceRecordsErrorAndBacksOff(t 
 			upstream, hits := probedUpstream(t, body)
 			server := seedRemoteMcpServerWithURL(t, ctx, ti, upstream.URL)
 			manager, probed := newProbingManager(t, ti)
+			var starts atomic.Int64
+			manager.SetBeforeProtectedResourceProbe(func() { starts.Add(1) })
 
 			postInitialize(t, ctx, manager, server)
 			<-probed
@@ -49,7 +51,7 @@ func TestProxyManager_UnrepresentableProtectedResourceRecordsErrorAndBacksOff(t 
 			require.Nil(t, failed.ScopesSupported)
 
 			postInitialize(t, ctx, manager, server)
-			require.Empty(t, probed, "a recorded failure retains the per-replica debounce")
+			require.EqualValues(t, 1, starts.Load(), "a recorded failure schedules no second probe")
 			require.EqualValues(t, 1, hits.Load())
 
 			// A fresh manager resets the per-replica checks. The persisted

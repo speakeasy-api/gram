@@ -103,6 +103,8 @@ type ProxyManager struct {
 	afterChallengeScopes func()
 
 	protectedResourceProbes *protectedResourceProbeState
+	// beforeProtectedResourceProbe runs synchronously before detached work starts; tests only.
+	beforeProtectedResourceProbe func()
 	// afterProtectedResourceProbe runs when a detached on-use probe finishes; tests only.
 	afterProtectedResourceProbe func()
 }
@@ -156,6 +158,7 @@ func NewProxyManager(
 		challengeScopes:                       newChallengeScopesState(),
 		afterChallengeScopes:                  nil,
 		protectedResourceProbes:               newProtectedResourceProbeState(),
+		beforeProtectedResourceProbe:          nil,
 		afterProtectedResourceProbe:           nil,
 	}
 }
