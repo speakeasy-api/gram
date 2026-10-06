@@ -83,13 +83,15 @@ func managedAssistantName(projectName string) string {
 // mapping now exists, so the re-read returns it) or a non-managed assistant
 // already holding the name (no mapping, so we surface ErrManagedAssistantNameTaken).
 //
-// Creating the managed assistant also provisions its dedicated agent, which
-// requires a user actor; createdByUserID must name the enabling user.
+// createdByUserID may be empty for system-initiated enablement; it is recorded
+// as NULL in that case. provisionIdentity gives a newly created managed
+// assistant its dedicated agent and requires a non-empty createdByUserID.
 func (s *ServiceCore) EnableManagedAssistant(
 	ctx context.Context,
 	organizationID string,
 	projectID uuid.UUID,
 	createdByUserID string,
+	provisionIdentity bool,
 ) (assistantRecord, error) {
 	existing, err := s.GetManagedAssistant(ctx, projectID)
 	switch {
@@ -114,7 +116,7 @@ func (s *ServiceCore) EnableManagedAssistant(
 	}
 	name := managedAssistantName(projectName)
 
-	record, err := s.createManagedAssistant(ctx, organizationID, projectID, name, createdByUserID)
+	record, err := s.createManagedAssistant(ctx, organizationID, projectID, name, createdByUserID, provisionIdentity)
 	if err == nil {
 		return record, nil
 	}
@@ -268,6 +270,7 @@ func (s *ServiceCore) createManagedAssistant(
 	projectID uuid.UUID,
 	name string,
 	createdByUserID string,
+	provisionIdentity bool,
 ) (assistantRecord, error) {
 	var createdBy pgtype.Text
 	if createdByUserID != "" {
@@ -304,8 +307,10 @@ func (s *ServiceCore) createManagedAssistant(
 		return assistantRecord{}, fmt.Errorf("insert managed assistant mapping: %w", err)
 	}
 
-	if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, AgentID: uuid.Nil, AgentName: ""}); err != nil {
-		return assistantRecord{}, fmt.Errorf("provision managed assistant identity: %w", err)
+	if provisionIdentity {
+		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, AgentID: uuid.Nil, AgentName: ""}); err != nil {
+			return assistantRecord{}, fmt.Errorf("provision managed assistant identity: %w", err)
+		}
 	}
 	if err := s.ensureDashboardTrigger(ctx, tx, organizationID, projectID, record.ID, name); err != nil {
 		return assistantRecord{}, err

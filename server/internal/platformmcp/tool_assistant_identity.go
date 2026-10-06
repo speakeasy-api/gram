@@ -12,6 +12,7 @@ import (
 	genassistants "github.com/speakeasy-api/gram/server/gen/assistants"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -38,21 +39,33 @@ type UpgradeAssistantIdentityOutput struct {
 	AgentID       *string `json:"agent_id,omitempty"`
 }
 
+// errAssistantIdentityNotEnabled reports an organization outside the
+// assistant workload identity rollout.
+var errAssistantIdentityNotEnabled = errors.New("assistant workload identity is not enabled for this organization")
+
 // AssistantIdentityService backs upgrade_assistant_workload_identity.
 type AssistantIdentityService struct {
 	management     AssistantIdentityManagement
 	resolveProject func(context.Context, string, FindMCPInput) (ResolvedProject, error)
+	organizations  OrganizationSlugResolver
+	flags          feature.Provider
 }
 
 // NewAssistantIdentityService resolves the named project through the same
-// inventory read the other project-scoped tools use.
-func NewAssistantIdentityService(management AssistantIdentityManagement, projects *PostgresReader) *AssistantIdentityService {
-	return &AssistantIdentityService{management: management, resolveProject: projects.resolveInventoryProject}
+// inventory read the other project-scoped tools use, and gates the upgrade on
+// the same rollout flag as the management endpoint.
+func NewAssistantIdentityService(management AssistantIdentityManagement, projects *PostgresReader, flags feature.Provider) *AssistantIdentityService {
+	return &AssistantIdentityService{
+		management:     management,
+		resolveProject: projects.resolveInventoryProject,
+		organizations:  NewPostgresOrganizationSlugResolver(projects.db),
+		flags:          flags,
+	}
 }
 
 func (s *AssistantIdentityService) upgrade(ctx context.Context, principal Principal, input UpgradeAssistantIdentityInput) (UpgradeAssistantIdentityOutput, error) {
 	var zero UpgradeAssistantIdentityOutput
-	if s == nil || s.management == nil || s.resolveProject == nil {
+	if s == nil || s.management == nil || s.resolveProject == nil || s.organizations == nil {
 		return zero, ErrUnavailable
 	}
 	projectID, err := uuid.Parse(input.ProjectID)
@@ -76,7 +89,22 @@ func (s *AssistantIdentityService) upgrade(ctx context.Context, principal Princi
 	if project.ID != projectID {
 		return zero, ErrForbidden
 	}
+	organizationSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
+	if err != nil {
+		return zero, fmt.Errorf("%w: resolve organization slug for assistant identity: %w", ErrUnavailable, err)
+	}
+	if organizationSlug == "" {
+		return zero, fmt.Errorf("%w: organization slug is unavailable", ErrUnavailable)
+	}
+	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagAgentIdentityCredentials, principal.OrganizationID, feature.OrgProjectGroups(organizationSlug, ""))
+	if err != nil {
+		return zero, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	if evaluation != feature.EvaluationEnabled {
+		return zero, errAssistantIdentityNotEnabled
+	}
 	scoped := *authCtx
+	scoped.OrganizationSlug = organizationSlug
 	scoped.ProjectID = &project.ID
 	scoped.ProjectSlug = &project.Slug
 	ctx = contextvalues.SetAuthContext(ctx, &scoped)
@@ -114,6 +142,8 @@ func assistantIdentityToolResult(err error) (*mcp.CallToolResult, bool) {
 	result := featureUnavailableResult{Code: unavailableCode, Feature: "assistant_workload_identity", Message: "Assistant workload identity upgrades are temporarily unavailable."}
 	var shareable *oops.ShareableError
 	switch {
+	case errors.Is(err, errAssistantIdentityNotEnabled):
+		result.Message = "Assistant workload identity is not enabled for this organization."
 	case errors.Is(err, ErrForbidden):
 		result.Code, result.Message = "not_found", "That assistant or project is not available to you."
 	case errors.As(err, &shareable):

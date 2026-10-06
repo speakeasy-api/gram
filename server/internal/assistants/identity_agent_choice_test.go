@@ -101,6 +101,13 @@ func TestUpgradeAssistantIdentityRequiresAuthorityOverExistingAgent(t *testing.T
 	require.NoError(t, err)
 	_, err = accessrepo.New(db).UpsertPrincipalGrant(t.Context(), accessrepo.UpsertPrincipalGrantParams{OrganizationID: "org-test", PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, "user-test"), Scope: string(authz.ScopeAgentAuthorize), Selectors: selector})
 	require.NoError(t, err)
+	svc.features = identityFlags(false)
+	_, err = svc.UpgradeAssistantIdentity(projectWrite, payload)
+	require.ErrorAs(t, err, &denied)
+	require.Equal(t, oops.CodeForbidden, denied.Code, "selecting an existing agent is gated on the identity rollout")
+	require.Empty(t, agentGrantScopes(t, agentrepo.New(db), agent.ID))
+
+	svc.features = identityFlags(true)
 	upgraded, err := svc.UpgradeAssistantIdentity(projectWrite, payload)
 	require.NoError(t, err)
 	require.Equal(t, agent.ID.String(), *upgraded.AgentID)
