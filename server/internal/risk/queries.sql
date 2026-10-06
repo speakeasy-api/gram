@@ -2187,3 +2187,11 @@ SET external_user_id = @external_user_id
 WHERE id = @id
   AND project_id = @project_id;
 
+-- name: DeleteRiskPoliciesByMcpServerID :many
+DELETE FROM risk_policies
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND mcp_scope IS NOT NULL
+  AND mcp_scope::jsonb @> jsonb_build_object('servers', jsonb_build_array(jsonb_build_object('mcp_server_id', @mcp_server_id::text)))
+RETURNING *;
+
