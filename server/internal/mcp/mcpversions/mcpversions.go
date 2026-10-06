@@ -33,22 +33,28 @@ const (
 const DefaultInEffect = Version20250326
 
 // The protocol revisions each Gram surface that terminates an MCP session
-// supports, oldest first. A revision in a surface's set is echoed at
-// `initialize` and governs per-request behavior when declared; anything
-// outside the set is answered with the newest member, per the spec's rule that
-// a server must respond with a version it supports and should pick its latest.
+// supports, oldest first. A revision in a surface's set governs per-request
+// behavior when declared, and is echoed at `initialize` when that revision
+// defines the handshake; anything outside the set is rejected with
+// UnsupportedProtocolVersionError, or at `initialize` answered with the newest
+// handshake revision, per the spec's rule that a server must respond with a
+// version it supports and should pick its latest.
 //
-// The hosted and platform sets are split deliberately, despite currently
-// holding the same values. The surfaces face different client populations, so
-// raising one is not the same decision as raising the other, and the ceilings
-// are expected to move on different schedules. The current ceiling is
-// Version20251125; advertising Version20260728 is its own project with its own
-// preconditions.
-// The hosted and platform Version20241105 floor is evidence-based — clients on
-// that revision still make tool calls — and claims support on the Streamable
-// HTTP transport only, not the HTTP+SSE transport that revision also defined.
-// The consent surface is a pinned first-party Streamable HTTP client and starts
-// at Version20250326, advancing independently from those external surfaces.
+// The hosted, platform, and meta surfaces are dual-era: they serve the
+// handshake-based revisions through Version20251125 and the per-request
+// metadata of Version20260728 side by side, selected by what each request
+// declares. Their sets are split deliberately, despite currently holding the
+// same values. The surfaces face different client populations, so raising one
+// is not the same decision as raising the other, and the ceilings are expected
+// to move on different schedules.
+//
+// The hosted, platform, and meta Version20241105 floor is evidence-based —
+// clients on that revision still make tool calls — and claims support on the
+// Streamable HTTP transport only, not the HTTP+SSE transport that revision
+// also defined. The consent surface is a pinned first-party Streamable HTTP
+// client and starts at Version20250326, advancing independently from those
+// external surfaces. It stops at Version20251125 because its client opens
+// with `initialize` and its server implements no Version20260728 method.
 //
 // The remote MCP proxy has no entry here by design: it never answers a
 // version, it relays whatever the client and the upstream negotiate between
@@ -56,18 +62,11 @@ const DefaultInEffect = Version20250326
 // that is Gram acting as a client, so the versions it requests are chosen by
 // the MCP SDK client it connects with rather than served by Gram.
 var (
-	supportedHostedToolset   = []string{Version20241105, Version20250326, Version20250618, Version20251125}
-	supportedPlatformToolset = []string{Version20241105, Version20250326, Version20250618, Version20251125}
+	supportedHostedToolset   = []string{Version20241105, Version20250326, Version20250618, Version20251125, Version20260728}
+	supportedPlatformToolset = []string{Version20241105, Version20250326, Version20250618, Version20251125, Version20260728}
+	supportedMetaServer      = []string{Version20241105, Version20250326, Version20250618, Version20251125, Version20260728}
 	supportedConsentToolset  = []string{Version20250326, Version20250618, Version20251125}
 )
-
-// supportedMetaServer is the set negotiated on meta-MCP-backed /mcp/{slug}
-// endpoints. It matches the hosted surface's range — same installed base of
-// ordinary MCP clients, same Version20251125 ceiling — and gains
-// Version20260728 together with the other surfaces once the remaining
-// 2026-07-28 integration work completes, not before: advertising it early
-// invites clients into the incomplete parts.
-var supportedMetaServer = []string{Version20241105, Version20250326, Version20250618, Version20251125}
 
 // SupportedMetaServer returns the revisions negotiated on meta-MCP-backed
 // /mcp/{slug} endpoints, oldest first.
@@ -191,7 +190,8 @@ func Resolve(declared string, supported []string) Resolution {
 // Either way it is the version in effect for the request carrying it.
 //
 // It is absent from the `initialize` request itself, since nothing is
-// negotiated yet at that point.
+// negotiated yet at that point. It is a request header only: no revision
+// defines it on a response, so Gram's MCP servers never send it.
 const HTTPHeader = "MCP-Protocol-Version"
 
 // Other and None are the two synthetic buckets [Clamp] emits, so that every
