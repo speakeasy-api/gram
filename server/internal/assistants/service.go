@@ -2156,16 +2156,34 @@ func (s *ServiceCore) CheckDashboardChatOwnership(ctx context.Context, projectID
 	return nil
 }
 
-// eventSourceKindKey records an event's own source on its payload: a wake can
-// reuse an existing thread whose source is Slack.
-const eventSourceKindKey = "_gram_source_kind"
+const (
+	// eventSourceKindKey records an event's own source on its payload: a wake
+	// can reuse an existing thread whose source is Slack.
+	eventSourceKindKey = "_gram_source_kind"
 
-// stampEventSourceKind adds the source to object payloads. Any other JSON
-// value is returned unchanged, and its turn falls back to the thread source.
+	// wakeIdentityVersionKey and wakeRequesterUserIDKey carry the requester a
+	// wake captured when it was scheduled.
+	wakeIdentityVersionKey = "identity_version"
+	wakeRequesterUserIDKey = "requester_user_id"
+)
+
+// stampEventSourceKind marks an object payload with its server-assigned
+// source. Any spelling of an identity key that JSON decoding would fold onto
+// it is removed first; only a wake keeps the exact requester fields its own
+// scheduler wrote. Any other JSON value is returned unchanged, and its turn
+// falls back to the thread source.
 func stampEventSourceKind(payload []byte, sourceKind string) ([]byte, error) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(payload, &fields); err != nil || fields == nil {
 		return payload, nil //nolint:nilerr // non-object payloads are valid and stay unstamped
+	}
+	for key := range fields {
+		for _, reserved := range []string{eventSourceKindKey, wakeIdentityVersionKey, wakeRequesterUserIDKey} {
+			kept := sourceKind == sourceKindWake && key == reserved && reserved != eventSourceKindKey
+			if strings.EqualFold(key, reserved) && !kept {
+				delete(fields, key)
+			}
+		}
 	}
 	encoded, err := json.Marshal(sourceKind)
 	if err != nil {
