@@ -751,6 +751,92 @@ func TestAnalyzeBatch_PromptInjectionPublishesStrictlyBoundedTrajectory(t *testi
 	require.Equal(t, string([]rune(recentUntrustedContent)[:4000]), (*published)[0].GetRecentUntrustedContent())
 }
 
+func TestAnalyzeBatch_PromptInjectionPublishesBoundedOversizedInputs(t *testing.T) {
+	t.Parallel()
+
+	const bound = 50 * 1024
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	userID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    td.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   strings.Repeat("u", 4*bound),
+	})
+	require.NoError(t, err)
+	toolID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": strings.Repeat("c", 4*bound)})
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, assetStorage)
+	t.Cleanup(func() { _ = shutdown(t.Context()) })
+	assetURL, err := writer.WriteContentPartAsset(t.Context(), td.projectID, td.chatID, []byte(strings.Repeat("p", 4*bound)))
+	require.NoError(t, err)
+	partID, err := riskrepo.New(conn).CreateChatContentPartForTest(t.Context(), riskrepo.CreateChatContentPartForTestParams{
+		ChatID:              td.chatID,
+		ProjectID:           uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Kind:                message.PromptAttachment,
+		ContentAssetUrl:     assetURL,
+		ParentChatMessageID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+
+	promptInjectionPub, published := capturingPromptInjectionPub(t)
+	ab, err := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		assetStorage,
+		&risk_analysis.StubPIIScanner{},
+		nil,
+		nil,
+		nil,
+		nil,
+		&feature.InMemory{},
+		newPresidioPub(),
+		newGitleaksPub(),
+		promptInjectionPub,
+		newPromptPolicyPub(),
+		newCustomRulesPub(), newLLMPub(),
+		newFindingsPub(),
+		mustCustomRuleScanner(t, conn),
+		mustCELEngine(t),
+		nil,
+		nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
+	)
+	require.NoError(t, err)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       []uuid.UUID{userID, toolID},
+		ContentPartIDs:   []uuid.UUID{partID},
+		Sources:          []string{risk_analysis.SourcePromptInjection},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
+	})
+	require.NoError(t, err)
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+
+	require.Len(t, *published, 3)
+	for _, req := range *published {
+		require.LessOrEqual(t, len(req.GetContent()), bound)
+		require.LessOrEqual(t, len(req.GetBody()), bound)
+		for _, call := range req.GetToolCalls() {
+			require.LessOrEqual(t, len(call.GetArguments()), bound)
+		}
+		require.NotEmpty(t, req.GetContent()+req.GetBody())
+	}
+}
+
 func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(t *testing.T) {
 	t.Parallel()
 

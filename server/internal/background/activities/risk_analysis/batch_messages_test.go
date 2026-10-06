@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,6 +44,34 @@ func TestScanSurfaceIncludesToolRequestArgs(t *testing.T) {
 
 	user := msg(message.User)
 	require.Equal(t, "content", user.scanSurface())
+}
+
+func TestNewBatchMessageBoundsScanText(t *testing.T) {
+	t.Parallel()
+
+	small, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "user", "hello", nil)
+	require.True(t, ok)
+	require.False(t, small.Truncated)
+	require.Equal(t, "hello", small.Content)
+
+	// A multibyte rune straddles the bound, so the cut must walk back.
+	oversized := strings.Repeat("a", batchScanMaxContentBytes-1) + "€" + strings.Repeat("b", 1024)
+	user, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "user", oversized, nil)
+	require.True(t, ok)
+	require.True(t, user.Truncated)
+	require.Equal(t, strings.Repeat("a", batchScanMaxContentBytes-1), user.Content)
+
+	args := strings.Repeat("x", batchScanMaxContentBytes)
+	raw := []byte(fmt.Sprintf(`[{"id":"1","function":{"name":"Write","arguments":%q}},{"id":"2","function":{"name":"Bash","arguments":%q}}]`, args, args))
+	req, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "assistant", "running", raw)
+	require.True(t, ok)
+	require.True(t, req.Truncated)
+	require.Len(t, req.ToolCalls, 2)
+	require.Equal(t, "running", req.Content)
+	require.Len(t, req.ToolCalls[0].Function.Arguments, batchScanMaxContentBytes-len("running"))
+	require.Empty(t, req.ToolCalls[1].Function.Arguments)
+	require.Len(t, req.RawToolCalls, batchScanMaxContentBytes)
+	require.LessOrEqual(t, len(req.scanSurface()), batchScanMaxContentBytes+len(req.ToolCalls))
 }
 
 func TestMessageContentsUsesScanSurface(t *testing.T) {

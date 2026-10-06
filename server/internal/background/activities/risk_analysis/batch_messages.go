@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -14,6 +15,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
+
+// batchScanMaxContentBytes bounds every batch scan input when it is loaded, so
+// no scanner or Pub/Sub publish sees an unbounded message. It matches the
+// enforcement dispatch default, so both lanes scan the same prefix.
+const batchScanMaxContentBytes = 50 * 1024
 
 type batchMessage struct {
 	ID                     uuid.UUID
@@ -37,6 +43,45 @@ type batchMessage struct {
 	// Source is the agent that recorded the message (Codex, Cursor, ...). The
 	// shadow-MCP scanner attributes unresolved provenance to it.
 	Source string
+	// Truncated reports that bound cut the scanned text.
+	Truncated bool
+}
+
+// bound cuts Content and tool-call arguments to one shared
+// batchScanMaxContentBytes budget, in scan-surface order, and RawToolCalls to
+// the same size on its own.
+func (m *batchMessage) bound() {
+	remaining := batchScanMaxContentBytes
+	m.Content = m.boundText(m.Content, &remaining)
+	for i := range m.ToolCalls {
+		m.ToolCalls[i].Function.Arguments = m.boundText(m.ToolCalls[i].Function.Arguments, &remaining)
+	}
+	if len(m.RawToolCalls) > batchScanMaxContentBytes {
+		m.RawToolCalls = []byte(truncateAtRuneBoundary(string(m.RawToolCalls), batchScanMaxContentBytes))
+		m.Truncated = true
+	}
+}
+
+func (m *batchMessage) boundText(s string, remaining *int) string {
+	if len(s) > *remaining {
+		s = truncateAtRuneBoundary(s, *remaining)
+		m.Truncated = true
+	}
+	*remaining -= len(s)
+	return s
+}
+
+// truncateAtRuneBoundary returns the longest prefix of s whose byte length is
+// <= n and that does not split a UTF-8 rune. Returns s unchanged when it
+// already fits.
+func truncateAtRuneBoundary(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 // scanSurface is the text content scanners (gitleaks, presidio) evaluate:
@@ -115,10 +160,12 @@ func newContentPartBatchMessages(rows []repo.GetContentPartBatchRow, contents []
 			UserID:                 row.ChatUserID,
 			CreatedAt:              time.Time{},
 			Source:                 row.Source.String,
+			Truncated:              false,
 		}
 		if row.CreatedAt.Valid {
 			msg.CreatedAt = row.CreatedAt.Time
 		}
+		msg.bound()
 		messages = append(messages, msg)
 	}
 	return messages
@@ -149,10 +196,12 @@ func newBatchMessage(ctx context.Context, logger *slog.Logger, id uuid.UUID, rol
 		UserID:                 "",
 		CreatedAt:              time.Time{},
 		Source:                 "",
+		Truncated:              false,
 	}
 	if messageType == message.ToolRequest && len(toolCalls) > 0 {
 		msg.ToolCalls = parseRecordedToolCalls(ctx, logger, toolCalls)
 	}
+	msg.bound()
 	return msg, true
 }
 

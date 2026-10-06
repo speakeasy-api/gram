@@ -25,6 +25,7 @@ const (
 	meterRiskRecommendedScopeFindingsSuppressed = "risk.recommended_scope.findings_suppressed"
 	meterRiskShadowMCPResolution                = "risk.shadow_mcp.resolution"
 	meterRiskLLMPolicyEvaluations               = "risk.llm.policy_evaluations"
+	meterRiskBatchInputTruncations              = "risk.batch.input_truncations"
 )
 
 type riskMetrics struct {
@@ -36,6 +37,7 @@ type riskMetrics struct {
 	recommendedScopeFindingsSuppressed  metric.Int64Counter
 	shadowMCPResolution                 metric.Int64Counter
 	llmPolicyEvaluations                metric.Int64Counter
+	batchInputTruncations               metric.Int64Counter
 }
 
 func newRiskMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *riskMetrics {
@@ -116,6 +118,15 @@ func newRiskMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *ri
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRiskLLMPolicyEvaluations), attr.SlogError(err))
 	}
 
+	batchInputTruncations, err := meter.Int64Counter(
+		meterRiskBatchInputTruncations,
+		metric.WithDescription("Batch scan inputs cut to batchScanMaxContentBytes when loaded"),
+		metric.WithUnit("{message}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRiskBatchInputTruncations), attr.SlogError(err))
+	}
+
 	return &riskMetrics{
 		scanEvents:                          scanEvents,
 		scanDuration:                        scanDuration,
@@ -125,6 +136,7 @@ func newRiskMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *ri
 		recommendedScopeFindingsSuppressed:  recommendedScopeFindingsSuppressed,
 		shadowMCPResolution:                 shadowMCPResolution,
 		llmPolicyEvaluations:                llmPolicyEvaluations,
+		batchInputTruncations:               batchInputTruncations,
 	}
 }
 
@@ -207,5 +219,19 @@ func (m *riskMetrics) RecordLLMPolicyEvaluation(ctx context.Context, orgID strin
 		attr.RiskPolicyID(policyID),
 		attr.RiskScanMode(llmanalyzer.ScanModeAsync),
 		attr.Outcome(outcome),
+	))
+}
+
+func (m *riskMetrics) RecordBatchInputTruncation(ctx context.Context, orgID string, contentPart bool) {
+	if m == nil || m.batchInputTruncations == nil {
+		return
+	}
+	source := "message"
+	if contentPart {
+		source = "content_part"
+	}
+	m.batchInputTruncations.Add(ctx, 1, metric.WithAttributes(
+		attr.OrganizationID(orgID),
+		attribute.String("risk.batch.input_source", source),
 	))
 }
