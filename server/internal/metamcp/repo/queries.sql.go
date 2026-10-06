@@ -1328,3 +1328,29 @@ func (q *Queries) UpdateMetaMCPServer(ctx context.Context, arg UpdateMetaMCPServ
 	)
 	return i, err
 }
+
+const updateMetaMCPServerNetworkAccessMode = `-- name: UpdateMetaMCPServerNetworkAccessMode :execrows
+UPDATE meta_mcp_servers SET network_access_mode = $1, updated_at = clock_timestamp()
+WHERE id = $2 AND organization_id = $3
+  AND project_id = $4 AND deleted IS FALSE
+`
+
+type UpdateMetaMCPServerNetworkAccessModeParams struct {
+	NetworkAccessMode pgtype.Text
+	ID                uuid.UUID
+	OrganizationID    string
+	ProjectID         uuid.UUID
+}
+
+func (q *Queries) UpdateMetaMCPServerNetworkAccessMode(ctx context.Context, arg UpdateMetaMCPServerNetworkAccessModeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateMetaMCPServerNetworkAccessMode,
+		arg.NetworkAccessMode,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
