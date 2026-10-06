@@ -1386,12 +1386,9 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid result ID")
 	}
-	executionID := ""
-	if payload.ExecutionID != nil {
-		executionID = CanonicalExecutionID(*payload.ExecutionID)
-		if len(executionID) > MaxExecutionIDLen {
-			return nil, oops.E(oops.CodeInvalid, nil, "execution ID is too long")
-		}
+	executionID, ok := ParseExecutionIDFilter(conv.PtrValOr(payload.ExecutionID, ""))
+	if !ok {
+		return nil, oops.E(oops.CodeInvalid, nil, "invalid execution ID")
 	}
 
 	// The Postgres chat listing cannot narrow by finding or execution.

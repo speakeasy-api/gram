@@ -24,6 +24,17 @@ import (
 // the slack only rejects obviously bogus input.
 const MaxExecutionIDLen = 128
 
+// ParseExecutionIDFilter canonicalizes an execution_id filter, "" meaning
+// none. A blank or over-long value is invalid rather than dropped, since
+// dropping it would list every finding.
+func ParseExecutionIDFilter(raw string) (string, bool) {
+	id := CanonicalExecutionID(raw)
+	if (raw != "" && id == "") || len(id) > MaxExecutionIDLen {
+		return "", false
+	}
+	return id, true
+}
+
 // CanonicalExecutionID trims an execution_id filter and lowercases it when it
 // is a UUID, the form findings store, since the filter is an exact match.
 func CanonicalExecutionID(id string) string {

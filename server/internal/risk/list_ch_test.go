@@ -731,4 +731,7 @@ func TestListRiskResults_ExecutionAndResultFilters(t *testing.T) {
 
 	_, err = ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ExecutionID: new(strings.Repeat("e", risk.MaxExecutionIDLen+1))})
 	requireOopsCode(t, err, oops.CodeInvalid)
+
+	_, err = ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ExecutionID: new("   ")})
+	requireOopsCode(t, err, oops.CodeInvalid)
 }
