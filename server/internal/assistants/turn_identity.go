@@ -39,54 +39,73 @@ func legacyTurnUserID(assistant assistantRecord, thread assistantThreadRecord, e
 // selectTurnUser picks the user a turn of an agent-backed assistant acts
 // under. Only an unmapped Slack sender falls back to the owner; a selected
 // user who is later denied is never retried as the owner.
+//
+// Fields are read by exact key. Ingress strips every spelling of the
+// identity keys that JSON decoding would fold onto them, and only the server
+// writes the exact ones.
 func selectTurnUser(ctx context.Context, assistant assistantRecord, threadSource string, event assistantThreadEventRecord, lookup slackUserLookup) (string, error) {
-	source := threadSource
-	var metadata struct {
-		Source     string `json:"_gram_source_kind"`
-		EventKind  string `json:"gram_event_kind"`
-		ResumeUser string `json:"_gram_resume_user_id"`
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(event.NormalizedPayloadJSON, &fields); err != nil {
+		fields = nil
 	}
-	if err := json.Unmarshal(event.NormalizedPayloadJSON, &metadata); err == nil {
-		if metadata.EventKind == mcpAuthEventKind && metadata.ResumeUser != "" {
+	if kind, err := exactField[string](fields, mcpAuthEventKindKey); err != nil {
+		return "", err
+	} else if kind == mcpAuthEventKind {
+		resume, err := exactField[string](fields, mcpAuthResumeUserIDKey)
+		if err != nil {
+			return "", err
+		}
+		if resume != "" {
 			// An OAuth continuation acts as the user whose turn started it.
-			return metadata.ResumeUser, nil
+			return resume, nil
 		}
-		if metadata.Source != "" {
-			source = metadata.Source
-		}
+	}
+	source := threadSource
+	if stamped, err := exactField[string](fields, eventSourceKindKey); err != nil {
+		return "", err
+	} else if stamped != "" {
+		source = stamped
 	}
 	switch source {
 	case sourceKindWake:
-		var payload wakeEventPayload
-		if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err != nil {
-			return "", fmt.Errorf("decode wake identity: %w", err)
+		version, err := exactField[int](fields, wakeIdentityVersionKey)
+		if err != nil {
+			return "", err
 		}
-		switch payload.IdentityVersion {
+		switch version {
 		case 0:
 			// Wakes scheduled before requesters were captured act as the owner.
 		case wakeIdentityVersionRequester:
-			if payload.RequesterUserID == "" {
+			requester, err := exactField[string](fields, wakeRequesterUserIDKey)
+			if err != nil {
+				return "", err
+			}
+			if requester == "" {
 				return "", errors.New("wake has no captured requester")
 			}
-			return payload.RequesterUserID, nil
+			return requester, nil
 		default:
-			return "", fmt.Errorf("unsupported wake identity version %d", payload.IdentityVersion)
+			return "", fmt.Errorf("unsupported wake identity version %d", version)
 		}
 	case sourceKindDashboard:
-		var payload dashboardEventPayload
-		if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err != nil {
-			return "", fmt.Errorf("decode dashboard identity: %w", err)
+		sender, err := exactField[string](fields, "user_id")
+		if err != nil {
+			return "", err
 		}
-		if payload.UserID != "" {
-			return payload.UserID, nil
+		if sender != "" {
+			return sender, nil
 		}
 	case sourceKindSlack:
-		var payload slackEventPayload
-		if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err != nil {
-			return "", fmt.Errorf("decode slack identity: %w", err)
+		team, err := exactField[string](fields, "team_id")
+		if err != nil {
+			return "", err
 		}
-		if payload.TeamID != "" && payload.UserID != "" {
-			user, err := lookup(ctx, slackrepo.ResolveSlackMappingUserParams{OrganizationID: assistant.OrganizationID, SlackTeamID: payload.TeamID, SlackUserID: payload.UserID})
+		sender, err := exactField[string](fields, "user_id")
+		if err != nil {
+			return "", err
+		}
+		if team != "" && sender != "" {
+			user, err := lookup(ctx, slackrepo.ResolveSlackMappingUserParams{OrganizationID: assistant.OrganizationID, SlackTeamID: team, SlackUserID: sender})
 			if err == nil && user != "" {
 				return user, nil
 			}
@@ -96,6 +115,20 @@ func selectTurnUser(ctx context.Context, assistant assistantRecord, threadSource
 		return "", errors.New("assistant owner is unavailable")
 	}
 	return assistant.CreatedByUserID, nil
+}
+
+// exactField decodes fields[key], matching the key exactly. A missing key or
+// JSON null yields the zero value.
+func exactField[T any](fields map[string]json.RawMessage, key string) (T, error) {
+	var value T
+	raw, ok := fields[key]
+	if !ok {
+		return value, nil
+	}
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return value, fmt.Errorf("decode turn identity field %s: %w", key, err)
+	}
+	return value, nil
 }
 
 // turnUserID returns the user a turn acts under and whether the assistant runs
