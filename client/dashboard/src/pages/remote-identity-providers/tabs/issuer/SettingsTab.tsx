@@ -376,7 +376,7 @@ export function SettingsTab({
 
       <SettingsSection
         title="Scopes"
-        description="A sign-in takes its scopes from the client, the server's challenge, or the protected resource. When none of those name any, the override below is requested exactly as chosen."
+        description="When set, the override is requested exactly as chosen in place of this provider's supported scopes."
       >
         <div className="flex flex-col gap-1.5">
           <Label id="scope-override-label" htmlFor="scope-override">

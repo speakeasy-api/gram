@@ -35,6 +35,9 @@ vi.mock("@gram/client/react-query/organizationRemoteSessionIssuer.js", () => ({
   useOrganizationRemoteSessionIssuer: () => ({ data: undefined }),
 }));
 vi.mock("./KeySetField", () => ({ KeySetField: () => null }));
+vi.mock("../../clientAlerts", () => ({
+  IssuerScopeOverrideAlert: () => <div>scope override warning</div>,
+}));
 vi.mock("../../clientDialogs", () => ({ DeleteClientDialog: () => null }));
 vi.mock(
   "../../../mcp/x/tabs/settings/sections/authentication/IssuerFormFields",
@@ -292,5 +295,25 @@ describe("organization client settings", () => {
         }),
       }),
     );
+  });
+
+  it("warns about a scope override only once the scope field has text", () => {
+    const { container } = render(
+      <SettingsTab
+        client={client(AuthMethod.ClientSecretBasic)}
+        issuerId="issuer-1"
+      />,
+    );
+    const scopes = [...container.querySelectorAll("label")]
+      .find((label) => label.textContent === "Scopes (comma-separated)")!
+      .parentElement!.querySelector("input")!;
+
+    expect(screen.queryByText("scope override warning")).toBeNull();
+
+    fireEvent.change(scopes, { target: { value: "openid" } });
+    expect(screen.getByText("scope override warning")).toBeTruthy();
+
+    fireEvent.change(scopes, { target: { value: "  " } });
+    expect(screen.queryByText("scope override warning")).toBeNull();
   });
 });

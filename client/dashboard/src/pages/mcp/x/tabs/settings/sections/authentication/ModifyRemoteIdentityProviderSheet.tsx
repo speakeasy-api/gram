@@ -35,7 +35,10 @@ import { Stack } from "@/components/ui/Stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { LegacyCallbackAlert } from "@/pages/remote-identity-providers/clientAlerts";
+import {
+  IssuerScopeOverrideAlert,
+  LegacyCallbackAlert,
+} from "@/pages/remote-identity-providers/clientAlerts";
 import {
   ClientAssertionAudienceField,
   ClientCredentialsFields,
@@ -588,6 +591,7 @@ function ModifyRemoteIdentityProviderSheetBody({
           audienceOverride={audienceOverride}
           onScopeOverrideChange={setScopeOverride}
           onAudienceOverrideChange={setAudienceOverride}
+          scopeWarning={<IssuerScopeOverrideAlert issuer={issuer} />}
         />
 
         {submitError && (

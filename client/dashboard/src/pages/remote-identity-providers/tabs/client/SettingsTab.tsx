@@ -30,6 +30,7 @@ import {
   narrowTokenEndpointAuthMethod,
   parseScopes,
 } from "../../../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
+import { IssuerScopeOverrideAlert } from "../../clientAlerts";
 import { DeleteClientDialog, RotateClientDialog } from "../../clientDialogs";
 import { KeySetField } from "./KeySetField";
 
@@ -172,6 +173,8 @@ export function SettingsTab({
         <div className="flex flex-col gap-1.5">
           <Label>Scopes (comma-separated)</Label>
           <Input value={scope} onChange={setScope} />
+          {/* Only warn once there are client scopes to be overridden. */}
+          {scope.trim() && <IssuerScopeOverrideAlert issuer={issuer} />}
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>Audience</Label>

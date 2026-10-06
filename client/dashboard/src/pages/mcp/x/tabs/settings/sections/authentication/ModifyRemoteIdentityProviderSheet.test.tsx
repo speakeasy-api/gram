@@ -36,6 +36,7 @@ vi.mock("@/hooks/useRBAC", () => ({
 // The alert's own rendering is covered in clientAlerts.test.tsx; this stub
 // only exposes what the sheet passes it.
 vi.mock("@/pages/remote-identity-providers/clientAlerts", () => ({
+  IssuerScopeOverrideAlert: () => null,
   LegacyCallbackAlert: ({
     legacyCallbackUrl,
     onMigrate,
