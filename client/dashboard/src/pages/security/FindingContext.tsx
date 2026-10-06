@@ -8,6 +8,7 @@ import {
   needsWholeMessageMask,
   resultIsSpanlessSensitive,
   resultsAreSensitive,
+  sensitiveMatchStrings,
   withJsonEscaped,
 } from "@/pages/chatLogs/chatHelpers";
 import { argsToString, messageText } from "@/pages/chatLogs/transcript";
@@ -76,8 +77,7 @@ function excerptMessage(message: ChatMessage): ExcerptMessage {
   }
 }
 
-/** Splits `text` at every match into plain and flagged pieces. A message
- * holding a sensitive match masks all its matches, as the transcript does;
+/** Splits `text` at every match into plain and flagged pieces. When `masked`,
  * only the current finding's match is lifted by its reveal. */
 function MaskedText({
   text,
@@ -239,14 +239,9 @@ export function FindingContext({
     [chatResults],
   );
   const sensitiveMatches = useMemo(
-    () =>
-      withJsonEscaped(
-        getMatchStrings(chatResults?.filter((r) => resultsAreSensitive([r]))),
-      ),
+    () => sensitiveMatchStrings(chatResults),
     [chatResults],
   );
-  const masksSpans = (text: string): boolean =>
-    matchRanges(text, sensitiveMatches).length > 0;
   const currentMatch = chatResults?.find((r) => r.id === result.id)?.match;
   const fingerprintForMatch = (value: string) =>
     chatResults?.find(
@@ -274,16 +269,20 @@ export function FindingContext({
         (r) => r.chatMessageId === messageId && r.id !== result.id,
       ),
     );
-  const ownsWholeMessage = (messageId: string): boolean =>
-    resultIsWhole && messageId === result.chatMessageId;
+  const rows = excerpt.map((raw) => {
+    const message = excerptMessage(raw);
+    return {
+      raw,
+      message,
+      flagged: raw.id === result.chatMessageId,
+      othersMask: othersMaskWholeMessage(raw.id),
+      masksSpans: matchRanges(message.text, sensitiveMatches).length > 0,
+    };
+  });
   // The toggle reveals only this finding, so it shows only when that is masked.
   const revealable =
     resultIsWhole || (kind === "chat" && resultsAreSensitive([result]));
-  const maskable =
-    revealable ||
-    excerpt.some(
-      (m) => othersMaskWholeMessage(m.id) || masksSpans(excerptMessage(m).text),
-    );
+  const maskable = revealable || rows.some((r) => r.othersMask || r.masksSpans);
 
   const forbidden =
     chatQuery.error instanceof GramError && chatQuery.error.statusCode === 403;
@@ -346,10 +345,9 @@ export function FindingContext({
               : `${total ?? messages.length} messages`}
           </span>
         </div>
-        {excerpt.map((raw, i) => {
-          const message = excerptMessage(raw);
-          const flagged = raw.id === result.chatMessageId;
-          const ownMask = ownsWholeMessage(raw.id) && !shown;
+        {rows.map(({ raw, message, flagged, othersMask, masksSpans }, i) => {
+          const ownMask = resultIsWhole && flagged && !shown;
+          const chipReveals = ownMask && canReveal;
           return (
             <ExcerptRow
               key={raw.id}
@@ -358,17 +356,17 @@ export function FindingContext({
               first={i === 0}
               rating={rating}
             >
-              {othersMaskWholeMessage(raw.id) || ownMask ? (
+              {othersMask || ownMask ? (
                 <RedactionChip
-                  label={`${flagged ? "Flagged event" : "Masked message"} · ${message.text.length.toLocaleString()} chars${ownMask && canReveal ? " · reveal" : ""}`}
+                  label={`${flagged ? "Flagged event" : "Masked message"} · ${message.text.length.toLocaleString()} chars${chipReveals ? " · reveal" : ""}`}
                   locked={!canReveal}
-                  onClick={ownMask && canReveal ? onRequestReveal : undefined}
+                  onClick={chipReveals ? onRequestReveal : undefined}
                 />
               ) : (
                 <MaskedText
                   text={message.text}
                   matches={matches}
-                  masked={masksSpans(message.text)}
+                  masked={masksSpans}
                   currentMatch={currentMatch}
                   currentShown={shown}
                   fingerprintForMatch={fingerprintForMatch}

@@ -132,7 +132,7 @@ describe("findingByteSpans", () => {
         endPos: 9,
         spans: [{ match: "", startPos: 2, endPos: 4 }],
       }),
-    ).toEqual([{ id: "f", startByte: 2, endByte: 4 }]);
+    ).toEqual([{ id: "f", startByte: 2, endByte: 4, offPayload: false }]);
   });
 
   it("marks spans outside the payload fields as off-payload", () => {
@@ -152,7 +152,7 @@ describe("findingByteSpans", () => {
         ],
       }),
     ).toEqual([
-      { id: "f", startByte: 0, endByte: 2 },
+      { id: "f", startByte: 0, endByte: 2, offPayload: false },
       { id: "f", startByte: 0, endByte: 4, offPayload: true },
       { id: "f", startByte: 1, endByte: 3, offPayload: true },
     ]);

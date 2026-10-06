@@ -6,7 +6,7 @@ export type ByteSpan = {
   id: string;
   startByte: number;
   endByte: number;
-  offPayload?: true;
+  offPayload?: boolean;
 };
 
 /** Merged `[start, end)` JS string-index range and the findings covering it. */
@@ -64,12 +64,11 @@ export function findingByteSpans(result: RiskResult): ByteSpan[] {
   const spans: ByteSpan[] = [];
   for (const span of result.spans ?? []) {
     if (span.startPos == null || span.endPos == null) continue;
-    const onPayload = PAYLOAD_FIELDS.has(span.field ?? "") && !span.path;
     spans.push({
       id: result.id,
       startByte: span.startPos,
       endByte: span.endPos,
-      ...(onPayload ? {} : { offPayload: true }),
+      offPayload: !PAYLOAD_FIELDS.has(span.field ?? "") || Boolean(span.path),
     });
   }
   if (spans.length > 0) return spans;
@@ -90,9 +89,8 @@ const MAX_RUNE_BACKOFF_BYTES = 3;
  * Converts byte spans to merged string-index ranges over `payload`. Spans that
  * fall outside the payload, or index another string, are dropped and reported
  * through `complete`: a masked view must not trust the payload once a span is
- * lost. A lost span that ends past a
- * payload stored at the size cap is listed in `truncatedIds`. Empty spans are
- * dropped silently.
+ * lost. A lost span that ends past a payload stored at the size cap is listed
+ * in `truncatedIds`. Empty spans are dropped silently.
  */
 export function buildSpanRanges(
   payload: string,
