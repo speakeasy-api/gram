@@ -9,6 +9,8 @@ import { usePageFilters, type PageFilterConfig } from "./usePageFilters";
 const testState = vi.hoisted(() => ({
   /** Every dimension asked for values, as dataset/dimension. */
   asked: [] as string[],
+  /** How many days each dataset/dimension's values were read over. */
+  days: {} as Record<string, number>,
 }));
 
 const sessions: AnalyticsDataset = {
@@ -67,11 +69,19 @@ vi.mock("@gram/client/funcs/analyticsDimensionValues.js", () => ({
   analyticsDimensionValues: (
     _client: unknown,
     request: {
-      dimensionValuesRequestBody: { dataset: string; dimension: string };
+      dimensionValuesRequestBody: {
+        dataset: string;
+        dimension: string;
+        from: Date;
+        to: Date;
+      };
     },
   ) => {
-    const { dataset, dimension } = request.dimensionValuesRequestBody;
+    const { dataset, dimension, from, to } = request.dimensionValuesRequestBody;
     testState.asked.push(`${dataset}/${dimension}`);
+    testState.days[`${dataset}/${dimension}`] = Math.round(
+      (to.getTime() - from.getTime()) / 86_400_000,
+    );
     return Promise.resolve({
       ok: true,
       value: {
@@ -160,5 +170,57 @@ describe("usePageFilters", () => {
     const to = new Date(Date.UTC(2026, 8, 14, 12));
     act(() => result.current.context.onRangeSelect?.(from, to));
     expect(result.current.context.window?.customRange).toEqual({ from, to });
+  });
+
+  it("without a default range, leaves each widget its own window and says so", () => {
+    const { result } = renderHook(
+      () => usePageFilters({ fields: CONFIG.fields }),
+      { wrapper: wrapper("/page") },
+    );
+    expect(result.current.context.window).toEqual({
+      preset: null,
+      customRange: null,
+      customLabel: null,
+    });
+    const date = result.current.toolbar.schema[0];
+    expect(date?.allLabel).toBe("Each widget's window");
+  });
+
+  it("offers each field the values of the first of the page's datasets that can filter by it", async () => {
+    testState.asked.length = 0;
+    const { result } = renderHook(
+      () =>
+        usePageFilters({
+          fields: [
+            { field: "user", label: "User" },
+            { field: "model", label: "Model" },
+          ],
+          optionsDatasets: ["tool_calls", "sessions"],
+        }),
+      { wrapper: wrapper("/page") },
+    );
+    await waitFor(() =>
+      expect(result.current.toolbar.optionsById.model).toHaveLength(1),
+    );
+    // tool_calls comes first and has user; it has no model, so sessions
+    // answers that one.
+    expect(testState.asked).toContain("tool_calls/user");
+    expect(testState.asked).not.toContain("sessions/user");
+    expect(testState.asked).toContain("sessions/model");
+  });
+
+  it("with no range picked, reads values over the window the page names, or 30 days", async () => {
+    testState.days = {};
+    const fields = [{ field: "user", label: "User" }];
+    renderHook(() => usePageFilters({ fields, optionsWindow: "90d" }), {
+      wrapper: wrapper("/page"),
+    });
+    await waitFor(() => expect(testState.days["sessions/user"]).toBe(90));
+
+    testState.days = {};
+    renderHook(() => usePageFilters({ fields }), {
+      wrapper: wrapper("/page"),
+    });
+    await waitFor(() => expect(testState.days["sessions/user"]).toBe(30));
   });
 });

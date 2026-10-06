@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
-import { useMemo, type JSX } from "react";
+import { useMemo, type JSX, type ReactNode } from "react";
 import { Link } from "react-router";
 import {
   completeMeasures,
@@ -43,6 +43,10 @@ function widgetBodyHeight(chartType: ChartType): number {
   return chartType === "number" ? 72 : 240;
 }
 
+/** The card's frame, shared with its placeholder so the two match. */
+const CARD_CLASSES =
+  "border-border bg-card flex min-w-0 flex-col gap-3 border p-4";
+
 /**
  * One widget drawn on its own, anywhere: a product page or, later, a
  * dashboard. It runs its own query and owns every state the card can be in,
@@ -57,6 +61,8 @@ export function WidgetView({
   widget,
   page,
   height,
+  onOpen,
+  actions,
   className,
 }: {
   widget: ViewableWidget;
@@ -64,6 +70,15 @@ export function WidgetView({
   page?: PageContext;
   /** The body's height in pixels; the chart type decides when unset. */
   height?: number;
+  /**
+   * Open in Explore yourself, in place of the link, for a caller that has
+   * to check something first, such as edits not yet saved. It is handed
+   * what the link would open: the question, and the saved widget when the
+   * card still asks it.
+   */
+  onOpen?: OpenInExplore | undefined;
+  /** Controls beside Open in Explore, such as a widget's actions menu. */
+  actions?: ReactNode;
   className?: string;
 }): JSX.Element {
   const describe = useAnalyticsDescribe();
@@ -130,18 +145,14 @@ export function WidgetView({
   }
 
   return (
-    <section
-      aria-label={widget.name}
-      className={cn(
-        "border-border bg-card flex min-w-0 flex-col gap-3 border p-4",
-        className,
-      )}
-    >
+    <section aria-label={widget.name} className={cn(CARD_CLASSES, className)}>
       <WidgetHeader
         name={widget.name}
         spec={headerSpec}
         // A question the page changed opens as its own query.
         widgetId={headerWidgetId}
+        onOpen={onOpen}
+        actions={actions}
       />
       {paged && paged.skipped.length > 0 && (
         <p className="text-muted-foreground -mt-2 text-xs">
@@ -156,14 +167,49 @@ export function WidgetView({
   );
 }
 
+/** Opens a question in Explore: a saved widget's when it has an id. */
+export type OpenInExplore = (
+  spec: ExploreSpec,
+  widgetId: string | undefined,
+) => void;
+
+const OPEN_CLASSES =
+  "text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center gap-1 text-xs no-underline hover:underline";
+
+/**
+ * A card not drawn yet, at the size it will be: the card's frame, a header
+ * row as tall as its actions, and the body at its chart type's height, so a
+ * grid of cards does not reflow as they mount.
+ */
+export function WidgetPlaceholder({
+  chartType,
+  className,
+}: {
+  chartType: ChartType;
+  className?: string;
+}): JSX.Element {
+  return (
+    <div aria-busy="true" className={cn(CARD_CLASSES, className)}>
+      <Skeleton className="h-8 w-1/3" />
+      <div style={{ height: widgetBodyHeight(chartType) }}>
+        <Skeleton className="h-full w-full" />
+      </div>
+    </div>
+  );
+}
+
 function WidgetHeader({
   name,
   spec,
   widgetId,
+  onOpen,
+  actions,
 }: {
   name: string;
   spec: ExploreSpec | null;
   widgetId: string | undefined;
+  onOpen: OpenInExplore | undefined;
+  actions: ReactNode;
 }): JSX.Element {
   const routes = useRoutes();
   const datasets = useAnalyticsDescribe().data?.datasets;
@@ -182,20 +228,41 @@ function WidgetHeader({
     if (widgetId) params.set(WIDGET_PARAM, widgetId);
     return `${routes.explore.href()}?${params.toString()}`;
   }, [spec, openable, widgetId, routes.explore]);
+  // A page that handles opening (to check for unsaved edits first) gets a
+  // button; anywhere else it is a plain link.
+  const label = (
+    <>
+      Open in Explore
+      <Icon name="arrow-up-right" className="size-3" />
+    </>
+  );
+  let openControl: JSX.Element | null = null;
+  if (href && spec && onOpen) {
+    openControl = (
+      <button
+        type="button"
+        onClick={() => onOpen(spec, widgetId)}
+        className={OPEN_CLASSES}
+      >
+        {label}
+      </button>
+    );
+  } else if (href) {
+    openControl = (
+      <Link to={href} className={OPEN_CLASSES}>
+        {label}
+      </Link>
+    );
+  }
   return (
     <header className="flex min-w-0 items-center justify-between gap-2">
       <h3 className="text-eyebrow truncate" title={name}>
         {name}
       </h3>
-      {href ? (
-        <Link
-          to={href}
-          className="text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center gap-1 text-xs no-underline hover:underline"
-        >
-          Open in Explore
-          <Icon name="arrow-up-right" className="size-3" />
-        </Link>
-      ) : null}
+      <span className="flex shrink-0 items-center gap-1">
+        {openControl}
+        {actions}
+      </span>
     </header>
   );
 }

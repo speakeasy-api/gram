@@ -91,6 +91,21 @@ export function windowPreset(value: unknown): WindowPreset | null {
   return null;
 }
 
+/**
+ * The longest of some stored or linked windows, in today's vocabulary, or
+ * undefined when none is one. WINDOW_PRESETS runs shortest first.
+ */
+export function longestWindow(
+  values: readonly unknown[],
+): WindowPreset | undefined {
+  let longest = -1;
+  for (const value of values) {
+    const window = windowPreset(value);
+    if (window) longest = Math.max(longest, WINDOW_PRESETS.indexOf(window));
+  }
+  return longest < 0 ? undefined : WINDOW_PRESETS[longest];
+}
+
 /** One VISUALIZE row: an aggregation and its target field ("" for count). */
 export interface MeasureDraft {
   op: MeasureOp;
