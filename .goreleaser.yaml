@@ -83,7 +83,7 @@ brews:
       name: homebrew-tap
     homepage: https://ai.speakeasy.com
     description: Speakeasy AI Control Plane CLI
-    license: Apache-2.0
+    license: AGPL-3.0-only
     # The Speakeasy SDK generator formula (speakeasy-api/tap/speakeasy) also
     # installs a binary named speakeasy.
     conflicts:
@@ -94,7 +94,10 @@ brews:
       system "#{bin}/speakeasy --version"
 
   # Legacy formulas: install the speakeasy binary under the gram name so
-  # existing installs and scripts keep working. Remove once gram is retired.
+  # existing installs and scripts keep working. They are deprecated in
+  # Homebrew, which warns on install and upgrade but keeps them installable.
+  # deprecate! leaves out replacement_formula: older Homebrew versions don't
+  # know that keyword and would fail to load the formula.
   - name: gram
     ids:
       - speakeasy
@@ -103,7 +106,9 @@ brews:
       name: homebrew-tap
     homepage: https://ai.speakeasy.com
     description: Speakeasy AI Control Plane CLI (deprecated gram command; use the cli formula)
-    license: Apache-2.0
+    license: AGPL-3.0-only
+    custom_block: |
+      deprecate! date: "2026-10-06", because: "is renamed to speakeasy: brew install speakeasy-api/tap/cli"
     install: |
       bin.install "speakeasy" => "gram"
     test: |
@@ -117,7 +122,9 @@ brews:
       name: homebrew-tap
     homepage: https://ai.speakeasy.com
     description: Speakeasy AI Control Plane CLI (deprecated gram command; use the cli formula)
-    license: Apache-2.0
+    license: AGPL-3.0-only
+    custom_block: |
+      deprecate! date: "2026-10-06", because: "is renamed to speakeasy: brew install speakeasy-api/tap/cli"
     install: |
       bin.install "speakeasy" => "gram"
     test: |
@@ -133,7 +140,7 @@ npms:
       - speakeasy
       - mcp
       - cli
-    license: Apache-2.0
+    license: AGPL-3.0-only
     author: Speakeasy, Inc
     repository: https://github.com/speakeasy-api/gram
     bugs: https://github.com/speakeasy-api/gram/issues
