@@ -57,6 +57,8 @@ func TestSelectTurnUser(t *testing.T) {
 		{name: "wake without captured requester", source: sourceKindWake, payload: `{"identity_version":1}`, owner: "owner", wantErr: true},
 		{name: "unsupported wake version", source: sourceKindWake, payload: `{"identity_version":2,"requester_user_id":"requester"}`, owner: "owner", wantErr: true},
 		{name: "no owner", source: sourceKindCron, payload: `{}`, owner: "", wantErr: true},
+		{name: "malformed payload", source: sourceKindCron, payload: `{"user_id":`, owner: "owner", wantErr: true},
+		{name: "non-object payload", source: sourceKindCron, payload: `[]`, owner: "owner", want: "owner"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

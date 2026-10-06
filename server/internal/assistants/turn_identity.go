@@ -46,6 +46,10 @@ func legacyTurnUserID(assistant assistantRecord, thread assistantThreadRecord, e
 // identity keys that JSON decoding would fold onto them, and only the server
 // writes the exact ones.
 func selectTurnUser(ctx context.Context, assistant assistantRecord, threadSource string, event assistantThreadEventRecord, lookup slackUserLookup) (string, error) {
+	if !json.Valid(event.NormalizedPayloadJSON) {
+		return "", errors.New("turn payload is not valid JSON")
+	}
+	// A valid non-object payload carries no identity fields and is never stamped.
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(event.NormalizedPayloadJSON, &fields); err != nil {
 		fields = nil
