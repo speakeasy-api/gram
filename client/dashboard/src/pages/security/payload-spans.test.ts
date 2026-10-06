@@ -86,6 +86,15 @@ describe("buildSpanRanges", () => {
     expect(truncatedIds).toEqual([]);
   });
 
+  it("is incomplete when a span indexes another string", () => {
+    const { ranges, complete, truncatedIds } = buildSpanRanges("tool args", [
+      { id: "name", startByte: 0, endByte: 4, offPayload: true },
+    ]);
+    expect(ranges).toEqual([]);
+    expect(complete).toBe(false);
+    expect(truncatedIds).toEqual([]);
+  });
+
   it("stays complete when only empty spans are dropped", () => {
     const { complete } = buildSpanRanges("short", [
       { id: "b", startByte: 3, endByte: 3 },
@@ -124,6 +133,29 @@ describe("findingByteSpans", () => {
         spans: [{ match: "", startPos: 2, endPos: 4 }],
       }),
     ).toEqual([{ id: "f", startByte: 2, endByte: 4 }]);
+  });
+
+  it("marks spans outside the payload fields as off-payload", () => {
+    expect(
+      findingByteSpans({
+        ...base,
+        spans: [
+          { match: "", field: "tool.args", startPos: 0, endPos: 2 },
+          { match: "", field: "tool.name", startPos: 0, endPos: 4 },
+          {
+            match: "",
+            field: "tool.args",
+            path: "cmd",
+            startPos: 1,
+            endPos: 3,
+          },
+        ],
+      }),
+    ).toEqual([
+      { id: "f", startByte: 0, endByte: 2 },
+      { id: "f", startByte: 0, endByte: 4, offPayload: true },
+      { id: "f", startByte: 1, endByte: 3, offPayload: true },
+    ]);
   });
 
   it("falls back to start/end", () => {

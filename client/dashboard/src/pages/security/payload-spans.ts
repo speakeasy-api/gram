@@ -1,7 +1,13 @@
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 
-/** A finding's span as UTF-8 byte offsets into the scanned payload. */
-export type ByteSpan = { id: string; startByte: number; endByte: number };
+/** A finding's span as UTF-8 byte offsets into the scanned payload.
+ * `offPayload` spans index some other text and can't be laid onto it. */
+export type ByteSpan = {
+  id: string;
+  startByte: number;
+  endByte: number;
+  offPayload?: true;
+};
 
 /** Merged `[start, end)` JS string-index range and the findings covering it. */
 export type SpanRange = { start: number; end: number; ids: string[] };
@@ -42,15 +48,28 @@ export function byteOffsetsToIndices(
   return out;
 }
 
+// Span fields whose text is the whole scanned payload. Others (tool.name,
+// tool.server, tool.function) and `.get(path)` sub-fields index another string.
+const PAYLOAD_FIELDS: ReadonlySet<string> = new Set([
+  "",
+  "content",
+  "prompt",
+  "assistant",
+  "tool_result",
+  "tool.args",
+]);
+
 /** Every byte span a finding reports: its `spans[]`, else its start/end. */
 export function findingByteSpans(result: RiskResult): ByteSpan[] {
   const spans: ByteSpan[] = [];
   for (const span of result.spans ?? []) {
     if (span.startPos == null || span.endPos == null) continue;
+    const onPayload = PAYLOAD_FIELDS.has(span.field ?? "") && !span.path;
     spans.push({
       id: result.id,
       startByte: span.startPos,
       endByte: span.endPos,
+      ...(onPayload ? {} : { offPayload: true }),
     });
   }
   if (spans.length > 0) return spans;
@@ -69,9 +88,9 @@ const MAX_RUNE_BACKOFF_BYTES = 3;
 
 /**
  * Converts byte spans to merged string-index ranges over `payload`. Spans that
- * fall outside the payload are dropped and reported through `complete`: some
- * sources index a different string than the one stored, so a masked view must
- * not trust the payload once a span is lost. A lost span that ends past a
+ * fall outside the payload, or index another string, are dropped and reported
+ * through `complete`: a masked view must not trust the payload once a span is
+ * lost. A lost span that ends past a
  * payload stored at the size cap is listed in `truncatedIds`. Empty spans are
  * dropped silently.
  */
@@ -88,6 +107,10 @@ export function buildSpanRanges(
   const truncatedIds: string[] = [];
   const mapped: SpanRange[] = [];
   for (const span of spans) {
+    if (span.offPayload) {
+      complete = false;
+      continue;
+    }
     if (span.endByte === span.startByte) continue;
     const start = index.get(span.startByte);
     const end = index.get(span.endByte);
