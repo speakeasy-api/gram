@@ -98,6 +98,17 @@ function installRequestFor(
   }
 }
 
+/**
+ * Key names are unique per organization. A timestamp alone collides when an
+ * agent is issued two keys in the same minute, so a short random suffix keeps
+ * each issuance distinct while the date still says when it was made.
+ */
+function keyName(agentName: string): string {
+  const issued = new Date().toISOString().slice(0, 16).replace("T", " ");
+  const suffix = crypto.randomUUID().slice(0, 6);
+  return `${agentName} key ${issued} ${suffix}`;
+}
+
 function verifyNote(
   purpose: AgentPurpose | undefined,
   connected: boolean,
@@ -335,7 +346,9 @@ export function ProvisionWizard({
     try {
       if (!purpose)
         throw new Error("This agent's permissions are still loading.");
-      if (purpose === "device-agent" && !existing && deviceAgentBlocked)
+      // Applies to an existing device agent too: issuing it a key delegates the
+      // same organization scopes as creating one.
+      if (purpose === "device-agent" && deviceAgentBlocked)
         throw new Error(deviceAgentBlocked);
       const draft: AgentPolicyDraft = {
         "mcp:connect": selected.map((entry) => ({
@@ -392,7 +405,7 @@ export function ProvisionWizard({
           agentId: target.id,
           // Key names are unique per organization, so a date alone collides
           // the second time an agent is issued a key that day.
-          name: `${name.trim()} key ${new Date().toISOString().slice(0, 16).replace("T", " ")}`,
+          name: keyName(name.trim()),
           expiresAt,
           delegatedGrantsVersion: 2,
           requestedGrants,
@@ -485,6 +498,24 @@ export function ProvisionWizard({
       case 0:
         return (
           <div className="space-y-6">
+            {storedPolicy.isError && (
+              // Its purpose is read from this, so without it the flow cannot
+              // tell which key the agent may be issued.
+              <div
+                role="alert"
+                className="border-destructive text-destructive flex items-center justify-between gap-4 border p-3 text-sm"
+              >
+                Could not read this agent&apos;s permissions.
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={storedPolicy.isFetching}
+                  onClick={() => void storedPolicy.refetch()}
+                >
+                  Retry
+                </Button>
+              </div>
+            )}
             <WizardStepHeader
               title="Name and scope"
               description="What this identity is called, and how far it may reach."
@@ -532,10 +563,10 @@ export function ProvisionWizard({
                   value="device-agent"
                   title="Device agent"
                   className="p-3"
-                  disabled={!existing && deviceAgentBlocked !== null}
+                  disabled={deviceAgentBlocked !== null}
                 >
                   <Text muted small>
-                    {(!existing && deviceAgentBlocked) ||
+                    {deviceAgentBlocked ||
                       "Runs the device agent on a Linux host no person uses."}
                   </Text>
                 </RadioCard>
@@ -708,8 +739,10 @@ export function ProvisionWizard({
     switch (step) {
       case 0:
         if (!name.trim()) return "Name this agent.";
+        if (storedPolicy.isError)
+          return "Could not read this agent's permissions.";
         if (!purpose) return "Reading this agent's permissions…";
-        if (purpose === "device-agent" && !existing) return deviceAgentBlocked;
+        if (purpose === "device-agent") return deviceAgentBlocked;
         return null;
       case 1:
         if (purpose === "device-agent")

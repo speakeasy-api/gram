@@ -66,8 +66,9 @@ type deviceAgentManagedConfig struct {
 
 // deviceAgentInstallScript installs the device agent on a Linux host and
 // enrolls it under an agent identity. The key is written to managed enrollment
-// with owner-only permissions before it is ever on disk, and the script never
-// prints it.
+// readable only by the account that runs the agent, the script never prints
+// it, and a failed install removes it again so no live key is left on a host
+// that was never enrolled.
 func deviceAgentInstallScript(controlPlane, key string, mode deviceAgentRunMode) (string, error) {
 	config := deviceAgentManagedConfig{
 		V:               deviceAgentManagedConfigVersion,
@@ -82,7 +83,7 @@ func deviceAgentInstallScript(controlPlane, key string, mode deviceAgentRunMode)
 	case deviceAgentRunModeEphemeral:
 		config.Environment = "ephemeral"
 		config.AutoUpdate = "disabled"
-		run = `  # 3) Reconcile once and exit. Rerun at the start of each session.
+		run = `  # 3) Sync once and exit. Run "$BIN_DIR/speakeasyd" sync --once to sync again.
   "$BIN_DIR/speakeasyd" sync --once`
 	case deviceAgentRunModeService:
 		run = `  # 3) Register and start the background service under this account.
@@ -117,6 +118,8 @@ func deviceAgentInstallScript(controlPlane, key string, mode deviceAgentRunMode)
 # Generated for one use. The key below is live: treat this file as a secret.
 set -eu
 
+MANAGED=` + path + `
+
 main() {
   if [ "$(id -u)" = 0 ]; then
     SUDO=""; BIN_DIR=/usr/local/bin
@@ -127,29 +130,21 @@ main() {
   # 1) Install the device agent (latest stable, checksum-verified). Download
   #    over HTTPS only, and in full, before running it.
   INSTALLER="$(mktemp)"
-  trap 'rm -f "$INSTALLER"' EXIT
+  KEY_WRITTEN=""
+  trap 'status=$?; rm -f "$INSTALLER"; if [ "$status" -ne 0 ] && [ -n "$KEY_WRITTEN" ]; then $SUDO rm -f "$MANAGED"; echo "Install failed; removed the agent key." >&2; fi' EXIT
   curl -fsSL --proto '=https' --proto-redir '=https' --tlsv1.2 \
     -o "$INSTALLER" ` + shellSingleQuote(deviceAgentInstallerURL) + `
   sh "$INSTALLER" --install-dir "$BIN_DIR"
 
   # 2) Agent identity. The key is this host's only credential.
   $SUDO mkdir -p ` + dir + `
-  # Create it private first so the key is never briefly world-readable.
-  $SUDO install -m 0600 /dev/null ` + path + `
-  $SUDO tee ` + path + ` >/dev/null <<'JSON'
+  # Owned by the account that runs the agent and readable by nobody else, and
+  # private before the key is written so it is never briefly readable.
+  KEY_WRITTEN=1
+  $SUDO install -m 0600 -o "$(id -un)" /dev/null "$MANAGED"
+  $SUDO tee "$MANAGED" >/dev/null <<'JSON'
 ` + string(managed) + `
 JSON
-  # Readable only by root and the account that runs the agent.
-  if [ -z "$SUDO" ]; then
-    chmod 0600 ` + path + `
-  else
-    sudo chown root:"$(id -gn)" ` + path + `
-    sudo chmod 0640 ` + path + `
-    # Safe under a user-private group; otherwise the whole group can read it.
-    if [ "$(id -gn)" != "$(id -un)" ]; then
-      echo "warning: every member of group '$(id -gn)' can read the agent key in ` + deviceAgentManagedConfigPath + `" >&2
-    fi
-  fi
 
 ` + run + `
 

@@ -222,6 +222,11 @@ func decodeAgentInstallRequest(r *http.Request) (agentInstallRequest, error) {
 	if err := decoder.Decode(&request); err != nil && !errors.Is(err, io.EOF) {
 		return request, fmt.Errorf("decode install request: %w", err)
 	}
+	// One JSON value and nothing after it: a second value or trailing bytes
+	// mean the body is not what the caller thinks it sent.
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return request, errors.New("install request has trailing data")
+	}
 	if request.Flavor == "" {
 		request.Flavor = agentInstallFlavorMCP
 	}

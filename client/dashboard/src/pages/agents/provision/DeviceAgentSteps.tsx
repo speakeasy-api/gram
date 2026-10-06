@@ -16,7 +16,11 @@ import {
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useState, type JSX } from "react";
-import type { DeviceAgentRunMode } from "./device-agent";
+import {
+  REVIEW_FILE,
+  reviewCommands,
+  type DeviceAgentRunMode,
+} from "./device-agent";
 import { Copyable } from "./StepProvision";
 import { WizardStepHeader } from "./WizardChrome";
 
@@ -25,9 +29,6 @@ import { WizardStepHeader } from "./WizardChrome";
  * rather than to call MCP servers: which project its hooks report to, and the
  * script that installs and enrolls the device agent on its host.
  */
-
-/** Where a reviewed script is saved; deleted once it has run. */
-const REVIEW_FILE = "gram-device-agent.sh";
 
 export function StepDeviceAgentProject({
   projectId,
@@ -67,18 +68,6 @@ export function StepDeviceAgentProject({
       </div>
     </div>
   );
-}
-
-/**
- * The review-first form of a one-line command: the same single-use URL saved
- * to a file instead of piped to a shell.
- */
-function reviewCommands(command: string): { fetch: string; run: string } {
-  const url = command.replace(/^curl -fsSL /, "").replace(/ \| sh$/, "");
-  return {
-    fetch: `curl -fsSL ${url} -o ${REVIEW_FILE}`,
-    run: `sh ${REVIEW_FILE} && rm ${REVIEW_FILE}`,
-  };
 }
 
 export function StepProvisionDeviceAgent({
@@ -128,7 +117,7 @@ export function StepProvisionDeviceAgent({
         />
         <Text muted small>
           {mode === "ephemeral"
-            ? "Syncs once and exits. Run it again at the start of each session."
+            ? "Syncs once and exits. Run speakeasyd sync --once to sync again; the setup link itself works only once."
             : "Installs a background service for the account that runs it, and keeps it running after logout. Run it as that account, not as root."}
         </Text>
       </div>
@@ -184,7 +173,8 @@ export function StepProvisionDeviceAgent({
                   <Copyable value={review.fetch} label="download command" />
                   <Text muted small>
                     Read {REVIEW_FILE}, then run it. The file carries the key,
-                    so this deletes it once it has run.
+                    so it is readable only by you, and this deletes it once it
+                    has run, whether or not the install succeeded.
                   </Text>
                   <Copyable value={review.run} label="run command" />
                 </>

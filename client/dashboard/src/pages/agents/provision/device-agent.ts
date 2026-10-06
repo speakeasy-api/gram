@@ -174,3 +174,24 @@ export function undelegableScopesMessage(missingScopes: string[]): string {
     return `You cannot delegate ${scopes} to this agent. Organization scopes require org:admin, held by both you and the agent's owner.`;
   return `You cannot delegate ${scopes} to this agent. Check the agent's policy, and that you and its owner hold these permissions.`;
 }
+
+/** Where a reviewed script is saved; deleted once it has run. */
+export const REVIEW_FILE = "gram-device-agent.sh";
+
+/**
+ * The review-first form of a one-line command: the same single-use URL saved
+ * to a file instead of piped to a shell. The file carries the key, so it is
+ * created owner-only (an existing file would keep its own mode, so it goes
+ * first), and it is removed after the run whether or not the run succeeded,
+ * in a subshell that keeps the script's exit status.
+ */
+export function reviewCommands(command: string): {
+  fetch: string;
+  run: string;
+} {
+  const url = command.replace(/^curl -fsSL /, "").replace(/ \| sh$/, "");
+  return {
+    fetch: `rm -f ${REVIEW_FILE} && (umask 077 && curl -fsSL ${url} -o ${REVIEW_FILE})`,
+    run: `(sh ${REVIEW_FILE}; rc=$?; rm -f ${REVIEW_FILE}; exit $rc)`,
+  };
+}

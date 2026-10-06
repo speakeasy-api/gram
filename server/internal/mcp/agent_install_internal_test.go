@@ -56,6 +56,7 @@ func TestDeviceAgentInstallScriptServiceLingers(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Contains(t, script, `sudo loginctl enable-linger "$(id -un)"`)
+	require.Contains(t, script, `"$BIN_DIR/speakeasyd" -service install`)
 	require.Contains(t, script, `"$BIN_DIR/speakeasyd" -service start`)
 	require.NotContains(t, script, "sync --once")
 	config := managedConfigFrom(t, script)
@@ -86,4 +87,26 @@ func TestDeviceAgentInstallScriptRejectsAnUnknownMode(t *testing.T) {
 	t.Parallel()
 	_, err := deviceAgentInstallScript("https://gram.example.test", "gram_test_key", "daemon")
 	require.Error(t, err)
+}
+
+// The key file belongs to the account that runs the agent and nobody else:
+// never readable through a shared group.
+func TestDeviceAgentInstallScriptKeepsTheKeyOwnerOnly(t *testing.T) {
+	t.Parallel()
+	script, err := deviceAgentInstallScript("https://gram.example.test", "gram_test_key", deviceAgentRunModeService)
+	require.NoError(t, err)
+	require.Contains(t, script, `install -m 0600 -o "$(id -un)" /dev/null "$MANAGED"`)
+	require.NotContains(t, script, "0640")
+	require.NotContains(t, script, "chown root:")
+}
+
+// A failed install must not leave a live key on a host that never enrolled.
+func TestDeviceAgentInstallScriptRemovesTheKeyWhenInstallFails(t *testing.T) {
+	t.Parallel()
+	script, err := deviceAgentInstallScript("https://gram.example.test", "gram_test_key", deviceAgentRunModeEphemeral)
+	require.NoError(t, err)
+	require.Contains(t, script, `if [ "$status" -ne 0 ] && [ -n "$KEY_WRITTEN" ]; then $SUDO rm -f "$MANAGED"`)
+	// The flag is raised before the file exists, so a failure while writing it
+	// is cleaned up too.
+	require.Less(t, strings.Index(script, "KEY_WRITTEN=1"), strings.Index(script, `install -m 0600`))
 }

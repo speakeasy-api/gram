@@ -289,6 +289,7 @@ func TestAgentInstall_RejectsMalformedRequests(t *testing.T) {
 		{name: "unknown mode", body: `{"flavor":"device_agent","mode":"daemon"}`},
 		{name: "mode on mcp flavor", body: `{"flavor":"mcp","mode":"service"}`},
 		{name: "unknown field", body: `{"flavor":"mcp","extra":true}`},
+		{name: "trailing data", body: `{"flavor":"mcp"} {"flavor":"device_agent"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

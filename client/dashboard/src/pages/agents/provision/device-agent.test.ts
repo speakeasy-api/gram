@@ -13,6 +13,7 @@ import {
   policyConnectsToMCP,
   selectDeviceAgentKeyGrants,
   undelegableScopesMessage,
+  reviewCommands,
 } from "./device-agent";
 
 const PROJECT = "proj-1";
@@ -206,5 +207,23 @@ describe("device agent purpose gate", () => {
         isOrgAdmin: false,
       }),
     ).toContain("org:admin");
+  });
+});
+
+describe("review-first commands", () => {
+  const { fetch, run } = reviewCommands(
+    "curl -fsSL https://gram.example.test/agent-mcp/install/code_1 | sh",
+  );
+
+  it("creates the key-bearing file owner-only, replacing any old one", () => {
+    expect(fetch).toBe(
+      "rm -f gram-device-agent.sh && (umask 077 && curl -fsSL https://gram.example.test/agent-mcp/install/code_1 -o gram-device-agent.sh)",
+    );
+  });
+
+  it("removes the file whether or not the run succeeds, keeping its status", () => {
+    expect(run).toBe(
+      "(sh gram-device-agent.sh; rc=$?; rm -f gram-device-agent.sh; exit $rc)",
+    );
   });
 });

@@ -12,6 +12,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
+import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { AgentPurpose } from "./device-agent";
 import { ProvisionWizard } from "./ProvisionWizard";
 
@@ -20,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   createKey: vi.fn(),
   listKeys: vi.fn(),
   listDelegableGrants: vi.fn(),
+  listPolicyGrants: vi.fn(),
   mcpServers: vi.fn(),
   toolsets: vi.fn(),
   fetch: vi.fn(),
@@ -60,6 +62,7 @@ vi.mock("@/contexts/Sdk", () => ({
     agents: {
       create: mocks.createAgent,
       listDelegableGrants: mocks.listDelegableGrants,
+      listPolicyGrants: mocks.listPolicyGrants,
     },
     keys: { create: mocks.createKey, list: mocks.listKeys },
   }),
@@ -95,7 +98,7 @@ const grant = {
   },
 };
 
-function setup(initialPurpose?: AgentPurpose) {
+function setup(initialPurpose?: AgentPurpose, agent?: ManagedAgent) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -105,6 +108,7 @@ function setup(initialPurpose?: AgentPurpose) {
       <TooltipProvider>
         <ProvisionWizard
           initialPurpose={initialPurpose}
+          agent={agent}
           onDone={(id) => {
             onDone(id);
           }}
@@ -377,7 +381,7 @@ describe("Provisioning a device agent", () => {
     ).toBeTruthy();
     // The review-first form spends the same code without piping it to a shell.
     expect(
-      screen.getByText(/setup_code -o gram-device-agent\.sh$/),
+      screen.getByText(/setup_code -o gram-device-agent\.sh\)$/),
     ).toBeTruthy();
   });
 
@@ -432,5 +436,66 @@ describe("Provisioning a device agent", () => {
         .getByRole("radio", { name: /Device agent/ })
         .getAttribute("data-disabled"),
     ).not.toBeNull();
+  });
+});
+
+const existingAgent = {
+  id: "agent_existing",
+  name: "CI host",
+  lifecycle: "active",
+  permissions: { read: true, write: true, authorize: true },
+} as unknown as ManagedAgent;
+
+describe("Issuing a key to an existing device agent", () => {
+  beforeEach(() => {
+    mocks.listDelegableGrants.mockResolvedValue(deviceAgentGrants);
+    mocks.listPolicyGrants.mockResolvedValue(
+      deviceAgentGrants.map((g, i) => ({ id: `grant_${i}`, ...g })),
+    );
+  });
+
+  it("reads the purpose from the agent's policy and locks it", async () => {
+    setup(undefined, existingAgent);
+
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole("radio", { name: /Device agent/ })
+          .getAttribute("data-state"),
+      ).toBe("checked"),
+    );
+    expect(
+      screen
+        .getByRole("radio", { name: /MCP servers/ })
+        .getAttribute("data-disabled"),
+    ).not.toBeNull();
+  });
+
+  it("still requires org:admin, as creating one does", async () => {
+    mocks.isOrgAdmin = false;
+    setup(undefined, existingAgent);
+
+    expect(
+      await screen.findByText(
+        "Provisioning a device agent requires org:admin.",
+      ),
+    ).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
+  it("says when the agent's permissions cannot be read, and retries", async () => {
+    mocks.listPolicyGrants.mockRejectedValueOnce(new Error("unavailable"));
+    setup(undefined, existingAgent);
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Could not read this agent's permissions.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(mocks.listPolicyGrants).toHaveBeenCalledTimes(2);
   });
 });
