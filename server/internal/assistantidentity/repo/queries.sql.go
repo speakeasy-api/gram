@@ -486,11 +486,10 @@ func (q *Queries) ShareLockAssistant(ctx context.Context, arg ShareLockAssistant
 	return id, err
 }
 
-const tombstoneAssistantBinding = `-- name: TombstoneAssistantBinding :one
+const tombstoneAssistantBinding = `-- name: TombstoneAssistantBinding :exec
 UPDATE assistant_agent_bindings
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE project_id = $1 AND original_assistant_id = $2 AND deleted IS FALSE
-RETURNING organization_id, original_agent_id
 `
 
 type TombstoneAssistantBindingParams struct {
@@ -498,16 +497,9 @@ type TombstoneAssistantBindingParams struct {
 	AssistantID uuid.UUID
 }
 
-type TombstoneAssistantBindingRow struct {
-	OrganizationID  string
-	OriginalAgentID uuid.UUID
-}
-
-func (q *Queries) TombstoneAssistantBinding(ctx context.Context, arg TombstoneAssistantBindingParams) (TombstoneAssistantBindingRow, error) {
-	row := q.db.QueryRow(ctx, tombstoneAssistantBinding, arg.ProjectID, arg.AssistantID)
-	var i TombstoneAssistantBindingRow
-	err := row.Scan(&i.OrganizationID, &i.OriginalAgentID)
-	return i, err
+func (q *Queries) TombstoneAssistantBinding(ctx context.Context, arg TombstoneAssistantBindingParams) error {
+	_, err := q.db.Exec(ctx, tombstoneAssistantBinding, arg.ProjectID, arg.AssistantID)
+	return err
 }
 
 const tombstoneTriggerBinding = `-- name: TombstoneTriggerBinding :exec

@@ -161,7 +161,7 @@ func TestManagedDashboardTriggerBindsLikeAnyRoot(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, assistantidentity.NeverConfigured, resolution.State)
 
-	_, err = core.UpgradeAssistantIdentity(t.Context(), "org-test", project, legacy.ID, "user-2")
+	_, err = core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: project, AssistantID: legacy.ID, ActorUserID: "user-2", AgentID: uuid.Nil, AgentName: ""})
 	require.NoError(t, err)
 	reused, err := core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, legacy.ID, legacy.Name)
 	require.NoError(t, err)
@@ -210,12 +210,12 @@ func TestUserAgentEditsDoNotBlockAssistantManagement(t *testing.T) {
 	paused := StatusPaused
 	_, err = core.UpdateAssistant(t.Context(), project, record.ID, nil, nil, nil, nil, nil, nil, nil, &paused)
 	require.NoError(t, err)
-	_, err = core.UpgradeAssistantIdentity(t.Context(), "org-test", project, record.ID, "user-1")
+	_, err = core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: project, AssistantID: record.ID, ActorUserID: "user-1", AgentID: uuid.Nil, AgentName: ""})
 	require.NoError(t, err)
 	require.NoError(t, core.DeleteAssistant(t.Context(), project, record.ID, urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"), nil))
-	revoked, err := agents.GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-test", ID: agentID})
+	kept, err := agents.GetAgentByID(t.Context(), agentrepo.GetAgentByIDParams{OrganizationID: "org-test", ID: agentID})
 	require.NoError(t, err)
-	require.Equal(t, lifecycle.Revoked, lifecycle.Derive(revoked))
+	require.Equal(t, lifecycle.Suspended, lifecycle.Derive(kept), "deleting the assistant leaves its agent as the user left it")
 }
 
 func TestDeleteAssistantWithdrawsWorkloads(t *testing.T) {

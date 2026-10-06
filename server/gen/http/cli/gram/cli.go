@@ -14406,7 +14406,7 @@ func assistantsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-assistants: List assistants for the current project.`)
 	fmt.Fprintln(os.Stderr, `    get-assistant: Get an assistant by ID.`)
 	fmt.Fprintln(os.Stderr, `    create-assistant: Create an assistant.`)
-	fmt.Fprintln(os.Stderr, `    upgrade-assistant-identity: Give an existing assistant its own dedicated agent and per-trigger workload identities. The agent starts with access to every MCP server and skill in the project and to administering this assistant, and is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.`)
+	fmt.Fprintln(os.Stderr, `    upgrade-assistant-identity: Give an existing assistant an agent and per-trigger workload identities. By default a new agent is created with access to every MCP server and skill in the project and to administering this assistant. Passing agent_id points the assistant at an existing agent of the project instead; that agent keeps its policy and gains administration of this assistant. Either way the agent is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.`)
 	fmt.Fprintln(os.Stderr, `    update-assistant: Update an assistant.`)
 	fmt.Fprintln(os.Stderr, `    delete-assistant: Delete an assistant.`)
 	fmt.Fprintln(os.Stderr, `    send-message: Send a message from the dashboard to an assistant as the calling user. Continue an existing conversation by passing its chat_id (from listChats), or omit chat_id to start a new conversation — the server mints and returns a fresh chat id. The reply is delivered asynchronously; poll the chat service (loadChat) to read it.`)
@@ -14491,7 +14491,7 @@ func assistantsUpgradeAssistantIdentityUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Give an existing assistant its own dedicated agent and per-trigger workload identities. The agent starts with access to every MCP server and skill in the project and to administering this assistant, and is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.`)
+	fmt.Fprintln(os.Stderr, `Give an existing assistant an agent and per-trigger workload identities. By default a new agent is created with access to every MCP server and skill in the project and to administering this assistant. Passing agent_id points the assistant at an existing agent of the project instead; that agent keeps its policy and gains administration of this assistant. Either way the agent is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -14500,7 +14500,7 @@ func assistantsUpgradeAssistantIdentityUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants upgrade-assistant-identity --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants upgrade-assistant-identity --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"agent_name\": \"aa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func assistantsUpdateAssistantUsage() {

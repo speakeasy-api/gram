@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/agentownership"
-	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
@@ -302,8 +301,9 @@ func (s *Service) withdrawWorkload(ctx context.Context, tx pgx.Tx, org string, p
 }
 
 // TombstoneAssistant withdraws every root trigger workload an assistant's
-// binding created, revokes its dedicated agent, and retires the binding.
-// Assistants without a binding, or already deleted, are left unchanged.
+// binding created and retires the binding. The agent is left as it is: it is
+// managed like any other agent and may outlive the assistant. Assistants
+// without a binding, or already deleted, are left unchanged.
 func (s *Service) TombstoneAssistant(ctx context.Context, tx pgx.Tx, project, assistant uuid.UUID, actor urn.Principal, actorDisplayName *string) error {
 	q := repo.New(tx)
 	if _, err := q.LockAssistant(ctx, repo.LockAssistantParams{ProjectID: project, AssistantID: assistant}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -321,40 +321,8 @@ func (s *Service) TombstoneAssistant(ctx context.Context, tx pgx.Tx, project, as
 			return err
 		}
 	}
-	binding, err := q.TombstoneAssistantBinding(ctx, repo.TombstoneAssistantBindingParams{ProjectID: project, AssistantID: assistant})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
+	if err := q.TombstoneAssistantBinding(ctx, repo.TombstoneAssistantBindingParams{ProjectID: project, AssistantID: assistant}); err != nil {
 		return fmt.Errorf("retire assistant binding: %w", err)
-	}
-	return s.revokeAgent(ctx, tx, binding.OrganizationID, binding.OriginalAgentID, actor, actorDisplayName)
-}
-
-// revokeAgent revokes the dedicated agent unless a user already revoked or
-// deleted it.
-func (s *Service) revokeAgent(ctx context.Context, tx pgx.Tx, org string, agentID uuid.UUID, actor urn.Principal, actorDisplayName *string) error {
-	agents := agentrepo.New(tx)
-	before, err := agents.GetAgentByIDForUpdate(ctx, agentrepo.GetAgentByIDForUpdateParams{OrganizationID: org, ID: agentID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("lock dedicated assistant agent: %w", err)
-	}
-	after, err := agents.RevokeAgent(ctx, agentrepo.RevokeAgentParams{OrganizationID: org, ID: agentID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("revoke dedicated assistant agent: %w", err)
-	}
-	if err := s.audit.LogAgent(ctx, tx, audit.LogAgentEvent{
-		OrganizationID: org, AgentURN: urn.NewAgentIdentity(after.ID.String()), Actor: actor, ActorDisplayName: actorDisplayName,
-		Action: audit.ActionAgentRevoke, Name: after.Name,
-		Before: agentownership.AgentAuditSnapshot(before), After: agentownership.AgentAuditSnapshot(after),
-	}); err != nil {
-		return fmt.Errorf("audit dedicated assistant agent revocation: %w", err)
 	}
 	return nil
 }

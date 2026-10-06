@@ -35,6 +35,9 @@ var (
 	ErrInvalidIdentity = errors.New("invalid assistant identity")
 	ErrActorIneligible = errors.New("assistant identity requires a user actor")
 	ErrNotFound        = errors.New("assistant identity resource not found")
+	// ErrAgentUnauthorized covers both an agent the actor may not authorize
+	// and one that does not exist, so neither can be told apart.
+	ErrAgentUnauthorized = errors.New("actor cannot authorize the selected agent")
 )
 
 // ProvisionParams identifies the assistant and the authenticated user who
@@ -45,6 +48,10 @@ type ProvisionParams struct {
 	ProjectID      uuid.UUID
 	AssistantID    uuid.UUID
 	ActorUserID    string
+	// AgentID points the assistant at an existing agent instead of creating
+	// one. AgentName names a new agent. At most one is set.
+	AgentID   uuid.UUID
+	AgentName string
 }
 
 // AssistantState is the configuration state of one assistant. AgentID is set

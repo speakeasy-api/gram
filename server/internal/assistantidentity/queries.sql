@@ -47,11 +47,10 @@ FROM assistant_agent_bindings
 WHERE original_assistant_id = @assistant_id::uuid
 RETURNING id, generation;
 
--- name: TombstoneAssistantBinding :one
+-- name: TombstoneAssistantBinding :exec
 UPDATE assistant_agent_bindings
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE project_id = @project_id AND original_assistant_id = @assistant_id AND deleted IS FALSE
-RETURNING organization_id, original_agent_id;
+WHERE project_id = @project_id AND original_assistant_id = @assistant_id AND deleted IS FALSE;
 
 -- name: ListAssistantRoots :many
 SELECT id

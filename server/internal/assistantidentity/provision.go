@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/agentownership"
+	"github.com/speakeasy-api/gram/server/internal/agents/lifecycle"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -18,13 +19,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// Provision points an assistant at a new dedicated agent and binds its
-// existing root triggers. An assistant that already has a binding only gets
-// its unbound root triggers bound. The caller owns the
-// transaction; a failed call must roll it back.
+// Provision points an assistant at an agent and binds its existing root
+// triggers: a new agent, or the existing one p.AgentID names. An assistant
+// that already has a binding only gets its unbound root triggers bound. The
+// caller owns the transaction; a failed call must roll it back.
 //
-// The agent is owned by the assistant's creator (the actor when the creator is
-// unknown) and starts with the project-wide ceiling from initialGrants. Users
+// A new agent starts with the project-wide ceiling from initialGrants. Users
 // refine that policy on the agent afterwards; it is never re-synchronised.
 func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) error {
 	if p.ActorUserID == "" || p.ActorUserID == urn.AllUsersPrincipalID {
@@ -39,38 +39,41 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) e
 		return fmt.Errorf("lock assistant: %w", ErrNotFound)
 	}
 
-	_, err = q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{ProjectID: p.ProjectID, AssistantID: p.AssistantID})
+	if p.AgentID != uuid.Nil && p.AgentName != "" {
+		return ErrInvalidIdentity
+	}
+	existing, err := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{ProjectID: p.ProjectID, AssistantID: p.AssistantID})
 	switch {
 	case err == nil:
+		if p.AgentName != "" || (p.AgentID != uuid.Nil && p.AgentID != existing.OriginalAgentID) {
+			return ErrInvalidIdentity
+		}
 		return s.bindExistingRoots(ctx, tx, p)
 	case !errors.Is(err, pgx.ErrNoRows):
 		return fmt.Errorf("read assistant binding: %w", err)
 	}
 
-	owner := conv.FromPGTextOrEmpty[string](assistant.CreatedByUserID)
-	if owner == "" {
-		owner = p.ActorUserID
-	}
-	agents := agentrepo.New(tx)
-	agent, err := agents.CreateAgent(ctx, agentrepo.CreateAgentParams{
-		OrganizationID: p.OrganizationID,
-		ProjectID:      uuid.NullUUID{UUID: p.ProjectID, Valid: true},
-		OwnerUserID:    owner,
-		Name:           "Assistant " + p.AssistantID.String(),
-	})
-	if err != nil {
-		return fmt.Errorf("create dedicated assistant agent: %w", err)
-	}
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, p.ActorUserID)
-	agentURN := urn.NewAgentIdentity(agent.ID.String())
-	if err := s.audit.LogAgent(ctx, tx, audit.LogAgentEvent{
-		OrganizationID: p.OrganizationID, AgentURN: agentURN, Actor: actor, ActorDisplayName: nil,
-		Action: audit.ActionAgentCreate, Name: agent.Name, Before: nil, After: agentownership.AgentAuditSnapshot(agent),
-	}); err != nil {
-		return fmt.Errorf("audit dedicated assistant agent: %w", err)
+	var agent agentrepo.Agent
+	var grants []authz.Grant
+	if p.AgentID != uuid.Nil {
+		// An existing agent keeps its policy; it only gains administration of
+		// the assistant it now backs.
+		agent, err = s.selectAgent(ctx, tx, p)
+		if err != nil {
+			return err
+		}
+		grants = assistantSelfAdminGrants(p.AssistantID)
+	} else {
+		agent, err = s.createAgent(ctx, tx, p, conv.FromPGTextOrEmpty[string](assistant.CreatedByUserID), actor)
+		if err != nil {
+			return err
+		}
+		grants = initialGrants(p.ProjectID, p.AssistantID)
 	}
-
-	for _, grant := range initialGrants(p.ProjectID, p.AssistantID) {
+	agentURN := urn.NewAgentIdentity(agent.ID.String())
+	agents := agentrepo.New(tx)
+	for _, grant := range grants {
 		selector, err := json.Marshal(grant.Selector)
 		if err != nil {
 			return fmt.Errorf("encode assistant agent grant: %w", err)
@@ -102,6 +105,65 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) e
 		return fmt.Errorf("audit assistant identity provisioning: %w", err)
 	}
 	return s.bindExistingRoots(ctx, tx, p)
+}
+
+// createAgent creates the assistant's agent, owned by the assistant's creator
+// (the actor when the creator is unknown).
+func (s *Service) createAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams, creator string, actor urn.Principal) (agentrepo.Agent, error) {
+	owner := creator
+	if owner == "" {
+		owner = p.ActorUserID
+	}
+	name := p.AgentName
+	if name == "" {
+		name = "Assistant " + p.AssistantID.String()
+	}
+	agent, err := agentrepo.New(tx).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: p.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: p.ProjectID, Valid: true},
+		OwnerUserID:    owner,
+		Name:           name,
+	})
+	if err != nil {
+		return agentrepo.Agent{}, fmt.Errorf("create assistant agent: %w", err)
+	}
+	if err := s.audit.LogAgent(ctx, tx, audit.LogAgentEvent{
+		OrganizationID: p.OrganizationID, AgentURN: urn.NewAgentIdentity(agent.ID.String()), Actor: actor, ActorDisplayName: nil,
+		Action: audit.ActionAgentCreate, Name: agent.Name, Before: nil, After: agentownership.AgentAuditSnapshot(agent),
+	}); err != nil {
+		return agentrepo.Agent{}, fmt.Errorf("audit assistant agent: %w", err)
+	}
+	return agent, nil
+}
+
+// selectAgent locks an existing agent of the assistant's project for the
+// assistant to point at. Like any other use of an agent, the actor must own it
+// or hold agent:authorize on it.
+func (s *Service) selectAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams) (agentrepo.Agent, error) {
+	agent, err := agentrepo.New(tx).GetAgentByIDForUpdate(ctx, agentrepo.GetAgentByIDForUpdateParams{OrganizationID: p.OrganizationID, ID: p.AgentID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return agentrepo.Agent{}, ErrAgentUnauthorized
+	}
+	if err != nil {
+		return agentrepo.Agent{}, fmt.Errorf("lock selected agent: %w", err)
+	}
+	if agent.OwnerUserID != p.ActorUserID {
+		principals, err := authz.ResolveUserPrincipals(ctx, tx, p.OrganizationID, p.ActorUserID)
+		if err != nil {
+			return agentrepo.Agent{}, fmt.Errorf("resolve actor principals: %w", err)
+		}
+		grants, err := authz.LoadGrants(ctx, tx, p.OrganizationID, principals)
+		if err != nil {
+			return agentrepo.Agent{}, fmt.Errorf("load actor grants: %w", err)
+		}
+		if !authz.GrantsSatisfy(grants, authz.Check{Scope: authz.ScopeAgentAuthorize, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil}) {
+			return agentrepo.Agent{}, ErrAgentUnauthorized
+		}
+	}
+	if !agent.ProjectID.Valid || agent.ProjectID.UUID != p.ProjectID || lifecycle.Derive(agent) != lifecycle.Active || agent.OwnerReassignmentRequiredAt.Valid {
+		return agentrepo.Agent{}, ErrInvalidIdentity
+	}
+	return agent, nil
 }
 
 // initialGrants is the dedicated agent's starting ceiling: every MCP server

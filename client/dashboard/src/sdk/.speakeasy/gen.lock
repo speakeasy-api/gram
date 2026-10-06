@@ -1901,6 +1901,7 @@ trackedFiles:
   src/models/components/updatewidgetrequestbody.ts: {}
   src/models/components/updateworkloadissuerform.ts: {}
   src/models/components/updateworkloadsubjectform.ts: {}
+  src/models/components/upgradeassistantidentityrequestbody.ts: {}
   src/models/components/uploadchatattachmentresult.ts: {}
   src/models/components/uploadfunctionsresult.ts: {}
   src/models/components/uploadimageresult.ts: {}

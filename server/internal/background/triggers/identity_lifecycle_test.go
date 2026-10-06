@@ -239,7 +239,7 @@ func TestWakeFromWorkloadCredentialRecordsNoRequester(t *testing.T) {
 
 func (f identityFixture) provisionTx(t *testing.T, tx pgx.Tx, assistantID uuid.UUID) error {
 	t.Helper()
-	if err := testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, AssistantID: assistantID, ActorUserID: "trigger-owner"}); err != nil {
+	if err := testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, AssistantID: assistantID, ActorUserID: "trigger-owner", AgentID: uuid.Nil, AgentName: ""}); err != nil {
 		return fmt.Errorf("provision assistant identity: %w", err)
 	}
 	return nil

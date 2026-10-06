@@ -308,7 +308,7 @@ func (s *ServiceCore) createManagedAssistant(
 	}
 
 	if provisionIdentity {
-		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID}); err != nil {
+		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, AgentID: uuid.Nil, AgentName: ""}); err != nil {
 			return assistantRecord{}, fmt.Errorf("provision managed assistant identity: %w", err)
 		}
 	}

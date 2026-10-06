@@ -11,6 +11,7 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
@@ -140,7 +141,7 @@ func TestProcessThreadEventsFailsRejectedIdentityTerminally(t *testing.T) {
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
 	logger := testenv.NewLogger(t)
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
-	upgraded, err := core.UpgradeAssistantIdentity(t.Context(), "org-test", projectID, assistantID, "user-1")
+	upgraded, err := core.UpgradeAssistantIdentity(t.Context(), assistantidentity.ProvisionParams{OrganizationID: "org-test", ProjectID: projectID, AssistantID: assistantID, ActorUserID: "user-1", AgentID: uuid.Nil, AgentName: ""})
 	require.NoError(t, err)
 	_, err = agentrepo.New(conn).SuspendAgent(t.Context(), agentrepo.SuspendAgentParams{OrganizationID: "org-test", ID: uuid.MustParse(*upgraded.AgentID)})
 	require.NoError(t, err)

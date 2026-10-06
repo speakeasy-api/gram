@@ -38,20 +38,21 @@ func (s *ServiceCore) hydrateAssistantIdentityState(ctx context.Context, project
 	return nil
 }
 
-// UpgradeAssistantIdentity gives an existing assistant a dedicated agent. The
-// assistant's creator owns the agent; the actor is recorded as who configured it.
-func (s *ServiceCore) UpgradeAssistantIdentity(ctx context.Context, organizationID string, projectID, assistantID uuid.UUID, actorUserID string) (assistantRecord, error) {
+// UpgradeAssistantIdentity points an existing assistant at an agent: a new one
+// owned by the assistant's creator, or the existing one p.AgentID names. The
+// actor is recorded as who configured it.
+func (s *ServiceCore) UpgradeAssistantIdentity(ctx context.Context, p assistantidentity.ProvisionParams) (assistantRecord, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("begin assistant identity upgrade: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if err = s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: assistantID, ActorUserID: actorUserID}); err != nil {
+	if err = s.identities.Provision(ctx, tx, p); err != nil {
 		return assistantRecord{}, fmt.Errorf("provision assistant identity: %w", err)
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit assistant identity upgrade: %w", err)
 	}
-	return s.GetAssistant(ctx, projectID, assistantID)
+	return s.GetAssistant(ctx, p.ProjectID, p.AssistantID)
 }

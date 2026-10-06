@@ -94,6 +94,7 @@ func TestAssistantIdentityUpgradeUsesAuthorizedEndpointAndSafeProjection(t *test
 		management: assistantIdentityManagementFunc(func(ctx context.Context, payload *genassistants.UpgradeAssistantIdentityPayload) (*types.Assistant, error) {
 			calls++
 			require.Equal(t, assistantID.String(), payload.ID)
+			require.Equal(t, &agentID, payload.AgentID, "the agent choice reaches the shared endpoint unchanged")
 			scoped, ok := contextvalues.GetAuthContext(ctx)
 			require.True(t, ok)
 			require.Equal(t, projectID, *scoped.ProjectID)
@@ -107,7 +108,7 @@ func TestAssistantIdentityUpgradeUsesAuthorizedEndpointAndSafeProjection(t *test
 			return &types.Assistant{ID: assistantID.String(), ProjectID: projectID.String(), IdentityState: &state, AgentID: &agentID, Instructions: "private instructions", CreatedByUserID: new("private creator")}, nil
 		}),
 	}
-	input := UpgradeAssistantIdentityInput{ProjectID: projectID.String(), AssistantID: assistantID.String(), Confirmed: true}
+	input := UpgradeAssistantIdentityInput{ProjectID: projectID.String(), AssistantID: assistantID.String(), AgentID: &agentID, AgentName: nil, Confirmed: true}
 	for range 2 {
 		output, err := service.upgrade(ctx, principal, input)
 		require.NoError(t, err)
@@ -159,7 +160,7 @@ func TestAssistantIdentityUpgradeRejectsAmbiguousUnconfirmedAndHiddenTargets(t *
 		require.Equal(t, oops.CodeBadRequest, shared.Code)
 	}
 	require.Zero(t, resolutions)
-	valid := UpgradeAssistantIdentityInput{ProjectID: projectID, AssistantID: assistantID, Confirmed: true}
+	valid := UpgradeAssistantIdentityInput{ProjectID: projectID, AssistantID: assistantID, AgentID: nil, AgentName: nil, Confirmed: true}
 	_, err := service.upgrade(t.Context(), principal, valid)
 	var shared *oops.ShareableError
 	require.ErrorAs(t, err, &shared)
@@ -200,7 +201,7 @@ func TestAssistantIdentityAPIAndMCPRequireSameProjectWrite(t *testing.T) {
 	for _, grants := range [][]authz.Grant{nil, {authz.NewGrant(authz.ScopeProjectWrite, uuid.NewString())}, {authz.NewGrant(authz.ScopeProjectRead, projectID.String())}} {
 		scoped := authz.GrantsToContext(ctx, grants)
 		_, apiErr := management.UpgradeAssistantIdentity(scoped, &genassistants.UpgradeAssistantIdentityPayload{ID: assistantID.String()})
-		_, mcpErr := service.upgrade(scoped, principal, UpgradeAssistantIdentityInput{ProjectID: projectID.String(), AssistantID: assistantID.String(), Confirmed: true})
+		_, mcpErr := service.upgrade(scoped, principal, UpgradeAssistantIdentityInput{ProjectID: projectID.String(), AssistantID: assistantID.String(), AgentID: nil, AgentName: nil, Confirmed: true})
 		var apiOops, mcpOops *oops.ShareableError
 		require.ErrorAs(t, apiErr, &apiOops)
 		require.ErrorAs(t, mcpErr, &mcpOops)
@@ -238,7 +239,7 @@ func TestAssistantIdentityOAuthUpgradeMatchesAPI(t *testing.T) {
 	clientID, ok := contextvalues.GetOAuthClientID(ctx)
 	require.True(t, ok)
 	require.Equal(t, principal.ClientID, clientID)
-	output, err := service.upgrade(ctx, principal, UpgradeAssistantIdentityInput{ProjectID: project.ID.String(), AssistantID: legacy.ID.String(), Confirmed: true})
+	output, err := service.upgrade(ctx, principal, UpgradeAssistantIdentityInput{ProjectID: project.ID.String(), AssistantID: legacy.ID.String(), AgentID: nil, AgentName: nil, Confirmed: true})
 	require.NoError(t, err, "Platform MCP OAuth users can upgrade")
 	require.Equal(t, "ACTIVE", *output.IdentityState)
 	require.NotEmpty(t, output.AgentID)

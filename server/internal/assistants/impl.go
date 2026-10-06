@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -555,11 +558,21 @@ func (s *Service) startRuntimeWarmup(ctx context.Context, record assistantRecord
 }
 
 func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error, message string) error {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == pgerrcode.UniqueViolation {
+		switch pgErr.ConstraintName {
+		case "agents_organization_name_key":
+			return oops.E(oops.CodeConflict, err, "an agent already uses this name").LogWarn(ctx, logger)
+		case "assistant_agent_bindings_live_agent_key":
+			return oops.E(oops.CodeConflict, err, "this agent already backs another assistant").LogWarn(ctx, logger)
+		}
+	}
 	switch {
 	case errors.Is(err, pgx.ErrNoRows), errors.Is(err, assistantidentity.ErrNotFound):
 		return oops.E(oops.CodeNotFound, err, "%s", message).LogError(ctx, logger)
 	case errors.Is(err, assistantidentity.ErrInvalidIdentity):
 		return oops.E(oops.CodeConflict, err, "%s", message).LogWarn(ctx, logger)
+	case errors.Is(err, assistantidentity.ErrAgentUnauthorized):
+		return oops.E(oops.CodeForbidden, err, "%s", message).LogWarn(ctx, logger)
 	case errors.Is(err, assistantidentity.ErrActorIneligible):
 		return oops.E(oops.CodeUnauthorized, err, "%s", message).LogWarn(ctx, logger)
 	case errors.Is(err, errAssistantValidation):
@@ -587,7 +600,19 @@ func (s *Service) UpgradeAssistantIdentity(ctx context.Context, payload *gen.Upg
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id")
 	}
-	record, err := s.core.UpgradeAssistantIdentity(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, id, authCtx.UserID)
+	params := assistantidentity.ProvisionParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, AssistantID: id, ActorUserID: authCtx.UserID, AgentID: uuid.Nil, AgentName: strings.TrimSpace(conv.PtrValOr(payload.AgentName, ""))}
+	if payload.AgentID != nil {
+		if params.AgentName != "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "agent_id and agent_name cannot be combined")
+		}
+		params.AgentID, err = uuid.Parse(*payload.AgentID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid agent id")
+		}
+	} else if payload.AgentName != nil && params.AgentName == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "agent_name cannot be blank")
+	}
+	record, err := s.core.UpgradeAssistantIdentity(ctx, params)
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "upgrade assistant identity")
 	}

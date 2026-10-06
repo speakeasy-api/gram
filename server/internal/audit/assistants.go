@@ -49,6 +49,10 @@ type LogAssistantToolCallEvent struct {
 	ToolName     string
 	ToolURN      urn.Tool
 	Params       json.RawMessage
+
+	// Authorizer is the user a principal credential acts for, when the call
+	// was made with one; the credential's principal is then the actor.
+	Authorizer *urn.Principal
 }
 
 func (l *Logger) LogAssistantToolCall(ctx context.Context, dbtx repo.DBTX, event LogAssistantToolCallEvent) error {
@@ -63,6 +67,9 @@ func (l *Logger) LogAssistantToolCall(ctx context.Context, dbtx repo.DBTX, event
 	}
 	if event.Thread != uuid.Nil {
 		meta["thread_id"] = event.Thread.String()
+	}
+	if event.Authorizer != nil {
+		meta["authorizer_urn"] = event.Authorizer.String()
 	}
 	if event.Chat != "" {
 		meta["chat_id"] = event.Chat

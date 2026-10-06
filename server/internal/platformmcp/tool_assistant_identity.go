@@ -25,9 +25,11 @@ type AssistantIdentityManagement interface {
 }
 
 type UpgradeAssistantIdentityInput struct {
-	ProjectID   string `json:"project_id" jsonschema:"exact project UUID owning the assistant; never inferred"`
-	AssistantID string `json:"assistant_id" jsonschema:"exact UUID of the assistant to upgrade; repeating the upgrade for an assistant that already has a dedicated agent is safe"`
-	Confirmed   bool   `json:"confirmed" jsonschema:"true only after the user explicitly confirms upgrading this exact assistant in this exact project"`
+	ProjectID   string  `json:"project_id" jsonschema:"exact project UUID owning the assistant; never inferred"`
+	AssistantID string  `json:"assistant_id" jsonschema:"exact UUID of the assistant to upgrade; repeating the upgrade for an assistant that already has an agent is safe"`
+	AgentID     *string `json:"agent_id,omitempty" jsonschema:"exact UUID of an existing agent in the project to use instead of creating one; the user must own it or hold agent:authorize on it"`
+	AgentName   *string `json:"agent_name,omitempty" jsonschema:"name for the new agent; cannot be combined with agent_id"`
+	Confirmed   bool    `json:"confirmed" jsonschema:"true only after the user explicitly confirms upgrading this exact assistant in this exact project with this exact agent choice"`
 }
 
 type UpgradeAssistantIdentityOutput struct {
@@ -109,7 +111,7 @@ func (s *AssistantIdentityService) upgrade(ctx context.Context, principal Princi
 	// The shared endpoint enforces project:write and the ordinary actor policy.
 	// Its transaction locks and reads the exact assistant, performs the one-way
 	// idempotent upgrade, audits it atomically, then returns committed state.
-	assistant, err := s.management.UpgradeAssistantIdentity(ctx, &genassistants.UpgradeAssistantIdentityPayload{ID: assistantID.String(), SessionToken: nil, ProjectSlugInput: nil})
+	assistant, err := s.management.UpgradeAssistantIdentity(ctx, &genassistants.UpgradeAssistantIdentityPayload{ID: assistantID.String(), AgentID: input.AgentID, AgentName: input.AgentName, SessionToken: nil, ProjectSlugInput: nil})
 	if err != nil {
 		return zero, fmt.Errorf("upgrade assistant workload identity: %w", err)
 	}
@@ -124,7 +126,7 @@ func registerAssistantIdentityTool(reg *Registrar, service *AssistantIdentitySer
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Name:        upgradeAssistantIdentityToolName,
 		Title:       "Upgrade Assistant Workload Identity",
-		Description: "Explicitly give one assistant in an exact project its own dedicated agent and per-trigger workload identities. The agent starts with access to every MCP server and skill in the project and to administering this assistant, and can be refined like any other agent afterwards. Ask the user to confirm the exact project and assistant before setting confirmed: true. Requires organization administrator access and the same project:write authorization as the dashboard. Repeating the upgrade is safe but keeps the existing agent, so it does not replace one that was suspended, revoked, or deleted. Unavailable until assistant workload identity is enabled for the organization; when it is not, tell the user and do not retry. Returns only identity configuration state, never credentials, instructions, bindings, or policy. ACTIVE does not prove execution permission or runtime readiness.",
+		Description: "Explicitly give one assistant in an exact project an agent and per-trigger workload identities. By default a new agent is created, optionally named with agent_name, starting with access to every MCP server and skill in the project and to administering this assistant. With agent_id the assistant uses an existing agent of the project instead, which keeps its policy and gains administration of this assistant; the user must own that agent or hold agent:authorize on it, and an agent backs at most one assistant. Either agent can be refined like any other agent afterwards. Ask the user to confirm the exact project, assistant, and agent choice before setting confirmed: true. Requires organization administrator access and the same project:write authorization as the dashboard. Repeating the upgrade is safe but keeps the existing agent, so it does not replace one that was suspended, revoked, or deleted. Unavailable until assistant workload identity is enabled for the organization; when it is not, tell the user and do not retry. Returns only identity configuration state, never credentials, instructions, bindings, or policy. ACTIVE does not prove execution permission or runtime readiness.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: nil, ReadOnlyHint: false, Title: ""},
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: nil}, func(ctx context.Context, _ *mcp.CallToolRequest, input UpgradeAssistantIdentityInput) (*mcp.CallToolResult, UpgradeAssistantIdentityOutput, error) {
 		return principalToolCall(ctx, assistantIdentityToolResult, func(principal Principal) (UpgradeAssistantIdentityOutput, error) {
@@ -151,7 +153,9 @@ func assistantIdentityToolResult(err error) (*mcp.CallToolResult, bool) {
 		case oops.CodeForbidden, oops.CodeUnauthorized:
 			result.Code, result.Message = "permission_denied", "This upgrade requires project:write and a user identity."
 		case oops.CodeNotFound:
-			result.Code, result.Message = "not_found", "That assistant or project is not available to you."
+			result.Code, result.Message = "not_found", "That assistant, agent, or project is not available to you."
+		case oops.CodeConflict:
+			result.Code, result.Message = "conflict", "That agent cannot back this assistant: the name is taken, the agent already backs another assistant, the agent is not active in this project, or the assistant already uses a different agent."
 		default:
 			// Unknown failures retain the bounded unavailable response.
 		}

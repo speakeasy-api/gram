@@ -19483,7 +19483,7 @@ paths:
             x-speakeasy-name-override: update
     /rpc/assistants.upgradeIdentity:
         post:
-            description: Give an existing assistant its own dedicated agent and per-trigger workload identities. The agent starts with access to every MCP server and skill in the project and to administering this assistant, and is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.
+            description: Give an existing assistant an agent and per-trigger workload identities. By default a new agent is created with access to every MCP server and skill in the project and to administering this assistant. Passing agent_id points the assistant at an existing agent of the project instead; that agent keeps its policy and gains administration of this assistant. Either way the agent is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.
             operationId: upgradeAssistantIdentity
             parameters:
                 - allowEmptyValue: true
@@ -19504,7 +19504,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/RiskIDRequestBody'
+                            $ref: '#/components/schemas/UpgradeAssistantIdentityRequestBody'
                 required: true
             responses:
                 "200":
@@ -116240,6 +116240,24 @@ components:
                         type: string
                     description: Replaces the admission's tags; an empty list clears them. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
             description: Form for editing an admitted workload subject. Every field but id is optional; an omitted field is left unchanged.
+            required:
+                - id
+        UpgradeAssistantIdentityRequestBody:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: An existing agent of the project to use instead of creating one. Requires owning the agent or agent:authorize on it.
+                    format: uuid
+                agent_name:
+                    type: string
+                    description: The name of the new agent. Cannot be combined with agent_id.
+                    minLength: 1
+                    maxLength: 120
+                id:
+                    type: string
+                    description: The assistant ID.
+                    format: uuid
             required:
                 - id
         UploadChatAttachmentForm:

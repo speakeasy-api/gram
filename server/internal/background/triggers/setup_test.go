@@ -87,7 +87,7 @@ func (f identityFixture) createAssistant(t *testing.T, bound bool) uuid.UUID {
 	assistant, err := assistantsrepo.New(tx).CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{ProjectID: f.projectID, OrganizationID: "org-trigger-test", CreatedByUserID: pgtype.Text{String: "trigger-owner", Valid: true}, Name: "Identity assistant " + uuid.NewString(), Model: "openai/gpt-4o-mini", Instructions: "", WarmTtlSeconds: 300, MaxConcurrency: 1, Status: "active"})
 	require.NoError(t, err)
 	if bound {
-		err = testIdentityService.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, AssistantID: assistant.ID, ActorUserID: "trigger-owner"})
+		err = testIdentityService.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, AssistantID: assistant.ID, ActorUserID: "trigger-owner", AgentID: uuid.Nil, AgentName: ""})
 		require.NoError(t, err)
 	}
 	require.NoError(t, tx.Commit(ctx))

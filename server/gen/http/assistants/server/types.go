@@ -41,6 +41,11 @@ type CreateAssistantRequestBody struct {
 type UpgradeAssistantIdentityRequestBody struct {
 	// The assistant ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// An existing agent of the project to use instead of creating one. Requires
+	// owning the agent or agent:authorize on it.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// The name of the new agent. Cannot be combined with agent_id.
+	AgentName *string `form:"agent_name,omitempty" json:"agent_name,omitempty" xml:"agent_name,omitempty"`
 }
 
 // UpdateAssistantRequestBody is the type of the "assistants" service
@@ -4210,7 +4215,9 @@ func NewCreateAssistantPayload(body *CreateAssistantRequestBody, sessionToken *s
 // upgradeAssistantIdentity endpoint payload.
 func NewUpgradeAssistantIdentityPayload(body *UpgradeAssistantIdentityRequestBody, sessionToken *string, projectSlugInput *string) *assistants.UpgradeAssistantIdentityPayload {
 	v := &assistants.UpgradeAssistantIdentityPayload{
-		ID: *body.ID,
+		ID:        *body.ID,
+		AgentID:   body.AgentID,
+		AgentName: body.AgentName,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -4376,6 +4383,19 @@ func ValidateUpgradeAssistantIdentityRequestBody(body *UpgradeAssistantIdentityR
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if body.AgentName != nil {
+		if utf8.RuneCountInString(*body.AgentName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.agent_name", *body.AgentName, utf8.RuneCountInString(*body.AgentName), 1, true))
+		}
+	}
+	if body.AgentName != nil {
+		if utf8.RuneCountInString(*body.AgentName) > 120 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.agent_name", *body.AgentName, utf8.RuneCountInString(*body.AgentName), 120, false))
+		}
 	}
 	return
 }

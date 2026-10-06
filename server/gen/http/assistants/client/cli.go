@@ -149,9 +149,22 @@ func BuildUpgradeAssistantIdentityPayload(assistantsUpgradeAssistantIdentityBody
 	{
 		err = json.Unmarshal([]byte(assistantsUpgradeAssistantIdentityBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"agent_name\": \"aa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.AgentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+		}
+		if body.AgentName != nil {
+			if utf8.RuneCountInString(*body.AgentName) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.agent_name", *body.AgentName, utf8.RuneCountInString(*body.AgentName), 1, true))
+			}
+		}
+		if body.AgentName != nil {
+			if utf8.RuneCountInString(*body.AgentName) > 120 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.agent_name", *body.AgentName, utf8.RuneCountInString(*body.AgentName), 120, false))
+			}
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -169,7 +182,9 @@ func BuildUpgradeAssistantIdentityPayload(assistantsUpgradeAssistantIdentityBody
 		}
 	}
 	v := &assistants.UpgradeAssistantIdentityPayload{
-		ID: body.ID,
+		ID:        body.ID,
+		AgentID:   body.AgentID,
+		AgentName: body.AgentName,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

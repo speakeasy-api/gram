@@ -96,6 +96,8 @@ type Config struct {
 
 ## Constants and types
 
+- **Name the actual state or behavior.** Avoid relative labels such as `legacy` and `modern` in identifiers, comments, and messages. Use the condition or mechanism they represent (for example, `agentIdentityIsNotConfigured` or `creatorAttributedExecution`). Choose the name from the actual condition. Preserve externally contracted values, including metric labels used by queries or alerts, unless the change includes a compatibility plan.
+
 - **Name and explain numeric values.** Limits, sizes, budgets, timeouts, retry counts, and thresholds are named constants, each with a comment saying what the value represents and why it was chosen. Write bitwise and multiplied sizes with the human-readable value alongside. Obvious literals (`0`, `1`, `2` for halving or pairs, base `10` in `strconv`) need no name.
 
   ```go
