@@ -230,7 +230,6 @@ describe("isServerRenderedPath", () => {
     "/mcp/linear/install",
     "/mcp/linear/install?domain=custom",
     "/mcp/linear/install#clients",
-    "/mcp/linear/install/",
   ])("recognizes the install page %s", async (path) => {
     const { isServerRenderedPath } = await import("./session-expired");
     expect(isServerRenderedPath(path)).toBe(true);
@@ -240,6 +239,8 @@ describe("isServerRenderedPath", () => {
     "/acme/projects/default/mcp/x/linear/settings",
     "/mcp/linear",
     "/mcp/linear/installer",
+    // The server only routes /mcp/{mcpSlug}/install, without a trailing slash.
+    "/mcp/linear/install/",
     "/mcp//install",
     "/acme/mcp/linear/install",
   ])("leaves the dashboard route %s to the router", async (path) => {

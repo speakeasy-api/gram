@@ -57,7 +57,7 @@ export function safeRedirectPath(value: string | null): string | undefined {
  * Such a return target has to be loaded with a full navigation.
  */
 export function isServerRenderedPath(path: string): boolean {
-  return /^\/mcp\/[^/?#]+\/install\/?([?#]|$)/.test(path);
+  return /^\/mcp\/[^/?#]+\/install([?#]|$)/.test(path);
 }
 
 /**
