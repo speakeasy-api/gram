@@ -1,6 +1,6 @@
 use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use agentkit_adapter_completions::CompletionsAdapter;
@@ -67,25 +67,32 @@ pub struct RuntimeHost {
     /// retries with the same key serialize. A failed admission drops the
     /// guard with `false`, leaving the slot retryable.
     pub seen: DashMap<String, Arc<tokio::sync::Mutex<bool>>>,
-    /// Serializes admission only; queued work stays durable on the server.
-    pub turn_admissions: DashMap<String, Weak<tokio::sync::Mutex<()>>>,
     pub threads: DashMap<String, Arc<OnceCell<Arc<ConfiguredThread>>>>,
     pub gram_client: GramBootstrapClient,
     pub thread_idle_ttl: Duration,
     pub mcp_http_client: reqwest::Client,
     pub spill_root: PathBuf,
+    /// Serializes admission/enqueue with eviction and task-exit cleanup.
+    pub admission: tokio::sync::Mutex<()>,
 }
 
-/// Live per-thread state. Concurrent first-turn requests for the same
-/// thread race through an `OnceCell` so only one bootstrap fetch and one
-/// task spawn happen.
+/// A message and its opaque bearer, handed to an idle thread loop. A thread
+/// admits one turn at a time: the backend keeps every later event pending
+/// until the thread is idle again, so no accepted input waits behind a turn
+/// that could fail, and every credential is minted just before its turn runs.
+pub struct QueuedTurn {
+    pub input: RunnerContent,
+    pub token: String,
+    pub mcp_servers: Option<Vec<McpServer>>,
+}
+
+/// Live per-thread state, shared by successive queued turns.
 pub struct ConfiguredThread {
     pub thread_id: String,
     pub chat_id: String,
     pub idle_since: Arc<Mutex<Option<Instant>>>,
-    pub inbox_tx: UnboundedSender<RunnerContent>,
+    pub inbox_tx: UnboundedSender<QueuedTurn>,
     pub task_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
-    pub mcp_cmd_tx: mpsc::Sender<McpCmd>,
     /// Broadcasts user interrupts into the thread's agent loop. Bumping the
     /// generation cancels whatever checkpoint the turn in flight captured at
     /// its start; a bump while the thread is idle is inert, because the next
@@ -95,22 +102,37 @@ pub struct ConfiguredThread {
 
 impl ConfiguredThread {
     pub fn idle_for(&self) -> Duration {
-        let guard = match self.idle_since.lock() {
-            Ok(g) => g,
-            Err(_) => return Duration::ZERO,
-        };
+        let guard = self
+            .idle_since
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         match *guard {
             None => Duration::ZERO,
             Some(t) => Instant::now().saturating_duration_since(t),
         }
     }
 
-    pub fn enqueue(&self, input: RunnerContent, notice: Option<String>) -> Result<(), RunnerError> {
-        let input = invocation_content(input, notice);
+    pub fn enqueue(
+        &self,
+        input: RunnerContent,
+        token: String,
+        mcp_servers: Option<Vec<McpServer>>,
+    ) -> Result<(), RunnerError> {
+        let mut idle = self
+            .idle_since
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if idle.is_none() {
+            return Err(RunnerError::InvocationBusy);
+        }
         self.inbox_tx
-            .send(input)
+            .send(QueuedTurn {
+                input,
+                token,
+                mcp_servers,
+            })
             .map_err(|_| RunnerError::SubmitInput("loop inbox closed".into()))?;
-        mark_busy(&self.idle_since);
+        *idle = None;
         Ok(())
     }
 
@@ -127,13 +149,13 @@ impl ConfiguredThread {
     /// Returns whether there was a turn to stop — input enqueued, or a driver
     /// step still running. A warm thread between turns has nothing in flight,
     /// and the bump is inert until a turn checkpoints the generation, so it
-    /// answers false. A poisoned idle clock answers true: claiming a stop that
-    /// did nothing is the safer error.
+    /// answers false. The scalar idle clock can safely recover a poisoned lock.
     pub fn interrupt(&self) -> bool {
-        let busy = match self.idle_since.lock() {
-            Ok(guard) => guard.is_none(),
-            Err(_) => true,
-        };
+        let busy = self
+            .idle_since
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_none();
         self.cancellation.interrupt();
         busy
     }
@@ -172,12 +194,12 @@ pub async fn build_host(
         identity,
         started_at: Instant::now(),
         seen: DashMap::new(),
-        turn_admissions: DashMap::new(),
         threads: DashMap::new(),
         gram_client,
         thread_idle_ttl,
         mcp_http_client,
         spill_root,
+        admission: tokio::sync::Mutex::new(()),
     });
 
     // Background eviction task: walks the threads map and drops any whose
@@ -224,6 +246,7 @@ pub fn snapshot_threads(host: &RuntimeHost) -> Vec<(String, String, Duration)> {
 }
 
 async fn sweep_idle(host: &Arc<RuntimeHost>) {
+    let _admission = host.admission.lock().await;
     let ttl = host.thread_idle_ttl;
     let mut to_evict = Vec::new();
     for entry in host.threads.iter() {
@@ -235,14 +258,19 @@ async fn sweep_idle(host: &Arc<RuntimeHost>) {
         }
     }
     for thread_id in to_evict {
-        let admission = admission_lock(host, &thread_id);
-        let Ok(_guard) = admission.try_lock() else {
-            continue;
-        };
         if lookup_thread(host, &thread_id).is_some_and(|thread| thread.idle_for() > ttl) {
             evict_thread(host, &thread_id);
         }
     }
+}
+
+fn remove_thread_if_current(
+    host: &RuntimeHost,
+    id: &str,
+    expected: &Arc<OnceCell<Arc<ConfiguredThread>>>,
+) {
+    host.threads
+        .remove_if(id, |_, current| Arc::ptr_eq(current, expected));
 }
 
 fn evict_thread(host: &RuntimeHost, thread_id: &str) {
@@ -252,9 +280,11 @@ fn evict_thread(host: &RuntimeHost, thread_id: &str) {
         tracing::info!(thread_id = %thread_id, "evicting thread");
         // Closing the inbox causes run_loop to return; abort the task
         // for prompt teardown of any blocked compactor / model call.
-        if let Ok(mut handle_slot) = thread.task_handle.lock()
-            && let Some(handle) = handle_slot.take()
-        {
+        let mut handle_slot = thread
+            .task_handle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(handle) = handle_slot.take() {
             handle.abort();
         }
     }
@@ -271,179 +301,54 @@ fn reap_oldest_idle(host: &RuntimeHost) {
         .iter()
         .filter_map(|entry| {
             let thread = entry.value().get()?;
-            let guard = thread.idle_since.lock().ok()?;
+            let guard = thread
+                .idle_since
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let since = (*guard)?;
             Some((thread.thread_id.clone(), since))
         })
         .min_by_key(|(_, since)| *since)
         .map(|(id, _)| id);
     if let Some(thread_id) = victim {
-        let admission = admission_lock(host, &thread_id);
-        let Ok(_guard) = admission.try_lock() else {
-            return;
-        };
-        if lookup_thread(host, &thread_id).is_some_and(|thread| thread.idle_for() > Duration::ZERO)
-        {
-            evict_thread(host, &thread_id);
-        }
+        evict_thread(host, &thread_id);
     }
 }
 
-/// Weak entries keep only concurrent admissions serialized, without retaining
-/// one lock forever for every historical thread. No network work holds a map guard.
-pub fn admission_lock(host: &RuntimeHost, thread_id: &str) -> Arc<tokio::sync::Mutex<()>> {
-    host.turn_admissions
-        .retain(|_, lock| lock.strong_count() > 0);
-    let mut entry = host
-        .turn_admissions
-        .entry(thread_id.to_string())
-        .or_default();
-    if let Some(lock) = entry.upgrade() {
-        return lock;
-    }
-    let lock = Arc::new(tokio::sync::Mutex::new(()));
-    *entry = Arc::downgrade(&lock);
-    lock
-}
-
-/// Owns a dedup slot across admission, including cancellation while waiting.
-/// Map + this owner are the final two references only after every waiter leaves.
-/// Removing under the map shard lock prevents new requests joining a detached
-/// slot; successful entries remain until the normal thread eviction boundary.
-pub struct EventAdmission {
-    host: Arc<RuntimeHost>,
-    key: String,
-    pub slot: Arc<tokio::sync::Mutex<bool>>,
-}
-
-impl EventAdmission {
-    pub fn new(host: Arc<RuntimeHost>, key: String) -> Self {
-        let slot = host
-            .seen
-            .entry(key.clone())
-            .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(false)))
-            .clone();
-        Self { host, key, slot }
-    }
-}
-
-impl Drop for EventAdmission {
-    fn drop(&mut self) {
-        let slot = std::mem::take(&mut self.slot);
-        self.host.seen.remove_if(&self.key, |_, current| {
-            let same = Arc::ptr_eq(current, &slot);
-            // Release our reference under the map lock so two concurrent
-            // final owners cannot both observe the other and leave an orphan.
-            drop(slot);
-            same && Arc::strong_count(current) == 1
-                && current.try_lock().is_ok_and(|accepted| !*accepted)
-        });
-    }
-}
-
-/// Roll back admission even when its HTTP future is cancelled before enqueue.
-pub struct UnclaimedInvocation {
-    host: Arc<RuntimeHost>,
-    thread: Arc<ConfiguredThread>,
-    accepted: bool,
-}
-
-impl UnclaimedInvocation {
-    pub fn new(host: Arc<RuntimeHost>, thread: Arc<ConfiguredThread>) -> Self {
-        Self {
-            host,
-            thread,
-            accepted: false,
-        }
-    }
-    pub fn accept(&mut self) {
-        self.accepted = true;
-    }
-}
-
-impl Drop for UnclaimedInvocation {
-    fn drop(&mut self) {
-        if self.accepted {
-            return;
-        }
-        if let Ok(mut slot) = self.thread.task_handle.lock()
-            && let Some(handle) = slot.take()
-        {
-            handle.abort();
-        }
-        self.host
-            .threads
-            .remove_if(&self.thread.thread_id, |_, cell| {
-                cell.get()
-                    .is_some_and(|current| Arc::ptr_eq(current, &self.thread))
-            });
-    }
-}
-
-/// Called under this thread's admission lock before any input was accepted.
-pub async fn discard_unclaimed(host: &RuntimeHost, thread: &Arc<ConfiguredThread>) {
-    let handle = thread
-        .task_handle
-        .lock()
-        .ok()
-        .and_then(|mut slot| slot.take());
-    if let Some(handle) = handle {
-        handle.abort();
-        let _ = handle.await;
-    }
-    host.threads.remove_if(&thread.thread_id, |_, cell| {
-        cell.get()
-            .is_some_and(|current| Arc::ptr_eq(current, thread))
-    });
-}
-
-/// First-turn bootstrap path. Concurrent /turn requests for the same thread
-/// race through the `OnceCell`; only one wins the bootstrap fetch and task
-/// spawn. A live invocation rejects later turns with retryable backpressure;
-/// its immutable credentials and actor are never reused for another event.
+/// Initializes warm state from an already-authenticated bootstrap. The caller
+/// holds the host admission lock through enqueue, excluding eviction. Later
+/// invocations still validate bootstrap but keep the existing driver/history;
+/// their bearer and MCP configuration change only when dequeued by the loop.
 pub async fn ensure_thread(
     host: &Arc<RuntimeHost>,
     thread_id: &str,
     bootstrap: ThreadBootstrap,
-    tokens: TokenRegistry,
+    bearer: String,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
-    // A completed invocation can leave only an idle host entry. Rebuild all
-    // clients/actor/driver from durable bootstrap, retaining dedup history until
-    // ordinary idle eviction. There is no credential rotation on a warm driver.
-    if let Some(previous) = lookup_thread(host, thread_id)
-        && previous.idle_for() > Duration::ZERO
-        && previous
-            .task_handle
-            .lock()
-            .ok()
-            .and_then(|slot| slot.as_ref().map(|task| task.is_finished()))
-            == Some(true)
-    {
-        host.threads.remove(thread_id);
-    }
     let cell = host
         .threads
         .entry(thread_id.to_string())
         .or_insert_with(|| Arc::new(OnceCell::new()))
         .clone();
 
-    let mut initialized = false;
-    let thread = cell
+    let result = cell
         .get_or_try_init(|| async {
-            initialized = true;
             // Reap skips busy threads and our own (still-uninitialized)
             // OnceCell, so worst case is a no-op.
             reap_oldest_idle(host);
+            let tokens = TokenRegistry::new(bearer.clone());
             spawn_thread(host, thread_id.to_string(), bootstrap, tokens).await
         })
-        .await?;
-
-    if !initialized {
-        // Never exchange credentials or MCP state on a live invocation. The
-        // server retries its durable event after this invocation finishes.
-        return Err(RunnerError::InvocationBusy);
+        .await;
+    match result {
+        Ok(thread) => Ok(thread.clone()),
+        Err(error) => {
+            host.threads.remove_if(thread_id, |_, current| {
+                Arc::ptr_eq(current, &cell) && current.get().is_none()
+            });
+            Err(error)
+        }
     }
-    Ok(thread.clone())
 }
 
 /// Builds a per-thread agent and spawns its tokio task. Each task is wrapped
@@ -455,7 +360,7 @@ async fn spawn_thread(
     bootstrap: ThreadBootstrap,
     tokens: TokenRegistry,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
-    let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<RunnerContent>();
+    let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<QueuedTurn>();
     let (notice_tx, notice_rx) = mpsc::unbounded_channel::<RunnerContent>();
     let (mcp_inbox_tx, mut mcp_inbox_rx) = mpsc::unbounded_channel::<String>();
 
@@ -468,7 +373,7 @@ async fn spawn_thread(
         }
     });
 
-    let (mcp_cmd_tx, mcp_catalog) = spawn_mcp_actor(
+    let (mcp_cmd_tx, mcp_catalog, mcp_known_tools) = spawn_mcp_actor(
         host.gram_client.clone(),
         host.mcp_http_client.clone(),
         &thread_id,
@@ -581,6 +486,7 @@ async fn spawn_thread(
     let compose_source = agentkit_tool_compose::ComposeTool::wrap(HiddenCatalogSource::new(
         mcp_catalog,
         mcp_cmd_tx.clone(),
+        mcp_known_tools,
     ))
     .with_source(native_tools.merge(agentkit_tool_fs::registry()))
     .with_source(UnknownToolSource);
@@ -637,26 +543,28 @@ async fn spawn_thread(
         .await
         .map_err(|e| RunnerError::AgentStart(e.to_string()))?;
 
-    let idle_since = Arc::new(Mutex::new(None));
+    let idle_since = Arc::new(Mutex::new(Some(Instant::now())));
     let loop_idle = Arc::clone(&idle_since);
     let log_thread_id = thread_id.clone();
     let host_for_eviction = Arc::clone(host);
     let evict_thread_id = thread_id.clone();
     let loop_thread_id = thread_id.clone();
-    let entry_idle = Arc::clone(&idle_since);
 
+    let eviction_cell = host
+        .threads
+        .get(&thread_id)
+        .map(|entry| entry.value().clone());
+    let loop_mcp_cmd = mcp_cmd_tx.clone();
     let task_handle = tokio::spawn(async move {
         let outcome = AssertUnwindSafe(run_loop(
             driver,
-            inbox_rx,
-            notice_rx,
+            (inbox_rx, notice_rx, tokens, Some(loop_mcp_cmd)),
             loop_idle,
             turn_end_compactor,
             loop_thread_id,
         ))
         .catch_unwind()
         .await;
-        let finished = matches!(&outcome, Ok(Ok("invocation finished")));
         match outcome {
             Ok(Ok(reason)) => {
                 tracing::info!(thread_id = %log_thread_id, reason = %reason, "thread loop exited")
@@ -673,16 +581,11 @@ async fn spawn_thread(
                 tracing::error!(thread_id = %log_thread_id, panic = %msg, "thread loop panicked");
             }
         }
-        // Retain successful idle entries for normal TTL/dedup eviction. The
-        // next admitted invocation replaces the whole driver and actor. Failed
-        // tasks must not leave a busy entry that prevents future admission.
-        if !finished {
-            host_for_eviction
-                .threads
-                .remove_if(&evict_thread_id, |_, cell| {
-                    cell.get()
-                        .is_some_and(|thread| Arc::ptr_eq(&thread.idle_since, &entry_idle))
-                });
+        // Drop the entry on exit so a stale ConfiguredThread doesn't keep
+        // holding state for a dead task.
+        let _admission = host_for_eviction.admission.lock().await;
+        if let Some(cell) = eviction_cell {
+            remove_thread_if_current(&host_for_eviction, &evict_thread_id, &cell);
         }
     });
 
@@ -692,7 +595,6 @@ async fn spawn_thread(
         idle_since,
         inbox_tx,
         task_handle: Mutex::new(Some(task_handle)),
-        mcp_cmd_tx,
         cancellation,
     });
     Ok(configured)
@@ -713,8 +615,12 @@ fn mcp_disclosure_item(servers: &[McpServer]) -> String {
 
 async fn run_loop<S>(
     mut driver: LoopDriver<S>,
-    mut inbox: UnboundedReceiver<RunnerContent>,
-    mut notices: UnboundedReceiver<RunnerContent>,
+    (mut inbox, mut notices, tokens, mcp_cmd): (
+        UnboundedReceiver<QueuedTurn>,
+        UnboundedReceiver<RunnerContent>,
+        TokenRegistry,
+        Option<mpsc::Sender<McpCmd>>,
+    ),
     idle_since: Arc<Mutex<Option<Instant>>>,
     turn_end_compactor: Option<PersistingCompactor>,
     thread_id: String,
@@ -744,16 +650,35 @@ where
                 } else if let Some(compactor) = &turn_end_compactor {
                     compact_at_turn_end(compactor, &driver).await;
                 }
-                mark_idle(&idle_since);
-                return Ok("invocation finished");
+                let mut idle = idle_since
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                *idle = if inbox.is_empty() {
+                    Some(Instant::now())
+                } else {
+                    None
+                };
             }
             LoopStep::Interrupt(LoopInterrupt::AwaitingInput(req)) => {
-                // Exactly one invocation owns this driver, immutable bearer,
-                // actor and compactor. Never coalesce separate event inputs.
-                let items = match inbox.recv().await {
-                    Some(msg) => vec![user_content_item(&msg)],
-                    None => return Ok("inbox closed"),
+                let Some(turn) = inbox.recv().await else {
+                    return Ok("inbox closed");
                 };
+                if let Some(cmd) = &mcp_cmd {
+                    let (reply, ack) = tokio::sync::oneshot::channel();
+                    cmd.send(McpCmd::TurnBoundary {
+                        token: turn.token,
+                        desired: turn.mcp_servers,
+                        reply,
+                    })
+                    .await
+                    .map_err(|_| RunnerError::Loop("MCP actor closed".into()))?;
+                    ack.await
+                        .map_err(|_| RunnerError::Loop("MCP boundary failed".into()))??;
+                } else {
+                    tokens.rotate(turn.token)?;
+                }
+                let mut items = vec![user_content_item(&turn.input)];
+                items.extend(drained_into_items(drain(&mut notices)));
                 mark_busy(&idle_since);
                 req.submit(&mut driver, items)?;
             }
@@ -794,16 +719,6 @@ async fn compact_at_turn_end<S: ModelSession>(
     }
 }
 
-fn invocation_content(input: RunnerContent, notice: Option<String>) -> RunnerContent {
-    let Some(notice) = notice else { return input };
-    let mut parts = vec![RunnerContentPart::Text { text: notice }];
-    match input {
-        RunnerContent::Text(text) => parts.push(RunnerContentPart::Text { text }),
-        RunnerContent::Parts(content) => parts.extend(content),
-    }
-    RunnerContent::Parts(parts)
-}
-
 fn drained_into_items(drained: Vec<RunnerContent>) -> Vec<Item> {
     drained.iter().map(user_content_item).collect()
 }
@@ -817,15 +732,9 @@ fn drain(inbox: &mut UnboundedReceiver<RunnerContent>) -> Vec<RunnerContent> {
 }
 
 fn mark_busy(idle_since: &Arc<Mutex<Option<Instant>>>) {
-    if let Ok(mut slot) = idle_since.lock() {
-        *slot = None;
-    }
-}
-
-fn mark_idle(idle_since: &Arc<Mutex<Option<Instant>>>) {
-    if let Ok(mut slot) = idle_since.lock() {
-        *slot = Some(Instant::now());
-    }
+    *idle_since
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
 }
 
 /// Builds a user item from a content union. Text maps to `TextPart`s and
@@ -957,75 +866,263 @@ mod tests {
     use super::*;
     use crate::http_layer::{TokenRegistry, build_bootstrap_client};
 
-    fn test_bootstrap() -> ThreadBootstrap {
-        serde_json::from_str(
-            r#"{"model":"test","completions_url":"http://localhost","chat_id":"chat"}"#,
-        )
-        .unwrap()
+    #[derive(Clone)]
+    struct QueueTestModel {
+        tokens: TokenRegistry,
+        seen: mpsc::UnboundedSender<(String, Vec<String>)>,
+        finish: Arc<tokio::sync::Semaphore>,
     }
 
-    #[tokio::test]
-    async fn failed_admission_slots_are_bounded_and_success_is_retained() {
-        let host = empty_host();
-        for n in 0..1000 {
-            let admission = EventAdmission::new(host.clone(), format!("failed:{n}"));
-            let guard = admission.slot.lock().await;
-            assert!(!*guard);
-            drop(guard);
-            drop(admission);
-            assert!(host.seen.is_empty());
+    #[async_trait::async_trait]
+    impl agentkit_loop::ModelAdapter for QueueTestModel {
+        type Session = Self;
+        async fn start_session(&self, _: SessionConfig) -> Result<Self, agentkit_loop::LoopError> {
+            Ok(self.clone())
         }
-        let retry = EventAdmission::new(host.clone(), "failed:0".into());
-        *retry.slot.lock().await = true;
-        drop(retry);
-        let successful_retry = EventAdmission::new(host.clone(), "failed:0".into());
-        assert!(*successful_retry.slot.lock().await);
-        drop(successful_retry);
-        assert!(host.seen.contains_key("failed:0"));
+    }
+
+    #[async_trait::async_trait]
+    impl ModelSession for QueueTestModel {
+        type Turn = QueueTestTurn;
+        async fn begin_turn(
+            &mut self,
+            request: agentkit_loop::TurnRequest,
+            _: Option<agentkit_core::TurnCancellation>,
+        ) -> Result<Self::Turn, agentkit_loop::LoopError> {
+            let messages = request
+                .transcript
+                .iter()
+                .filter(|item| item.kind == ItemKind::User)
+                .flat_map(|item| item.parts.iter())
+                .filter_map(|part| match part {
+                    Part::Text(text) => Some(text.text.clone()),
+                    _ => None,
+                })
+                .collect();
+            self.seen
+                .send((self.tokens.current().unwrap(), messages))
+                .unwrap();
+            Ok(QueueTestTurn {
+                finish: self.finish.clone(),
+                emitted: false,
+            })
+        }
+    }
+
+    struct QueueTestTurn {
+        finish: Arc<tokio::sync::Semaphore>,
+        emitted: bool,
+    }
+
+    #[async_trait::async_trait]
+    impl agentkit_loop::ModelTurn for QueueTestTurn {
+        async fn next_event(
+            &mut self,
+            _: Option<agentkit_core::TurnCancellation>,
+        ) -> Result<Option<agentkit_loop::ModelTurnEvent>, agentkit_loop::LoopError> {
+            if self.emitted {
+                return Ok(None);
+            }
+            self.finish.acquire().await.unwrap().forget();
+            self.emitted = true;
+            Ok(Some(agentkit_loop::ModelTurnEvent::Finished(
+                agentkit_loop::ModelTurnResult {
+                    model: None,
+                    response_id: None,
+                    finish_reason: FinishReason::Completed,
+                    output_items: vec![],
+                    usage: None,
+                    metadata: Default::default(),
+                },
+            )))
+        }
     }
 
     #[tokio::test]
-    async fn cancelled_admission_keeps_waiters_on_the_same_slot() {
-        let host = empty_host();
-        let first = EventAdmission::new(host.clone(), "thread:event".into());
-        let first_guard = first.slot.lock().await;
-        let waiting = EventAdmission::new(host.clone(), "thread:event".into());
-        assert!(Arc::ptr_eq(&first.slot, &waiting.slot));
-        // Cancellation releases the lock before its owner, but the waiter
-        // prevents removal; fresh retries must still join that same slot.
-        drop(first_guard);
-        drop(first);
-        let retry = EventAdmission::new(host.clone(), "thread:event".into());
-        assert!(Arc::ptr_eq(&waiting.slot, &retry.slot));
-        let waiter_task = tokio::spawn(async move {
-            let _guard = waiting.slot.lock().await;
-            std::future::pending::<()>().await;
+    async fn queued_messages_rotate_existing_bearer_only_between_turns() {
+        // Exercise the real terminal compactor and its awaited persistence,
+        // gating the HTTP response rather than relying on a timing window.
+        let (persist_tx, mut persisted) = mpsc::unbounded_channel();
+        let persist_finish = Arc::new(tokio::sync::Semaphore::new(0));
+        let release_persist = persist_finish.clone();
+        let app = axum::Router::new().route(
+            "/rpc/assistants.recordCompactedGeneration",
+            axum::routing::post(move |headers: http::HeaderMap| {
+                let seen = persist_tx.clone();
+                let release = release_persist.clone();
+                async move {
+                    seen.send(
+                        headers
+                            .get("authorization")
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .to_string(),
+                    )
+                    .unwrap();
+                    release.acquire().await.unwrap().forget();
+                    http::StatusCode::NO_CONTENT
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let persist_server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
         });
-        tokio::task::yield_now().await;
-        waiter_task.abort();
-        let _ = waiter_task.await;
-        assert!(host.seen.contains_key("thread:event"));
-        drop(retry);
-        assert!(host.seen.is_empty());
+        let tokens = TokenRegistry::new("initial");
+        let (seen, mut observations) = mpsc::unbounded_channel();
+        let finish = Arc::new(tokio::sync::Semaphore::new(0));
+        let terminal = PersistingCompactor::new(
+            agentkit_compaction::StrategyCompactor::builder()
+                .trigger(|_, _| None)
+                .strategy(agentkit_compaction::DropReasoningStrategy::new())
+                .build()
+                .unwrap(),
+            GramBootstrapClient::new(
+                format!("http://{addr}"),
+                build_bootstrap_client(reqwest::Client::new()),
+            ),
+            tokens.clone(),
+            "shared-thread".into(),
+            None,
+        );
+        let driver = Agent::builder()
+            .model(QueueTestModel {
+                tokens: tokens.clone(),
+                seen,
+                finish: finish.clone(),
+            })
+            .build()
+            .unwrap()
+            .start(SessionConfig::new("shared-thread"))
+            .await
+            .unwrap();
+        let (tx, rx) = mpsc::unbounded_channel();
+        let (_notice_tx, notices) = mpsc::unbounded_channel();
+        let (cmd_tx, mut cmd_rx) = mpsc::channel(4);
+        let (boundary_tx, mut boundaries) = mpsc::unbounded_channel();
+        let boundary_tokens = tokens.clone();
+        let _actor = tokio::spawn(async move {
+            while let Some(McpCmd::TurnBoundary {
+                token,
+                desired,
+                reply,
+            }) = cmd_rx.recv().await
+            {
+                boundary_tx.send((token.clone(), desired)).unwrap();
+                boundary_tokens.rotate(token).unwrap();
+                reply.send(Ok(())).unwrap();
+            }
+        });
+        let task = tokio::spawn(run_loop(
+            driver,
+            (rx, notices, tokens.clone(), Some(cmd_tx)),
+            Arc::new(Mutex::new(None)),
+            Some(terminal),
+            "shared-thread".into(),
+        ));
+        tx.send(QueuedTurn {
+            input: RunnerContent::Text("Alice".into()),
+            token: "token-a".into(),
+            mcp_servers: None,
+        })
+        .unwrap();
+        let first_boundary = boundaries.recv().await.unwrap();
+        assert_eq!(first_boundary.0, "token-a");
+        assert!(first_boundary.1.is_none());
+        let a = tokio::time::timeout(Duration::from_secs(5), observations.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(a, ("token-a".into(), vec!["Alice".into()]));
+        tx.send(QueuedTurn {
+            input: RunnerContent::Text("Bob".into()),
+            token: "token-b".into(),
+            mcp_servers: Some(vec![McpServer {
+                id: "next-turn-only".into(),
+                url: "https://example.com/mcp".into(),
+                headers: Default::default(),
+            }]),
+        })
+        .unwrap();
+        assert_eq!(tokens.current().unwrap(), "token-a");
+        assert!(observations.try_recv().is_err());
+        assert!(
+            boundaries.try_recv().is_err(),
+            "queued config must not reach the actor during the preceding turn"
+        );
+        finish.add_permits(1);
+        assert_eq!(persisted.recv().await.unwrap(), "Bearer token-a");
+        assert_eq!(tokens.current().unwrap(), "token-a");
+        assert!(
+            boundaries.try_recv().is_err(),
+            "the next boundary must wait for preceding compaction persistence"
+        );
+        persist_finish.add_permits(1);
+        let next_boundary = boundaries.recv().await.unwrap();
+        assert_eq!(next_boundary.0, "token-b");
+        assert_eq!(next_boundary.1.unwrap()[0].id, "next-turn-only");
+        let b = tokio::time::timeout(Duration::from_secs(5), observations.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(b, ("token-b".into(), vec!["Alice".into(), "Bob".into()]));
+        finish.add_permits(1);
+        assert_eq!(persisted.recv().await.unwrap(), "Bearer token-b");
+        persist_finish.add_permits(1);
+        drop(tx);
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(5), task)
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap(),
+            "inbox closed"
+        );
+        persist_server.abort();
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn concurrent_final_failed_owners_do_not_orphan_slots() {
-        let host = empty_host();
-        for _ in 0..100 {
-            let a = EventAdmission::new(host.clone(), "thread:event".into());
-            let b = EventAdmission::new(host.clone(), "thread:event".into());
-            let gate = Arc::new(tokio::sync::Barrier::new(2));
-            let other_gate = gate.clone();
-            let task = tokio::spawn(async move {
-                other_gate.wait().await;
-                drop(a);
-            });
-            gate.wait().await;
-            drop(b);
-            task.await.unwrap();
-            assert!(host.seen.is_empty());
-        }
+    #[tokio::test]
+    async fn failed_boundary_ack_does_not_submit_input() {
+        let tokens = TokenRegistry::new("prior");
+        let (seen, mut observations) = mpsc::unbounded_channel();
+        let driver = Agent::builder()
+            .model(QueueTestModel {
+                tokens: tokens.clone(),
+                seen,
+                finish: Arc::new(tokio::sync::Semaphore::new(0)),
+            })
+            .build()
+            .unwrap()
+            .start(SessionConfig::new("T"))
+            .await
+            .unwrap();
+        let (tx, rx) = mpsc::unbounded_channel();
+        let (_notice_tx, notices) = mpsc::unbounded_channel();
+        let (cmd, mut commands) = mpsc::channel(1);
+        let task = tokio::spawn(run_loop(
+            driver,
+            (rx, notices, tokens.clone(), Some(cmd)),
+            Arc::new(Mutex::new(None)),
+            None,
+            "T".into(),
+        ));
+        tx.send(QueuedTurn {
+            input: RunnerContent::Text("must not run".into()),
+            token: "next".into(),
+            mcp_servers: None,
+        })
+        .unwrap();
+        let McpCmd::TurnBoundary { reply, .. } = commands.recv().await.unwrap() else {
+            panic!("expected boundary");
+        };
+        reply
+            .send(Err(RunnerError::Loop("invalid MCP header".into())))
+            .unwrap();
+        assert!(task.await.unwrap().is_err());
+        assert!(observations.try_recv().is_err());
+        assert_eq!(tokens.current().unwrap(), "prior");
     }
 
     fn empty_host() -> Arc<RuntimeHost> {
@@ -1040,7 +1137,6 @@ mod tests {
             identity,
             started_at: Instant::now(),
             seen: DashMap::new(),
-            turn_admissions: DashMap::new(),
             threads: DashMap::new(),
             gram_client,
             thread_idle_ttl: Duration::from_secs(60 * 30),
@@ -1049,12 +1145,12 @@ mod tests {
                 .build()
                 .expect("MCP HTTP client should build"),
             spill_root: PathBuf::from("/tmp/runtime-test-spill"),
+            admission: tokio::sync::Mutex::new(()),
         })
     }
 
     fn insert_thread(host: &RuntimeHost, thread_id: &str, idle_since: Option<Instant>) {
-        let (inbox_tx, _inbox_rx) = mpsc::unbounded_channel::<RunnerContent>();
-        let (mcp_cmd_tx, _mcp_cmd_rx) = mpsc::channel::<McpCmd>(1);
+        let (inbox_tx, _inbox_rx) = mpsc::unbounded_channel::<QueuedTurn>();
         let handle = tokio::spawn(async {});
         let configured = Arc::new(ConfiguredThread {
             thread_id: thread_id.to_string(),
@@ -1062,7 +1158,6 @@ mod tests {
             idle_since: Arc::new(Mutex::new(idle_since)),
             inbox_tx,
             task_handle: Mutex::new(Some(handle)),
-            mcp_cmd_tx,
             cancellation: CancellationController::new(),
         });
         let cell = Arc::new(OnceCell::new());
@@ -1073,101 +1168,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn admission_is_scoped_and_expired_locks_are_pruned() {
+    async fn old_task_cleanup_preserves_replacement_cell() {
         let host = empty_host();
-        let a = admission_lock(&host, "a");
-        let _guard = a.lock().await;
-        let again = admission_lock(&host, "a");
-        assert!(Arc::ptr_eq(&a, &again));
-        let b = admission_lock(&host, "b");
-        assert!(
-            b.try_lock().is_ok(),
-            "unrelated admission must not wait for a"
-        );
-        drop(b);
-        let _c = admission_lock(&host, "c");
-        assert!(!host.turn_admissions.contains_key("b"));
+        insert_thread(&host, "T", Some(Instant::now()));
+        let old = host.threads.get("T").unwrap().value().clone();
+        insert_thread(&host, "T", Some(Instant::now()));
+        remove_thread_if_current(&host, "T", &old);
+        assert!(host.threads.contains_key("T"));
     }
 
     #[tokio::test]
-    async fn unclaimed_failure_retires_busy_state_without_forgetting_completed_events() {
+    async fn sweep_waits_for_admission_and_rechecks_busy_state() {
         let host = empty_host();
-        insert_thread(&host, "failed", None);
-        host.seen.insert(
-            "failed:previous".into(),
-            Arc::new(tokio::sync::Mutex::new(true)),
+        insert_thread(
+            &host,
+            "T",
+            Some(Instant::now() - host.thread_idle_ttl - Duration::from_secs(1)),
         );
-        let thread = lookup_thread(&host, "failed").unwrap();
-        discard_unclaimed(&host, &thread).await;
-        assert!(lookup_thread(&host, "failed").is_none());
-        assert!(host.seen.contains_key("failed:previous"));
-    }
-
-    #[tokio::test]
-    async fn cancelled_admission_drops_its_unclaimed_thread() {
-        let host = empty_host();
-        insert_thread(&host, "cancelled", None);
-        let thread = lookup_thread(&host, "cancelled").unwrap();
-        let admission = UnclaimedInvocation::new(host.clone(), thread);
-        drop(admission);
-        assert!(lookup_thread(&host, "cancelled").is_none());
-    }
-
-    #[test]
-    fn reconciliation_notice_is_part_of_first_input_without_a_tool_call() {
-        let content = invocation_content(
-            RunnerContent::Text("prompt".into()),
-            Some("server update".into()),
-        );
-        let RunnerContent::Parts(parts) = content else {
-            panic!("expected content parts")
-        };
-        assert_eq!(parts.len(), 2);
-        assert!(matches!(&parts[0], RunnerContentPart::Text { text } if text == "server update"));
-        assert!(matches!(&parts[1], RunnerContentPart::Text { text } if text == "prompt"));
-    }
-
-    #[tokio::test]
-    async fn another_invocation_cannot_reuse_or_rotate_an_active_thread() {
-        let host = empty_host();
-        insert_thread(&host, "shared-thread", None);
-        let original = lookup_thread(&host, "shared-thread").unwrap();
-        let (a, b) = tokio::join!(
-            ensure_thread(
-                &host,
-                "shared-thread",
-                test_bootstrap(),
-                TokenRegistry::new("user-a")
-            ),
-            ensure_thread(
-                &host,
-                "shared-thread",
-                test_bootstrap(),
-                TokenRegistry::new("user-b")
-            ),
-        );
-        assert!(a.is_err());
-        assert!(b.is_err());
-        assert!(Arc::ptr_eq(
-            &original,
-            &lookup_thread(&host, "shared-thread").unwrap()
-        ));
-    }
-
-    #[tokio::test]
-    async fn queued_invocation_cannot_change_an_earlier_client_snapshot() {
-        let first = TokenRegistry::new("human-a");
-        let model = first.clone();
-        let actor = first.clone();
-        let compactor = first.clone();
-        let second = TokenRegistry::new("workload-b");
-        let (a, b) = tokio::join!(async { model.current().unwrap() }, async {
-            second.current().unwrap()
-        });
-        assert_eq!(a, "human-a");
-        assert_eq!(b, "workload-b");
-        assert_eq!(actor.current().unwrap(), "human-a");
-        assert_eq!(compactor.current().unwrap(), "human-a");
+        let guard = host.admission.lock().await;
+        let sweep = sweep_idle(&host);
+        tokio::pin!(sweep);
+        assert!(futures::poll!(&mut sweep).is_pending());
+        mark_busy(&lookup_thread(&host, "T").unwrap().idle_since);
+        drop(guard);
+        sweep.await;
+        assert!(host.threads.contains_key("T"));
     }
 
     #[tokio::test]

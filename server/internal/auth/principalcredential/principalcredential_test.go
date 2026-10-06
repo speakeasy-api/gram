@@ -110,6 +110,6 @@ func TestLegacyRuntimeTokenValidatorRejectsPrincipalCredentials(t *testing.T) {
 	t.Parallel()
 	raw, _, err := principalcredential.New(newSigner(t), nil).Mint(agentCredential())
 	require.NoError(t, err)
-	_, err = assistanttokens.New("secret", nil, nil).Validate(raw)
+	_, err = assistanttokens.New("secret", nil, nil, nil, nil).Validate(raw)
 	require.Error(t, err, "an RS256 principal credential never passes the HS256 assistant runtime token validator")
 }

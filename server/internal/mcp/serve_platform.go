@@ -73,7 +73,7 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	authedCtx, _, err := s.assistantTokens.Authorize(ctx, token)
+	authedCtx, _, err := s.assistantTokens.AuthorizeRuntime(ctx, token)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "failed to authorize platform toolset request").LogError(ctx, s.logger)
 	}

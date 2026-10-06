@@ -456,7 +456,7 @@ func TestHandleMCPAuthCallbackInvalidClientRetiresCIMDClient(t *testing.T) {
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
 
 	service := newCIMDAuthTestService(t, conn)
-	service.core.assistantTokens = assistanttokens.New("test-jwt-secret", conn, nil)
+	service.core.assistantTokens = assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
 	service.signaler = &stubWorkflowSignaler{signalledThreads: nil}
 	redirectURI := "https://gram.example.com/rpc/assistantMcpAuth/" + assistantID.String() + "/oauth/callback"
 	cimd, err := service.getOrRegisterMCPAuthClient(

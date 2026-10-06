@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use agentkit_http::Http;
@@ -28,29 +28,41 @@ const HTTP_RETRY_MAX: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Error)]
 enum MiddlewareError {
-    #[error("token registry lock poisoned")]
-    LockPoisoned,
-
     #[error("invalid bearer token header value: {0}")]
     InvalidTokenHeader(#[from] http::header::InvalidHeaderValue),
 }
 
-/// Immutable bearer owned by exactly one invocation. Clients, reconnects and
-/// delayed responses retain this snapshot even after another turn is admitted.
+/// Bearer slot for one assistant thread. Every outbound request the thread
+/// makes (chat completions, MCP, bootstrap fetch) authenticates against
+/// this slot, so the ThreadID claim minted on `/threads/turn` propagates
+/// to platform tools that key off `principal.ThreadID`.
 #[derive(Clone, Debug)]
 pub struct TokenRegistry {
-    inner: Arc<String>,
+    inner: Arc<RwLock<String>>,
 }
 
 impl TokenRegistry {
     pub fn new(initial: impl Into<String>) -> Self {
         Self {
-            inner: Arc::new(initial.into()),
+            inner: Arc::new(RwLock::new(initial.into())),
         }
     }
 
+    pub fn rotate(&self, next: impl Into<String>) -> Result<(), RunnerError> {
+        let mut slot = self
+            .inner
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *slot = next.into();
+        Ok(())
+    }
+
     pub fn current(&self) -> Result<String, RunnerError> {
-        Ok(self.inner.as_ref().clone())
+        Ok(self
+            .inner
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone())
     }
 }
 
@@ -64,7 +76,7 @@ impl Middleware for TokenRegistry {
     ) -> reqwest_middleware::Result<reqwest::Response> {
         let token = self
             .current()
-            .map_err(|_| reqwest_middleware::Error::middleware(MiddlewareError::LockPoisoned))?;
+            .map_err(reqwest_middleware::Error::middleware)?;
         let value = http::HeaderValue::try_from(format!("Bearer {token}"))
             .map_err(|e| reqwest_middleware::Error::middleware(MiddlewareError::from(e)))?;
         req.headers_mut().insert(http::header::AUTHORIZATION, value);
@@ -94,21 +106,22 @@ pub fn build_bootstrap_client(client: reqwest::Client) -> ClientWithMiddleware {
     ClientBuilder::new(client).with(retry_middleware()).build()
 }
 
-/// `McpHttpClient` impl that mints a fresh bearer token per request from a
-/// shared [`TokenRegistry`]. Replaces the static `bearer_token` path in
-/// [`agentkit_mcp::StreamableHttpTransportConfig`] so token rotation does
-/// not require a reconnect.
-pub struct McpRotatingClient {
+/// `McpHttpClient` impl that sends one fixed bearer for the lifetime of a
+/// transport. Each MCP session captures the credential of the invocation that
+/// opened it, so late protocol traffic — a slow discovery POST or the session
+/// DELETE that cleans it up — can never carry a later invocation's bearer to
+/// an endpoint that invocation did not configure.
+pub struct McpSessionClient {
     inner: reqwest::Client,
-    tokens: TokenRegistry,
+    token: String,
     static_headers: HeaderMap,
 }
 
-impl McpRotatingClient {
-    pub fn new(inner: reqwest::Client, tokens: TokenRegistry, static_headers: HeaderMap) -> Self {
+impl McpSessionClient {
+    pub fn new(inner: reqwest::Client, token: String, static_headers: HeaderMap) -> Self {
         Self {
             inner,
-            tokens,
+            token,
             static_headers,
         }
     }
@@ -123,13 +136,13 @@ impl McpRotatingClient {
         custom
     }
 
-    fn current_token(&self) -> Option<String> {
-        self.tokens.current().ok().filter(|t| !t.is_empty())
+    fn bearer(&self) -> Option<String> {
+        Some(self.token.clone()).filter(|t| !t.is_empty())
     }
 }
 
 #[async_trait]
-impl McpHttpClient for McpRotatingClient {
+impl McpHttpClient for McpSessionClient {
     async fn post_message(
         &self,
         uri: Arc<str>,
@@ -138,7 +151,7 @@ impl McpHttpClient for McpRotatingClient {
         _auth_header: Option<String>,
         custom_headers: HashMap<HeaderName, HeaderValue>,
     ) -> Result<McpStreamableHttpPostResponse, McpStreamableHttpError<reqwest::Error>> {
-        let token = self.current_token();
+        let token = self.bearer();
         let headers = self.merged_headers(custom_headers);
         RmcpStreamableHttpClient::post_message(
             &self.inner,
@@ -158,7 +171,7 @@ impl McpHttpClient for McpRotatingClient {
         _auth_header: Option<String>,
         custom_headers: HashMap<HeaderName, HeaderValue>,
     ) -> Result<(), McpStreamableHttpError<reqwest::Error>> {
-        let token = self.current_token();
+        let token = self.bearer();
         let headers = self.merged_headers(custom_headers);
         RmcpStreamableHttpClient::delete_session(&self.inner, uri, session_id, token, headers).await
     }
@@ -171,7 +184,7 @@ impl McpHttpClient for McpRotatingClient {
         _auth_header: Option<String>,
         custom_headers: HashMap<HeaderName, HeaderValue>,
     ) -> Result<McpSseStream, McpStreamableHttpError<reqwest::Error>> {
-        let token = self.current_token();
+        let token = self.bearer();
         let headers = self.merged_headers(custom_headers);
         RmcpStreamableHttpClient::get_stream(
             &self.inner,
@@ -182,5 +195,25 @@ impl McpHttpClient for McpRotatingClient {
             headers,
         )
         .await
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scalar_bearer_recovers_after_lock_poison() {
+        let tokens = TokenRegistry::new("opaque-original");
+        let poison = tokens.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = poison.inner.write().unwrap();
+            panic!("test-only poison");
+        })
+        .join();
+        assert_eq!(tokens.current().unwrap(), "opaque-original");
+        tokens.rotate("opaque-next").unwrap();
+        assert_eq!(tokens.current().unwrap(), "opaque-next");
     }
 }

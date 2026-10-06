@@ -543,23 +543,32 @@ func (a *App) CreateWakeInstance(ctx context.Context, params CreateWakeInstanceP
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: wake organization mismatch", ErrBadRequest)
 	}
 	userID := owner.CreatedByUserID.String
+	credential, hasCredential := contextvalues.PrincipalCredentialAuthorization(ctx)
 	if auth, ok := contextvalues.GetAuthContext(ctx); ok && auth != nil {
 		if auth.ActiveOrganizationID != params.OrganizationID {
 			return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: wake requester organization mismatch", ErrBadRequest)
 		}
-		if auth.UserID != "" {
+		switch {
+		case hasCredential:
+			userID = credential.AuthorizerUserID
+		case auth.UserID != "":
 			userID = auth.UserID
 		}
 	}
-	if userID == "" {
-		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: wake requester is unavailable", ErrBadRequest)
-	}
 
 	configMap := map[string]any{
-		"fire_at":           params.FireAt.UTC().Format(time.RFC3339Nano),
-		"correlation_id":    params.CorrelationID,
-		"requester_user_id": userID,
-		"identity_version":  1,
+		"fire_at":        params.FireAt.UTC().Format(time.RFC3339Nano),
+		"correlation_id": params.CorrelationID,
+	}
+	// A wake scheduled under a principal credential acts for the credential's
+	// authorizing user. One with no authorizing user, such as a workload,
+	// records no requester and later runs the same way.
+	if !hasCredential || userID != "" {
+		if userID == "" {
+			return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: wake requester is unavailable", ErrBadRequest)
+		}
+		configMap["requester_user_id"] = userID
+		configMap["identity_version"] = 1
 	}
 	if params.Note != nil {
 		configMap["note"] = *params.Note

@@ -103,7 +103,7 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 
 	var stopCalls atomic.Int64
 	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
 	corruption := fmt.Errorf("%w: execute fly turn request: status=400 body=provider error: messages: tool_use_id has no corresponding tool_use block", ErrHistoryCorrupted)
 	backend := testRuntimeBackend{
 		backend:    runtimeBackendFlyIO,
@@ -216,7 +216,7 @@ func TestServiceCoreSkipsSelfHealAfterFirstRetry(t *testing.T) {
 
 	var stopCalls atomic.Int64
 	logger := testenv.NewLogger(t)
-	tokens := assistanttokens.New("test-jwt-secret", conn, nil)
+	tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
 	corruption := fmt.Errorf("%w: provider error: messages: tool_use_id has no corresponding tool_use block", ErrHistoryCorrupted)
 	backend := testRuntimeBackend{
 		backend:    runtimeBackendFlyIO,

@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -173,6 +174,7 @@ type Service struct {
 	telemLogger            *tm.Logger
 	vectorToolStore        *rag.ToolsetVectorStore
 	assistantTokens        *assistanttokens.Manager
+	principalCredentials   *principalcredential.Issuer
 	sessions               *sessions.Manager
 	consentBindings        ConsentBindingService
 	identityResolver       IdentityResolver
@@ -413,6 +415,7 @@ func NewService(
 	triggerApp *bgtriggers.App,
 	authzEngine *authz.Engine,
 	assistantTokens *assistanttokens.Manager,
+	principalCredentials *principalcredential.Issuer,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
 	platformExtras []platformtools.ExternalTool,
@@ -507,6 +510,7 @@ func NewService(
 		telemLogger:            telemLogger,
 		vectorToolStore:        vectorToolStore,
 		assistantTokens:        assistantTokens,
+		principalCredentials:   principalCredentials,
 		sessions:               sessions,
 		chatSessionsManager:    chatSessionsManager,
 		enc:                    enc,
@@ -1301,6 +1305,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 			}
 		}
 
+		if err := requirePrincipalCredentialProject(ctx, toolset.ProjectID); err != nil {
+			return err
+		}
 		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.APIKeyID != "" {
 			if authCtx.ProjectID != nil && *authCtx.ProjectID != toolset.ProjectID {
 				return oops.E(oops.CodeForbidden, nil, "api key project does not match toolset project")
@@ -1882,6 +1889,9 @@ func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, is
 // the resource is a toolset id; remote-backend callers pass false and the
 // id is decorative.
 //
+// Principal credentials are authenticated and admitted as their agent or
+// workload principal, like agent API keys.
+//
 // Each successful strategy stamps its mcpidentity provenance here, at the
 // point of credential validation: assistant tokens are KindAssistant, API
 // keys (either scope) are KindAPIKey, and chat-session tokens are
@@ -1893,6 +1903,10 @@ func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, is
 func (s *Service) authenticateToken(ctx context.Context, token string, oauthResourceID uuid.UUID, isOAuthCapable bool) (context.Context, error) {
 	if token == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+
+	if principalcredential.IsToken(token) {
+		return s.authenticatePrincipalCredential(ctx, token)
 	}
 
 	if authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token); err == nil {

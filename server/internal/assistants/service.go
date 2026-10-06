@@ -2933,7 +2933,7 @@ func (s *ServiceCore) processEventTurn(
 
 	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
 
-	actorUserID, err := s.turnUserID(ctx, assistant, thread, event)
+	identity, err := s.resolveTurnIdentity(ctx, assistant, thread, event)
 	if err != nil {
 		return nil, err
 	}
@@ -2963,7 +2963,12 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return nil, err
 	}
-	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, actorUserID)
+	var turnToken string
+	if identity.AgentBacked {
+		turnToken, err = s.mintTurnCredential(ctx, assistant, thread, event, identity)
+	} else {
+		turnToken, err = s.MintThreadScopedRuntimeToken(assistant, thread.ID, identity.UserID)
+	}
 	if err != nil {
 		return nil, err
 	}

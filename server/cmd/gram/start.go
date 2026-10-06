@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auditapi"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
@@ -1069,7 +1070,9 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create mcp registry client: %w", err)
 			}
 
-			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
+			principalCredentials := principalcredential.New(callerAssertions, db)
+
+			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine, principalCredentials, cache.NewRedisCacheAdapter(redisClient))
 			assistantRuntime, err := newAssistantRuntime(ctx, logger, tracerProvider, c, guardianPolicy, db, serverURL)
 			if err != nil {
 				return err
@@ -1177,7 +1180,7 @@ func newStartCommand() *cli.Command {
 				Posthog: posthogClient, Features: featureFlags, ServerURL: serverURL, SiteURL: siteURL,
 				Encryption: encryptionClient, Guardian: guardianPolicy, Functions: functionsOrchestrator,
 				BillingTracker: billingTracker, Billing: billingRepo, Telemetry: telemLogger, TelemetryService: telemSvc,
-				RAG: ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager,
+				RAG: ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager, PrincipalCredentials: principalCredentials,
 				ShadowMCP: shadowMCPClient, MCPRisk: mcpPolicyEvaluator, Audit: auditLogger, PlatformExtras: assistantPlatformExtras,
 				PlatformFeatureChecker: platformFeatureChecker, PlatformToolsets: platformToolsets,
 				Identity: identityResolver, Challenges: remoteChallengeManager, CallbackOrigins: callbackOrigins, PlatformHosts: platformHosts,
