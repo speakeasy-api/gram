@@ -37,7 +37,7 @@ type UpdateDashboardRequestBody struct {
 type SaveDashboardLayoutRequestBody struct {
 	// The dashboard to lay out
 	ID string `form:"id" json:"id" xml:"id"`
-	// Every card and where it sits
+	// Every card and where it sits; a dashboard holds at most 100
 	Placements []*PlacementInputRequestBody `form:"placements" json:"placements" xml:"placements"`
 }
 

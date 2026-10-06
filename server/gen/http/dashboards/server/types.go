@@ -39,7 +39,7 @@ type UpdateDashboardRequestBody struct {
 type SaveDashboardLayoutRequestBody struct {
 	// The dashboard to lay out
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Every card and where it sits
+	// Every card and where it sits; a dashboard holds at most 100
 	Placements []*PlacementInputRequestBody `form:"placements,omitempty" json:"placements,omitempty" xml:"placements,omitempty"`
 }
 
@@ -4126,6 +4126,9 @@ func ValidateSaveDashboardLayoutRequestBody(body *SaveDashboardLayoutRequestBody
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if len(body.Placements) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.placements", body.Placements, len(body.Placements), 100, false))
 	}
 	for _, e := range body.Placements {
 		if e != nil {

@@ -237,7 +237,7 @@ type SaveDashboardFiltersPayload struct {
 type SaveDashboardLayoutPayload struct {
 	// The dashboard to lay out
 	ID string
-	// Every card and where it sits
+	// Every card and where it sits; a dashboard holds at most 100
 	Placements       []*PlacementInput
 	SessionToken     *string
 	ProjectSlugInput *string

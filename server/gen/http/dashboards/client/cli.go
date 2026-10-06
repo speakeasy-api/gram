@@ -174,12 +174,15 @@ func BuildSaveDashboardLayoutPayload(dashboardsSaveDashboardLayoutBody string, d
 	{
 		err = json.Unmarshal([]byte(dashboardsSaveDashboardLayoutBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"placements\": [\n         {\n            \"h\": 2,\n            \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"w\": 2,\n            \"widget_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"x\": 1,\n            \"y\": 1\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"placements\": [\n         {\n            \"h\": 2,\n            \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"w\": 2,\n            \"widget_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"x\": 1,\n            \"y\": 1\n         },\n         {\n            \"h\": 2,\n            \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"w\": 2,\n            \"widget_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"x\": 1,\n            \"y\": 1\n         },\n         {\n            \"h\": 2,\n            \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"w\": 2,\n            \"widget_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"x\": 1,\n            \"y\": 1\n         }\n      ]\n   }'")
 		}
 		if body.Placements == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("placements", "body"))
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if len(body.Placements) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.placements", body.Placements, len(body.Placements), 100, false))
+		}
 		for _, e := range body.Placements {
 			if e != nil {
 				if err2 := ValidatePlacementInputRequestBody(e); err2 != nil {

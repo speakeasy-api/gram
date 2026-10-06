@@ -15571,7 +15571,7 @@ func dashboardsSaveDashboardLayoutUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dashboards save-dashboard-layout --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"placements\": [\n         {\n            \"h\": 2,\n            \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"w\": 2,\n            \"widget_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"x\": 1,\n            \"y\": 1\n         }\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dashboards save-dashboard-layout --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"placements\": [\n         {\n            \"h\": 2,\n            \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"w\": 2,\n            \"widget_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"x\": 1,\n            \"y\": 1\n         },\n         {\n            \"h\": 2,\n            \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"w\": 2,\n            \"widget_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"x\": 1,\n            \"y\": 1\n         },\n         {\n            \"h\": 2,\n            \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"w\": 2,\n            \"widget_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"x\": 1,\n            \"y\": 1\n         }\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func dashboardsAddDashboardWidgetUsage() {

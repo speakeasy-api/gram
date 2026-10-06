@@ -288,10 +288,12 @@ func TestSaveDashboardLayout(t *testing.T) {
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "is not in this project")
 
+		// A card the dashboard does not have is left out, not refused: it
+		// went while the layout was being made (see the stale-layout test).
 		unknown := uuid.NewString()
-		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(&unknown, tile.ID.String(), 0, 0, 3, 2)))
-		requireOopsCode(t, err, oops.CodeBadRequest)
-		require.ErrorContains(t, err, "no card")
+		without, err := ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(&unknown, tile.ID.String(), 0, 0, 3, 2)))
+		require.NoError(t, err)
+		require.Empty(t, without.Widgets)
 
 		// A position that would wrap an addition is refused, not narrowed.
 		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(nil, tile.ID.String(), math.MaxInt-1, 0, 3, 2)))
@@ -304,6 +306,18 @@ func TestSaveDashboardLayout(t *testing.T) {
 		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, nil))
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "placements[0]: a placement is required")
+
+		// Cards cannot sit on top of each other, and there are only so many.
+		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(nil, tile.ID.String(), 0, 0, 3, 2), placement(nil, tile.ID.String(), 2, 1, 3, 2)))
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "placements[1] overlaps placements[0]")
+		many := make([]*gen.PlacementInput, 0, 101)
+		for i := range 101 {
+			many = append(many, placement(nil, tile.ID.String(), 0, i*2, 3, 2))
+		}
+		_, err = ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, many...))
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "a dashboard holds at most 100 cards")
 
 		// A refused layout changes nothing.
 		got, err := ti.service.GetDashboard(ctx, getPayload(dashboard.ID))
@@ -335,6 +349,53 @@ func TestSaveDashboardLayout(t *testing.T) {
 		_, err = ti.service.SaveDashboardLayout(otherCtx, layoutPayload(dashboard.ID))
 		requireOopsCode(t, err, oops.CodeForbidden)
 	})
+}
+
+func TestSaveDashboardLayoutIgnoresCardsThatWent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	dashboard, err := ti.service.CreateDashboard(ctx, createPayload("stale"))
+	require.NoError(t, err)
+	tile := insertWidget(t, ti, "Sessions", numberQuery, numberChart)
+	chart := insertWidget(t, ti, "Sessions by user", barQuery, barChart)
+	other := insertWidget(t, ti, "Sessions by surface", barQuery, barChart)
+
+	laid, err := ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID,
+		placement(nil, tile.ID.String(), 0, 0, 3, 2),
+		placement(nil, chart.ID.String(), 0, 2, 6, 3),
+		placement(nil, other.ID.String(), 6, 2, 6, 3)))
+	require.NoError(t, err)
+	require.Len(t, laid.Widgets, 3)
+	cardOf := func(widgetID uuid.UUID) *gen.DashboardPlacement {
+		for _, card := range laid.Widgets {
+			if card.WidgetID == widgetID.String() {
+				return card
+			}
+		}
+		t.Fatalf("no card for widget %s", widgetID)
+		return nil
+	}
+	tileCard, chartCard, otherCard := cardOf(tile.ID), cardOf(chart.ID), cardOf(other.ID)
+
+	// Meanwhile someone took the chart off, and the tile's widget was deleted.
+	_, err = ti.service.RemoveDashboardWidget(ctx, &gen.RemoveDashboardWidgetPayload{ID: dashboard.ID, PlacementID: chartCard.ID, SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	_, err = widgetsrepo.New(ti.conn).DeleteWidget(ctx, widgetsrepo.DeleteWidgetParams{ProjectID: ti.projectID, ID: tile.ID})
+	require.NoError(t, err)
+
+	// A layout made before either happened still lands: the cards that went
+	// are left out rather than refused, and the one that is still there
+	// moves, so autosave does not keep failing until a reload.
+	saved, err := ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID,
+		placement(&tileCard.ID, tile.ID.String(), 6, 0, 3, 2),
+		placement(&chartCard.ID, chart.ID.String(), 0, 2, 6, 3),
+		placement(&otherCard.ID, other.ID.String(), 0, 5, 12, 3)))
+	require.NoError(t, err)
+	require.Len(t, saved.Widgets, 1)
+	require.Equal(t, otherCard.ID, saved.Widgets[0].ID)
+	require.Equal(t, 0, saved.Widgets[0].X)
+	require.Equal(t, 5, saved.Widgets[0].Y)
+	require.Equal(t, 12, saved.Widgets[0].W)
 }
 
 func TestAddDashboardWidgetNeedsRoom(t *testing.T) {
@@ -379,6 +440,16 @@ func TestSaveDashboardFiltersAreBounded(t *testing.T) {
 	err = save(&gen.DashboardFilters{Range: nil, Values: map[string][]string{"user": {strings.Repeat("v", 501)}}})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 	require.ErrorContains(t, err, "filters.values.user: a value is at most 500 characters")
+
+	err = save(&gen.DashboardFilters{Range: nil, Values: map[string][]string{"nonexistent": {"a"}}})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorContains(t, err, "filters.values.nonexistent: no dataset has a dimension named that")
+
+	// The builder's old spelling of a day is saved as the preset it means.
+	legacy := "24h"
+	normalized, err := ti.service.SaveDashboardFilters(ctx, &gen.SaveDashboardFiltersPayload{ID: dashboard.ID, Filters: &gen.DashboardFilters{Range: &gen.DashboardRange{Preset: &legacy, From: nil, To: nil, Label: nil}, Values: map[string][]string{}}, SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, "1d", *normalized.Filters.Range.Preset)
 
 	from, to, label := "2026-10-01T00:00:00Z", "2026-10-03T00:00:00Z", strings.Repeat("l", 201)
 	err = save(&gen.DashboardFilters{Range: &gen.DashboardRange{Preset: nil, From: &from, To: &to, Label: &label}, Values: map[string][]string{}})

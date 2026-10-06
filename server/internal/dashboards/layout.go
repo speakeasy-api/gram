@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	gen "github.com/speakeasy-api/gram/server/gen/dashboards"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 	"github.com/speakeasy-api/gram/server/internal/widgets"
 )
 
@@ -19,6 +20,10 @@ const gridColumns = 12
 // columns can hold. A dashboard with cards past it is not one anyone made
 // by dragging.
 const maxGridRow = 10_000
+
+// maxCards keeps a dashboard, and a layout save that checks every card
+// while it holds the dashboard, within reason.
+const maxCards = 100
 
 // The saved filters are replayed to every reader of the dashboard, so each
 // part of them is bounded: how many dimensions, how long a name, a value and
@@ -79,6 +84,27 @@ func checkPlacement(position string, input *gen.PlacementInput, chartType string
 	return ""
 }
 
+// placed is a card that passed its own checks, named by its place in the
+// payload for messages.
+type placed struct {
+	position string
+	input    *gen.PlacementInput
+}
+
+// checkOverlaps returns which two cards sit on top of each other, or "".
+// The grid never lays cards out that way; a caller of the API might.
+func checkOverlaps(cards []placed) string {
+	for i := 1; i < len(cards); i++ {
+		for j := range i {
+			a, b := cards[i].input, cards[j].input
+			if a.X < b.X+b.W && b.X < a.X+a.W && a.Y < b.Y+b.H && b.Y < a.Y+a.H {
+				return fmt.Sprintf("%s overlaps %s", cards[i].position, cards[j].position)
+			}
+		}
+	}
+	return ""
+}
+
 func chartName(chartType string) string {
 	if chartType == "" {
 		return "chart"
@@ -86,17 +112,19 @@ func chartName(chartType string) string {
 	return chartType
 }
 
-// checkFilters returns why saved filters cannot be stored, or "". The date
-// range is either a relative window a widget could be saved with or an
-// absolute from-to; the values are per catalog dimension, within the cap
-// the analytics query applies.
-func checkFilters(filters *gen.DashboardFilters) string {
+// checkFilters returns why saved filters cannot be stored, or "", and
+// settles the spelling of a relative window. The date range is either a
+// relative window a widget could be saved with or an absolute from-to; the
+// values are per catalog dimension, one some dataset has, within the cap the
+// analytics query applies.
+func checkFilters(catalog *analytics.Catalog, filters *gen.DashboardFilters) string {
 	if filters == nil {
 		return ""
 	}
 	if reason := checkRange(filters.Range); reason != "" {
 		return reason
 	}
+	dimensions := catalogDimensions(catalog)
 	if len(filters.Values) > maxFilterDimensions {
 		return fmt.Sprintf("filters.values: at most %d dimensions", maxFilterDimensions)
 	}
@@ -106,6 +134,8 @@ func checkFilters(filters *gen.DashboardFilters) string {
 			return "filters.values: a dimension name is empty"
 		case utf8.RuneCountInString(field) > maxFilterNameLength:
 			return fmt.Sprintf("filters.values: a dimension name is at most %d characters", maxFilterNameLength)
+		case !dimensions[field]:
+			return fmt.Sprintf("filters.values.%s: no dataset has a dimension named that", field)
 		case len(values) > maxFilterValues:
 			return fmt.Sprintf("filters.values.%s: at most %d values", field, maxFilterValues)
 		}
@@ -130,9 +160,11 @@ func checkRange(r *gen.DashboardRange) string {
 	case r.Preset != nil && absolute:
 		return "filters.range: a preset and an absolute range cannot both be set"
 	case r.Preset != nil:
-		if !widgets.IsWindow(*r.Preset) {
+		canonical, ok := widgets.CanonicalWindow(*r.Preset)
+		if !ok {
 			return fmt.Sprintf("filters.range.preset: %q is not a window a dashboard can open on", *r.Preset)
 		}
+		*r.Preset = canonical
 		if r.Label != nil {
 			return "filters.range.label: a label only names an absolute range"
 		}
@@ -158,4 +190,21 @@ func checkRange(r *gen.DashboardRange) string {
 		return "filters.range.label: a label only names an absolute range"
 	}
 	return ""
+}
+
+// catalogDimensions is every dimension name some catalog dataset has: the
+// names a dashboard's filter bar can be set to.
+func catalogDimensions(catalog *analytics.Catalog) map[string]bool {
+	out := map[string]bool{}
+	if catalog == nil {
+		return out
+	}
+	for _, dataset := range catalog.Datasets() {
+		for _, field := range dataset.Fields {
+			if field.Role == analytics.RoleDimension {
+				out[field.Name] = true
+			}
+		}
+	}
+	return out
 }

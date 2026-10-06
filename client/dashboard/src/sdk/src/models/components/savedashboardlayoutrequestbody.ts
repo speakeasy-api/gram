@@ -15,7 +15,7 @@ export type SaveDashboardLayoutRequestBody = {
    */
   id: string;
   /**
-   * Every card and where it sits
+   * Every card and where it sits; a dashboard holds at most 100
    */
   placements: Array<PlacementInput>;
 };

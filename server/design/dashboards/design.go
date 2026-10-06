@@ -179,7 +179,7 @@ var _ = Service("dashboards", func() {
 		Description("Replace a dashboard's layout with the given cards. A card with an id moves or resizes the existing placement, one without an id is added, and any placement not listed is removed. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.")
 		Payload(func() {
 			dashboardID("The dashboard to lay out")
-			Attribute("placements", ArrayOf(PlacementInput), "Every card and where it sits")
+			Attribute("placements", ArrayOf(PlacementInput), "Every card and where it sits; a dashboard holds at most 100", func() { MaxLength(100) })
 			Required("id", "placements")
 			security.SessionPayload()
 			security.ProjectPayload()
