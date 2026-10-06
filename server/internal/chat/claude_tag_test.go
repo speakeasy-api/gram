@@ -270,6 +270,32 @@ func TestClaudeTagWakeOverridesReportedSourceAndPersistsChannel(t *testing.T) {
 	}
 }
 
+func TestClaudeTagWrappedThreadPersistsMetadata(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	id := seedChat(t, ctx, ti, "", "", "Demo thread session")
+	seedTagDirectory(t, ti, "T_DEMO", "U_DEMO_ONE", "Demo Person")
+	write := tagWrite(t, ti, id, `<system-reminder>Opaque & <example></system-reminder>
+<session-context nonce='demo'>
+Channel: #demo-team (id: `+"`C_DEMO`"+`)
+Workspace: `+"`T_DEMO`"+`
+</session-context nonce='demo'>
+<wake><channel id='C_DEMO'><thread><messages><message from='human' author-id='U_DEMO_ONE'>hello & welcome</message></messages></thread></channel></wake>`)
+	write.Params.Source = conv.ToPGText("claude-code-web")
+	_, err := tagWriter(t, ti).Write(ctx, ti.projectID, []chat.MessageWrite{write})
+	require.NoError(t, err)
+	loaded, err := ti.service.LoadChat(ctx, loadPayload(id.String()))
+	require.NoError(t, err)
+	require.Equal(t, "claude-tag", conv.PtrValOr(loaded.Source, ""))
+	require.Equal(t, "T_DEMO", conv.PtrValOr(loaded.SlackTeamID, ""))
+	require.Equal(t, "C_DEMO", conv.PtrValOr(loaded.SlackChannelID, ""))
+	require.Equal(t, "demo-team", conv.PtrValOr(loaded.SlackChannelName, ""))
+	require.Len(t, loaded.Messages[0].Participants, 1)
+	require.Equal(t, "U_DEMO_ONE", loaded.Messages[0].Participants[0].ProviderUserID)
+	require.Equal(t, "Demo Person", conv.PtrValOr(loaded.Messages[0].Participants[0].DisplayName, ""))
+}
+
 func TestClaudeTagEnvelopeDoesNotOverrideNonClaudeSource(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)

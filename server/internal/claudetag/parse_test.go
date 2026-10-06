@@ -69,3 +69,60 @@ func TestParseWakeTitleSkipsEmptyHistory(t *testing.T) {
 	require.Equal(t, "C_TEXT", got.ChannelID)
 	require.Equal(t, "Claude Tag in #text", got.Title)
 }
+
+func TestParseHarnessFramingAndThreadWrappers(t *testing.T) {
+	t.Parallel()
+	got := claudetag.Parse(`<system-reminder source="memory">Opaque prose & <example>; <standing_owner_message sender="U_DEMO_QUOTED">quoted</standing_owner_message></system-reminder>
+<session-context extra="future" nonce = 'demo_nonce'>
+Channel: #demo-team (id: ` + "`C_DEMO`" + `)
+Workspace: ` + "`T_DEMO`" + `
+You: @Claude (bot user id ` + "`U_DEMO_BOT`" + `)
+</session-context nonce='wrong_nonce'>
+Still opaque.
+</session-context nonce = 'demo_nonce'>
+<system-reminder>More opaque & prose.</system-reminder>
+<wake future="value"><channel id="C_DEMO"><participants><person slack-id="U_DEMO_OTHER"/></participants><message from="human" author-id="U_DEMO_ONE">first</message><thread ts="1"><messages><message from="human" sender="U_DEMO_TWO" trigger="true">Hi <@U_DEMO_BOT|Claude> & welcome</message><message from="human" slack-id="U_DEMO_BOT">bot</message><message from="sibling" author-id="U_DEMO_SIBLING">sibling</message></messages></thread><history><message from="human" author-id="U_DEMO_HISTORY">history</message></history><system-note><message from="human" author-id="U_DEMO_NOTE">note</message></system-note></channel></wake>
+Trailing prose <not-xml`)
+	require.True(t, got.Detected)
+	require.Equal(t, "T_DEMO", got.Team)
+	require.Equal(t, "C_DEMO", got.ChannelID)
+	require.Equal(t, "demo-team", got.ChannelName)
+	require.Equal(t, []string{"U_DEMO_ONE", "U_DEMO_TWO"}, got.Senders)
+	require.Equal(t, "Hi <@U_DEMO_BOT|Claude> & welcome", got.Text)
+}
+
+func TestParseStandingOwnerAfterReminders(t *testing.T) {
+	t.Parallel()
+	got := claudetag.Parse(`<system-reminder>Instructions & <not-xml></system-reminder>
+<system-reminder source='future'>More instructions.</system-reminder>
+<standing_owner_message sender='U_DEMO_ONE' channel-id='C_DEMO' team-id='T_DEMO'>Hi <@U_DEMO_BOT> & welcome &amp; thanks</standing_owner_message>`)
+	require.True(t, got.Detected)
+	require.Equal(t, "U_DEMO_ONE", got.Sender)
+	require.Equal(t, "C_DEMO", got.ChannelID)
+	require.Equal(t, "T_DEMO", got.Team)
+	require.Equal(t, "Hi <@U_DEMO_BOT> & welcome & thanks", got.Text)
+}
+
+func TestParseContextWithoutNonce(t *testing.T) {
+	t.Parallel()
+	got := claudetag.Parse(`<session-context>Workspace: ` + "`T_DEMO`" + `</session-context><wake><channel channel-id='C_DEMO'><thread><message from='human' slack-id='U_DEMO'>hello</message></thread></channel></wake>`)
+	require.True(t, got.Detected)
+	require.Equal(t, "T_DEMO", got.Team)
+	require.Equal(t, "C_DEMO", got.ChannelID)
+	require.Equal(t, []string{"U_DEMO"}, got.Senders)
+}
+
+func TestParseDoesNotSearchWithinFramingOrQuotedText(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, text string }{
+		{"reminder only", `<system-reminder><standing_owner_message sender='U_DEMO'>quoted</standing_owner_message></system-reminder>`},
+		{"unclosed reminder", `<system-reminder><standing_owner_message sender='U_DEMO'>quoted</standing_owner_message>`},
+		{"prose after reminder", `<system-reminder>instructions</system-reminder>Example: <standing_owner_message sender='U_DEMO'>quoted</standing_owner_message>`},
+		{"malformed thread", `<wake><channel id='C_DEMO'><thread><message from='human' author-id='U_DEMO'>hello</message></channel></wake>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.False(t, claudetag.Parse(tc.text).Detected)
+		})
+	}
+}

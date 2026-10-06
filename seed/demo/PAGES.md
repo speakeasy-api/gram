@@ -215,7 +215,7 @@ Anthropic inference hooks: Agent Sessions includes “Claude inference conversat
 
 Anthropic inference hooks on AI Integrations shows **Finish setup** with a pending URL and no signing secret. The seeded configuration never permits real inference deliveries.
 
-`[~]` Claude Tag: Agent Sessions includes “Claude Tag in #demo-releases”. Open it to see the demo-releases channel, human message, and assistant reply. The row shows the persisted #demo-releases Slack channel and two directory participants with hover details, standing-owner messages show their individual authors, and “Release checklist helper” appears beneath its parent as a subagent. Raw view reveals the original envelopes and Slack reply tool call.
+`[~]` Claude Tag: Agent Sessions includes “Claude Tag in #demo-releases”. Open it to see the demo-releases channel, human message, and assistant reply. The row shows the persisted #demo-releases Slack channel and two directory participants with hover details, standing-owner messages show their individual authors, and “Release checklist helper” appears beneath its parent as a subagent. The readable view extracts deliveries after harness reminders and inside nested threads. Raw view reveals those original wrappers, envelopes, and the Slack reply tool call.
 
 - `[~]` Trial end-date changes: org-scoped audit example records a shortened trial with previous/new dates; browser verification pending.
 
