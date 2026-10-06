@@ -5462,6 +5462,22 @@ func (q *Queries) SetProjectSlugFixture(ctx context.Context, arg SetProjectSlugF
 	return err
 }
 
+const setRemoteSessionIssuerOmitScopeFallbackFixture = `-- name: SetRemoteSessionIssuerOmitScopeFallbackFixture :exec
+UPDATE remote_session_issuers
+SET omit_scope_fallback = $1
+WHERE id = $2
+`
+
+type SetRemoteSessionIssuerOmitScopeFallbackFixtureParams struct {
+	OmitScopeFallback pgtype.Bool
+	ID                uuid.UUID
+}
+
+func (q *Queries) SetRemoteSessionIssuerOmitScopeFallbackFixture(ctx context.Context, arg SetRemoteSessionIssuerOmitScopeFallbackFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRemoteSessionIssuerOmitScopeFallbackFixture, arg.OmitScopeFallback, arg.ID)
+	return err
+}
+
 const setRemoteSessionResourceFixture = `-- name: SetRemoteSessionResourceFixture :exec
 UPDATE remote_sessions
 SET resource = $1
