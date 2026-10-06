@@ -252,7 +252,7 @@ func TestUpdateDashboard(t *testing.T) {
 func TestSaveDashboardLayout(t *testing.T) {
 	t.Parallel()
 
-	t.Run("it moves and removes cards, keeping each card's id across saves", func(t *testing.T) {
+	t.Run("it moves the cards it names, leaves the rest, and keeps each card's id", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)
 		dashboard, err := ti.service.CreateDashboard(ctx, createPayload("layout"))
@@ -272,29 +272,38 @@ func TestSaveDashboardLayout(t *testing.T) {
 		require.Equal(t, chartCard.ID, laid.Widgets[1].ID)
 		require.Equal(t, 9, laid.Widgets[1].W)
 
-		// Leaving the chart out removes it.
+		// Leaving the chart out leaves it where it is: a layout saved from an
+		// older view cannot take off a card it did not know about.
 		moved, err := ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID,
 			placement(&tileCard.ID, tile.ID.String(), 6, 4, 4, 2),
 		))
 		require.NoError(t, err)
-		require.Len(t, moved.Widgets, 1)
-		require.Equal(t, tileCard.ID, moved.Widgets[0].ID)
-		require.Equal(t, 6, moved.Widgets[0].X)
-		require.Equal(t, 4, moved.Widgets[0].Y)
+		require.Len(t, moved.Widgets, 2)
+		require.Equal(t, chartCard.ID, moved.Widgets[0].ID)
+		require.Equal(t, 9, moved.Widgets[0].W)
+		require.Equal(t, tileCard.ID, moved.Widgets[1].ID)
+		require.Equal(t, 6, moved.Widgets[1].X)
+		require.Equal(t, 4, moved.Widgets[1].Y)
 
 		// The same widget may be on the dashboard twice.
 		again := addCard(t, ctx, ti, dashboard.ID, tile.ID)
 		require.NotEqual(t, tileCard.ID, again.ID)
 		twice, err := ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID,
-			placement(&tileCard.ID, tile.ID.String(), 0, 0, 3, 2),
-			placement(&again.ID, tile.ID.String(), 3, 0, 3, 2),
+			placement(&tileCard.ID, tile.ID.String(), 0, 3, 3, 2),
+			placement(&again.ID, tile.ID.String(), 3, 3, 3, 2),
 		))
 		require.NoError(t, err)
-		require.Len(t, twice.Widgets, 2)
+		require.Len(t, twice.Widgets, 3)
 
-		record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDashboardUpdate)
+		// A change to the cards is audited as a layout change, with the
+		// cards alone, not as a dashboard update.
+		record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDashboardLayout)
 		require.NoError(t, err)
 		require.NotEmpty(t, record.BeforeSnapshot)
+		require.NotEmpty(t, record.AfterSnapshot)
+		updates, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDashboardUpdate)
+		require.NoError(t, err)
+		require.Zero(t, updates)
 	})
 
 	t.Run("it refuses a card that is too small, runs past the grid, or has no id", func(t *testing.T) {
@@ -361,10 +370,11 @@ func TestSaveDashboardLayout(t *testing.T) {
 
 		// A card the dashboard does not have is left out, not refused: it
 		// went while the layout was being made (see the stale-layout test).
+		// The cards it does have stay as they are.
 		unknown := uuid.NewString()
 		without, err := ti.service.SaveDashboardLayout(ctx, layoutPayload(dashboard.ID, placement(&unknown, tile.ID.String(), 0, 0, 3, 2)))
 		require.NoError(t, err)
-		require.Empty(t, without.Widgets)
+		require.Equal(t, []*gen.DashboardPlacement{tileCard, chartCard}, without.Widgets)
 	})
 
 	t.Run("a card keeps its widget: pointing it at another is refused", func(t *testing.T) {
@@ -485,6 +495,19 @@ func TestSaveDashboardFiltersAreBounded(t *testing.T) {
 	normalized, err := ti.service.SaveDashboardFilters(ctx, &gen.SaveDashboardFiltersPayload{ID: dashboard.ID, Filters: &gen.DashboardFilters{Range: &gen.DashboardRange{Preset: &legacy, From: nil, To: nil, Label: nil}, Values: map[string][]string{}}, SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Equal(t, "1d", *normalized.Filters.Range.Preset)
+
+	// A range with nothing in it is no range, and a dimension with no
+	// values, or a null in their place, is no filter.
+	cleaned, err := ti.service.SaveDashboardFilters(ctx, &gen.SaveDashboardFiltersPayload{ID: dashboard.ID, Filters: &gen.DashboardFilters{Range: &gen.DashboardRange{Preset: nil, From: nil, To: nil, Label: nil}, Values: map[string][]string{"user": nil, "surface": {}, "model": {"gpt"}}}, SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Nil(t, cleaned.Filters.Range)
+	require.Equal(t, map[string][]string{"model": {"gpt"}}, cleaned.Filters.Values)
+
+	// Instants a query cannot represent are refused.
+	early, late := "1600-01-01T00:00:00Z", "2026-10-03T00:00:00Z"
+	err = save(&gen.DashboardFilters{Range: &gen.DashboardRange{Preset: nil, From: &early, To: &late, Label: nil}, Values: map[string][]string{}})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorContains(t, err, "filters.range: timestamps must fall between 1677 and 2262")
 
 	from, to, label := "2026-10-01T00:00:00Z", "2026-10-03T00:00:00Z", strings.Repeat("l", 201)
 	err = save(&gen.DashboardFilters{Range: &gen.DashboardRange{Preset: nil, From: &from, To: &to, Label: &label}, Values: map[string][]string{}})
@@ -641,6 +664,12 @@ func TestDuplicateDashboard(t *testing.T) {
 			require.Equal(t, []int{laid.Widgets[i].X, laid.Widgets[i].Y, laid.Widgets[i].W, laid.Widgets[i].H}, []int{card.X, card.Y, card.W, card.H}, "the layout is kept")
 		}
 		require.Len(t, copiedWidgetIDs, 2)
+		// Each copy is named as one, like a duplicated widget.
+		for id := range copiedWidgetIDs {
+			copiedWidget, err := widgetsrepo.New(ti.conn).GetWidget(ctx, widgetsrepo.GetWidgetParams{ProjectID: ti.projectID, ID: uuid.MustParse(id)})
+			require.NoError(t, err)
+			require.True(t, strings.HasSuffix(copiedWidget.Name, " (copy)"), copiedWidget.Name)
+		}
 		widgetsAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionWidgetCreate)
 		require.NoError(t, err)
 		require.Equal(t, widgetsBefore+2, widgetsAfter, "each widget copy is audited as a widget creation")

@@ -123,25 +123,6 @@ func (q *Queries) DeletePlacement(ctx context.Context, arg DeletePlacementParams
 	return i, err
 }
 
-const deletePlacementsNotIn = `-- name: DeletePlacementsNotIn :exec
-DELETE FROM dashboard_widgets
-WHERE project_id = $1
-  AND dashboard_id = $2
-  AND NOT (id = ANY($3::uuid[]))
-`
-
-type DeletePlacementsNotInParams struct {
-	ProjectID   uuid.UUID
-	DashboardID uuid.UUID
-	Keep        []uuid.UUID
-}
-
-// Removes every card a saved layout no longer lists.
-func (q *Queries) DeletePlacementsNotIn(ctx context.Context, arg DeletePlacementsNotInParams) error {
-	_, err := q.db.Exec(ctx, deletePlacementsNotIn, arg.ProjectID, arg.DashboardID, arg.Keep)
-	return err
-}
-
 const getDashboard = `-- name: GetDashboard :one
 SELECT id, project_id, organization_id, created_by_user_id, name, description, filters, created_at, updated_at, deleted_at, deleted
 FROM dashboards

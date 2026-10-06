@@ -15,9 +15,13 @@ import (
 
 const (
 	ActionDashboardCreate Action = "dashboard:create"
-	// ActionDashboardUpdate covers every change to a dashboard that keeps
-	// it: its name, its layout and its saved filters.
+	// ActionDashboardUpdate covers a change to a dashboard's name,
+	// description or saved filters.
 	ActionDashboardUpdate Action = "dashboard:update"
+	// ActionDashboardLayout covers a change to a dashboard's cards: one
+	// added, removed, moved or resized. Its snapshots are the cards alone,
+	// because the grid autosaves every drag.
+	ActionDashboardLayout Action = "dashboard:layout"
 	ActionDashboardDelete Action = "dashboard:delete"
 )
 
@@ -44,6 +48,12 @@ type LogDashboardUpdateEvent struct {
 	DashboardEventBase
 	Before *gen.Dashboard
 	After  *gen.Dashboard
+}
+
+type LogDashboardLayoutEvent struct {
+	DashboardEventBase
+	Before []*gen.DashboardPlacement
+	After  []*gen.DashboardPlacement
 }
 
 type LogDashboardDeleteEvent struct{ DashboardEventBase }
@@ -92,6 +102,18 @@ func (l *Logger) LogDashboardUpdate(ctx context.Context, dbtx repo.DBTX, event L
 		return fmt.Errorf("marshal dashboard update after snapshot: %w", err)
 	}
 	return l.log(ctx, dbtx, auditEntry{Params: dashboardEntry(event.DashboardEventBase, ActionDashboardUpdate, nil, before, after), OutboxEvent: events.DashboardV1})
+}
+
+func (l *Logger) LogDashboardLayout(ctx context.Context, dbtx repo.DBTX, event LogDashboardLayoutEvent) error {
+	before, err := marshalAuditPayload(event.Before)
+	if err != nil {
+		return fmt.Errorf("marshal dashboard layout before snapshot: %w", err)
+	}
+	after, err := marshalAuditPayload(event.After)
+	if err != nil {
+		return fmt.Errorf("marshal dashboard layout after snapshot: %w", err)
+	}
+	return l.log(ctx, dbtx, auditEntry{Params: dashboardEntry(event.DashboardEventBase, ActionDashboardLayout, nil, before, after), OutboxEvent: events.DashboardV1})
 }
 
 func (l *Logger) LogDashboardDelete(ctx context.Context, dbtx repo.DBTX, event LogDashboardDeleteEvent) error {

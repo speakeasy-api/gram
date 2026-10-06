@@ -54,7 +54,7 @@ export type SaveDashboardLayoutMutationError =
  * saveDashboardLayout dashboards
  *
  * @remarks
- * Move and resize a dashboard's cards. Each card names an existing placement and where it now sits; any placement not listed is removed, and a new card is added with addWidget. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.
+ * Move and resize a dashboard's cards. Each card names an existing placement and where it now sits; cards not listed stay as they are, so a layout saved from an older view cannot take off a card someone has just added. A card is added with addWidget and taken off with removeWidget. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.
  */
 export function useSaveDashboardLayoutMutation(
   options?: MutationHookOptions<

@@ -15456,11 +15456,11 @@ func dashboardsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-dashboard: Get one dashboard by id, with its cards and saved filters.`)
 	fmt.Fprintln(os.Stderr, `    create-dashboard: Make an empty dashboard. Any member of the project can.`)
 	fmt.Fprintln(os.Stderr, `    update-dashboard: Rename a dashboard or change its description. Its creator can; editing someone else's needs project write access.`)
-	fmt.Fprintln(os.Stderr, `    save-dashboard-layout: Move and resize a dashboard's cards. Each card names an existing placement and where it now sits; any placement not listed is removed, and a new card is added with addWidget. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.`)
+	fmt.Fprintln(os.Stderr, `    save-dashboard-layout: Move and resize a dashboard's cards. Each card names an existing placement and where it now sits; cards not listed stay as they are, so a layout saved from an older view cannot take off a card someone has just added. A card is added with addWidget and taken off with removeWidget. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.`)
 	fmt.Fprintln(os.Stderr, `    add-dashboard-widget: Place a saved widget on a dashboard, as a new card at the bottom, sized for its chart type.`)
 	fmt.Fprintln(os.Stderr, `    remove-dashboard-widget: Take a card off a dashboard. The widget itself stays saved.`)
 	fmt.Fprintln(os.Stderr, `    save-dashboard-filters: Store the date range and filter values a dashboard opens on, for everyone. Until saved, changes in the filter bar are the viewer's own.`)
-	fmt.Fprintln(os.Stderr, `    duplicate-dashboard: Copy a dashboard into a new one the caller owns, named "<name> (copy)". Every card's widget is copied into a new saved widget too, so the copy is fully independent of the original. Like every widget save, each copy is validated, so a dashboard with a broken widget cannot be duplicated until the widget is fixed.`)
+	fmt.Fprintln(os.Stderr, `    duplicate-dashboard: Copy a dashboard into a new one the caller owns, named "<name> (copy)". Every card's widget is copied into a new saved widget too, named the same way, so the copy is fully independent of the original. Like every widget save, each copy is validated, so a dashboard with a broken widget cannot be duplicated until the widget is fixed.`)
 	fmt.Fprintln(os.Stderr, `    delete-dashboard: Delete a dashboard and its cards. Its widgets stay saved. Its creator can; deleting someone else's needs project write access.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -15562,7 +15562,7 @@ func dashboardsSaveDashboardLayoutUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Move and resize a dashboard's cards. Each card names an existing placement and where it now sits; any placement not listed is removed, and a new card is added with addWidget. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.`)
+	fmt.Fprintln(os.Stderr, `Move and resize a dashboard's cards. Each card names an existing placement and where it now sits; cards not listed stay as they are, so a layout saved from an older view cannot take off a card someone has just added. A card is added with addWidget and taken off with removeWidget. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -15650,7 +15650,7 @@ func dashboardsDuplicateDashboardUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Copy a dashboard into a new one the caller owns, named "<name> (copy)". Every card's widget is copied into a new saved widget too, so the copy is fully independent of the original. Like every widget save, each copy is validated, so a dashboard with a broken widget cannot be duplicated until the widget is fixed.`)
+	fmt.Fprintln(os.Stderr, `Copy a dashboard into a new one the caller owns, named "<name> (copy)". Every card's widget is copied into a new saved widget too, named the same way, so the copy is fully independent of the original. Like every widget save, each copy is validated, so a dashboard with a broken widget cannot be duplicated until the widget is fixed.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

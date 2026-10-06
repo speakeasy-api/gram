@@ -62,6 +62,7 @@ export const AUDIT_ACTIONS = [
   "custom_domains:update",
   "dashboard:create",
   "dashboard:delete",
+  "dashboard:layout",
   "dashboard:update",
   "data_export_route:create",
   "data_export_route:delete",
@@ -729,6 +730,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "created dashboard";
     case "dashboard:update":
       return "updated dashboard";
+    case "dashboard:layout":
+      return "laid out dashboard";
     case "dashboard:delete":
       return "deleted dashboard";
 

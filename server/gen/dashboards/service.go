@@ -28,9 +28,11 @@ type Service interface {
 	// someone else's needs project write access.
 	UpdateDashboard(context.Context, *UpdateDashboardPayload) (res *Dashboard, err error)
 	// Move and resize a dashboard's cards. Each card names an existing placement
-	// and where it now sits; any placement not listed is removed, and a new card
-	// is added with addWidget. The grid is 12 columns wide, and each chart type
-	// has a minimum size. Layout autosaves, so the last save wins.
+	// and where it now sits; cards not listed stay as they are, so a layout saved
+	// from an older view cannot take off a card someone has just added. A card is
+	// added with addWidget and taken off with removeWidget. The grid is 12 columns
+	// wide, and each chart type has a minimum size. Layout autosaves, so the last
+	// save wins.
 	SaveDashboardLayout(context.Context, *SaveDashboardLayoutPayload) (res *Dashboard, err error)
 	// Place a saved widget on a dashboard, as a new card at the bottom, sized for
 	// its chart type.
@@ -41,10 +43,10 @@ type Service interface {
 	// Until saved, changes in the filter bar are the viewer's own.
 	SaveDashboardFilters(context.Context, *SaveDashboardFiltersPayload) (res *Dashboard, err error)
 	// Copy a dashboard into a new one the caller owns, named "<name> (copy)".
-	// Every card's widget is copied into a new saved widget too, so the copy is
-	// fully independent of the original. Like every widget save, each copy is
-	// validated, so a dashboard with a broken widget cannot be duplicated until
-	// the widget is fixed.
+	// Every card's widget is copied into a new saved widget too, named the same
+	// way, so the copy is fully independent of the original. Like every widget
+	// save, each copy is validated, so a dashboard with a broken widget cannot be
+	// duplicated until the widget is fixed.
 	DuplicateDashboard(context.Context, *DuplicateDashboardPayload) (res *Dashboard, err error)
 	// Delete a dashboard and its cards. Its widgets stay saved. Its creator can;
 	// deleting someone else's needs project write access.

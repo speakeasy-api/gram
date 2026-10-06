@@ -113,13 +113,6 @@ WHERE project_id = @project_id
   AND id = @id
 RETURNING *;
 
--- name: DeletePlacementsNotIn :exec
--- Removes every card a saved layout no longer lists.
-DELETE FROM dashboard_widgets
-WHERE project_id = @project_id
-  AND dashboard_id = @dashboard_id
-  AND NOT (id = ANY(@keep::uuid[]));
-
 -- name: GetWidgetForPlacement :one
 -- The widget a card links to must be a live widget of the same project.
 SELECT *

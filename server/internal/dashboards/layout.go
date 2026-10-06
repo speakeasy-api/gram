@@ -3,6 +3,7 @@ package dashboards
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -20,6 +21,12 @@ const gridColumns = 12
 // columns can hold. A dashboard with cards past it is not one anyone made
 // by dragging.
 const maxGridRow = 10_000
+
+// The instants a query can represent, as nanoseconds since the epoch.
+var (
+	earliestInstant = time.Unix(0, math.MinInt64).UTC()
+	latestInstant   = time.Unix(0, math.MaxInt64).UTC()
+)
 
 // maxCards keeps a dashboard, and a layout save that checks every card
 // while it holds the dashboard, within reason.
@@ -121,8 +128,19 @@ func checkFilters(catalog *analytics.Catalog, filters *gen.DashboardFilters) str
 	if filters == nil {
 		return ""
 	}
+	// A range with nothing in it is no range.
+	if r := filters.Range; r != nil && r.Preset == nil && r.From == nil && r.To == nil && r.Label == nil {
+		filters.Range = nil
+	}
 	if reason := checkRange(filters.Range); reason != "" {
 		return reason
+	}
+	// A dimension with no values picked, or a null in place of them, is no
+	// filter: it is dropped rather than stored as one.
+	for field, values := range filters.Values {
+		if len(values) == 0 {
+			delete(filters.Values, field)
+		}
 	}
 	dimensions := catalogDimensions(catalog)
 	if len(filters.Values) > maxFilterDimensions {
@@ -182,6 +200,9 @@ func checkRange(r *gen.DashboardRange) string {
 		}
 		if !from.Before(to) {
 			return "filters.range: from must be before to"
+		}
+		if from.Before(earliestInstant) || to.After(latestInstant) {
+			return fmt.Sprintf("filters.range: timestamps must fall between %d and %d", earliestInstant.Year(), latestInstant.Year())
 		}
 		if r.Label != nil && utf8.RuneCountInString(*r.Label) > maxRangeLabelLength {
 			return fmt.Sprintf("filters.range.label: at most %d characters", maxRangeLabelLength)

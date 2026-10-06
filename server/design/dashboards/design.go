@@ -176,7 +176,7 @@ var _ = Service("dashboards", func() {
 	})
 
 	Method("saveDashboardLayout", func() {
-		Description("Move and resize a dashboard's cards. Each card names an existing placement and where it now sits; any placement not listed is removed, and a new card is added with addWidget. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.")
+		Description("Move and resize a dashboard's cards. Each card names an existing placement and where it now sits; cards not listed stay as they are, so a layout saved from an older view cannot take off a card someone has just added. A card is added with addWidget and taken off with removeWidget. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.")
 		Payload(func() {
 			dashboardID("The dashboard to lay out")
 			Attribute("placements", ArrayOf(PlacementInput), "Every card and where it sits; a dashboard holds at most 100", func() { MaxLength(100) })
@@ -260,7 +260,7 @@ var _ = Service("dashboards", func() {
 	})
 
 	Method("duplicateDashboard", func() {
-		Description("Copy a dashboard into a new one the caller owns, named \"<name> (copy)\". Every card's widget is copied into a new saved widget too, so the copy is fully independent of the original. Like every widget save, each copy is validated, so a dashboard with a broken widget cannot be duplicated until the widget is fixed.")
+		Description("Copy a dashboard into a new one the caller owns, named \"<name> (copy)\". Every card's widget is copied into a new saved widget too, named the same way, so the copy is fully independent of the original. Like every widget save, each copy is validated, so a dashboard with a broken widget cannot be duplicated until the widget is fixed.")
 		Payload(func() {
 			dashboardID("The dashboard to copy")
 			Required("id")

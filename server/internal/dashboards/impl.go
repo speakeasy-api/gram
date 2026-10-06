@@ -331,7 +331,9 @@ func (s *Service) SaveDashboardLayout(ctx context.Context, payload *gen.SaveDash
 			return repo.Dashboard{}, oops.E(oops.CodeBadRequest, nil, "%s", reason)
 		}
 
-		keep := make([]uuid.UUID, 0, len(cards))
+		// Cards the layout does not name stay where they are: a layout saved
+		// from an older view cannot take off a card someone has just added.
+		// Removing a card is its own call.
 		for _, c := range cards {
 			if _, err := queries.MovePlacement(ctx, repo.MovePlacementParams{
 				X: int32(c.input.X), Y: int32(c.input.Y), W: int32(c.input.W), H: int32(c.input.H), //nolint:gosec // bounded by checkPlacement
@@ -339,11 +341,6 @@ func (s *Service) SaveDashboardLayout(ctx context.Context, payload *gen.SaveDash
 			}); err != nil {
 				return repo.Dashboard{}, fmt.Errorf("move dashboard card: %w", err)
 			}
-			keep = append(keep, c.placementID)
-		}
-
-		if err := queries.DeletePlacementsNotIn(ctx, repo.DeletePlacementsNotInParams{ProjectID: *authCtx.ProjectID, DashboardID: dashboard.ID, Keep: keep}); err != nil {
-			return repo.Dashboard{}, fmt.Errorf("remove dashboard cards: %w", err)
 		}
 		return s.touch(ctx, authCtx, queries, dashboard.ID)
 	})
@@ -456,7 +453,9 @@ func (s *Service) DuplicateDashboard(ctx context.Context, payload *gen.Duplicate
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	queries := repo.New(dbtx)
 
-	source, err := queries.GetDashboard(ctx, repo.GetDashboardParams{ProjectID: *authCtx.ProjectID, ID: id})
+	// Held for the copy, so a layout save on the source waits and the cards
+	// and widgets read here agree with each other.
+	source, err := queries.GetDashboardForUpdate(ctx, repo.GetDashboardForUpdateParams{ProjectID: *authCtx.ProjectID, ID: id})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "dashboard not found")
@@ -490,7 +489,7 @@ func (s *Service) DuplicateDashboard(ctx context.Context, payload *gen.Duplicate
 			ProjectID:       *authCtx.ProjectID,
 			OrganizationID:  authCtx.ActiveOrganizationID,
 			CreatedByUserID: conv.ToPGTextEmpty(authCtx.UserID),
-			Name:            widget.Name,
+			Name:            copyName(widget.Name),
 			Description:     widget.Description,
 			Dataset:         widget.Dataset,
 			Query:           widget.Query,
@@ -653,8 +652,17 @@ func (s *Service) edit(ctx context.Context, rawID string, what string, apply cha
 		return nil, err
 	}
 
-	if err := s.audit.LogDashboardUpdate(ctx, dbtx, audit.LogDashboardUpdateEvent{DashboardEventBase: s.auditBase(authCtx, after), Before: beforeView, After: afterView}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "audit dashboard %s", what).LogError(ctx, s.logger)
+	// A change to the cards is audited as a layout change, with the cards
+	// alone: the grid autosaves every drag, so a full dashboard snapshot per
+	// move would swamp the log.
+	var audited error
+	if what == "layout" || what == "add card" || what == "remove card" {
+		audited = s.audit.LogDashboardLayout(ctx, dbtx, audit.LogDashboardLayoutEvent{DashboardEventBase: s.auditBase(authCtx, after), Before: beforeView.Widgets, After: afterView.Widgets})
+	} else {
+		audited = s.audit.LogDashboardUpdate(ctx, dbtx, audit.LogDashboardUpdateEvent{DashboardEventBase: s.auditBase(authCtx, after), Before: beforeView, After: afterView})
+	}
+	if audited != nil {
+		return nil, oops.E(oops.CodeUnexpected, audited, "audit dashboard %s", what).LogError(ctx, s.logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit dashboard %s", what).LogError(ctx, s.logger)

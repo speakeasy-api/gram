@@ -54,7 +54,7 @@ export type DuplicateDashboardMutationError =
  * duplicateDashboard dashboards
  *
  * @remarks
- * Copy a dashboard into a new one the caller owns, named "<name> (copy)". Every card's widget is copied into a new saved widget too, so the copy is fully independent of the original. Like every widget save, each copy is validated, so a dashboard with a broken widget cannot be duplicated until the widget is fixed.
+ * Copy a dashboard into a new one the caller owns, named "<name> (copy)". Every card's widget is copied into a new saved widget too, named the same way, so the copy is fully independent of the original. Like every widget save, each copy is validated, so a dashboard with a broken widget cannot be duplicated until the widget is fixed.
  */
 export function useDuplicateDashboardMutation(
   options?: MutationHookOptions<
