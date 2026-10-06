@@ -56,6 +56,53 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-conversation-v1-message-event
+    name: gram-conversation-v1-message-event
+    spec:
+      definition: |
+        edition = "2024";
+        message MessageEvent {
+          enum Type {
+            TYPE_UNSPECIFIED = 0;
+            TYPE_CREATED = 1;
+            TYPE_ATTRIBUTION_UPDATED = 2;
+            TYPE_ATTACHMENTS_ADDED = 3;
+          }
+          enum Role {
+            ROLE_UNSPECIFIED = 0;
+            ROLE_SYSTEM = 1;
+            ROLE_DEVELOPER = 2;
+            ROLE_USER = 3;
+            ROLE_ASSISTANT = 4;
+            ROLE_TOOL = 5;
+          }
+          message IngestionContext {
+            string source = 1;
+            string billing_user_id = 2;
+            string assistant_id = 3;
+            string observed_user_email = 4;
+            string provider = 5;
+            string hook_source = 6;
+            string hostname = 7;
+            string account_type = 8;
+            string billing_mode = 9;
+            bool replayed = 10;
+          }
+          string id = 1;
+          Type type = 2;
+          string organization_id = 3;
+          string project_id = 4;
+          string conversation_id = 5;
+          string message_id = 6;
+          Role role = 7;
+          string occurred_at = 8;
+          string message_created_at = 9;
+          IngestionContext ingestion = 10;
+          repeated string attachment_ids = 11;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading
     name: gram-metering-v1-meter-reading
     spec:
@@ -1959,6 +2006,16 @@ pubsub:
     name: gram-authz-v1-challenge-ch-writer-dlq
     spec:
       messageRetentionDuration: 604800s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-conversation-v1-message-event
+    name: gram-conversation-v1-message-event
+    spec:
+      messageRetentionDuration: 345600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-conversation-v1-message-event
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading
