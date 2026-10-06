@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -600,12 +601,77 @@ func TestWidgetDashboards(t *testing.T) {
 	require.Equal(t, []*gen.WidgetDashboard{{ID: alpha.ID.String(), Name: "Alpha"}}, got.Dashboards)
 
 	// Deleting the widget takes it off the dashboard; the dashboard stays.
-	// Read through the dashboards side, which does not hide a deleted
-	// widget's cards, so rows left behind would show.
+	// Read through the widgets repo's dashboards query, which joins dashboards
+	// only and so does not hide a deleted widget's cards: rows left behind
+	// would show.
 	require.NoError(t, ti.service.DeleteWidget(ctx, &gen.DeleteWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil}))
 	left, err := widgetsrepo.New(ti.conn).ListDashboardsForWidget(ctx, widgetsrepo.ListDashboardsForWidgetParams{ProjectID: ti.projectID, WidgetID: uuid.MustParse(created.ID)})
 	require.NoError(t, err)
 	require.Empty(t, left)
+
+	// The dashboard it came off is touched and its history says why the
+	// cards went; the widget's own event names the dashboard.
+	touched, err := dashboards.GetDashboard(ctx, dashboardsrepo.GetDashboardParams{ProjectID: ti.projectID, ID: alpha.ID})
+	require.NoError(t, err)
+	require.True(t, touched.UpdatedAt.Time.After(alpha.UpdatedAt.Time), "the dashboard moves up the list")
+	layout, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDashboardLayout)
+	require.NoError(t, err)
+	require.Equal(t, alpha.ID.String(), layout.SubjectID)
+	require.NotEmpty(t, layout.BeforeSnapshot)
+	require.JSONEq(t, "[]", string(layout.AfterSnapshot))
+	deleted, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionWidgetDelete)
+	require.NoError(t, err)
+	metadata, err := audittest.DecodeAuditData(deleted.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, []any{"dashboard:" + alpha.ID.String()}, metadata["removed_from"])
 	_, err = dashboards.GetDashboard(ctx, dashboardsrepo.GetDashboardParams{ProjectID: ti.projectID, ID: alpha.ID})
 	require.NoError(t, err)
+}
+
+func TestDeleteWidgetWaitsForALayoutHoldingTheWidget(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created, err := ti.service.CreateWidget(ctx, createPayload("held", validQuery(), barChart()))
+	require.NoError(t, err)
+	widgetID := uuid.MustParse(created.ID)
+	dashboards := dashboardsrepo.New(ti.conn)
+	dashboard, err := dashboards.CreateDashboard(ctx, dashboardsrepo.CreateDashboardParams{
+		ProjectID: ti.projectID, OrganizationID: ti.orgID, CreatedByUserID: pgtype.Text{String: ti.userID, Valid: true},
+		Name: "Held", Description: pgtype.Text{String: "", Valid: false}, Filters: []byte("{}"),
+	})
+	require.NoError(t, err)
+
+	// A layout save reads the widget for share and places a card on it,
+	// and holds both until it commits.
+	holding, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: a transaction held open to pin down the lock a layout save takes
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = holding.Rollback(ctx) })
+	_, err = dashboardsrepo.New(holding).GetWidgetForPlacement(ctx, dashboardsrepo.GetWidgetForPlacementParams{ProjectID: ti.projectID, ID: widgetID})
+	require.NoError(t, err)
+	_, err = dashboardsrepo.New(holding).InsertPlacement(ctx, dashboardsrepo.InsertPlacementParams{
+		ProjectID: ti.projectID, OrganizationID: ti.orgID, DashboardID: dashboard.ID, WidgetID: widgetID, X: 0, Y: 0, W: 4, H: 3,
+	})
+	require.NoError(t, err)
+
+	// Deleting the widget meanwhile waits for the layout, so the card it
+	// placed is taken off with the rest rather than left behind.
+	done := make(chan error, 1)
+	go func() {
+		done <- ti.service.DeleteWidget(ctx, &gen.DeleteWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil})
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("the delete did not wait for the layout: %v", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	require.NoError(t, holding.Commit(ctx))
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("the delete did not finish once the layout had committed")
+	}
+	left, err := widgetsrepo.New(ti.conn).ListDashboardsForWidget(ctx, widgetsrepo.ListDashboardsForWidgetParams{ProjectID: ti.projectID, WidgetID: widgetID})
+	require.NoError(t, err)
+	require.Empty(t, left)
 }

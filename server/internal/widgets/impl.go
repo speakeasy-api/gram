@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	dashboardsrepo "github.com/speakeasy-api/gram/server/internal/dashboards/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -400,9 +401,50 @@ func (s *Service) DeleteWidget(ctx context.Context, payload *gen.DeleteWidgetPay
 		return err
 	}
 
-	// The widget comes off every dashboard it was on; the dashboards stay.
+	// The widget comes off every dashboard it was on; the dashboards stay,
+	// and each is touched and audited as a layout change, so its history
+	// says why a card went.
+	affected, err := queries.ListDashboardsForWidget(ctx, repo.ListDashboardsForWidgetParams{ProjectID: *authCtx.ProjectID, WidgetID: id})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list widget's dashboards").LogError(ctx, s.logger)
+	}
+	dashboards := dashboardsrepo.New(dbtx)
+	before := make(map[uuid.UUID][]dashboardsrepo.DashboardWidget, len(affected))
+	for _, dashboard := range affected {
+		cards, err := dashboards.ListPlacements(ctx, dashboardsrepo.ListPlacementsParams{ProjectID: *authCtx.ProjectID, DashboardID: dashboard.DashboardID})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "list dashboard cards").LogError(ctx, s.logger)
+		}
+		before[dashboard.DashboardID] = cards
+	}
 	if err := queries.DeleteWidgetPlacements(ctx, repo.DeleteWidgetPlacementsParams{ProjectID: *authCtx.ProjectID, WidgetID: id}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove widget from dashboards").LogError(ctx, s.logger)
+	}
+	removedFrom := make([]urn.Dashboard, 0, len(affected))
+	for _, dashboard := range affected {
+		after, err := dashboards.ListPlacements(ctx, dashboardsrepo.ListPlacementsParams{ProjectID: *authCtx.ProjectID, DashboardID: dashboard.DashboardID})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "list dashboard cards").LogError(ctx, s.logger)
+		}
+		if _, err := dashboards.TouchDashboard(ctx, dashboardsrepo.TouchDashboardParams{ProjectID: *authCtx.ProjectID, ID: dashboard.DashboardID}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "touch dashboard").LogError(ctx, s.logger)
+		}
+		dashboardURN := urn.NewDashboard(dashboard.DashboardID)
+		if err := s.audit.LogDashboardLayout(ctx, dbtx, audit.LogDashboardLayoutEvent{
+			DashboardEventBase: audit.DashboardEventBase{
+				OrganizationID:   authCtx.ActiveOrganizationID,
+				ProjectID:        *authCtx.ProjectID,
+				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+				ActorDisplayName: authCtx.Email,
+				DashboardURN:     dashboardURN,
+				Name:             dashboard.DashboardName,
+			},
+			Before: mv.BuildDashboardPlacements(before[dashboard.DashboardID]),
+			After:  mv.BuildDashboardPlacements(after),
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "audit dashboard layout").LogError(ctx, s.logger)
+		}
+		removedFrom = append(removedFrom, dashboardURN)
 	}
 	row, err := queries.DeleteWidget(ctx, repo.DeleteWidgetParams{ProjectID: *authCtx.ProjectID, ID: id})
 	if err != nil {
@@ -411,7 +453,7 @@ func (s *Service) DeleteWidget(ctx context.Context, payload *gen.DeleteWidgetPay
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete widget").LogError(ctx, s.logger)
 	}
-	if err := s.audit.LogWidgetDelete(ctx, dbtx, audit.LogWidgetDeleteEvent{WidgetEventBase: s.auditBase(authCtx, row)}); err != nil {
+	if err := s.audit.LogWidgetDelete(ctx, dbtx, audit.LogWidgetDeleteEvent{WidgetEventBase: s.auditBase(authCtx, row), RemovedFrom: removedFrom}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "audit widget deletion").LogError(ctx, s.logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
