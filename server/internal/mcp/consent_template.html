@@ -205,7 +205,7 @@
         {{if .RemoteSessionCards}}
         <div
           data-service-connections
-          data-action-url="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect/remote-session"
+          data-action-url="{{.ConsentPath}}/remote-session"
           class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8"
         >
           <div class="flex items-baseline justify-between gap-3">
@@ -289,7 +289,7 @@
 
               <form
                 method="POST"
-                action="/{{$.MCPRouteBase}}/{{$.MCPSlug}}/connect/remote-session"
+                action="{{$.ConsentPath}}/remote-session"
                 class="flex flex-wrap items-center justify-end gap-1.5"
               >
                 <input type="hidden" name="state" value="{{$.State}}" />
@@ -629,7 +629,7 @@
         {{if .AutoRefreshPolicy.IsUserControlled}}
         <form
           method="POST"
-          action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect/remote-session"
+          action="{{.ConsentPath}}/remote-session"
           id="auto-refresh-form"
           class="sr-only"
           {{if .AutoRefreshHasSessions}}data-auto-refresh-persist{{end}}
@@ -651,7 +651,7 @@
         <div class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:px-8">
           <form
             method="POST"
-            action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect"
+            action="{{.ConsentPath}}"
             id="consent-approve-form"
             data-approve-form
           >
@@ -676,7 +676,7 @@
             </p>
             {{end}}
           </form>
-          <form method="POST" action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect">
+          <form method="POST" action="{{.ConsentPath}}">
             <input type="hidden" name="state" value="{{.State}}" />
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
             <button
