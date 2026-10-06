@@ -958,7 +958,9 @@ WHERE marketplace_token = @marketplace_token;
 -- config just published; all are always overwritten so subsequent rollout runs
 -- can detect independently whether the MCP or hooks component changed (including
 -- hooks config drift a version bump can't capture, e.g. a marketplace rename or
--- browser-login toggle).
+-- browser-login toggle). published_hooks_config also records, under
+-- published_marketplace_name, the marketplace name the repo was published under,
+-- which freezes the project's marketplace name.
 INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
 VALUES (@project_id, @installation_id, @repo_owner, @repo_name, @marketplace_token, @published_mcp_fingerprints, @published_hooks_version, @published_hooks_config)
 ON CONFLICT (project_id) DO UPDATE
@@ -971,6 +973,36 @@ ON CONFLICT (project_id) DO UPDATE
       published_hooks_config = EXCLUDED.published_hooks_config,
       updated_at = clock_timestamp()
 RETURNING *;
+
+-- name: RecordPublishedMarketplaceName :exec
+-- Records the marketplace.json name a project's repo is known to hold, under
+-- the published_marketplace_name key of published_hooks_config, without a
+-- republish. The publish path calls it when it skips an unchanged publish:
+-- matching shared MCP fingerprints prove the repo already carries that name.
+-- It writes only while the recorded name still equals the one the caller read
+-- (NULL when none was recorded), so it never overwrites a name that a
+-- concurrent publish recorded. updated_at stays the last-published timestamp.
+-- The key is not a hooks config field, so this never reads as a hooks change.
+UPDATE plugin_github_connections
+SET published_hooks_config = jsonb_set(
+    COALESCE(published_hooks_config, '{}'::jsonb),
+    '{published_marketplace_name}',
+    to_jsonb(@marketplace_name::text)
+  )
+WHERE project_id = @project_id
+  AND published_hooks_config ->> 'published_marketplace_name' IS NOT DISTINCT FROM sqlc.narg('recorded_marketplace_name')::text;
+
+-- name: ForgetPublishedMarketplaceName :exec
+-- Drops the recorded published marketplace name when it is the override an
+-- admin just cleared. That name came from the override, not from the project's
+-- default, so the project returns to its computed name and records it on its
+-- next publish. A recorded name that differs from the cleared override is
+-- still live in the repo (the override never published), so it stays.
+-- updated_at stays the last-published timestamp.
+UPDATE plugin_github_connections
+SET published_hooks_config = published_hooks_config - 'published_marketplace_name'
+WHERE project_id = @project_id
+  AND published_hooks_config ->> 'published_marketplace_name' = @cleared_override::text;
 
 -- name: GetGitHubConnectionOwner :one
 -- Resolves which project currently owns a given installation/repo pair, and

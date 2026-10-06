@@ -60,6 +60,10 @@ export const AUDIT_ACTIONS = [
   "custom_domains:create",
   "custom_domains:delete",
   "custom_domains:update",
+  "dashboard:create",
+  "dashboard:delete",
+  "dashboard:layout",
+  "dashboard:update",
   "data_export_route:create",
   "data_export_route:delete",
   "data_export_route:pause",
@@ -230,6 +234,7 @@ export const AUDIT_ACTIONS = [
   "risk_policy:update",
   "risk_result:dismiss",
   "risk_result:restore",
+  "risk_result:reveal_payload",
   "risk_result:unmask",
   "session_quarantine:open",
   "session_quarantine:release",
@@ -722,6 +727,14 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated widget";
     case "widget:delete":
       return "deleted widget";
+    case "dashboard:create":
+      return "created dashboard";
+    case "dashboard:update":
+      return "updated dashboard";
+    case "dashboard:layout":
+      return "laid out dashboard";
+    case "dashboard:delete":
+      return "deleted dashboard";
 
     case "remote-mcp:create":
       return "added remote MCP server";
@@ -805,6 +818,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "dismissed risk finding";
     case "risk_result:restore":
       return "restored risk finding";
+    case "risk_result:reveal_payload":
+      return "revealed risk finding payload";
     case "risk_result:unmask":
       return "unmasked risk finding";
 

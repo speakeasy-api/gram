@@ -364,6 +364,11 @@ const (
 	// third-party-facing /mcp/{slug} and /x/mcp/{slug} paths (all backends), or
 	// "platform" for the assistant-token-only /platform/mcp/{toolsetSlug} path.
 	McpSurfaceKey = attribute.Key("gram.mcp.surface")
+	// McpRejectionReasonKey is the bounded reason an inbound MCP request was
+	// rejected before dispatch: "authentication" for the Session OAuth gate
+	// (whose detail stays on gram.oauth.failure_reason), or the request
+	// validation failure class such as "header_mismatch".
+	McpRejectionReasonKey = attribute.Key("gram.mcp.rejection_reason")
 	// McpKillswitchSurfaceKey is the kill-switch enforcement surface a covered
 	// MCP tools/call reached: "hosted" or "private_proxy".
 	McpKillswitchSurfaceKey = attribute.Key("gram.mcp.killswitch.surface")
@@ -475,7 +480,14 @@ const (
 	OAuthScopeKey                 = attribute.Key("gram.oauth.scope")
 	// OAuthScopeAddedKey lists the scopes the dance appended on top of a
 	// client's configured scope because the issuer advertises them.
-	OAuthScopeAddedKey                = attribute.Key("gram.oauth.scope_added")
+	OAuthScopeAddedKey = attribute.Key("gram.oauth.scope_added")
+	// OAuthScopeComparisonKey is how a protected resource's scopes_supported
+	// relates to its authorization server's.
+	OAuthScopeComparisonKey = attribute.Key("gram.oauth.scope_comparison")
+	// OAuthResourceScopesSupportedKey lists the scopes an RFC 9728 document advertises.
+	OAuthResourceScopesSupportedKey = attribute.Key("gram.oauth.resource_scopes_supported")
+	// OAuthIssuerScopesSupportedKey lists the scopes an RFC 8414 document advertises.
+	OAuthIssuerScopesSupportedKey     = attribute.Key("gram.oauth.issuer_scopes_supported")
 	OAuthTokenEndpointKey             = attribute.Key("gram.oauth.token_endpoint")
 	OAuthVersionKey                   = attribute.Key("gram.oauth.version")
 	OAuthStatusKey                    = attribute.Key("gram.oauth.status")
@@ -618,6 +630,10 @@ const (
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
 	SecurityTypeKey                = attribute.Key("gram.security.type")
 	SessionIDKey                   = attribute.Key("gram.session.id")
+	SessionTransferSourceHostKey   = attribute.Key("gram.session_transfer.source_host")
+	SessionTransferTargetHostKey   = attribute.Key("gram.session_transfer.target_host")
+	TransferFailureReasonKey       = attribute.Key("gram.session_transfer.failure_reason")
+	TransferSigninErrorKey         = attribute.Key("gram.session_transfer.signin_error")
 	SlackEventFullKey              = attribute.Key("gram.slack.event.full")
 	SlackEventTypeKey              = attribute.Key("gram.slack.event.type")
 	SlackTeamIDKey                 = attribute.Key("gram.slack.team.id")
@@ -2001,6 +2017,24 @@ func SlogOAuthScope(v string) slog.Attr      { return slog.String(string(OAuthSc
 func OAuthScopeAdded(v string) attribute.KeyValue { return OAuthScopeAddedKey.String(v) }
 func SlogOAuthScopeAdded(v string) slog.Attr      { return slog.String(string(OAuthScopeAddedKey), v) }
 
+func SlogOAuthScopeComparison[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthScopeComparisonKey), string(v))
+}
+
+func OAuthResourceScopesSupported(v []string) attribute.KeyValue {
+	return OAuthResourceScopesSupportedKey.StringSlice(v)
+}
+func SlogOAuthResourceScopesSupported(v []string) slog.Attr {
+	return slog.Any(string(OAuthResourceScopesSupportedKey), v)
+}
+
+func OAuthIssuerScopesSupported(v []string) attribute.KeyValue {
+	return OAuthIssuerScopesSupportedKey.StringSlice(v)
+}
+func SlogOAuthIssuerScopesSupported(v []string) slog.Attr {
+	return slog.Any(string(OAuthIssuerScopesSupportedKey), v)
+}
+
 func OAuthTokenEndpoint(v string) attribute.KeyValue { return OAuthTokenEndpointKey.String(v) }
 func SlogOAuthTokenEndpoint(v string) slog.Attr {
 	return slog.String(string(OAuthTokenEndpointKey), v)
@@ -2599,6 +2633,22 @@ func SlogSecurityType(v string) slog.Attr      { return slog.String(string(Secur
 func SessionID(v string) attribute.KeyValue { return SessionIDKey.String(v) }
 func SlogSessionID(v string) slog.Attr      { return slog.String(string(SessionIDKey), v) }
 
+func TransferFailureReason(v string) attribute.KeyValue { return TransferFailureReasonKey.String(v) }
+func SlogTransferFailureReason(v string) slog.Attr {
+	return slog.String(string(TransferFailureReasonKey), v)
+}
+
+func TransferSigninError(v string) attribute.KeyValue { return TransferSigninErrorKey.String(v) }
+func SlogTransferSigninError(v string) slog.Attr {
+	return slog.String(string(TransferSigninErrorKey), v)
+}
+
+func SourceHost(v string) attribute.KeyValue { return SessionTransferSourceHostKey.String(v) }
+func SlogSourceHost(v string) slog.Attr      { return slog.String(string(SessionTransferSourceHostKey), v) }
+
+func TargetHost(v string) attribute.KeyValue { return SessionTransferTargetHostKey.String(v) }
+func SlogTargetHost(v string) slog.Attr      { return slog.String(string(SessionTransferTargetHostKey), v) }
+
 func SlackEventFull(v any) attribute.KeyValue { return SlackEventFullKey.String(fmt.Sprintf("%v", v)) }
 func SlogSlackEventFull(v any) slog.Attr      { return slog.Any(string(SlackEventFullKey), v) }
 
@@ -2699,6 +2749,13 @@ func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMetho
 
 func McpSurface(v string) attribute.KeyValue { return McpSurfaceKey.String(v) }
 func SlogMcpSurface(v string) slog.Attr      { return slog.String(string(McpSurfaceKey), v) }
+
+func McpRejectionReason[V ~string](v V) attribute.KeyValue {
+	return McpRejectionReasonKey.String(string(v))
+}
+func SlogMcpRejectionReason[V ~string](v V) slog.Attr {
+	return slog.String(string(McpRejectionReasonKey), string(v))
+}
 
 func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }
 

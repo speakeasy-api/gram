@@ -1,12 +1,12 @@
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
-import { isMCPFinding, type MCPFindingNames } from "./mcp-finding-context";
-
-const EMPTY_MCP_FINDING_NAMES: MCPFindingNames = {
-  serverNames: new Map(),
-  toolsetNames: new Map(),
-};
+import {
+  isMCPFinding,
+  mcpFindingTargetName,
+  mediationSurfaceLabel,
+  type MCPFindingNames,
+} from "./mcp-finding-context";
 
 function outcomeLabel(outcome: string | undefined): string | undefined {
   if (outcome === "denied" || outcome === "withheld") return "Blocked";
@@ -18,54 +18,27 @@ function outcomeLabel(outcome: string | undefined): string | undefined {
     .join(" ");
 }
 
-function mediationSurfaceLabel(
-  surface: string | undefined,
-): string | undefined {
-  if (surface === "hosted_mcp") return "Hosted MCP";
-  if (surface === "remote_mcp") return "Remote MCP";
-  if (surface === "shadow_mcp") return "Shadow MCP";
-  if (!surface) return undefined;
-  return surface
-    .split("_")
-    .map((word) =>
-      word.toLowerCase() === "mcp"
-        ? "MCP"
-        : word.charAt(0).toUpperCase() + word.slice(1),
-    )
-    .join(" ");
-}
-
+// Two lines, tool first: the server on top, then "{tool} · {surface}" since the
+// tool is the more specific of the two.
 export function MCPFindingContext({
   finding,
   names,
   className,
+  showOutcome = false,
 }: {
   finding: RiskResult;
   names?: MCPFindingNames;
   className?: string;
+  /** Append the enforcement outcome, for surfaces with no outcome column. */
+  showOutcome?: boolean;
 }): JSX.Element | null {
   if (!isMCPFinding(finding)) return null;
-  const resolvedNames = names ?? EMPTY_MCP_FINDING_NAMES;
 
-  const target =
-    (finding.mcpServerId
-      ? resolvedNames.serverNames.get(finding.mcpServerId)
-      : undefined) ??
-    (finding.metaMcpServerId
-      ? resolvedNames.serverNames.get(finding.metaMcpServerId)
-      : undefined) ??
-    (finding.toolsetId
-      ? resolvedNames.toolsetNames.get(finding.toolsetId)
-      : undefined) ??
-    (finding.mcpServerId
-      ? "MCP server"
-      : finding.metaMcpServerId
-        ? "MCP gateway"
-        : "MCP toolset");
+  const target = mcpFindingTargetName(finding, names);
   const detail = [
-    mediationSurfaceLabel(finding.mediationSurface),
     finding.toolName,
-    outcomeLabel(finding.enforcementOutcome),
+    mediationSurfaceLabel(finding.mediationSurface),
+    showOutcome ? outcomeLabel(finding.enforcementOutcome) : undefined,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -76,7 +49,7 @@ export function MCPFindingContext({
         <Badge variant="information" size="sm">
           MCP
         </Badge>
-        <span className="min-w-0 truncate" title={target}>
+        <span className="text-foreground min-w-0 truncate" title={target}>
           {target}
         </span>
       </div>

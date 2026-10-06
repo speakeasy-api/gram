@@ -23,6 +23,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/chat"
 	_ "github.com/speakeasy-api/gram/server/design/chatsessions"
 	_ "github.com/speakeasy-api/gram/server/design/cliauth"
+	_ "github.com/speakeasy-api/gram/server/design/dashboards"
 	_ "github.com/speakeasy-api/gram/server/design/dataexports"
 	_ "github.com/speakeasy-api/gram/server/design/deployments"
 	_ "github.com/speakeasy-api/gram/server/design/deviceintegrations"

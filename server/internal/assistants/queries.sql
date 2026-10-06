@@ -122,6 +122,21 @@ WHERE project_id = @project_id
 ORDER BY id
 FOR NO KEY UPDATE;
 
+-- name: ListAttachmentTargetIDs :many
+-- Resolves the toolsets and MCP servers a write would attach so the handler
+-- can authorize them first. Read-only: the write locks them itself.
+SELECT t.id
+FROM toolsets t
+WHERE t.project_id = @project_id
+  AND t.slug = ANY(@toolset_slugs::TEXT[])
+  AND t.deleted IS FALSE
+UNION ALL
+SELECT ms.id
+FROM mcp_servers ms
+WHERE ms.project_id = @project_id
+  AND ms.slug = ANY(@mcp_server_slugs::TEXT[])
+  AND ms.deleted IS FALSE;
+
 -- name: ResolveEnvironmentsForWrite :many
 SELECT id, slug
 FROM environments

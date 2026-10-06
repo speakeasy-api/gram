@@ -23,9 +23,8 @@ import (
 // between statements, and a statement's return means the read paths already
 // see the new state.
 //
-// The same append-a-flagged-copy projection is the intended mechanism for
-// moving false-positive marking ClickHouse-native once Postgres risk_results
-// is decommissioned.
+// False-positive marking and reversal reuse the same projection so mediated
+// execution metadata remains intact across every appended state copy.
 
 // RetroExclusionScope bounds one statement to a tenant and one partition day
 // ([DayStart, DayEnd) half-open).
@@ -219,16 +218,11 @@ func reversalWhere(keep RetroReversalKeep) string {
 }
 
 // copyProjection renders the INSERT ... SELECT column projection: every
-// risk_findings column passed through verbatim except inserted_at (strictly
-// newer than the selected source and both clocks) and the suppression
-// columns (bound, literal or NULL per direction). excluded_reason,
-// excluded_detail and event_kind are SQL literal expressions, not bind
-// placeholders — the callers only ever stamp constants ('rule' on apply, ” on
-// reversal), so literals keep the arg plumbing untouched. event_kind is
-// stamped per direction so the copy ranks as a state change at read time and
-// a redelivered scanner row cannot clobber it. Column order matches
-// riskFindingColumns exactly, which a test pins against InsertRiskFindings.
-func copyProjection(excludedAtExpr, exclusionIDExpr, excludedReasonExpr, excludedDetailExpr, eventKindExpr string) string {
+// risk_findings column passes through verbatim except inserted_at, which is
+// strictly newer than the selected source and both clocks, and the state
+// columns supplied by the caller. Column order matches riskFindingColumns
+// exactly, which a test pins against InsertRiskFindings.
+func copyProjection(excludedAtExpr, exclusionIDExpr, falsePositiveAtExpr, excludedReasonExpr, excludedDetailExpr, eventKindExpr string) string {
 	projected := make([]string, len(riskFindingColumns))
 	for i, col := range riskFindingColumns {
 		switch col {
@@ -240,6 +234,8 @@ func copyProjection(excludedAtExpr, exclusionIDExpr, excludedReasonExpr, exclude
 			projected[i] = excludedAtExpr
 		case "exclusion_id":
 			projected[i] = exclusionIDExpr
+		case "false_positive_at":
+			projected[i] = falsePositiveAtExpr
 		case "excluded_reason":
 			projected[i] = excludedReasonExpr
 		case "excluded_detail":
@@ -257,13 +253,14 @@ func copyProjection(excludedAtExpr, exclusionIDExpr, excludedReasonExpr, exclude
 // and exclusion_id bound, reason stamped 'rule', detail cleared, kind stamped
 // suppression.
 func applyProjection() string {
-	return copyProjection("?", "?", "'"+ExcludedReasonRule+"'", "''", "'"+EventKindSuppression+"'")
+	return copyProjection("?", "?", "false_positive_at", "'"+ExcludedReasonRule+"'", "''", "'"+EventKindSuppression+"'")
 }
 
 // reversalProjection is the copy projection for the reversal direction: the
-// whole suppression annotation cleared, kind stamped unsuppression.
+// rule suppression annotation cleared, false-positive state preserved, and
+// kind stamped unsuppression.
 func reversalProjection() string {
-	return copyProjection("NULL", "NULL", "''", "''", "'"+EventKindUnsuppression+"'")
+	return copyProjection("NULL", "NULL", "false_positive_at", "''", "''", "'"+EventKindUnsuppression+"'")
 }
 
 // CountRetroExclusionApply returns how many latest-copy rows in scope the

@@ -13573,6 +13573,213 @@ paths:
       x-speakeasy-name-override: switchScopes
       x-speakeasy-react-hook:
         name: SwitchScopes
+  /rpc/auth.transferIn:
+    get:
+      description: 'Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code''s account (login CSRF). A request with both or neither, and any failed check, lands on this host''s login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.'
+      operationId: authTransferIn
+      parameters:
+        - allowEmptyValue: true
+          description: 'Start mode: the platform host that holds the session to move here (e.g. app.getgram.ai)'
+          in: query
+          name: source_host
+          schema:
+            description: 'Start mode: the platform host that holds the session to move here (e.g. app.getgram.ai)'
+            type: string
+        - allowEmptyValue: true
+          description: 'Callback mode: the opaque one-time transfer code from the source host''s transferOut endpoint'
+          in: query
+          name: code
+          schema:
+            description: 'Callback mode: the opaque one-time transfer code from the source host''s transferOut endpoint'
+            type: string
+        - allowEmptyValue: true
+          description: Optional URL path to land on once the session is established on this host
+          in: query
+          name: redirect
+          schema:
+            description: Optional URL path to land on once the session is established on this host
+            type: string
+      responses:
+        "307":
+          description: Temporary Redirect response.
+          headers:
+            Gram-Session:
+              description: Session header
+              schema:
+                description: Session header
+                type: string
+            Location:
+              description: 'The URL to redirect to: the source host''s transferOut (start mode), the requested page (callback mode), or this host''s login page when a check fails'
+              schema:
+                description: 'The URL to redirect to: the source host''s transferOut (start mode), the requested page (callback mode), or this host''s login page when a check fails'
+                type: string
+            Set-Cookie:
+              description: The new authentication session on this host. Set only when callback mode succeeds.
+              schema:
+                description: The new authentication session on this host. Set only when callback mode succeeds.
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: transferIn auth
+      tags:
+        - auth
+      x-speakeasy-name-override: transferIn
+      x-speakeasy-react-hook:
+        disabled: true
+  /rpc/auth.transferOut:
+    get:
+      description: Step 2/3 (authorize) of a cross-domain session transfer, on the source platform host. Reached from Step 1/3, transferIn's start mode on the target host; redirects to Step 3/3, transferIn's callback mode there. Authenticates the session from the session cookie or header, checks that its active organization's default host is the target, and stores a one-time transfer code bound to the browser's nonce. Only an ordinary session whose organization lives on the target host can transfer. On any failure the browser is sent to a login page with a signin_error code instead of an error. See the flow diagram in server/internal/auth/transfer.go.
+      operationId: authTransferOut
+      parameters:
+        - allowEmptyValue: true
+          description: The target platform host to transfer the session to (e.g. ai.speakeasy.com)
+          in: query
+          name: target_host
+          schema:
+            description: The target platform host to transfer the session to (e.g. ai.speakeasy.com)
+            type: string
+        - allowEmptyValue: true
+          description: The browser binding nonce from the target host's transferIn start mode
+          in: query
+          name: nonce
+          schema:
+            description: The browser binding nonce from the target host's transferIn start mode
+            type: string
+        - allowEmptyValue: true
+          description: Optional URL path to redirect to after the transfer completes on the target host
+          in: query
+          name: redirect
+          schema:
+            description: Optional URL path to redirect to after the transfer completes on the target host
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "307":
+          description: Temporary Redirect response.
+          headers:
+            Location:
+              description: 'The URL to redirect to: the target host''s transferIn callback with the transfer code, or a login page when the transfer cannot continue'
+              schema:
+                description: 'The URL to redirect to: the target host''s transferIn callback with the transfer code, or a login page when the transfer cannot continue'
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: transferOut auth
+      tags:
+        - auth
+      x-speakeasy-name-override: transferOut
+      x-speakeasy-react-hook:
+        disabled: true
   /rpc/businessMemories.contentScopes:
     get:
       description: List the complete content-scope tree and distinct-memory counts for the active project. Requires organization admin.
@@ -15896,6 +16103,964 @@ paths:
       tags:
         - cliAuth
       x-speakeasy-name-override: redeem
+  /rpc/dashboards.addWidget:
+    post:
+      description: Place a saved widget on a dashboard, as a new card at the bottom, sized for its chart type.
+      operationId: addDashboardWidget
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddDashboardWidgetRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: addDashboardWidget dashboards
+      tags:
+        - dashboards
+      x-speakeasy-name-override: addWidget
+      x-speakeasy-react-hook:
+        name: AddDashboardWidget
+  /rpc/dashboards.create:
+    post:
+      description: Make an empty dashboard. Any member of the project can.
+      operationId: createDashboard
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDashboardRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: createDashboard dashboards
+      tags:
+        - dashboards
+      x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: CreateDashboard
+  /rpc/dashboards.delete:
+    delete:
+      description: Delete a dashboard and its cards. Its widgets stay saved. Its creator can; deleting someone else's needs project write access.
+      operationId: deleteDashboard
+      parameters:
+        - allowEmptyValue: true
+          description: The dashboard to delete
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The dashboard to delete
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: deleteDashboard dashboards
+      tags:
+        - dashboards
+      x-speakeasy-name-override: delete
+      x-speakeasy-react-hook:
+        name: DeleteDashboard
+  /rpc/dashboards.duplicate:
+    post:
+      description: Copy a dashboard into a new one the caller owns, named "<name> (copy)". Every card's widget is copied into a new saved widget too, named the same way, so the copy is fully independent of the original. Like every widget save, each copy is validated, so a dashboard with a broken widget cannot be duplicated until the widget is fixed.
+      operationId: duplicateDashboard
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DuplicateDashboardRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: duplicateDashboard dashboards
+      tags:
+        - dashboards
+      x-speakeasy-name-override: duplicate
+      x-speakeasy-react-hook:
+        name: DuplicateDashboard
+  /rpc/dashboards.get:
+    get:
+      description: Get one dashboard by id, with its cards and saved filters.
+      operationId: getDashboard
+      parameters:
+        - allowEmptyValue: true
+          description: The dashboard to get
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The dashboard to get
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getDashboard dashboards
+      tags:
+        - dashboards
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: Dashboard
+        type: query
+  /rpc/dashboards.list:
+    get:
+      description: List the project's dashboards, most recently updated first, each with its cards.
+      operationId: listDashboards
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListDashboardsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listDashboards dashboards
+      tags:
+        - dashboards
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: Dashboards
+        type: query
+  /rpc/dashboards.removeWidget:
+    post:
+      description: Take a card off a dashboard. The widget itself stays saved.
+      operationId: removeDashboardWidget
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoveDashboardWidgetRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: removeDashboardWidget dashboards
+      tags:
+        - dashboards
+      x-speakeasy-name-override: removeWidget
+      x-speakeasy-react-hook:
+        name: RemoveDashboardWidget
+  /rpc/dashboards.saveFilters:
+    post:
+      description: Store the date range and filter values a dashboard opens on, for everyone. Until saved, changes in the filter bar are the viewer's own.
+      operationId: saveDashboardFilters
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveDashboardFiltersRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: saveDashboardFilters dashboards
+      tags:
+        - dashboards
+      x-speakeasy-name-override: saveFilters
+      x-speakeasy-react-hook:
+        name: SaveDashboardFilters
+  /rpc/dashboards.saveLayout:
+    post:
+      description: Move and resize a dashboard's cards. Each card names an existing placement and where it now sits; cards not listed stay as they are, so a layout saved from an older view cannot take off a card someone has just added. A card is added with addWidget and taken off with removeWidget. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.
+      operationId: saveDashboardLayout
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveDashboardLayoutRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: saveDashboardLayout dashboards
+      tags:
+        - dashboards
+      x-speakeasy-name-override: saveLayout
+      x-speakeasy-react-hook:
+        name: SaveDashboardLayout
+  /rpc/dashboards.update:
+    post:
+      description: Rename a dashboard or change its description. Its creator can; editing someone else's needs project write access.
+      operationId: updateDashboard
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDashboardRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: updateDashboard dashboards
+      tags:
+        - dashboards
+      x-speakeasy-name-override: update
+      x-speakeasy-react-hook:
+        name: UpdateDashboard
   /rpc/dataExports.createDestination:
     post:
       description: Create a data export destination in the selected project.
@@ -53518,6 +54683,21 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
+          description: Optional risk result ID; returns that one finding even when it is not on a loaded page, such as from a shared link. A dismissed finding, such as a false positive, is not returned.
+          in: query
+          name: result_id
+          schema:
+            description: Optional risk result ID; returns that one finding even when it is not on a loaded page, such as from a shared link. A dismissed finding, such as a false positive, is not returned.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Optional ID of one mediated MCP execution (tool call, resource read or prompt get), the execution_id a result carries; returns the live findings on that execution across its request and response phases. Findings that were dismissed, auto-excluded by exclusion rules, or raised under deleted policies are omitted.
+          in: query
+          name: execution_id
+          schema:
+            description: Optional ID of one mediated MCP execution (tool call, resource read or prompt get), the execution_id a result carries; returns the live findings on that execution across its request and response phases. Findings that were dismissed, auto-excluded by exclusion rules, or raised under deleted policies are omitted.
+            type: string
+        - allowEmptyValue: true
           description: Optional rule category key to filter by (e.g. secrets, pii, financial).
           in: query
           name: category
@@ -54439,6 +55619,113 @@ paths:
       x-speakeasy-name-override: releaseSessionQuarantine
       x-speakeasy-react-hook:
         name: RiskReleaseSessionQuarantine
+        type: mutation
+  /rpc/risk.revealResultPayload:
+    post:
+      description: Return the full scanned payload of the MCP tool call phase a risk result was raised on, so its findings can be shown in context. Positions of every finding with the same execution_id and phase index into the returned payload. Requires an unrestricted chat:read grant. Every successful reveal is audited.
+      operationId: revealRiskResultPayload
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskIDRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskRevealPayloadResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: revealRiskResultPayload risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.results
+      x-speakeasy-name-override: revealPayload
+      x-speakeasy-react-hook:
+        name: RiskRevealResultPayload
         type: mutation
   /rpc/risk.revokePolicyBypassRequest:
     post:
@@ -75960,6 +77247,20 @@ components:
         - name
         - type
         - description
+    AddDashboardWidgetRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The dashboard to place it on
+          format: uuid
+        widget_id:
+          type: string
+          description: The widget to place
+          format: uuid
+      required:
+        - id
+        - widget_id
     AddDeploymentPackageForm:
       type: object
       properties:
@@ -76424,7 +77725,7 @@ components:
             - open_world
         project_id:
           type: string
-          description: Project filter (MCP scopes only).
+          description: Project filter (MCP, environment, and assistant scopes).
         resource_id:
           type: string
           description: The resource identifier, or '*' for all resources of this kind.
@@ -76437,6 +77738,7 @@ components:
             - org
             - environment
             - skill
+            - assistant
             - risk_policy
             - chat
             - agent
@@ -79424,6 +80726,20 @@ components:
       required:
         - rule_id
         - title
+    CreateDashboardRequestBody:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What the dashboard is for, at most 2000 characters
+          maxLength: 2000
+        name:
+          type: string
+          description: Display name, at most 200 characters
+          minLength: 1
+          maxLength: 200
+      required:
+        - name
     CreateDataExportRouteForm:
       type: object
       properties:
@@ -81286,6 +82602,118 @@ components:
         - project_name
         - project_slug
         - is_domain_root
+    Dashboard:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        created_by_user_id:
+          type: string
+          description: Who made it, when known
+        description:
+          type: string
+          description: What the dashboard is for, when its creator said
+        filters:
+          $ref: '#/components/schemas/DashboardFilters'
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Display name. Not unique.
+        organization_id:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        updated_at:
+          type: string
+          format: date-time
+        widgets:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardPlacement'
+          description: Its cards, in no particular order; the grid places them by position
+      description: 'A project''s layout of saved widgets on a 12-column grid, under one date range and filter bar. Belongs to a project and is visible to everyone in it. Widgets are linked, not copied: editing one changes it on every dashboard it is on.'
+      required:
+        - id
+        - project_id
+        - organization_id
+        - name
+        - filters
+        - widgets
+        - created_at
+        - updated_at
+    DashboardFilters:
+      type: object
+      properties:
+        range:
+          $ref: '#/components/schemas/DashboardRange'
+        values:
+          type: object
+          description: Values picked per catalog dimension, by field name
+          additionalProperties:
+            type: array
+            items:
+              type: string
+      description: 'What a dashboard opens on: its date range and the values picked for each catalog dimension its filter bar offers. Changes in the bar are a personal view until they are saved here.'
+      required:
+        - values
+    DashboardPlacement:
+      type: object
+      properties:
+        h:
+          type: integer
+          description: Height in rows
+          format: int64
+        id:
+          type: string
+          description: Stable across layout edits, so the grid keeps the card's identity
+          format: uuid
+        w:
+          type: integer
+          description: Width in columns
+          format: int64
+        widget_id:
+          type: string
+          format: uuid
+        x:
+          type: integer
+          description: Column the card starts at, from 0
+          format: int64
+        "y":
+          type: integer
+          description: Row the card starts at, from 0
+          format: int64
+      description: 'One card on a dashboard: the saved widget it links to and where it sits on the 12-column grid. The same widget may be placed more than once.'
+      required:
+        - id
+        - widget_id
+        - x
+        - "y"
+        - w
+        - h
+    DashboardRange:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Start of an absolute range
+          format: date-time
+        label:
+          type: string
+          description: How the date picker named the absolute range
+          example: Last Tuesday
+        preset:
+          type: string
+          description: A relative window, one a widget may be saved with
+          example: 7d
+        to:
+          type: string
+          description: End of an absolute range
+          format: date-time
+      description: 'The date range a dashboard opens on: a relative window, or an absolute range with the label the date picker gave it.'
     DataExportRoute:
       type: object
       properties:
@@ -82241,6 +83669,15 @@ components:
           description: The CNAME target subdomain custom domains should point at, if configured
       required:
         - a_records
+    DuplicateDashboardRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The dashboard to copy
+          format: uuid
+      required:
+        - id
     DuplicateWidgetRequestBody:
       type: object
       properties:
@@ -87368,6 +88805,16 @@ components:
       required:
         - domains
         - dns_config
+    ListDashboardsResult:
+      type: object
+      properties:
+        dashboards:
+          type: array
+          items:
+            $ref: '#/components/schemas/Dashboard'
+          description: Dashboards in the project, most recently updated first
+      required:
+        - dashboards
     ListDataExportRoutesResult:
       type: object
       properties:
@@ -88308,6 +89755,10 @@ components:
             - skill:blocked_read
             - skill:write
             - skill:blocked_write
+            - assistant:read
+            - assistant:blocked_read
+            - assistant:write
+            - assistant:blocked_write
             - plugin:write
             - plugin:blocked_write
             - risk_policy:evaluate
@@ -88357,6 +89808,10 @@ components:
               - skill:blocked_read
               - skill:write
               - skill:blocked_write
+              - assistant:read
+              - assistant:blocked_read
+              - assistant:write
+              - assistant:blocked_write
               - plugin:write
               - plugin:blocked_write
               - risk_policy:evaluate
@@ -91971,6 +93426,48 @@ components:
         - included_servers
         - actual_enabled_server_count
         - has_active_subscription
+    PlacementInput:
+      type: object
+      properties:
+        h:
+          type: integer
+          description: Height in rows; each chart type also has a minimum
+          format: int64
+          minimum: 1
+          maximum: 10000
+        id:
+          type: string
+          description: The placement being moved or resized
+          format: uuid
+        w:
+          type: integer
+          description: Width in columns; each chart type also has a minimum, so x + w stays within 12
+          format: int64
+          minimum: 1
+          maximum: 12
+        widget_id:
+          type: string
+          format: uuid
+        x:
+          type: integer
+          description: Column the card starts at, on a 12-column grid
+          format: int64
+          minimum: 0
+          maximum: 11
+        "y":
+          type: integer
+          description: Row the card starts at
+          format: int64
+          minimum: 0
+          maximum: 9999
+      description: Where a card sits in a layout being saved. It names an existing placement, which is moved or resized; a new card is added with addWidget.
+      required:
+        - id
+        - widget_id
+        - x
+        - "y"
+        - w
+        - h
     PlatformKillswitchDefinition:
       type: object
       properties:
@@ -94540,6 +96037,20 @@ components:
       required:
         - client_id
         - mcp_server_id
+    RemoveDashboardWidgetRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The dashboard the card is on
+          format: uuid
+        placement_id:
+          type: string
+          description: The card to remove
+          format: uuid
+      required:
+        - id
+        - placement_id
     RenameAgentForm:
       type: object
       properties:
@@ -96006,7 +97517,7 @@ components:
           format: uuid
         execution_id:
           type: string
-          description: Identity of the concrete mediated execution.
+          description: The mediated MCP execution (tool call, resource read or prompt get) that raised this finding. Filter listResults by it to list that execution's non-dismissed findings.
         false_positive_at:
           type: string
           description: 'Deprecated: mirror of suppressed_at, kept while clients migrate to the suppressed_* fields. Null when not suppressed.'
@@ -96038,7 +97549,7 @@ components:
           description: Outer gateway that routed the execution, when present.
         phase:
           type: string
-          description: Execution phase inspected by risk.
+          description: 'Which phase of the mediated MCP execution was scanned: its request or its response.'
         policy_id:
           type: string
           description: The risk policy ID.
@@ -96141,7 +97652,7 @@ components:
             - quarantined
         execution_id:
           type: string
-          description: Identity of the concrete mediated execution.
+          description: The mediated MCP execution (tool call, resource read or prompt get) that raised this finding. Filter listResults by it to list that execution's non-dismissed findings.
         id:
           type: string
           description: The result ID.
@@ -96166,7 +97677,7 @@ components:
           description: Outer gateway that routed the execution, when present.
         phase:
           type: string
-          description: Execution phase inspected by risk.
+          description: 'Which phase of the mediated MCP execution was scanned: its request or its response.'
         policy_id:
           type: string
           description: The risk policy ID.
@@ -96214,6 +97725,36 @@ components:
         - created_at
         - match_redacted
         - position_known
+    RiskRevealPayloadResult:
+      type: object
+      properties:
+        execution_id:
+          type: string
+          description: The mediated execution the payload belongs to.
+        expires_at:
+          type: string
+          description: When the stored payload is deleted. Absent when reveal_state is evidence_not_stored.
+          format: date-time
+        id:
+          type: string
+          description: The risk result ID.
+          format: uuid
+        payload:
+          type: string
+          description: 'The exact text the scanners inspected: the tools/call arguments JSON for a request, or the extracted result text for a response. Empty when reveal_state is evidence_not_stored.'
+        phase:
+          type: string
+          description: Execution phase the payload was scanned in (request or response).
+        reveal_state:
+          type: string
+          description: Whether the payload was revealed or its evidence is unavailable or expired.
+          enum:
+            - available
+            - evidence_not_stored
+      required:
+        - id
+        - reveal_state
+        - payload
     RiskRuleBreakdownEntry:
       type: object
       properties:
@@ -96648,6 +98189,10 @@ components:
             - skill:blocked_read
             - skill:write
             - skill:blocked_write
+            - assistant:read
+            - assistant:blocked_read
+            - assistant:write
+            - assistant:blocked_write
             - plugin:write
             - plugin:blocked_write
             - risk_policy:evaluate
@@ -96894,6 +98439,34 @@ components:
         - id
         - name
         - key_prefix
+    SaveDashboardFiltersRequestBody:
+      type: object
+      properties:
+        filters:
+          $ref: '#/components/schemas/DashboardFilters'
+        id:
+          type: string
+          description: The dashboard to save filters on
+          format: uuid
+      required:
+        - id
+        - filters
+    SaveDashboardLayoutRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The dashboard to lay out
+          format: uuid
+        placements:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlacementInput'
+          description: Every card and where it sits; a dashboard holds at most 100
+          maxItems: 100
+      required:
+        - id
+        - placements
     SaveRiskEvalReviewRequestBody:
       type: object
       properties:
@@ -96940,6 +98513,8 @@ components:
             - environment:blocked_write
             - skill:blocked_read
             - skill:blocked_write
+            - assistant:blocked_read
+            - assistant:blocked_write
             - plugin:blocked_write
             - risk_policy:bypass
             - workload:blocked_read
@@ -96953,6 +98528,7 @@ components:
             - mcp
             - environment
             - skill
+            - assistant
             - risk_policy
             - chat
             - agent
@@ -96983,6 +98559,10 @@ components:
             - skill:blocked_read
             - skill:write
             - skill:blocked_write
+            - assistant:read
+            - assistant:blocked_read
+            - assistant:write
+            - assistant:blocked_write
             - plugin:write
             - plugin:blocked_write
             - risk_policy:evaluate
@@ -97470,7 +99050,7 @@ components:
             - open_world
         project_id:
           type: string
-          description: Project filter (MCP scopes only). When set with resource_id='*', grants access to all servers in the project.
+          description: Project filter (MCP, environment, and assistant scopes). When set with resource_id='*', grants access to every resource of the kind in the project.
         resource_id:
           type: string
           description: The resource identifier, or '*' for all resources of this kind.
@@ -97483,6 +99063,7 @@ components:
             - org
             - environment
             - skill
+            - assistant
             - risk_policy
             - chat
             - agent
@@ -103489,6 +105070,25 @@ components:
         - id
         - title
         - severity
+    UpdateDashboardRequestBody:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What the dashboard is for, at most 2000 characters
+          maxLength: 2000
+        id:
+          type: string
+          description: The dashboard to update
+          format: uuid
+        name:
+          type: string
+          description: Display name, at most 200 characters
+          minLength: 1
+          maxLength: 200
+      required:
+        - id
+        - name
     UpdateDestinationRequestBody:
       type: object
       properties:
@@ -106386,6 +107986,8 @@ tags:
     description: Manages chat session tokens for client-side authentication
   - name: cliAuth
     description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
+  - name: dashboards
+    description: 'Dashboards: a project''s layouts of saved widgets. Any member can make one; editing someone else''s needs project write access.'
   - name: dataExports
     description: Manage project-scoped data export destinations and routes.
   - name: deployments

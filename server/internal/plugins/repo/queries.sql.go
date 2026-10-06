@@ -442,6 +442,29 @@ func (q *Queries) EnableRoleSetupFeatureFixture(ctx context.Context, organizatio
 	return err
 }
 
+const forgetPublishedMarketplaceName = `-- name: ForgetPublishedMarketplaceName :exec
+UPDATE plugin_github_connections
+SET published_hooks_config = published_hooks_config - 'published_marketplace_name'
+WHERE project_id = $1
+  AND published_hooks_config ->> 'published_marketplace_name' = $2::text
+`
+
+type ForgetPublishedMarketplaceNameParams struct {
+	ProjectID       uuid.UUID
+	ClearedOverride string
+}
+
+// Drops the recorded published marketplace name when it is the override an
+// admin just cleared. That name came from the override, not from the project's
+// default, so the project returns to its computed name and records it on its
+// next publish. A recorded name that differs from the cleared override is
+// still live in the repo (the override never published), so it stays.
+// updated_at stays the last-published timestamp.
+func (q *Queries) ForgetPublishedMarketplaceName(ctx context.Context, arg ForgetPublishedMarketplaceNameParams) error {
+	_, err := q.db.Exec(ctx, forgetPublishedMarketplaceName, arg.ProjectID, arg.ClearedOverride)
+	return err
+}
+
 const getDefaultPlugin = `-- name: GetDefaultPlugin :one
 SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
 FROM plugins
@@ -2363,6 +2386,36 @@ func (q *Queries) PromoteToDefaultPlugin(ctx context.Context, arg PromoteToDefau
 	return i, err
 }
 
+const recordPublishedMarketplaceName = `-- name: RecordPublishedMarketplaceName :exec
+UPDATE plugin_github_connections
+SET published_hooks_config = jsonb_set(
+    COALESCE(published_hooks_config, '{}'::jsonb),
+    '{published_marketplace_name}',
+    to_jsonb($1::text)
+  )
+WHERE project_id = $2
+  AND published_hooks_config ->> 'published_marketplace_name' IS NOT DISTINCT FROM $3::text
+`
+
+type RecordPublishedMarketplaceNameParams struct {
+	MarketplaceName         string
+	ProjectID               uuid.UUID
+	RecordedMarketplaceName pgtype.Text
+}
+
+// Records the marketplace.json name a project's repo is known to hold, under
+// the published_marketplace_name key of published_hooks_config, without a
+// republish. The publish path calls it when it skips an unchanged publish:
+// matching shared MCP fingerprints prove the repo already carries that name.
+// It writes only while the recorded name still equals the one the caller read
+// (NULL when none was recorded), so it never overwrites a name that a
+// concurrent publish recorded. updated_at stays the last-published timestamp.
+// The key is not a hooks config field, so this never reads as a hooks change.
+func (q *Queries) RecordPublishedMarketplaceName(ctx context.Context, arg RecordPublishedMarketplaceNameParams) error {
+	_, err := q.db.Exec(ctx, recordPublishedMarketplaceName, arg.MarketplaceName, arg.ProjectID, arg.RecordedMarketplaceName)
+	return err
+}
+
 const removeAllPluginAssignments = `-- name: RemoveAllPluginAssignments :execrows
 DELETE FROM plugin_assignments pa
 USING plugins p
@@ -2984,7 +3037,9 @@ type UpsertGitHubConnectionParams struct {
 // config just published; all are always overwritten so subsequent rollout runs
 // can detect independently whether the MCP or hooks component changed (including
 // hooks config drift a version bump can't capture, e.g. a marketplace rename or
-// browser-login toggle).
+// browser-login toggle). published_hooks_config also records, under
+// published_marketplace_name, the marketplace name the repo was published under,
+// which freezes the project's marketplace name.
 func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubConnectionParams) (PluginGithubConnection, error) {
 	row := q.db.QueryRow(ctx, upsertGitHubConnection,
 		arg.ProjectID,

@@ -584,6 +584,17 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 		}
 	}
 
+	writes := []chat.MessageWrite{{
+		Params:         msgParams,
+		BillingUserID:  metadata.UserID,
+		AssistantID:    uuid.Nil,
+		WorkloadSource: metering.WorkloadSourceHook,
+		UserEmail:      metadata.UserEmail,
+		Provider:       metadata.Provider,
+		HookHostname:   metadata.Hostname,
+		AccountType:    metadata.AccountType,
+		BillingMode:    metadata.BillingMode,
+	}}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin prompt correlation transaction: %w", err)
@@ -615,17 +626,6 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 	if err := s.ensureHookChat(ctx, repo.New(tx), metadata, msgParams.ChatID, projectID, defaultTitle); err != nil {
 		return false, err
 	}
-	writes := []chat.MessageWrite{{
-		Params:         msgParams,
-		BillingUserID:  metadata.UserID,
-		AssistantID:    uuid.Nil,
-		WorkloadSource: metering.WorkloadSourceHook,
-		UserEmail:      metadata.UserEmail,
-		Provider:       metadata.Provider,
-		HookHostname:   metadata.Hostname,
-		AccountType:    metadata.AccountType,
-		BillingMode:    metadata.BillingMode,
-	}}
 	n, err := s.writer.WriteInTx(ctx, tx, writes)
 	if err != nil {
 		return false, fmt.Errorf("insert uncorrelated agent prompt: %w", err)

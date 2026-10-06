@@ -21,7 +21,9 @@ const (
 
 	// DefaultModel is the served model name of the merged fine-tune. It must
 	// equal the --served-model-name of the deployment the base URL points at.
-	DefaultModel = "risk-judge-4b"
+	// risk-judge-9b is the compact-format model SystemPrompt was written for;
+	// the 4B deployments serve as risk-judge-4b and need the previous prompt.
+	DefaultModel = "risk-judge-9b"
 )
 
 // Config configures the fine-tuned risk model client.

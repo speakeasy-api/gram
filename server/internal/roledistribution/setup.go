@@ -92,8 +92,10 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 	if err != nil {
 		return false, fmt.Errorf("validate role setup liveness: %w", err)
 	}
+	// A projectless organization is valid. Creating its first project publishes
+	// an organization bootstrap, so skip rather than retry.
 	if projectID == uuid.Nil {
-		return false, fmt.Errorf("role distribution organization has no active project")
+		return skip()
 	}
 	// Match ordinary audience/content writers: admission lock, then project and
 	// plugin row locks. Never wait for admission while holding the project row.
@@ -103,7 +105,7 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 	var currentProjectID uuid.UUID
 	err = tx.QueryRow(ctx, `SELECT id FROM projects WHERE organization_id = $1 AND deleted IS FALSE ORDER BY created_at, id LIMIT 1 FOR SHARE`, organizationID).Scan(&currentProjectID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return false, fmt.Errorf("role distribution organization has no active project")
+		return skip()
 	}
 	if err != nil {
 		return false, fmt.Errorf("revalidate role setup project: %w", err)

@@ -37,11 +37,15 @@ type ListRiskFindingsParams struct {
 	PolicyIDs      []string
 	MCPServerID    string
 	ChatID         string
-	From           *time.Time
-	To             *time.Time
-	Category       string
-	RuleIDSubstr   string
-	UserIDSubstr   string
+	// ResultID narrows to one finding id.
+	ResultID uuid.NullUUID
+	// ExecutionID narrows to the findings of one mediated execution.
+	ExecutionID  string
+	From         *time.Time
+	To           *time.Time
+	Category     string
+	RuleIDSubstr string
+	UserIDSubstr string
 	// ExternalUserIDs matches whole external user ids rather than a substring.
 	// The identity page needs exactly one subject's findings, and a substring
 	// of one person's id routinely matches another's.
@@ -163,12 +167,9 @@ func (r *RiskFindingListRow) scanTargets() []any {
 
 // listRiskFindingsBase applies the filters shared by the list and count reads
 // that are immutable across an id's copies: tenancy, dead-letter sentinels,
-// the shadow marker and the visible-policy pushdown. The exclusion / false-positive state is
-// deliberately NOT here: those flags change by appending a newer copy of the
-// row (the retroactive reconcile, the false-positive mirror), so filtering
-// them before the latest-copy-per-id dedup would drop the flagged copy and
-// let a stale live copy win — callers must gate on them AFTER dedup, the way
-// overview.go and signals.go do.
+// the shadow marker and the visible-policy pushdown. Suppression state is
+// deliberately NOT here: it changes by appending a newer copy, so callers
+// gate on it after latest-copy-per-id dedup.
 func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel.SelectBuilder, error) {
 	if len(p.PolicyIDs) == 0 {
 		return squirrel.SelectBuilder{}, errEmptyPolicyIDs
@@ -183,6 +184,20 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 	if p.ChatID != "" {
 		sb = sb.Where("chat_id = ?", p.ChatID)
 	}
+	if p.ResultID.Valid {
+		sb = sb.Where("id = ?", p.ResultID.UUID)
+	}
+	if p.ExecutionID != "" {
+		// Suppression copies carry no execution metadata, so the filter selects
+		// ids rather than rows and every copy still reaches the dedup.
+		sb = sb.Where(sq.Select("id").
+			From("risk_findings").
+			Where("organization_id = ?", p.OrganizationID).
+			Where("project_id = ?", p.ProjectID).
+			Where("execution_id = ?", p.ExecutionID).
+			Prefix("id IN (").
+			Suffix(")"))
+	}
 	return sb, nil
 }
 
@@ -193,18 +208,16 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 // Events listing, the Dismissed listing, the overview, signals, the Watchdog,
 // reveal and the retroactive exclusion reconcile applies this condition.
 //
-// Unlike the suppression state the marker is immutable across an id's copies:
-// the scanner stamps it, the retroactive reconcile's INSERT ... SELECT passes
-// it through verbatim, and the manual-dismissal mirror republishes Postgres
-// risk_results rows only, which never hold shadow findings. It is therefore
-// safe to apply BEFORE the per-id dedup, next to the tenancy filters, where it
-// also prunes the scan.
+// Unlike suppression state, the marker is immutable across copies: scanners
+// stamp it and every INSERT ... SELECT state transition passes it through.
+// It is therefore safe to apply before per-id dedup, next to tenancy filters,
+// where it also prunes the scan.
 const notShadowCond = "shadow = 0"
 
 // withMCPServerCond narrows to one concrete server AFTER the latest-copy
-// dedup. A suppression copy mirrored from Postgres carries no execution
-// metadata, so filtering before dedup would drop it and let the live scanner
-// copy win, resurfacing a dismissed finding under the filter.
+// dedup. Legacy suppression copies mirrored from Postgres carry no execution
+// metadata, so filtering before dedup would drop them and let the live
+// scanner copy win, resurfacing a dismissed finding under the filter.
 func withMCPServerCond(sb squirrel.SelectBuilder, p ListRiskFindingsParams) squirrel.SelectBuilder {
 	if p.MCPServerID == "" {
 		return sb
