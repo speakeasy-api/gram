@@ -1,0 +1,14 @@
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 18,110,120-129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "05fa763540373b58592104d7aec5978db25d030c",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
