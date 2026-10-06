@@ -10,8 +10,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
-// loginPath is the dashboard login entry point on every platform host.
-const loginPath = "/rpc/auth.login"
+// transferInPath moves a session onto every platform host.
+const transferInPath = "/rpc/auth.transferIn"
 
 // orgHostMove names the platform host an organization's browser sessions
 // belong on.
@@ -21,13 +21,17 @@ type orgHostMove struct {
 
 	// siteURL is the base URL of the dashboard on that host.
 	siteURL *url.URL
+
+	// sourceHost is the platform host the request arrived on, which holds
+	// the session to hand over.
+	sourceHost string
 }
 
 // organizationHostMove reports where to move a browser that is using an
 // organization whose stored default_host is defaultHost. ok is true only when
 // the request arrived on a platform host and the stored value names a
 // different configured platform host. Session cookies are host-only, so the
-// browser has to sign in again there.
+// session is handed to that host with a session transfer.
 //
 // A NULL or no-longer-valid stored value never moves the browser: NULL means
 // the legacy host, and users of those organizations keep using whichever
@@ -59,7 +63,7 @@ func (s *Service) organizationHostMove(ctx context.Context, defaultHost pgtype.T
 	if sameHost(current.Host, serverURL.Host) {
 		return none, false
 	}
-	return orgHostMove{serverURL: serverURL, siteURL: siteURL}, true
+	return orgHostMove{serverURL: serverURL, siteURL: siteURL, sourceHost: current.Host}, true
 }
 
 // allowedScheme reports whether a move from a request over current may target
@@ -82,10 +86,12 @@ func sameHost(currentHost, targetHost string) bool {
 	return current == target
 }
 
-// loginURL is the login entry point on the move's host, carrying destination,
-// a rooted path from safeRedirectPath, as the post-login redirect.
-func (m orgHostMove) loginURL(destination string) string {
+// transferURL starts a session transfer (TransferIn's start mode) on the
+// move's host from the request's host, landing on destination, a rooted path
+// from safeRedirectPath.
+func (m orgHostMove) transferURL(destination string) string {
 	query := url.Values{}
+	query.Set("source_host", m.sourceHost)
 	query.Set("redirect", destination)
-	return strings.TrimRight(m.serverURL.String(), "/") + loginPath + "?" + query.Encode()
+	return strings.TrimRight(m.serverURL.String(), "/") + transferInPath + "?" + query.Encode()
 }

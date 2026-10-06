@@ -20293,23 +20293,29 @@ paths:
                 name: SwitchScopes
     /rpc/auth.transferIn:
         get:
-            description: Completes a cross-domain session transfer. Redeems the transfer code, checks it against the browser binding cookie set by transferStart, and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.
+            description: Moves a session onto this platform host from another one, in two modes. Start mode (source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to the source host's transferOut. Callback mode (code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page; a failed callback never starts a new transfer. Used to share sessions between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
             operationId: authTransferIn
             parameters:
                 - allowEmptyValue: true
-                  description: The opaque one-time transfer code from the source host's transferOut endpoint
+                  description: 'Start mode: the platform host that holds the session to move here (e.g. app.getgram.ai)'
                   in: query
-                  name: token
-                  required: true
+                  name: source_host
                   schema:
-                    description: The opaque one-time transfer code from the source host's transferOut endpoint
+                    description: 'Start mode: the platform host that holds the session to move here (e.g. app.getgram.ai)'
                     type: string
                 - allowEmptyValue: true
-                  description: Optional URL path to redirect to after the session is established
+                  description: 'Callback mode: the opaque one-time transfer code from the source host''s transferOut endpoint'
+                  in: query
+                  name: code
+                  schema:
+                    description: 'Callback mode: the opaque one-time transfer code from the source host''s transferOut endpoint'
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional URL path to land on once the session is established on this host
                   in: query
                   name: redirect
                   schema:
-                    description: Optional URL path to redirect to after the session is established
+                    description: Optional URL path to land on once the session is established on this host
                     type: string
             responses:
                 "307":
@@ -20321,14 +20327,14 @@ paths:
                                 description: Session header
                                 type: string
                         Location:
-                            description: The URL to redirect to after the session is established
+                            description: 'The URL to redirect to: the source host''s transferOut (start mode), the requested page (callback mode), or this host''s login page when a check fails'
                             schema:
-                                description: The URL to redirect to after the session is established
+                                description: 'The URL to redirect to: the source host''s transferOut (start mode), the requested page (callback mode), or this host''s login page when a check fails'
                                 type: string
                         Set-Cookie:
-                            description: The new authentication session on this host
+                            description: The new authentication session on this host. Set only when callback mode succeeds.
                             schema:
-                                description: The new authentication session on this host
+                                description: The new authentication session on this host. Set only when callback mode succeeds.
                                 type: string
                 "400":
                     content:
@@ -20392,7 +20398,7 @@ paths:
                 disabled: true
     /rpc/auth.transferOut:
         get:
-            description: Continues a cross-domain session transfer on the source platform host. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint.
+            description: Continues a cross-domain session transfer on the source platform host. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn callback. Only an ordinary session whose active organization lives on the target host can transfer. The session is read from the session cookie or header; on any failure the browser is sent to a login page instead of an error.
             operationId: authTransferOut
             parameters:
                 - allowEmptyValue: true
@@ -20404,12 +20410,12 @@ paths:
                     description: The target platform host to transfer the session to (e.g. ai.speakeasy.com)
                     type: string
                 - allowEmptyValue: true
-                  description: The browser binding nonce from the target host's transferStart endpoint
+                  description: The browser binding nonce from the target host's transferIn start mode
                   in: query
                   name: nonce
                   required: true
                   schema:
-                    description: The browser binding nonce from the target host's transferStart endpoint
+                    description: The browser binding nonce from the target host's transferIn start mode
                     type: string
                 - allowEmptyValue: true
                   description: Optional URL path to redirect to after the transfer completes on the target host
@@ -20430,9 +20436,9 @@ paths:
                     description: Temporary Redirect response.
                     headers:
                         Location:
-                            description: The URL to redirect to (the target host's transferIn endpoint with the transfer code)
+                            description: 'The URL to redirect to: the target host''s transferIn callback with the transfer code, or a login page when the transfer cannot continue'
                             schema:
-                                description: The URL to redirect to (the target host's transferIn endpoint with the transfer code)
+                                description: 'The URL to redirect to: the target host''s transferIn callback with the transfer code, or a login page when the transfer cannot continue'
                                 type: string
                 "400":
                     content:
@@ -20488,106 +20494,10 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
             summary: transferOut auth
             tags:
                 - auth
             x-speakeasy-name-override: transferOut
-            x-speakeasy-react-hook:
-                disabled: true
-    /rpc/auth.transferStart:
-        get:
-            description: Starts a cross-domain session transfer on the target platform host. Sets a short-lived cookie that binds the transfer to this browser and redirects to the source platform host's transferOut endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
-            operationId: authTransferStart
-            parameters:
-                - allowEmptyValue: true
-                  description: The platform host that holds the session to transfer (e.g. app.getgram.ai)
-                  in: query
-                  name: source_host
-                  required: true
-                  schema:
-                    description: The platform host that holds the session to transfer (e.g. app.getgram.ai)
-                    type: string
-                - allowEmptyValue: true
-                  description: Optional URL path to redirect to after the transfer completes on this host
-                  in: query
-                  name: redirect
-                  schema:
-                    description: Optional URL path to redirect to after the transfer completes on this host
-                    type: string
-            responses:
-                "307":
-                    description: Temporary Redirect response.
-                    headers:
-                        Location:
-                            description: The URL to redirect to (the source host's transferOut endpoint)
-                            schema:
-                                description: The URL to redirect to (the source host's transferOut endpoint)
-                                type: string
-                        Set-Cookie:
-                            description: The browser binding for this transfer
-                            schema:
-                                description: The browser binding for this transfer
-                                type: string
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            summary: transferStart auth
-            tags:
-                - auth
-            x-speakeasy-name-override: transferStart
             x-speakeasy-react-hook:
                 disabled: true
     /rpc/businessMemories.contentScopes:

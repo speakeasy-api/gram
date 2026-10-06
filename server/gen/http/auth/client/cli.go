@@ -169,26 +169,6 @@ func BuildInfoPayload(authInfoSessionToken string) (*auth.InfoPayload, error) {
 	return v, nil
 }
 
-// BuildTransferStartPayload builds the payload for the auth transferStart
-// endpoint from CLI flags.
-func BuildTransferStartPayload(authTransferStartSourceHost string, authTransferStartRedirect string) (*auth.TransferStartPayload, error) {
-	var sourceHost string
-	{
-		sourceHost = authTransferStartSourceHost
-	}
-	var redirect *string
-	{
-		if authTransferStartRedirect != "" {
-			redirect = &authTransferStartRedirect
-		}
-	}
-	v := &auth.TransferStartPayload{}
-	v.SourceHost = sourceHost
-	v.Redirect = redirect
-
-	return v, nil
-}
-
 // BuildTransferOutPayload builds the payload for the auth transferOut endpoint
 // from CLI flags.
 func BuildTransferOutPayload(authTransferOutTargetHost string, authTransferOutNonce string, authTransferOutRedirect string, authTransferOutSessionToken string) (*auth.TransferOutPayload, error) {
@@ -223,10 +203,18 @@ func BuildTransferOutPayload(authTransferOutTargetHost string, authTransferOutNo
 
 // BuildTransferInPayload builds the payload for the auth transferIn endpoint
 // from CLI flags.
-func BuildTransferInPayload(authTransferInToken string, authTransferInRedirect string) (*auth.TransferInPayload, error) {
-	var token string
+func BuildTransferInPayload(authTransferInSourceHost string, authTransferInCode string, authTransferInRedirect string) (*auth.TransferInPayload, error) {
+	var sourceHost *string
 	{
-		token = authTransferInToken
+		if authTransferInSourceHost != "" {
+			sourceHost = &authTransferInSourceHost
+		}
+	}
+	var code *string
+	{
+		if authTransferInCode != "" {
+			code = &authTransferInCode
+		}
 	}
 	var redirect *string
 	{
@@ -235,7 +223,8 @@ func BuildTransferInPayload(authTransferInToken string, authTransferInRedirect s
 		}
 	}
 	v := &auth.TransferInPayload{}
-	v.Token = token
+	v.SourceHost = sourceHost
+	v.Code = code
 	v.Redirect = redirect
 
 	return v, nil

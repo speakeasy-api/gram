@@ -172,7 +172,6 @@ trackedFiles:
   src/funcs/authSwitchScopes.ts: {}
   src/funcs/authTransferIn.ts: {}
   src/funcs/authTransferOut.ts: {}
-  src/funcs/authTransferStart.ts: {}
   src/funcs/businessMemoriesList.ts: {}
   src/funcs/businessMemoriesListContentScopes.ts: {}
   src/funcs/businessMemoriesSearch.ts: {}
@@ -1953,7 +1952,6 @@ trackedFiles:
   src/models/operations/authlogin.ts: {}
   src/models/operations/authtransferin.ts: {}
   src/models/operations/authtransferout.ts: {}
-  src/models/operations/authtransferstart.ts: {}
   src/models/operations/beginslackdirectoryconnection.ts: {}
   src/models/operations/cancelstripesubscription.ts: {}
   src/models/operations/captureevent.ts: {}

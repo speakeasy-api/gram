@@ -10,11 +10,15 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type AuthTransferInRequest = {
   /**
-   * The opaque one-time transfer code from the source host's transferOut endpoint
+   * Start mode: the platform host that holds the session to move here (e.g. app.getgram.ai)
    */
-  token: string;
+  sourceHost?: string | undefined;
   /**
-   * Optional URL path to redirect to after the session is established
+   * Callback mode: the opaque one-time transfer code from the source host's transferOut endpoint
+   */
+  code?: string | undefined;
+  /**
+   * Optional URL path to land on once the session is established on this host
    */
   redirect?: string | undefined;
 };
@@ -25,7 +29,8 @@ export type AuthTransferInResponse = {
 
 /** @internal */
 export type AuthTransferInRequest$Outbound = {
-  token: string;
+  source_host?: string | undefined;
+  code?: string | undefined;
   redirect?: string | undefined;
 };
 
@@ -33,10 +38,18 @@ export type AuthTransferInRequest$Outbound = {
 export const AuthTransferInRequest$outboundSchema: z.ZodMiniType<
   AuthTransferInRequest$Outbound,
   AuthTransferInRequest
-> = z.object({
-  token: z.string(),
-  redirect: z.optional(z.string()),
-});
+> = z.pipe(
+  z.object({
+    sourceHost: z.optional(z.string()),
+    code: z.optional(z.string()),
+    redirect: z.optional(z.string()),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      sourceHost: "source_host",
+    });
+  }),
+);
 
 export function authTransferInRequestToJSON(
   authTransferInRequest: AuthTransferInRequest,

@@ -8,17 +8,13 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export type AuthTransferOutSecurity = {
-  sessionHeaderGramSession?: string | undefined;
-};
-
 export type AuthTransferOutRequest = {
   /**
    * The target platform host to transfer the session to (e.g. ai.speakeasy.com)
    */
   targetHost: string;
   /**
-   * The browser binding nonce from the target host's transferStart endpoint
+   * The browser binding nonce from the target host's transferIn start mode
    */
   nonce: string;
   /**
@@ -34,34 +30,6 @@ export type AuthTransferOutRequest = {
 export type AuthTransferOutResponse = {
   headers: { [k: string]: Array<string> };
 };
-
-/** @internal */
-export type AuthTransferOutSecurity$Outbound = {
-  "session_header_Gram-Session"?: string | undefined;
-};
-
-/** @internal */
-export const AuthTransferOutSecurity$outboundSchema: z.ZodMiniType<
-  AuthTransferOutSecurity$Outbound,
-  AuthTransferOutSecurity
-> = z.pipe(
-  z.object({
-    sessionHeaderGramSession: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      sessionHeaderGramSession: "session_header_Gram-Session",
-    });
-  }),
-);
-
-export function authTransferOutSecurityToJSON(
-  authTransferOutSecurity: AuthTransferOutSecurity,
-): string {
-  return JSON.stringify(
-    AuthTransferOutSecurity$outboundSchema.parse(authTransferOutSecurity),
-  );
-}
 
 /** @internal */
 export type AuthTransferOutRequest$Outbound = {

@@ -687,6 +687,13 @@ describe("AuthProvider organization host", () => {
   const ORG_HOST = "https://ai.example.test";
   const PAGE = "/test-org/mcp?tab=logs#recent";
 
+  /** The session transfer to the organization's host that lands on page. */
+  const transferTo = (page: string) =>
+    `${ORG_HOST}/rpc/auth.transferIn?${new URLSearchParams({
+      source_host: window.location.host,
+      redirect: page,
+    }).toString()}`;
+
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
@@ -705,7 +712,7 @@ describe("AuthProvider organization host", () => {
     replaceSpy = undefined;
   });
 
-  it("moves to the organization's host keeping the path, query and hash", async () => {
+  it("hands the session to the organization's host with a transfer that keeps the path, query and hash", async () => {
     mocks.sessionData.mockReturnValue(
       gatedSession({
         whitelisted: true,
@@ -716,10 +723,24 @@ describe("AuthProvider organization host", () => {
     renderGate(PAGE);
 
     await waitFor(() => {
-      expect(replaceSpy).toHaveBeenCalledWith(`${ORG_HOST}${PAGE}`);
+      expect(replaceSpy).toHaveBeenCalledWith(transferTo(PAGE));
     });
     expect(replaceSpy).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId("app")).toBeNull();
+  });
+
+  it("never moves an organization on the legacy host (no dashboard URL)", () => {
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: undefined,
+      }),
+    );
+
+    renderGate(PAGE);
+
+    expect(screen.getByTestId("app")).toBeTruthy();
+    expect(replaceSpy).not.toHaveBeenCalled();
   });
 
   it("stays when the organization's host is the current host", () => {
@@ -818,7 +839,7 @@ describe("AuthProvider organization host", () => {
         organizationId: OTHER_ORG.id,
       });
     });
-    expect(replaceSpy).not.toHaveBeenCalledWith(`${ORG_HOST}${otherPage}`);
+    expect(replaceSpy).not.toHaveBeenCalledWith(transferTo(otherPage));
   });
 
   it("stays when the dashboard URL is not absolute", () => {
@@ -880,7 +901,48 @@ describe("AuthProvider organization host", () => {
     await waitFor(() => {
       expect(replaceSpy).toHaveBeenCalledTimes(2);
     });
-    expect(replaceSpy).toHaveBeenLastCalledWith(`${ORG_HOST}${otherPage}`);
+    expect(replaceSpy).toHaveBeenLastCalledWith(transferTo(otherPage));
+  });
+
+  it("records the move before leaving, so a failed transfer that comes back never moves again", async () => {
+    // Source host: the organization lives on ORG_HOST.
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: ORG_HOST,
+      }),
+    );
+    let recordedBeforeLeaving = false;
+    replaceSpy?.mockImplementation(() => {
+      recordedBeforeLeaving = (
+        sessionStorage.getItem("organizationHostMoves") ?? ""
+      ).includes("ai.example.test");
+    });
+
+    renderGate(PAGE);
+    await waitFor(() => {
+      expect(replaceSpy).toHaveBeenCalledWith(transferTo(PAGE));
+    });
+    expect(recordedBeforeLeaving).toBe(true);
+    cleanup();
+
+    // The transfer failed (say the code expired) and the tab is back on the
+    // source host with the same session: it stays and renders the app.
+    renderGate(PAGE);
+    expect(screen.getByTestId("app")).toBeTruthy();
+
+    // Destination host: auth.info names no other host, so nothing moves.
+    cleanup();
+    mocks.sessionData.mockReturnValue(
+      gatedSession({
+        whitelisted: true,
+        activeOrganizationDashboardUrl: undefined,
+      }),
+    );
+    renderGate(PAGE);
+    expect(screen.getByTestId("app")).toBeTruthy();
+
+    expect(replaceSpy).toHaveBeenCalledTimes(1);
   });
 
   it("does not move a tab to the same host twice", async () => {

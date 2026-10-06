@@ -38,11 +38,11 @@ import { Result } from "../types/fp.js";
  * transferIn auth
  *
  * @remarks
- * Completes a cross-domain session transfer. Redeems the transfer code, checks it against the browser binding cookie set by transferStart, and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.
+ * Moves a session onto this platform host from another one, in two modes. Start mode (source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to the source host's transferOut. Callback mode (code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page; a failed callback never starts a new transfer. Used to share sessions between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
  */
 export function authTransferIn(
   client: GramCore,
-  request: AuthTransferInRequest,
+  request?: AuthTransferInRequest | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -67,7 +67,7 @@ export function authTransferIn(
 
 async function $do(
   client: GramCore,
-  request: AuthTransferInRequest,
+  request?: AuthTransferInRequest | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -88,7 +88,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(AuthTransferInRequest$outboundSchema, value),
+    (value) => z.parse(z.optional(AuthTransferInRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -100,8 +100,9 @@ async function $do(
   const path = pathToFunc("/rpc/auth.transferIn")();
 
   const query = encodeFormQuery({
-    "redirect": payload.redirect,
-    "token": payload.token,
+    "code": payload?.code,
+    "redirect": payload?.redirect,
+    "source_host": payload?.source_host,
   });
 
   const headers = new Headers(compactMap({

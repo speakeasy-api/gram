@@ -16,7 +16,7 @@ import (
 const TransferCodeTTL = 60 * time.Second
 
 // ErrTransferCodeInvalid reports a transfer code that is unknown, expired,
-// already redeemed, or issued for another host or browser.
+// already redeemed, or issued for another host.
 var ErrTransferCodeInvalid = errors.New("transfer code is invalid, expired, or already used")
 
 // ErrSessionNotTransferable reports an impersonation or support session. Those
@@ -26,17 +26,17 @@ var ErrSessionNotTransferable = errors.New("impersonation and support sessions c
 // TransferRecord is the server-side state behind a transfer code. It has no
 // session ID on purpose: the destination host mints a new session.
 type TransferRecord struct {
-	UserID               string `json:"user_id"`
-	ActiveOrganizationID string `json:"active_organization_id"`
+	UserID               string
+	ActiveOrganizationID string
 	// WorkOSSessionID lets logout on the destination host revoke the
 	// WorkOS session.
-	WorkOSSessionID string `json:"workos_session_id,omitempty"`
-	SourceHost      string `json:"source_host"`
-	TargetHost      string `json:"target_host"`
+	WorkOSSessionID string
+	SourceHost      string
+	TargetHost      string
 	// NonceHash is the SHA-256 of the browser binding nonce that transferStart
-	// set as a cookie on the target host. Only the browser holding that
-	// cookie can redeem the code.
-	NonceHash string `json:"nonce_hash"`
+	// set as a cookie on the target host. It also names that cookie. Only the
+	// browser holding the cookie can redeem the code.
+	NonceHash string
 }
 
 // TransferManager issues and redeems one-time session transfer codes. The
@@ -53,6 +53,18 @@ func NewTransferManager(c cache.Cache) *TransferManager {
 func sha256Hex(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:])
+}
+
+// TransferNonceHash is the hash a transfer record keeps of its browser
+// binding nonce. The nonce itself is never stored.
+func TransferNonceHash(nonce string) string {
+	return sha256Hex(nonce)
+}
+
+// BoundTo reports, in constant time, whether nonce is the browser binding the
+// record was issued for.
+func (r TransferRecord) BoundTo(nonce string) bool {
+	return nonce != "" && subtle.ConstantTimeCompare([]byte(sha256Hex(nonce)), []byte(r.NonceHash)) == 1
 }
 
 // transferKey derives the cache key from a code. Only a hash of the code is
@@ -93,19 +105,16 @@ func (m *TransferManager) Create(ctx context.Context, session Session, nonce, so
 	return code, nil
 }
 
-// Lookup returns the record for code when it was issued for targetHost and
-// the browser presenting nonce. It does not consume the code, so a caller can
-// run further checks first and call Consume only once they pass.
-func (m *TransferManager) Lookup(ctx context.Context, code, targetHost, nonce string) (TransferRecord, error) {
+// Lookup returns the record for code when it was issued for targetHost. It
+// does not consume the code, so a caller can check the browser binding with
+// BoundTo and run further checks first, and call Consume only once they pass.
+func (m *TransferManager) Lookup(ctx context.Context, code, targetHost string) (TransferRecord, error) {
 	var record TransferRecord
 	if err := m.cache.Get(ctx, transferKey(code), &record); err != nil {
 		return TransferRecord{}, fmt.Errorf("%w: %w", ErrTransferCodeInvalid, err)
 	}
 	if record.TargetHost != targetHost {
 		return TransferRecord{}, fmt.Errorf("%w: issued for another host", ErrTransferCodeInvalid)
-	}
-	if nonce == "" || subtle.ConstantTimeCompare([]byte(sha256Hex(nonce)), []byte(record.NonceHash)) != 1 {
-		return TransferRecord{}, fmt.Errorf("%w: issued for another browser", ErrTransferCodeInvalid)
 	}
 	return record, nil
 }

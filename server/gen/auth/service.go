@@ -31,20 +31,23 @@ type Service interface {
 	Register(context.Context, *RegisterPayload) (err error)
 	// Provides information about the current authentication status.
 	Info(context.Context, *InfoPayload) (res *InfoResult, err error)
-	// Starts a cross-domain session transfer on the target platform host. Sets a
-	// short-lived cookie that binds the transfer to this browser and redirects to
-	// the source platform host's transferOut endpoint. Used to share session
-	// cookies seamlessly between platform hosts (e.g. app.getgram.ai and
-	// ai.speakeasy.com).
-	TransferStart(context.Context, *TransferStartPayload) (res *TransferStartResult, err error)
 	// Continues a cross-domain session transfer on the source platform host.
 	// Stores a one-time transfer code server-side and redirects to the target
-	// platform host's transferIn endpoint.
+	// platform host's transferIn callback. Only an ordinary session whose active
+	// organization lives on the target host can transfer. The session is read from
+	// the session cookie or header; on any failure the browser is sent to a login
+	// page instead of an error.
 	TransferOut(context.Context, *TransferOutPayload) (res *TransferOutResult, err error)
-	// Completes a cross-domain session transfer. Redeems the transfer code, checks
-	// it against the browser binding cookie set by transferStart, and creates a
-	// new session cookie on this host. The code is one-time-use and expires after
-	// 60 seconds.
+	// Moves a session onto this platform host from another one, in two modes.
+	// Start mode (source_host, no code) sets a short-lived cookie that binds the
+	// transfer to this browser and redirects to the source host's transferOut.
+	// Callback mode (code, no source_host) redeems the one-time code that
+	// transferOut issued, checks it against that cookie, and sets a new session
+	// cookie on this host. The cookie exists because a code alone would let anyone
+	// who holds one sign another person into the code's account (login CSRF). A
+	// request with both or neither, and any failed check, lands on this host's
+	// login page; a failed callback never starts a new transfer. Used to share
+	// sessions between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
 	TransferIn(context.Context, *TransferInPayload) (res *TransferInResult, err error)
 }
 
@@ -68,7 +71,7 @@ const ServiceName = "auth"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"callback", "login", "switchScopes", "enterDemo", "logout", "register", "info", "transferStart", "transferOut", "transferIn"}
+var MethodNames = [9]string{"callback", "login", "switchScopes", "enterDemo", "logout", "register", "info", "transferOut", "transferIn"}
 
 // CallbackPayload is the payload type of the auth service callback method.
 type CallbackPayload struct {
@@ -220,20 +223,27 @@ type SwitchScopesResult struct {
 
 // TransferInPayload is the payload type of the auth service transferIn method.
 type TransferInPayload struct {
-	// The opaque one-time transfer code from the source host's transferOut endpoint
-	Token string
-	// Optional URL path to redirect to after the session is established
+	// Start mode: the platform host that holds the session to move here (e.g.
+	// app.getgram.ai)
+	SourceHost *string
+	// Callback mode: the opaque one-time transfer code from the source host's
+	// transferOut endpoint
+	Code *string
+	// Optional URL path to land on once the session is established on this host
 	Redirect *string
 }
 
 // TransferInResult is the result type of the auth service transferIn method.
 type TransferInResult struct {
-	// The URL to redirect to after the session is established
+	// The URL to redirect to: the source host's transferOut (start mode), the
+	// requested page (callback mode), or this host's login page when a check fails
 	Location string
-	// The new authentication session on this host
-	SessionToken string
-	// The new authentication session on this host
-	SessionCookie string
+	// The new authentication session on this host. Set only when callback mode
+	// succeeds.
+	SessionToken *string
+	// The new authentication session on this host. Set only when callback mode
+	// succeeds.
+	SessionCookie *string
 }
 
 // TransferOutPayload is the payload type of the auth service transferOut
@@ -241,37 +251,20 @@ type TransferInResult struct {
 type TransferOutPayload struct {
 	// The target platform host to transfer the session to (e.g. ai.speakeasy.com)
 	TargetHost string
-	// The browser binding nonce from the target host's transferStart endpoint
+	// The browser binding nonce from the target host's transferIn start mode
 	Nonce string
 	// Optional URL path to redirect to after the transfer completes on the target
 	// host
-	Redirect     *string
+	Redirect *string
+	// The session to transfer. Defaults to the session cookie.
 	SessionToken *string
 }
 
 // TransferOutResult is the result type of the auth service transferOut method.
 type TransferOutResult struct {
-	// The URL to redirect to (the target host's transferIn endpoint with the
-	// transfer code)
+	// The URL to redirect to: the target host's transferIn callback with the
+	// transfer code, or a login page when the transfer cannot continue
 	Location string
-}
-
-// TransferStartPayload is the payload type of the auth service transferStart
-// method.
-type TransferStartPayload struct {
-	// The platform host that holds the session to transfer (e.g. app.getgram.ai)
-	SourceHost string
-	// Optional URL path to redirect to after the transfer completes on this host
-	Redirect *string
-}
-
-// TransferStartResult is the result type of the auth service transferStart
-// method.
-type TransferStartResult struct {
-	// The URL to redirect to (the source host's transferOut endpoint)
-	Location string
-	// The browser binding for this transfer
-	TransferNonceCookie string
 }
 
 type Trial struct {

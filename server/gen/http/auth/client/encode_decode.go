@@ -1730,254 +1730,6 @@ func DecodeInfoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 	}
 }
 
-// BuildTransferStartRequest instantiates a HTTP request object with method and
-// path set to call the "auth" service "transferStart" endpoint
-func (c *Client) BuildTransferStartRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: TransferStartAuthPath()}
-	req, err := http.NewRequest("GET", u.String(), nil)
-	if err != nil {
-		return nil, goahttp.ErrInvalidURL("auth", "transferStart", u.String(), err)
-	}
-	if ctx != nil {
-		req = req.WithContext(ctx)
-	}
-
-	return req, nil
-}
-
-// EncodeTransferStartRequest returns an encoder for requests sent to the auth
-// transferStart server.
-func EncodeTransferStartRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
-	return func(req *http.Request, v any) error {
-		p, ok := v.(*auth.TransferStartPayload)
-		if !ok {
-			return goahttp.ErrInvalidType("auth", "transferStart", "*auth.TransferStartPayload", v)
-		}
-		values := req.URL.Query()
-		values.Add("source_host", p.SourceHost)
-		if p.Redirect != nil {
-			values.Add("redirect", *p.Redirect)
-		}
-		req.URL.RawQuery = values.Encode()
-		return nil
-	}
-}
-
-// DecodeTransferStartResponse returns a decoder for responses returned by the
-// auth transferStart endpoint. restoreBody controls whether the response body
-// should be restored after having been read.
-// DecodeTransferStartResponse may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
-//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
-//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
-//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
-//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
-//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
-//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
-//   - error: internal error
-func DecodeTransferStartResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
-	return func(resp *http.Response) (any, error) {
-		if restoreBody {
-			b, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			defer func() {
-				resp.Body = io.NopCloser(bytes.NewBuffer(b))
-			}()
-		} else {
-			defer resp.Body.Close()
-		}
-		switch resp.StatusCode {
-		case http.StatusTemporaryRedirect:
-			var (
-				location string
-				err      error
-			)
-			locationRaw := resp.Header.Get("Location")
-			if locationRaw == "" {
-				err = goa.MergeErrors(err, goa.MissingFieldError("location", "header"))
-			}
-			location = locationRaw
-			var (
-				transferNonceCookie    string
-				transferNonceCookieRaw string
-
-				cookies = resp.Cookies()
-			)
-			for _, c := range cookies {
-				switch c.Name {
-				case "__Host-gram_transfer_nonce":
-					transferNonceCookieRaw = c.Value
-				}
-			}
-			if transferNonceCookieRaw == "" {
-				err = goa.MergeErrors(err, goa.MissingFieldError("transfer_nonce_cookie", "cookie"))
-			}
-			transferNonceCookie = transferNonceCookieRaw
-			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "transferStart", err)
-			}
-			res := NewTransferStartResultTemporaryRedirect(location, transferNonceCookie)
-			return res, nil
-		case http.StatusUnauthorized:
-			var (
-				body TransferStartUnauthorizedResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("auth", "transferStart", err)
-			}
-			err = ValidateTransferStartUnauthorizedResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "transferStart", err)
-			}
-			return nil, NewTransferStartUnauthorized(&body)
-		case http.StatusForbidden:
-			var (
-				body TransferStartForbiddenResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("auth", "transferStart", err)
-			}
-			err = ValidateTransferStartForbiddenResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "transferStart", err)
-			}
-			return nil, NewTransferStartForbidden(&body)
-		case http.StatusBadRequest:
-			var (
-				body TransferStartBadRequestResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("auth", "transferStart", err)
-			}
-			err = ValidateTransferStartBadRequestResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "transferStart", err)
-			}
-			return nil, NewTransferStartBadRequest(&body)
-		case http.StatusNotFound:
-			var (
-				body TransferStartNotFoundResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("auth", "transferStart", err)
-			}
-			err = ValidateTransferStartNotFoundResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "transferStart", err)
-			}
-			return nil, NewTransferStartNotFound(&body)
-		case http.StatusConflict:
-			var (
-				body TransferStartConflictResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("auth", "transferStart", err)
-			}
-			err = ValidateTransferStartConflictResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "transferStart", err)
-			}
-			return nil, NewTransferStartConflict(&body)
-		case http.StatusUnsupportedMediaType:
-			var (
-				body TransferStartUnsupportedMediaResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("auth", "transferStart", err)
-			}
-			err = ValidateTransferStartUnsupportedMediaResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "transferStart", err)
-			}
-			return nil, NewTransferStartUnsupportedMedia(&body)
-		case http.StatusUnprocessableEntity:
-			var (
-				body TransferStartInvalidResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("auth", "transferStart", err)
-			}
-			err = ValidateTransferStartInvalidResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "transferStart", err)
-			}
-			return nil, NewTransferStartInvalid(&body)
-		case http.StatusInternalServerError:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "invariant_violation":
-				var (
-					body TransferStartInvariantViolationResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("auth", "transferStart", err)
-				}
-				err = ValidateTransferStartInvariantViolationResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("auth", "transferStart", err)
-				}
-				return nil, NewTransferStartInvariantViolation(&body)
-			case "unexpected":
-				var (
-					body TransferStartUnexpectedResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("auth", "transferStart", err)
-				}
-				err = ValidateTransferStartUnexpectedResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("auth", "transferStart", err)
-				}
-				return nil, NewTransferStartUnexpected(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("auth", "transferStart", resp.StatusCode, string(body))
-			}
-		case http.StatusBadGateway:
-			var (
-				body TransferStartGatewayErrorResponseBody
-				err  error
-			)
-			err = decoder(resp).Decode(&body)
-			if err != nil {
-				return nil, goahttp.ErrDecodingError("auth", "transferStart", err)
-			}
-			err = ValidateTransferStartGatewayErrorResponseBody(&body)
-			if err != nil {
-				return nil, goahttp.ErrValidationError("auth", "transferStart", err)
-			}
-			return nil, NewTransferStartGatewayError(&body)
-		default:
-			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("auth", "transferStart", resp.StatusCode, string(body))
-		}
-	}
-}
-
 // BuildTransferOutRequest instantiates a HTTP request object with method and
 // path set to call the "auth" service "transferOut" endpoint
 func (c *Client) BuildTransferOutRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2239,7 +1991,12 @@ func EncodeTransferInRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			return goahttp.ErrInvalidType("auth", "transferIn", "*auth.TransferInPayload", v)
 		}
 		values := req.URL.Query()
-		values.Add("token", p.Token)
+		if p.SourceHost != nil {
+			values.Add("source_host", *p.SourceHost)
+		}
+		if p.Code != nil {
+			values.Add("code", *p.Code)
+		}
 		if p.Redirect != nil {
 			values.Add("redirect", *p.Redirect)
 		}
@@ -2281,7 +2038,7 @@ func DecodeTransferInResponse(decoder func(*http.Response) goahttp.Decoder, rest
 		case http.StatusTemporaryRedirect:
 			var (
 				location     string
-				sessionToken string
+				sessionToken *string
 				err          error
 			)
 			locationRaw := resp.Header.Get("Location")
@@ -2290,12 +2047,11 @@ func DecodeTransferInResponse(decoder func(*http.Response) goahttp.Decoder, rest
 			}
 			location = locationRaw
 			sessionTokenRaw := resp.Header.Get("Gram-Session")
-			if sessionTokenRaw == "" {
-				err = goa.MergeErrors(err, goa.MissingFieldError("session_token", "header"))
+			if sessionTokenRaw != "" {
+				sessionToken = &sessionTokenRaw
 			}
-			sessionToken = sessionTokenRaw
 			var (
-				sessionCookie    string
+				sessionCookie    *string
 				sessionCookieRaw string
 
 				cookies = resp.Cookies()
@@ -2306,10 +2062,9 @@ func DecodeTransferInResponse(decoder func(*http.Response) goahttp.Decoder, rest
 					sessionCookieRaw = c.Value
 				}
 			}
-			if sessionCookieRaw == "" {
-				err = goa.MergeErrors(err, goa.MissingFieldError("session_cookie", "cookie"))
+			if sessionCookieRaw != "" {
+				sessionCookie = &sessionCookieRaw
 			}
-			sessionCookie = sessionCookieRaw
 			if err != nil {
 				return nil, goahttp.ErrValidationError("auth", "transferIn", err)
 			}

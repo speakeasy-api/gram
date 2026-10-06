@@ -236,9 +236,9 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// client-side storage once the session has been invalidated server-side.
 	server.Logout = middleware.ClearSiteDataOnLogout(server.Logout)
 
-	// Wrap TransferIn handler: read the transfer nonce cookie into the context
-	// and clear it whatever the outcome, since it is single-use.
-	server.TransferIn = transferNonceMiddleware(server.TransferIn)
+	// Wrap TransferIn: give it the browser's per-transfer nonce cookies, whose
+	// names Goa cannot know ahead of the request.
+	server.TransferIn = transferCookieMiddleware(server.TransferIn)
 
 	srv.Mount(mux, server)
 }
@@ -293,47 +293,6 @@ func callbackNonceBindingMiddleware(next http.Handler) http.Handler {
 
 		ctx := withNonceBinding(r.Context(), binding)
 		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-type transferNonceKey struct{}
-
-func withTransferNonce(ctx context.Context, nonce string) context.Context {
-	return context.WithValue(ctx, transferNonceKey{}, nonce)
-}
-
-// TestTransferNonceContext injects the session transfer nonce cookie value
-// into the context. Exported for use in tests only.
-func TestTransferNonceContext(ctx context.Context, nonce string) context.Context {
-	return withTransferNonce(ctx, nonce)
-}
-
-func transferNonceFromContext(ctx context.Context) string {
-	v, _ := ctx.Value(transferNonceKey{}).(string)
-	return v
-}
-
-// transferNonceMiddleware reads the session transfer nonce cookie into the
-// request context for TransferIn and expires the cookie on every response,
-// success or failure, because it is single-use.
-func transferNonceMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var nonce string
-		if c, err := r.Cookie(constants.SessionTransferNonceCookie); err == nil {
-			nonce = c.Value
-		}
-
-		//nolint:exhaustruct // only these fields matter for clearing the cookie
-		http.SetCookie(w, &http.Cookie{
-			Name:     constants.SessionTransferNonceCookie,
-			Value:    "",
-			MaxAge:   -1,
-			Path:     "/",
-			Secure:   true,
-			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
-		})
-		next.ServeHTTP(w, r.WithContext(withTransferNonce(r.Context(), nonce)))
 	})
 }
 
@@ -588,14 +547,16 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 	}
 
-	// An organization that lives on another platform host signs in again
-	// there, landing on the same destination. Impersonation sessions stay on
-	// the host that started them.
+	// An organization that lives on another platform host gets this session
+	// handed over there, landing on the same destination. The session is
+	// stored above and its cookie is set on this same response, so
+	// transferOut on this host finds it. Impersonation sessions stay on the
+	// host that started them.
 	if idpUser.ImpersonatorEmail() == "" {
 		destination, movable := s.organizationDestination(payload, orgMetadata.Slug)
 		if move, ok := s.organizationHostMove(ctx, orgMetadata.DefaultHost); ok && movable {
 			return &gen.CallbackResult{
-				Location:      move.loginURL(destination),
+				Location:      move.transferURL(destination),
 				SessionToken:  session.SessionID,
 				SessionCookie: session.SessionID,
 			}, nil
@@ -612,8 +573,9 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 // organizationDestination is the post-login destination to carry to another
 // host for the organization with slug orgSlug: the sanitized destination from
 // state when it names that organization, and the organization's root when
-// there is none. Naming the organization makes the second login select the
-// same one, so it does not move the browser again.
+// there is none. Naming the organization means that if the transfer falls
+// back to a login on that host, the login selects the same organization and
+// does not move the browser again.
 //
 // ok is false for any other destination, and the login stays on this host.
 // Those are hand-offs that must finish where they started, such as the CLI
@@ -1850,134 +1812,124 @@ func (s *Service) destinationFromState(payload *gen.CallbackPayload) string {
 	return safeRedirectPath(state.FinalDestinationURL, s.siteOrigin)
 }
 
-// TransferStart begins a cross-domain session transfer on the target host. It
-// sets a nonce cookie that binds the transfer to this browser and redirects to
-// the source host's transferOut endpoint with the nonce. TransferIn later
-// accepts the transfer code only from the browser holding that cookie, so an
-// attacker cannot sign a victim into the attacker's account with a code of
-// their own.
-func (s *Service) TransferStart(ctx context.Context, payload *gen.TransferStartPayload) (*gen.TransferStartResult, error) {
-	logger := s.logger.With(attr.SlogGoaMethod("TransferStart"))
-
-	if s.cfg.OrgHosts == nil {
-		return nil, oops.E(oops.CodeUnavailable, nil, "platform hosts not configured").LogError(ctx, logger)
-	}
-
-	origin, ok := requestorigin.FromContext(ctx)
-	if !ok || origin.Surface != requestorigin.SurfacePlatform {
-		return nil, oops.E(oops.CodeForbidden, nil, "session transfer only available on platform hosts").LogWarn(ctx, logger)
-	}
-
-	sourceBaseURL, ok := s.cfg.OrgHosts.IsPlatformHost(payload.SourceHost)
-	if !ok {
-		return nil, oops.E(oops.CodeBadRequest, nil, "source host is not a valid platform host").LogWarn(ctx, logger)
-	}
-
-	currentURL, err := url.Parse(origin.BaseURL)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse current origin").LogError(ctx, logger)
-	}
-	sourceURL, err := url.Parse(sourceBaseURL)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse source base URL").LogError(ctx, logger)
-	}
-	if sourceURL.Host == currentURL.Host {
-		return nil, oops.E(oops.CodeBadRequest, nil, "source and target hosts are the same").LogWarn(ctx, logger)
-	}
-
-	nonce, err := authsessions.NewSessionID()
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate transfer nonce").LogError(ctx, logger)
-	}
-
-	query := url.Values{}
-	query.Set("target_host", currentURL.Host)
-	query.Set("nonce", nonce)
-	if payload.Redirect != nil {
-		if redirect := safeRedirectPath(*payload.Redirect, ""); redirect != "" {
-			query.Set("redirect", redirect)
+// transferRedirect returns the sanitized, same-origin path a transfer should
+// land on, or "/" when none was given or it cannot be trusted.
+func transferRedirect(raw *string) string {
+	if raw != nil {
+		if redirect := safeRedirectPath(*raw, ""); redirect != "" {
+			return redirect
 		}
 	}
-	sourceURL.Path = strings.TrimRight(sourceURL.Path, "/") + "/rpc/auth.transferOut"
-	sourceURL.RawQuery = query.Encode()
+	return "/"
+}
 
-	return &gen.TransferStartResult{
-		Location:            sourceURL.String(),
-		TransferNonceCookie: nonce,
-	}, nil
+// dashboardSiteURL returns the dashboard base URL on the platform host whose
+// server base URL is baseURL. Extra platform hosts serve the dashboard
+// themselves; the configured server host uses the configured site.
+func (s *Service) dashboardSiteURL(baseURL string) string {
+	if strings.TrimRight(baseURL, "/") == strings.TrimRight(s.cfg.GramServerURL, "/") {
+		return s.siteOrigin
+	}
+	return strings.TrimRight(baseURL, "/")
+}
+
+// dashboardLoginURL is the dashboard login page under siteURL that returns to
+// redirect after signing in. Transfers land there on any failure, so a browser
+// mid-navigation never stops on an error page.
+func dashboardLoginURL(siteURL, redirect string) string {
+	query := url.Values{}
+	query.Set("redirect", redirect)
+	return strings.TrimRight(siteURL, "/") + "/login?" + query.Encode()
 }
 
 // TransferOut continues a cross-domain session transfer on the source host. It
-// validates that the caller has an active session, stores a one-time transfer
-// code bound to the nonce from TransferStart, and returns a redirect to the
-// target platform host's transferIn endpoint.
+// authenticates the caller's session, checks that the session's active
+// organization lives on the target host, stores a one-time transfer code bound
+// to the nonce from TransferIn's start mode, and redirects to the target
+// host's TransferIn callback. On any failure the browser lands on a login page: the
+// target host's when the target is a platform host, this host's otherwise.
 func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPayload) (*gen.TransferOutResult, error) {
 	logger := s.logger.With(attr.SlogGoaMethod("TransferOut"))
+	redirect := transferRedirect(payload.Redirect)
+
+	loginSiteURL := s.platformHostURL(ctx, s.siteOrigin)
+	fail := func(err error) (*gen.TransferOutResult, error) {
+		logger.WarnContext(ctx, "session transfer refused", attr.SlogError(err))
+		return &gen.TransferOutResult{Location: dashboardLoginURL(loginSiteURL, redirect)}, nil
+	}
 
 	if s.cfg.OrgHosts == nil {
-		return nil, oops.E(oops.CodeUnavailable, nil, "platform hosts not configured").LogError(ctx, logger)
+		return fail(errors.New("platform hosts not configured"))
 	}
-
-	// Validate the target host is a valid platform host.
 	targetBaseURL, ok := s.cfg.OrgHosts.IsPlatformHost(payload.TargetHost)
 	if !ok {
-		return nil, oops.E(oops.CodeBadRequest, nil, "target host is not a valid platform host").LogWarn(ctx, logger)
+		return fail(errors.New("target host is not a platform host"))
 	}
+	loginSiteURL = s.dashboardSiteURL(targetBaseURL)
 
-	// Get the current platform origin.
 	origin, ok := requestorigin.FromContext(ctx)
 	if !ok || origin.Surface != requestorigin.SurfacePlatform {
-		return nil, oops.E(oops.CodeForbidden, nil, "session transfer only available on platform hosts").LogWarn(ctx, logger)
+		return fail(errors.New("session transfer only available on platform hosts"))
 	}
-
 	if payload.Nonce == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "transfer nonce is required").LogWarn(ctx, logger)
+		return fail(errors.New("transfer nonce is required"))
 	}
 
+	// Authenticate the session from the header, or the session cookie when
+	// there is none, the same way the session security scheme does.
+	ctx, err := s.sessions.Authenticate(ctx, conv.PtrValOr(payload.SessionToken, ""))
+	if err != nil {
+		return fail(fmt.Errorf("authenticate session: %w", err))
+	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
+		return fail(errors.New("no session"))
 	}
 	session, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "invalid session").LogWarn(ctx, logger)
+		return fail(fmt.Errorf("load session: %w", err))
 	}
 
-	// Parse source and target hosts.
 	sourceURL, err := url.Parse(origin.BaseURL)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse source origin").LogError(ctx, logger)
+		return fail(fmt.Errorf("parse source origin: %w", err))
 	}
 	targetURL, err := url.Parse(targetBaseURL)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse target base URL").LogError(ctx, logger)
+		return fail(fmt.Errorf("parse target base URL: %w", err))
+	}
+	if sameHost(sourceURL.Host, targetURL.Host) {
+		return fail(errors.New("source and target hosts are the same"))
+	}
+	if !allowedScheme(targetURL.Scheme, sourceURL.Scheme) {
+		return fail(errors.New("transfer would downgrade to http"))
 	}
 
-	// Don't transfer to the same host.
-	if sourceURL.Host == targetURL.Host {
-		return nil, oops.E(oops.CodeBadRequest, nil, "source and target hosts are the same").LogWarn(ctx, logger)
+	// Only an organization with a stored default host on the target moves its
+	// sessions there. NULL means the legacy host, which never transfers, and
+	// neither do organization-less or demo sessions, which have no such host.
+	if session.ActiveOrganizationID == "" {
+		return fail(errors.New("session has no active organization"))
+	}
+	orgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, session.ActiveOrganizationID)
+	if err != nil {
+		return fail(fmt.Errorf("load active organization: %w", err))
+	}
+	orgServerURL, _, ok := s.cfg.OrgHosts.StoredPlatformHost(orgMetadata.DefaultHost)
+	if !ok || !sameHost(orgServerURL.Host, targetURL.Host) {
+		return fail(errors.New("target host is not the organization's default host"))
 	}
 
 	code, err := s.transferManager.Create(ctx, session, payload.Nonce, sourceURL.Host, targetURL.Host)
-	switch {
-	case errors.Is(err, authsessions.ErrSessionNotTransferable):
-		return nil, oops.E(oops.CodeForbidden, err, "session cannot be transferred").LogWarn(ctx, logger)
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create transfer code").LogError(ctx, logger)
+	if err != nil {
+		return fail(fmt.Errorf("create transfer code: %w", err))
 	}
 
-	// Build the redirect URL to the target host's transferIn endpoint.
-	transferInURL := strings.TrimRight(targetBaseURL, "/") + "/rpc/auth.transferIn"
-	redirectURL, err := url.Parse(transferInURL)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to build transfer URL").LogError(ctx, logger)
-	}
-	query := redirectURL.Query()
-	query.Set("token", code)
-	if payload.Redirect != nil && *payload.Redirect != "" {
-		query.Set("redirect", *payload.Redirect)
-	}
-	redirectURL.RawQuery = query.Encode()
+	query := url.Values{}
+	query.Set("code", code)
+	query.Set("redirect", redirect)
+	targetURL.Path = strings.TrimRight(targetURL.Path, "/") + "/rpc/auth.transferIn"
+	targetURL.RawQuery = query.Encode()
 
 	logger.InfoContext(ctx, "initiating session transfer",
 		attr.SlogSourceHost(sourceURL.Host),
@@ -1985,84 +1937,160 @@ func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPaylo
 		attr.SlogUserID(session.UserID),
 	)
 
-	return &gen.TransferOutResult{
-		Location: redirectURL.String(),
-	}, nil
+	return &gen.TransferOutResult{Location: targetURL.String()}, nil
 }
 
-// TransferIn completes a cross-domain session transfer. It redeems the
-// one-time transfer code presented by the browser that holds the matching
-// nonce cookie, creates a new session on this host, and returns a redirect
-// with the new session cookie.
+// TransferIn moves a session onto this host from another platform host. It
+// has two modes, chosen by its parameters:
+//
+//   - Start mode (source_host, no code) sets a per-transfer nonce cookie on
+//     this host and redirects to the source host's transferOut with the
+//     nonce, so the code transferOut issues is bound to this browser.
+//   - Callback mode (code, no source_host) redeems that code: it must have
+//     been issued for this host, the browser must hold the matching nonce
+//     cookie, and the user must still be a member of the organization. Only
+//     then is the code consumed and a new session minted here.
+//
+// The nonce exists because a code alone is a bearer credential for its
+// account: anyone holding one could send it to someone else and sign them
+// into the sender's account (login CSRF). A request with both or neither
+// parameter, and every failed check, lands on this host's login page. A
+// failed callback never falls back to start mode, so a broken transfer
+// cannot restart itself.
 func (s *Service) TransferIn(ctx context.Context, payload *gen.TransferInPayload) (*gen.TransferInResult, error) {
 	logger := s.logger.With(attr.SlogGoaMethod("TransferIn"))
+	redirect := transferRedirect(payload.Redirect)
+	siteURL := s.platformHostURL(ctx, s.siteOrigin)
 
-	// Get the current platform origin.
+	sourceHost := conv.PtrValOr(payload.SourceHost, "")
+	code := conv.PtrValOr(payload.Code, "")
+	var (
+		result *gen.TransferInResult
+		err    error
+	)
+	switch {
+	case sourceHost != "" && code != "":
+		err = errors.New("transferIn takes source_host or code, not both")
+	case sourceHost != "":
+		result, err = s.transferInStart(ctx, sourceHost, redirect)
+	case code != "":
+		result, err = s.transferInCallback(ctx, logger, code, redirect, siteURL)
+	default:
+		err = errors.New("transferIn needs source_host or code")
+	}
+	if err != nil {
+		logger.WarnContext(ctx, "session transfer failed", attr.SlogError(err))
+		return &gen.TransferInResult{
+			Location:      dashboardLoginURL(siteURL, redirect),
+			SessionToken:  nil,
+			SessionCookie: nil,
+		}, nil
+	}
+	return result, nil
+}
+
+// transferInStart is TransferIn's start mode.
+func (s *Service) transferInStart(ctx context.Context, sourceHost, redirect string) (*gen.TransferInResult, error) {
+	if s.cfg.OrgHosts == nil {
+		return nil, errors.New("platform hosts not configured")
+	}
 	origin, ok := requestorigin.FromContext(ctx)
 	if !ok || origin.Surface != requestorigin.SurfacePlatform {
-		return nil, oops.E(oops.CodeForbidden, nil, "session transfer only available on platform hosts").LogWarn(ctx, logger)
+		return nil, errors.New("session transfer only available on platform hosts")
 	}
-
-	// Parse the current host.
+	sourceBaseURL, ok := s.cfg.OrgHosts.IsPlatformHost(sourceHost)
+	if !ok {
+		return nil, errors.New("source host is not a platform host")
+	}
 	currentURL, err := url.Parse(origin.BaseURL)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse current origin").LogError(ctx, logger)
+		return nil, fmt.Errorf("parse current origin: %w", err)
 	}
-
-	// The nonce cookie proves this browser started the transfer. Without it, an
-	// attacker could sign a victim into the attacker's account.
-	record, err := s.transferManager.Lookup(ctx, payload.Token, currentURL.Host, transferNonceFromContext(ctx))
+	sourceURL, err := url.Parse(sourceBaseURL)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "invalid or expired transfer token").LogWarn(ctx, logger)
+		return nil, fmt.Errorf("parse source base URL: %w", err)
+	}
+	if sameHost(currentURL.Host, sourceURL.Host) {
+		return nil, errors.New("source and target hosts are the same")
+	}
+	jar, ok := transferCookieJarFromContext(ctx)
+	if !ok {
+		return nil, errors.New("no transfer cookie jar")
+	}
+	nonce, err := authsessions.NewSessionID()
+	if err != nil {
+		return nil, fmt.Errorf("generate transfer nonce: %w", err)
 	}
 
-	// A session with no active organization, or one in the shared demo
-	// organization (which has no membership rows), has no membership to check.
-	if record.ActiveOrganizationID != "" && record.ActiveOrganizationID != constants.DemoOrganizationID {
-		isMember, err := s.identity.IsOrganizationMember(ctx, record.ActiveOrganizationID, record.UserID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to check organization membership").LogError(ctx, logger)
-		}
-		if !isMember {
-			return nil, oops.E(oops.CodeForbidden, nil, "user no longer has access to organization").LogWarn(ctx, logger)
-		}
+	query := url.Values{}
+	query.Set("target_host", currentURL.Host)
+	query.Set("nonce", nonce)
+	query.Set("redirect", redirect)
+	sourceURL.Path = strings.TrimRight(sourceURL.Path, "/") + "/rpc/auth.transferOut"
+	sourceURL.RawQuery = query.Encode()
+
+	jar.Set(transferNonceCookieName(authsessions.TransferNonceHash(nonce)), nonce)
+	return &gen.TransferInResult{Location: sourceURL.String(), SessionToken: nil, SessionCookie: nil}, nil
+}
+
+// transferInCallback is TransferIn's callback mode.
+func (s *Service) transferInCallback(ctx context.Context, logger *slog.Logger, code, redirect, siteURL string) (*gen.TransferInResult, error) {
+	origin, ok := requestorigin.FromContext(ctx)
+	if !ok || origin.Surface != requestorigin.SurfacePlatform {
+		return nil, errors.New("session transfer only available on platform hosts")
+	}
+	currentURL, err := url.Parse(origin.BaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse current origin: %w", err)
+	}
+
+	record, err := s.transferManager.Lookup(ctx, code, currentURL.Host)
+	if err != nil {
+		return nil, fmt.Errorf("look up transfer code: %w", err)
+	}
+
+	// The cookie is single-use, so it is cleared whatever the outcome.
+	jar, ok := transferCookieJarFromContext(ctx)
+	if !ok {
+		return nil, errors.New("no transfer cookie jar")
+	}
+	cookieName := transferNonceCookieName(record.NonceHash)
+	nonce := jar.Get(cookieName)
+	jar.Clear(cookieName)
+	if !record.BoundTo(nonce) {
+		return nil, errors.New("transfer code was issued for another browser")
+	}
+
+	isMember, err := s.identity.IsOrganizationMember(ctx, record.ActiveOrganizationID, record.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("check organization membership: %w", err)
+	}
+	if !isMember {
+		return nil, errors.New("user no longer has access to organization")
 	}
 
 	// Consume only after every check passes, so a transient failure above
 	// leaves the code redeemable. Consume is atomic: a concurrent second use
 	// fails here.
-	if err := s.transferManager.Consume(ctx, payload.Token); err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "invalid or expired transfer token").LogWarn(ctx, logger)
+	if err := s.transferManager.Consume(ctx, code); err != nil {
+		return nil, fmt.Errorf("consume transfer code: %w", err)
 	}
 
-	// Create a new session on this host.
 	newSessionID, err := authsessions.NewSessionID()
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate session ID").LogError(ctx, logger)
+		return nil, fmt.Errorf("generate session ID: %w", err)
 	}
-
 	newSession := authsessions.Session{
 		SessionID:             newSessionID,
 		ActiveOrganizationID:  record.ActiveOrganizationID,
 		UserID:                record.UserID,
 		WorkOSSessionID:       record.WorkOSSessionID,
 		ImpersonatorEmail:     "", // TransferOut refuses impersonation sessions.
-		SupportOrganizationID: "", // Empty for regular sessions; transfers don't carry support admin context.
+		SupportOrganizationID: "", // TransferOut refuses support sessions.
 		SupportExpiresAt:      time.Time{},
 	}
-
 	if err := s.sessions.StoreSession(ctx, newSession); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to store session").LogError(ctx, logger)
-	}
-
-	// Like Callback, land on this host's dashboard unless a path was given.
-	redirect := s.platformHostURL(ctx, s.cfg.SignInRedirectURL)
-	if payload.Redirect != nil && *payload.Redirect != "" {
-		// Sanitize the redirect to prevent open redirects.
-		sanitized := safeRedirectPath(*payload.Redirect, "")
-		if sanitized != "" {
-			redirect = sanitized
-		}
+		return nil, fmt.Errorf("store session: %w", err)
 	}
 
 	logger.InfoContext(ctx, "completed session transfer",
@@ -2072,8 +2100,8 @@ func (s *Service) TransferIn(ctx context.Context, payload *gen.TransferInPayload
 	)
 
 	return &gen.TransferInResult{
-		Location:      redirect,
-		SessionToken:  newSessionID,
-		SessionCookie: newSessionID,
+		Location:      strings.TrimRight(siteURL, "/") + redirect,
+		SessionToken:  &newSessionID,
+		SessionCookie: &newSessionID,
 	}, nil
 }

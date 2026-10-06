@@ -123,7 +123,7 @@ func TestTransferManager_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(code), 43, "code must carry at least 32 bytes of entropy")
 
-	record, err := manager.Lookup(ctx, code, testTargetHost, testNonce)
+	record, err := manager.Lookup(ctx, code, testTargetHost)
 	require.NoError(t, err)
 	require.Equal(t, TransferRecord{
 		UserID:               session.UserID,
@@ -169,7 +169,7 @@ func TestTransferManager_SecondConsumeFails(t *testing.T) {
 	require.NoError(t, manager.Consume(ctx, code))
 	require.ErrorIs(t, manager.Consume(ctx, code), ErrTransferCodeInvalid)
 
-	_, err = manager.Lookup(ctx, code, testTargetHost, testNonce)
+	_, err = manager.Lookup(ctx, code, testTargetHost)
 	require.ErrorIs(t, err, ErrTransferCodeInvalid)
 }
 
@@ -179,7 +179,7 @@ func TestTransferManager_UnknownCodeFails(t *testing.T) {
 	ctx := t.Context()
 	manager := NewTransferManager(newTestMemoryCache())
 
-	_, err := manager.Lookup(ctx, "unknown-code", testTargetHost, testNonce)
+	_, err := manager.Lookup(ctx, "unknown-code", testTargetHost)
 	require.ErrorIs(t, err, ErrTransferCodeInvalid)
 	require.ErrorIs(t, manager.Consume(ctx, "unknown-code"), ErrTransferCodeInvalid)
 }
@@ -197,7 +197,7 @@ func TestTransferManager_ExpiredCodeFails(t *testing.T) {
 	// Simulate the cache TTL expiring the record.
 	require.NoError(t, memCache.Delete(ctx, transferKey(code)))
 
-	_, err = manager.Lookup(ctx, code, testTargetHost, testNonce)
+	_, err = manager.Lookup(ctx, code, testTargetHost)
 	require.ErrorIs(t, err, ErrTransferCodeInvalid)
 }
 
@@ -210,10 +210,10 @@ func TestTransferManager_WrongTargetHostDoesNotConsume(t *testing.T) {
 	code, err := manager.Create(ctx, testTransferSession(), testNonce, testSourceHost, testTargetHost)
 	require.NoError(t, err)
 
-	_, err = manager.Lookup(ctx, code, "wrong.example.com", testNonce)
+	_, err = manager.Lookup(ctx, code, "wrong.example.com")
 	require.ErrorIs(t, err, ErrTransferCodeInvalid)
 
-	_, err = manager.Lookup(ctx, code, testTargetHost, testNonce)
+	_, err = manager.Lookup(ctx, code, testTargetHost)
 	require.NoError(t, err)
 	require.NoError(t, manager.Consume(ctx, code))
 }
@@ -253,7 +253,7 @@ func TestTransferManager_RejectsImpersonationAndSupportSessions(t *testing.T) {
 	require.Empty(t, memCache.items)
 }
 
-func TestTransferManager_WrongNonceDoesNotConsume(t *testing.T) {
+func TestTransferRecord_BoundTo(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -261,15 +261,13 @@ func TestTransferManager_WrongNonceDoesNotConsume(t *testing.T) {
 
 	code, err := manager.Create(ctx, testTransferSession(), testNonce, testSourceHost, testTargetHost)
 	require.NoError(t, err)
-
-	_, err = manager.Lookup(ctx, code, testTargetHost, "")
-	require.ErrorIs(t, err, ErrTransferCodeInvalid)
-	_, err = manager.Lookup(ctx, code, testTargetHost, "other-nonce")
-	require.ErrorIs(t, err, ErrTransferCodeInvalid)
-
-	_, err = manager.Lookup(ctx, code, testTargetHost, testNonce)
+	record, err := manager.Lookup(ctx, code, testTargetHost)
 	require.NoError(t, err)
-	require.NoError(t, manager.Consume(ctx, code))
+
+	require.True(t, record.BoundTo(testNonce))
+	require.False(t, record.BoundTo(""))
+	require.False(t, record.BoundTo("other-nonce"))
+	require.Equal(t, TransferNonceHash(testNonce), record.NonceHash)
 }
 
 func TestTransferManager_RequiresNonce(t *testing.T) {

@@ -11,7 +11,6 @@ import { authRegister } from "../funcs/authRegister.js";
 import { authSwitchScopes } from "../funcs/authSwitchScopes.js";
 import { authTransferIn } from "../funcs/authTransferIn.js";
 import { authTransferOut } from "../funcs/authTransferOut.js";
-import { authTransferStart } from "../funcs/authTransferStart.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import {
   AuthCallbackRequest,
@@ -28,12 +27,7 @@ import {
 import {
   AuthTransferOutRequest,
   AuthTransferOutResponse,
-  AuthTransferOutSecurity,
 } from "../models/operations/authtransferout.js";
-import {
-  AuthTransferStartRequest,
-  AuthTransferStartResponse,
-} from "../models/operations/authtransferstart.js";
 import {
   EnterDemoRequest,
   EnterDemoResponse,
@@ -194,10 +188,10 @@ export class Auth extends ClientSDK {
    * transferIn auth
    *
    * @remarks
-   * Completes a cross-domain session transfer. Redeems the transfer code, checks it against the browser binding cookie set by transferStart, and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.
+   * Moves a session onto this platform host from another one, in two modes. Start mode (source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to the source host's transferOut. Callback mode (code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page; a failed callback never starts a new transfer. Used to share sessions between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
    */
   async transferIn(
-    request: AuthTransferInRequest,
+    request?: AuthTransferInRequest | undefined,
     options?: RequestOptions,
   ): Promise<AuthTransferInResponse | undefined> {
     return unwrapAsync(authTransferIn(
@@ -211,32 +205,13 @@ export class Auth extends ClientSDK {
    * transferOut auth
    *
    * @remarks
-   * Continues a cross-domain session transfer on the source platform host. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint.
+   * Continues a cross-domain session transfer on the source platform host. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn callback. Only an ordinary session whose active organization lives on the target host can transfer. The session is read from the session cookie or header; on any failure the browser is sent to a login page instead of an error.
    */
   async transferOut(
     request: AuthTransferOutRequest,
-    security?: AuthTransferOutSecurity | undefined,
     options?: RequestOptions,
   ): Promise<AuthTransferOutResponse | undefined> {
     return unwrapAsync(authTransferOut(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * transferStart auth
-   *
-   * @remarks
-   * Starts a cross-domain session transfer on the target platform host. Sets a short-lived cookie that binds the transfer to this browser and redirects to the source platform host's transferOut endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
-   */
-  async transferStart(
-    request: AuthTransferStartRequest,
-    options?: RequestOptions,
-  ): Promise<AuthTransferStartResponse | undefined> {
-    return unwrapAsync(authTransferStart(
       this,
       request,
       options,

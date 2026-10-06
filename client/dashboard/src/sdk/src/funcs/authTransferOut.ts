@@ -10,7 +10,6 @@ import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
@@ -31,7 +30,6 @@ import {
   AuthTransferOutRequest$outboundSchema,
   AuthTransferOutResponse,
   AuthTransferOutResponse$inboundSchema,
-  AuthTransferOutSecurity,
 } from "../models/operations/authtransferout.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
@@ -40,12 +38,11 @@ import { Result } from "../types/fp.js";
  * transferOut auth
  *
  * @remarks
- * Continues a cross-domain session transfer on the source platform host. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint.
+ * Continues a cross-domain session transfer on the source platform host. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn callback. Only an ordinary session whose active organization lives on the target host can transfer. The session is read from the session cookie or header; on any failure the browser is sent to a login page instead of an error.
  */
 export function authTransferOut(
   client: GramCore,
   request: AuthTransferOutRequest,
-  security?: AuthTransferOutSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -64,7 +61,6 @@ export function authTransferOut(
   return new APIPromise($do(
     client,
     request,
-    security,
     options,
   ));
 }
@@ -72,7 +68,6 @@ export function authTransferOut(
 async function $do(
   client: GramCore,
   request: AuthTransferOutRequest,
-  security?: AuthTransferOutSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -118,25 +113,15 @@ async function $do(
     }),
   }));
 
-  const requestSecurity = resolveSecurity(
-    [
-      {
-        fieldName: "Gram-Session",
-        type: "apiKey:header",
-        value: security?.sessionHeaderGramSession,
-      },
-    ],
-  );
-
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
     operationID: "authTransferOut",
     oAuth2Scopes: null,
 
-    resolvedSecurity: requestSecurity,
+    resolvedSecurity: null,
 
-    securitySource: security,
+    securitySource: null,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },
@@ -144,7 +129,6 @@ async function $do(
   };
 
   const requestRes = client._createRequest(context, {
-    security: requestSecurity,
     method: "GET",
     baseURL: options?.serverURL,
     path: path,
