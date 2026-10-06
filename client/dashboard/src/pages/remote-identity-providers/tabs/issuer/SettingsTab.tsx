@@ -413,11 +413,12 @@ export function SettingsTab({
             </Label>
           </div>
           <Text small muted>
-            When the MCP server advertises no scopes and no client scope or
-            override is set, every scope the authorization server lists is
-            requested. Turn this on to send no scope parameter instead so the
-            authorization server applies its defaults. Some authorization
-            servers reject a request without a scope.
+            When the MCP server names no scopes (none advertised, pinned, or
+            demanded in its challenge) and no client scope or override is set,
+            every scope the authorization server lists is requested. Turn this
+            on to send no scope parameter instead so the authorization server
+            applies its defaults. Some authorization servers reject a request
+            without a scope.
           </Text>
         </div>
       </SettingsSection>
