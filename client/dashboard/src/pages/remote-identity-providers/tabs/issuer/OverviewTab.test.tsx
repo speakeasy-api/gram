@@ -37,20 +37,20 @@ describe("issuer overview scope fallback", () => {
   // NULL and false both read as the default.
   it("reads an unset or false setting as sending the supported scopes", () => {
     render(<OverviewTab issuer={issuer()} />);
-    expect(value("When no scopes are configured").textContent).toContain(
-      "Request every advertised scope",
+    expect(value("Scope fallback").textContent).toContain(
+      "Every advertised scope",
     );
     cleanup();
     render(<OverviewTab issuer={issuer(false)} />);
-    expect(value("When no scopes are configured").textContent).toContain(
-      "Request every advertised scope",
+    expect(value("Scope fallback").textContent).toContain(
+      "Every advertised scope",
     );
   });
 
   it("reads true as sending none", () => {
     render(<OverviewTab issuer={issuer(true)} />);
-    expect(value("When no scopes are configured").textContent).toContain(
-      "Request no scopes",
+    expect(value("Scope fallback").textContent).toContain(
+      "Authorization server defaults",
     );
   });
 });

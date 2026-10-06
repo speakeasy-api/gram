@@ -409,15 +409,15 @@ export function SettingsTab({
               onCheckedChange={setOmitScopeFallback}
             />
             <Label id="omit-scope-fallback-label">
-              Request no scopes when none are configured
+              Request default scopes when the MCP server advertises none
             </Label>
           </div>
           <Text small muted>
-            When a sign-in has no client scope, challenge scope, resource
-            scopes, or override, every scope this provider advertises is
-            requested. Turn this on to request no scopes in that case and let
-            the provider apply its defaults. Some providers reject a sign-in
-            that requests no scopes.
+            When the MCP server advertises no scopes and no client scope or
+            override is set, every scope the authorization server lists is
+            requested. Turn this on to send no scope parameter instead so the
+            authorization server applies its defaults. Some authorization
+            servers reject a request without a scope.
           </Text>
         </div>
       </SettingsSection>

@@ -25,7 +25,7 @@ export type IssuerSettingsFormState = {
   // Scope override. Undefined omits the field so the server keeps what it
   // has; an empty list clears the override.
   scopeOverride?: string[];
-  // Request no scopes when the issuer's whole scopes_supported would otherwise be
+  // Send no scope parameter when the issuer's whole scopes_supported would otherwise be
   // requested. Undefined omits the field so the server keeps what it has.
   omitScopeFallback?: boolean;
 };

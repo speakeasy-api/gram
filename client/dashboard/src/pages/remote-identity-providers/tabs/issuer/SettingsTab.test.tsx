@@ -121,7 +121,7 @@ function savedForm(): Record<string, unknown> {
 describe("issuer settings scope section", () => {
   const toggle = () =>
     screen.getByRole("switch", {
-      name: "Request no scopes when none are configured",
+      name: "Request default scopes when the MCP server advertises none",
     });
   const save = () =>
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));

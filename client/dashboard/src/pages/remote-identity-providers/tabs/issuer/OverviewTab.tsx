@@ -73,8 +73,8 @@ function DocumentationUrlValue({ value }: { value: string | undefined }) {
 // requested when a sign-in has no other scope source.
 function scopeFallbackLabel(omitScopeFallback: boolean | undefined): string {
   return omitScopeFallback
-    ? "Request no scopes"
-    : "Request every advertised scope";
+    ? "Authorization server defaults"
+    : "Every advertised scope";
 }
 
 export function OverviewTab({
@@ -141,7 +141,7 @@ export function OverviewTab({
         <InfoField label="Scope Override">
           {list(issuer.scopeOverride ?? undefined)}
         </InfoField>
-        <InfoField label="When no scopes are configured">
+        <InfoField label="Scope fallback">
           <InfoText>{scopeFallbackLabel(issuer.omitScopeFallback)}</InfoText>
         </InfoField>
         <InfoField label="Grant Types">
