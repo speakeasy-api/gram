@@ -29,14 +29,15 @@ func auditChange(ctx context.Context, tx pgx.Tx, org string, projectID, pluginID
 		mcpURN = &value
 	}
 	actor := urn.NewSystemPrincipal("automatic-role-distribution")
+	actorDisplayName := "Gram"
 	logger := audit.NewLogger()
 	if added {
-		if err := logger.LogPluginServerAdd(ctx, tx, audit.LogPluginServerAddEvent{OrganizationID: org, ProjectID: projectID, Actor: actor, ActorDisplayName: nil, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug, ServerID: membership.ID, ServerDisplayName: membership.DisplayName, ServerPolicy: membership.Policy, ServerSortOrder: membership.SortOrder, ToolsetURN: toolsetURN, McpServerURN: mcpURN, MetaMcpServerURN: nil}); err != nil {
+		if err := logger.LogPluginServerAdd(ctx, tx, audit.LogPluginServerAddEvent{OrganizationID: org, ProjectID: projectID, Actor: actor, ActorDisplayName: &actorDisplayName, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug, ServerID: membership.ID, ServerDisplayName: membership.DisplayName, ServerPolicy: membership.Policy, ServerSortOrder: membership.SortOrder, ToolsetURN: toolsetURN, McpServerURN: mcpURN, MetaMcpServerURN: nil}); err != nil {
 			return fmt.Errorf("audit role delivery membership: %w", err)
 		}
 		return nil
 	}
-	if err := logger.LogPluginServerRemove(ctx, tx, audit.LogPluginServerRemoveEvent{OrganizationID: org, ProjectID: projectID, Actor: actor, ActorDisplayName: nil, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug, ServerID: membership.ID, ToolsetURN: toolsetURN, McpServerURN: mcpURN, MetaMcpServerURN: nil}); err != nil {
+	if err := logger.LogPluginServerRemove(ctx, tx, audit.LogPluginServerRemoveEvent{OrganizationID: org, ProjectID: projectID, Actor: actor, ActorDisplayName: &actorDisplayName, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug, ServerID: membership.ID, ToolsetURN: toolsetURN, McpServerURN: mcpURN, MetaMcpServerURN: nil}); err != nil {
 		return fmt.Errorf("audit role delivery membership: %w", err)
 	}
 	return nil

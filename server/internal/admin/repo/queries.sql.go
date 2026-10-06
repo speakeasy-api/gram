@@ -2255,7 +2255,7 @@ func (q *Queries) ReadSupportMatrix(ctx context.Context) ([]byte, error) {
 }
 
 const rejectOrganizationEntitlementsFixture = `-- name: RejectOrganizationEntitlementsFixture :exec
-ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK (feature_name = 'automatic-role-distribution') NOT VALID
+ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK (false) NOT VALID
 `
 
 func (q *Queries) RejectOrganizationEntitlementsFixture(ctx context.Context) error {

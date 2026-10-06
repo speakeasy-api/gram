@@ -57,15 +57,6 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 		}
 		return false, nil
 	}
-	// This row lock serializes completion with disabling the rollout feature.
-	var featureID int64
-	err = tx.QueryRow(ctx, `SELECT id FROM organization_features WHERE organization_id = $1 AND feature_name = 'automatic-role-distribution' AND deleted IS FALSE FOR UPDATE`, organizationID).Scan(&featureID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return skip()
-	}
-	if err != nil {
-		return false, fmt.Errorf("lock role setup feature gate: %w", err)
-	}
 	var activeOrganization string
 	err = tx.QueryRow(ctx, `SELECT id FROM organization_metadata WHERE id = $1 AND disabled_at IS NULL FOR SHARE`, organizationID).Scan(&activeOrganization)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -165,8 +156,9 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 	}
 	auditLogger := audit.NewLogger()
 	actor := urn.NewPrincipal(urn.PrincipalTypeSystem, "automatic-role-distribution")
+	actorDisplayName := "Gram"
 	if created {
-		if err := auditLogger.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{OrganizationID: organizationID, ProjectID: projectID, Actor: actor, ActorDisplayName: nil, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug}); err != nil {
+		if err := auditLogger.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{OrganizationID: organizationID, ProjectID: projectID, Actor: actor, ActorDisplayName: &actorDisplayName, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug}); err != nil {
 			return false, fmt.Errorf("audit role plugin creation: %w", err)
 		}
 	}
@@ -174,7 +166,7 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 		return false, fmt.Errorf("add role plugin assignment: %w", err)
 	}
 	if !alreadyAssigned {
-		if err := auditLogger.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{OrganizationID: organizationID, ProjectID: projectID, Actor: actor, ActorDisplayName: nil, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug, PrincipalURNs: desired}); err != nil {
+		if err := auditLogger.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{OrganizationID: organizationID, ProjectID: projectID, Actor: actor, ActorDisplayName: &actorDisplayName, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug, PrincipalURNs: desired}); err != nil {
 			return false, fmt.Errorf("audit role plugin assignment: %w", err)
 		}
 	}

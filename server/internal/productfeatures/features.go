@@ -10,11 +10,9 @@ import (
 type Feature string
 
 const (
-	// FeatureAutomaticRoleDistribution is the temporary staff-only role-plugin rollout.
-	FeatureAutomaticRoleDistribution Feature = "automatic-role-distribution"
-	FeatureLogs                      Feature = "logs"
-	FeatureToolIOLogs                Feature = "tool_io_logs"
-	FeatureSessionCapture            Feature = "session_capture"
+	FeatureLogs           Feature = "logs"
+	FeatureToolIOLogs     Feature = "tool_io_logs"
+	FeatureSessionCapture Feature = "session_capture"
 	// FeatureSessionPortability gates agent session portability: the device
 	// agent's "continue this session in another harness" flow and the agent
 	// service endpoints backing it (getSessionMeta, reportSessionMoved).
