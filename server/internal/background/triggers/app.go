@@ -359,6 +359,9 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
+	if err := a.identities.LockTarget(ctx, tx, params.ProjectID, params.TargetKind, params.TargetRef); err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock trigger target: %w", err)
+	}
 	existing, err := triggerrepo.New(tx).GetTriggerInstanceByIDForUpdate(ctx, triggerrepo.GetTriggerInstanceByIDForUpdateParams{ID: params.ID, ProjectID: params.ProjectID})
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock trigger before update: %w", err)
@@ -1241,7 +1244,9 @@ func nullUUIDToUUID(value uuid.NullUUID) uuid.UUID {
 // AssistantIdentityLifecycle binds root triggers to assistant workload
 // identities inside the trigger's own transaction. Implementations must leave
 // triggers that do not target an identity-backed assistant unchanged.
+// LockTarget runs before an existing trigger row is locked for an update.
 type AssistantIdentityLifecycle interface {
+	LockTarget(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, targetKind, targetRef string) error
 	BindRootTrigger(ctx context.Context, tx pgx.Tx, projectID, triggerID uuid.UUID) error
 	RetargetRootTrigger(ctx context.Context, tx pgx.Tx, projectID, triggerID uuid.UUID) error
 	TombstoneTrigger(ctx context.Context, tx pgx.Tx, projectID, triggerID uuid.UUID) error

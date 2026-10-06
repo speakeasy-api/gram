@@ -136,7 +136,7 @@ func (s *Service) bindExistingRoots(ctx context.Context, tx pgx.Tx, p ProvisionP
 		return fmt.Errorf("list assistant root triggers: %w", err)
 	}
 	for _, root := range roots {
-		if err := s.BindRootTrigger(ctx, tx, p.ProjectID, root); err != nil {
+		if err := s.bindRoot(ctx, tx, p.ProjectID, root, false, auditActor{principal: urn.NewPrincipal(urn.PrincipalTypeUser, p.ActorUserID), displayName: nil}); err != nil {
 			return err
 		}
 	}

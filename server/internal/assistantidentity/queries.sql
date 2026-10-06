@@ -8,6 +8,14 @@ FROM assistants
 WHERE project_id = @project_id AND id = @assistant_id AND deleted IS FALSE
 FOR UPDATE;
 
+-- Conflicts with LockAssistant, so a trigger bind and an upgrade of the same
+-- assistant serialize; concurrent trigger binds do not block each other.
+-- name: ShareLockAssistant :one
+SELECT id
+FROM assistants
+WHERE project_id = @project_id AND id = @assistant_id AND deleted IS FALSE
+FOR SHARE;
+
 -- Agent liveness mirrors agents/lifecycle.Derive: an agent is active unless it
 -- is deleted, revoked, or suspended.
 -- name: ListAssistantAgentStates :many
@@ -110,9 +118,10 @@ VALUES (@organization_id, @project_id, @name, @issuer, @jwks_uri, false)
 ON CONFLICT (project_id, name) WHERE deleted IS FALSE DO NOTHING
 RETURNING id;
 
--- name: WithdrawExactAdmission :exec
-UPDATE workload_identity_admissions
-SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+-- name: ListExactAdmissions :many
+SELECT id
+FROM workload_identity_admissions
 WHERE organization_id = @organization_id AND project_id = @project_id
   AND workload_issuer_id = @workload_issuer_id AND match_kind = 'exact' AND subject = @subject
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+ORDER BY id;

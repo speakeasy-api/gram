@@ -4,17 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 
+	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	workloadrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
@@ -68,6 +76,22 @@ func TestRootTriggerBindsRetargetsAndWithdraws(t *testing.T) {
 	require.NoError(t, f.app.Delete(t.Context(), f.projectID, item.ID))
 	require.False(t, f.bound(t, item.ID))
 	require.Equal(t, assistantidentity.Unavailable, f.resolve(t, next, item.ID).State)
+
+	for _, tc := range []struct {
+		action audit.Action
+		want   int64
+	}{
+		{action: audit.ActionWorkloadIssuerCreate, want: 1},
+		{action: audit.ActionWorkloadAdmissionAdmit, want: 3},
+		{action: audit.ActionWorkloadAdmissionWithdraw, want: 3},
+	} {
+		count, err := audittest.AuditLogCountByAction(t.Context(), f.db, tc.action)
+		require.NoError(t, err)
+		require.Equal(t, tc.want, count, tc.action)
+		latest, err := audittest.LatestAuditLogByAction(t.Context(), f.db, tc.action)
+		require.NoError(t, err)
+		require.Equal(t, agentownership.SystemActor.ID, latest.ActorID, "unauthenticated trigger changes are attributed to the system")
+	}
 }
 
 func TestRootTriggerPauseKeepsIdentity(t *testing.T) {
@@ -165,4 +189,91 @@ func TestWakeCapturesRequesterOrOwnerAtCreation(t *testing.T) {
 			require.ErrorContains(t, err, "captured wake identity")
 		})
 	}
+}
+
+func (f identityFixture) provisionTx(t *testing.T, tx pgx.Tx, assistantID uuid.UUID) error {
+	t.Helper()
+	if err := testIdentityService.Provision(t.Context(), tx, assistantidentity.ProvisionParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, AssistantID: assistantID, ActorUserID: "trigger-owner"}); err != nil {
+		return fmt.Errorf("provision assistant identity: %w", err)
+	}
+	return nil
+}
+
+func TestTriggerCreateDuringUpgradeIsBound(t *testing.T) {
+	t.Parallel()
+	f := newIdentityFixture(t)
+	ctx := t.Context()
+	legacy := f.createAssistant(t, false)
+	params := f.createParams()
+	params.TargetRef = legacy.String()
+
+	upgrade := testenv.BeginTx(t, ctx, f.db)
+	require.NoError(t, f.provisionTx(t, upgrade, legacy))
+	var item triggerrepo.TriggerInstance
+	var group errgroup.Group
+	group.Go(func() error {
+		var err error
+		item, err = f.app.Create(ctx, params)
+		if err != nil {
+			return fmt.Errorf("create trigger during upgrade: %w", err)
+		}
+		return nil
+	})
+	testenv.WaitForQueryBlockedBy(t, ctx, f.db, testenv.BackendPID(upgrade), "%ShareLockAssistant :one%")
+	require.NoError(t, upgrade.Commit(ctx))
+	require.NoError(t, group.Wait())
+	require.True(t, f.bound(t, item.ID))
+	require.Equal(t, assistantidentity.Active, f.resolve(t, legacy, item.ID).State)
+}
+
+func TestUpgradeDuringTriggerCreateBindsIt(t *testing.T) {
+	t.Parallel()
+	f := newIdentityFixture(t)
+	ctx := t.Context()
+	legacy := f.createAssistant(t, false)
+	params := f.createParams()
+	params.TargetRef = legacy.String()
+
+	holding := make(chan uint32, 1)
+	release := make(chan struct{})
+	t.Cleanup(sync.OnceFunc(func() { close(release) }))
+	createDone := make(chan error, 1)
+	var item triggerrepo.TriggerInstance
+	go func() {
+		var err error
+		item, err = f.app.Create(ctx, params, func(_ context.Context, tx pgx.Tx, _ triggerrepo.TriggerInstance) error {
+			holding <- testenv.BackendPID(tx)
+			<-release
+			return nil
+		})
+		createDone <- err
+	}()
+	var creator uint32
+	select {
+	case creator = <-holding:
+	case err := <-createDone:
+		require.FailNow(t, "create finished before holding its lock", "error: %v", err)
+	}
+
+	var group errgroup.Group
+	group.Go(func() error {
+		tx, err := f.db.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary only; the upgrade uses the identity service.
+		if err != nil {
+			return fmt.Errorf("begin upgrade: %w", err)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(context.Background()) })
+		if err := f.provisionTx(t, tx, legacy); err != nil {
+			return err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit upgrade: %w", err)
+		}
+		return nil
+	})
+	testenv.WaitForQueryBlockedBy(t, ctx, f.db, creator, "%name: LockAssistant :one%")
+	release <- struct{}{}
+	require.NoError(t, <-createDone)
+	require.NoError(t, group.Wait())
+	require.True(t, f.bound(t, item.ID))
+	require.Equal(t, assistantidentity.Active, f.resolve(t, legacy, item.ID).State)
 }

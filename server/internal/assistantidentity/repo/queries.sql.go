@@ -329,6 +329,47 @@ func (q *Queries) ListAssistantTriggerBindings(ctx context.Context, arg ListAssi
 	return items, nil
 }
 
+const listExactAdmissions = `-- name: ListExactAdmissions :many
+SELECT id
+FROM workload_identity_admissions
+WHERE organization_id = $1 AND project_id = $2
+  AND workload_issuer_id = $3 AND match_kind = 'exact' AND subject = $4
+  AND deleted IS FALSE
+ORDER BY id
+`
+
+type ListExactAdmissionsParams struct {
+	OrganizationID   string
+	ProjectID        uuid.NullUUID
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+}
+
+func (q *Queries) ListExactAdmissions(ctx context.Context, arg ListExactAdmissionsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listExactAdmissions,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockAssistant = `-- name: LockAssistant :one
 
 SELECT id, organization_id, name, created_by_user_id
@@ -396,6 +437,27 @@ func (q *Queries) LockTriggers(ctx context.Context, arg LockTriggersParams) ([]u
 	return items, nil
 }
 
+const shareLockAssistant = `-- name: ShareLockAssistant :one
+SELECT id
+FROM assistants
+WHERE project_id = $1 AND id = $2 AND deleted IS FALSE
+FOR SHARE
+`
+
+type ShareLockAssistantParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+}
+
+// Conflicts with LockAssistant, so a trigger bind and an upgrade of the same
+// assistant serialize; concurrent trigger binds do not block each other.
+func (q *Queries) ShareLockAssistant(ctx context.Context, arg ShareLockAssistantParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, shareLockAssistant, arg.ProjectID, arg.AssistantID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const tombstoneAssistantBinding = `-- name: TombstoneAssistantBinding :one
 UPDATE assistant_agent_bindings
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
@@ -433,30 +495,5 @@ type TombstoneTriggerBindingParams struct {
 
 func (q *Queries) TombstoneTriggerBinding(ctx context.Context, arg TombstoneTriggerBindingParams) error {
 	_, err := q.db.Exec(ctx, tombstoneTriggerBinding, arg.ProjectID, arg.TriggerID)
-	return err
-}
-
-const withdrawExactAdmission = `-- name: WithdrawExactAdmission :exec
-UPDATE workload_identity_admissions
-SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = $1 AND project_id = $2
-  AND workload_issuer_id = $3 AND match_kind = 'exact' AND subject = $4
-  AND deleted IS FALSE
-`
-
-type WithdrawExactAdmissionParams struct {
-	OrganizationID   string
-	ProjectID        uuid.NullUUID
-	WorkloadIssuerID uuid.UUID
-	Subject          string
-}
-
-func (q *Queries) WithdrawExactAdmission(ctx context.Context, arg WithdrawExactAdmissionParams) error {
-	_, err := q.db.Exec(ctx, withdrawExactAdmission,
-		arg.OrganizationID,
-		arg.ProjectID,
-		arg.WorkloadIssuerID,
-		arg.Subject,
-	)
 	return err
 }
