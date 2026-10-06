@@ -209,6 +209,7 @@ func NewApp(
 	platformHosts map[string]string,
 	slackClient *slackclient.SlackClient,
 	cacheImpl cache.Cache,
+	identities AssistantIdentityLifecycle,
 	dispatchers ...Dispatcher,
 ) *App {
 	logger = logger.With(attr.SlogComponent("background_triggers"))
@@ -219,7 +220,7 @@ func NewApp(
 	}
 
 	return &App{
-		identities:     nil,
+		identities:     identities,
 		logger:         logger,
 		db:             db,
 		repo:           triggerrepo.New(db),
@@ -258,21 +259,6 @@ func (a *App) GetInstance(ctx context.Context, projectID uuid.UUID, id uuid.UUID
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("get trigger instance: %w", err)
 	}
 	return item, nil
-}
-
-// bindRootIdentity deliberately excludes continuation wakes: their authority belongs
-// to the durable origin trigger, never a newly minted per-wake workload.
-func (a *App) bindRootIdentity(ctx context.Context, tx pgx.Tx, item triggerrepo.TriggerInstance) error {
-	if item.DefinitionSlug == DefinitionSlugWake || item.Status != StatusActive || item.TargetKind != TargetKindAssistant {
-		return nil
-	}
-	if a.identities == nil {
-		return fmt.Errorf("assistant identity lifecycle is not configured")
-	}
-	if err := a.identities.BindRootTrigger(ctx, tx, item.OrganizationID, item.ProjectID, item.ID); err != nil {
-		return fmt.Errorf("bind root trigger identity: %w", err)
-	}
-	return nil
 }
 
 func (a *App) Create(ctx context.Context, params CreateParams, hooks ...InstanceDBHook) (triggerrepo.TriggerInstance, error) {
@@ -321,8 +307,8 @@ func (a *App) Create(ctx context.Context, params CreateParams, hooks ...Instance
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("create trigger instance: %w", err)
 	}
 
-	if err := a.bindRootIdentity(ctx, tx, item); err != nil {
-		return triggerrepo.TriggerInstance{}, err
+	if err := a.identities.BindRootTrigger(ctx, tx, item.ProjectID, item.ID); err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("bind trigger workload identity: %w", err)
 	}
 
 	for _, hook := range hooks {
@@ -398,14 +384,9 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 	}
 
 	if existing.TargetKind != item.TargetKind || existing.TargetRef != item.TargetRef {
-		if a.identities == nil {
-			return triggerrepo.TriggerInstance{}, fmt.Errorf("assistant identity lifecycle is not configured")
+		if err := a.identities.RetargetRootTrigger(ctx, tx, item.ProjectID, item.ID); err != nil {
+			return triggerrepo.TriggerInstance{}, fmt.Errorf("rebind trigger workload identity: %w", err)
 		}
-		if err := a.identities.RetargetRootTrigger(ctx, tx, item.OrganizationID, item.ProjectID, item.ID); err != nil {
-			return triggerrepo.TriggerInstance{}, fmt.Errorf("rebind updated root trigger identity: %w", err)
-		}
-	} else if err := a.bindRootIdentity(ctx, tx, item); err != nil {
-		return triggerrepo.TriggerInstance{}, err
 	}
 
 	for _, hook := range hooks {
@@ -459,8 +440,8 @@ func (a *App) deleteInstance(ctx context.Context, projectID uuid.UUID, id uuid.U
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock trigger before deletion: %w", err)
 	}
-	if err := a.tombstoneIdentity(ctx, tx, existing); err != nil {
-		return triggerrepo.TriggerInstance{}, fmt.Errorf("invalidate trigger identity before deletion: %w", err)
+	if err := a.identities.TombstoneTrigger(ctx, tx, existing.ProjectID, existing.ID); err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("withdraw trigger workload identity: %w", err)
 	}
 
 	item, err := triggerrepo.New(tx).DeleteTriggerInstance(ctx, triggerrepo.DeleteTriggerInstanceParams{
@@ -491,11 +472,6 @@ func (a *App) SetStatus(ctx context.Context, projectID uuid.UUID, id uuid.UUID, 
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	_, err = triggerrepo.New(tx).GetTriggerInstanceByIDForUpdate(ctx, triggerrepo.GetTriggerInstanceByIDForUpdateParams{ID: id, ProjectID: projectID})
-	if err != nil {
-		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock trigger before status change: %w", err)
-	}
-
 	item, err := triggerrepo.New(tx).SetTriggerInstanceStatus(ctx, triggerrepo.SetTriggerInstanceStatusParams{
 		Status:    status,
 		ID:        id,
@@ -503,10 +479,6 @@ func (a *App) SetStatus(ctx context.Context, projectID uuid.UUID, id uuid.UUID, 
 	})
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("set trigger status: %w", err)
-	}
-
-	if err := a.bindRootIdentity(ctx, tx, item); err != nil {
-		return triggerrepo.TriggerInstance{}, err
 	}
 
 	for _, hook := range hooks {
@@ -1266,28 +1238,11 @@ func nullUUIDToUUID(value uuid.NullUUID) uuid.UUID {
 	return value.UUID
 }
 
-// SetIdentityService configures the deployment platform trust before serving requests.
-func (a *App) SetIdentityService(identities AssistantIdentityLifecycle) *App {
-	a.identities = identities
-	return a
-}
-
-// AssistantIdentityLifecycle keeps trigger transactions independent of identity implementation.
+// AssistantIdentityLifecycle binds root triggers to assistant workload
+// identities inside the trigger's own transaction. Implementations must leave
+// triggers that do not target an identity-backed assistant unchanged.
 type AssistantIdentityLifecycle interface {
-	BindRootTrigger(context.Context, pgx.Tx, string, uuid.UUID, uuid.UUID) error
-	RetargetRootTrigger(context.Context, pgx.Tx, string, uuid.UUID, uuid.UUID) error
-	TombstoneTrigger(context.Context, pgx.Tx, string, uuid.UUID, uuid.UUID) error
-}
-
-func (a *App) tombstoneIdentity(ctx context.Context, tx pgx.Tx, item triggerrepo.TriggerInstance) error {
-	if item.DefinitionSlug == DefinitionSlugWake {
-		return nil
-	}
-	if a.identities == nil {
-		return fmt.Errorf("assistant identity lifecycle is not configured")
-	}
-	if err := a.identities.TombstoneTrigger(ctx, tx, item.OrganizationID, item.ProjectID, item.ID); err != nil {
-		return fmt.Errorf("withdraw trigger identity: %w", err)
-	}
-	return nil
+	BindRootTrigger(ctx context.Context, tx pgx.Tx, projectID, triggerID uuid.UUID) error
+	RetargetRootTrigger(ctx context.Context, tx pgx.Tx, projectID, triggerID uuid.UUID) error
+	TombstoneTrigger(ctx context.Context, tx pgx.Tx, projectID, triggerID uuid.UUID) error
 }

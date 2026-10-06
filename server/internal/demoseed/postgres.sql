@@ -436,9 +436,8 @@ BEGIN
   DELETE FROM platform_mcp_catalog_registrations
     WHERE organization_id = demo_org AND project_id = proj_a;
 
-  -- Fixture reset only: application lifecycle paths must retain binding history.
-  -- Scope by immutable tenant/project keys, including rows whose live FKs were
-  -- nulled by resource deletion. Never erase another project's reservations.
+  -- Binding rows point at project resources; clear them by tenant and project
+  -- keys, including rows whose pointers were nulled by resource deletion.
   DELETE FROM trigger_workload_bindings
     WHERE organization_id = demo_org AND project_id = proj_a;
   DELETE FROM assistant_agent_bindings
@@ -1376,8 +1375,7 @@ BEGIN
      now() + interval '6 days', now() - interval '30 minutes',
      now() - interval '3 hours', now() - interval '4 days');
 
-  -- One identity-bound assistant and one deliberately legacy assistant. These
-  -- fixtures do not opt existing assistants into identity on read or wake.
+  -- One assistant with a dedicated agent and one legacy assistant without.
   INSERT INTO assistants
     (id, organization_id, project_id, created_by_user_id, name, model, instructions)
   VALUES
@@ -1386,11 +1384,24 @@ BEGIN
     (demo.det_uuid('gram-demo-assistant-legacy'), demo_org, proj_a, demo_user_ids[1],
      'Legacy assistant', 'anthropic/claude-sonnet-4.6', 'Help summarize project activity.');
 
-  -- Dedicated project agent with an intentionally empty capability ceiling:
-  -- no principal grants, role assignments, or upstream credential attachments.
+  -- The dedicated agent starts with the project-wide ceiling provisioning
+  -- grants: every MCP server and skill in the assistant's project.
   INSERT INTO agents (id, organization_id, project_id, owner_user_id, name)
   VALUES (demo.det_uuid('gram-demo-assistant-agent'), demo_org, proj_a,
           demo_user_ids[1], 'Identity-bound assistant agent');
+
+  INSERT INTO principal_grants
+    (id, organization_id, principal_urn, scope, selectors)
+  VALUES
+    (demo.det_uuid('gram-demo-assistant-agent-grant-mcp-connect'), demo_org,
+     'agent:' || demo.det_uuid('gram-demo-assistant-agent')::text, 'mcp:connect',
+     jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*', 'project_id', proj_a::text)),
+    (demo.det_uuid('gram-demo-assistant-agent-grant-mcp-read'), demo_org,
+     'agent:' || demo.det_uuid('gram-demo-assistant-agent')::text, 'mcp:read',
+     jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*', 'project_id', proj_a::text)),
+    (demo.det_uuid('gram-demo-assistant-agent-grant-skill-read'), demo_org,
+     'agent:' || demo.det_uuid('gram-demo-assistant-agent')::text, 'skill:read',
+     jsonb_build_object('resource_kind', 'skill', 'resource_id', proj_a::text));
 
   INSERT INTO trigger_instances
     (id, organization_id, project_id, definition_slug, name, target_kind, target_ref, target_display)
@@ -1406,7 +1417,7 @@ BEGIN
   INSERT INTO workload_issuers
     (id, organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission)
   VALUES (demo.det_uuid('gram-demo-assistant-platform-trust'), demo_org, proj_a,
-          'Assistant roots ' || proj_a::text, 'https://platform.example.invalid',
+          'Assistant triggers ' || proj_a::text, 'https://platform.example.invalid',
           'https://platform.example.invalid/.well-known/jwks.json', FALSE);
 
   INSERT INTO assistant_agent_bindings
@@ -1417,7 +1428,7 @@ BEGIN
           demo.det_uuid('gram-demo-assistant-bound'), demo_org, proj_a, demo.det_uuid('gram-demo-assistant-bound'),
           demo.det_uuid('gram-demo-assistant-agent'), demo_org, proj_a, demo.det_uuid('gram-demo-assistant-agent'), 1);
 
-  -- Bind the existing canonical dashboard root, not an event or human wake.
+  -- Bind the dashboard root trigger, never a continuation wake.
   INSERT INTO trigger_workload_bindings
     (id, organization_id, project_id, project_ref_organization_id, project_ref_id,
      original_trigger_id, trigger_ref_organization_id, trigger_ref_project_id, trigger_id,
@@ -3309,8 +3320,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
 
   SELECT count(*) INTO stray FROM principal_grants
   WHERE organization_id = demo_org AND principal_urn LIKE 'agent:%';
-  IF stray <> 2 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 2 scoped agent grants, found %', stray;
+  IF stray <> 5 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 5 scoped agent grants, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM principal_grants
@@ -3534,7 +3545,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: % MCP connections have no registration', stray;
   END IF;
 
-  -- Identity fixtures must stay coherent, with no implicit legacy upgrade.
+  -- The legacy assistant stays without a dedicated agent.
   SELECT count(*) INTO stray FROM assistants
   WHERE organization_id = demo_org AND project_id = proj_a AND deleted IS FALSE;
   IF stray <> 2 THEN
@@ -3570,18 +3581,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     AND wa.subject = t.subject AND wa.match_kind = 'exact' AND wa.deleted IS FALSE
   WHERE t.organization_id = demo_org AND t.project_id = proj_a
     AND t.deleted IS FALSE AND b.deleted IS FALSE
-    AND t.project_ref_id = proj_a AND b.project_ref_id = proj_a
-    AND t.generation = 1 AND b.generation = 1 AND t.assistant_binding_generation = b.generation
     AND a.id = demo.det_uuid('gram-demo-assistant-bound')
     AND ag.project_id = proj_a AND ag.owner_user_id = demo_user_ids[1]
     AND ag.suspended_at IS NULL AND ag.revoked_at IS NULL
     AND i.issuer = 'https://platform.example.invalid' AND i.jwks_uri = 'https://platform.example.invalid/.well-known/jwks.json' AND i.allow_wildcard_admission IS FALSE
     AND r.definition_slug = 'dashboard' AND r.target_kind = 'assistant' AND r.target_ref = a.id::text
     AND t.subject = 'assistant-trigger:' || r.id::text
-    AND NOT EXISTS (SELECT 1 FROM principal_grants g
-      WHERE g.organization_id = demo_org AND g.principal_urn = 'agent:' || ag.id::text)
-    AND NOT EXISTS (SELECT 1 FROM agent_role_assignments g
-      WHERE g.organization_id = demo_org AND g.agent_id = ag.id);
+    AND (SELECT count(*) FROM principal_grants g
+      WHERE g.organization_id = demo_org AND g.principal_urn = 'agent:' || ag.id::text) = 3;
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: identity-bound assistant root is incoherent';
   END IF;

@@ -3,63 +3,73 @@ package assistants
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
-	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 )
 
-type legacyWakeLookup func(context.Context, assistantrepo.FindLegacyWakeRequesterParams) ([]string, error)
+// ErrTurnIdentity signals that a turn's identity cannot be selected or is not
+// allowed to act. Replaying the event selects the same identity, so callers
+// fail the event terminally instead of retrying it.
+var ErrTurnIdentity = errors.New("assistant turn identity rejected")
+
+// wakeIdentityVersionRequester marks wakes that captured their requester when
+// they were scheduled.
+const wakeIdentityVersionRequester = 1
 
 type slackUserLookup func(context.Context, slackrepo.ResolveSlackMappingUserParams) (string, error)
 
-// selectTurnUser resolves identity, not authority. Only unavailable Slack mappings
-// fall back to the owner. A selected user's authorization failure must propagate.
-func selectTurnUser(ctx context.Context, assistant assistantRecord, source string, event assistantThreadEventRecord, lookup slackUserLookup, legacyLookup legacyWakeLookup) (string, error) {
+// legacyTurnUserID is the user a turn acts under for an assistant without a
+// dedicated agent. Dashboard turns act as the sender carried on the payload;
+// every other source acts as the assistant's creator, which may be empty.
+func legacyTurnUserID(assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) string {
+	if thread.SourceKind == sourceKindDashboard {
+		var payload dashboardEventPayload
+		if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err == nil && payload.UserID != "" {
+			return payload.UserID
+		}
+	}
+	return assistant.CreatedByUserID
+}
+
+// selectTurnUser picks the user a turn of an agent-backed assistant acts
+// under. Only an unmapped Slack sender falls back to the owner; a selected
+// user who is later denied is never retried as the owner.
+func selectTurnUser(ctx context.Context, assistant assistantRecord, threadSource string, event assistantThreadEventRecord, lookup slackUserLookup) (string, error) {
+	source := threadSource
 	var metadata struct {
-		Source      string `json:"_gram_source_kind"`
-		ScheduledAt string `json:"scheduled_at"`
+		Source string `json:"_gram_source_kind"`
 	}
-	if err := json.Unmarshal(event.NormalizedPayloadJSON, &metadata); err != nil {
-		return "", fmt.Errorf("decode turn identity: %w", err)
-	}
-	if metadata.Source != "" {
+	if err := json.Unmarshal(event.NormalizedPayloadJSON, &metadata); err == nil && metadata.Source != "" {
 		source = metadata.Source
-	} else if metadata.ScheduledAt != "" {
-		// Historical wakes can share a Slack thread without stored source metadata.
-		source = sourceKindWake
 	}
 	switch source {
 	case sourceKindWake:
 		var payload wakeEventPayload
 		if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err != nil {
-			return "", fmt.Errorf("resolve turn identity: %w", err)
+			return "", fmt.Errorf("decode wake identity: %w", err)
 		}
-		if payload.IdentityVersion != 0 && payload.IdentityVersion != 1 {
-			return "", fmt.Errorf("unsupported wake identity version")
-		}
-		if payload.IdentityVersion == 1 {
+		switch payload.IdentityVersion {
+		case 0:
+			// Wakes scheduled before requesters were captured act as the owner.
+		case wakeIdentityVersionRequester:
 			if payload.RequesterUserID == "" {
-				return "", fmt.Errorf("wake has no captured requester")
+				return "", errors.New("wake has no captured requester")
 			}
 			return payload.RequesterUserID, nil
+		default:
+			return "", fmt.Errorf("unsupported wake identity version %d", payload.IdentityVersion)
 		}
-		// Version zero has no captured-requester contract; ignore that field.
-		// Only unversioned legacy wakes retain the old owner selection. Prefer an
-		// unambiguous recorded scheduling actor, not a reconstructed historical user.
-		if event.TriggerInstanceID.Valid && legacyLookup != nil {
-			users, err := legacyLookup(ctx, assistantrepo.FindLegacyWakeRequesterParams{OrganizationID: assistant.OrganizationID, ProjectID: assistant.ProjectID, TriggerID: event.TriggerInstanceID.UUID.String()})
-			if err == nil && len(users) == 1 {
-				return users[0], nil
-			}
-		}
-
 	case sourceKindDashboard:
 		var payload dashboardEventPayload
 		if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err != nil {
-			return "", fmt.Errorf("resolve turn identity: %w", err)
+			return "", fmt.Errorf("decode dashboard identity: %w", err)
 		}
 		if payload.UserID != "" {
 			return payload.UserID, nil
@@ -67,9 +77,9 @@ func selectTurnUser(ctx context.Context, assistant assistantRecord, source strin
 	case sourceKindSlack:
 		var payload slackEventPayload
 		if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err != nil {
-			return "", fmt.Errorf("resolve turn identity: %w", err)
+			return "", fmt.Errorf("decode slack identity: %w", err)
 		}
-		if payload.TeamID != "" && payload.UserID != "" && lookup != nil {
+		if payload.TeamID != "" && payload.UserID != "" {
 			user, err := lookup(ctx, slackrepo.ResolveSlackMappingUserParams{OrganizationID: assistant.OrganizationID, SlackTeamID: payload.TeamID, SlackUserID: payload.UserID})
 			if err == nil && user != "" {
 				return user, nil
@@ -77,25 +87,39 @@ func selectTurnUser(ctx context.Context, assistant assistantRecord, source strin
 		}
 	}
 	if assistant.CreatedByUserID == "" {
-		return "", fmt.Errorf("assistant owner is unavailable")
+		return "", errors.New("assistant owner is unavailable")
 	}
 	return assistant.CreatedByUserID, nil
 }
 
+// turnUserID returns the user a turn acts under. Identity failures wrap
+// ErrTurnIdentity; storage failures do not.
 func (s *ServiceCore) turnUserID(ctx context.Context, assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) (string, error) {
-	user, err := selectTurnUser(ctx, assistant, thread.SourceKind, event, slackrepo.New(s.db).ResolveSlackMappingUser, assistantrepo.New(s.db).FindLegacyWakeRequester)
+	states, err := assistantidentity.States(ctx, s.db, assistant.ProjectID, []uuid.UUID{assistant.ID})
 	if err != nil {
-		return "", fmt.Errorf("resolve turn identity: %w", err)
+		return "", fmt.Errorf("load turn identity state: %w", err)
+	}
+	switch states[assistant.ID].State {
+	case assistantidentity.NeverConfigured:
+		return legacyTurnUserID(assistant, thread, event), nil
+	case assistantidentity.Active:
+	default:
+		return "", fmt.Errorf("%w: assistant agent is not active", ErrTurnIdentity)
+	}
+
+	user, err := selectTurnUser(ctx, assistant, thread.SourceKind, event, slackrepo.New(s.db).ResolveSlackMappingUser)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", ErrTurnIdentity, err)
 	}
 	active, err := orgrepo.New(s.db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{OrganizationID: assistant.OrganizationID, UserID: user})
 	if err != nil {
-		return "", fmt.Errorf("check turn user eligibility: %w", err)
+		return "", fmt.Errorf("check turn user membership: %w", err)
 	}
 	if !active {
-		return "", fmt.Errorf("turn user is not an active organization member")
+		return "", fmt.Errorf("%w: turn user is not an active organization member", ErrTurnIdentity)
 	}
-	// Resolve the selected identity's current grants, never the transport actor's
-	// grants. Trusted event provenance establishes identity, not project access.
+	// The selected user's own grants decide project access, never the grants
+	// of whatever transport delivered the event.
 	principals, err := authz.ResolveUserPrincipals(ctx, s.db, assistant.OrganizationID, user)
 	if err != nil {
 		return "", fmt.Errorf("resolve turn user principals: %w", err)
@@ -104,12 +128,9 @@ func (s *ServiceCore) turnUserID(ctx context.Context, assistant assistantRecord,
 	if err != nil {
 		return "", fmt.Errorf("load turn user grants: %w", err)
 	}
-	allowed, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: assistant.ProjectID.String(), Dimensions: nil})
-	if err != nil {
-		return "", fmt.Errorf("check turn user project access: %w", err)
-	}
-	if !allowed {
-		return "", fmt.Errorf("turn user does not have access to assistant project")
+	check := authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: assistant.ProjectID.String(), Dimensions: nil}
+	if err := s.authz.EvaluateLoadedGrants(ctx, grants, check); err != nil {
+		return "", fmt.Errorf("%w: turn user cannot read the assistant project: %w", ErrTurnIdentity, err)
 	}
 	return user, nil
 }

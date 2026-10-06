@@ -41,7 +41,7 @@ func TestSearchToolCallsNarrowsToOneServerWithoutReportedNames(t *testing.T) {
 	fixedNow := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
 	codec, err := newSubjectReferenceCodec("tool-call-search-integration-key")
 	require.NoError(t, err)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn, nil).
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
 		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil))
 	search := &recordingToolCallSearchReader{}
 	service := &DiagnosticsService{

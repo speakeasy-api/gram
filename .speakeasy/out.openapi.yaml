@@ -12543,7 +12543,7 @@ paths:
       x-speakeasy-name-override: update
   /rpc/assistants.upgradeIdentity:
     post:
-      description: Explicitly configure workload identity for an assistant without configured workload identity (NEVER_CONFIGURED), creating a dedicated agent and stable trigger workload identities. Existing assistants are never upgraded implicitly. Repeating an already ACTIVE upgrade is safe; tombstoned identities cannot be restored.
+      description: Give an existing assistant its own dedicated agent and per-trigger workload identities. The agent starts with access to every MCP server and skill in the project and is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.
       operationId: upgradeAssistantIdentity
       parameters:
         - allowEmptyValue: true
@@ -77098,7 +77098,7 @@ components:
       properties:
         agent_id:
           type: string
-          description: The dedicated agent ID for an active identity binding.
+          description: The assistant's dedicated agent ID, when it has one.
           format: uuid
         created_at:
           type: string
@@ -77111,17 +77111,13 @@ components:
           type: string
           description: The assistant ID.
           format: uuid
-        identity_generation:
-          type: integer
-          description: The current or last retained assistant identity binding generation.
-          format: int64
         identity_state:
           type: string
-          description: Whether this assistant has never configured, active, or tombstoned workload identity bindings. This is configuration state, not permission to execute.
+          description: NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its dedicated agent is usable, and UNAVAILABLE when that agent is suspended, revoked, or deleted. This is configuration state, not permission to execute.
           enum:
             - NEVER_CONFIGURED
             - ACTIVE
-            - TOMBSTONED
+            - UNAVAILABLE
         instructions:
           type: string
           description: The system instructions for the assistant.

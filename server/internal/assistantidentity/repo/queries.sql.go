@@ -12,59 +12,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createAdmission = `-- name: CreateAdmission :exec
-INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind)
-VALUES ($1, $2, $3, $4, 'exact')
-`
-
-type CreateAdmissionParams struct {
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	IssuerID       uuid.UUID
-	Subject        string
-}
-
-func (q *Queries) CreateAdmission(ctx context.Context, arg CreateAdmissionParams) error {
-	_, err := q.db.Exec(ctx, createAdmission,
-		arg.OrganizationID,
-		arg.ProjectID,
-		arg.IssuerID,
-		arg.Subject,
-	)
-	return err
-}
-
-const createAssignment = `-- name: CreateAssignment :exec
-INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, match_kind, agent_id)
-VALUES ($1, $2, $3, 'exact', $4)
-`
-
-type CreateAssignmentParams struct {
-	OrganizationID string
-	IssuerID       uuid.UUID
-	Subject        string
-	AgentID        uuid.UUID
-}
-
-func (q *Queries) CreateAssignment(ctx context.Context, arg CreateAssignmentParams) error {
-	_, err := q.db.Exec(ctx, createAssignment,
-		arg.OrganizationID,
-		arg.IssuerID,
-		arg.Subject,
-		arg.AgentID,
-	)
-	return err
-}
-
 const createAssistantBinding = `-- name: CreateAssistantBinding :one
 INSERT INTO assistant_agent_bindings (
- organization_id, project_id, project_ref_organization_id, project_ref_id,
- original_assistant_id, assistant_ref_organization_id, assistant_ref_project_id, assistant_id,
- original_agent_id, agent_ref_organization_id, agent_ref_project_id, agent_id, generation
-) VALUES ($1, $2, $1, $2,
- $3, $1, $2, $3,
- $4, $1, $2, $4, 1)
-RETURNING id
+  organization_id, project_id, project_ref_organization_id, project_ref_id,
+  original_assistant_id, assistant_ref_organization_id, assistant_ref_project_id, assistant_id,
+  original_agent_id, agent_ref_organization_id, agent_ref_project_id, agent_id, generation
+)
+SELECT $1::text, $2::uuid, $1::text, $2::uuid,
+  $3::uuid, $1::text, $2::uuid, $3::uuid,
+  $4::uuid, $1::text, $2::uuid, $4::uuid,
+  COALESCE(MAX(generation), 0) + 1
+FROM assistant_agent_bindings
+WHERE original_assistant_id = $3::uuid
+RETURNING id, generation
 `
 
 type CreateAssistantBindingParams struct {
@@ -74,26 +34,31 @@ type CreateAssistantBindingParams struct {
 	AgentID        uuid.UUID
 }
 
-func (q *Queries) CreateAssistantBinding(ctx context.Context, arg CreateAssistantBindingParams) (uuid.UUID, error) {
+type CreateAssistantBindingRow struct {
+	ID         uuid.UUID
+	Generation int64
+}
+
+func (q *Queries) CreateAssistantBinding(ctx context.Context, arg CreateAssistantBindingParams) (CreateAssistantBindingRow, error) {
 	row := q.db.QueryRow(ctx, createAssistantBinding,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.AssistantID,
 		arg.AgentID,
 	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i CreateAssistantBindingRow
+	err := row.Scan(&i.ID, &i.Generation)
+	return i, err
 }
 
-const createPlatformIssuer = `-- name: CreatePlatformIssuer :one
+const createProjectIssuer = `-- name: CreateProjectIssuer :one
 INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission)
 VALUES ($1, $2, $3, $4, $5, false)
 ON CONFLICT (project_id, name) WHERE deleted IS FALSE DO NOTHING
 RETURNING id
 `
 
-type CreatePlatformIssuerParams struct {
+type CreateProjectIssuerParams struct {
 	OrganizationID string
 	ProjectID      uuid.NullUUID
 	Name           string
@@ -101,8 +66,10 @@ type CreatePlatformIssuerParams struct {
 	JwksUri        string
 }
 
-func (q *Queries) CreatePlatformIssuer(ctx context.Context, arg CreatePlatformIssuerParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, createPlatformIssuer,
+// A concurrent binder in the same project may win the name; the caller then
+// re-reads the winner by issuer URL.
+func (q *Queries) CreateProjectIssuer(ctx context.Context, arg CreateProjectIssuerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createProjectIssuer,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.Name,
@@ -116,26 +83,29 @@ func (q *Queries) CreatePlatformIssuer(ctx context.Context, arg CreatePlatformIs
 
 const createTriggerBinding = `-- name: CreateTriggerBinding :exec
 INSERT INTO trigger_workload_bindings (
- organization_id, project_id, project_ref_organization_id, project_ref_id,
- original_trigger_id, trigger_ref_organization_id, trigger_ref_project_id, trigger_id,
- original_assistant_binding_id, assistant_binding_ref_organization_id, assistant_binding_ref_project_id, assistant_binding_id,
- assistant_binding_generation, original_workload_issuer_id, workload_issuer_ref_organization_id,
- workload_issuer_ref_project_id, workload_issuer_id, subject, generation
-) VALUES ($1, $2, $1, $2,
- $3, $1, $2, $3,
- $4, $1, $2, $4,
- $5, $6, $1, $2, $6, $7, $8)
+  organization_id, project_id, project_ref_organization_id, project_ref_id,
+  original_trigger_id, trigger_ref_organization_id, trigger_ref_project_id, trigger_id,
+  original_assistant_binding_id, assistant_binding_ref_organization_id, assistant_binding_ref_project_id, assistant_binding_id,
+  assistant_binding_generation, original_workload_issuer_id, workload_issuer_ref_organization_id,
+  workload_issuer_ref_project_id, workload_issuer_id, subject, generation
+)
+SELECT $1::text, $2::uuid, $1::text, $2::uuid,
+  $3::uuid, $1::text, $2::uuid, $3::uuid,
+  $4::uuid, $1::text, $2::uuid, $4::uuid,
+  $5::bigint, $6::uuid, $1::text, $2::uuid, $6::uuid,
+  $7::text, COALESCE(MAX(generation), 0) + 1
+FROM trigger_workload_bindings
+WHERE original_trigger_id = $3::uuid
 `
 
 type CreateTriggerBindingParams struct {
-	OrganizationID      string
-	ProjectID           uuid.UUID
-	TriggerID           uuid.UUID
-	AssistantBindingID  uuid.UUID
-	AssistantGeneration int64
-	IssuerID            uuid.UUID
-	Subject             string
-	Generation          int64
+	OrganizationID             string
+	ProjectID                  uuid.UUID
+	TriggerID                  uuid.UUID
+	AssistantBindingID         uuid.UUID
+	AssistantBindingGeneration int64
+	WorkloadIssuerID           uuid.UUID
+	Subject                    string
 }
 
 func (q *Queries) CreateTriggerBinding(ctx context.Context, arg CreateTriggerBindingParams) error {
@@ -144,733 +114,29 @@ func (q *Queries) CreateTriggerBinding(ctx context.Context, arg CreateTriggerBin
 		arg.ProjectID,
 		arg.TriggerID,
 		arg.AssistantBindingID,
-		arg.AssistantGeneration,
-		arg.IssuerID,
+		arg.AssistantBindingGeneration,
+		arg.WorkloadIssuerID,
 		arg.Subject,
-		arg.Generation,
 	)
 	return err
 }
 
-const fixtureAgentOwner = `-- name: FixtureAgentOwner :one
-SELECT owner_user_id FROM agents WHERE organization_id = $1 AND id = $2
+const findProjectIssuer = `-- name: FindProjectIssuer :many
+SELECT id
+FROM workload_issuers
+WHERE organization_id = $1 AND project_id = $2
+  AND issuer = ANY($3::text[]) AND deleted IS FALSE
+ORDER BY created_at, id
 `
 
-type FixtureAgentOwnerParams struct {
-	OrganizationID string
-	AgentID        uuid.UUID
-}
-
-func (q *Queries) FixtureAgentOwner(ctx context.Context, arg FixtureAgentOwnerParams) (string, error) {
-	row := q.db.QueryRow(ctx, fixtureAgentOwner, arg.OrganizationID, arg.AgentID)
-	var owner_user_id string
-	err := row.Scan(&owner_user_id)
-	return owner_user_id, err
-}
-
-const fixtureAttachMCPServer = `-- name: FixtureAttachMCPServer :exec
-INSERT INTO assistant_mcp_servers (assistant_id,mcp_server_id,project_id) VALUES ($1,$2,$3)
-`
-
-type FixtureAttachMCPServerParams struct {
-	AssistantID uuid.UUID
-	ServerID    uuid.UUID
-	ProjectID   uuid.UUID
-}
-
-func (q *Queries) FixtureAttachMCPServer(ctx context.Context, arg FixtureAttachMCPServerParams) error {
-	_, err := q.db.Exec(ctx, fixtureAttachMCPServer, arg.AssistantID, arg.ServerID, arg.ProjectID)
-	return err
-}
-
-const fixtureAuthorityCounts = `-- name: FixtureAuthorityCounts :one
-SELECT
- (SELECT count(*) FROM agents AS c0 WHERE c0.organization_id = $1)::bigint AS agents,
- (SELECT count(*) FROM assistant_agent_bindings AS c1 WHERE c1.organization_id = $1)::bigint AS assistants,
- (SELECT count(*) FROM workload_issuers AS c2 WHERE c2.organization_id = $1)::bigint AS issuers,
- (SELECT count(*) FROM workload_identity_admissions AS c3 WHERE c3.organization_id = $1)::bigint AS admissions,
- (SELECT count(*) FROM workload_agent_assignments AS c4 WHERE c4.organization_id = $1)::bigint AS assignments,
- (SELECT count(*) FROM trigger_workload_bindings AS c5 WHERE c5.organization_id = $1)::bigint AS triggers,
- (SELECT count(*) FROM principal_grants c6 WHERE c6.organization_id = $1)::bigint AS grants,
- (SELECT count(*) FROM audit_logs c7 WHERE c7.organization_id = $1)::bigint AS audits
-`
-
-type FixtureAuthorityCountsRow struct {
-	Agents      int64
-	Assistants  int64
-	Issuers     int64
-	Admissions  int64
-	Assignments int64
-	Triggers    int64
-	Grants      int64
-	Audits      int64
-}
-
-func (q *Queries) FixtureAuthorityCounts(ctx context.Context, organizationID string) (FixtureAuthorityCountsRow, error) {
-	row := q.db.QueryRow(ctx, fixtureAuthorityCounts, organizationID)
-	var i FixtureAuthorityCountsRow
-	err := row.Scan(
-		&i.Agents,
-		&i.Assistants,
-		&i.Issuers,
-		&i.Admissions,
-		&i.Assignments,
-		&i.Triggers,
-		&i.Grants,
-		&i.Audits,
-	)
-	return i, err
-}
-
-const fixtureCreateAssistant = `-- name: FixtureCreateAssistant :exec
-INSERT INTO assistants (id,organization_id,project_id,created_by_user_id,name,model,instructions)
-VALUES ($1::uuid,$2,$3,$4,'Identity assistant ' || ($1::uuid)::text,'test-model','test instructions')
-`
-
-type FixtureCreateAssistantParams struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-	Creator        pgtype.Text
-}
-
-func (q *Queries) FixtureCreateAssistant(ctx context.Context, arg FixtureCreateAssistantParams) error {
-	_, err := q.db.Exec(ctx, fixtureCreateAssistant,
-		arg.ID,
-		arg.OrganizationID,
-		arg.ProjectID,
-		arg.Creator,
-	)
-	return err
-}
-
-const fixtureCreateMCPServer = `-- name: FixtureCreateMCPServer :exec
-INSERT INTO mcp_servers (id,project_id,remote_mcp_server_id,visibility) VALUES ($1,$2,$3,'private')
-`
-
-type FixtureCreateMCPServerParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	RemoteID  uuid.NullUUID
-}
-
-func (q *Queries) FixtureCreateMCPServer(ctx context.Context, arg FixtureCreateMCPServerParams) error {
-	_, err := q.db.Exec(ctx, fixtureCreateMCPServer, arg.ID, arg.ProjectID, arg.RemoteID)
-	return err
-}
-
-const fixtureCreateMembership = `-- name: FixtureCreateMembership :exec
-INSERT INTO organization_user_relationships (organization_id,user_id) VALUES ($1,$2)
-`
-
-type FixtureCreateMembershipParams struct {
-	OrganizationID string
-	UserID         pgtype.Text
-}
-
-func (q *Queries) FixtureCreateMembership(ctx context.Context, arg FixtureCreateMembershipParams) error {
-	_, err := q.db.Exec(ctx, fixtureCreateMembership, arg.OrganizationID, arg.UserID)
-	return err
-}
-
-const fixtureCreateOrganization = `-- name: FixtureCreateOrganization :exec
-INSERT INTO organization_metadata (id,name,slug) VALUES ($1,'Identity test',$1)
-`
-
-// The following package-local fixtures exercise corrupted/hard-deleted states
-// that public management APIs intentionally cannot produce.
-func (q *Queries) FixtureCreateOrganization(ctx context.Context, id string) error {
-	_, err := q.db.Exec(ctx, fixtureCreateOrganization, id)
-	return err
-}
-
-const fixtureCreateProject = `-- name: FixtureCreateProject :exec
-INSERT INTO projects (id,organization_id,name,slug) VALUES ($1,$2,'Identity project','identity-project')
-`
-
-type FixtureCreateProjectParams struct {
-	ID             uuid.UUID
-	OrganizationID string
-}
-
-func (q *Queries) FixtureCreateProject(ctx context.Context, arg FixtureCreateProjectParams) error {
-	_, err := q.db.Exec(ctx, fixtureCreateProject, arg.ID, arg.OrganizationID)
-	return err
-}
-
-const fixtureCreateRemote = `-- name: FixtureCreateRemote :exec
-INSERT INTO remote_mcp_servers (id,project_id,transport_type,url) VALUES ($1,$2,'streamable-http','https://example.com/mcp')
-`
-
-type FixtureCreateRemoteParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) FixtureCreateRemote(ctx context.Context, arg FixtureCreateRemoteParams) error {
-	_, err := q.db.Exec(ctx, fixtureCreateRemote, arg.ID, arg.ProjectID)
-	return err
-}
-
-const fixtureCreateRoot = `-- name: FixtureCreateRoot :exec
-INSERT INTO trigger_instances (id,organization_id,project_id,definition_slug,name,target_kind,target_ref,target_display)
-VALUES ($1,$2,$3,$4,'Identity root','assistant',$5,'Assistant')
-`
-
-type FixtureCreateRootParams struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
-	DefinitionSlug string
-	TargetRef      string
-}
-
-func (q *Queries) FixtureCreateRoot(ctx context.Context, arg FixtureCreateRootParams) error {
-	_, err := q.db.Exec(ctx, fixtureCreateRoot,
-		arg.ID,
-		arg.OrganizationID,
-		arg.ProjectID,
-		arg.DefinitionSlug,
-		arg.TargetRef,
-	)
-	return err
-}
-
-const fixtureCreateUser = `-- name: FixtureCreateUser :exec
-INSERT INTO users (id,email,display_name) VALUES ($1,$2,'Identity user')
-`
-
-type FixtureCreateUserParams struct {
-	ID    string
-	Email string
-}
-
-func (q *Queries) FixtureCreateUser(ctx context.Context, arg FixtureCreateUserParams) error {
-	_, err := q.db.Exec(ctx, fixtureCreateUser, arg.ID, arg.Email)
-	return err
-}
-
-const fixtureDeleteAgent = `-- name: FixtureDeleteAgent :exec
-DELETE FROM agents WHERE organization_id = $1 AND id = $2
-`
-
-type FixtureDeleteAgentParams struct {
-	OrganizationID string
-	AgentID        uuid.UUID
-}
-
-func (q *Queries) FixtureDeleteAgent(ctx context.Context, arg FixtureDeleteAgentParams) error {
-	_, err := q.db.Exec(ctx, fixtureDeleteAgent, arg.OrganizationID, arg.AgentID)
-	return err
-}
-
-const fixtureDeleteAssistant = `-- name: FixtureDeleteAssistant :exec
-DELETE FROM assistants WHERE organization_id = $1 AND project_id = $2 AND id = $3
-`
-
-type FixtureDeleteAssistantParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	AssistantID    uuid.UUID
-}
-
-func (q *Queries) FixtureDeleteAssistant(ctx context.Context, arg FixtureDeleteAssistantParams) error {
-	_, err := q.db.Exec(ctx, fixtureDeleteAssistant, arg.OrganizationID, arg.ProjectID, arg.AssistantID)
-	return err
-}
-
-const fixtureDeleteIssuer = `-- name: FixtureDeleteIssuer :exec
-DELETE FROM workload_issuers WHERE organization_id = $1 AND id = $2
-`
-
-type FixtureDeleteIssuerParams struct {
-	OrganizationID string
-	IssuerID       uuid.UUID
-}
-
-func (q *Queries) FixtureDeleteIssuer(ctx context.Context, arg FixtureDeleteIssuerParams) error {
-	_, err := q.db.Exec(ctx, fixtureDeleteIssuer, arg.OrganizationID, arg.IssuerID)
-	return err
-}
-
-const fixtureDeleteOwner = `-- name: FixtureDeleteOwner :exec
-UPDATE users SET deleted_at=clock_timestamp() WHERE id = $1
-`
-
-func (q *Queries) FixtureDeleteOwner(ctx context.Context, userID string) error {
-	_, err := q.db.Exec(ctx, fixtureDeleteOwner, userID)
-	return err
-}
-
-const fixtureDeleteProject = `-- name: FixtureDeleteProject :exec
-DELETE FROM projects WHERE organization_id = $1 AND id = $2
-`
-
-type FixtureDeleteProjectParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-}
-
-func (q *Queries) FixtureDeleteProject(ctx context.Context, arg FixtureDeleteProjectParams) error {
-	_, err := q.db.Exec(ctx, fixtureDeleteProject, arg.OrganizationID, arg.ProjectID)
-	return err
-}
-
-const fixtureDeleteTrigger = `-- name: FixtureDeleteTrigger :exec
-DELETE FROM trigger_instances WHERE organization_id = $1 AND project_id = $2 AND id = $3
-`
-
-type FixtureDeleteTriggerParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	TriggerID      uuid.UUID
-}
-
-func (q *Queries) FixtureDeleteTrigger(ctx context.Context, arg FixtureDeleteTriggerParams) error {
-	_, err := q.db.Exec(ctx, fixtureDeleteTrigger, arg.OrganizationID, arg.ProjectID, arg.TriggerID)
-	return err
-}
-
-const fixtureLatchOwner = `-- name: FixtureLatchOwner :exec
-UPDATE agents SET owner_reassignment_required_at=clock_timestamp(),owner_reassignment_reason='test' WHERE organization_id = $1 AND id = $2
-`
-
-type FixtureLatchOwnerParams struct {
-	OrganizationID string
-	AgentID        uuid.UUID
-}
-
-func (q *Queries) FixtureLatchOwner(ctx context.Context, arg FixtureLatchOwnerParams) error {
-	_, err := q.db.Exec(ctx, fixtureLatchOwner, arg.OrganizationID, arg.AgentID)
-	return err
-}
-
-const fixtureLiveAssignmentCount = `-- name: FixtureLiveAssignmentCount :one
-SELECT count(*)::bigint FROM workload_agent_assignments WHERE organization_id = $1 AND agent_id = $2 AND NOT deleted
-`
-
-type FixtureLiveAssignmentCountParams struct {
-	OrganizationID string
-	AgentID        uuid.UUID
-}
-
-func (q *Queries) FixtureLiveAssignmentCount(ctx context.Context, arg FixtureLiveAssignmentCountParams) (int64, error) {
-	row := q.db.QueryRow(ctx, fixtureLiveAssignmentCount, arg.OrganizationID, arg.AgentID)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
-const fixtureProvisioningMetadata = `-- name: FixtureProvisioningMetadata :one
-SELECT metadata FROM audit_logs WHERE organization_id = $1 AND action='assistant:identity_provision' AND subject_id = $2
-`
-
-type FixtureProvisioningMetadataParams struct {
-	OrganizationID string
-	SubjectID      string
-}
-
-func (q *Queries) FixtureProvisioningMetadata(ctx context.Context, arg FixtureProvisioningMetadataParams) ([]byte, error) {
-	row := q.db.QueryRow(ctx, fixtureProvisioningMetadata, arg.OrganizationID, arg.SubjectID)
-	var metadata []byte
-	err := row.Scan(&metadata)
-	return metadata, err
-}
-
-const fixtureRetargetTrigger = `-- name: FixtureRetargetTrigger :exec
-UPDATE trigger_instances SET target_ref = $1 WHERE organization_id = $2 AND project_id = $3 AND id = $4
-`
-
-type FixtureRetargetTriggerParams struct {
-	TargetRef      string
-	OrganizationID string
-	ProjectID      uuid.UUID
-	TriggerID      uuid.UUID
-}
-
-func (q *Queries) FixtureRetargetTrigger(ctx context.Context, arg FixtureRetargetTriggerParams) error {
-	_, err := q.db.Exec(ctx, fixtureRetargetTrigger,
-		arg.TargetRef,
-		arg.OrganizationID,
-		arg.ProjectID,
-		arg.TriggerID,
-	)
-	return err
-}
-
-const fixtureSetAssistantStatus = `-- name: FixtureSetAssistantStatus :exec
-UPDATE assistants SET status = $1 WHERE organization_id = $2 AND project_id = $3 AND id = $4
-`
-
-type FixtureSetAssistantStatusParams struct {
-	Status         string
-	OrganizationID string
-	ProjectID      uuid.UUID
-	AssistantID    uuid.UUID
-}
-
-func (q *Queries) FixtureSetAssistantStatus(ctx context.Context, arg FixtureSetAssistantStatusParams) error {
-	_, err := q.db.Exec(ctx, fixtureSetAssistantStatus,
-		arg.Status,
-		arg.OrganizationID,
-		arg.ProjectID,
-		arg.AssistantID,
-	)
-	return err
-}
-
-const fixtureSetTriggerDefinition = `-- name: FixtureSetTriggerDefinition :exec
-UPDATE trigger_instances SET definition_slug = $1
-WHERE organization_id = $2 AND project_id = $3 AND id = $4
-`
-
-type FixtureSetTriggerDefinitionParams struct {
-	DefinitionSlug string
-	OrganizationID string
-	ProjectID      uuid.UUID
-	TriggerID      uuid.UUID
-}
-
-func (q *Queries) FixtureSetTriggerDefinition(ctx context.Context, arg FixtureSetTriggerDefinitionParams) error {
-	_, err := q.db.Exec(ctx, fixtureSetTriggerDefinition,
-		arg.DefinitionSlug,
-		arg.OrganizationID,
-		arg.ProjectID,
-		arg.TriggerID,
-	)
-	return err
-}
-
-const fixtureSetTriggerStatus = `-- name: FixtureSetTriggerStatus :exec
-UPDATE trigger_instances SET status = $1 WHERE organization_id = $2 AND project_id = $3 AND id = $4
-`
-
-type FixtureSetTriggerStatusParams struct {
-	Status         string
-	OrganizationID string
-	ProjectID      uuid.UUID
-	TriggerID      uuid.UUID
-}
-
-func (q *Queries) FixtureSetTriggerStatus(ctx context.Context, arg FixtureSetTriggerStatusParams) error {
-	_, err := q.db.Exec(ctx, fixtureSetTriggerStatus,
-		arg.Status,
-		arg.OrganizationID,
-		arg.ProjectID,
-		arg.TriggerID,
-	)
-	return err
-}
-
-const fixtureSuspendAgent = `-- name: FixtureSuspendAgent :exec
-UPDATE agents SET suspended_at=clock_timestamp() WHERE organization_id = $1 AND id = $2
-`
-
-type FixtureSuspendAgentParams struct {
-	OrganizationID string
-	AgentID        uuid.UUID
-}
-
-func (q *Queries) FixtureSuspendAgent(ctx context.Context, arg FixtureSuspendAgentParams) error {
-	_, err := q.db.Exec(ctx, fixtureSuspendAgent, arg.OrganizationID, arg.AgentID)
-	return err
-}
-
-const fixtureWithdrawAssignment = `-- name: FixtureWithdrawAssignment :exec
-UPDATE workload_agent_assignments SET deleted_at = clock_timestamp()
-WHERE organization_id = $1 AND workload_issuer_id = $2 AND subject = $3 AND match_kind = 'exact' AND NOT deleted
-`
-
-type FixtureWithdrawAssignmentParams struct {
-	OrganizationID string
-	IssuerID       uuid.UUID
-	Subject        string
-}
-
-func (q *Queries) FixtureWithdrawAssignment(ctx context.Context, arg FixtureWithdrawAssignmentParams) error {
-	_, err := q.db.Exec(ctx, fixtureWithdrawAssignment, arg.OrganizationID, arg.IssuerID, arg.Subject)
-	return err
-}
-
-const fixtureWithdrawIssuer = `-- name: FixtureWithdrawIssuer :exec
-UPDATE workload_issuers SET deleted_at=clock_timestamp() WHERE organization_id = $1 AND id = $2
-`
-
-type FixtureWithdrawIssuerParams struct {
-	OrganizationID string
-	IssuerID       uuid.UUID
-}
-
-func (q *Queries) FixtureWithdrawIssuer(ctx context.Context, arg FixtureWithdrawIssuerParams) error {
-	_, err := q.db.Exec(ctx, fixtureWithdrawIssuer, arg.OrganizationID, arg.IssuerID)
-	return err
-}
-
-const fixtureWithdrawMembership = `-- name: FixtureWithdrawMembership :exec
-UPDATE organization_user_relationships SET deleted_at=clock_timestamp() WHERE organization_id = $1 AND user_id = $2
-`
-
-type FixtureWithdrawMembershipParams struct {
-	OrganizationID string
-	UserID         pgtype.Text
-}
-
-func (q *Queries) FixtureWithdrawMembership(ctx context.Context, arg FixtureWithdrawMembershipParams) error {
-	_, err := q.db.Exec(ctx, fixtureWithdrawMembership, arg.OrganizationID, arg.UserID)
-	return err
-}
-
-const getAssistant = `-- name: GetAssistant :one
-SELECT a.id, a.created_by_user_id, a.status, a.deleted,
-       (p.deleted IS FALSE)::boolean AS project_live
-FROM assistants a JOIN projects p ON p.id = a.project_id AND p.organization_id = a.organization_id
-WHERE a.organization_id = $1 AND a.project_id = $2 AND a.id = $3
-`
-
-type GetAssistantParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	AssistantID    uuid.UUID
-}
-
-type GetAssistantRow struct {
-	ID              uuid.UUID
-	CreatedByUserID pgtype.Text
-	Status          string
-	Deleted         bool
-	ProjectLive     bool
-}
-
-func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (GetAssistantRow, error) {
-	row := q.db.QueryRow(ctx, getAssistant, arg.OrganizationID, arg.ProjectID, arg.AssistantID)
-	var i GetAssistantRow
-	err := row.Scan(
-		&i.ID,
-		&i.CreatedByUserID,
-		&i.Status,
-		&i.Deleted,
-		&i.ProjectLive,
-	)
-	return i, err
-}
-
-const getAssistantBinding = `-- name: GetAssistantBinding :one
-SELECT b.id, b.original_assistant_id, b.original_agent_id, b.generation, b.deleted,
-  (b.deleted OR b.project_ref_id IS NULL OR b.assistant_id IS NULL OR b.agent_id IS NULL OR g.deleted OR g.revoked_at IS NOT NULL OR g.owner_reassignment_required_at IS NOT NULL OR (a.created_by_user_id IS NOT NULL AND g.owner_user_id IS DISTINCT FROM a.created_by_user_id))::boolean AS tombstoned,
-  COALESCE(NOT b.deleted AND b.project_ref_id IS NOT NULL AND b.assistant_id IS NOT NULL
-    AND b.agent_id = b.original_agent_id AND b.assistant_id = b.original_assistant_id
-    AND b.project_ref_id = b.project_id AND NOT p.deleted AND NOT a.deleted
-    AND NOT g.deleted AND g.suspended_at IS NULL AND g.revoked_at IS NULL
-    AND g.owner_reassignment_required_at IS NULL
-    AND (a.created_by_user_id IS NULL OR g.owner_user_id = a.created_by_user_id) AND u.deleted_at IS NULL
-    AND u.workos_deleted_at IS NULL AND NOT m.deleted AND m.user_id IS NOT NULL, false)::boolean AS eligible
-FROM assistant_agent_bindings b
-LEFT JOIN projects p ON p.organization_id = b.organization_id AND p.id = b.project_ref_id
-LEFT JOIN assistants a ON a.organization_id = b.organization_id AND a.project_id = b.project_id AND a.id = b.assistant_id
-LEFT JOIN agents g ON g.organization_id = b.organization_id AND g.project_id = b.project_id AND g.id = b.agent_id
-LEFT JOIN users u ON u.id = g.owner_user_id
-LEFT JOIN organization_user_relationships m ON m.organization_id = b.organization_id AND m.user_id = u.id
-WHERE b.organization_id = $1 AND b.project_id = $2 AND b.original_assistant_id = $3
-ORDER BY b.generation DESC LIMIT 1
-`
-
-type GetAssistantBindingParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	AssistantID    uuid.UUID
-}
-
-type GetAssistantBindingRow struct {
-	ID                  uuid.UUID
-	OriginalAssistantID uuid.UUID
-	OriginalAgentID     uuid.UUID
-	Generation          int64
-	Deleted             bool
-	Tombstoned          bool
-	Eligible            bool
-}
-
-func (q *Queries) GetAssistantBinding(ctx context.Context, arg GetAssistantBindingParams) (GetAssistantBindingRow, error) {
-	row := q.db.QueryRow(ctx, getAssistantBinding, arg.OrganizationID, arg.ProjectID, arg.AssistantID)
-	var i GetAssistantBindingRow
-	err := row.Scan(
-		&i.ID,
-		&i.OriginalAssistantID,
-		&i.OriginalAgentID,
-		&i.Generation,
-		&i.Deleted,
-		&i.Tombstoned,
-		&i.Eligible,
-	)
-	return i, err
-}
-
-const getPlatformIssuer = `-- name: GetPlatformIssuer :many
-SELECT id, deleted, jwks_uri, allow_wildcard_admission FROM workload_issuers
-WHERE organization_id = $1 AND project_id = $2 AND issuer = $3 AND NOT deleted
-ORDER BY created_at, id FOR UPDATE
-`
-
-type GetPlatformIssuerParams struct {
+type FindProjectIssuerParams struct {
 	OrganizationID string
 	ProjectID      uuid.NullUUID
-	PlatformIssuer string
+	Issuers        []string
 }
 
-type GetPlatformIssuerRow struct {
-	ID                     uuid.UUID
-	Deleted                bool
-	JwksUri                string
-	AllowWildcardAdmission bool
-}
-
-func (q *Queries) GetPlatformIssuer(ctx context.Context, arg GetPlatformIssuerParams) ([]GetPlatformIssuerRow, error) {
-	rows, err := q.db.Query(ctx, getPlatformIssuer, arg.OrganizationID, arg.ProjectID, arg.PlatformIssuer)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetPlatformIssuerRow
-	for rows.Next() {
-		var i GetPlatformIssuerRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Deleted,
-			&i.JwksUri,
-			&i.AllowWildcardAdmission,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getTrigger = `-- name: GetTrigger :one
-SELECT id, definition_slug, target_kind, target_ref, status, deleted
-FROM trigger_instances
-WHERE organization_id = $1 AND project_id = $2 AND id = $3
-`
-
-type GetTriggerParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	TriggerID      uuid.UUID
-}
-
-type GetTriggerRow struct {
-	ID             uuid.UUID
-	DefinitionSlug string
-	TargetKind     string
-	TargetRef      string
-	Status         string
-	Deleted        bool
-}
-
-func (q *Queries) GetTrigger(ctx context.Context, arg GetTriggerParams) (GetTriggerRow, error) {
-	row := q.db.QueryRow(ctx, getTrigger, arg.OrganizationID, arg.ProjectID, arg.TriggerID)
-	var i GetTriggerRow
-	err := row.Scan(
-		&i.ID,
-		&i.DefinitionSlug,
-		&i.TargetKind,
-		&i.TargetRef,
-		&i.Status,
-		&i.Deleted,
-	)
-	return i, err
-}
-
-const getTriggerBinding = `-- name: GetTriggerBinding :one
-SELECT b.id, b.original_trigger_id, b.original_assistant_binding_id, b.original_workload_issuer_id,
- b.assistant_binding_generation, b.generation, b.subject, b.deleted,
- COALESCE(NOT b.deleted AND b.project_ref_id IS NOT NULL AND b.trigger_id IS NOT NULL
-   AND b.assistant_binding_id = b.original_assistant_binding_id AND b.workload_issuer_id = b.original_workload_issuer_id
-   AND b.trigger_id = b.original_trigger_id AND b.project_ref_id = b.project_id
-   AND NOT p.deleted AND NOT t.deleted
-   AND b.subject = 'assistant-trigger:' || b.original_trigger_id::text
-   AND t.definition_slug <> 'wake' AND t.target_kind = 'assistant' AND t.target_ref = ab.original_assistant_id::text
-   AND NOT i.deleted AND NOT i.allow_wildcard_admission
-   AND i.issuer = $1 AND i.jwks_uri = $2 AND i.project_id = b.project_id
-   AND EXISTS (SELECT 1 FROM workload_identity_admissions adm
-     WHERE adm.organization_id = b.organization_id AND adm.project_id = b.project_id
-       AND adm.workload_issuer_id = b.original_workload_issuer_id AND adm.subject = b.subject
-       AND adm.match_kind = 'exact' AND NOT adm.deleted)
-   AND EXISTS (SELECT 1 FROM workload_agent_assignments wa
-     WHERE wa.organization_id = b.organization_id AND wa.workload_issuer_id = b.original_workload_issuer_id
-       AND wa.subject = b.subject AND wa.match_kind = 'exact' AND NOT wa.deleted
-       AND wa.agent_id = ab.original_agent_id), false)::boolean AS eligible
-FROM trigger_workload_bindings b
-LEFT JOIN projects p ON p.organization_id = b.organization_id AND p.id = b.project_ref_id
-LEFT JOIN trigger_instances t ON t.organization_id = b.organization_id AND t.project_id = b.project_id AND t.id = b.trigger_id
-LEFT JOIN assistant_agent_bindings ab ON ab.organization_id = b.organization_id AND ab.project_id = b.project_id AND ab.id = b.assistant_binding_id
-LEFT JOIN workload_issuers i ON i.organization_id = b.organization_id AND i.project_id = b.project_id AND i.id = b.workload_issuer_id
-WHERE b.organization_id = $3 AND b.project_id = $4 AND b.original_trigger_id = $5
-ORDER BY b.generation DESC LIMIT 1
-`
-
-type GetTriggerBindingParams struct {
-	PlatformIssuer  string
-	PlatformJwksUri string
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	TriggerID       uuid.UUID
-}
-
-type GetTriggerBindingRow struct {
-	ID                         uuid.UUID
-	OriginalTriggerID          uuid.UUID
-	OriginalAssistantBindingID uuid.UUID
-	OriginalWorkloadIssuerID   uuid.UUID
-	AssistantBindingGeneration int64
-	Generation                 int64
-	Subject                    string
-	Deleted                    bool
-	Eligible                   bool
-}
-
-func (q *Queries) GetTriggerBinding(ctx context.Context, arg GetTriggerBindingParams) (GetTriggerBindingRow, error) {
-	row := q.db.QueryRow(ctx, getTriggerBinding,
-		arg.PlatformIssuer,
-		arg.PlatformJwksUri,
-		arg.OrganizationID,
-		arg.ProjectID,
-		arg.TriggerID,
-	)
-	var i GetTriggerBindingRow
-	err := row.Scan(
-		&i.ID,
-		&i.OriginalTriggerID,
-		&i.OriginalAssistantBindingID,
-		&i.OriginalWorkloadIssuerID,
-		&i.AssistantBindingGeneration,
-		&i.Generation,
-		&i.Subject,
-		&i.Deleted,
-		&i.Eligible,
-	)
-	return i, err
-}
-
-const listAssistantRoots = `-- name: ListAssistantRoots :many
-SELECT id FROM trigger_instances
-WHERE organization_id = $1 AND project_id = $2
- AND target_kind = 'assistant' AND target_ref = $3::text
- AND NOT deleted AND status = 'active' AND definition_slug <> 'wake'
-ORDER BY id
-`
-
-type ListAssistantRootsParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	AssistantID    string
-}
-
-func (q *Queries) ListAssistantRoots(ctx context.Context, arg ListAssistantRootsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listAssistantRoots, arg.OrganizationID, arg.ProjectID, arg.AssistantID)
+func (q *Queries) FindProjectIssuer(ctx context.Context, arg FindProjectIssuerParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, findProjectIssuer, arg.OrganizationID, arg.ProjectID, arg.Issuers)
 	if err != nil {
 		return nil, err
 	}
@@ -889,24 +155,162 @@ func (q *Queries) ListAssistantRoots(ctx context.Context, arg ListAssistantRoots
 	return items, nil
 }
 
-const listAssistantTriggerHistory = `-- name: ListAssistantTriggerHistory :many
-SELECT DISTINCT tb.original_trigger_id
+const getAssistantBinding = `-- name: GetAssistantBinding :one
+SELECT id, organization_id, original_agent_id, generation
+FROM assistant_agent_bindings
+WHERE project_id = $1 AND original_assistant_id = $2 AND deleted IS FALSE
+`
+
+type GetAssistantBindingParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+}
+
+type GetAssistantBindingRow struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	OriginalAgentID uuid.UUID
+	Generation      int64
+}
+
+func (q *Queries) GetAssistantBinding(ctx context.Context, arg GetAssistantBindingParams) (GetAssistantBindingRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantBinding, arg.ProjectID, arg.AssistantID)
+	var i GetAssistantBindingRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.OriginalAgentID,
+		&i.Generation,
+	)
+	return i, err
+}
+
+const getTriggerBinding = `-- name: GetTriggerBinding :one
+SELECT id, organization_id, original_workload_issuer_id AS workload_issuer_id, subject
+FROM trigger_workload_bindings
+WHERE project_id = $1 AND original_trigger_id = $2 AND deleted IS FALSE
+`
+
+type GetTriggerBindingParams struct {
+	ProjectID uuid.UUID
+	TriggerID uuid.UUID
+}
+
+type GetTriggerBindingRow struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+}
+
+func (q *Queries) GetTriggerBinding(ctx context.Context, arg GetTriggerBindingParams) (GetTriggerBindingRow, error) {
+	row := q.db.QueryRow(ctx, getTriggerBinding, arg.ProjectID, arg.TriggerID)
+	var i GetTriggerBindingRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.WorkloadIssuerID,
+		&i.Subject,
+	)
+	return i, err
+}
+
+const listAssistantAgentStates = `-- name: ListAssistantAgentStates :many
+SELECT b.original_assistant_id AS assistant_id,
+       b.original_agent_id AS agent_id,
+       (g.id IS NOT NULL AND g.deleted IS FALSE AND g.revoked_at IS NULL AND g.suspended_at IS NULL)::boolean AS agent_active
+FROM assistant_agent_bindings b
+LEFT JOIN agents g ON g.organization_id = b.organization_id AND g.id = b.agent_id
+WHERE b.project_id = $1
+  AND b.original_assistant_id = ANY($2::uuid[])
+  AND b.deleted IS FALSE
+`
+
+type ListAssistantAgentStatesParams struct {
+	ProjectID    uuid.UUID
+	AssistantIds []uuid.UUID
+}
+
+type ListAssistantAgentStatesRow struct {
+	AssistantID uuid.UUID
+	AgentID     uuid.UUID
+	AgentActive bool
+}
+
+// Agent liveness mirrors agents/lifecycle.Derive: an agent is active unless it
+// is deleted, revoked, or suspended.
+func (q *Queries) ListAssistantAgentStates(ctx context.Context, arg ListAssistantAgentStatesParams) ([]ListAssistantAgentStatesRow, error) {
+	rows, err := q.db.Query(ctx, listAssistantAgentStates, arg.ProjectID, arg.AssistantIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssistantAgentStatesRow
+	for rows.Next() {
+		var i ListAssistantAgentStatesRow
+		if err := rows.Scan(&i.AssistantID, &i.AgentID, &i.AgentActive); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAssistantRoots = `-- name: ListAssistantRoots :many
+SELECT id
+FROM trigger_instances
+WHERE project_id = $1
+  AND target_kind = 'assistant' AND target_ref = $2::text
+  AND definition_slug <> 'wake' AND deleted IS FALSE
+ORDER BY id
+FOR UPDATE
+`
+
+type ListAssistantRootsParams struct {
+	ProjectID   uuid.UUID
+	AssistantID string
+}
+
+func (q *Queries) ListAssistantRoots(ctx context.Context, arg ListAssistantRootsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listAssistantRoots, arg.ProjectID, arg.AssistantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAssistantTriggerBindings = `-- name: ListAssistantTriggerBindings :many
+SELECT tb.original_trigger_id
 FROM trigger_workload_bindings tb
-JOIN assistant_agent_bindings ab ON ab.id = tb.original_assistant_binding_id
- AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
-WHERE ab.organization_id = $1 AND ab.project_id = $2 AND ab.original_assistant_id = $3
- AND NOT tb.deleted
+JOIN assistant_agent_bindings ab ON ab.organization_id = tb.assistant_binding_ref_organization_id
+  AND ab.project_id = tb.assistant_binding_ref_project_id AND ab.id = tb.assistant_binding_id
+WHERE ab.project_id = $1 AND ab.original_assistant_id = $2
+  AND ab.deleted IS FALSE AND tb.deleted IS FALSE
 ORDER BY tb.original_trigger_id
 `
 
-type ListAssistantTriggerHistoryParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	AssistantID    uuid.UUID
+type ListAssistantTriggerBindingsParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
 }
 
-func (q *Queries) ListAssistantTriggerHistory(ctx context.Context, arg ListAssistantTriggerHistoryParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listAssistantTriggerHistory, arg.OrganizationID, arg.ProjectID, arg.AssistantID)
+func (q *Queries) ListAssistantTriggerBindings(ctx context.Context, arg ListAssistantTriggerBindingsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listAssistantTriggerBindings, arg.ProjectID, arg.AssistantID)
 	if err != nil {
 		return nil, err
 	}
@@ -925,343 +329,134 @@ func (q *Queries) ListAssistantTriggerHistory(ctx context.Context, arg ListAssis
 	return items, nil
 }
 
-const listConfiguredMCPServers = `-- name: ListConfiguredMCPServers :many
-SELECT DISTINCT s.id
-FROM mcp_servers s JOIN projects p ON p.id = s.project_id
-WHERE p.organization_id = $1 AND p.id = $2 AND NOT p.deleted AND NOT s.deleted
-AND (EXISTS (SELECT 1 FROM assistant_mcp_servers am
-  WHERE am.project_id = s.project_id AND am.assistant_id = $3 AND am.mcp_server_id = s.id)
- OR EXISTS (SELECT 1 FROM assistant_toolsets at
-  JOIN toolsets ts ON ts.id = at.toolset_id AND ts.project_id = at.project_id AND NOT ts.deleted AND ts.mcp_enabled
-  WHERE at.project_id = s.project_id AND at.assistant_id = $3 AND at.toolset_id = s.toolset_id))
-ORDER BY s.id
-`
-
-type ListConfiguredMCPServersParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	AssistantID    uuid.UUID
-}
-
-func (q *Queries) ListConfiguredMCPServers(ctx context.Context, arg ListConfiguredMCPServersParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listConfiguredMCPServers, arg.OrganizationID, arg.ProjectID, arg.AssistantID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listConfiguredSkills = `-- name: ListConfiguredSkills :many
-SELECT DISTINCT s.id FROM skill_distributions sd
-JOIN projects p ON p.id = sd.project_id
-JOIN skills s ON s.id = sd.skill_id AND s.project_id = sd.project_id AND s.archived_at IS NULL
-WHERE p.organization_id = $1 AND p.id = $2 AND NOT p.deleted
- AND sd.assistant_id = $3 AND sd.channel = 'assistant' AND sd.plugin_id IS NULL AND sd.revoked_at IS NULL
- AND EXISTS (SELECT 1 FROM skill_versions sv WHERE sv.skill_id = sd.skill_id AND sv.spec_valid IS TRUE
-   AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id))
-ORDER BY s.id
-`
-
-type ListConfiguredSkillsParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	AssistantID    uuid.NullUUID
-}
-
-// Mirrors LoadAssistantSkills' active/resolvable distribution predicates.
-func (q *Queries) ListConfiguredSkills(ctx context.Context, arg ListConfiguredSkillsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listConfiguredSkills, arg.OrganizationID, arg.ProjectID, arg.AssistantID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const lockActor = `-- name: LockActor :one
-SELECT u.id FROM users u
-JOIN organization_user_relationships m ON m.user_id = u.id
-WHERE m.organization_id = $1 AND u.id = $2
-  AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE
-FOR SHARE OF u, m
-`
-
-type LockActorParams struct {
-	OrganizationID string
-	UserID         string
-}
-
-func (q *Queries) LockActor(ctx context.Context, arg LockActorParams) (string, error) {
-	row := q.db.QueryRow(ctx, lockActor, arg.OrganizationID, arg.UserID)
-	var id string
-	err := row.Scan(&id)
-	return id, err
-}
-
 const lockAssistant = `-- name: LockAssistant :one
-SELECT id FROM assistants WHERE organization_id = $1 AND project_id = $2 AND id = $3 FOR UPDATE
+
+SELECT id, organization_id, name, created_by_user_id
+FROM assistants
+WHERE project_id = $1 AND id = $2 AND deleted IS FALSE
+FOR UPDATE
 `
 
 type LockAssistantParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	AssistantID    uuid.UUID
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
 }
 
-func (q *Queries) LockAssistant(ctx context.Context, arg LockAssistantParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, lockAssistant, arg.OrganizationID, arg.ProjectID, arg.AssistantID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+type LockAssistantRow struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	Name            string
+	CreatedByUserID pgtype.Text
 }
 
-const lockDedicatedAgent = `-- name: LockDedicatedAgent :one
-SELECT g.id FROM agents g
-JOIN users u ON u.id = g.owner_user_id
-JOIN organization_user_relationships m ON m.user_id = u.id AND m.organization_id = g.organization_id
-WHERE g.organization_id = $1 AND g.project_id = $2 AND g.id = $3
- AND NOT g.deleted AND g.suspended_at IS NULL AND g.revoked_at IS NULL AND g.owner_reassignment_required_at IS NULL
- AND u.deleted_at IS NULL AND u.workos_deleted_at IS NULL AND NOT m.deleted
-FOR UPDATE OF g FOR SHARE OF u, m
-`
-
-type LockDedicatedAgentParams struct {
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	AgentID        uuid.UUID
-}
-
-func (q *Queries) LockDedicatedAgent(ctx context.Context, arg LockDedicatedAgentParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, lockDedicatedAgent, arg.OrganizationID, arg.ProjectID, arg.AgentID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
-const lockLiveProject = `-- name: LockLiveProject :one
-SELECT id FROM projects WHERE organization_id = $1 AND id = $2 AND NOT deleted FOR SHARE NOWAIT
-`
-
-type LockLiveProjectParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-}
-
-// Shared liveness lock permits concurrent provisioning but excludes project deletion.
-// NOWAIT avoids reversing caller-held assistant/trigger locks against deletion.
-func (q *Queries) LockLiveProject(ctx context.Context, arg LockLiveProjectParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, lockLiveProject, arg.OrganizationID, arg.ProjectID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
-const lockTrigger = `-- name: LockTrigger :one
-SELECT id, definition_slug, target_kind, target_ref, status, deleted
-FROM trigger_instances
-WHERE organization_id = $1 AND project_id = $2 AND id = $3
-FOR UPDATE NOWAIT
-`
-
-type LockTriggerParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	TriggerID      uuid.UUID
-}
-
-type LockTriggerRow struct {
-	ID             uuid.UUID
-	DefinitionSlug string
-	TargetKind     string
-	TargetRef      string
-	Status         string
-	Deleted        bool
-}
-
-// Lock the exact trigger, not every trigger in its project. Callers must roll
-// back on lock contention; NOWAIT avoids assistant/trigger lock-order deadlocks.
-func (q *Queries) LockTrigger(ctx context.Context, arg LockTriggerParams) (LockTriggerRow, error) {
-	row := q.db.QueryRow(ctx, lockTrigger, arg.OrganizationID, arg.ProjectID, arg.TriggerID)
-	var i LockTriggerRow
+// Bindings are pointers only: assistant -> dedicated agent, and root trigger ->
+// (workload issuer, subject). Everything they point at is owned and edited
+// through the ordinary agent and workload identity surfaces.
+func (q *Queries) LockAssistant(ctx context.Context, arg LockAssistantParams) (LockAssistantRow, error) {
+	row := q.db.QueryRow(ctx, lockAssistant, arg.ProjectID, arg.AssistantID)
+	var i LockAssistantRow
 	err := row.Scan(
 		&i.ID,
-		&i.DefinitionSlug,
-		&i.TargetKind,
-		&i.TargetRef,
-		&i.Status,
-		&i.Deleted,
+		&i.OrganizationID,
+		&i.Name,
+		&i.CreatedByUserID,
 	)
 	return i, err
 }
 
-const recordProvisioning = `-- name: RecordProvisioning :exec
-INSERT INTO audit_logs (organization_id, project_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
-VALUES ($1, $2, $3, 'user', 'assistant:identity_provision', $4, 'assistant', $5)
+const lockTriggers = `-- name: LockTriggers :many
+SELECT id FROM trigger_instances
+WHERE project_id = $1 AND id = ANY($2::uuid[])
+ORDER BY id
+FOR UPDATE
 `
 
-type RecordProvisioningParams struct {
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	ActorUserID    string
-	AssistantID    string
-	Metadata       []byte
+type LockTriggersParams struct {
+	ProjectID  uuid.UUID
+	TriggerIds []uuid.UUID
 }
 
-// Provenance is immutable audit data, distinct from the revocable association.
-func (q *Queries) RecordProvisioning(ctx context.Context, arg RecordProvisioningParams) error {
-	_, err := q.db.Exec(ctx, recordProvisioning,
-		arg.OrganizationID,
-		arg.ProjectID,
-		arg.ActorUserID,
-		arg.AssistantID,
-		arg.Metadata,
-	)
-	return err
+func (q *Queries) LockTriggers(ctx context.Context, arg LockTriggersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockTriggers, arg.ProjectID, arg.TriggerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
-const revokeAdmission = `-- name: RevokeAdmission :exec
-UPDATE workload_identity_admissions SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = $1 AND project_id = $2 AND workload_issuer_id = $3 AND subject = $4 AND match_kind = 'exact' AND NOT deleted
-`
-
-type RevokeAdmissionParams struct {
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	IssuerID       uuid.UUID
-	Subject        string
-}
-
-func (q *Queries) RevokeAdmission(ctx context.Context, arg RevokeAdmissionParams) error {
-	_, err := q.db.Exec(ctx, revokeAdmission,
-		arg.OrganizationID,
-		arg.ProjectID,
-		arg.IssuerID,
-		arg.Subject,
-	)
-	return err
-}
-
-const revokeAssignment = `-- name: RevokeAssignment :exec
-UPDATE workload_agent_assignments wa SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE wa.organization_id = $1 AND wa.workload_issuer_id = $2 AND wa.subject = $3 AND wa.match_kind = 'exact' AND NOT wa.deleted
- AND NOT EXISTS (SELECT 1 FROM workload_identity_admissions adm WHERE adm.organization_id = wa.organization_id AND adm.workload_issuer_id = wa.workload_issuer_id AND adm.subject = wa.subject AND adm.match_kind = wa.match_kind AND NOT adm.deleted)
-`
-
-type RevokeAssignmentParams struct {
-	OrganizationID string
-	IssuerID       uuid.UUID
-	Subject        string
-}
-
-func (q *Queries) RevokeAssignment(ctx context.Context, arg RevokeAssignmentParams) error {
-	_, err := q.db.Exec(ctx, revokeAssignment, arg.OrganizationID, arg.IssuerID, arg.Subject)
-	return err
-}
-
-const revokeDedicatedAdmissions = `-- name: RevokeDedicatedAdmissions :exec
-UPDATE workload_identity_admissions adm SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE adm.organization_id = $1 AND adm.project_id = $2 AND NOT adm.deleted
- AND EXISTS (SELECT 1 FROM workload_agent_assignments wa
- WHERE wa.organization_id = adm.organization_id AND wa.workload_issuer_id = adm.workload_issuer_id
- AND wa.subject = adm.subject AND wa.match_kind = adm.match_kind AND wa.agent_id = $3 AND NOT wa.deleted)
-`
-
-type RevokeDedicatedAdmissionsParams struct {
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	AgentID        uuid.UUID
-}
-
-func (q *Queries) RevokeDedicatedAdmissions(ctx context.Context, arg RevokeDedicatedAdmissionsParams) error {
-	_, err := q.db.Exec(ctx, revokeDedicatedAdmissions, arg.OrganizationID, arg.ProjectID, arg.AgentID)
-	return err
-}
-
-const revokeDedicatedAgent = `-- name: RevokeDedicatedAgent :exec
-UPDATE agents SET revoked_at = COALESCE(revoked_at, clock_timestamp()), suspended_at = NULL,
- updated_at = clock_timestamp()
-WHERE organization_id = $1 AND project_id = $2 AND id = $3 AND revoked_at IS NULL
-`
-
-type RevokeDedicatedAgentParams struct {
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	AgentID        uuid.UUID
-}
-
-func (q *Queries) RevokeDedicatedAgent(ctx context.Context, arg RevokeDedicatedAgentParams) error {
-	_, err := q.db.Exec(ctx, revokeDedicatedAgent, arg.OrganizationID, arg.ProjectID, arg.AgentID)
-	return err
-}
-
-const revokeDedicatedAssignments = `-- name: RevokeDedicatedAssignments :exec
-UPDATE workload_agent_assignments wa SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE wa.organization_id = $1 AND wa.agent_id = $2 AND NOT wa.deleted
- AND NOT EXISTS (SELECT 1 FROM workload_identity_admissions adm WHERE adm.organization_id = wa.organization_id
- AND adm.workload_issuer_id = wa.workload_issuer_id AND adm.subject = wa.subject AND adm.match_kind = wa.match_kind AND NOT adm.deleted)
-`
-
-type RevokeDedicatedAssignmentsParams struct {
-	OrganizationID string
-	AgentID        uuid.UUID
-}
-
-func (q *Queries) RevokeDedicatedAssignments(ctx context.Context, arg RevokeDedicatedAssignmentsParams) error {
-	_, err := q.db.Exec(ctx, revokeDedicatedAssignments, arg.OrganizationID, arg.AgentID)
-	return err
-}
-
-const tombstoneAssistantBinding = `-- name: TombstoneAssistantBinding :exec
-UPDATE assistant_agent_bindings SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = $1 AND project_id = $2 AND original_assistant_id = $3 AND NOT deleted
+const tombstoneAssistantBinding = `-- name: TombstoneAssistantBinding :one
+UPDATE assistant_agent_bindings
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE project_id = $1 AND original_assistant_id = $2 AND deleted IS FALSE
+RETURNING organization_id, original_agent_id
 `
 
 type TombstoneAssistantBindingParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	AssistantID    uuid.UUID
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
 }
 
-func (q *Queries) TombstoneAssistantBinding(ctx context.Context, arg TombstoneAssistantBindingParams) error {
-	_, err := q.db.Exec(ctx, tombstoneAssistantBinding, arg.OrganizationID, arg.ProjectID, arg.AssistantID)
-	return err
+type TombstoneAssistantBindingRow struct {
+	OrganizationID  string
+	OriginalAgentID uuid.UUID
+}
+
+func (q *Queries) TombstoneAssistantBinding(ctx context.Context, arg TombstoneAssistantBindingParams) (TombstoneAssistantBindingRow, error) {
+	row := q.db.QueryRow(ctx, tombstoneAssistantBinding, arg.ProjectID, arg.AssistantID)
+	var i TombstoneAssistantBindingRow
+	err := row.Scan(&i.OrganizationID, &i.OriginalAgentID)
+	return i, err
 }
 
 const tombstoneTriggerBinding = `-- name: TombstoneTriggerBinding :exec
-UPDATE trigger_workload_bindings SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE organization_id = $1 AND project_id = $2 AND original_trigger_id = $3 AND NOT deleted
+UPDATE trigger_workload_bindings
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE project_id = $1 AND original_trigger_id = $2 AND deleted IS FALSE
 `
 
 type TombstoneTriggerBindingParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	TriggerID      uuid.UUID
+	ProjectID uuid.UUID
+	TriggerID uuid.UUID
 }
 
 func (q *Queries) TombstoneTriggerBinding(ctx context.Context, arg TombstoneTriggerBindingParams) error {
-	_, err := q.db.Exec(ctx, tombstoneTriggerBinding, arg.OrganizationID, arg.ProjectID, arg.TriggerID)
+	_, err := q.db.Exec(ctx, tombstoneTriggerBinding, arg.ProjectID, arg.TriggerID)
+	return err
+}
+
+const withdrawExactAdmission = `-- name: WithdrawExactAdmission :exec
+UPDATE workload_identity_admissions
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1 AND project_id = $2
+  AND workload_issuer_id = $3 AND match_kind = 'exact' AND subject = $4
+  AND deleted IS FALSE
+`
+
+type WithdrawExactAdmissionParams struct {
+	OrganizationID   string
+	ProjectID        uuid.NullUUID
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+}
+
+func (q *Queries) WithdrawExactAdmission(ctx context.Context, arg WithdrawExactAdmissionParams) error {
+	_, err := q.db.Exec(ctx, withdrawExactAdmission,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+	)
 	return err
 }

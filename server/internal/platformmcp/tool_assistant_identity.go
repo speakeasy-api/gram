@@ -25,24 +25,30 @@ type AssistantIdentityManagement interface {
 
 type UpgradeAssistantIdentityInput struct {
 	ProjectID   string `json:"project_id" jsonschema:"exact project UUID owning the assistant; never inferred"`
-	AssistantID string `json:"assistant_id" jsonschema:"exact UUID of the assistant without configured workload identity (NEVER_CONFIGURED), or an ACTIVE assistant for a safe repeat"`
+	AssistantID string `json:"assistant_id" jsonschema:"exact UUID of the assistant to upgrade; repeating the upgrade for an assistant that already has a dedicated agent is safe"`
 	Confirmed   bool   `json:"confirmed" jsonschema:"true only after the user explicitly confirms upgrading this exact assistant in this exact project"`
 }
 
 type UpgradeAssistantIdentityOutput struct {
-	ProjectID          string  `json:"project_id"`
-	AssistantID        string  `json:"assistant_id"`
-	IdentityState      *string `json:"identity_state,omitempty"`
-	AgentID            *string `json:"agent_id,omitempty"`
-	IdentityGeneration *int64  `json:"identity_generation,omitempty"`
+	ProjectID     string  `json:"project_id"`
+	AssistantID   string  `json:"assistant_id"`
+	IdentityState *string `json:"identity_state,omitempty"`
+	AgentID       *string `json:"agent_id,omitempty"`
 }
 
-type assistantIdentityService struct {
+// AssistantIdentityService backs upgrade_assistant_workload_identity.
+type AssistantIdentityService struct {
 	management     AssistantIdentityManagement
 	resolveProject func(context.Context, string, FindMCPInput) (ResolvedProject, error)
 }
 
-func (s *assistantIdentityService) upgrade(ctx context.Context, principal Principal, input UpgradeAssistantIdentityInput) (UpgradeAssistantIdentityOutput, error) {
+// NewAssistantIdentityService resolves the named project through the same
+// inventory read the other project-scoped tools use.
+func NewAssistantIdentityService(management AssistantIdentityManagement, projects *PostgresReader) *AssistantIdentityService {
+	return &AssistantIdentityService{management: management, resolveProject: projects.resolveInventoryProject}
+}
+
+func (s *AssistantIdentityService) upgrade(ctx context.Context, principal Principal, input UpgradeAssistantIdentityInput) (UpgradeAssistantIdentityOutput, error) {
 	var zero UpgradeAssistantIdentityOutput
 	if s == nil || s.management == nil || s.resolveProject == nil {
 		return zero, ErrUnavailable
@@ -82,15 +88,15 @@ func (s *assistantIdentityService) upgrade(ctx context.Context, principal Princi
 	if assistant == nil || assistant.ID != assistantID.String() || assistant.ProjectID != projectID.String() {
 		return zero, ErrUnavailable
 	}
-	return UpgradeAssistantIdentityOutput{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, IdentityState: assistant.IdentityState, AgentID: assistant.AgentID, IdentityGeneration: assistant.IdentityGeneration}, nil
+	return UpgradeAssistantIdentityOutput{ProjectID: assistant.ProjectID, AssistantID: assistant.ID, IdentityState: assistant.IdentityState, AgentID: assistant.AgentID}, nil
 }
 
-func registerAssistantIdentityTool(reg *Registrar, service *assistantIdentityService) {
+func registerAssistantIdentityTool(reg *Registrar, service *AssistantIdentityService) {
 	addTool(reg, &mcp.Tool{
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Name:        upgradeAssistantIdentityToolName,
 		Title:       "Upgrade Assistant Workload Identity",
-		Description: "Explicitly configure workload identity for one assistant without configured workload identity (NEVER_CONFIGURED) in an exact project, creating a dedicated agent and stable workload identity bindings. Ask the user to confirm the exact project and assistant before setting confirmed: true. Requires organization administrator access and the same project:write and ordinary actor authorization as the dashboard. Repeating an already active upgrade is safe; tombstoned identities cannot be restored. Returns only identity configuration state, never credentials, instructions, bindings, or policy. ACTIVE does not prove execution permission or runtime readiness.",
+		Description: "Explicitly give one assistant in an exact project its own dedicated agent and per-trigger workload identities. The agent starts with access to every MCP server and skill in the project and can be refined like any other agent afterwards. Ask the user to confirm the exact project and assistant before setting confirmed: true. Requires organization administrator access and the same project:write authorization as the dashboard. Repeating the upgrade is safe. Returns only identity configuration state, never credentials, instructions, bindings, or policy. ACTIVE does not prove execution permission or runtime readiness.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: nil, ReadOnlyHint: false, Title: ""},
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: nil}, func(ctx context.Context, _ *mcp.CallToolRequest, input UpgradeAssistantIdentityInput) (*mcp.CallToolResult, UpgradeAssistantIdentityOutput, error) {
 		return principalToolCall(ctx, assistantIdentityToolResult, func(principal Principal) (UpgradeAssistantIdentityOutput, error) {
@@ -113,11 +119,9 @@ func assistantIdentityToolResult(err error) (*mcp.CallToolResult, bool) {
 		case oops.CodeBadRequest, oops.CodeInvalid:
 			result.Code, result.Message = "invalid_request", "Provide exact project and assistant UUIDs and explicitly confirm this upgrade."
 		case oops.CodeForbidden, oops.CodeUnauthorized:
-			result.Code, result.Message = "permission_denied", "This upgrade requires project:write and an authorized ordinary actor."
+			result.Code, result.Message = "permission_denied", "This upgrade requires project:write and a user identity."
 		case oops.CodeNotFound:
 			result.Code, result.Message = "not_found", "That assistant or project is not available to you."
-		case oops.CodeConflict:
-			result.Code, result.Message = "conflict", "The assistant identity cannot be upgraded from its current state. Refresh the assistant before retrying."
 		default:
 			// Unknown failures retain the bounded unavailable response.
 		}

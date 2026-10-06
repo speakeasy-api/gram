@@ -154,9 +154,6 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 	if authCtx.UserID == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "create assistant requires a user identity").LogError(ctx, s.logger)
 	}
-	if err := requireAssistantProvisioningActor(ctx); err != nil {
-		return nil, err
-	}
 	record, err := s.core.CreateAssistant(
 		ctx,
 		authCtx.ActiveOrganizationID,
@@ -436,9 +433,6 @@ func (s *Service) EnsureManagedAssistant(ctx context.Context, _ *gen.EnsureManag
 		return nil, oops.E(oops.CodeUnauthorized, nil, "the project assistant requires a user identity").LogError(ctx, s.logger)
 	}
 
-	if err := requireAssistantProvisioningActor(ctx); err != nil {
-		return nil, err
-	}
 	record, err := s.core.EnableManagedAssistant(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID)
 	if err != nil {
 		if errors.Is(err, ErrManagedAssistantNameTaken) {
@@ -510,46 +504,12 @@ func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error,
 	case errors.Is(err, pgx.ErrNoRows), errors.Is(err, assistantidentity.ErrNotFound):
 		return oops.E(oops.CodeNotFound, err, "%s", message).LogError(ctx, logger)
 	case errors.Is(err, assistantidentity.ErrActorIneligible):
-		return oops.E(oops.CodeForbidden, err, "%s", message).LogError(ctx, logger)
-	case errors.Is(err, assistantidentity.ErrTombstoned), errors.Is(err, assistantidentity.ErrBrokenMapping), errors.Is(err, assistantidentity.ErrInvalidIdentity):
-		return oops.E(oops.CodeConflict, err, "%s", message).LogError(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, err, "%s", message).LogWarn(ctx, logger)
 	case errors.Is(err, errAssistantValidation):
 		return oops.E(oops.CodeBadRequest, err, "%s", message).LogError(ctx, logger)
 	default:
 		return oops.E(oops.CodeUnexpected, err, "%s", message).LogError(ctx, logger)
 	}
-}
-
-// requireAssistantProvisioningActor rejects credentials that merely attribute
-// an action to a user; they cannot delegate that user's full live policy.
-func requireAssistantProvisioningActor(ctx context.Context) error {
-	actor, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || actor == nil || actor.UserID == "" {
-		return oops.C(oops.CodeUnauthorized)
-	}
-	if actor.APIKeyID != "" || actor.APIKeyName != "" || len(actor.APIKeyScopes) > 0 || actor.OrgWidePluginHooksKey || contextvalues.IsSupportSession(ctx) || contextvalues.IsLegacyImpersonatedSession(ctx) {
-		return oops.C(oops.CodeForbidden)
-	}
-	if _, ok := contextvalues.PrincipalCredentialAuthorization(ctx); ok {
-		return oops.C(oops.CodeForbidden)
-	}
-	if _, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
-		return oops.C(oops.CodeForbidden)
-	}
-	clientID, oauth := contextvalues.GetOAuthClientID(ctx)
-	if oauth {
-		surface, trusted := contextvalues.GetActingSurface(ctx)
-		if clientID == "" || !trusted || surface != contextvalues.ActingSurfacePlatformMCP {
-			return oops.C(oops.CodeForbidden)
-		}
-	}
-	if !oauth && (!contextvalues.HasValidatedGramSession(ctx) || actor.SessionID == nil || *actor.SessionID == "") {
-		return oops.C(oops.CodeForbidden)
-	}
-	if _, ok := contextvalues.GetRBACScopeOverride(ctx); ok {
-		return oops.C(oops.CodeForbidden)
-	}
-	return nil
 }
 
 func (s *Service) UpgradeAssistantIdentity(ctx context.Context, payload *gen.UpgradeAssistantIdentityPayload) (*types.Assistant, error) {
@@ -560,8 +520,8 @@ func (s *Service) UpgradeAssistantIdentity(ctx context.Context, payload *gen.Upg
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
-	if err := requireAssistantProvisioningActor(ctx); err != nil {
-		return nil, err
+	if authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "upgrade assistant identity requires a user identity").LogWarn(ctx, s.logger)
 	}
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {

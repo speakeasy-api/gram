@@ -22,15 +22,15 @@ import {
 } from "./assistanttoolsetref.js";
 
 /**
- * Whether this assistant has never configured, active, or tombstoned workload identity bindings. This is configuration state, not permission to execute.
+ * NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its dedicated agent is usable, and UNAVAILABLE when that agent is suspended, revoked, or deleted. This is configuration state, not permission to execute.
  */
 export const IdentityState = {
   NeverConfigured: "NEVER_CONFIGURED",
   Active: "ACTIVE",
-  Tombstoned: "TOMBSTONED",
+  Unavailable: "UNAVAILABLE",
 } as const;
 /**
- * Whether this assistant has never configured, active, or tombstoned workload identity bindings. This is configuration state, not permission to execute.
+ * NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its dedicated agent is usable, and UNAVAILABLE when that agent is suspended, revoked, or deleted. This is configuration state, not permission to execute.
  */
 export type IdentityState = ClosedEnum<typeof IdentityState>;
 
@@ -48,7 +48,7 @@ export type AssistantStatus = ClosedEnum<typeof AssistantStatus>;
 
 export type Assistant = {
   /**
-   * The dedicated agent ID for an active identity binding.
+   * The assistant's dedicated agent ID, when it has one.
    */
   agentId?: string | undefined;
   /**
@@ -64,11 +64,7 @@ export type Assistant = {
    */
   id: string;
   /**
-   * The current or last retained assistant identity binding generation.
-   */
-  identityGeneration?: number | undefined;
-  /**
-   * Whether this assistant has never configured, active, or tombstoned workload identity bindings. This is configuration state, not permission to execute.
+   * NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its dedicated agent is usable, and UNAVAILABLE when that agent is suspended, revoked, or deleted. This is configuration state, not permission to execute.
    */
   identityState?: IdentityState | undefined;
   /**
@@ -137,7 +133,6 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
       ),
       created_by_user_id: z.optional(z.string()),
       id: z.string(),
-      identity_generation: z.optional(z.int()),
       identity_state: z.optional(IdentityState$inboundSchema),
       instructions: z.string(),
       max_concurrency: z.int(),
@@ -159,7 +154,6 @@ export const Assistant$inboundSchema: z.ZodMiniType<Assistant, unknown> = z
         "agent_id": "agentId",
         "created_at": "createdAt",
         "created_by_user_id": "createdByUserId",
-        "identity_generation": "identityGeneration",
         "identity_state": "identityState",
         "max_concurrency": "maxConcurrency",
         "mcp_servers": "mcpServers",

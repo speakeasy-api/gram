@@ -9,21 +9,51 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/internal/agents/lifecycle"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
-// Resolve reads tenant-pinned history and every live authority dependency from
-// one repeatable-read snapshot. Storage failures are never legacy fallbacks.
+// States reports the configuration state of each assistant in one project.
+// Assistants without a binding are NeverConfigured. This is the single
+// definition of assistant identity state used by the API and by Resolve.
+func States(ctx context.Context, db repo.DBTX, project uuid.UUID, assistants []uuid.UUID) (map[uuid.UUID]AssistantState, error) {
+	states := make(map[uuid.UUID]AssistantState, len(assistants))
+	for _, id := range assistants {
+		states[id] = AssistantState{State: NeverConfigured, AgentID: nil}
+	}
+	if len(assistants) == 0 {
+		return states, nil
+	}
+	rows, err := repo.New(db).ListAssistantAgentStates(ctx, repo.ListAssistantAgentStatesParams{ProjectID: project, AssistantIds: assistants})
+	if err != nil {
+		return nil, fmt.Errorf("load assistant identity states: %w", err)
+	}
+	for _, row := range rows {
+		state := Unavailable
+		if row.AgentActive {
+			state = Active
+		}
+		states[row.AssistantID] = AssistantState{State: state, AgentID: new(row.AgentID)}
+	}
+	return states, nil
+}
+
+// Resolve reads an assistant's state and, for an active assistant, the live
+// workload identity of one root trigger: its bound issuer and subject, the
+// current admission, and the agent the current assignment names.
 func (s *Service) Resolve(ctx context.Context, db DB, org string, project, assistant, trigger uuid.UUID) (Resolution, error) {
 	tx, err := readSnapshot(ctx, db)
 	if err != nil {
 		return Resolution{}, err
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	result, err := s.resolve(ctx, tx, org, project, assistant, trigger)
+	result, err := resolve(ctx, tx, org, project, assistant, trigger)
 	if err != nil {
 		return Resolution{}, err
 	}
@@ -33,79 +63,64 @@ func (s *Service) Resolve(ctx context.Context, db DB, org string, project, assis
 	return result, nil
 }
 
-func (s *Service) resolve(ctx context.Context, tx pgx.Tx, org string, project, assistant, trigger uuid.UUID) (Resolution, error) {
-	if s == nil || org == "" || project == uuid.Nil || assistant == uuid.Nil || trigger == uuid.Nil {
+func resolve(ctx context.Context, tx pgx.Tx, org string, project, assistant, trigger uuid.UUID) (Resolution, error) {
+	if org == "" || project == uuid.Nil || assistant == uuid.Nil || trigger == uuid.Nil {
 		return Resolution{}, ErrInvalidIdentity
 	}
-	q := repo.New(tx)
-	ab, aerr := q.GetAssistantBinding(ctx, repo.GetAssistantBindingParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})
-	if aerr != nil && !errors.Is(aerr, pgx.ErrNoRows) {
-		return Resolution{}, fmt.Errorf("resolve assistant history: %w", aerr)
-	}
-	tb, terr := q.GetTriggerBinding(ctx, repo.GetTriggerBindingParams{PlatformIssuer: s.issuer, PlatformJwksUri: s.jwksURI, OrganizationID: org, ProjectID: project, TriggerID: trigger})
-	if terr != nil && !errors.Is(terr, pgx.ErrNoRows) {
-		return Resolution{}, fmt.Errorf("resolve trigger history: %w", terr)
-	}
-	// Original identifiers remain authoritative even when all FK mirrors were
-	// nulled by hard deletes. Never reinterpret retained history as legacy.
-	if aerr == nil && ab.Tombstoned {
-		return Resolution{State: Tombstoned, Identity: nil}, nil
-	}
-	if terr == nil && (tb.Deleted || !tb.Eligible) {
-		return Resolution{State: Tombstoned, Identity: nil}, nil
-	}
-	if aerr == nil && !ab.Eligible {
-		return Resolution{State: Unavailable, Identity: nil}, nil
-	}
-	if aerr == nil && errors.Is(terr, pgx.ErrNoRows) {
-		return Resolution{}, ErrBrokenMapping
-	}
-	if aerr == nil && terr == nil {
-		a, err := q.GetAssistant(ctx, repo.GetAssistantParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})
-		if err != nil {
-			return Resolution{}, resourceError("resolve bound assistant lifecycle", err)
-		}
-		root, err := q.GetTrigger(ctx, repo.GetTriggerParams{OrganizationID: org, ProjectID: project, TriggerID: trigger})
-		if err != nil {
-			return Resolution{}, resourceError("resolve bound trigger lifecycle", err)
-		}
-		if root.Status != "active" || a.Status != "active" {
-			return Resolution{State: Unavailable, Identity: nil}, nil
-		}
-		if tb.OriginalAssistantBindingID != ab.ID || tb.AssistantBindingGeneration != ab.Generation {
-			return Resolution{}, ErrBrokenMapping
-		}
-		id := Identity{OrganizationID: org, ProjectID: project, AssistantID: assistant, AgentID: ab.OriginalAgentID,
-			TriggerID: trigger, IssuerID: tb.OriginalWorkloadIssuerID, Subject: tb.Subject,
-			AssistantGeneration: ab.Generation, TriggerGeneration: tb.Generation}
-		return Resolution{State: Active, Identity: &id}, nil
-	}
-	if terr == nil {
-		return Resolution{}, ErrBrokenMapping
-	}
-	// The legacy state is meaningful only for a real same-tenant target pair.
-	a, err := q.GetAssistant(ctx, repo.GetAssistantParams{OrganizationID: org, ProjectID: project, AssistantID: assistant})
+	states, err := States(ctx, tx, project, []uuid.UUID{assistant})
 	if err != nil {
-		return Resolution{}, resourceError("resolve legacy assistant", err)
+		return Resolution{}, err
 	}
-	t, err := q.GetTrigger(ctx, repo.GetTriggerParams{OrganizationID: org, ProjectID: project, TriggerID: trigger})
+	if state := states[assistant].State; state != Active {
+		return Resolution{State: state, Identity: nil}, nil
+	}
+	unavailable := Resolution{State: Unavailable, Identity: nil}
+
+	binding, err := repo.New(tx).GetTriggerBinding(ctx, repo.GetTriggerBindingParams{ProjectID: project, TriggerID: trigger})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return unavailable, nil
+	}
 	if err != nil {
-		return Resolution{}, resourceError("resolve legacy trigger", err)
+		return Resolution{}, fmt.Errorf("read trigger binding: %w", err)
 	}
-	if a.Deleted || !a.ProjectLive || t.Deleted {
-		return Resolution{}, ErrNotFound
-	}
-	if t.DefinitionSlug == "wake" {
+	if binding.OrganizationID != org {
 		return Resolution{}, ErrInvalidIdentity
 	}
-	if t.TargetKind != "assistant" || t.TargetRef != assistant.String() {
-		return Resolution{}, ErrBrokenMapping
+	admitted, err := workloadidentity.IsAdmitted(ctx, tx, workloadidentity.AdmissionParams{
+		OrganizationID: org, ProjectID: uuid.NullUUID{UUID: project, Valid: true}, WorkloadIssuerID: binding.WorkloadIssuerID, Subject: binding.Subject,
+	})
+	if err != nil {
+		return Resolution{}, fmt.Errorf("resolve trigger workload admission: %w", err)
 	}
-	return Resolution{State: NeverConfigured, Identity: nil}, nil
+	if !admitted {
+		return unavailable, nil
+	}
+	agentID, assigned, err := workloadidentity.ResolveAssignedAgent(ctx, tx, workloadidentity.AssignmentParams{
+		OrganizationID: org, WorkloadIssuerID: binding.WorkloadIssuerID, Subject: binding.Subject,
+	})
+	if err != nil {
+		return Resolution{}, fmt.Errorf("resolve trigger workload agent: %w", err)
+	}
+	if !assigned {
+		return unavailable, nil
+	}
+	agent, err := agents.ResolvePrincipal(ctx, tx, org, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()))
+	if errors.Is(err, agents.ErrPrincipalNotFound) {
+		return unavailable, nil
+	}
+	if err != nil {
+		return Resolution{}, fmt.Errorf("resolve trigger agent principal: %w", err)
+	}
+	if lifecycle.Derive(agent) != lifecycle.Active {
+		return unavailable, nil
+	}
+	return Resolution{State: Active, Identity: &Identity{
+		OrganizationID: org, ProjectID: project, AssistantID: assistant, AgentID: agent.ID,
+		TriggerID: trigger, IssuerID: binding.WorkloadIssuerID, Subject: binding.Subject,
+	}}, nil
 }
 
-// Validate rejects stale generations, owner transfers, and any live
-// lifecycle, target, assignment, admission, issuer, or tenancy inconsistency.
+// Validate reports ErrInvalidIdentity unless expected still resolves exactly.
 func (s *Service) Validate(ctx context.Context, db DB, expected Identity) error {
 	resolved, err := s.Resolve(ctx, db, expected.OrganizationID, expected.ProjectID, expected.AssistantID, expected.TriggerID)
 	if err != nil {
@@ -121,30 +136,27 @@ func matchExpected(resolved Resolution, expected Identity) error {
 	return nil
 }
 
-// SnapshotCeiling validates and derives the bounded policy within the same
-// snapshot. Subsequent grant expansion cannot mutate these canonical bytes.
+// SnapshotCeiling validates expected and captures the representable subset of
+// its agent's live policy in the same snapshot. Later policy edits cannot
+// mutate the returned canonical bytes.
 func (s *Service) SnapshotCeiling(ctx context.Context, db DB, expected Identity) (CeilingSnapshot, error) {
 	tx, err := readSnapshot(ctx, db)
 	if err != nil {
 		return CeilingSnapshot{}, err
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	resolved, err := s.resolve(ctx, tx, expected.OrganizationID, expected.ProjectID, expected.AssistantID, expected.TriggerID)
+	resolved, err := resolve(ctx, tx, expected.OrganizationID, expected.ProjectID, expected.AssistantID, expected.TriggerID)
 	if err != nil {
 		return CeilingSnapshot{}, err
 	}
 	if err := matchExpected(resolved, expected); err != nil {
 		return CeilingSnapshot{}, err
 	}
-	caps, err := ConfiguredCapabilities(ctx, tx, expected.OrganizationID, expected.ProjectID, expected.AssistantID)
-	if err != nil {
-		return CeilingSnapshot{}, err
-	}
 	policy, err := runtimepolicy.LoadAgentPolicy(ctx, tx, expected.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, expected.AgentID.String()))
 	if err != nil {
 		return CeilingSnapshot{}, fmt.Errorf("load ceiling agent policy: %w", err)
 	}
-	grants, err := runtimepolicy.DelegableGrants(caps, policy, policy)
+	grants, err := runtimepolicy.DelegableGrants(policy, policy, policy)
 	if err != nil {
 		return CeilingSnapshot{}, fmt.Errorf("derive assistant ceiling: %w", err)
 	}

@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	envrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -73,7 +74,7 @@ func newIdentityFixture(t *testing.T) identityFixture {
 	fixture.assistantID = fixture.createAssistant(t, true)
 	baseURL, err := url.Parse("https://example.invalid")
 	require.NoError(t, err)
-	fixture.app = triggers.NewApp(testenv.NewLogger(t), db, nil, identityEnvironmentLoader{}, nil, nil, baseURL, baseURL, nil, nil, cache.NoopCache).SetIdentityService(testIdentityService)
+	fixture.app = triggers.NewApp(testenv.NewLogger(t), db, nil, identityEnvironmentLoader{}, nil, nil, baseURL, baseURL, nil, nil, cache.NoopCache, testIdentityService)
 	return fixture
 }
 
@@ -86,7 +87,7 @@ func (f identityFixture) createAssistant(t *testing.T, bound bool) uuid.UUID {
 	assistant, err := assistantsrepo.New(tx).CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{ProjectID: f.projectID, OrganizationID: "org-trigger-test", CreatedByUserID: pgtype.Text{String: "trigger-owner", Valid: true}, Name: "Identity assistant " + uuid.NewString(), Model: "openai/gpt-4o-mini", Instructions: "", WarmTtlSeconds: 300, MaxConcurrency: 1, Status: "active"})
 	require.NoError(t, err)
 	if bound {
-		_, err = testIdentityService.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, AssistantID: assistant.ID, ActorUserID: "trigger-owner"})
+		err = testIdentityService.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, AssistantID: assistant.ID, ActorUserID: "trigger-owner"})
 		require.NoError(t, err)
 	}
 	require.NoError(t, tx.Commit(ctx))
@@ -97,10 +98,4 @@ func (f identityFixture) createParams() triggers.CreateParams {
 	return triggers.CreateParams{OrganizationID: "org-trigger-test", ProjectID: f.projectID, DefinitionSlug: triggers.DefinitionSlugGithub, Name: "Root trigger", EnvironmentID: uuid.NullUUID{UUID: f.environmentID, Valid: true}, TargetKind: triggers.TargetKindAssistant, TargetRef: f.assistantID.String(), TargetDisplay: "Identity assistant", Config: map[string]any{}, Status: triggers.StatusActive}
 }
 
-var testIdentityService = func() *assistantidentity.Service {
-	service, err := assistantidentity.New("https://platform.example.invalid", false)
-	if err != nil {
-		panic(err)
-	}
-	return service
-}()
+var testIdentityService = assistantidentity.New("https://platform.example.invalid", audit.NewLogger())

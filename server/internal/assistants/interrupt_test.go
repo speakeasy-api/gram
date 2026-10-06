@@ -26,7 +26,6 @@ const interruptTestUserID = "user-owner"
 func insertDashboardAssistantFixture(t *testing.T, conn *pgxpool.Pool, dbName string) (projectID, assistantID, chatID, threadID uuid.UUID) {
 	t.Helper()
 	ctx := t.Context()
-	seedTurnUser(t, conn, "org-test", interruptTestUserID)
 
 	proj, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
 		Name:           "Project",
@@ -34,7 +33,6 @@ func insertDashboardAssistantFixture(t *testing.T, conn *pgxpool.Pool, dbName st
 		OrganizationID: "org-test",
 	})
 	require.NoError(t, err)
-	seedTurnProjectAccess(t, conn, "org-test", interruptTestUserID, proj.ID)
 
 	assistant, err := assistantsrepo.New(conn).CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
 		ProjectID:       proj.ID,
@@ -101,7 +99,10 @@ func newInterruptTestCore(t *testing.T, conn *pgxpool.Pool, backend testRuntimeB
 		nil,
 		telemetry.NewStub(logger),
 		nil,
-		newTestAuditLogger(), testIdentityService)
+		newTestAuditLogger(),
+		testIdentityService,
+		newTestAuthzEngine(t, conn),
+	)
 }
 
 // A stop pressed while the runtime is still cold has no generation to cancel:

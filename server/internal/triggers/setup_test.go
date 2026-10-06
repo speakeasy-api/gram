@@ -112,11 +112,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		nil,
 		nil,
 		cache.NoopCache,
+		assistantidentity.New("https://platform.example.invalid", auditLogger),
 	)
-
-	identities, err := assistantidentity.New("https://platform.example.invalid", false)
-	require.NoError(t, err)
-	app.SetIdentityService(identities)
 
 	svc := triggers.NewService(
 		logger,
