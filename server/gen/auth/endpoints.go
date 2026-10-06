@@ -16,15 +16,16 @@ import (
 
 // Endpoints wraps the "auth" service endpoints.
 type Endpoints struct {
-	Callback     goa.Endpoint
-	Login        goa.Endpoint
-	SwitchScopes goa.Endpoint
-	EnterDemo    goa.Endpoint
-	Logout       goa.Endpoint
-	Register     goa.Endpoint
-	Info         goa.Endpoint
-	TransferOut  goa.Endpoint
-	TransferIn   goa.Endpoint
+	Callback      goa.Endpoint
+	Login         goa.Endpoint
+	SwitchScopes  goa.Endpoint
+	EnterDemo     goa.Endpoint
+	Logout        goa.Endpoint
+	Register      goa.Endpoint
+	Info          goa.Endpoint
+	TransferStart goa.Endpoint
+	TransferOut   goa.Endpoint
+	TransferIn    goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "auth" service with endpoints.
@@ -32,15 +33,16 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Callback:     NewCallbackEndpoint(s),
-		Login:        NewLoginEndpoint(s),
-		SwitchScopes: NewSwitchScopesEndpoint(s, a.APIKeyAuth),
-		EnterDemo:    NewEnterDemoEndpoint(s, a.APIKeyAuth),
-		Logout:       NewLogoutEndpoint(s, a.APIKeyAuth),
-		Register:     NewRegisterEndpoint(s, a.APIKeyAuth),
-		Info:         NewInfoEndpoint(s, a.APIKeyAuth),
-		TransferOut:  NewTransferOutEndpoint(s, a.APIKeyAuth),
-		TransferIn:   NewTransferInEndpoint(s),
+		Callback:      NewCallbackEndpoint(s),
+		Login:         NewLoginEndpoint(s),
+		SwitchScopes:  NewSwitchScopesEndpoint(s, a.APIKeyAuth),
+		EnterDemo:     NewEnterDemoEndpoint(s, a.APIKeyAuth),
+		Logout:        NewLogoutEndpoint(s, a.APIKeyAuth),
+		Register:      NewRegisterEndpoint(s, a.APIKeyAuth),
+		Info:          NewInfoEndpoint(s, a.APIKeyAuth),
+		TransferStart: NewTransferStartEndpoint(s),
+		TransferOut:   NewTransferOutEndpoint(s, a.APIKeyAuth),
+		TransferIn:    NewTransferInEndpoint(s),
 	}
 }
 
@@ -53,6 +55,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Logout = m(e.Logout)
 	e.Register = m(e.Register)
 	e.Info = m(e.Info)
+	e.TransferStart = m(e.TransferStart)
 	e.TransferOut = m(e.TransferOut)
 	e.TransferIn = m(e.TransferIn)
 }
@@ -187,6 +190,15 @@ func NewInfoEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoi
 			return nil, err
 		}
 		return s.Info(ctx, p)
+	}
+}
+
+// NewTransferStartEndpoint returns an endpoint function that calls the method
+// "transferStart" of service "auth".
+func NewTransferStartEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*TransferStartPayload)
+		return s.TransferStart(ctx, p)
 	}
 }
 

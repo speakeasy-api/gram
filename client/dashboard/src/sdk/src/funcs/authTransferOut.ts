@@ -40,7 +40,7 @@ import { Result } from "../types/fp.js";
  * transferOut auth
  *
  * @remarks
- * Initiates a cross-domain session transfer. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
+ * Continues a cross-domain session transfer on the source platform host. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint.
  */
 export function authTransferOut(
   client: GramCore,
@@ -105,6 +105,7 @@ async function $do(
   const path = pathToFunc("/rpc/auth.transferOut")();
 
   const query = encodeFormQuery({
+    "nonce": payload.nonce,
     "redirect": payload.redirect,
     "target_host": payload.target_host,
   });

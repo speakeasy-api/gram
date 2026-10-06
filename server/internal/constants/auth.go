@@ -15,6 +15,12 @@ const (
 	SessionIdleTimeout         = 72 * time.Hour
 	SessionCookieMaxAgeSeconds = int(SessionIdleTimeout / time.Second)
 
+	// SessionTransferNonceCookie binds a cross-domain session transfer to the
+	// browser that started it on the target host. It outlives the 60 second
+	// transfer code by a small margin.
+	SessionTransferNonceCookie              = "__Host-gram_transfer_nonce"
+	SessionTransferNonceCookieMaxAgeSeconds = 90
+
 	ChatSessionsTokenSecurityScheme = "chat_sessions_token"
 	ChatSessionsTokenHeader         = "Gram-Chat-Session" //nolint:gosec // this is a valid header name
 

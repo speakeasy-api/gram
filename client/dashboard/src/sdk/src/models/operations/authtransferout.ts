@@ -18,6 +18,10 @@ export type AuthTransferOutRequest = {
    */
   targetHost: string;
   /**
+   * The browser binding nonce from the target host's transferStart endpoint
+   */
+  nonce: string;
+  /**
    * Optional URL path to redirect to after the transfer completes on the target host
    */
   redirect?: string | undefined;
@@ -62,6 +66,7 @@ export function authTransferOutSecurityToJSON(
 /** @internal */
 export type AuthTransferOutRequest$Outbound = {
   target_host: string;
+  nonce: string;
   redirect?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
@@ -73,6 +78,7 @@ export const AuthTransferOutRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     targetHost: z.string(),
+    nonce: z.string(),
     redirect: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),

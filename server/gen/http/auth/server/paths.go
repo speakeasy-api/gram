@@ -42,6 +42,11 @@ func InfoAuthPath() string {
 	return "/rpc/auth.info"
 }
 
+// TransferStartAuthPath returns the URL path to the auth service transferStart HTTP endpoint.
+func TransferStartAuthPath() string {
+	return "/rpc/auth.transferStart"
+}
+
 // TransferOutAuthPath returns the URL path to the auth service transferOut HTTP endpoint.
 func TransferOutAuthPath() string {
 	return "/rpc/auth.transferOut"

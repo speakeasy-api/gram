@@ -169,12 +169,36 @@ func BuildInfoPayload(authInfoSessionToken string) (*auth.InfoPayload, error) {
 	return v, nil
 }
 
+// BuildTransferStartPayload builds the payload for the auth transferStart
+// endpoint from CLI flags.
+func BuildTransferStartPayload(authTransferStartSourceHost string, authTransferStartRedirect string) (*auth.TransferStartPayload, error) {
+	var sourceHost string
+	{
+		sourceHost = authTransferStartSourceHost
+	}
+	var redirect *string
+	{
+		if authTransferStartRedirect != "" {
+			redirect = &authTransferStartRedirect
+		}
+	}
+	v := &auth.TransferStartPayload{}
+	v.SourceHost = sourceHost
+	v.Redirect = redirect
+
+	return v, nil
+}
+
 // BuildTransferOutPayload builds the payload for the auth transferOut endpoint
 // from CLI flags.
-func BuildTransferOutPayload(authTransferOutTargetHost string, authTransferOutRedirect string, authTransferOutSessionToken string) (*auth.TransferOutPayload, error) {
+func BuildTransferOutPayload(authTransferOutTargetHost string, authTransferOutNonce string, authTransferOutRedirect string, authTransferOutSessionToken string) (*auth.TransferOutPayload, error) {
 	var targetHost string
 	{
 		targetHost = authTransferOutTargetHost
+	}
+	var nonce string
+	{
+		nonce = authTransferOutNonce
 	}
 	var redirect *string
 	{
@@ -190,6 +214,7 @@ func BuildTransferOutPayload(authTransferOutTargetHost string, authTransferOutRe
 	}
 	v := &auth.TransferOutPayload{}
 	v.TargetHost = targetHost
+	v.Nonce = nonce
 	v.Redirect = redirect
 	v.SessionToken = sessionToken
 

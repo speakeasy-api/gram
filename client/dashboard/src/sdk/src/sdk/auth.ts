@@ -11,6 +11,7 @@ import { authRegister } from "../funcs/authRegister.js";
 import { authSwitchScopes } from "../funcs/authSwitchScopes.js";
 import { authTransferIn } from "../funcs/authTransferIn.js";
 import { authTransferOut } from "../funcs/authTransferOut.js";
+import { authTransferStart } from "../funcs/authTransferStart.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import {
   AuthCallbackRequest,
@@ -29,6 +30,10 @@ import {
   AuthTransferOutResponse,
   AuthTransferOutSecurity,
 } from "../models/operations/authtransferout.js";
+import {
+  AuthTransferStartRequest,
+  AuthTransferStartResponse,
+} from "../models/operations/authtransferstart.js";
 import {
   EnterDemoRequest,
   EnterDemoResponse,
@@ -189,7 +194,7 @@ export class Auth extends ClientSDK {
    * transferIn auth
    *
    * @remarks
-   * Completes a cross-domain session transfer. Redeems the transfer code and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.
+   * Completes a cross-domain session transfer. Redeems the transfer code, checks it against the browser binding cookie set by transferStart, and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.
    */
   async transferIn(
     request: AuthTransferInRequest,
@@ -206,7 +211,7 @@ export class Auth extends ClientSDK {
    * transferOut auth
    *
    * @remarks
-   * Initiates a cross-domain session transfer. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
+   * Continues a cross-domain session transfer on the source platform host. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint.
    */
   async transferOut(
     request: AuthTransferOutRequest,
@@ -217,6 +222,23 @@ export class Auth extends ClientSDK {
       this,
       request,
       security,
+      options,
+    ));
+  }
+
+  /**
+   * transferStart auth
+   *
+   * @remarks
+   * Starts a cross-domain session transfer on the target platform host. Sets a short-lived cookie that binds the transfer to this browser and redirects to the source platform host's transferOut endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
+   */
+  async transferStart(
+    request: AuthTransferStartRequest,
+    options?: RequestOptions,
+  ): Promise<AuthTransferStartResponse | undefined> {
+    return unwrapAsync(authTransferStart(
+      this,
+      request,
       options,
     ));
   }

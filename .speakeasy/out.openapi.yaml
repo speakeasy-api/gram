@@ -13467,7 +13467,7 @@ paths:
         name: SwitchScopes
   /rpc/auth.transferIn:
     get:
-      description: Completes a cross-domain session transfer. Redeems the transfer code and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.
+      description: Completes a cross-domain session transfer. Redeems the transfer code, checks it against the browser binding cookie set by transferStart, and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.
       operationId: authTransferIn
       parameters:
         - allowEmptyValue: true
@@ -13566,7 +13566,7 @@ paths:
         disabled: true
   /rpc/auth.transferOut:
     get:
-      description: Initiates a cross-domain session transfer. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
+      description: Continues a cross-domain session transfer on the source platform host. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint.
       operationId: authTransferOut
       parameters:
         - allowEmptyValue: true
@@ -13576,6 +13576,14 @@ paths:
           required: true
           schema:
             description: The target platform host to transfer the session to (e.g. ai.speakeasy.com)
+            type: string
+        - allowEmptyValue: true
+          description: The browser binding nonce from the target host's transferStart endpoint
+          in: query
+          name: nonce
+          required: true
+          schema:
+            description: The browser binding nonce from the target host's transferStart endpoint
             type: string
         - allowEmptyValue: true
           description: Optional URL path to redirect to after the transfer completes on the target host
@@ -13661,6 +13669,100 @@ paths:
       tags:
         - auth
       x-speakeasy-name-override: transferOut
+      x-speakeasy-react-hook:
+        disabled: true
+  /rpc/auth.transferStart:
+    get:
+      description: Starts a cross-domain session transfer on the target platform host. Sets a short-lived cookie that binds the transfer to this browser and redirects to the source platform host's transferOut endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
+      operationId: authTransferStart
+      parameters:
+        - allowEmptyValue: true
+          description: The platform host that holds the session to transfer (e.g. app.getgram.ai)
+          in: query
+          name: source_host
+          required: true
+          schema:
+            description: The platform host that holds the session to transfer (e.g. app.getgram.ai)
+            type: string
+        - allowEmptyValue: true
+          description: Optional URL path to redirect to after the transfer completes on this host
+          in: query
+          name: redirect
+          schema:
+            description: Optional URL path to redirect to after the transfer completes on this host
+            type: string
+      responses:
+        "307":
+          description: Temporary Redirect response.
+          headers:
+            Location:
+              description: The URL to redirect to (the source host's transferOut endpoint)
+              schema:
+                description: The URL to redirect to (the source host's transferOut endpoint)
+                type: string
+            Set-Cookie:
+              description: The browser binding for this transfer
+              schema:
+                description: The browser binding for this transfer
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: transferStart auth
+      tags:
+        - auth
+      x-speakeasy-name-override: transferStart
       x-speakeasy-react-hook:
         disabled: true
   /rpc/businessMemories.contentScopes:

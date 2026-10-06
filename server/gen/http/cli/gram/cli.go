@@ -127,7 +127,7 @@ func UsageCommands() []string {
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
-		"auth (callback|login|switch-scopes|enter-demo|logout|register|info|transfer-out|transfer-in)",
+		"auth (callback|login|switch-scopes|enter-demo|logout|register|info|transfer-start|transfer-out|transfer-in)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
@@ -842,8 +842,13 @@ func ParseEndpoint(
 		authInfoFlags            = flag.NewFlagSet("info", flag.ExitOnError)
 		authInfoSessionTokenFlag = authInfoFlags.String("session-token", "", "")
 
+		authTransferStartFlags          = flag.NewFlagSet("transfer-start", flag.ExitOnError)
+		authTransferStartSourceHostFlag = authTransferStartFlags.String("source-host", "REQUIRED", "")
+		authTransferStartRedirectFlag   = authTransferStartFlags.String("redirect", "", "")
+
 		authTransferOutFlags            = flag.NewFlagSet("transfer-out", flag.ExitOnError)
 		authTransferOutTargetHostFlag   = authTransferOutFlags.String("target-host", "REQUIRED", "")
+		authTransferOutNonceFlag        = authTransferOutFlags.String("nonce", "REQUIRED", "")
 		authTransferOutRedirectFlag     = authTransferOutFlags.String("redirect", "", "")
 		authTransferOutSessionTokenFlag = authTransferOutFlags.String("session-token", "", "")
 
@@ -4917,6 +4922,7 @@ func ParseEndpoint(
 	authLogoutFlags.Usage = authLogoutUsage
 	authRegisterFlags.Usage = authRegisterUsage
 	authInfoFlags.Usage = authInfoUsage
+	authTransferStartFlags.Usage = authTransferStartUsage
 	authTransferOutFlags.Usage = authTransferOutUsage
 	authTransferInFlags.Usage = authTransferInUsage
 
@@ -6408,6 +6414,9 @@ func ParseEndpoint(
 
 			case "info":
 				epf = authInfoFlags
+
+			case "transfer-start":
+				epf = authTransferStartFlags
 
 			case "transfer-out":
 				epf = authTransferOutFlags
@@ -9314,9 +9323,12 @@ func ParseEndpoint(
 			case "info":
 				endpoint = c.Info()
 				data, err = authc.BuildInfoPayload(*authInfoSessionTokenFlag)
+			case "transfer-start":
+				endpoint = c.TransferStart()
+				data, err = authc.BuildTransferStartPayload(*authTransferStartSourceHostFlag, *authTransferStartRedirectFlag)
 			case "transfer-out":
 				endpoint = c.TransferOut()
-				data, err = authc.BuildTransferOutPayload(*authTransferOutTargetHostFlag, *authTransferOutRedirectFlag, *authTransferOutSessionTokenFlag)
+				data, err = authc.BuildTransferOutPayload(*authTransferOutTargetHostFlag, *authTransferOutNonceFlag, *authTransferOutRedirectFlag, *authTransferOutSessionTokenFlag)
 			case "transfer-in":
 				endpoint = c.TransferIn()
 				data, err = authc.BuildTransferInPayload(*authTransferInTokenFlag, *authTransferInRedirectFlag)
@@ -14478,8 +14490,9 @@ func authUsage() {
 	fmt.Fprintln(os.Stderr, `    logout: Logs out the current user by clearing their session.`)
 	fmt.Fprintln(os.Stderr, `    register: Register a new org for a user with their session information.`)
 	fmt.Fprintln(os.Stderr, `    info: Provides information about the current authentication status.`)
-	fmt.Fprintln(os.Stderr, `    transfer-out: Initiates a cross-domain session transfer. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).`)
-	fmt.Fprintln(os.Stderr, `    transfer-in: Completes a cross-domain session transfer. Redeems the transfer code and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.`)
+	fmt.Fprintln(os.Stderr, `    transfer-start: Starts a cross-domain session transfer on the target platform host. Sets a short-lived cookie that binds the transfer to this browser and redirects to the source platform host's transferOut endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).`)
+	fmt.Fprintln(os.Stderr, `    transfer-out: Continues a cross-domain session transfer on the source platform host. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint.`)
+	fmt.Fprintln(os.Stderr, `    transfer-in: Completes a cross-domain session transfer. Redeems the transfer code, checks it against the browser binding cookie set by transferStart, and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s auth COMMAND --help\n", os.Args[0])
@@ -14624,26 +14637,48 @@ func authInfoUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth info --session-token \"abc123\"")
 }
 
+func authTransferStartUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth transfer-start", os.Args[0])
+	fmt.Fprint(os.Stderr, " -source-host STRING")
+	fmt.Fprint(os.Stderr, " -redirect STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Starts a cross-domain session transfer on the target platform host. Sets a short-lived cookie that binds the transfer to this browser and redirects to the source platform host's transferOut endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -source-host STRING: `)
+	fmt.Fprintln(os.Stderr, `    -redirect STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth transfer-start --source-host \"abc123\" --redirect \"abc123\"")
+}
+
 func authTransferOutUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] auth transfer-out", os.Args[0])
 	fmt.Fprint(os.Stderr, " -target-host STRING")
+	fmt.Fprint(os.Stderr, " -nonce STRING")
 	fmt.Fprint(os.Stderr, " -redirect STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Initiates a cross-domain session transfer. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).`)
+	fmt.Fprintln(os.Stderr, `Continues a cross-domain session transfer on the source platform host. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -target-host STRING: `)
+	fmt.Fprintln(os.Stderr, `    -nonce STRING: `)
 	fmt.Fprintln(os.Stderr, `    -redirect STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth transfer-out --target-host \"abc123\" --redirect \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth transfer-out --target-host \"abc123\" --nonce \"abc123\" --redirect \"abc123\" --session-token \"abc123\"")
 }
 
 func authTransferInUsage() {
@@ -14655,7 +14690,7 @@ func authTransferInUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Completes a cross-domain session transfer. Redeems the transfer code and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.`)
+	fmt.Fprintln(os.Stderr, `Completes a cross-domain session transfer. Redeems the transfer code, checks it against the browser binding cookie set by transferStart, and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -token STRING: `)

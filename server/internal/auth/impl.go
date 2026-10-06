@@ -236,6 +236,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// client-side storage once the session has been invalidated server-side.
 	server.Logout = middleware.ClearSiteDataOnLogout(server.Logout)
 
+	// Wrap TransferIn handler: read the transfer nonce cookie into the context
+	// and clear it whatever the outcome, since it is single-use.
+	server.TransferIn = transferNonceMiddleware(server.TransferIn)
+
 	srv.Mount(mux, server)
 }
 
@@ -289,6 +293,47 @@ func callbackNonceBindingMiddleware(next http.Handler) http.Handler {
 
 		ctx := withNonceBinding(r.Context(), binding)
 		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+type transferNonceKey struct{}
+
+func withTransferNonce(ctx context.Context, nonce string) context.Context {
+	return context.WithValue(ctx, transferNonceKey{}, nonce)
+}
+
+// TestTransferNonceContext injects the session transfer nonce cookie value
+// into the context. Exported for use in tests only.
+func TestTransferNonceContext(ctx context.Context, nonce string) context.Context {
+	return withTransferNonce(ctx, nonce)
+}
+
+func transferNonceFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(transferNonceKey{}).(string)
+	return v
+}
+
+// transferNonceMiddleware reads the session transfer nonce cookie into the
+// request context for TransferIn and expires the cookie on every response,
+// success or failure, because it is single-use.
+func transferNonceMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var nonce string
+		if c, err := r.Cookie(constants.SessionTransferNonceCookie); err == nil {
+			nonce = c.Value
+		}
+
+		//nolint:exhaustruct // only these fields matter for clearing the cookie
+		http.SetCookie(w, &http.Cookie{
+			Name:     constants.SessionTransferNonceCookie,
+			Value:    "",
+			MaxAge:   -1,
+			Path:     "/",
+			Secure:   true,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
+		next.ServeHTTP(w, r.WithContext(withTransferNonce(r.Context(), nonce)))
 	})
 }
 
@@ -1805,9 +1850,67 @@ func (s *Service) destinationFromState(payload *gen.CallbackPayload) string {
 	return safeRedirectPath(state.FinalDestinationURL, s.siteOrigin)
 }
 
-// TransferOut initiates a cross-domain session transfer. It validates that the
-// caller has an active session, stores a one-time transfer code server-side,
-// and returns a redirect to the target platform host's transferIn endpoint.
+// TransferStart begins a cross-domain session transfer on the target host. It
+// sets a nonce cookie that binds the transfer to this browser and redirects to
+// the source host's transferOut endpoint with the nonce. TransferIn later
+// accepts the transfer code only from the browser holding that cookie, so an
+// attacker cannot sign a victim into the attacker's account with a code of
+// their own.
+func (s *Service) TransferStart(ctx context.Context, payload *gen.TransferStartPayload) (*gen.TransferStartResult, error) {
+	logger := s.logger.With(attr.SlogGoaMethod("TransferStart"))
+
+	if s.cfg.OrgHosts == nil {
+		return nil, oops.E(oops.CodeUnavailable, nil, "platform hosts not configured").LogError(ctx, logger)
+	}
+
+	origin, ok := requestorigin.FromContext(ctx)
+	if !ok || origin.Surface != requestorigin.SurfacePlatform {
+		return nil, oops.E(oops.CodeForbidden, nil, "session transfer only available on platform hosts").LogWarn(ctx, logger)
+	}
+
+	sourceBaseURL, ok := s.cfg.OrgHosts.IsPlatformHost(payload.SourceHost)
+	if !ok {
+		return nil, oops.E(oops.CodeBadRequest, nil, "source host is not a valid platform host").LogWarn(ctx, logger)
+	}
+
+	currentURL, err := url.Parse(origin.BaseURL)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse current origin").LogError(ctx, logger)
+	}
+	sourceURL, err := url.Parse(sourceBaseURL)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse source base URL").LogError(ctx, logger)
+	}
+	if sourceURL.Host == currentURL.Host {
+		return nil, oops.E(oops.CodeBadRequest, nil, "source and target hosts are the same").LogWarn(ctx, logger)
+	}
+
+	nonce, err := authsessions.NewSessionID()
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate transfer nonce").LogError(ctx, logger)
+	}
+
+	query := url.Values{}
+	query.Set("target_host", currentURL.Host)
+	query.Set("nonce", nonce)
+	if payload.Redirect != nil {
+		if redirect := safeRedirectPath(*payload.Redirect, ""); redirect != "" {
+			query.Set("redirect", redirect)
+		}
+	}
+	sourceURL.Path = strings.TrimRight(sourceURL.Path, "/") + "/rpc/auth.transferOut"
+	sourceURL.RawQuery = query.Encode()
+
+	return &gen.TransferStartResult{
+		Location:            sourceURL.String(),
+		TransferNonceCookie: nonce,
+	}, nil
+}
+
+// TransferOut continues a cross-domain session transfer on the source host. It
+// validates that the caller has an active session, stores a one-time transfer
+// code bound to the nonce from TransferStart, and returns a redirect to the
+// target platform host's transferIn endpoint.
 func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPayload) (*gen.TransferOutResult, error) {
 	logger := s.logger.With(attr.SlogGoaMethod("TransferOut"))
 
@@ -1825,6 +1928,10 @@ func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPaylo
 	origin, ok := requestorigin.FromContext(ctx)
 	if !ok || origin.Surface != requestorigin.SurfacePlatform {
 		return nil, oops.E(oops.CodeForbidden, nil, "session transfer only available on platform hosts").LogWarn(ctx, logger)
+	}
+
+	if payload.Nonce == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "transfer nonce is required").LogWarn(ctx, logger)
 	}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -1851,7 +1958,7 @@ func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPaylo
 		return nil, oops.E(oops.CodeBadRequest, nil, "source and target hosts are the same").LogWarn(ctx, logger)
 	}
 
-	code, err := s.transferManager.Create(ctx, session, sourceURL.Host, targetURL.Host)
+	code, err := s.transferManager.Create(ctx, session, payload.Nonce, sourceURL.Host, targetURL.Host)
 	switch {
 	case errors.Is(err, authsessions.ErrSessionNotTransferable):
 		return nil, oops.E(oops.CodeForbidden, err, "session cannot be transferred").LogWarn(ctx, logger)
@@ -1884,8 +1991,9 @@ func (s *Service) TransferOut(ctx context.Context, payload *gen.TransferOutPaylo
 }
 
 // TransferIn completes a cross-domain session transfer. It redeems the
-// one-time transfer code, creates a new session on this host, and returns a
-// redirect with the new session cookie.
+// one-time transfer code presented by the browser that holds the matching
+// nonce cookie, creates a new session on this host, and returns a redirect
+// with the new session cookie.
 func (s *Service) TransferIn(ctx context.Context, payload *gen.TransferInPayload) (*gen.TransferInResult, error) {
 	logger := s.logger.With(attr.SlogGoaMethod("TransferIn"))
 
@@ -1901,7 +2009,9 @@ func (s *Service) TransferIn(ctx context.Context, payload *gen.TransferInPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse current origin").LogError(ctx, logger)
 	}
 
-	record, err := s.transferManager.Lookup(ctx, payload.Token, currentURL.Host)
+	// The nonce cookie proves this browser started the transfer. Without it, an
+	// attacker could sign a victim into the attacker's account.
+	record, err := s.transferManager.Lookup(ctx, payload.Token, currentURL.Host, transferNonceFromContext(ctx))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "invalid or expired transfer token").LogWarn(ctx, logger)
 	}

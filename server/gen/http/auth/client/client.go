@@ -42,6 +42,10 @@ type Client struct {
 	// Info Doer is the HTTP client used to make requests to the info endpoint.
 	InfoDoer goahttp.Doer
 
+	// TransferStart Doer is the HTTP client used to make requests to the
+	// transferStart endpoint.
+	TransferStartDoer goahttp.Doer
+
 	// TransferOut Doer is the HTTP client used to make requests to the transferOut
 	// endpoint.
 	TransferOutDoer goahttp.Doer
@@ -77,6 +81,7 @@ func NewClient(
 		LogoutDoer:          doer,
 		RegisterDoer:        doer,
 		InfoDoer:            doer,
+		TransferStartDoer:   doer,
 		TransferOutDoer:     doer,
 		TransferInDoer:      doer,
 		RestoreResponseBody: restoreBody,
@@ -250,6 +255,30 @@ func (c *Client) Info() goa.Endpoint {
 		resp, err := c.InfoDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("auth", "info", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// TransferStart returns an endpoint that makes HTTP requests to the auth
+// service transferStart server.
+func (c *Client) TransferStart() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeTransferStartRequest(c.encoder)
+		decodeResponse = DecodeTransferStartResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildTransferStartRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.TransferStartDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("auth", "transferStart", err)
 		}
 		return decodeResponse(resp)
 	}

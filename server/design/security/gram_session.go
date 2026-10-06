@@ -39,3 +39,15 @@ var DeleteSessionCookie = func() {
 var SessionHeader = func() {
 	Header(fmt.Sprintf("session_token:%s", constants.SessionHeader), String, "Session header")
 }
+
+// WriteSessionTransferNonceCookie sets the host-only cookie that binds a
+// session transfer to the browser that started it.
+var WriteSessionTransferNonceCookie = func() {
+	Cookie(fmt.Sprintf("transfer_nonce_cookie:%s", constants.SessionTransferNonceCookie), String, func() {
+	})
+	CookieMaxAge(constants.SessionTransferNonceCookieMaxAgeSeconds)
+	CookieSecure()
+	CookieHTTPOnly()
+	CookiePath("/")
+	CookieSameSite(CookieSameSiteLax)
+}

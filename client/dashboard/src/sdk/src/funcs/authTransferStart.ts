@@ -26,27 +26,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  AuthTransferInRequest,
-  AuthTransferInRequest$outboundSchema,
-  AuthTransferInResponse,
-  AuthTransferInResponse$inboundSchema,
-} from "../models/operations/authtransferin.js";
+  AuthTransferStartRequest,
+  AuthTransferStartRequest$outboundSchema,
+  AuthTransferStartResponse,
+  AuthTransferStartResponse$inboundSchema,
+} from "../models/operations/authtransferstart.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * transferIn auth
+ * transferStart auth
  *
  * @remarks
- * Completes a cross-domain session transfer. Redeems the transfer code, checks it against the browser binding cookie set by transferStart, and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.
+ * Starts a cross-domain session transfer on the target platform host. Sets a short-lived cookie that binds the transfer to this browser and redirects to the source platform host's transferOut endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).
  */
-export function authTransferIn(
+export function authTransferStart(
   client: GramCore,
-  request: AuthTransferInRequest,
+  request: AuthTransferStartRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    AuthTransferInResponse | undefined,
+    AuthTransferStartResponse | undefined,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -67,12 +67,12 @@ export function authTransferIn(
 
 async function $do(
   client: GramCore,
-  request: AuthTransferInRequest,
+  request: AuthTransferStartRequest,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      AuthTransferInResponse | undefined,
+      AuthTransferStartResponse | undefined,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -88,7 +88,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(AuthTransferInRequest$outboundSchema, value),
+    (value) => z.parse(AuthTransferStartRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -97,11 +97,11 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/auth.transferIn")();
+  const path = pathToFunc("/rpc/auth.transferStart")();
 
   const query = encodeFormQuery({
     "redirect": payload.redirect,
-    "token": payload.token,
+    "source_host": payload.source_host,
   });
 
   const headers = new Headers(compactMap({
@@ -111,7 +111,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "authTransferIn",
+    operationID: "authTransferStart",
     oAuth2Scopes: null,
 
     resolvedSecurity: null,
@@ -155,7 +155,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    AuthTransferInResponse | undefined,
+    AuthTransferStartResponse | undefined,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -166,7 +166,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.nil(307, z.optional(AuthTransferInResponse$inboundSchema), {
+    M.nil(307, z.optional(AuthTransferStartResponse$inboundSchema), {
       hdrs: true,
     }),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),

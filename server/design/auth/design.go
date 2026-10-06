@@ -254,14 +254,49 @@ var _ = Service("auth", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SessionInfo"}`)
 	})
 
+	Method("transferStart", func() {
+		Description("Starts a cross-domain session transfer on the target platform host. Sets a short-lived cookie that binds the transfer to this browser and redirects to the source platform host's transferOut endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).")
+
+		NoSecurity()
+
+		Payload(func() {
+			Attribute("source_host", String, "The platform host that holds the session to transfer (e.g. app.getgram.ai)")
+			Attribute("redirect", String, "Optional URL path to redirect to after the transfer completes on this host")
+			Required("source_host")
+		})
+
+		Result(func() {
+			Attribute("location", String, "The URL to redirect to (the source host's transferOut endpoint)")
+			Attribute("transfer_nonce_cookie", String, "The browser binding for this transfer")
+			Required("location", "transfer_nonce_cookie")
+		})
+
+		HTTP(func() {
+			GET("/rpc/auth.transferStart")
+			Param("source_host")
+			Param("redirect")
+
+			Response(StatusTemporaryRedirect, func() {
+				Header("location:Location", String, func() {
+				})
+				security.WriteSessionTransferNonceCookie()
+			})
+		})
+
+		Meta("openapi:operationId", "authTransferStart")
+		Meta("openapi:extension:x-speakeasy-name-override", "transferStart")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
+	})
+
 	Method("transferOut", func() {
-		Description("Initiates a cross-domain session transfer. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint. Used to share session cookies seamlessly between platform hosts (e.g. app.getgram.ai and ai.speakeasy.com).")
+		Description("Continues a cross-domain session transfer on the source platform host. Stores a one-time transfer code server-side and redirects to the target platform host's transferIn endpoint.")
 
 		Payload(func() {
 			Attribute("target_host", String, "The target platform host to transfer the session to (e.g. ai.speakeasy.com)")
+			Attribute("nonce", String, "The browser binding nonce from the target host's transferStart endpoint")
 			Attribute("redirect", String, "Optional URL path to redirect to after the transfer completes on the target host")
 			security.SessionPayload()
-			Required("target_host")
+			Required("target_host", "nonce")
 		})
 
 		Result(func() {
@@ -272,6 +307,7 @@ var _ = Service("auth", func() {
 		HTTP(func() {
 			GET("/rpc/auth.transferOut")
 			Param("target_host")
+			Param("nonce")
 			Param("redirect")
 			security.SessionHeader()
 
@@ -287,7 +323,7 @@ var _ = Service("auth", func() {
 	})
 
 	Method("transferIn", func() {
-		Description("Completes a cross-domain session transfer. Redeems the transfer code and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.")
+		Description("Completes a cross-domain session transfer. Redeems the transfer code, checks it against the browser binding cookie set by transferStart, and creates a new session cookie on this host. The code is one-time-use and expires after 60 seconds.")
 
 		NoSecurity()
 
