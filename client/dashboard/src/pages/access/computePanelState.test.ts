@@ -44,7 +44,7 @@ describe("computePanelState", () => {
 
     it("null selectors with assistant resourceType", () => {
       const result = computePanelState(null, "assistant");
-      expect(result).toEqual({ activePanel: "all", label: "All projects" });
+      expect(result).toEqual({ activePanel: "all", label: "All assistants" });
     });
   });
 

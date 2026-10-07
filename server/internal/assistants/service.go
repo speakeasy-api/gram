@@ -26,10 +26,12 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -137,6 +139,8 @@ func assistantValidationError(format string, args ...any) error {
 }
 
 type assistantRecord struct {
+	IdentityState   string
+	AgentID         *string
 	ID              uuid.UUID
 	ProjectID       uuid.UUID
 	OrganizationID  string
@@ -235,6 +239,8 @@ type assistantSkillRow struct {
 
 func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistantRecord {
 	return assistantRecord{
+		IdentityState:   "",
+		AgentID:         nil,
 		ID:              row.ID,
 		ProjectID:       row.ProjectID,
 		OrganizationID:  row.OrganizationID,
@@ -256,6 +262,8 @@ func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistan
 
 func assistantRecordFromListRow(row assistantrepo.ListAssistantsRow) assistantRecord {
 	return assistantRecord{
+		IdentityState:   "",
+		AgentID:         nil,
 		ID:              row.ID,
 		ProjectID:       row.ProjectID,
 		OrganizationID:  row.OrganizationID,
@@ -277,6 +285,8 @@ func assistantRecordFromListRow(row assistantrepo.ListAssistantsRow) assistantRe
 
 func assistantRecordFromGetRow(row assistantrepo.GetAssistantRow) assistantRecord {
 	return assistantRecord{
+		IdentityState:   "",
+		AgentID:         nil,
 		ID:              row.ID,
 		ProjectID:       row.ProjectID,
 		OrganizationID:  row.OrganizationID,
@@ -298,6 +308,8 @@ func assistantRecordFromGetRow(row assistantrepo.GetAssistantRow) assistantRecor
 
 func assistantRecordFromDispatchRow(row assistantrepo.GetAssistantForDispatchRow) assistantRecord {
 	return assistantRecord{
+		IdentityState:   "",
+		AgentID:         nil,
 		ID:              row.ID,
 		ProjectID:       row.ProjectID,
 		OrganizationID:  row.OrganizationID,
@@ -319,6 +331,8 @@ func assistantRecordFromDispatchRow(row assistantrepo.GetAssistantForDispatchRow
 
 func assistantRecordFromUpdateRow(row assistantrepo.UpdateAssistantRow) assistantRecord {
 	return assistantRecord{
+		IdentityState:   "",
+		AgentID:         nil,
 		ID:              row.ID,
 		ProjectID:       row.ProjectID,
 		OrganizationID:  row.OrganizationID,
@@ -392,6 +406,8 @@ type DashboardIngestor interface {
 }
 
 type ServiceCore struct {
+	identities        *assistantidentity.Service
+	authz             *authz.Engine
 	logger            *slog.Logger
 	tracer            trace.Tracer
 	db                *pgxpool.Pool
@@ -434,6 +450,8 @@ func NewServiceCore(
 	telemetryLogger *telemetry.Logger,
 	contextWindow *openrouter.ContextWindowResolver,
 	auditLogger *audit.Logger,
+	identities *assistantidentity.Service,
+	authzEngine *authz.Engine,
 ) *ServiceCore {
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/assistants")
 	turnClassified, err := meter.Int64Counter(
@@ -446,6 +464,8 @@ func NewServiceCore(
 	}
 
 	return &ServiceCore{
+		identities:        identities,
+		authz:             authzEngine,
 		logger:            logger,
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
 		db:                db,
@@ -1273,6 +1293,8 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 		})
 	}
 	return &types.Assistant{
+		IdentityState:   conv.PtrEmpty(record.IdentityState),
+		AgentID:         record.AgentID,
 		ID:              record.ID.String(),
 		ProjectID:       record.ProjectID.String(),
 		CreatedByUserID: conv.PtrEmpty(record.CreatedByUserID),
@@ -1303,6 +1325,7 @@ func (s *ServiceCore) CreateAssistant(
 	warmTTLSeconds int,
 	maxConcurrency int,
 	status string,
+	provisionIdentity bool,
 ) (assistantRecord, error) {
 	if createdByUserID == "" {
 		return assistantRecord{}, fmt.Errorf("create assistant: missing user id")
@@ -1347,11 +1370,19 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, err
 	}
 
+	if provisionIdentity {
+		if err := s.identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: organizationID, ProjectID: projectID, AssistantID: record.ID, ActorUserID: createdByUserID, AgentID: uuid.Nil, AgentName: ""}); err != nil {
+			return assistantRecord{}, fmt.Errorf("provision assistant identity: %w", err)
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit assistant tx: %w", err)
 	}
 
 	if err := s.hydrateAssistantToolSources(ctx, projectID, &record); err != nil {
+		return assistantRecord{}, err
+	}
+	if err := s.hydrateAssistantIdentityState(ctx, projectID, &record); err != nil {
 		return assistantRecord{}, err
 	}
 	return record, nil
@@ -1388,6 +1419,9 @@ func (s *ServiceCore) ListAssistants(ctx context.Context, projectID uuid.UUID) (
 		out[i].MCPServers = mcpRefs[out[i].ID]
 		out[i].Skills = skillRefs[out[i].ID]
 	}
+	if err := s.hydrateAssistantIdentityStates(ctx, projectID, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -1404,6 +1438,9 @@ func (s *ServiceCore) GetAssistant(ctx context.Context, projectID uuid.UUID, ass
 		return assistantRecord{}, err
 	}
 	if err := s.hydrateAssistantSkills(ctx, projectID, &record); err != nil {
+		return assistantRecord{}, err
+	}
+	if err := s.hydrateAssistantIdentityState(ctx, projectID, &record); err != nil {
 		return assistantRecord{}, err
 	}
 	return record, nil
@@ -1494,6 +1531,9 @@ func (s *ServiceCore) UpdateAssistant(
 	if err := s.hydrateAssistantSkills(ctx, projectID, &record); err != nil {
 		return assistantRecord{}, err
 	}
+	if err := s.hydrateAssistantIdentityState(ctx, projectID, &record); err != nil {
+		return assistantRecord{}, err
+	}
 	return record, nil
 }
 
@@ -1534,6 +1574,9 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 		return fmt.Errorf("begin delete assistant tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := s.identities.TombstoneAssistant(ctx, tx, projectID, assistantID, actor, actorDisplayName); err != nil {
+		return fmt.Errorf("withdraw assistant workload identity: %w", err)
+	}
 	queries := assistantrepo.New(tx)
 	err = queries.DeleteAssistant(ctx, assistantrepo.DeleteAssistantParams{
 		AssistantID: assistantID,
@@ -1992,6 +2035,10 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	if err != nil {
 		return EnqueueResult{}, err
 	}
+	normalizedPayloadJSON, err = stampEventSourceKind(normalizedPayloadJSON, sourceKind)
+	if err != nil {
+		return EnqueueResult{}, err
+	}
 	triggerInstanceID, err := conv.PtrToNullUUID(conv.PtrEmpty(task.TriggerInstanceID))
 	if err != nil {
 		return EnqueueResult{}, fmt.Errorf("parse trigger instance id: %w", err)
@@ -2110,6 +2157,54 @@ func (s *ServiceCore) CheckDashboardChatOwnership(ctx context.Context, projectID
 		return fmt.Errorf("resolve dashboard chat access: %w", err)
 	}
 	return nil
+}
+
+const (
+	// eventSourceKindKey records an event's own source on its payload: a wake
+	// can reuse an existing thread whose source is Slack.
+	eventSourceKindKey = "_gram_source_kind"
+
+	// wakeIdentityVersionKey and wakeRequesterUserIDKey carry the requester a
+	// wake captured when it was scheduled.
+	wakeIdentityVersionKey = "identity_version"
+	wakeRequesterUserIDKey = "requester_user_id"
+
+	// mcpAuthEventKindKey and mcpAuthResumeUserIDKey mark an OAuth
+	// continuation and the user whose turn started it. Only the OAuth callback
+	// writes them, on an event that never passes through ingress.
+	mcpAuthEventKindKey    = "gram_event_kind"
+	mcpAuthResumeUserIDKey = "_gram_resume_user_id"
+)
+
+// stampEventSourceKind marks an object payload with its server-assigned
+// source. Any spelling of an identity key that JSON decoding would fold onto
+// it is removed first; only a wake keeps the exact requester fields its own
+// scheduler wrote, and no ingress payload keeps the OAuth continuation keys.
+// Any other JSON value is returned unchanged, and its turn falls back to the
+// thread source.
+func stampEventSourceKind(payload []byte, sourceKind string) ([]byte, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil || fields == nil {
+		return payload, nil //nolint:nilerr // non-object payloads are valid and stay unstamped
+	}
+	for key := range fields {
+		for _, reserved := range []string{eventSourceKindKey, wakeIdentityVersionKey, wakeRequesterUserIDKey, mcpAuthEventKindKey, mcpAuthResumeUserIDKey} {
+			kept := sourceKind == sourceKindWake && key == reserved && (reserved == wakeIdentityVersionKey || reserved == wakeRequesterUserIDKey)
+			if strings.EqualFold(key, reserved) && !kept {
+				delete(fields, key)
+			}
+		}
+	}
+	encoded, err := json.Marshal(sourceKind)
+	if err != nil {
+		return nil, fmt.Errorf("encode trigger event source: %w", err)
+	}
+	fields[eventSourceKindKey] = encoded
+	stamped, err := json.Marshal(fields)
+	if err != nil {
+		return nil, fmt.Errorf("encode trigger event source: %w", err)
+	}
+	return stamped, nil
 }
 
 func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, []byte, error) {
@@ -2701,16 +2796,21 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				}, nil
 			}
 
-			// Upstream completion provider rejected the request (Anthropic 400
-			// on a malformed message, OpenRouter rate limit, etc), or a live
-			// runtime returned a deterministic 4xx. The runtime is fine —
+			// The turn's identity was rejected, the upstream completion
+			// provider rejected the request (Anthropic 400 on a malformed
+			// message, OpenRouter rate limit, etc), or a live runtime
+			// returned a deterministic 4xx. The runtime is fine —
 			// replaying the same input would just reproduce it, so terminally
 			// fail the event and keep the VM warm. Request admission so any
 			// other pending event on the thread is drained on the warm runtime
 			// instead of waiting out the warm timer; the failed event is no
 			// longer claimable, so this cannot loop on it.
-			if errors.Is(runErr, ErrCompletionFailed) || errors.Is(runErr, ErrHistoryCorrupted) {
-				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event failed at completion provider", "ERROR", runErr)
+			if errors.Is(runErr, ErrTurnIdentity) || errors.Is(runErr, ErrCompletionFailed) || errors.Is(runErr, ErrHistoryCorrupted) {
+				message := "assistant event failed at completion provider"
+				if errors.Is(runErr, ErrTurnIdentity) {
+					message = "assistant event identity rejected"
+				}
+				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", message, "ERROR", runErr)
 				if err := s.failEvent(ctx, thread.ProjectID, event.ID, runErr); err != nil {
 					return ProcessThreadEventsResult{}, err
 				}
@@ -2731,7 +2831,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 
 			// Terminal failure after maxEventAttempts — stop retrying this
 			// event. The warm runtime stays up for subsequent events.
-			if event.Attempts >= maxEventAttempts {
+			if event.Attempts >= maxEventAttempts && !errors.Is(runErr, ErrRuntimeInvocationBusy) {
 				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event exceeded max attempts", "ERROR", runErr)
 				if err := s.failEvent(ctx, thread.ProjectID, event.ID, fmt.Errorf("exceeded %d attempts: %w", maxEventAttempts, runErr)); err != nil {
 					return ProcessThreadEventsResult{}, err
@@ -2752,7 +2852,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			}
 			// Transient turn-level failure (LLM 5xx, MCP blip) — reset event,
 			// keep the warm runtime, let the coordinator re-kick on the next
-			// admit cycle.
+			// admit cycle, after AssistantThreadWorkflow's durable admission backoff.
 			s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_requeued", "assistant event requeued for retry", "WARN", runErr)
 			if err := s.resetEventToPending(ctx, thread.ProjectID, event.ID, runErr); err != nil {
 				return ProcessThreadEventsResult{}, err
@@ -2833,11 +2933,13 @@ func (s *ServiceCore) processEventTurn(
 
 	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
 
-	prompt, actorUserID := "", assistant.CreatedByUserID
+	identity, err := s.resolveTurnIdentity(ctx, assistant, thread, event)
+	if err != nil {
+		return nil, err
+	}
+	prompt := ""
 	var inputParts []runtimeContentPart
 	if mcpAuthPrompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
-		// MCP auth resumption is a system event with no human sender — act as
-		// the assistant's creator.
 		prompt = mcpAuthPrompt
 	} else {
 		adapter, err := getSourceAdapter(thread.SourceKind)
@@ -2848,7 +2950,6 @@ func (s *ServiceCore) processEventTurn(
 		if err != nil {
 			return nil, fmt.Errorf("decode assistant turn: %w", err)
 		}
-		actorUserID = turnUserID(assistant, thread, event)
 		// Best-effort: files attached to the triggering message ride along as
 		// vision/text content. Failures degrade to the metadata-only turn.
 		switch thread.SourceKind {
@@ -2862,7 +2963,12 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return nil, err
 	}
-	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, actorUserID)
+	var turnToken string
+	if identity.AgentBacked {
+		turnToken, err = s.mintTurnCredential(ctx, assistant, thread, event, identity)
+	} else {
+		turnToken, err = s.MintThreadScopedRuntimeToken(assistant, thread.ID, identity.UserID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -2948,22 +3054,6 @@ func (s *ServiceCore) assistantToolsVariant(ctx context.Context, projectID uuid.
 		return feature.VariantAssistantToolsLegacy
 	}
 	return feature.AssistantToolsVariant(variant)
-}
-
-// turnUserID returns the Gram user whose identity a turn should act under.
-// Dashboard turns carry a Gram user id on the event payload (the sender), so
-// MCP calls, audit attribution, and per-user RBAC reflect the actual sender
-// rather than the assistant's creator. Other sources either don't carry a
-// Gram user identity (cron/wake) or carry an external one (Slack), so they
-// fall back to the creator.
-func turnUserID(assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) string {
-	if thread.SourceKind == sourceKindDashboard {
-		var payload dashboardEventPayload
-		if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err == nil && payload.UserID != "" {
-			return payload.UserID
-		}
-	}
-	return assistant.CreatedByUserID
 }
 
 func (s *ServiceCore) startProcessingLeaseHeartbeat(
@@ -3066,6 +3156,8 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		LastEventAt:   time.Time{},
 	}
 	assistant := assistantRecord{
+		IdentityState:   "",
+		AgentID:         nil,
 		ID:              row.AssistantID,
 		ProjectID:       row.ProjectID,
 		OrganizationID:  row.OrganizationID,
@@ -3147,6 +3239,8 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	}
 
 	return threadBootstrap{
+		AssistantID:    assistant.ID.String(),
+		ProjectID:      assistant.ProjectID.String(),
 		Model:          assistant.Model,
 		Instructions:   instructions,
 		CompletionsURL: completionsEndpoint.String(),
@@ -3435,6 +3529,8 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 		LastEventAt:   row.LastEventAt.Time,
 	}
 	assistant := assistantRecord{
+		IdentityState:   "",
+		AgentID:         nil,
 		ID:              row.AssistantRecordID,
 		ProjectID:       row.AssistantRecordProjectID,
 		OrganizationID:  row.OrganizationID,
@@ -3817,10 +3913,11 @@ func (s *ServiceCore) failEvent(ctx context.Context, projectID, eventID uuid.UUI
 
 func (s *ServiceCore) resetEventToPending(ctx context.Context, projectID, eventID uuid.UUID, runErr error) error {
 	err := assistantrepo.New(s.db).ResetAssistantThreadEventToPending(ctx, assistantrepo.ResetAssistantThreadEventToPendingParams{
-		PendingStatus: eventStatusPending,
-		LastError:     conv.ToPGText(runErr.Error()),
-		EventID:       eventID,
-		ProjectID:     projectID,
+		RestoreAttempt: errors.Is(runErr, ErrRuntimeInvocationBusy),
+		PendingStatus:  eventStatusPending,
+		LastError:      conv.ToPGText(runErr.Error()),
+		EventID:        eventID,
+		ProjectID:      projectID,
 	})
 	if err != nil {
 		return fmt.Errorf("reset assistant thread event to pending: %w", err)

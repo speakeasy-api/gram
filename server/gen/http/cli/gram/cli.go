@@ -34,6 +34,7 @@ import (
 	chatc "github.com/speakeasy-api/gram/server/gen/http/chat/client"
 	chatsessionsc "github.com/speakeasy-api/gram/server/gen/http/chat_sessions/client"
 	cliauthc "github.com/speakeasy-api/gram/server/gen/http/cli_auth/client"
+	dashboardsc "github.com/speakeasy-api/gram/server/gen/http/dashboards/client"
 	dataexportsc "github.com/speakeasy-api/gram/server/gen/http/data_exports/client"
 	deploymentsc "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
 	deviceintegrationsc "github.com/speakeasy-api/gram/server/gen/http/device_integrations/client"
@@ -125,13 +126,14 @@ func UsageCommands() []string {
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-image-from-url|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"organization-assets upload-organization-image",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
-		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
+		"assistants (list-assistants|get-assistant|create-assistant|upgrade-assistant-identity|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|register|info|transfer-out|transfer-in)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat-overview|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
+		"dashboards (list-dashboards|get-dashboard|create-dashboard|update-dashboard|save-dashboard-layout|add-dashboard-widget|remove-dashboard-widget|save-dashboard-filters|duplicate-dashboard|delete-dashboard)",
 		"data-exports (list-destinations|list-for-org|create-destination|update-destination|delete-destination|list-routes|create-route|update-route|delete-route)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"device-integrations (list-providers|get-config|upsert-config|delete-config|test-connection|list-schedules|set-schedule-enabled|retry-schedule|list-managed-devices|get-coverage)",
@@ -142,7 +144,7 @@ func UsageCommands() []string {
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details|get-setup-docs)",
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
-		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics)",
+		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics|get-status)",
 		"identity resolve",
 		"identity-provider-connections (create|submit-client-id|verify|get|record-agent|revoke|sync-applications|list-applications)",
 		"instances get-instance",
@@ -182,7 +184,7 @@ func UsageCommands() []string {
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (list-bindings|attach-binding|detach-binding|commit-server-identity-configuration|list-remote-sessions|count-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|list-mcp-platform-toolsets|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-mcp-server-counts|get-risk-analysis-status|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
+		"risk (create-risk-policy|list-risk-policies|list-mcp-platform-toolsets|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|reveal-risk-result-payload|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-mcp-server-counts|get-risk-analysis-status|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"slack-directory-connections (list|sync|list-members|list-person-accounts|get-member|set-mapping|begin|disconnect)",
@@ -777,6 +779,11 @@ func ParseEndpoint(
 		assistantsCreateAssistantSessionTokenFlag     = assistantsCreateAssistantFlags.String("session-token", "", "")
 		assistantsCreateAssistantProjectSlugInputFlag = assistantsCreateAssistantFlags.String("project-slug-input", "", "")
 
+		assistantsUpgradeAssistantIdentityFlags                = flag.NewFlagSet("upgrade-assistant-identity", flag.ExitOnError)
+		assistantsUpgradeAssistantIdentityBodyFlag             = assistantsUpgradeAssistantIdentityFlags.String("body", "REQUIRED", "")
+		assistantsUpgradeAssistantIdentitySessionTokenFlag     = assistantsUpgradeAssistantIdentityFlags.String("session-token", "", "")
+		assistantsUpgradeAssistantIdentityProjectSlugInputFlag = assistantsUpgradeAssistantIdentityFlags.String("project-slug-input", "", "")
+
 		assistantsUpdateAssistantFlags                = flag.NewFlagSet("update-assistant", flag.ExitOnError)
 		assistantsUpdateAssistantBodyFlag             = assistantsUpdateAssistantFlags.String("body", "REQUIRED", "")
 		assistantsUpdateAssistantSessionTokenFlag     = assistantsUpdateAssistantFlags.String("session-token", "", "")
@@ -1012,6 +1019,57 @@ func ParseEndpoint(
 
 		cliAuthRedeemFlags    = flag.NewFlagSet("redeem", flag.ExitOnError)
 		cliAuthRedeemBodyFlag = cliAuthRedeemFlags.String("body", "REQUIRED", "")
+
+		dashboardsFlags = flag.NewFlagSet("dashboards", flag.ContinueOnError)
+
+		dashboardsListDashboardsFlags                = flag.NewFlagSet("list-dashboards", flag.ExitOnError)
+		dashboardsListDashboardsSessionTokenFlag     = dashboardsListDashboardsFlags.String("session-token", "", "")
+		dashboardsListDashboardsProjectSlugInputFlag = dashboardsListDashboardsFlags.String("project-slug-input", "", "")
+
+		dashboardsGetDashboardFlags                = flag.NewFlagSet("get-dashboard", flag.ExitOnError)
+		dashboardsGetDashboardIDFlag               = dashboardsGetDashboardFlags.String("id", "REQUIRED", "")
+		dashboardsGetDashboardSessionTokenFlag     = dashboardsGetDashboardFlags.String("session-token", "", "")
+		dashboardsGetDashboardProjectSlugInputFlag = dashboardsGetDashboardFlags.String("project-slug-input", "", "")
+
+		dashboardsCreateDashboardFlags                = flag.NewFlagSet("create-dashboard", flag.ExitOnError)
+		dashboardsCreateDashboardBodyFlag             = dashboardsCreateDashboardFlags.String("body", "REQUIRED", "")
+		dashboardsCreateDashboardSessionTokenFlag     = dashboardsCreateDashboardFlags.String("session-token", "", "")
+		dashboardsCreateDashboardProjectSlugInputFlag = dashboardsCreateDashboardFlags.String("project-slug-input", "", "")
+
+		dashboardsUpdateDashboardFlags                = flag.NewFlagSet("update-dashboard", flag.ExitOnError)
+		dashboardsUpdateDashboardBodyFlag             = dashboardsUpdateDashboardFlags.String("body", "REQUIRED", "")
+		dashboardsUpdateDashboardSessionTokenFlag     = dashboardsUpdateDashboardFlags.String("session-token", "", "")
+		dashboardsUpdateDashboardProjectSlugInputFlag = dashboardsUpdateDashboardFlags.String("project-slug-input", "", "")
+
+		dashboardsSaveDashboardLayoutFlags                = flag.NewFlagSet("save-dashboard-layout", flag.ExitOnError)
+		dashboardsSaveDashboardLayoutBodyFlag             = dashboardsSaveDashboardLayoutFlags.String("body", "REQUIRED", "")
+		dashboardsSaveDashboardLayoutSessionTokenFlag     = dashboardsSaveDashboardLayoutFlags.String("session-token", "", "")
+		dashboardsSaveDashboardLayoutProjectSlugInputFlag = dashboardsSaveDashboardLayoutFlags.String("project-slug-input", "", "")
+
+		dashboardsAddDashboardWidgetFlags                = flag.NewFlagSet("add-dashboard-widget", flag.ExitOnError)
+		dashboardsAddDashboardWidgetBodyFlag             = dashboardsAddDashboardWidgetFlags.String("body", "REQUIRED", "")
+		dashboardsAddDashboardWidgetSessionTokenFlag     = dashboardsAddDashboardWidgetFlags.String("session-token", "", "")
+		dashboardsAddDashboardWidgetProjectSlugInputFlag = dashboardsAddDashboardWidgetFlags.String("project-slug-input", "", "")
+
+		dashboardsRemoveDashboardWidgetFlags                = flag.NewFlagSet("remove-dashboard-widget", flag.ExitOnError)
+		dashboardsRemoveDashboardWidgetBodyFlag             = dashboardsRemoveDashboardWidgetFlags.String("body", "REQUIRED", "")
+		dashboardsRemoveDashboardWidgetSessionTokenFlag     = dashboardsRemoveDashboardWidgetFlags.String("session-token", "", "")
+		dashboardsRemoveDashboardWidgetProjectSlugInputFlag = dashboardsRemoveDashboardWidgetFlags.String("project-slug-input", "", "")
+
+		dashboardsSaveDashboardFiltersFlags                = flag.NewFlagSet("save-dashboard-filters", flag.ExitOnError)
+		dashboardsSaveDashboardFiltersBodyFlag             = dashboardsSaveDashboardFiltersFlags.String("body", "REQUIRED", "")
+		dashboardsSaveDashboardFiltersSessionTokenFlag     = dashboardsSaveDashboardFiltersFlags.String("session-token", "", "")
+		dashboardsSaveDashboardFiltersProjectSlugInputFlag = dashboardsSaveDashboardFiltersFlags.String("project-slug-input", "", "")
+
+		dashboardsDuplicateDashboardFlags                = flag.NewFlagSet("duplicate-dashboard", flag.ExitOnError)
+		dashboardsDuplicateDashboardBodyFlag             = dashboardsDuplicateDashboardFlags.String("body", "REQUIRED", "")
+		dashboardsDuplicateDashboardSessionTokenFlag     = dashboardsDuplicateDashboardFlags.String("session-token", "", "")
+		dashboardsDuplicateDashboardProjectSlugInputFlag = dashboardsDuplicateDashboardFlags.String("project-slug-input", "", "")
+
+		dashboardsDeleteDashboardFlags                = flag.NewFlagSet("delete-dashboard", flag.ExitOnError)
+		dashboardsDeleteDashboardIDFlag               = dashboardsDeleteDashboardFlags.String("id", "REQUIRED", "")
+		dashboardsDeleteDashboardSessionTokenFlag     = dashboardsDeleteDashboardFlags.String("session-token", "", "")
+		dashboardsDeleteDashboardProjectSlugInputFlag = dashboardsDeleteDashboardFlags.String("project-slug-input", "", "")
 
 		dataExportsFlags = flag.NewFlagSet("data-exports", flag.ContinueOnError)
 
@@ -1473,6 +1531,11 @@ func ParseEndpoint(
 		hooksMetricsBodyFlag             = hooksMetricsFlags.String("body", "REQUIRED", "")
 		hooksMetricsApikeyTokenFlag      = hooksMetricsFlags.String("apikey-token", "", "")
 		hooksMetricsProjectSlugInputFlag = hooksMetricsFlags.String("project-slug-input", "", "")
+
+		hooksGetStatusFlags                = flag.NewFlagSet("get-status", flag.ExitOnError)
+		hooksGetStatusApikeyTokenFlag      = hooksGetStatusFlags.String("apikey-token", "", "")
+		hooksGetStatusSessionTokenFlag     = hooksGetStatusFlags.String("session-token", "", "")
+		hooksGetStatusProjectSlugInputFlag = hooksGetStatusFlags.String("project-slug-input", "", "")
 
 		identityFlags = flag.NewFlagSet("identity", flag.ContinueOnError)
 
@@ -3004,6 +3067,8 @@ func ParseEndpoint(
 		riskListRiskResultsPolicyIDFlag         = riskListRiskResultsFlags.String("policy-id", "", "")
 		riskListRiskResultsChatIDFlag           = riskListRiskResultsFlags.String("chat-id", "", "")
 		riskListRiskResultsMcpServerIDFlag      = riskListRiskResultsFlags.String("mcp-server-id", "", "")
+		riskListRiskResultsResultIDFlag         = riskListRiskResultsFlags.String("result-id", "", "")
+		riskListRiskResultsExecutionIDFlag      = riskListRiskResultsFlags.String("execution-id", "", "")
 		riskListRiskResultsCategoryFlag         = riskListRiskResultsFlags.String("category", "", "")
 		riskListRiskResultsRuleIDFlag           = riskListRiskResultsFlags.String("rule-id", "", "")
 		riskListRiskResultsUserIDFlag           = riskListRiskResultsFlags.String("user-id", "", "")
@@ -3042,6 +3107,12 @@ func ParseEndpoint(
 		riskUnmaskRiskResultApikeyTokenFlag      = riskUnmaskRiskResultFlags.String("apikey-token", "", "")
 		riskUnmaskRiskResultSessionTokenFlag     = riskUnmaskRiskResultFlags.String("session-token", "", "")
 		riskUnmaskRiskResultProjectSlugInputFlag = riskUnmaskRiskResultFlags.String("project-slug-input", "", "")
+
+		riskRevealRiskResultPayloadFlags                = flag.NewFlagSet("reveal-risk-result-payload", flag.ExitOnError)
+		riskRevealRiskResultPayloadBodyFlag             = riskRevealRiskResultPayloadFlags.String("body", "REQUIRED", "")
+		riskRevealRiskResultPayloadApikeyTokenFlag      = riskRevealRiskResultPayloadFlags.String("apikey-token", "", "")
+		riskRevealRiskResultPayloadSessionTokenFlag     = riskRevealRiskResultPayloadFlags.String("session-token", "", "")
+		riskRevealRiskResultPayloadProjectSlugInputFlag = riskRevealRiskResultPayloadFlags.String("project-slug-input", "", "")
 
 		riskListRiskResultsByChatFlags                = flag.NewFlagSet("list-risk-results-by-chat", flag.ExitOnError)
 		riskListRiskResultsByChatCursorFlag           = riskListRiskResultsByChatFlags.String("cursor", "", "")
@@ -4922,6 +4993,7 @@ func ParseEndpoint(
 	assistantsListAssistantsFlags.Usage = assistantsListAssistantsUsage
 	assistantsGetAssistantFlags.Usage = assistantsGetAssistantUsage
 	assistantsCreateAssistantFlags.Usage = assistantsCreateAssistantUsage
+	assistantsUpgradeAssistantIdentityFlags.Usage = assistantsUpgradeAssistantIdentityUsage
 	assistantsUpdateAssistantFlags.Usage = assistantsUpdateAssistantUsage
 	assistantsDeleteAssistantFlags.Usage = assistantsDeleteAssistantUsage
 	assistantsSendMessageFlags.Usage = assistantsSendMessageUsage
@@ -4972,6 +5044,18 @@ func ParseEndpoint(
 	cliAuthFlags.Usage = cliAuthUsage
 	cliAuthAuthorizeFlags.Usage = cliAuthAuthorizeUsage
 	cliAuthRedeemFlags.Usage = cliAuthRedeemUsage
+
+	dashboardsFlags.Usage = dashboardsUsage
+	dashboardsListDashboardsFlags.Usage = dashboardsListDashboardsUsage
+	dashboardsGetDashboardFlags.Usage = dashboardsGetDashboardUsage
+	dashboardsCreateDashboardFlags.Usage = dashboardsCreateDashboardUsage
+	dashboardsUpdateDashboardFlags.Usage = dashboardsUpdateDashboardUsage
+	dashboardsSaveDashboardLayoutFlags.Usage = dashboardsSaveDashboardLayoutUsage
+	dashboardsAddDashboardWidgetFlags.Usage = dashboardsAddDashboardWidgetUsage
+	dashboardsRemoveDashboardWidgetFlags.Usage = dashboardsRemoveDashboardWidgetUsage
+	dashboardsSaveDashboardFiltersFlags.Usage = dashboardsSaveDashboardFiltersUsage
+	dashboardsDuplicateDashboardFlags.Usage = dashboardsDuplicateDashboardUsage
+	dashboardsDeleteDashboardFlags.Usage = dashboardsDeleteDashboardUsage
 
 	dataExportsFlags.Usage = dataExportsUsage
 	dataExportsListDestinationsFlags.Usage = dataExportsListDestinationsUsage
@@ -5083,6 +5167,7 @@ func ParseEndpoint(
 	hooksSkillFeedbackFlags.Usage = hooksSkillFeedbackUsage
 	hooksLogsFlags.Usage = hooksLogsUsage
 	hooksMetricsFlags.Usage = hooksMetricsUsage
+	hooksGetStatusFlags.Usage = hooksGetStatusUsage
 
 	identityFlags.Usage = identityUsage
 	identityResolveFlags.Usage = identityResolveUsage
@@ -5450,6 +5535,7 @@ func ParseEndpoint(
 	riskListRiskResultsFlags.Usage = riskListRiskResultsUsage
 	riskListRiskResultsForAgentFlags.Usage = riskListRiskResultsForAgentUsage
 	riskUnmaskRiskResultFlags.Usage = riskUnmaskRiskResultUsage
+	riskRevealRiskResultPayloadFlags.Usage = riskRevealRiskResultPayloadUsage
 	riskListRiskResultsByChatFlags.Usage = riskListRiskResultsByChatUsage
 	riskMarkRiskResultsFalsePositiveFlags.Usage = riskMarkRiskResultsFalsePositiveUsage
 	riskUnmarkRiskResultsFalsePositiveFlags.Usage = riskUnmarkRiskResultsFalsePositiveUsage
@@ -5866,6 +5952,8 @@ func ParseEndpoint(
 			svcf = chatSessionsFlags
 		case "cli-auth":
 			svcf = cliAuthFlags
+		case "dashboards":
+			svcf = dashboardsFlags
 		case "data-exports":
 			svcf = dataExportsFlags
 		case "deployments":
@@ -6384,6 +6472,9 @@ func ParseEndpoint(
 			case "create-assistant":
 				epf = assistantsCreateAssistantFlags
 
+			case "upgrade-assistant-identity":
+				epf = assistantsUpgradeAssistantIdentityFlags
+
 			case "update-assistant":
 				epf = assistantsUpdateAssistantFlags
 
@@ -6521,6 +6612,40 @@ func ParseEndpoint(
 
 			case "redeem":
 				epf = cliAuthRedeemFlags
+
+			}
+
+		case "dashboards":
+			switch epn {
+			case "list-dashboards":
+				epf = dashboardsListDashboardsFlags
+
+			case "get-dashboard":
+				epf = dashboardsGetDashboardFlags
+
+			case "create-dashboard":
+				epf = dashboardsCreateDashboardFlags
+
+			case "update-dashboard":
+				epf = dashboardsUpdateDashboardFlags
+
+			case "save-dashboard-layout":
+				epf = dashboardsSaveDashboardLayoutFlags
+
+			case "add-dashboard-widget":
+				epf = dashboardsAddDashboardWidgetFlags
+
+			case "remove-dashboard-widget":
+				epf = dashboardsRemoveDashboardWidgetFlags
+
+			case "save-dashboard-filters":
+				epf = dashboardsSaveDashboardFiltersFlags
+
+			case "duplicate-dashboard":
+				epf = dashboardsDuplicateDashboardFlags
+
+			case "delete-dashboard":
+				epf = dashboardsDeleteDashboardFlags
 
 			}
 
@@ -6832,6 +6957,9 @@ func ParseEndpoint(
 
 			case "metrics":
 				epf = hooksMetricsFlags
+
+			case "get-status":
+				epf = hooksGetStatusFlags
 
 			}
 
@@ -7853,6 +7981,9 @@ func ParseEndpoint(
 
 			case "unmask-risk-result":
 				epf = riskUnmaskRiskResultFlags
+
+			case "reveal-risk-result-payload":
+				epf = riskRevealRiskResultPayloadFlags
 
 			case "list-risk-results-by-chat":
 				epf = riskListRiskResultsByChatFlags
@@ -9295,6 +9426,9 @@ func ParseEndpoint(
 			case "create-assistant":
 				endpoint = c.CreateAssistant()
 				data, err = assistantsc.BuildCreateAssistantPayload(*assistantsCreateAssistantBodyFlag, *assistantsCreateAssistantSessionTokenFlag, *assistantsCreateAssistantProjectSlugInputFlag)
+			case "upgrade-assistant-identity":
+				endpoint = c.UpgradeAssistantIdentity()
+				data, err = assistantsc.BuildUpgradeAssistantIdentityPayload(*assistantsUpgradeAssistantIdentityBodyFlag, *assistantsUpgradeAssistantIdentitySessionTokenFlag, *assistantsUpgradeAssistantIdentityProjectSlugInputFlag)
 			case "update-assistant":
 				endpoint = c.UpdateAssistant()
 				data, err = assistantsc.BuildUpdateAssistantPayload(*assistantsUpdateAssistantBodyFlag, *assistantsUpdateAssistantSessionTokenFlag, *assistantsUpdateAssistantProjectSlugInputFlag)
@@ -9433,6 +9567,40 @@ func ParseEndpoint(
 			case "redeem":
 				endpoint = c.Redeem()
 				data, err = cliauthc.BuildRedeemPayload(*cliAuthRedeemBodyFlag)
+			}
+		case "dashboards":
+			c := dashboardsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-dashboards":
+				endpoint = c.ListDashboards()
+				data, err = dashboardsc.BuildListDashboardsPayload(*dashboardsListDashboardsSessionTokenFlag, *dashboardsListDashboardsProjectSlugInputFlag)
+			case "get-dashboard":
+				endpoint = c.GetDashboard()
+				data, err = dashboardsc.BuildGetDashboardPayload(*dashboardsGetDashboardIDFlag, *dashboardsGetDashboardSessionTokenFlag, *dashboardsGetDashboardProjectSlugInputFlag)
+			case "create-dashboard":
+				endpoint = c.CreateDashboard()
+				data, err = dashboardsc.BuildCreateDashboardPayload(*dashboardsCreateDashboardBodyFlag, *dashboardsCreateDashboardSessionTokenFlag, *dashboardsCreateDashboardProjectSlugInputFlag)
+			case "update-dashboard":
+				endpoint = c.UpdateDashboard()
+				data, err = dashboardsc.BuildUpdateDashboardPayload(*dashboardsUpdateDashboardBodyFlag, *dashboardsUpdateDashboardSessionTokenFlag, *dashboardsUpdateDashboardProjectSlugInputFlag)
+			case "save-dashboard-layout":
+				endpoint = c.SaveDashboardLayout()
+				data, err = dashboardsc.BuildSaveDashboardLayoutPayload(*dashboardsSaveDashboardLayoutBodyFlag, *dashboardsSaveDashboardLayoutSessionTokenFlag, *dashboardsSaveDashboardLayoutProjectSlugInputFlag)
+			case "add-dashboard-widget":
+				endpoint = c.AddDashboardWidget()
+				data, err = dashboardsc.BuildAddDashboardWidgetPayload(*dashboardsAddDashboardWidgetBodyFlag, *dashboardsAddDashboardWidgetSessionTokenFlag, *dashboardsAddDashboardWidgetProjectSlugInputFlag)
+			case "remove-dashboard-widget":
+				endpoint = c.RemoveDashboardWidget()
+				data, err = dashboardsc.BuildRemoveDashboardWidgetPayload(*dashboardsRemoveDashboardWidgetBodyFlag, *dashboardsRemoveDashboardWidgetSessionTokenFlag, *dashboardsRemoveDashboardWidgetProjectSlugInputFlag)
+			case "save-dashboard-filters":
+				endpoint = c.SaveDashboardFilters()
+				data, err = dashboardsc.BuildSaveDashboardFiltersPayload(*dashboardsSaveDashboardFiltersBodyFlag, *dashboardsSaveDashboardFiltersSessionTokenFlag, *dashboardsSaveDashboardFiltersProjectSlugInputFlag)
+			case "duplicate-dashboard":
+				endpoint = c.DuplicateDashboard()
+				data, err = dashboardsc.BuildDuplicateDashboardPayload(*dashboardsDuplicateDashboardBodyFlag, *dashboardsDuplicateDashboardSessionTokenFlag, *dashboardsDuplicateDashboardProjectSlugInputFlag)
+			case "delete-dashboard":
+				endpoint = c.DeleteDashboard()
+				data, err = dashboardsc.BuildDeleteDashboardPayload(*dashboardsDeleteDashboardIDFlag, *dashboardsDeleteDashboardSessionTokenFlag, *dashboardsDeleteDashboardProjectSlugInputFlag)
 			}
 		case "data-exports":
 			c := dataexportsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -9744,6 +9912,9 @@ func ParseEndpoint(
 			case "metrics":
 				endpoint = c.Metrics()
 				data, err = hooksc.BuildMetricsPayload(*hooksMetricsBodyFlag, *hooksMetricsApikeyTokenFlag, *hooksMetricsProjectSlugInputFlag)
+			case "get-status":
+				endpoint = c.GetStatus()
+				data, err = hooksc.BuildGetStatusPayload(*hooksGetStatusApikeyTokenFlag, *hooksGetStatusSessionTokenFlag, *hooksGetStatusProjectSlugInputFlag)
 			}
 		case "identity":
 			c := identityc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -10770,13 +10941,16 @@ func ParseEndpoint(
 				data, err = riskc.BuildReleaseSessionQuarantinePayload(*riskReleaseSessionQuarantineBodyFlag, *riskReleaseSessionQuarantineApikeyTokenFlag, *riskReleaseSessionQuarantineSessionTokenFlag, *riskReleaseSessionQuarantineProjectSlugInputFlag)
 			case "list-risk-results":
 				endpoint = c.ListRiskResults()
-				data, err = riskc.BuildListRiskResultsPayload(*riskListRiskResultsPolicyIDFlag, *riskListRiskResultsChatIDFlag, *riskListRiskResultsMcpServerIDFlag, *riskListRiskResultsCategoryFlag, *riskListRiskResultsRuleIDFlag, *riskListRiskResultsUserIDFlag, *riskListRiskResultsExternalUserIdsFlag, *riskListRiskResultsUniqueMatchFlag, *riskListRiskResultsNonAssistantFlag, *riskListRiskResultsAssistantIDFlag, *riskListRiskResultsFromFlag, *riskListRiskResultsToFlag, *riskListRiskResultsCursorFlag, *riskListRiskResultsLimitFlag, *riskListRiskResultsApikeyTokenFlag, *riskListRiskResultsSessionTokenFlag, *riskListRiskResultsProjectSlugInputFlag)
+				data, err = riskc.BuildListRiskResultsPayload(*riskListRiskResultsPolicyIDFlag, *riskListRiskResultsChatIDFlag, *riskListRiskResultsMcpServerIDFlag, *riskListRiskResultsResultIDFlag, *riskListRiskResultsExecutionIDFlag, *riskListRiskResultsCategoryFlag, *riskListRiskResultsRuleIDFlag, *riskListRiskResultsUserIDFlag, *riskListRiskResultsExternalUserIdsFlag, *riskListRiskResultsUniqueMatchFlag, *riskListRiskResultsNonAssistantFlag, *riskListRiskResultsAssistantIDFlag, *riskListRiskResultsFromFlag, *riskListRiskResultsToFlag, *riskListRiskResultsCursorFlag, *riskListRiskResultsLimitFlag, *riskListRiskResultsApikeyTokenFlag, *riskListRiskResultsSessionTokenFlag, *riskListRiskResultsProjectSlugInputFlag)
 			case "list-risk-results-for-agent":
 				endpoint = c.ListRiskResultsForAgent()
 				data, err = riskc.BuildListRiskResultsForAgentPayload(*riskListRiskResultsForAgentPolicyIDFlag, *riskListRiskResultsForAgentChatIDFlag, *riskListRiskResultsForAgentMcpServerIDFlag, *riskListRiskResultsForAgentCategoryFlag, *riskListRiskResultsForAgentRuleIDFlag, *riskListRiskResultsForAgentUserIDFlag, *riskListRiskResultsForAgentUniqueMatchFlag, *riskListRiskResultsForAgentNonAssistantFlag, *riskListRiskResultsForAgentAssistantIDFlag, *riskListRiskResultsForAgentFromFlag, *riskListRiskResultsForAgentToFlag, *riskListRiskResultsForAgentCursorFlag, *riskListRiskResultsForAgentLimitFlag, *riskListRiskResultsForAgentApikeyTokenFlag, *riskListRiskResultsForAgentSessionTokenFlag, *riskListRiskResultsForAgentProjectSlugInputFlag)
 			case "unmask-risk-result":
 				endpoint = c.UnmaskRiskResult()
 				data, err = riskc.BuildUnmaskRiskResultPayload(*riskUnmaskRiskResultBodyFlag, *riskUnmaskRiskResultApikeyTokenFlag, *riskUnmaskRiskResultSessionTokenFlag, *riskUnmaskRiskResultProjectSlugInputFlag)
+			case "reveal-risk-result-payload":
+				endpoint = c.RevealRiskResultPayload()
+				data, err = riskc.BuildRevealRiskResultPayloadPayload(*riskRevealRiskResultPayloadBodyFlag, *riskRevealRiskResultPayloadApikeyTokenFlag, *riskRevealRiskResultPayloadSessionTokenFlag, *riskRevealRiskResultPayloadProjectSlugInputFlag)
 			case "list-risk-results-by-chat":
 				endpoint = c.ListRiskResultsByChat()
 				data, err = riskc.BuildListRiskResultsByChatPayload(*riskListRiskResultsByChatCursorFlag, *riskListRiskResultsByChatLimitFlag, *riskListRiskResultsByChatApikeyTokenFlag, *riskListRiskResultsByChatSessionTokenFlag, *riskListRiskResultsByChatProjectSlugInputFlag)
@@ -14268,6 +14442,7 @@ func assistantsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-assistants: List assistants for the current project.`)
 	fmt.Fprintln(os.Stderr, `    get-assistant: Get an assistant by ID.`)
 	fmt.Fprintln(os.Stderr, `    create-assistant: Create an assistant.`)
+	fmt.Fprintln(os.Stderr, `    upgrade-assistant-identity: Give an existing assistant an agent and per-trigger workload identities. By default a new agent is created with access to every MCP server and skill in the project and to administering this assistant. Passing agent_id points the assistant at an existing agent of the project instead; that agent keeps its policy and gains administration of this assistant. Either way the agent is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.`)
 	fmt.Fprintln(os.Stderr, `    update-assistant: Update an assistant.`)
 	fmt.Fprintln(os.Stderr, `    delete-assistant: Delete an assistant.`)
 	fmt.Fprintln(os.Stderr, `    send-message: Send a message from the dashboard to an assistant as the calling user. Continue an existing conversation by passing its chat_id (from listChats), or omit chat_id to start a new conversation — the server mints and returns a fresh chat id. The reply is delivered asynchronously; poll the chat service (loadChat) to read it.`)
@@ -14340,6 +14515,28 @@ func assistantsCreateAssistantUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants create-assistant --body '{\n      \"instructions\": \"abc123\",\n      \"max_concurrency\": 1,\n      \"mcp_servers\": [\n         {\n            \"endpoint_slug\": \"abc123\",\n            \"environment_slug\": \"abc123\",\n            \"mcp_server_slug\": \"abc123\"\n         }\n      ],\n      \"model\": \"abc123\",\n      \"name\": \"abc123\",\n      \"status\": \"paused\",\n      \"toolsets\": [\n         {\n            \"environment_slug\": \"abc123\",\n            \"toolset_slug\": \"abc123\"\n         }\n      ],\n      \"warm_ttl_seconds\": 1\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantsUpgradeAssistantIdentityUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants upgrade-assistant-identity", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Give an existing assistant an agent and per-trigger workload identities. By default a new agent is created with access to every MCP server and skill in the project and to administering this assistant. Passing agent_id points the assistant at an existing agent of the project instead; that agent keeps its policy and gains administration of this assistant. Either way the agent is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants upgrade-assistant-identity --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"agent_name\": \"aa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func assistantsUpdateAssistantUsage() {
@@ -15333,6 +15530,244 @@ func cliAuthRedeemUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "cli-auth redeem --body '{\n      \"code\": \"abc123\",\n      \"code_verifier\": \"aaa\"\n   }'")
+}
+
+// dashboardsUsage displays the usage of the dashboards command and its
+// subcommands.
+func dashboardsUsage() {
+	fmt.Fprintln(os.Stderr, `Dashboards: a project's layouts of saved widgets. Any member can make one; editing someone else's needs project write access.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] dashboards COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-dashboards: List the project's dashboards, most recently updated first, each with its cards.`)
+	fmt.Fprintln(os.Stderr, `    get-dashboard: Get one dashboard by id, with its cards and saved filters.`)
+	fmt.Fprintln(os.Stderr, `    create-dashboard: Make an empty dashboard. Any member of the project can.`)
+	fmt.Fprintln(os.Stderr, `    update-dashboard: Rename a dashboard or change its description. Its creator can; editing someone else's needs project write access.`)
+	fmt.Fprintln(os.Stderr, `    save-dashboard-layout: Move and resize a dashboard's cards. Each card names an existing placement and where it now sits; cards not listed stay as they are, so a layout saved from an older view cannot take off a card someone has just added. A card is added with addWidget and taken off with removeWidget. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.`)
+	fmt.Fprintln(os.Stderr, `    add-dashboard-widget: Place a saved widget on a dashboard, as a new card at the bottom, sized for its chart type.`)
+	fmt.Fprintln(os.Stderr, `    remove-dashboard-widget: Take a card off a dashboard. The widget itself stays saved.`)
+	fmt.Fprintln(os.Stderr, `    save-dashboard-filters: Store the date range and filter values a dashboard opens on, for everyone. Until saved, changes in the filter bar are the viewer's own.`)
+	fmt.Fprintln(os.Stderr, `    duplicate-dashboard: Copy a dashboard into a new one the caller owns, named "<name> (copy)". Every card's widget is copied into a new saved widget too, named the same way, so the copy is fully independent of the original. Like every widget save, each copy is validated, so a dashboard with a broken widget cannot be duplicated until the widget is fixed.`)
+	fmt.Fprintln(os.Stderr, `    delete-dashboard: Delete a dashboard and its cards. Its widgets stay saved. Its creator can; deleting someone else's needs project write access.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s dashboards COMMAND --help\n", os.Args[0])
+}
+func dashboardsListDashboardsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] dashboards list-dashboards", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the project's dashboards, most recently updated first, each with its cards.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dashboards list-dashboards --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dashboardsGetDashboardUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] dashboards get-dashboard", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get one dashboard by id, with its cards and saved filters.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dashboards get-dashboard --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dashboardsCreateDashboardUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] dashboards create-dashboard", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Make an empty dashboard. Any member of the project can.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dashboards create-dashboard --body '{\n      \"description\": \"aaa\",\n      \"name\": \"aa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dashboardsUpdateDashboardUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] dashboards update-dashboard", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Rename a dashboard or change its description. Its creator can; editing someone else's needs project write access.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dashboards update-dashboard --body '{\n      \"description\": \"aaa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dashboardsSaveDashboardLayoutUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] dashboards save-dashboard-layout", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Move and resize a dashboard's cards. Each card names an existing placement and where it now sits; cards not listed stay as they are, so a layout saved from an older view cannot take off a card someone has just added. A card is added with addWidget and taken off with removeWidget. The grid is 12 columns wide, and each chart type has a minimum size. Layout autosaves, so the last save wins.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dashboards save-dashboard-layout --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"placements\": [\n         {\n            \"h\": 2,\n            \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"w\": 2,\n            \"widget_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"x\": 1,\n            \"y\": 1\n         },\n         {\n            \"h\": 2,\n            \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"w\": 2,\n            \"widget_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"x\": 1,\n            \"y\": 1\n         },\n         {\n            \"h\": 2,\n            \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"w\": 2,\n            \"widget_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"x\": 1,\n            \"y\": 1\n         }\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dashboardsAddDashboardWidgetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] dashboards add-dashboard-widget", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Place a saved widget on a dashboard, as a new card at the bottom, sized for its chart type.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dashboards add-dashboard-widget --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"widget_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dashboardsRemoveDashboardWidgetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] dashboards remove-dashboard-widget", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Take a card off a dashboard. The widget itself stays saved.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dashboards remove-dashboard-widget --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"placement_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dashboardsSaveDashboardFiltersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] dashboards save-dashboard-filters", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Store the date range and filter values a dashboard opens on, for everyone. Until saved, changes in the filter bar are the viewer's own.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dashboards save-dashboard-filters --body '{\n      \"filters\": {\n         \"range\": {\n            \"from\": \"1970-01-01T00:00:01Z\",\n            \"label\": \"Last Tuesday\",\n            \"preset\": \"7d\",\n            \"to\": \"1970-01-01T00:00:01Z\"\n         },\n         \"values\": {\n            \"abc123\": [\n               \"abc123\"\n            ]\n         }\n      },\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dashboardsDuplicateDashboardUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] dashboards duplicate-dashboard", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Copy a dashboard into a new one the caller owns, named "<name> (copy)". Every card's widget is copied into a new saved widget too, named the same way, so the copy is fully independent of the original. Like every widget save, each copy is validated, so a dashboard with a broken widget cannot be duplicated until the widget is fixed.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dashboards duplicate-dashboard --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dashboardsDeleteDashboardUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] dashboards delete-dashboard", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a dashboard and its cards. Its widgets stay saved. Its creator can; deleting someone else's needs project write access.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dashboards delete-dashboard --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // dataExportsUsage displays the usage of the data-exports command and its
@@ -17282,6 +17717,7 @@ func hooksUsage() {
 	fmt.Fprintln(os.Stderr, `    skill-feedback: Records agent-volunteered feedback about a distributed skill.`)
 	fmt.Fprintln(os.Stderr, `    logs: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.`)
 	fmt.Fprintln(os.Stderr, `    metrics: Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.`)
+	fmt.Fprintln(os.Stderr, `    get-status: Report whether the organization has any hook telemetry source configured. Reads configuration only; it does not query hook traffic.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s hooks COMMAND --help\n", os.Args[0])
@@ -17476,6 +17912,28 @@ func hooksMetricsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks metrics --body '{\n      \"resourceMetrics\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"arrayValue\": \"abc123\",\n                        \"boolValue\": false,\n                        \"bytesValue\": \"abc123\",\n                        \"doubleValue\": 1,\n                        \"intValue\": \"abc123\",\n                        \"kvlistValue\": \"abc123\",\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeMetrics\": [\n               {\n                  \"metrics\": [\n                     {\n                        \"description\": \"abc123\",\n                        \"exponentialHistogram\": \"abc123\",\n                        \"gauge\": \"abc123\",\n                        \"histogram\": \"abc123\",\n                        \"name\": \"abc123\",\n                        \"sum\": {\n                           \"aggregationTemporality\": \"abc123\",\n                           \"dataPoints\": [\n                              {\n                                 \"asDouble\": 1,\n                                 \"asInt\": \"abc123\",\n                                 \"attributes\": [\n                                    {\n                                       \"key\": \"abc123\",\n                                       \"value\": {\n                                          \"arrayValue\": \"abc123\",\n                                          \"boolValue\": false,\n                                          \"bytesValue\": \"abc123\",\n                                          \"doubleValue\": 1,\n                                          \"intValue\": \"abc123\",\n                                          \"kvlistValue\": \"abc123\",\n                                          \"stringValue\": \"abc123\"\n                                       }\n                                    }\n                                 ],\n                                 \"startTimeUnixNano\": \"abc123\",\n                                 \"timeUnixNano\": \"abc123\"\n                              }\n                           ],\n                           \"isMonotonic\": false\n                        },\n                        \"summary\": \"abc123\",\n                        \"unit\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func hooksGetStatusUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] hooks get-status", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Report whether the organization has any hook telemetry source configured. Reads configuration only; it does not query hook traffic.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks get-status --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // identityUsage displays the usage of the identity command and its subcommands.
@@ -24252,6 +24710,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    list-risk-results: List risk analysis results for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-for-agent: List risk analysis results with the `+"`"+`match`+"`"+` field redacted to an opaque length+sha256-prefix fingerprint. Matches the payload and pagination semantics of listRiskResults. Designed for AI assistant / MCP consumption so secret content (gitleaks captures, presidio entities, prompt-injection payloads) never reaches the model context. For shadow_mcp findings the `+"`"+`match`+"`"+` value — a non-sensitive server URL or command identifier — is passed through verbatim.`)
 	fmt.Fprintln(os.Stderr, `    unmask-risk-result: Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.`)
+	fmt.Fprintln(os.Stderr, `    reveal-risk-result-payload: Return the full scanned payload of the MCP tool call phase a risk result was raised on, so its findings can be shown in context. Positions of every finding with the same execution_id and phase index into the returned payload. Requires an unrestricted chat:read grant. Every successful reveal is audited.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-by-chat: List risk results grouped by chat session for the current project.`)
 	fmt.Fprintln(os.Stderr, `    mark-risk-results-false-positive: Mark one or more risk results as manually-reviewed false positives. Distinct from exclusions: this suppresses the specific results picked, not future findings matching a rule.`)
 	fmt.Fprintln(os.Stderr, `    unmark-risk-results-false-positive: Undo a false-positive dismissal for one or more risk results.`)
@@ -24536,6 +24995,8 @@ func riskListRiskResultsUsage() {
 	fmt.Fprint(os.Stderr, " -policy-id STRING")
 	fmt.Fprint(os.Stderr, " -chat-id STRING")
 	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -result-id STRING")
+	fmt.Fprint(os.Stderr, " -execution-id STRING")
 	fmt.Fprint(os.Stderr, " -category STRING")
 	fmt.Fprint(os.Stderr, " -rule-id STRING")
 	fmt.Fprint(os.Stderr, " -user-id STRING")
@@ -24560,6 +25021,8 @@ func riskListRiskResultsUsage() {
 	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -chat-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -result-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -execution-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -category STRING: `)
 	fmt.Fprintln(os.Stderr, `    -rule-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
@@ -24577,7 +25040,7 @@ func riskListRiskResultsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --category \"abc123\" --rule-id \"abc123\" --user-id \"abc123\" --external-user-ids '[\n      \"abc123\"\n   ]' --unique-match false --non-assistant false --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-results --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --result-id \"550e8400-e29b-41d4-a716-446655440000\" --execution-id \"abc123\" --category \"abc123\" --rule-id \"abc123\" --user-id \"abc123\" --external-user-ids '[\n      \"abc123\"\n   ]' --unique-match false --non-assistant false --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --cursor \"abc123\" --limit 2 --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskResultsForAgentUsage() {
@@ -24650,6 +25113,30 @@ func riskUnmaskRiskResultUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk unmask-risk-result --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskRevealRiskResultPayloadUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk reveal-risk-result-payload", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Return the full scanned payload of the MCP tool call phase a risk result was raised on, so its findings can be shown in context. Positions of every finding with the same execution_id and phase index into the returned payload. Requires an unrestricted chat:read grant. Every successful reveal is audited.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk reveal-risk-result-payload --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskResultsByChatUsage() {

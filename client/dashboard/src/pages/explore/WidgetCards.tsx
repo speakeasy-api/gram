@@ -64,12 +64,12 @@ export function WidgetCards({
 
 /**
  * Mounts a card once it first scrolls near the viewport, and keeps it. Each
- * card scans its dataset across its whole window, so a long list asks only
- * the questions someone scrolls to rather than all of them at once. Without
- * an IntersectionObserver, cards mount straight away. Until then it holds
- * the card's place at the size the card will draw at.
+ * card scans its dataset across its whole window, so a long list or a tall
+ * dashboard asks only the questions someone scrolls to rather than all of
+ * them at once. Without an IntersectionObserver, cards mount straight away.
+ * Until then it holds the card's place at the size the card will draw at.
  */
-function OnceVisible({
+export function OnceVisible({
   chartType,
   children,
 }: {

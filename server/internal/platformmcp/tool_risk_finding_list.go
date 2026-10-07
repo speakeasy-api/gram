@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/speakeasy-api/gram/server/internal/risk"
 )
 
 const (
@@ -21,7 +23,7 @@ func registerRiskFindingListTools(reg *Registrar, service riskFindingListLister)
 	available := service != nil && service.valid()
 	registerRiskFindingListTool(reg, &mcp.Tool{
 		Name: riskFindingListToolName, Title: "List Risk Findings",
-		Description: "List individual risk findings in an exact project or the organization's literal default project, newest message first, with the matched value redacted to a length and hash fingerprint that never reaches the model. Filter by message-time window, policy, concrete MCP server, chat, category, rule substring, user substring, assistant linkage, or unique match; page with an opaque cursor, 25 per page by default and at most 50. MCP findings can be chatless and return execution_id, mcp_server_id, meta_mcp_server_id, toolset_id, tool_name, phase, mediation_surface, mcp_method, principal_kind, identity_stamped, and enforcement_outcome. Each finding carries a stable id for later dismissal, its severity band and score, and an organization-scoped user pseudonym shared with list_watchdog_findings. Prefer get_risk_rule_breakdown to size a finding set, and list_watchdog_findings for severity-first rule triage.",
+		Description: "List individual risk findings in an exact project or the organization's literal default project, newest message first, with the matched value redacted to a length and hash fingerprint that never reaches the model. Filter by message-time window, policy, concrete MCP server, chat, category, rule substring, user substring, assistant linkage, or unique match; fetch one finding by result_id, or the live findings on one mediated MCP execution by execution_id; page with an opaque cursor, 25 per page by default and at most 50. MCP findings can be chatless and return execution_id (the tool call, resource read or prompt get that raised them), mcp_server_id, meta_mcp_server_id, toolset_id, tool_name, phase, mediation_surface, mcp_method, principal_kind, identity_stamped, and enforcement_outcome. Each finding carries a stable id for later dismissal, its severity band and score, and an organization-scoped user pseudonym shared with list_watchdog_findings. Prefer get_risk_rule_breakdown to size a finding set, and list_watchdog_findings for severity-first rule triage.",
 		Annotations: readOnlyAnnotations(), InputSchema: riskFindingListSchema(),
 	}, available, func(ctx context.Context, principal Principal, input ListRiskFindingPageInput) (ListRiskFindingPageOutput, error) {
 		return service.List(ctx, principal, input)
@@ -67,7 +69,7 @@ func riskFindingListSchema() *jsonschema.Schema {
 	properties["to"] = &jsonschema.Schema{Type: "string", Description: "Exclusive message time in RFC3339. Omit for no upper bound."}
 	properties["policy_id"] = uuidSchema("Optional exact policy ID, including a disabled policy. Without it, findings from every non-deleted policy are listed.")
 	properties["chat_id"] = uuidSchema("Optional exact chat ID. Combines with the other filters.")
-	properties["mcp_server_id"] = uuidSchema("Optional exact MCP server ID; only findings on tool calls through that server, including chatless ones.")
+	properties["mcp_server_id"] = uuidSchema("Optional exact MCP server ID; only findings on mediated MCP executions (tool calls, resource reads, prompt gets) through that server, including chatless ones.")
 	properties["category"] = enumSchema(riskCategoryKeys()...)
 	properties["category"].Description = "Optional exact risk category key."
 	properties["rule_id"] = stringSchema("Optional case-insensitive substring of the rule identifier, such as secret.", 1, 128)
@@ -75,6 +77,8 @@ func riskFindingListSchema() *jsonschema.Schema {
 	properties["assistant_id"] = uuidSchema("Optional assistant ID; only findings from chats linked to it. Mutually exclusive with non_assistant.")
 	properties["non_assistant"] = &jsonschema.Schema{Type: "boolean", Description: "Only findings from chats not linked to any assistant."}
 	properties["unique_match"] = &jsonschema.Schema{Type: "boolean", Description: "Collapse to one finding per (policy, rule, matched value), keeping the most recent occurrence."}
+	properties["result_id"] = uuidSchema("Optional finding ID. Fetches that one finding, such as one from a shared link, even when it is not on the current page. Returns nothing if it was dismissed, for example as a false positive.")
+	properties["execution_id"] = stringSchema("Optional ID of one mediated MCP execution (tool call, resource read or prompt get), the execution_id a finding returns. Returns the live findings for that execution across its request and response phases; findings that were dismissed, auto-excluded by exclusion rules, or raised under deleted policies are omitted.", 1, risk.MaxExecutionIDLen)
 	return projectSelectorSchema(properties, nil)
 }
 

@@ -493,9 +493,6 @@ func (s *Service) DeleteProject(ctx context.Context, payload *gen.DeleteProjectP
 	if err := pr.DeleteProjectEMATombstones(ctx, repo.DeleteProjectEMATombstonesParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove project identity-chaining tombstones")
 	}
-	if _, err := pr.DeleteProjectRiskFindingEvidence(ctx, repo.DeleteProjectRiskFindingEvidenceParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "remove project risk finding evidence")
-	}
 
 	_, err = pr.DeleteProject(ctx, projectID)
 	switch {

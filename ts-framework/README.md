@@ -4,8 +4,13 @@ This directory contains the TypeScript packages for Gram.
 
 ## Packages
 
-- `create-function` - CLI tool for scaffolding new Gram functions (`pnpm create @gram-ai/function`)
-- `functions` - Core framework for building Gram functions
+- `create-function` - Deprecated scaffolder for new Gram functions (`pnpm create @gram-ai/function`). Use `speakeasy functions init` instead.
+- `functions` - Core framework for building Gram functions, published as `@speakeasy-api/functions`
+- `functions-compat` - Deprecated `@gram-ai/functions` package. It depends on `@speakeasy-api/functions` at the same version and re-exports it, including every subpath and the `gf` command, so existing projects keep working
+
+The project templates live in `cli/internal/functions/templates`, where the
+`speakeasy` CLI embeds them. `create-function` copies them into its package
+when it builds.
 
 ## Local Development
 

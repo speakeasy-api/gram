@@ -108,7 +108,8 @@ function getDenyPanels(
     return allowLevel === "all" ? ["servers"] : [];
   }
   if (resourceType && isProjectFilteredResourceType(resourceType)) {
-    return allowLevel === "all" ? ["projects"] : [];
+    if (allowLevel === "all") return ["projects", "servers"];
+    return allowLevel === "project" ? ["servers"] : [];
   }
 
   switch (allowLevel) {

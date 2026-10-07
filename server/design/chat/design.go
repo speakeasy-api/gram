@@ -615,6 +615,7 @@ var ChatOverview = Type("ChatOverview", func() {
 	Attribute("external_user_id", String, "The ID of the external user who created the chat")
 	Attribute("assistant_id", String, "The ID of the assistant that produced this chat, if any")
 	Attribute("assistant_name", String, "The name of the assistant that produced this chat, if any")
+	Attribute("assistant_agent_id", String, "The ID of the agent the assistant acts as, when the assistant has a dedicated agent identity")
 	Attribute("num_messages", Int, "The number of messages in the chat")
 	Attribute("source", String, "The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)")
 	Attribute("originating_client", String, "The supported client that originated a chat routed through the source, when known")

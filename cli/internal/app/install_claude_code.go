@@ -13,7 +13,7 @@ import (
 func newInstallClaudeCodeCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "claude-code",
-		Usage:  "Install a Gram toolset as an MCP server in Claude Code (CLI editor with native HTTP support)",
+		Usage:  "Install a toolset as an MCP server in Claude Code (CLI editor with native HTTP support)",
 		Flags:  installFlags,
 		Action: doInstallClaudeCode,
 	}
@@ -51,6 +51,19 @@ func doInstallClaudeCode(c *cli.Context) error {
 			logger.InfoContext(ctx, "successfully installed via claude CLI",
 				slog.String("name", info.Name),
 				slog.String("url", info.URL))
+
+			// Remove an entry an earlier release installed under the legacy
+			// default name, as the config file path below does. It usually
+			// doesn't exist, so a failure here is only logged.
+			if legacy, ok := mcp.LegacyServerName(info.Name); ok {
+				if err := mcp.RemoveViaClaudeCLI(legacy, scope); err != nil {
+					logger.DebugContext(ctx, "no legacy server to remove via claude CLI",
+						slog.String("legacy_name", legacy), slog.String("error", err.Error()))
+				} else {
+					logger.InfoContext(ctx, "removed server installed under its legacy name",
+						slog.String("legacy_name", legacy), slog.String("name", info.Name))
+				}
+			}
 
 			fmt.Printf("\n✓ Successfully installed MCP server '%s' via claude CLI\n", info.Name)
 			fmt.Printf("  URL: %s\n", info.URL)
@@ -96,6 +109,16 @@ func doInstallClaudeCode(c *cli.Context) error {
 	config, err := claudecode.ReadConfig(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to read config: %w", err)
+	}
+
+	// Replace an entry an earlier release installed under the legacy default
+	// name instead of adding a duplicate next to it.
+	if legacy, ok := mcp.LegacyServerName(info.Name); ok {
+		if _, exists := config.MCPServers[legacy]; exists {
+			logger.InfoContext(ctx, "replacing server installed under its legacy name",
+				slog.String("legacy_name", legacy), slog.String("name", info.Name))
+			delete(config.MCPServers, legacy)
+		}
 	}
 
 	if _, exists := config.MCPServers[info.Name]; exists {

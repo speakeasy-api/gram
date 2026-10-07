@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
 
 const maxPluginAssignmentReceiptPayloadBytes = 16 << 10
@@ -86,6 +88,11 @@ func validPluginAssignmentReceiptResult(result SetPluginAssignmentsReceiptResult
 		return false
 	}
 	if result.Plugin.Publication != PluginPublicationPublished && result.Plugin.Publication != PluginPublicationUnpublished && result.Plugin.Publication != PluginPublicationNoRepository {
+		return false
+	}
+	switch result.PublicationRequest {
+	case "", string(plugins.ProjectPublicationEnqueued), string(plugins.ProjectPublicationNotConfigured), string(plugins.ProjectPublicationEmissionDisabled):
+	default:
 		return false
 	}
 	for _, assignment := range result.Assignments {

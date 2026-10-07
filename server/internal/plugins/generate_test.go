@@ -2047,6 +2047,26 @@ func TestHooksConfigHashTracksBinaryReleaseMetadata(t *testing.T) {
 	require.NotEqual(t, hooksConfigHash(current), hooksConfigHash(changedTargets))
 }
 
+// Recording the published marketplace name must never read as a hooks change:
+// the publish path stamps it into every persisted snapshot (carried, skipped,
+// and observability-disabled ones included), so a hash that covered it would
+// regenerate hooks across the fleet, or past the rollout gate.
+func TestHooksConfigHashIgnoresPublishedMarketplaceName(t *testing.T) {
+	t.Parallel()
+
+	snapshot, err := marshalHooksConfig(hooksConfigSnapshot(GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}))
+	require.NoError(t, err)
+
+	stamped, err := naming.WithPublishedMarketplaceName(snapshot, "acme-speakeasy")
+	require.NoError(t, err)
+	restamped, err := naming.WithPublishedMarketplaceName(stamped, "renamed-speakeasy")
+	require.NoError(t, err)
+
+	require.NotEmpty(t, storedHooksConfigHash(snapshot))
+	require.Equal(t, storedHooksConfigHash(snapshot), storedHooksConfigHash(stamped))
+	require.Equal(t, storedHooksConfigHash(snapshot), storedHooksConfigHash(restamped))
+}
+
 // Substring assertions cannot catch shell quoting regressions — run bash -n
 // over every generated shell script.
 func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
@@ -2846,6 +2866,89 @@ func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {
 	readme := string(files["README.md"])
 	require.Contains(t, readme, "### Codex", "Codex installation section must be present — Codex packages are still generated and listed in the marketplace")
 	require.Contains(t, readme, "codex plugin marketplace add")
+}
+
+// claudeManagedSettingsFromReadme parses the README's Claude Code managed
+// settings snippet, the one JSON block that registers the marketplace.
+func claudeManagedSettingsFromReadme(t *testing.T, readme string) map[string]any {
+	t.Helper()
+	for block := range strings.SplitSeq(readme, "```json\n") {
+		body, _, found := strings.Cut(block, "```")
+		if !found || !strings.Contains(body, "extraKnownMarketplaces") {
+			continue
+		}
+		var settings map[string]any
+		require.NoError(t, json.Unmarshal([]byte(body), &settings), "managed settings snippet must be valid JSON:\n%s", body)
+		return settings
+	}
+	require.FailNow(t, "README has no Claude Code managed settings snippet", readme)
+	return nil
+}
+
+// Claude Code registers a marketplace under its marketplace.json name and
+// applies autoUpdate only from the extraKnownMarketplaces entry keyed by that
+// name, so the README must key the snippet by the resolved name (override
+// included) and must never emit the nonexistent plugins.required key.
+func TestGenerateReadmeKeysClaudeManagedSettingsByMarketplaceName(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name            string
+		cfg             GenerateConfig
+		marketplaceName string
+		enabledPlugin   string
+	}{
+		{
+			name:            "default name with observability",
+			cfg:             GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai", HooksAPIKey: "gram_hooks_test", IsDefaultProject: true},
+			marketplaceName: "acme-speakeasy",
+			enabledPlugin:   ClaudeObservabilitySlug(GenerateConfig{OrgName: "Acme"}) + "@acme-speakeasy",
+		},
+		{
+			name:            "override name with observability",
+			cfg:             GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai", HooksAPIKey: "gram_hooks_test", MarketplaceName: "custom-market"},
+			marketplaceName: "custom-market",
+			enabledPlugin:   ClaudeObservabilitySlug(GenerateConfig{OrgName: "Acme"}) + "@custom-market",
+		},
+		{
+			name:            "project-scoped name without observability",
+			cfg:             GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai", ProjectSlug: "tools"},
+			marketplaceName: "acme-tools-speakeasy",
+			enabledPlugin:   "<plugin-slug>@acme-tools-speakeasy",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			files, err := GeneratePluginPackages(nil, tc.cfg)
+			require.NoError(t, err)
+
+			var manifest marketplaceManifest
+			require.NoError(t, json.Unmarshal(files[".claude-plugin/marketplace.json"], &manifest))
+			require.Equal(t, tc.marketplaceName, manifest.Name, "the README must key settings by the published marketplace name")
+
+			readme := string(files["README.md"])
+			require.NotContains(t, readme, `"required"`, "Claude Code has no plugins.required setting")
+			require.Contains(t, readme, "Merge this into `~/.claude/settings.json`")
+			require.Contains(t, readme, "Keep the marketplace name `"+tc.marketplaceName+"` exactly as shown, including after `@`.")
+			require.NotContains(t, readme, "<org>-gram", "new users never saw the retired <org>-gram default")
+			// Settings register the marketplace with autoUpdate on, so there is
+			// no CLI step to run.
+			require.NotContains(t, readme, "/plugin marketplace add")
+			require.NotContains(t, readme, "/plugin install")
+
+			settings := claudeManagedSettingsFromReadme(t, readme)
+			require.Equal(t, map[string]any{"FORCE_AUTOUPDATE_PLUGINS": "1"}, settings["env"])
+			require.Equal(t, map[string]any{
+				tc.marketplaceName: map[string]any{
+					"autoUpdate": true,
+					"source":     map[string]any{"source": "git", "url": "<marketplace-url>"},
+				},
+			}, settings["extraKnownMarketplaces"])
+			require.Equal(t, map[string]any{tc.enabledPlugin: true}, settings["enabledPlugins"])
+		})
+	}
 }
 
 func TestGenerateReadmeDescribesAdminAccessAndCursorServing(t *testing.T) {

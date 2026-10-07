@@ -1066,6 +1066,7 @@ WHERE project_id = @project_id
 UPDATE assistant_thread_events
 SET
   status = @pending_status,
+  attempts = GREATEST(0, attempts - CASE WHEN @restore_attempt::boolean THEN 1 ELSE 0 END),
   last_error = @last_error,
   updated_at = clock_timestamp()
 WHERE id = @event_id

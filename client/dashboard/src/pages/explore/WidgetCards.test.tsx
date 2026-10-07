@@ -43,6 +43,7 @@ function widget(id: string, name: string, chartType = "number"): Widget {
     dataset: "sessions",
     query: {},
     visualization: { type: chartType },
+    dashboards: [],
     projectId: "project",
     organizationId: "org",
     createdAt: new Date(),

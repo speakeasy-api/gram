@@ -873,6 +873,9 @@ func (s *Service) prepareProxyBackendContext(
 			if !ok || authCtx == nil || project.OrganizationID != authCtx.ActiveOrganizationID {
 				return nil, "", oops.C(oops.CodeUnauthorized)
 			}
+			if err := requirePrincipalCredentialProject(ctx, project.ID); err != nil {
+				return nil, "", err
+			}
 			ctx = setProxyBackendProjectContext(ctx, authCtx, project.ID, project.Slug)
 		}
 	case mcpservers.VisibilityPublic:

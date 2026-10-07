@@ -39,6 +39,9 @@ type Service interface {
 	// Endpoint to receive OTEL metrics data from Claude Code. Requires API key
 	// authentication.
 	Metrics(context.Context, *MetricsPayload) (err error)
+	// Report whether the organization has any hook telemetry source configured.
+	// Reads configuration only; it does not query hook traffic.
+	GetStatus(context.Context, *GetStatusPayload) (res *HooksStatus, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -61,7 +64,7 @@ const ServiceName = "hooks"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"claude", "cursor", "codex", "ingest", "uploadSkillContent", "skillFeedback", "logs", "metrics"}
+var MethodNames = [9]string{"claude", "cursor", "codex", "ingest", "uploadSkillContent", "skillFeedback", "logs", "metrics", "getStatus"}
 
 // ClaudeHookResult is the result type of the hooks service claude method.
 type ClaudeHookResult struct {
@@ -271,6 +274,13 @@ type CursorPayload struct {
 	Duration *float64
 }
 
+// GetStatusPayload is the payload type of the hooks service getStatus method.
+type GetStatusPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // Feature-specific payloads. Hooks populate only the blocks needed for the
 // event.
 type HookIngestData struct {
@@ -470,6 +480,17 @@ type HookUsageData struct {
 	LoopCount *int
 	// Provider-reported usage or session status, when available.
 	Status *string
+}
+
+// HooksStatus is the result type of the hooks service getStatus method.
+type HooksStatus struct {
+	// True when at least one hook source is configured for the organization.
+	Configured bool
+	// An active hooks-scoped API key exists, as minted by the hooks setup dialog,
+	// the plugin download or the setup wizard.
+	AgentHooksKey bool
+	// An enabled Anthropic inference hooks integration is connected.
+	AnthropicInferenceHooks bool
 }
 
 // IngestHookResult is the result type of the hooks service ingest method.

@@ -4,14 +4,35 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // What the page sends when a row changes. The rules the surface writes are the
 // whole point, so the tests assert the payload rather than the rendering alone.
-const { mutate } = vi.hoisted(() => ({ mutate: vi.fn() }));
+const { mutate, mutationOptions, invalidate } = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  mutationOptions: vi.fn(),
+  invalidate: vi.fn(),
+}));
 
 vi.mock("@gram/client/react-query/setResourceAudience.js", () => ({
-  useSetResourceAudienceMutation: () => ({ mutate, isPending: false }),
+  useSetResourceAudienceMutation: (options: unknown) => {
+    mutationOptions(options);
+    return { mutate, isPending: false };
+  },
 }));
 
 vi.mock("@gram/client/react-query/resourceAudience.js", () => ({
   invalidateAllResourceAudience: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/explainResourceAccess.js", () => ({
+  invalidateAllExplainResourceAccess: invalidate,
+}));
+
+vi.mock("@gram/client/react-query/roles.js", () => ({
+  invalidateAllRoles: invalidate,
+}));
+vi.mock("@gram/client/react-query/plugin.js", () => ({
+  invalidateAllPlugin: invalidate,
+}));
+vi.mock("@gram/client/react-query/plugins.js", () => ({
+  invalidateAllPlugins: invalidate,
 }));
 
 vi.mock("@gram/client/react-query/members.js", () => ({
@@ -33,6 +54,11 @@ vi.mock("@gram/client/react-query/audienceOptions.js", () => ({
   useAudienceOptions: () => ({
     data: {
       options: [
+        {
+          principalUrn: "role:global:1",
+          kind: "role",
+          displayName: "Engineering",
+        },
         {
           principalUrn: "agent:agent-1",
           kind: "agent",
@@ -84,7 +110,7 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import { ManageAccess } from "./ManageAccess";
 
 afterEach(cleanup);
-beforeEach(() => mutate.mockClear());
+beforeEach(() => vi.clearAllMocks());
 
 function entry(
   overrides: Partial<ResourceAudienceEntry>,
@@ -304,6 +330,37 @@ describe("the access list", () => {
     expect(
       screen.getByText("Blocked by Engineering on this server"),
     ).toBeTruthy();
+  });
+
+  it("grants a picked role Connect through the existing audience endpoint", async () => {
+    renderList([entry({})]);
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: /Grant access/ }),
+      { button: 0, ctrlKey: false, pointerType: "mouse" },
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Role" }));
+    expect(
+      screen.getByRole("heading", { name: "Grant role access" }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("combobox"));
+    expect(screen.queryByText("Release Bot")).toBeNull();
+    fireEvent.click(screen.getByRole("option", { name: /Engineering/ }));
+    fireEvent.keyDown(screen.getByRole("option", { name: /Engineering/ }), {
+      key: "Escape",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(savedEntries()).toEqual({
+      resourceKind: "mcp",
+      resourceId: "server-1",
+      expectedVersion: "v1",
+      entries: [
+        { principalUrn: "user:1", level: "use" },
+        { principalUrn: "role:global:1", level: "use" },
+      ],
+    });
+    await mutationOptions.mock.calls.at(-1)![0].onSuccess();
+    expect(invalidate).toHaveBeenCalledTimes(4);
   });
 
   it("says when nobody reaches the server", () => {

@@ -36,6 +36,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
@@ -893,7 +894,18 @@ func (s *Service) authenticateIssuerGate(
 		surface = mcpmetrics.SurfaceMeta
 	}
 
-	newCtx, subject, toolSelection, refreshable, valErr := s.validateUserSessionToken(ctx, authToken, baseURL, endpoint)
+	var (
+		newCtx        context.Context
+		subject       *urn.SessionSubject
+		toolSelection *toolfilter.SessionSelection
+		refreshable   bool
+		valErr        error
+	)
+	if principalcredential.IsToken(authToken) {
+		newCtx, subject, valErr = s.authenticateIssuerGatePrincipalCredential(ctx, authToken, endpoint)
+	} else {
+		newCtx, subject, toolSelection, refreshable, valErr = s.validateUserSessionToken(ctx, authToken, baseURL, endpoint)
+	}
 	refreshableUserSession := subject != nil && refreshable
 	if subject == nil {
 		// Accept an assistant-runtime JWT, but only when the assistant

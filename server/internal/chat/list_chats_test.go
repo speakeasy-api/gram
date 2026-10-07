@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	assistantidentityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -17,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -378,6 +381,10 @@ func TestListChats_OneRowPerChat_ReportsOnlyThisProjectsAssistant(t *testing.T) 
 	require.True(t, ok)
 	require.Nil(t, crossAssistant.AssistantID, "a thread here pointing at another project's assistant surfaces neither its id nor its name")
 	require.Nil(t, crossAssistant.AssistantName)
+	loadedCross, err := ti.service.LoadChat(ctx, &gen.LoadChatPayload{ID: crossAssistantChat.String()})
+	require.NoError(t, err)
+	require.Nil(t, loadedCross.AssistantID, "loading the chat reports the same attribution as listing it")
+	require.Nil(t, loadedCross.AssistantName)
 
 	// Narrowing to the foreign assistant admits only the chat whose thread is
 	// recorded here (the admission filter is project-scoped), and even that row
@@ -392,6 +399,82 @@ func TestListChats_OneRowPerChat_ReportsOnlyThisProjectsAssistant(t *testing.T) 
 	require.Equal(t, crossAssistantChat.String(), result.Chats[0].ID)
 	require.Nil(t, result.Chats[0].AssistantID)
 	require.Nil(t, result.Chats[0].AssistantName)
+}
+
+// An assistant session reports the agent its assistant acts as, so the
+// session can name that agent; an assistant without one reports none.
+func TestListChats_ReportsAssistantAgentIdentity(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	queries := repo.New(ti.conn)
+
+	agentBacked, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Name:           "Agent-backed Assistant",
+	})
+	require.NoError(t, err)
+	legacy, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Name:           "Legacy Assistant",
+	})
+	require.NoError(t, err)
+	_, err = orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: ti.orgID,
+		UserID:         conv.ToPGText(authCtx.UserID),
+	})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: ti.orgID,
+		OwnerUserID:    authCtx.UserID,
+		ProjectID:      uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		Name:           "Assistant Agent",
+	})
+	require.NoError(t, err)
+	_, err = assistantidentityrepo.New(ti.conn).CreateAssistantBinding(ctx, assistantidentityrepo.CreateAssistantBindingParams{
+		OrganizationID: ti.orgID,
+		ProjectID:      ti.projectID,
+		AssistantID:    agentBacked,
+		AgentID:        agent.ID,
+	})
+	require.NoError(t, err)
+
+	agentChat := seedChat(t, ctx, ti, authCtx.UserID, "", "agent-backed chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   agentBacked,
+		ProjectID:     ti.projectID,
+		CorrelationID: "agent-backed",
+		ChatID:        agentChat,
+	}))
+	legacyChat := seedChat(t, ctx, ti, authCtx.UserID, "", "legacy chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   legacy,
+		ProjectID:     ti.projectID,
+		CorrelationID: "legacy",
+		ChatID:        legacyChat,
+	}))
+	plainChat := seedChat(t, ctx, ti, authCtx.UserID, "", "plain chat")
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	byID := map[string]*gen.ChatOverview{}
+	for _, chat := range result.Chats {
+		byID[chat.ID] = chat
+	}
+	require.Equal(t, agent.ID.String(), conv.PtrValOr(byID[agentChat.String()].AssistantAgentID, ""))
+	require.Nil(t, byID[legacyChat.String()].AssistantAgentID)
+	require.Nil(t, byID[plainChat.String()].AssistantAgentID)
+
+	loaded, err := ti.service.LoadChat(ctx, &gen.LoadChatPayload{ID: agentChat.String()})
+	require.NoError(t, err)
+	require.Equal(t, agent.ID.String(), conv.PtrValOr(loaded.AssistantAgentID, ""))
+	loaded, err = ti.service.LoadChat(ctx, &gen.LoadChatPayload{ID: legacyChat.String()})
+	require.NoError(t, err)
+	require.Nil(t, loaded.AssistantAgentID)
 }
 
 // TestListChats_ChatRead_SeesAllChats verifies that a caller holding an

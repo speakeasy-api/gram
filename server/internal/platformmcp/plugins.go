@@ -428,8 +428,10 @@ func (s *PluginsService) readPublicationEvidence(ctx context.Context, principal 
 // PluginsService answers what plugins a project has and what is inside one,
 // and resolves the exact plugin a distribution names.
 type PluginsService struct {
+	serverRemoval        *plugindelivery.Service
 	publicationEvidence  publicationEvidenceReader
 	publishStatus        publishstatus.Describer
+	publicationRequests  plugindelivery.PublicationRequests
 	db                   *pgxpool.Pool
 	authorization        *authz.Engine
 	dashboardURL         *url.URL
@@ -504,6 +506,13 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		metadataCore:          nil,
 		metadataBudget:        OperationBudget{},
 	}
+}
+
+func (s *PluginsService) WithPublicationRequests(requests plugindelivery.PublicationRequests) *PluginsService {
+	if s != nil {
+		s.publicationRequests = requests
+	}
+	return s
 }
 
 func (s *PluginsService) WithPublicationEvidence(reader publicationEvidenceReader) *PluginsService {

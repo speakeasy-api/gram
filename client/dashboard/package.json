@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.131.0",
+  "version": "0.133.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
@@ -84,6 +84,7 @@
     "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.3.0",
     "react-error-boundary": "^6.1.2",
+    "react-grid-layout": "^2.2.4",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.12.2",
     "react-router": "^8.3.1",

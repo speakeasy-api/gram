@@ -95,14 +95,30 @@ var windows = map[string]time.Duration{
 // windowNames lists the windows a widget can be saved with, for messages.
 const windowNames = "15m, 1h, 4h, 1d, 2d, 3d, 7d, 15d, 30d, 90d"
 
-// validate returns what is wrong with a widget, or "" when it works: the
+// CanonicalWindow returns the spelling a relative window is saved with, for
+// a dashboard's date range to share a widget's vocabulary: "24h", the
+// builder's old spelling of a day, reads as "1d". ok is false for a window
+// a widget cannot be saved with.
+func CanonicalWindow(window string) (string, bool) {
+	if _, ok := windows[window]; !ok {
+		return "", false
+	}
+	if window == "24h" {
+		return "1d", true
+	}
+	return window, true
+}
+
+// Validate returns what is wrong with a widget, or "" when it works: the
 // question is planned against the catalog, then the chart is checked against
 // the question. Used on save, so a mistake is rejected immediately, and on
 // read, so a catalog change is visible breakage naming what went missing
 // instead of quietly wrong numbers. An error is a failure that is not the
 // widget's fault: a write fails with it as a server error, and a read logs
-// it and reports only that the widget could not be validated.
-func validate(catalog *analytics.Catalog, dataset string, rawQuery, rawVisualization []byte, now time.Time) (string, error) {
+// it and reports only that the widget could not be validated. Exported for
+// another service that stores a widget's shape, such as dashboards copying
+// cards into saved widgets.
+func Validate(catalog *analytics.Catalog, dataset string, rawQuery, rawVisualization []byte, now time.Time) (string, error) {
 	query, err := decodeQuery(rawQuery)
 	if err != nil {
 		return "invalid query: " + err.Error(), nil

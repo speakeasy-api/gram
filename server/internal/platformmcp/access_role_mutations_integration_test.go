@@ -1,10 +1,13 @@
 package platformmcp
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
@@ -16,10 +19,30 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+type roleAdmissionOutsideTransactionFlags struct {
+	feature.Provider
+	t         *testing.T
+	db        *pgxpool.Pool
+	evaluated bool
+}
+
+func (f *roleAdmissionOutsideTransactionFlags) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
+	f.t.Helper()
+	f.evaluated = true
+	require.Zero(f.t, f.db.Stat().AcquiredConns(), "role admission must resolve before opening the mutation transaction")
+	evaluation, err := feature.EvaluateFlag(ctx, f.Provider, flag, distinctID, groups)
+	if err != nil {
+		return evaluation, fmt.Errorf("evaluate role admission flag: %w", err)
+	}
+	return evaluation, nil
+}
 
 func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 	t.Parallel()
@@ -50,7 +73,8 @@ func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 	flags.SetFlag(feature.FlagPlatformMCPAccessRoleMutations, principal.OrganizationID, true)
 	logger := testenv.NewLogger(t)
 	reads := NewAccessReadService(logger, conn, allowBudget(), "access-role-integration-key")
-	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger())
+	admissionFlags := &roleAdmissionOutsideTransactionFlags{Provider: flags, t: t, db: conn, evaluated: false}
+	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, admission.NewGuard(admissionFlags, nil))
 	service, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "access-role-integration-key", manager)
 	require.NoError(t, err)
 
@@ -126,6 +150,7 @@ func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 		IdempotencyKey: "update-mcp-operators", Confirmed: true,
 	})
 	require.NoError(t, err)
+	require.True(t, admissionFlags.evaluated, "role update must exercise admission preparation")
 	require.False(t, updated.Receipt.Replayed)
 	require.Equal(t, "complete", updated.Reconciliation)
 	require.NotEqual(t, current.Version, updated.Role.Version)

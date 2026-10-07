@@ -117,3 +117,4 @@ All mutations emit an audit event with actor, action, subject (plugin), and org/
 - [Local development](./local-development.md) — env vars, GitHub App setup, running locally
 - [Package format](./package-format.md) — exact file layout Gram generates per platform
 - [Publishing](./publishing.md) — end-to-end publish flow, marketplace tokens, GitHub integration
+- [Hooks environment overrides](../runbooks/hooks-environment-overrides.md) — the `GRAM_HOOKS_*` variables an installed plugin honours, and how to collect a debug log

@@ -322,10 +322,6 @@ INSERT INTO organization_metadata (
     $8::text
 )
 RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
-), enabled AS (
-    INSERT INTO organization_features (organization_id, feature_name)
-    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -433,10 +429,6 @@ WITH written AS (
 INSERT INTO organization_metadata (id, name, slug, default_host)
 VALUES ($1, $2, $3, $4::text)
 RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, TRUE AS inserted
-), enabled AS (
-    INSERT INTO organization_features (organization_id, feature_name)
-    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -3497,10 +3489,6 @@ ON CONFLICT (id) DO UPDATE SET
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     updated_at = clock_timestamp()
 RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
-), enabled AS (
-    INSERT INTO organization_features (organization_id, feature_name)
-    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -3641,10 +3629,6 @@ ON CONFLICT (id) DO UPDATE SET
     -- URLs to another host.
     updated_at = clock_timestamp()
 RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, default_host, created_at, updated_at, disabled_at, (xmax = 0) AS inserted
-), enabled AS (
-    INSERT INTO organization_features (organization_id, feature_name)
-    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,

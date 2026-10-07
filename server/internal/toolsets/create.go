@@ -255,9 +255,9 @@ func ensureGeneratedMcpSlug(ctx context.Context, dbtx pgx.Tx, logger *slog.Logge
 }
 
 // attachToDefaultPluginInTransaction adds a newly MCP-enabled toolset to the
-// project's Default plugin so it's included in the auto-published marketplace
-// without a human visiting the Plugins page. No-op if the toolset is already
-// attached. Returns pluginCreated=true if this call lazily created the Default
+// project's Default plugin and matching role-audience plugins so it's included
+// in the auto-published marketplace without a human visiting the Plugins page.
+// Returns pluginCreated=true if this call lazily created the Default
 // plugin (project predates this feature) — callers should enqueue an initial
 // publish for it, but only after their own transaction commits, since this
 // runs pre-commit and the DB writes could still roll back.
@@ -267,13 +267,13 @@ func attachToDefaultPluginInTransaction(ctx context.Context, dbtx pgx.Tx, logger
 }
 
 func attachToDefaultPluginWithOutcome(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (plugins.DefaultPluginAttachOutcome, error) {
-	outcome, err := plugins.AttachToDefaultPluginAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, plugins.AttachToDefaultPluginParams{
+	outcome, err := plugins.AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
 		McpServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		DisplayName:    displayName,
-	})
+	}, nil)
 	if err != nil {
 		return plugins.DefaultPluginAttachOutcome{}, oops.E(oops.CodeUnexpected, err, "attach toolset to default plugin").LogError(ctx, logger)
 	}
