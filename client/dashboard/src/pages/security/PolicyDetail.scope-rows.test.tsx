@@ -27,6 +27,7 @@ import {
 const mocks = vi.hoisted(() => ({
   flagResult: vi.fn(),
   hooksStatus: vi.fn(),
+  refetchHooksStatus: vi.fn(),
   step: "scope",
 }));
 
@@ -38,6 +39,20 @@ vi.mock("@gram/client/react-query/getHooksStatus.js", () => ({
   useGetHooksStatus: () => mocks.hooksStatus(),
 }));
 
+// The real dialog reads publish status through the SDK; a stub that can only
+// close is enough to prove the Scope step reacts to it closing.
+vi.mock("@/pages/hooks/HooksSetupDialog", () => ({
+  HooksSetupDialog: ({
+    onOpenChange,
+  }: {
+    onOpenChange: (open: boolean) => void;
+  }) => (
+    <button type="button" onClick={() => onOpenChange(false)}>
+      Close hooks setup
+    </button>
+  ),
+}));
+
 const HOOKS_CONFIGURED = {
   data: {
     configured: true,
@@ -47,6 +62,7 @@ const HOOKS_CONFIGURED = {
   isPending: false,
   isSuccess: true,
   isError: false,
+  refetch: mocks.refetchHooksStatus,
 };
 const HOOKS_UNCONFIGURED = {
   data: {
@@ -57,6 +73,7 @@ const HOOKS_UNCONFIGURED = {
   isPending: false,
   isSuccess: true,
   isError: false,
+  refetch: mocks.refetchHooksStatus,
 };
 
 vi.mock("sonner", () => ({
@@ -930,6 +947,21 @@ describe("StandardPolicyEditor hooks availability", () => {
     expect(
       screen.queryByText("Choose where this policy applies to continue."),
     ).toBeNull();
+  });
+
+  it("re-reads the hooks status after the setup dialog closes", async () => {
+    mocks.refetchHooksStatus.mockReset();
+    renderEditor(null);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("radio", { name: "Specific MCP servers" }),
+      ).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Set up hooks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close hooks setup" }));
+
+    expect(mocks.refetchHooksStatus).toHaveBeenCalledTimes(1);
   });
 
   it("offers no cards and asks for a retry when the hooks status cannot be read", () => {

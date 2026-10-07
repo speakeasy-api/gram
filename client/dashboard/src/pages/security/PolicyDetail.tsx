@@ -1248,6 +1248,9 @@ function ScopeStep({
             sessionsAvailable={sessionsAvailable}
             mcpAvailable={mcpAvailable}
             onChange={(mode) => setMcpScope({ ...mcpScope, mode })}
+            // The dialog may have minted a hooks key; the cached status would
+            // otherwise keep Client sessions hidden until staleTime elapses.
+            onHooksSetupClosed={() => void hooksStatus.refetch()}
           />
         ) : null}
         {!settled && !hooksStatus.isError ? (

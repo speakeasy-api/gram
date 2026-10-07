@@ -33,17 +33,26 @@ export function PolicyScopeModeCards({
   onChange,
   sessionsAvailable,
   mcpAvailable,
+  onHooksSetupClosed,
 }: {
   value: PolicyScopeMode;
   onChange: (mode: PolicyScopeChoice) => void;
-  /** False until the organization has a hooks-scoped key or inference hooks. */
+  /** False until the project has a hooks-scoped key or inference hooks. */
   sessionsAvailable: boolean;
   /** False while the MCP-scoped policies flag is off. */
   mcpAvailable: boolean;
+  /** Called when the hooks setup dialog closes; the setup may have minted a key. */
+  onHooksSetupClosed?: () => void;
 }): JSX.Element {
   const [hooksOpen, setHooksOpen] = useState(false);
   const dialog = hooksOpen ? (
-    <HooksSetupDialog open onOpenChange={setHooksOpen} />
+    <HooksSetupDialog
+      open
+      onOpenChange={(open) => {
+        setHooksOpen(open);
+        if (!open) onHooksSetupClosed?.();
+      }}
+    />
   ) : null;
 
   if (!sessionsAvailable && !mcpAvailable) {
