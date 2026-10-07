@@ -23,7 +23,19 @@ func TestDefaultCatalog(t *testing.T) {
 	user, ok := sessions.Field("user")
 	require.True(t, ok)
 	require.True(t, user.Admits("in"))
-	require.False(t, user.Admits("sum"), "a dimension admits operators, not aggregations")
+	require.False(t, user.Admits("sum"), "a dimension admits operators, not a measure's aggregations")
+	require.True(t, user.Admits("count_distinct"), "the one aggregation a dimension declares is over its own values")
+
+	toolCalls, ok := Default.Dataset("tool_calls")
+	require.True(t, ok)
+	for _, name := range []string{"tool_name", "mcp_server", "session", "user"} {
+		field, ok := toolCalls.Field(name)
+		require.True(t, ok, name)
+		require.True(t, field.Admits("count_distinct"), "%s answers a distinct count", name)
+	}
+	status, ok := toolCalls.Field("status")
+	require.True(t, ok)
+	require.False(t, status.Admits("count_distinct"), "a dimension that does not declare it does not admit it")
 
 	duration, ok := sessions.Field("duration_seconds")
 	require.True(t, ok)
@@ -59,7 +71,11 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 		want   string
 	}{
 		{name: "it rejects a numeric dimension", mutate: func(d *Dataset) { d.Fields[0].Type = TypeInt64 }, want: "must be a string"},
-		{name: "it rejects a dimension with aggregations", mutate: func(d *Dataset) { d.Fields[0].Aggregations = []Aggregation{AggregationSum} }, want: "must declare operators and no aggregations"},
+		{name: "it rejects a dimension with a measure's aggregation", mutate: func(d *Dataset) { d.Fields[0].Aggregations = []Aggregation{AggregationSum} }, want: "count_distinct and no other aggregation"},
+		{name: "it rejects a dimension with no operators", mutate: func(d *Dataset) { d.Fields[0].Operators = nil }, want: "must declare operators"},
+		{name: "it rejects a measure declaring count_distinct", mutate: func(d *Dataset) {
+			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{AggregationCountDistinct}, Expr: "n"}
+		}, want: "cannot declare count_distinct"},
 		{name: "it rejects a measure with operators", mutate: func(d *Dataset) {
 			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: equalsIn, Aggregations: []Aggregation{AggregationSum}, Expr: "n"}
 		}, want: "must declare aggregations and no operators"},
@@ -92,6 +108,14 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
+
+	t.Run("it accepts a dimension declaring only count_distinct", func(t *testing.T) {
+		t.Parallel()
+		ds := base()
+		ds.Fields[0].Aggregations = countDistinct
+		_, err := NewCatalog(ds)
+		require.NoError(t, err)
+	})
 
 	t.Run("it rejects a nil dataset instead of panicking", func(t *testing.T) {
 		t.Parallel()

@@ -234,11 +234,17 @@ export function dimensionFields(
   return (dataset?.fields ?? []).filter((field) => field.role === "dimension");
 }
 
-/** The dataset's numeric quantities. */
-function measureFields(
+/**
+ * Fields an aggregation can target: anything the catalog declares
+ * aggregations for. A measure declares sums and percentiles; a dimension
+ * declares count_distinct over its own values.
+ */
+function aggregatableFields(
   dataset: AnalyticsDataset | undefined,
 ): AnalyticsField[] {
-  return (dataset?.fields ?? []).filter((field) => field.role === "measure");
+  return (dataset?.fields ?? []).filter(
+    (field) => (field.aggregations ?? []).length > 0,
+  );
 }
 
 /** Fields a WHERE row can target: anything the catalog declares operators for. */
@@ -253,6 +259,7 @@ export function filterableFields(
 // The order aggregations are offered in, whichever fields declare them.
 const MEASURE_OP_ORDER: MeasureOp[] = [
   "count",
+  "count_distinct",
   "sum",
   "avg",
   "min",
@@ -268,13 +275,13 @@ export function isMeasureOp(value: unknown): value is MeasureOp {
 
 /**
  * The aggregations a dataset admits: count (every dataset), then every op
- * at least one measure field declares.
+ * at least one field declares.
  */
 export function opsForDataset(
   dataset: AnalyticsDataset | undefined,
 ): MeasureOp[] {
   const declared = new Set<string>();
-  for (const field of measureFields(dataset)) {
+  for (const field of aggregatableFields(dataset)) {
     for (const aggregation of field.aggregations ?? []) {
       declared.add(aggregation);
     }
@@ -282,13 +289,13 @@ export function opsForDataset(
   return MEASURE_OP_ORDER.filter((op) => op === "count" || declared.has(op));
 }
 
-/** The measure fields an aggregation can target; count targets none. */
+/** The fields an aggregation can target; count targets none. */
 export function fieldsForOp(
   dataset: AnalyticsDataset | undefined,
   op: MeasureOp,
 ): AnalyticsField[] {
   if (op === "count") return [];
-  return measureFields(dataset).filter((field) =>
+  return aggregatableFields(dataset).filter((field) =>
     (field.aggregations ?? []).includes(op),
   );
 }

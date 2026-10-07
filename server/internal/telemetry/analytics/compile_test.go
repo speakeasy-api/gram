@@ -67,6 +67,39 @@ func TestCompileGrouped(t *testing.T) {
 	require.NotContains(t, plan.SQL, "project-1", "tenancy is bound, never interpolated")
 }
 
+// TestCompileCountDistinct: count_distinct is an aggregation over a
+// dimension's own values, exact, with the same alias and ordering rules as
+// every other measure.
+func TestCompileCountDistinct(t *testing.T) {
+	t.Parallel()
+
+	plan, err := compileTest(t, Request{
+		Dataset:    "tool_calls",
+		Grain:      "",
+		Dimensions: []string{"mcp_server"},
+		Measures: []Measure{
+			{Op: "count", Field: "", Alias: ""},
+			{Op: "count_distinct", Field: "tool_name", Alias: ""},
+			{Op: "count_distinct", Field: "user", Alias: "people"},
+		},
+		Filters:   nil,
+		OrderBy:   []OrderBy{{Measure: "people", Direction: "desc"}},
+		Limit:     0,
+		Ungrouped: false,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, []Column{
+		{Name: "mcp_server", Kind: ColumnDimension},
+		{Name: "count", Kind: ColumnMeasure},
+		{Name: "count_distinct_tool_name", Kind: ColumnMeasure},
+		{Name: "people", Kind: ColumnMeasure},
+	}, plan.Columns)
+	require.Contains(t, plan.SQL, "uniqExact(tool_name) AS count_distinct_tool_name")
+	require.Contains(t, plan.SQL, "uniqExact(user_email) AS people")
+	require.Contains(t, plan.SQL, "ORDER BY people DESC, mcp_server ASC")
+}
+
 func TestCompileUngrouped(t *testing.T) {
 	t.Parallel()
 
@@ -112,6 +145,11 @@ func TestCompileRejects(t *testing.T) {
 		{name: "aggregation the field does not admit", req: Request{Dataset: "sessions", Measures: []Measure{{Op: "p95", Field: "turn_count", Alias: ""}}}, code: ErrUnsupportedAggregation, field: "measures[0].op"},
 		{name: "unknown measure field", req: Request{Dataset: "sessions", Measures: []Measure{{Op: "sum", Field: "cost_usd", Alias: ""}}}, code: ErrUnknownField, field: "measures[0].field"},
 		{name: "count with a field", req: Request{Dataset: "sessions", Measures: []Measure{{Op: "count", Field: "turn_count", Alias: ""}}}, code: ErrUnsatisfiable, field: "measures[0].field"},
+		{name: "count_distinct without a field", req: Request{Dataset: "tool_calls", Measures: []Measure{{Op: "count_distinct", Field: "", Alias: ""}}}, code: ErrUnsatisfiable, field: "measures[0].field"},
+		{name: "count_distinct over a measure", req: Request{Dataset: "tool_calls", Measures: []Measure{{Op: "count_distinct", Field: "duration_ms", Alias: ""}}}, code: ErrUnsupportedAggregation, field: "measures[0].op"},
+		{name: "count_distinct over a dimension that does not declare it", req: Request{Dataset: "tool_calls", Measures: []Measure{{Op: "count_distinct", Field: "status", Alias: ""}}}, code: ErrUnsupportedAggregation, field: "measures[0].op"},
+		{name: "count_distinct over an unknown field", req: Request{Dataset: "tool_calls", Measures: []Measure{{Op: "count_distinct", Field: "department", Alias: ""}}}, code: ErrUnknownField, field: "measures[0].field"},
+		{name: "a measure's aggregation over a dimension", req: Request{Dataset: "tool_calls", Measures: []Measure{{Op: "sum", Field: "tool_name", Alias: ""}}}, code: ErrUnknownField, field: "measures[0].field"},
 		{name: "alias that is a field name", req: Request{Dataset: "sessions", Measures: []Measure{{Op: "count", Field: "", Alias: "user"}}}, code: ErrUnsatisfiable, field: "measures[0].alias"},
 		{name: "alias that is not an identifier", req: Request{Dataset: "sessions", Measures: []Measure{{Op: "count", Field: "", Alias: "x; DROP TABLE"}}}, code: ErrUnsatisfiable, field: "measures[0].alias"},
 		{name: "duplicate alias", req: Request{Dataset: "sessions", Measures: []Measure{{Op: "count", Field: "", Alias: "n"}, {Op: "sum", Field: "turn_count", Alias: "n"}}}, code: ErrUnsatisfiable, field: "measures[1].alias"},
