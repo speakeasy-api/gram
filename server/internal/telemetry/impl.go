@@ -440,6 +440,7 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 	}
 
 	deploymentID := conv.PtrValOr(filter.DeploymentID, "")
+	cursorKey, cursorLastSeen := decodeEmployeeSearchCursor(params.cursor)
 
 	groupBy := "user_id"
 	if payload.UserType == "external" {
@@ -491,13 +492,10 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		UserIDs:             userKeys,
 		IdentityContains:    "",
 		SortOrder:           params.sortOrder,
-		Cursor:              params.cursor,
-		// The dashboard's cursor is the group key alone, so the repository
-		// re-derives its boundary timestamp. That lookup ignores this query's
-		// window and its Gram-hosted exclusion, which can repeat a person
-		// across pages — tracked separately rather than changed here, because
-		// sealing the boundary is a cursor format change for a shipped surface.
-		CursorLastSeenUnixNano: 0,
+		Cursor:              cursorKey,
+		// Zero only for a bare group-key cursor, which makes the repository
+		// re-derive the boundary for that one page.
+		CursorLastSeenUnixNano: cursorLastSeen,
 		Limit:                  params.limit + 1,
 		MetricsDetail:          metricsDetailFromPayload(payload.Metrics),
 		CanonicalIdentityOrg:   canonicalOrg,
@@ -517,7 +515,8 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 
 	var nextCursor *string
 	if len(items) > params.limit {
-		nextCursor = &items[params.limit-1].UserID
+		last := items[params.limit-1]
+		nextCursor = new(encodeEmployeeSearchCursor(last.LastSeenUnixNano, last.UserID))
 		items = items[:params.limit]
 	}
 
@@ -528,6 +527,39 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		Roles:      nil,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// employeeSearchCursorPrefix marks a people-directory cursor that carries the
+// last_seen boundary its page was cut at alongside the group key.
+//
+// The boundary has to travel in the cursor. Re-deriving it from the group key
+// alone looks the person's latest activity up again without this search's
+// window or row filters (Gram-hosted hook sources, event source, account type,
+// account, deployment), so an excluded row later than the person's last
+// qualifying one inflates the boundary and the person is returned again on
+// every following page.
+const employeeSearchCursorPrefix = "ls1:"
+
+// encodeEmployeeSearchCursor seals the last row's last_seen and group key.
+func encodeEmployeeSearchCursor(lastSeenUnixNano int64, groupKey string) string {
+	return employeeSearchCursorPrefix + encodeToolUsageTraceCursor(lastSeenUnixNano, groupKey)
+}
+
+// decodeEmployeeSearchCursor returns the group key and sealed last_seen a
+// cursor carries. Anything else is a bare group key with a zero last_seen, the
+// shape cursors had before the boundary was sealed: a dashboard holding one
+// mid-traversal gets its next page on the re-derived boundary rather than an
+// error, and the cursor that page returns is sealed.
+func decodeEmployeeSearchCursor(cursor string) (groupKey string, lastSeenUnixNano int64) {
+	encoded, ok := strings.CutPrefix(cursor, employeeSearchCursorPrefix)
+	if !ok {
+		return cursor, 0
+	}
+	lastSeen, key, err := decodeToolUsageTraceCursor(encoded)
+	if err != nil || lastSeen <= 0 {
+		return cursor, 0
+	}
+	return key, lastSeen
 }
 
 // searchUsersSourceAgentMetrics is the SearchUsersPayload.Source value that
