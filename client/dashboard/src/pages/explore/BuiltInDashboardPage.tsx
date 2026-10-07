@@ -8,7 +8,7 @@ import type { Dashboard } from "@gram/client/models/components/dashboard.js";
 import type { DashboardFilters } from "@gram/client/models/components/dashboardfilters.js";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
 import { useDashboards } from "@gram/client/react-query/dashboards.js";
-import { useMemo, type JSX } from "react";
+import { useMemo, type JSX, type ReactNode } from "react";
 import {
   barValuesFromSaved,
   sameFilters,
@@ -26,15 +26,22 @@ import type { OpenInExplore } from "./WidgetView";
 /** A built-in saves no filters: it opens on the defaults, as a new dashboard does. */
 const NO_FILTERS: DashboardFilters = { values: {} };
 
-/** What the page is told about the tabs around it. */
+/** What the page is told about the page around it. */
 interface BuiltInDashboardPageProps {
-  /** Where the list of dashboards is. */
-  backHref: string;
-  backState: unknown;
+  /** Where the list of dashboards is, when the page sits under one. */
+  backHref?: string | undefined;
+  backState?: unknown;
+  /** Whether the dashboard is the page, or a section under a page's tabs. */
+  heading?: "section" | "page";
+  /** Buttons drawn beside Duplicate. */
+  actions?: ReactNode;
   /** Open the project dashboard Duplicate makes. */
   onOpen: (dashboard: Dashboard) => void;
-  /** Open a card's question in the Explore tab. */
-  onOpenQuery: OpenInExplore;
+  /**
+   * Open a card's question in the Explore tab yourself, in place of the
+   * link, when something has to be checked first.
+   */
+  onOpenQuery?: OpenInExplore | undefined;
 }
 
 /**
@@ -52,9 +59,10 @@ export function BuiltInDashboardPage({
   // request of its own.
   const list = useDashboards();
   const page = list.data?.builtIn.find((candidate) => candidate.slug === slug);
-  const back = (
-    <DashboardBackLink href={props.backHref} state={props.backState} />
-  );
+  const back =
+    props.backHref === undefined ? null : (
+      <DashboardBackLink href={props.backHref} state={props.backState} />
+    );
 
   if (list.isPending) {
     return (
@@ -93,6 +101,8 @@ function BuiltInDashboardView({
   page,
   backHref,
   backState,
+  heading,
+  actions,
   onOpen,
   onOpenQuery,
 }: BuiltInDashboardPageProps & { page: BuiltInDashboard }): JSX.Element {
@@ -156,6 +166,7 @@ function BuiltInDashboardView({
     <DashboardFrame
       backHref={backHref}
       backState={backState}
+      heading={heading}
       name={page.name}
       description={page.description}
       badge={
@@ -165,15 +176,18 @@ function BuiltInDashboardView({
       }
       byline="Built by Speakeasy and read only. Duplicate it to lay it out your own way."
       actions={
-        <Button
-          variant="secondary"
-          size="sm"
-          icon="copy"
-          disabled={mutations.pending}
-          onClick={() => mutations.duplicateBuiltIn(page.slug, onOpen)}
-        >
-          Duplicate
-        </Button>
+        <>
+          {actions}
+          <Button
+            variant="secondary"
+            size="sm"
+            icon="copy"
+            disabled={mutations.pending}
+            onClick={() => mutations.duplicateBuiltIn(page.slug, onOpen)}
+          >
+            Duplicate
+          </Button>
+        </>
       }
       toolbar={
         <>

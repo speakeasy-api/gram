@@ -50,7 +50,8 @@ export function DashboardGrid({
   onSave: (placements: PlacementInput[]) => void;
   /** Take a card off the dashboard. */
   onRemove: (placementId: string) => void;
-  onOpen: OpenInExplore;
+  /** Open a card's question yourself; without this, the card links to Explore. */
+  onOpen?: OpenInExplore | undefined;
 }): JSX.Element {
   const placements = useMemo(
     () => cards.map((card) => card.placement),
