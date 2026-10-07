@@ -12,16 +12,15 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // one does, this table empties and name takes over. Most requests and most
 // tool events involve no skill, so the column is Recommended on all four
 // types and an absent skill is not counted.
-func columnSkillName(in *Instruments) LogEnricher {
+func columnSkillName() columnDefinition {
 	skill := recommended(getter[string]{log: dialect.LogDialect.SkillName, span: dialect.SpanDialect.SkillName})
-	return &logColumnEnricher[string]{
-		column: SkillNameColumnKey,
+	return column[string]{
+		key: SkillNameColumnKey,
 		byType: perEventType[string]{
 			dialect.EventTypeAPIRequest:     skill,
 			dialect.EventTypeToolCall:       skill,
 			dialect.EventTypeToolCallResult: skill,
 			dialect.EventTypeToolDecision:   skill,
 		},
-		instruments: in,
 	}
 }

@@ -15,10 +15,10 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // anything but itself, so neither has a subject to name. The writer falls
 // back to the record id for them, which is stable across redelivery, so a
 // re-observation of the same record never gets a second subject id.
-func columnEventID(in *Instruments) LogEnricher {
+func columnEventID() columnDefinition {
 	subject := getter[string]{log: dialect.LogDialect.SubjectID, span: dialect.SpanDialect.SubjectID}
-	return &logColumnEnricher[string]{
-		column: EventIDColumnKey,
+	return column[string]{
+		key: EventIDColumnKey,
 		byType: perEventType[string]{
 			dialect.EventTypePrompt:          subject,
 			dialect.EventTypeAPIRequest:      subject,
@@ -30,6 +30,5 @@ func columnEventID(in *Instruments) LogEnricher {
 			dialect.EventTypeToolDecision:    subject,
 			dialect.EventTypeAPIResponseBody: subject,
 		},
-		instruments: in,
 	}
 }

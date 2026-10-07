@@ -457,6 +457,11 @@ func TestAgentEventRowFromSpan(t *testing.T) {
 	t.Parallel()
 
 	t.Run("it projects a semconv chat span into an api_request row", func(t *testing.T) {
+		// A span is the whole model call, so its status says how the call
+		// went; the outcome table does not list api_request, since in the
+		// log vocabulary a request records that a call was made and its
+		// response or error says how it went. Until that is decided for
+		// spans, the span status lands nowhere. Raised as an open question.
 		t.Parallel()
 		span := spanEventTestSpan("org-1", "litellm")
 		span.SetName("chat gpt-4o")
@@ -472,7 +477,7 @@ func TestAgentEventRowFromSpan(t *testing.T) {
 			spanEventTestKV("gen_ai.usage.cost", "0.002"),
 		})
 
-		row, skip := agentEventRowFromSpan(span, testObservedAt)
+		row, skip := agentEventRowFromSpan(agentEventTestTransformedSpan(t, span), testObservedAt)
 		require.Empty(t, skip)
 		require.Equal(t, "org-1", row.OrganizationID)
 		require.Equal(t, strings.Repeat("ab", 16)+":"+strings.Repeat("cd", 8), row.RecordID)
@@ -489,8 +494,8 @@ func TestAgentEventRowFromSpan(t *testing.T) {
 		require.Equal(t, int64(1_724_500_000_000_000_001), row.OccurredAtUnixNano)
 		require.Equal(t, testObservedAt, row.ObservedAtUnixNano)
 		require.Equal(t, int64(500), row.DurationNano)
-		require.Equal(t, string(dialect.OutcomeError), row.Outcome)
-		require.Equal(t, "boom", row.OutcomeMessage)
+		require.Empty(t, row.Outcome, "an api_request is not in the outcome table")
+		require.Empty(t, row.OutcomeMessage)
 		require.Equal(t, "litellm", row.Source)
 		require.Empty(t, row.Text)
 	})
@@ -506,12 +511,13 @@ func TestAgentEventRowFromSpan(t *testing.T) {
 		})
 		span.SetStatus((&otelv1.Span_Status_builder{Code: otelv1.Span_STATUS_CODE_OK.Enum()}).Build())
 
-		row, skip := agentEventRowFromSpan(span, testObservedAt)
+		row, skip := agentEventRowFromSpan(agentEventTestTransformedSpan(t, span), testObservedAt)
 		require.Empty(t, skip)
 		require.Equal(t, string(dialect.EventTypeToolCall), row.EventType)
+		require.Equal(t, "search", row.Name)
 		require.Equal(t, "search", row.ToolName)
 		require.Equal(t, "call-1", row.EventID)
-		require.Equal(t, string(dialect.OutcomeOK), row.Outcome)
+		require.Empty(t, row.Outcome, "a tool_call is not in the outcome table; the span status lands nowhere until that is decided for spans")
 	})
 
 	t.Run("it keeps an unrecognised span with the span name as its raw name", func(t *testing.T) {
@@ -519,7 +525,7 @@ func TestAgentEventRowFromSpan(t *testing.T) {
 		span := spanEventTestSpan("org-1", "my-agent")
 		span.SetName("GET /health")
 		span.SetAttributes(nil)
-		row, skip := agentEventRowFromSpan(span, testObservedAt)
+		row, skip := agentEventRowFromSpan(agentEventTestTransformedSpan(t, span), testObservedAt)
 		require.Empty(t, skip)
 		require.Equal(t, string(dialect.EventTypeUnclassified), row.EventType)
 		require.Equal(t, "GET /health", row.RawEventName)
@@ -736,4 +742,63 @@ func inboundLogFromRecord(record *otelv1.LogRecord) (*otelv1.InboundLogRecord, e
 		}
 	}
 	return inbound, nil
+}
+
+// agentEventTestTransformedSpan runs the column enrichers over a normalized
+// span the way the span transform does, and applies what they wrote, so the
+// writer sees the span as it reaches the topic.
+func agentEventTestTransformedSpan(t *testing.T, span *otelv1.Span) *otelv1.Span {
+	t.Helper()
+	inbound, err := inboundSpanFromSpan(span)
+	require.NoError(t, err)
+	in := enrich.NewInstruments(testenv.NewLogger(t), testenv.NewMeterProvider(t))
+	enrichments, err := enrich.Span(t.Context(), in, inbound, enrich.SpanColumns(in))
+	require.NoError(t, err)
+	require.NoError(t, applySpanEnrichments(span, enrichments))
+	return span
+}
+
+// inboundSpanFromSpan is inboundLogFromRecord for a span.
+func inboundSpanFromSpan(span *otelv1.Span) (*otelv1.InboundSpan, error) {
+	encoded, err := proto.Marshal(span)
+	if err != nil {
+		return nil, fmt.Errorf("marshal span: %w", err)
+	}
+	inbound := &otelv1.InboundSpan{}
+	if err := proto.Unmarshal(encoded, inbound); err != nil {
+		return nil, fmt.Errorf("unmarshal span as gram.otel.v1.InboundSpan: %w", err)
+	}
+	for _, kv := range span.GetAttributes() {
+		if kv.GetKey() == string(enrich.OriginalInstrumentationScopeNameKey) && kv.GetValue().HasStringValue() {
+			original := kv.GetValue().GetStringValue()
+			if inbound.GetScope() == nil {
+				inbound.SetScope((&otelv1.InboundSpan_InstrumentationScope_builder{Name: &original}).Build())
+			} else {
+				inbound.GetScope().SetName(original)
+			}
+		}
+	}
+	return inbound, nil
+}
+
+// The span writer copies the canonical columns the transform wrote and never
+// asks a dialect for them, so a span that reached the topic before the
+// column enrichers ran lands with those columns empty.
+func TestAgentEventRowFromSpanHasNoDialectFallbackForCanonicalColumns(t *testing.T) {
+	t.Parallel()
+
+	span := spanEventTestSpan("org-1", "litellm")
+	span.SetName("chat gpt-4o")
+	span.SetAttributes([]*otelv1.Span_KeyValue{
+		spanEventTestKV("gen_ai.operation.name", "chat"),
+		spanEventTestKV("gen_ai.conversation.id", "session-9"),
+	})
+
+	row, skip := agentEventRowFromSpan(span, testObservedAt)
+	require.Empty(t, skip)
+	require.Empty(t, row.EventType)
+	require.Empty(t, row.RawEventName)
+	require.Empty(t, row.Source)
+	require.Empty(t, row.SessionID)
+	require.Equal(t, row.RecordID, row.EventID, "with no subject the event id falls back to the record id")
 }

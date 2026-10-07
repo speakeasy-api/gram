@@ -36,16 +36,20 @@ func NewSpanTransformHandler(
 	cacheImpl cache.Cache,
 ) *SpanTransformHandler {
 	logger = logger.With(attr.SlogComponent("span-transform-handler"))
+	in := enrich.NewInstruments(logger, meterProvider)
+
+	enrichers := []enrich.SpanEnricher{
+		enrich.NewSpanTenancy(),
+		enrich.NewSpanTokens(),
+		enrich.NewSpanDirectory(logger, replicaDB, cacheImpl),
+	}
+	enrichers = append(enrichers, enrich.SpanColumns(in)...)
 
 	return &SpanTransformHandler{
 		logger:        logger,
-		instruments:   enrich.NewInstruments(logger, meterProvider),
+		instruments:   in,
 		spanPublisher: spanPublisher,
-		enrichers: []enrich.SpanEnricher{
-			enrich.NewSpanTenancy(),
-			enrich.NewSpanTokens(),
-			enrich.NewSpanDirectory(logger, replicaDB, cacheImpl),
-		},
+		enrichers:     enrichers,
 	}
 }
 
@@ -57,6 +61,7 @@ func (h *SpanTransformHandler) Handle(ctx context.Context, m *otelv1.InboundSpan
 	if err := rewriteInstrumentationScope(out); err != nil {
 		return fmt.Errorf("rewrite instrumentation scope: %w", err)
 	}
+	h.instruments.RecordReservedAttributesDropped(ctx, enrich.SignalSpan, dropReservedSpanAttributes(out))
 
 	enrichments, err := enrich.Span(ctx, h.instruments, m, h.enrichers)
 	if err != nil {
@@ -95,6 +100,23 @@ func rewriteInstrumentationScope(span *otelv1.Span) error {
 	return applySpanEnrichments(span, []otelattr.KeyValue{
 		enrich.OriginalInstrumentationScopeName(originalName),
 	})
+}
+
+// dropReservedSpanAttributes removes what a producer sent under Gram's own
+// speakeasy.agent namespace and says how many attributes went, exactly as
+// the log transform does for a log record: only the column enrichers write
+// there, and a producer that sends one would otherwise classify its own
+// span. The enrichers read the inbound span, so what they see is unchanged.
+func dropReservedSpanAttributes(span *otelv1.Span) int {
+	attributes := span.GetAttributes()
+	kept := slices.DeleteFunc(attributes, func(kv *otelv1.Span_KeyValue) bool {
+		return enrich.IsAgentColumnKey(kv.GetKey())
+	})
+	dropped := len(attributes) - len(kept)
+	if dropped > 0 {
+		span.SetAttributes(kept)
+	}
+	return dropped
 }
 
 func applySpanEnrichments(out *otelv1.Span, enrichments []otelattr.KeyValue) error {
