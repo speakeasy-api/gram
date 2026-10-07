@@ -76,11 +76,6 @@ BEGIN
 END
 $install$;
 
--- name: RejectCatchUpSecondOrganizationFixture :exec
--- Allow the first selected organization, then fail to prove catch-up rollback.
-ALTER TABLE publish_outbox ADD CONSTRAINT reject_catchup_second_organization_fixture
-CHECK (organization_id <> 'org-never-enabled') NOT VALID;
-
 -- name: RolloutBlockedBackends :many
 -- Observe real lock dependencies without relying on production query text.
 SELECT pid FROM pg_catalog.pg_stat_activity

@@ -370,7 +370,7 @@ func (q *Queries) GetLiveOktaIdentityProviderConnectionForOrganization(ctx conte
 
 const getManagedClient = `-- name: GetManagedClient :one
 SELECT
-  c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.created_at, c.updated_at, c.deleted_at, c.deleted,
+  c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.created_at, c.updated_at, c.deleted_at, c.deleted,
   s.id AS json_web_key_set_id,
   s.external_key_id,
   k.id AS json_web_key_id,
@@ -448,6 +448,7 @@ func (q *Queries) GetManagedClient(ctx context.Context, arg GetManagedClientPara
 		&i.RemoteSessionClient.ResourceTosUri,
 		&i.RemoteSessionClient.UpstreamRejectedAt,
 		&i.RemoteSessionClient.IdentityProviderConnectionID,
+		&i.RemoteSessionClient.CredentialOwner,
 		&i.RemoteSessionClient.CreatedAt,
 		&i.RemoteSessionClient.UpdatedAt,
 		&i.RemoteSessionClient.DeletedAt,
@@ -1206,7 +1207,7 @@ WHERE id = $3
   AND identity_provider_connection_id = $5
   AND client_id = $6
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
 `
 
 type SetManagedClientIDParams struct {
@@ -1257,6 +1258,7 @@ func (q *Queries) SetManagedClientID(ctx context.Context, arg SetManagedClientID
 		&i.ResourceTosUri,
 		&i.UpstreamRejectedAt,
 		&i.IdentityProviderConnectionID,
+		&i.CredentialOwner,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

@@ -43,6 +43,9 @@ func (e *TokenEndpoint) IssuerID() uuid.UUID { return e.issuerID }
 // ClientID is the client_id the authorization server knows the client by.
 func (e *TokenEndpoint) ClientID() string { return e.auth.ClientID }
 
+// AuthMethod is how the endpoint authenticates the client.
+func (e *TokenEndpoint) AuthMethod() TokenEndpointAuthMethod { return e.auth.Method }
+
 func (e *TokenEndpoint) String() string               { return "[token endpoint]" }
 func (e *TokenEndpoint) GoString() string             { return e.String() }
 func (e *TokenEndpoint) MarshalJSON() ([]byte, error) { return []byte("{}"), nil }
@@ -104,40 +107,64 @@ func (m *ChallengeManager) LoadClientTokenEndpoint(ctx context.Context, clientID
 }
 
 func (m *ChallengeManager) clientTokenEndpoint(client repo.GetRemoteSessionClientWithIssuerByIDRow) (*TokenEndpoint, error) {
-	if !client.TokenEndpoint.Valid || client.TokenEndpoint.String == "" {
+	return m.BindTokenEndpoint(TokenEndpointRegistration{
+		ClientID:                        client.ClientID,
+		OrganizationID:                  client.ClientOrganizationID.String,
+		ExternalClientID:                client.ExternalClientID,
+		ClientSecretEncrypted:           client.ClientSecretEncrypted.String,
+		TokenEndpointAuthMethod:         client.TokenEndpointAuthMethod.String,
+		TokenEndpointAuthAudienceFormat: client.TokenEndpointAuthAudienceFormat.String,
+		JSONWebKeySetID:                 client.JsonWebKeySetID,
+		IssuerID:                        client.RemoteSessionIssuerID,
+		IssuerURL:                       client.IssuerUrl,
+		IssuerMetadata:                  client.IssuerMetadata,
+		TokenEndpoint:                   client.TokenEndpoint.String,
+		TunneledMcpServerID:             client.TunneledMcpServerID,
+	})
+}
+
+// BindTokenEndpoint binds a stored registration to its issuer's token endpoint.
+// A registration that cannot authenticate is ErrTokenEndpointConfiguration.
+func (m *ChallengeManager) BindTokenEndpoint(reg TokenEndpointRegistration) (*TokenEndpoint, error) {
+	if reg.TokenEndpoint == "" {
 		return nil, ErrTokenEndpointConfiguration
 	}
+
 	secret := ""
-	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
+	if reg.ClientSecretEncrypted != "" && reg.TokenEndpointAuthMethod != string(TokenEndpointAuthMethodPrivateKeyJWT) {
 		var err error
-		secret, err = m.enc.Decrypt(client.ClientSecretEncrypted.String)
+		secret, err = m.enc.Decrypt(reg.ClientSecretEncrypted)
 		if err != nil {
 			return nil, ErrTokenEndpointConfiguration
 		}
 	}
-	method, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, secret)
-	if err != nil || (method == TokenEndpointAuthMethodPrivateKeyJWT && !client.JsonWebKeySetID.Valid) {
+
+	method, err := ResolveTokenEndpointAuthMethod(reg.TokenEndpointAuthMethod, secret)
+	if err != nil || (method == TokenEndpointAuthMethodPrivateKeyJWT && !reg.JSONWebKeySetID.Valid) {
 		return nil, ErrTokenEndpointConfiguration
 	}
-	audience, err := ResolveTokenEndpointAuthAudience(client.TokenEndpointAuthAudienceFormat.String, clientAssertionIssuer(client.IssuerMetadata, client.IssuerUrl), client.TokenEndpoint.String)
+
+	audience, err := ResolveTokenEndpointAuthAudience(reg.TokenEndpointAuthAudienceFormat, clientAssertionIssuer(reg.IssuerMetadata, reg.IssuerURL), reg.TokenEndpoint)
 	if err != nil && method == TokenEndpointAuthMethodPrivateKeyJWT {
 		return nil, ErrTokenEndpointConfiguration
 	}
-	doer, err := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, client.TunneledMcpServerID)
+
+	doer, err := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, reg.TunneledMcpServerID)
 	if err != nil {
 		return nil, ErrTokenEndpointConfiguration
 	}
+
 	return &TokenEndpoint{
-		endpoint: client.TokenEndpoint.String,
-		issuer:   client.IssuerUrl,
-		issuerID: client.RemoteSessionIssuerID,
+		endpoint: reg.TokenEndpoint,
+		issuer:   reg.IssuerURL,
+		issuerID: reg.IssuerID,
 		doer:     doer,
 		auth: TokenEndpointClientAuth{
 			Method:                method,
-			RemoteSessionClientID: client.ClientID,
-			OrganizationID:        client.ClientOrganizationID.String,
-			JSONWebKeySetID:       client.JsonWebKeySetID.UUID,
-			ClientID:              client.ExternalClientID,
+			RemoteSessionClientID: reg.ClientID,
+			OrganizationID:        reg.OrganizationID,
+			JSONWebKeySetID:       reg.JSONWebKeySetID.UUID,
+			ClientID:              reg.ExternalClientID,
 			ClientSecret:          secret,
 			AssertionAudience:     audience,
 			AssertionSigner:       m.assertions,

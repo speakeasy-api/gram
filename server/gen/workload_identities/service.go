@@ -24,6 +24,15 @@ type Service interface {
 	// names a project, with the agent each subject resolves to. Requires
 	// workload:read.
 	List(context.Context, *ListPayload) (res *WorkloadIdentityPolicy, err error)
+	// List the platforms the catalog offers to trust without looking anything up,
+	// each with the guided setup that connects it. The same for every
+	// organization. Requires workload:read.
+	ListPlatforms(context.Context, *ListPlatformsPayload) (res *WorkloadPlatformCatalog, err error)
+	// List the token endpoints an external platform can be pointed at: one per
+	// user session issuer in shared mode, at the organization level and in each
+	// project, with the issuer it serves. Issuers this deployment does not serve a
+	// shared authorization server for are left out. Requires workload:read.
+	ListTokenEndpoints(context.Context, *ListTokenEndpointsPayload) (res *types.WorkloadTokenEndpoints, err error)
 	// Trust an external issuer to vouch for workloads. Requires workload:write.
 	// Returns the whole policy, so a caller replaces its view rather than merging
 	// into it.
@@ -74,7 +83,7 @@ const ServiceName = "workloadIdentities"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"list", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject"}
+var MethodNames = [9]string{"list", "listPlatforms", "listTokenEndpoints", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject"}
 
 // AdmitSubjectPayload is the payload type of the workloadIdentities service
 // admitSubject method.
@@ -111,6 +120,22 @@ type AdmitSubjectPayload struct {
 // ListPayload is the payload type of the workloadIdentities service list
 // method.
 type ListPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListPlatformsPayload is the payload type of the workloadIdentities service
+// listPlatforms method.
+type ListPlatformsPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListTokenEndpointsPayload is the payload type of the workloadIdentities
+// service listTokenEndpoints method.
+type ListTokenEndpointsPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -217,6 +242,115 @@ type WorkloadIdentityPolicy struct {
 	Issuers []*types.WorkloadIssuer
 	// Admitted subjects.
 	Admissions []*types.WorkloadAdmission
+}
+
+// A platform the catalog offers to trust, with what the operator supplies and
+// the guided setup that connects it.
+type WorkloadPlatform struct {
+	// Identifies the entry permanently.
+	Key string
+	// What the operator sees.
+	DisplayName string
+	// What connecting the platform does.
+	Description string
+	// The platform's logo, a path on the dashboard's origin. Empty where it has
+	// none.
+	Icon string
+	// False for a platform listed but not offered.
+	Enabled bool
+	// The issuer identifier its tokens carry.
+	Issuer *WorkloadPlatformConstant
+	// Where it publishes its signing keys.
+	JwksURI *WorkloadPlatformConstant
+	// What the operator supplies.
+	Variables []*WorkloadPlatformVariable
+	// The access rule it produces.
+	Subject *WorkloadPlatformSubject
+	// The guided setup. Empty for a platform without one, which is listed as
+	// coming soon and cannot be opened.
+	Steps []*WorkloadPlatformStep
+}
+
+// One piece of a guided setup step. Which fields are set depends on type; the
+// rest are empty.
+type WorkloadPlatformBlock struct {
+	// The kind of content.
+	Type string
+	// A text block's Markdown, or what a checklist item without a value asks the
+	// operator to do. Raw HTML in it must not be rendered.
+	Markdown string
+	// An image's path on the dashboard's origin.
+	Src string
+	// An image's alternative text.
+	Alt string
+	// Shown under an image.
+	Caption string
+	// A link's https target.
+	Href string
+	// A link's or computed value's label, or the console field or control a
+	// checklist item names.
+	Label string
+	// The variable key a field collects.
+	Variable string
+	// The value a computed block or checklist item shows.
+	Value string
+	// Shown under a computed value or checklist item.
+	Help string
+}
+
+// WorkloadPlatformCatalog is the result type of the workloadIdentities service
+// listPlatforms method.
+type WorkloadPlatformCatalog struct {
+	// The catalog entries.
+	Platforms []*WorkloadPlatform
+}
+
+// A value a catalog platform supplies, the same for every customer.
+type WorkloadPlatformConstant struct {
+	// The value, with {key} placeholders for platform-tier variables.
+	Value string
+	// Whether the operator sees the value.
+	Visibility string
+}
+
+// One screen of a guided setup.
+type WorkloadPlatformStep struct {
+	// Stable within the platform; used in the dashboard URL.
+	ID string
+	// Heads the step.
+	Title string
+	// collect steps gather values, the create step writes the rows, connect steps
+	// describe the platform's side.
+	Phase string
+	// Rendered in order.
+	Blocks []*WorkloadPlatformBlock
+}
+
+// The access rule a catalog platform produces.
+type WorkloadPlatformSubject struct {
+	// The subject with {key} placeholders for rule-tier variables; the stem, for a
+	// wildcard rule.
+	Template string
+	// Whether the rule is the filled template followed by *.
+	Wildcard bool
+}
+
+// Something the operator supplies when connecting a catalog platform.
+type WorkloadPlatformVariable struct {
+	// Names the variable in templates, as {key}.
+	Key string
+	// Whether it is supplied once per trusted platform or once per access rule.
+	Tier string
+	// The field's label.
+	Label string
+	// Where the operator finds the value. Empty where there is no help.
+	Help string
+	// Shown in the empty field. Empty where there is none.
+	Placeholder string
+	// A regular expression the whole value must match.
+	Pattern string
+	// Shown when the value does not match. Empty where there is none.
+	PatternMessage string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
