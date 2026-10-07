@@ -75,6 +75,8 @@ DELETE FROM attribute_keys WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
 DELETE FROM shadow_mcp_inventory_urls WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
+DELETE FROM shadow_mcp_inventory_url_overrides WHERE gram_project_id IN
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
 DELETE FROM mcp_network_traffic_hourly_summaries WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
 DELETE FROM ai_detections WHERE organization_id = 'org_gram_demo_workspace';
