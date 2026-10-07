@@ -47,7 +47,9 @@ export function CreateConnectionForm(): JSX.Element {
   const normalizedOrgUrl = normalizeOktaOrgUrl(trimmed);
   const invalid = trimmed !== "" && normalizedOrgUrl === undefined;
 
-  const createConnection = () => {
+  const createConnection = (
+    listingMode: ListingMode = DEFAULT_LISTING_MODE,
+  ) => {
     if (create.isPending || normalizedOrgUrl === undefined) return;
     setOrgUrl(normalizedOrgUrl);
     create.mutate({
@@ -55,7 +57,7 @@ export function CreateConnectionForm(): JSX.Element {
       request: {
         createIdentityProviderConnectionRequestBody: {
           orgUrl: normalizedOrgUrl,
-          listingMode: DEFAULT_LISTING_MODE,
+          listingMode,
         },
       },
     });
@@ -82,7 +84,7 @@ export function CreateConnectionForm(): JSX.Element {
             <Input
               id="okta-org-url"
               disabled={create.isPending}
-              onEnter={createConnection}
+              onEnter={() => createConnection()}
               inputMode="url"
               autoCapitalize="none"
               aria-invalid={invalid}
@@ -119,6 +121,21 @@ export function CreateConnectionForm(): JSX.Element {
             )}
           </Field>
           <ApiErrorAlert error={create.error} />
+          {create.error && (
+            <div className="flex flex-col items-start gap-2">
+              <Text muted small>
+                If your Okta organization does not support client-secret
+                authentication, use a custom API Services app instead.
+              </Text>
+              <Button
+                variant="secondary"
+                disabled={normalizedOrgUrl === undefined || create.isPending}
+                onClick={() => createConnection("custom_app")}
+              >
+                Continue with a custom API Services app
+              </Button>
+            </div>
+          )}
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>
@@ -128,7 +145,7 @@ export function CreateConnectionForm(): JSX.Element {
           <SettingsSection.FooterActions>
             <Button
               disabled={normalizedOrgUrl === undefined || create.isPending}
-              onClick={createConnection}
+              onClick={() => createConnection()}
             >
               {create.isPending ? "Creating..." : "Continue"}
             </Button>

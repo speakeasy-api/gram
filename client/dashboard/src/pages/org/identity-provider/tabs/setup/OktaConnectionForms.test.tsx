@@ -96,6 +96,38 @@ describe("CreateConnectionForm", () => {
     expect(mutation.mutate).toHaveBeenCalledTimes(1);
   });
 
+  it("offers private-key creation after OIN discovery fails", () => {
+    mutation.error = new Error(
+      "the Okta org's authorization server does not advertise client_secret_basic client authentication",
+    );
+    const { rerender } = render(<CreateConnectionForm />, { wrapper: Wrapper });
+    const fallback = screen.getByRole("button", {
+      name: "Continue with a custom API Services app",
+    });
+    expect(fallback.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(fallback);
+    expect(mutation.mutate).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Okta organization URL"), {
+      target: { value: "https://example-admin.okta.com/admin/home" },
+    });
+    fireEvent.click(fallback);
+    expect(mutation.mutate).toHaveBeenCalledExactlyOnceWith({
+      security: expect.anything(),
+      request: {
+        createIdentityProviderConnectionRequestBody: {
+          orgUrl: "https://example.okta.com",
+          listingMode: "custom_app",
+        },
+      },
+    });
+    mutation.isPending = true;
+    rerender(<CreateConnectionForm />);
+    expect(fallback.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(fallback);
+    expect(mutation.mutate).toHaveBeenCalledTimes(1);
+  });
+
   it("shows the org URL for a pasted admin console URL", () => {
     render(<CreateConnectionForm />, { wrapper: Wrapper });
     const input = screen.getByLabelText<HTMLInputElement>(
