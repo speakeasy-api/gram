@@ -2149,10 +2149,11 @@ CREATE TABLE IF NOT EXISTS agent_events (
     duration_nano Int64 COMMENT 'Duration in nanoseconds when the producer states one (span duration, tool call duration). 0 when not stated.' CODEC(Delta, ZSTD),
 
     -- Content. Deprecated with no replacement on 2026-10-07: text carries the
-    -- words and attributes carries the structure. Nothing reads these, they
-    -- are no longer filled, and a later contract migration drops them.
-    input_content String COMMENT 'Deprecated, no replacement: text carries the words and attributes the structure. No longer filled. Was the normalized input message JSON.' CODEC(ZSTD),
-    output_content String COMMENT 'Deprecated, no replacement: text carries the words and attributes the structure. No longer filled. Was the normalized output message JSON.' CODEC(ZSTD),
+    -- words and attributes carries the structure. Nothing reads these, the
+    -- writer stops filling them once the column enrichers land, and a later
+    -- contract migration drops them.
+    input_content String COMMENT 'Deprecated with no replacement, decided 2026-10-07: text carries the words and attributes carries the structure. Nothing reads it, and the writer stops filling it once the column enrichers land. Was the normalized input message JSON.' CODEC(ZSTD),
+    output_content String COMMENT 'Deprecated with no replacement, decided 2026-10-07: text carries the words and attributes carries the structure. Nothing reads it, and the writer stops filling it once the column enrichers land. Was the normalized output message JSON.' CODEC(ZSTD),
 
     -- Usage carried on the record itself, present when the producer log or span states it
     input_tokens Int64 COMMENT 'Input tokens stated on the record. 0 when not stated.',
