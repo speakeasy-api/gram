@@ -209,7 +209,7 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 	}); err != nil {
 		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "failed to log toolset creation").LogError(ctx, logger)
 	}
-	if _, err := hostedmcp.Sync(ctx, tx, auditLogger, hostedmcp.Actor{UserID: input.ActorUserID, Email: input.ActorEmail}, created, nil); err != nil {
+	if _, err := hostedmcp.Sync(ctx, tx, auditLogger, hostedmcp.Actor{UserID: input.ActorUserID, Email: input.ActorEmail, System: ""}, created, nil); err != nil {
 		return ToolsetCreateResult{}, err //nolint:wrapcheck // oops errors pass through.
 	}
 

@@ -29,10 +29,32 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// Actor is the user wrapper writes are audited under.
+// Actor is who wrapper writes are audited under: a user, or a Gram component when UserID is empty.
 type Actor struct {
+	// UserID is the acting user; it takes precedence over System.
 	UserID string
-	Email  *string
+
+	// Email is the acting user's display name in audit entries.
+	Email *string
+
+	// System names a Gram component acting with no user behind it, audited as system:<System>.
+	System string
+}
+
+// SystemActor audits wrapper writes as the named Gram component.
+func SystemActor(component string) Actor {
+	return Actor{UserID: "", Email: nil, System: component}
+}
+
+func (a Actor) principal() (urn.Principal, bool) {
+	switch {
+	case a.UserID != "":
+		return urn.NewPrincipal(urn.PrincipalTypeUser, a.UserID), true
+	case a.System != "":
+		return urn.NewSystemPrincipal(a.System), true
+	default:
+		return urn.Principal{}, false
+	}
 }
 
 // Visibility maps a toolset's (mcp_enabled, mcp_is_public) onto mcp_servers.visibility.
@@ -71,7 +93,8 @@ func LockDomains(ctx context.Context, tx pgx.Tx, organizationID string, ids ...u
 
 // Sync mirrors a locked toolset onto its canonical wrapper; returned domains need a post-commit reconcile.
 func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset, requested *networkaccess.Mode) ([]uuid.UUID, error) {
-	if auditLogger == nil || actor.UserID == "" {
+	principal, ok := actor.principal()
+	if auditLogger == nil || !ok {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")
 	}
 	hasSlug := toolset.McpSlug.Valid && toolset.McpSlug.String != ""
@@ -141,7 +164,6 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 		}
 	}
 
-	principal := urn.NewPrincipal(urn.PrincipalTypeUser, actor.UserID)
 	var clearedRoots []mcpendpointsrepo.McpEndpoint
 	switch {
 	case created:
@@ -202,7 +224,7 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 
 	if !hasSlug {
 		// No slug, no address: endpoints retire but the wrapper stays, since a tombstoned id cannot be reused.
-		retired, err := retireEndpoints(ctx, tx, auditLogger, actor, toolset, endpoints)
+		retired, err := retireEndpoints(ctx, tx, auditLogger, principal, actor.Email, toolset, endpoints)
 		if err != nil {
 			return nil, err
 		}
@@ -211,7 +233,7 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 	if !addressed {
 		return tombstone.RootDomainIDs(clearedRoots), nil
 	}
-	moved, err := syncEndpoint(ctx, tx, auditLogger, actor, toolset, canonical, endpoints)
+	moved, err := syncEndpoint(ctx, tx, auditLogger, principal, actor.Email, toolset, canonical, endpoints)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +241,7 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 }
 
 // syncEndpoint re-keys the single endpoint in place so client references keep its identity.
-func syncEndpoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset, server mcpserversrepo.McpServer, endpoints []mcpendpointsrepo.McpEndpoint) ([]mcpendpointsrepo.McpEndpoint, error) {
+func syncEndpoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, principal urn.Principal, actorEmail *string, toolset toolsetsrepo.Toolset, server mcpserversrepo.McpServer, endpoints []mcpendpointsrepo.McpEndpoint) ([]mcpendpointsrepo.McpEndpoint, error) {
 	if len(endpoints) > 1 {
 		return nil, oops.E(oops.CodeConflict, nil, "hosted MCP has multiple endpoints; resolve them before editing the toolset")
 	}
@@ -241,7 +263,6 @@ func syncEndpoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, act
 	if !available.Valid || !available.Bool {
 		return nil, oops.E(oops.CodeConflict, nil, "hosted MCP address is already in use")
 	}
-	principal := urn.NewPrincipal(urn.PrincipalTypeUser, actor.UserID)
 	if len(endpoints) == 0 {
 		endpoint, err := endpointRepo.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 			ProjectID: toolset.ProjectID, McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, CustomDomainID: toolset.CustomDomainID, Slug: toolset.McpSlug.String,
@@ -250,7 +271,7 @@ func syncEndpoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, act
 			return nil, oops.E(oops.CodeConflict, err, "create hosted MCP endpoint")
 		}
 		if err := auditLogger.LogMcpEndpointCreate(ctx, tx, audit.LogMcpEndpointCreateEvent{
-			OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID, Actor: principal, ActorDisplayName: actor.Email,
+			OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID, Actor: principal, ActorDisplayName: actorEmail,
 			McpEndpointURN: urn.NewMcpEndpoint(endpoint.ID), Slug: endpoint.Slug,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "audit hosted MCP endpoint")
@@ -272,7 +293,7 @@ func syncEndpoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, act
 		return nil, oops.E(oops.CodeConflict, err, "update hosted MCP endpoint address")
 	}
 	if err := auditLogger.LogMcpEndpointUpdate(ctx, tx, audit.LogMcpEndpointUpdateEvent{
-		OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID, Actor: principal, ActorDisplayName: actor.Email,
+		OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID, Actor: principal, ActorDisplayName: actorEmail,
 		McpEndpointURN: urn.NewMcpEndpoint(updated.ID), Slug: updated.Slug,
 		McpEndpointSnapshotBefore: mv.BuildMcpEndpointView(existing), McpEndpointSnapshotAfter: mv.BuildMcpEndpointView(updated),
 	}); err != nil {
@@ -282,13 +303,13 @@ func syncEndpoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, act
 		return nil, nil
 	}
 	lost := []mcpendpointsrepo.McpEndpoint{existing}
-	if err := tombstone.LogRootAutoClears(ctx, tx, auditLogger, toolset.OrganizationID, principal, actor.Email, lost); err != nil {
+	if err := tombstone.LogRootAutoClears(ctx, tx, auditLogger, toolset.OrganizationID, principal, actorEmail, lost); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit hosted MCP root cleanup")
 	}
 	return lost, nil
 }
 
-func retireEndpoints(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset, endpoints []mcpendpointsrepo.McpEndpoint) ([]mcpendpointsrepo.McpEndpoint, error) {
+func retireEndpoints(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, principal urn.Principal, actorEmail *string, toolset toolsetsrepo.Toolset, endpoints []mcpendpointsrepo.McpEndpoint) ([]mcpendpointsrepo.McpEndpoint, error) {
 	if len(endpoints) == 0 {
 		return nil, nil
 	}
@@ -296,16 +317,15 @@ func retireEndpoints(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, 
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "retire hosted MCP endpoints")
 	}
-	principal := urn.NewPrincipal(urn.PrincipalTypeUser, actor.UserID)
 	roots := slices.DeleteFunc(slices.Clone(endpoints), func(endpoint mcpendpointsrepo.McpEndpoint) bool {
 		return !endpoint.IsDomainRoot.Valid || !endpoint.IsDomainRoot.Bool
 	})
-	if err := tombstone.LogRootAutoClears(ctx, tx, auditLogger, toolset.OrganizationID, principal, actor.Email, roots); err != nil {
+	if err := tombstone.LogRootAutoClears(ctx, tx, auditLogger, toolset.OrganizationID, principal, actorEmail, roots); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit hosted MCP root cleanup")
 	}
 	for _, endpoint := range deleted {
 		if err := auditLogger.LogMcpEndpointDelete(ctx, tx, audit.LogMcpEndpointDeleteEvent{
-			OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID, Actor: principal, ActorDisplayName: actor.Email,
+			OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID, Actor: principal, ActorDisplayName: actorEmail,
 			McpEndpointURN: urn.NewMcpEndpoint(endpoint.ID), Slug: endpoint.Slug,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "audit hosted MCP endpoint deletion")
