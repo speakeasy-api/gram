@@ -35,5 +35,12 @@ func LogColumns(in *Instruments) []LogEnricher {
 		columnOutcome(in),
 		columnOutcomeMessage(in),
 		columnDurationNano(in),
+
+		// Usage, which only a request carries.
+		columnInputTokens(in),
+		columnOutputTokens(in),
+		columnCacheReadTokens(in),
+		columnCacheWriteTokens(in),
+		columnCostUSD(in),
 	}
 }
