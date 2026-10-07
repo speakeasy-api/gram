@@ -181,8 +181,8 @@ func (s *Service) PreviewAuthoring(ctx context.Context, input AuthoringInput) (A
 }
 
 // AuthorInTransaction atomically applies a version-bound operation in the caller's
-// receipt transaction. The caller owns final commit or rollback. Existing service
-// mutations use nested savepoints, preserving authorization and audit behavior.
+// receipt transaction. The caller owns commit or rollback and must roll back on
+// error. Service mutations share the transaction, including their audit writes.
 func (s *Service) AuthorInTransaction(ctx context.Context, tx pgx.Tx, input AuthoringInput, expectedVersion string) (AuthoringResult, error) {
 	var result AuthoringResult
 
@@ -199,15 +199,13 @@ func (s *Service) AuthorInTransaction(ctx context.Context, tx pgx.Tx, input Auth
 		return result, err
 	}
 
-	bound := *s
-	bound.db = tx
 	var ids []string
 	if input.Signals != nil {
 		ids = make([]string, 0, len(*input.Signals))
 		for _, ref := range *input.Signals {
 			id := ref.ID
 			if ref.New != nil {
-				created, err := bound.CreateSignal(ctx, &gen.CreateSignalPayload{Name: ref.New.Name, Slug: slugPointer(ref.New.Slug), Description: ref.New.Description, ClassifierCriteria: ref.New.Criteria, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
+				created, err := s.CreateSignalWithTx(ctx, tx, &gen.CreateSignalPayload{Name: ref.New.Name, Slug: slugPointer(ref.New.Slug), Description: ref.New.Description, ClassifierCriteria: ref.New.Criteria, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
 				if err != nil {
 					return result, err
 				}
@@ -219,17 +217,17 @@ func (s *Service) AuthorInTransaction(ctx context.Context, tx pgx.Tx, input Auth
 	}
 	switch input.Operation {
 	case "create_signal":
-		result.Signal, err = bound.CreateSignal(ctx, &gen.CreateSignalPayload{Name: *input.Name, Slug: slugPointer(input.Slug), Description: input.Description, ClassifierCriteria: input.Criteria, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
+		result.Signal, err = s.CreateSignalWithTx(ctx, tx, &gen.CreateSignalPayload{Name: *input.Name, Slug: slugPointer(input.Slug), Description: input.Description, ClassifierCriteria: input.Criteria, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
 	case "update_signal":
-		result.Signal, err = bound.UpdateSignal(ctx, &gen.UpdateSignalPayload{ID: input.ID, Name: input.Name, Slug: slugPointer(input.Slug), Description: input.Description, ClassifierCriteria: input.Criteria, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
+		result.Signal, err = s.UpdateSignalWithTx(ctx, tx, &gen.UpdateSignalPayload{ID: input.ID, Name: input.Name, Slug: slugPointer(input.Slug), Description: input.Description, ClassifierCriteria: input.Criteria, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
 	case "create_sensor":
-		result.Sensor, err = bound.CreateSensor(ctx, &gen.CreateSensorPayload{Name: *input.Name, Slug: slugPointer(input.Slug), Description: input.Description, Instructions: input.Instructions, Mode: types.SigintSensorMode(*input.Mode), MatchExpression: input.MatchExpression, SignalIds: ids, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
+		result.Sensor, err = s.CreateSensorWithTx(ctx, tx, &gen.CreateSensorPayload{Name: *input.Name, Slug: slugPointer(input.Slug), Description: input.Description, Instructions: input.Instructions, Mode: types.SigintSensorMode(*input.Mode), MatchExpression: input.MatchExpression, SignalIds: ids, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
 	case "update_sensor":
 		var mode *types.SigintSensorMode
 		if input.Mode != nil {
 			mode = new(types.SigintSensorMode(*input.Mode))
 		}
-		result.Sensor, err = bound.UpdateSensor(ctx, &gen.UpdateSensorPayload{ID: input.ID, Name: input.Name, Slug: slugPointer(input.Slug), Description: input.Description, Instructions: input.Instructions, Mode: mode, MatchExpression: input.MatchExpression, SignalIds: ids, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
+		result.Sensor, err = s.UpdateSensorWithTx(ctx, tx, &gen.UpdateSensorPayload{ID: input.ID, Name: input.Name, Slug: slugPointer(input.Slug), Description: input.Description, Instructions: input.Instructions, Mode: mode, MatchExpression: input.MatchExpression, SignalIds: ids, SessionToken: nil, ProjectSlugInput: nil, ApikeyToken: nil})
 	}
 	if err != nil {
 		return result, err

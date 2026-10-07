@@ -44,18 +44,11 @@ const (
 type Service struct {
 	logger          *slog.Logger
 	tracer          trace.Tracer
-	db              database
+	db              *pgxpool.Pool
 	auth            *auth.Auth
 	authz           *authz.Engine
 	audit           *audit.Logger
 	productFeatures *productfeatures.Client
-}
-
-// database permits composing existing audited mutations inside an outer
-// transaction. pgx transactions implement Begin with nested savepoints.
-type database interface {
-	repo.DBTX
-	Begin(context.Context) (pgx.Tx, error)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -106,6 +99,27 @@ func (s *Service) requireAccess(ctx context.Context, organizationID string, chec
 }
 
 func (s *Service) CreateSignal(ctx context.Context, payload *gen.CreateSignalPayload) (*types.SigintSignal, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin signal create").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	result, err := s.CreateSignalWithTx(ctx, tx, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit signal create").LogError(ctx, s.logger)
+	}
+
+	return result, nil
+}
+
+// CreateSignalWithTx creates an audited signal in the supplied transaction.
+// The caller owns commit or rollback and must roll back on error.
+func (s *Service) CreateSignalWithTx(ctx context.Context, dbtx pgx.Tx, payload *gen.CreateSignalPayload) (*types.SigintSignal, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -129,12 +143,6 @@ func (s *Service) CreateSignal(ctx context.Context, payload *gen.CreateSignalPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate signal id").LogError(ctx, s.logger)
 	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin signal create").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
 
@@ -167,10 +175,6 @@ func (s *Service) CreateSignal(ctx context.Context, payload *gen.CreateSignalPay
 		SignalName:       row.Name,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit signal create").LogError(ctx, s.logger)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit signal create").LogError(ctx, s.logger)
 	}
 
 	return mv.BuildSigintSignalView(row), nil
@@ -231,6 +235,27 @@ func (s *Service) ListSignals(ctx context.Context, payload *gen.ListSignalsPaylo
 }
 
 func (s *Service) UpdateSignal(ctx context.Context, payload *gen.UpdateSignalPayload) (*types.SigintSignal, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin signal update").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	result, err := s.UpdateSignalWithTx(ctx, tx, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit signal update").LogError(ctx, s.logger)
+	}
+
+	return result, nil
+}
+
+// UpdateSignalWithTx updates an audited signal in the supplied transaction.
+// The caller owns commit or rollback and must roll back on error.
+func (s *Service) UpdateSignalWithTx(ctx context.Context, dbtx pgx.Tx, payload *gen.UpdateSignalPayload) (*types.SigintSignal, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -244,12 +269,6 @@ func (s *Service) UpdateSignal(ctx context.Context, payload *gen.UpdateSignalPay
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid signal id").LogError(ctx, s.logger)
 	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin signal update").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
 
@@ -315,10 +334,6 @@ func (s *Service) UpdateSignal(ctx context.Context, payload *gen.UpdateSignalPay
 		SignalSnapshotAfter:  afterView,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit signal update").LogError(ctx, s.logger)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit signal update").LogError(ctx, s.logger)
 	}
 
 	return afterView, nil
@@ -432,6 +447,27 @@ func (s *Service) DeleteSignal(ctx context.Context, payload *gen.DeleteSignalPay
 }
 
 func (s *Service) CreateSensor(ctx context.Context, payload *gen.CreateSensorPayload) (*types.SigintSensor, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin sensor create").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	result, err := s.CreateSensorWithTx(ctx, tx, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit sensor create").LogError(ctx, s.logger)
+	}
+
+	return result, nil
+}
+
+// CreateSensorWithTx creates an audited sensor in the supplied transaction.
+// The caller owns commit or rollback and must roll back on error.
+func (s *Service) CreateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *gen.CreateSensorPayload) (*types.SigintSensor, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -474,12 +510,6 @@ func (s *Service) CreateSensor(ctx context.Context, payload *gen.CreateSensorPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate sensor id").LogError(ctx, s.logger)
 	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin sensor create").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
 
@@ -524,10 +554,6 @@ func (s *Service) CreateSensor(ctx context.Context, payload *gen.CreateSensorPay
 		SensorURN: urn.NewSigintSensor(created.ID), SensorName: created.Name,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit sensor create").LogError(ctx, s.logger)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit sensor create").LogError(ctx, s.logger)
 	}
 
 	return mv.BuildSigintSensorView(viewRow), nil
@@ -588,6 +614,27 @@ func (s *Service) ListSensors(ctx context.Context, payload *gen.ListSensorsPaylo
 }
 
 func (s *Service) UpdateSensor(ctx context.Context, payload *gen.UpdateSensorPayload) (*types.SigintSensor, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin sensor update").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	result, err := s.UpdateSensorWithTx(ctx, tx, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit sensor update").LogError(ctx, s.logger)
+	}
+
+	return result, nil
+}
+
+// UpdateSensorWithTx updates an audited sensor in the supplied transaction.
+// The caller owns commit or rollback and must roll back on error.
+func (s *Service) UpdateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *gen.UpdateSensorPayload) (*types.SigintSensor, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -609,12 +656,6 @@ func (s *Service) UpdateSensor(ctx context.Context, payload *gen.UpdateSensorPay
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid signal ids").LogError(ctx, s.logger)
 		}
 	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin sensor update").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
 
@@ -712,10 +753,6 @@ func (s *Service) UpdateSensor(ctx context.Context, payload *gen.UpdateSensorPay
 		SensorSnapshotBefore: beforeView, SensorSnapshotAfter: afterView,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit sensor update").LogError(ctx, s.logger)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit sensor update").LogError(ctx, s.logger)
 	}
 
 	return afterView, nil
