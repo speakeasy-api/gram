@@ -1,3 +1,4 @@
+import { useRBAC } from "@/hooks/useRBAC";
 import { IdentityLink } from "@/components/identity-link";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
@@ -76,6 +77,8 @@ export function MCPTeamAccessTab({
    */
   checkAccess?: boolean;
 }): ReactElement | null {
+  const { hasAnyScope } = useRBAC();
+  const canManage = hasAnyScope(["org:admin"]);
   const {
     data: audienceData,
     isLoading: audienceLoading,
@@ -202,6 +205,7 @@ export function MCPTeamAccessTab({
             resourceId={resourceId}
             resourceName={serverName}
             entries={entries}
+            rolePlugins={canManage ? audienceData?.rolePlugins : undefined}
             version={audienceData?.version ?? ""}
             toolCatalog={toolCatalog}
             isLoading={audienceLoading}

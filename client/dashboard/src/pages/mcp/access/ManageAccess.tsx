@@ -50,6 +50,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useMemo, useState, type JSX } from "react";
 import { toast } from "sonner";
+import { RolePluginLinks } from "./RolePluginLinks";
+import type { ResourceAudienceRolePlugin } from "@gram/client/models/components/resourceaudienceroleplugin.js";
 import { AddAudienceDialog } from "./AddAudienceDialog";
 import { RemoveAudienceDialog } from "./RemoveAudienceDialog";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
@@ -109,6 +111,7 @@ export function ManageAccess({
   version,
   toolCatalog,
   isLoading,
+  rolePlugins,
 }: {
   resourceId: string;
   resourceName?: string;
@@ -118,6 +121,7 @@ export function ManageAccess({
   /** The server's tools, when this backend exposes a catalogue. */
   toolCatalog?: ToolSelectionTool[];
   isLoading: boolean;
+  rolePlugins?: ResourceAudienceRolePlugin[];
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
@@ -127,6 +131,7 @@ export function ManageAccess({
   // same gate as a disabled state so it cannot be clicked without the scope.
   const { hasAnyScope } = useRBAC();
   const canManage = hasAnyScope(["org:admin"]);
+  const showPlugins = canManage && rolePlugins !== undefined;
   const [page, setPage] = useState(0);
   // Which kind of principal the picker is open for.
   const [adding, setAdding] = useState<"user" | "agent" | "role" | null>(null);
@@ -307,10 +312,8 @@ export function ManageAccess({
     <div>
       <Card.Dashboard
         title="Manage access to this server"
-        // Rows run edge to edge under the header, like the dashboard's other
-        // list cards, and the title bar sits tight above them.
+        // Rows run edge to edge under the header.
         bodyClassName="p-0"
-        headerClassName="py-2.5"
         action={
           <RequireScope
             scope="org:admin"
@@ -359,11 +362,29 @@ export function ManageAccess({
             </Text>
           </div>
         ) : (
-          <div className="grid grid-cols-[minmax(0,18rem)_minmax(0,1fr)_auto_auto]">
+          <div
+            className={cn(
+              "grid",
+              showPlugins
+                ? "grid-cols-[auto_repeat(3,minmax(0,1fr))_max-content_auto]"
+                : "grid-cols-[auto_repeat(2,minmax(0,1fr))_max-content_auto]",
+            )}
+          >
+            {showPlugins && (
+              <div className="text-muted-foreground border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-2 text-xs">
+                <span>Type</span>
+                <span>Name</span>
+                <span>Access</span>
+                <span>Distributed via</span>
+                <span>Members</span>
+                <span />
+              </div>
+            )}
             {visible.map((row) => (
               <PrincipalRow
                 key={row.principalUrn}
                 row={row}
+                rolePlugins={showPlugins ? rolePlugins : undefined}
                 faces={row.memberIds
                   .map((id) => facesById.get(id))
                   .filter((member) => member !== undefined)}
@@ -501,6 +522,7 @@ export function ManageAccess({
  */
 function PrincipalRow({
   row,
+  rolePlugins,
   faces,
   catalog,
   onAllow,
@@ -514,6 +536,7 @@ function PrincipalRow({
   pending,
 }: {
   row: AccessRow;
+  rolePlugins?: ResourceAudienceRolePlugin[];
   /** The people a role reaches, for the facepile on its row. */
   faces: FacepileMember[];
   /** The server's tools, for resolving what a rule and a block leave. */
@@ -540,9 +563,11 @@ function PrincipalRow({
   return (
     <div className="border-border col-span-full grid grid-cols-subgrid border-b last:border-b-0">
       <div className="col-span-full grid grid-cols-subgrid items-center gap-x-6 px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2">
+        <div>
           <PrincipalBadge kind={row.kind} />
-          <span className="truncate font-medium">
+        </div>
+        <div className="min-w-0">
+          <span className="block truncate font-medium">
             {userId ? (
               <IdentityLink identifier={{ userId }}>
                 {row.displayName}
@@ -560,6 +585,17 @@ function PrincipalRow({
         <Text muted small className="min-w-0 truncate">
           {accessSummary(row, catalog)}
         </Text>
+
+        {canManage && rolePlugins !== undefined && (
+          <div className="min-w-0">
+            {row.kind === "role" && (
+              <RolePluginLinks
+                principalUrn={row.principalUrn}
+                plugins={rolePlugins}
+              />
+            )}
+          </div>
+        )}
 
         {/* Who a role reaches, as the faces themselves: an administrator
             checks that before changing what the role can do, and "2 members"

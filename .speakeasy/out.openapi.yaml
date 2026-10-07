@@ -97463,12 +97463,37 @@ components:
           items:
             $ref: '#/components/schemas/ResourceAudienceEntry'
           description: Rules deciding access to this resource, widest first.
+        role_plugins:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceAudienceRolePlugin'
+          description: Live plugins containing this resource and assigned to an exact audience role. Omitted without plugin read and administrator access; not evidence of authorization or installation.
         version:
           type: string
           description: Fingerprint of the rules naming this resource. Send it back when saving so a change made elsewhere is a conflict rather than a silent overwrite.
       required:
         - entries
         - version
+    ResourceAudienceRolePlugin:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Plugin name.
+        plugin_id:
+          type: string
+          description: Plugin ID.
+        principal_urn:
+          type: string
+          description: Exact role assigned to the plugin.
+        slug:
+          type: string
+          description: Plugin slug.
+      required:
+        - principal_urn
+        - plugin_id
+        - name
+        - slug
     ResourceEntry:
       type: object
       properties:

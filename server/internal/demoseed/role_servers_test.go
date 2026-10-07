@@ -36,9 +36,10 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 		plugins, err := q.ListActivePluginsForProject(ctx, pluginrepo.ListActivePluginsForProjectParams{ProjectID: projectID})
 		require.NoError(t, err)
 		memberships := map[string][]string{}
+		audiences := map[string][]string{}
 		for _, plugin := range plugins {
 			// Seeded role plugins must remain role-only, beyond the content samples below.
-			if plugin.AutoCreated && !plugin.IsDefault.Bool {
+			if !plugin.IsDefault.Bool {
 				assignments, err := q.ListPluginAssignments(ctx, pluginrepo.ListPluginAssignmentsParams{
 					PluginID: plugin.ID, OrganizationID: spec.OrgID, ProjectID: projectID,
 				})
@@ -46,10 +47,8 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 				require.NotEmpty(t, assignments)
 				for _, assignment := range assignments {
 					require.Regexp(t, `^role:`, assignment.PrincipalUrn, "role content must not widen audiences to Everyone")
+					audiences[plugin.Slug] = append(audiences[plugin.Slug], assignment.PrincipalUrn)
 				}
-			}
-			if plugin.Slug != "engineer" && plugin.Slug != "read-only-tools" {
-				continue
 			}
 			servers, err := q.ListPluginServers(ctx, plugin.ID)
 			require.NoError(t, err)
@@ -73,6 +72,20 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 		// Representative build and read-only audiences must receive usable content.
 		for _, slug := range []string{"engineer", "read-only-tools"} {
 			require.NotEmpty(t, memberships[slug], "role plugin %s must deliver servers", slug)
+		}
+		require.Equal(t, []string{"github"}, memberships["engineering-essentials"])
+		require.Len(t, audiences["engineering-essentials"], 1)
+		require.Equal(t, audiences["engineer"], audiences["engineering-essentials"])
+		// Exact role audiences plus server content drive Team Access links.
+		for role, expected := range map[string]int{"engineer": 2, "read-only-tools": 1, "contractors": 0} {
+			require.Len(t, audiences[role], 1)
+			matches := 0
+			for slug, audience := range audiences {
+				if slices.Contains(audience, audiences[role][0]) && slices.Contains(memberships[slug], "github") {
+					matches++
+				}
+			}
+			require.Equal(t, expected, matches, "GitHub plugin matches for %s", role)
 		}
 		if iteration == 0 {
 			firstMemberships = memberships

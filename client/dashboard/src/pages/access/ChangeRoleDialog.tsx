@@ -1,3 +1,4 @@
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import {
@@ -49,6 +50,7 @@ export function ChangeRoleDialog({
       await Promise.all([
         invalidateAllMembers(queryClient),
         invalidateAllRoles(queryClient),
+        invalidateAllResourceAudience(queryClient),
       ]);
       onOpenChange(false);
     },

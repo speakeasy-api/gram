@@ -1583,6 +1583,25 @@ BEGIN
     RAISE EXCEPTION 'demo seed: expected 30 role server memberships, found %', stray;
   END IF;
 
+  -- A hand-curated supplement gives Team Access a multiple-plugin example:
+  -- Engineer reaches GitHub through both its role plugin and this one. Other
+  -- servers/roles keep their single-match and no-match examples.
+  INSERT INTO plugins (organization_id, project_id, name, slug)
+  VALUES (demo_org, proj_a, 'Engineering Essentials', 'engineering-essentials')
+  RETURNING id INTO custom_role_id;
+  INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
+  SELECT custom_role_id, demo_org, 'role:organization:' || id
+  FROM organization_roles
+  WHERE organization_id = demo_org AND workos_slug = 'engineer';
+  INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
+  SELECT custom_role_id, id, name FROM mcp_servers
+  WHERE project_id = proj_a AND slug = 'github';
+
+  GET DIAGNOSTICS stray = ROW_COUNT;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed: expected 1 supplemental server membership, found %', stray;
+  END IF;
+
   -- Leave instructions NULL so Settings starts with the editable built-in
   -- instructions, matching the gateway's initialize and server/discover text.
   -- Remote MCP identity modes: Linear uses per-user OAuth through a
