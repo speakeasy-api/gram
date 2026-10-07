@@ -18,6 +18,13 @@ import (
 // so the series stay bounded.
 const meterColumnEnricherMissing = "gram.otel_column_enricher.missing"
 
+// meterClassificationUnclassified counts the records no dialect gave a
+// type, by the surface the dialect knew from the scope. The names behind
+// the count are in agent_events under raw_event_name; the counter says a
+// producer started sending something the vocabulary does not name, or
+// renamed something it did, the same day.
+const meterClassificationUnclassified = "gram.otel_classification.unclassified"
+
 // MeterReservedAttributesDropped counts the attributes a transform dropped
 // because a producer sent them under Gram's reserved speakeasy.agent
 // namespace, by signal. Only the column enrichers may write there; a
@@ -38,6 +45,7 @@ type Instruments struct {
 	metricEnricherDuration    metric.Float64Histogram
 	spanEnricherDuration      metric.Float64Histogram
 	columnValueMissing        metric.Int64Counter
+	unclassified              metric.Int64Counter
 	reservedAttributesDropped metric.Int64Counter
 }
 
@@ -83,6 +91,14 @@ func NewInstruments(logger *slog.Logger, meterProvider metric.MeterProvider) *In
 		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterColumnEnricherMissing), attr.SlogError(err))
 	}
 
+	unclassified, err := meter.Int64Counter(
+		meterClassificationUnclassified,
+		metric.WithDescription("Records no dialect gave an event type, by surface"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterClassificationUnclassified), attr.SlogError(err))
+	}
+
 	reservedAttributesDropped, err := meter.Int64Counter(
 		MeterReservedAttributesDropped,
 		metric.WithDescription("Attributes a transform dropped because a producer sent them under the reserved speakeasy.agent namespace"),
@@ -96,8 +112,18 @@ func NewInstruments(logger *slog.Logger, meterProvider metric.MeterProvider) *In
 		metricEnricherDuration:    metricEnricherDuration,
 		spanEnricherDuration:      spanEnricherDuration,
 		columnValueMissing:        columnValueMissing,
+		unclassified:              unclassified,
 		reservedAttributesDropped: reservedAttributesDropped,
 	}
+}
+
+// recordUnclassified counts one record no dialect gave a type.
+func (m *Instruments) recordUnclassified(ctx context.Context, surface string) {
+	if m == nil || m.unclassified == nil {
+		return
+	}
+
+	m.unclassified.Add(ctx, 1, metric.WithAttributes(attr.AgentEventSurface(surface)))
 }
 
 // RecordReservedAttributesDropped counts attributes a transform dropped from

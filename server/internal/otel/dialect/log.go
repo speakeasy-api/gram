@@ -47,6 +47,7 @@ type LogDialect interface {
 var logDialects = []LogDialect{
 	ClaudeCodeLog{},
 	CodexLog{},
+	HooksLog{},
 }
 
 func ForLog(record *otelv1.InboundLogRecord) LogDialect {
