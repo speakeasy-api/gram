@@ -12,6 +12,7 @@ const testState = vi.hoisted(() => ({
     | "missing"
     | "error",
   featuresPending: false,
+  featuresFailed: false,
   logsEnabled: true,
   refetch: vi.fn(),
   navigated: [] as string[],
@@ -23,9 +24,11 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => ({
     isPending: testState.featuresPending,
-    data: testState.featuresPending
-      ? undefined
-      : { logsEnabled: testState.logsEnabled },
+    isError: testState.featuresFailed,
+    data:
+      testState.featuresPending || testState.featuresFailed
+        ? undefined
+        : { logsEnabled: testState.logsEnabled },
     refetch: testState.refetch,
   }),
 }));
@@ -87,6 +90,7 @@ describe("McpToolsPage", () => {
   beforeEach(() => {
     testState.flagStatus = "enabled";
     testState.featuresPending = false;
+    testState.featuresFailed = false;
     testState.logsEnabled = true;
     testState.refetch.mockClear();
     testState.navigated = [];
@@ -144,6 +148,17 @@ describe("McpToolsPage", () => {
 
     expect(screen.queryByTestId("built-in")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Enable logging" }));
+    expect(testState.refetch).toHaveBeenCalled();
+  });
+
+  it("says so when the logging setting cannot be read, rather than drawing empty cards", () => {
+    testState.featuresFailed = true;
+    render(<McpToolsPage />);
+
+    expect(screen.getByText("This page did not load")).toBeTruthy();
+    expect(screen.queryByTestId("built-in")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Enable logging" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(testState.refetch).toHaveBeenCalled();
   });
 
