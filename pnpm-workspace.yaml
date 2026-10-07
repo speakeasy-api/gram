@@ -40,10 +40,8 @@ minimumReleaseAgeExclude:
   - "@chromatic-com/storybook"
 
 overrides:
-  # Keep assistant-ui's SDK dependencies aligned with the dashboard: newer AI
-  # stream chunks are not assignable to the older ChatTransport types.
-  ai: 7.0.120
-  "@ai-sdk/react": 4.0.123
+  ai: 7.0.123
+  "@ai-sdk/react": 4.0.126
   glob@>=10.0 <10.5.0: 10.5.0
   fast-uri@<3.1.8: 3.1.8
   # monaco-editor pins dompurify exactly; 3.4.15 has open XSS advisories.
