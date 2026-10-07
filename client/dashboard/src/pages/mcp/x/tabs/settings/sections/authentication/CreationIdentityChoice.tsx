@@ -105,7 +105,7 @@ export function CreationIdentityChoice({
 
       {value === "none" && authenticationRequired ? (
         <Alert variant="warning" dismissible={false}>
-          This server requires authentication. No Identity may leave it unable
+          This server requires authentication. Manual may leave it unable
           to serve requests.
         </Alert>
       ) : null}
