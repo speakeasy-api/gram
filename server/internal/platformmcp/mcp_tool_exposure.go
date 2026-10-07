@@ -54,7 +54,6 @@ var (
 	// loop forever on a request that can never succeed.
 	ErrMCPToolExposureShared = errors.New("MCP tool list is shared beyond this change's reach")
 	ErrToolInventoryCursor   = errors.New("invalid platform mcp tool inventory cursor")
-	ErrToolExposureCursor    = errors.New("invalid platform mcp tool exposure cursor")
 )
 
 // MCPToolExposureError is safe to map into a tool refusal. UnknownTools names
@@ -159,7 +158,8 @@ type MCPToolExposureMutationOutput struct {
 	Applied   []string `json:"applied"`
 	Unchanged []string `json:"unchanged"`
 	// Exposure is a fresh read taken after the commit, so a caller reports the
-	// committed list rather than the one it asked for.
+	// committed list rather than the one it asked for. It is the first page of
+	// that list; a longer list continues through get_mcp's tool_cursor.
 	Exposure      *MCPToolExposure `json:"exposure,omitempty"`
 	SnapshotScope string           `json:"snapshot_scope"`
 	// Distributions names the plugins that carry this server. Changing the
@@ -259,7 +259,7 @@ func (s *MCPToolExposureService) WithIndexing(index ToolExposureIndexer) *MCPToo
 }
 
 func (s *MCPToolExposureService) valid() bool {
-	return s != nil && s.db != nil && s.queries != nil && s.audit != nil && s.engine != nil && s.admin != nil && s.cursors != nil && len(s.exposureCursors) > 0 && s.exposurePageSize > 0 && s.reads.valid() && s.changes.valid() && s.now != nil
+	return s != nil && s.db != nil && s.queries != nil && s.audit != nil && s.engine != nil && s.admin != nil && s.cursors != nil && s.reads.valid() && s.changes.valid() && s.now != nil
 }
 
 // ListProjectTools reports the tools a project's latest completed deployment
@@ -371,13 +371,11 @@ func (s *MCPToolExposureService) ExposurePage(ctx context.Context, principal Pri
 	}
 	version := toolExposureVersion(projectID, mcpID, row.ToolsetID, row.ToolsetVersion, row.ToolUrns)
 	if pinnedVersion != "" && !hmac.Equal([]byte(pinnedVersion), []byte(version)) {
-		return MCPToolExposure{}, &MCPToolExposureError{
-			Code:    "conflict",
-			Message: "This MCP server's tool list changed while it was being read page by page. Read the server again without tool_cursor and present the list it reports now.",
-			Cause:   ErrMCPToolExposureConflict,
-		}
+		return MCPToolExposure{}, toolExposurePageConflict()
 	}
-	urns := slices.Sorted(slices.Values(row.ToolUrns))
+	// The row is this call's own copy, so it is sorted in place for paging.
+	urns := row.ToolUrns
+	slices.Sort(urns)
 	if position > len(urns) {
 		return MCPToolExposure{}, toolExposureCursorInvalid()
 	}
@@ -397,7 +395,7 @@ func (s *MCPToolExposureService) ExposurePage(ctx context.Context, principal Pri
 	// A caller with no binding could never present the cursor back, so a
 	// page it cannot continue is refused rather than handed out.
 	if binding == "" {
-		return MCPToolExposure{}, ErrToolExposureCursor
+		return MCPToolExposure{}, ErrUnavailable
 	}
 	next, err := sealCursor(s.exposureCursors, toolExposureCursor{
 		OrganizationID: principal.OrganizationID, Binding: binding,
@@ -1000,6 +998,17 @@ func toolExposureAuthorizationError(err error, scope authz.Scope) error {
 
 func toolExposureInvalid(message string) error {
 	return &MCPToolExposureError{Code: "invalid_request", Message: message, Cause: ErrMCPToolExposureInvalid}
+}
+
+// toolExposurePageConflict is the paged read's counterpart of
+// toolExposureConflict: nothing was being changed, so the caller restarts the
+// read rather than a write.
+func toolExposurePageConflict() error {
+	return &MCPToolExposureError{
+		Code:    "conflict",
+		Message: "This MCP server's tool list changed while it was being read page by page. Read the server again without tool_cursor and present the list it reports now.",
+		Cause:   ErrMCPToolExposureConflict,
+	}
 }
 
 func toolExposureConflict() error {

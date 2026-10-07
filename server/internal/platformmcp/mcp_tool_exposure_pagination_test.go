@@ -156,26 +156,12 @@ func TestToolExposureCursorIsBoundToItsServerAndCaller(t *testing.T) {
 	}
 }
 
-type toolExposureCursorReader struct{ err error }
-
-func (r toolExposureCursorReader) ListProjects(context.Context, Principal, ListProjectsInput) (ListProjectsOutput, error) {
-	return ListProjectsOutput{}, ErrUnavailable
-}
-
-func (r toolExposureCursorReader) FindMCP(context.Context, Principal, FindMCPInput) (FindMCPOutput, error) {
-	return FindMCPOutput{}, ErrUnavailable
-}
-
-func (r toolExposureCursorReader) GetMCP(context.Context, Principal, GetMCPInput) (MCP, error) {
-	return MCP{}, r.err
-}
-
 // get_mcp advertises tool_cursor, accepts a partial page without a version,
 // and returns a stale cursor as a readable refusal rather than a tool failure.
 func TestGetMCPAdvertisesToolPagingAndRefusesAStaleToolCursor(t *testing.T) {
 	t.Parallel()
 
-	reader := toolExposureCursorReader{err: fmt.Errorf("read platform MCP tool exposure: %w", toolExposureCursorInvalid())}
+	reader := refusingProjectReader{mcpErr: fmt.Errorf("read platform MCP tool exposure: %w", toolExposureCursorInvalid())}
 	server, registrar := newServer(reader, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	bindExternalTestPrincipal(server)
 	registrar.withExternalAuthorizer(allowExternalCallAuthorizer{})

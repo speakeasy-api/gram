@@ -455,11 +455,7 @@ type PluginsService struct {
 func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMaterial string) *PluginsService {
 	cursor, cursorErr := newPluginCursorCodec(cursorKeyMaterial)
 	references, referenceErr := newSubjectReferenceCodec(cursorKeyMaterial)
-	var versionKey []byte
-	if cursorKeyMaterial != "" {
-		digest := sha256.Sum256([]byte("platform-mcp-plugin-assignment-version:" + cursorKeyMaterial))
-		versionKey = digest[:]
-	}
+	versionKey := []byte(newSignedCursorKey("platform-mcp-plugin-assignment-version", cursorKeyMaterial))
 	if cursorErr != nil {
 		cursor = nil
 	}
