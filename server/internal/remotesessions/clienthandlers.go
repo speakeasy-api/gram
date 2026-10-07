@@ -820,8 +820,11 @@ func (s *Service) AttachUserSessionIssuer(ctx context.Context, payload *gen.Atta
 		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
 	}
 	locked, err := txRepo.LockEMAClient(ctx, repo.LockEMAClientParams{ID: clientID, ProjectID: conv.ToNullUUID(*authCtx.ProjectID), OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID)})
-	if err != nil {
-		return nil, lifecycleLockError(err)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session client").LogError(ctx, logger)
 	}
 	if locked.RemoteSessionIssuerID != remoteIssuerID {
 		return nil, oops.E(oops.CodeConflict, nil, "remote session client moved to another remote session issuer while attaching; retry").LogError(ctx, logger)
