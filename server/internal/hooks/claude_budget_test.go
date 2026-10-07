@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -187,22 +186,30 @@ func requireScanStarted(t *testing.T, scanner *slowRiskScanner) {
 	requireSignal(t, scanner.started, "the enforcement scan never started")
 }
 
+// testToolTimeoutReason is the fail-closed reason for a tool call answered
+// from the hooks posture.
+const testToolTimeoutReason = "Speakeasy blocked this tool call: its security check did not finish in time. Retry in a moment, and contact your administrator if this keeps happening."
+
+// toolTimeoutDenial is the fail-closed posture answer to a PreToolUse event.
+func toolTimeoutDenial() *gen.ClaudeHookResult {
+	return &gen.ClaudeHookResult{
+		SystemMessage: new(testToolTimeoutReason),
+		HookSpecificOutput: &HookSpecificOutput{
+			HookEventName:            new("PreToolUse"),
+			PermissionDecision:       new("deny"),
+			PermissionDecisionReason: new(testToolTimeoutReason),
+		},
+	}
+}
+
 // A scan that overruns the budget is answered from the org's hooks posture at
 // the budget: fail-open passes (a tool call without pre-approval), fail-closed
 // or unreadable blocks with a reason, and a prompt is still persisted.
 func TestClaude_DecisionBudget_OverrunAnswersFromPosture(t *testing.T) {
 	t.Parallel()
-	toolReason := "Speakeasy blocked this tool call: its security check did not finish in time. Retry in a moment, and contact your administrator if this keeps happening."
-	promptReason := strings.Replace(toolReason, "tool call", "prompt", 1)
+	promptReason := strings.Replace(testToolTimeoutReason, "tool call", "prompt", 1)
 	failOpen := hooksPostureFeatures{failOpen: true}
-	toolDenied := &gen.ClaudeHookResult{
-		SystemMessage: &toolReason,
-		HookSpecificOutput: &HookSpecificOutput{
-			HookEventName:            new("PreToolUse"),
-			PermissionDecision:       new("deny"),
-			PermissionDecisionReason: &toolReason,
-		},
-	}
+	toolDenied := toolTimeoutDenial()
 	cases := []struct {
 		name    string
 		posture hooksPostureFeatures
@@ -377,29 +384,46 @@ func TestClaude_DecisionBudget_FastVerdictReportsRiskScan(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx, scanned := withRiskScanTracker(ctx)
-	_, answeredFromPosture, err := ti.service.decideClaudeHookWithinBudget(ctx, testenv.NewLogger(t), time.Now(), hookEvent, payload.HookEventName)
+	_, postureOutcome, err := ti.service.decideClaudeHookWithinBudget(ctx, testenv.NewLogger(t), time.Now(), hookEvent, payload.HookEventName)
 	require.NoError(t, err)
-	require.False(t, answeredFromPosture)
+	require.Empty(t, postureOutcome, "the handler's verdict answers")
 	require.True(t, *scanned, "the handler's scan must reach the request's tracker")
 }
 
-// A handler that panics within the budget fails the request with the error the
-// recovery middleware answers a panic with, instead of crashing the server.
-func TestClaude_DecisionBudget_HandlerPanicFailsRequest(t *testing.T) {
+// A handler that panics within the budget is answered from the org's hooks
+// posture, as an overrun is, instead of failing the request or crashing the
+// server, and its metric outcome says it panicked.
+func TestClaude_DecisionBudget_HandlerPanicAnswersFromPosture(t *testing.T) {
 	t.Parallel()
-	ctx, ti, scanner := newBudgetedClaudeService(t, hooksPostureFeatures{failOpen: true}, nil)
-	ti.service.claudeBudget = testClaudeInBudget
-	scanner.panics = true
-	scanner.finish()
+	cases := []struct {
+		name    string
+		posture hooksPostureFeatures
+		want    *gen.ClaudeHookResult
+	}{
+		{name: "fail-open passes", posture: hooksPostureFeatures{failOpen: true}, want: &gen.ClaudeHookResult{HookSpecificOutput: &HookSpecificOutput{HookEventName: new("PreToolUse")}}},
+		{name: "fail-closed blocks", posture: hooksPostureFeatures{failOpen: false}, want: toolTimeoutDenial()},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti, scanner := newBudgetedClaudeService(t, tc.posture, nil)
+			ti.service.claudeBudget = testClaudeInBudget
+			reader := sdkmetric.NewManualReader()
+			ti.service.metrics = newMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), testenv.NewLogger(t))
+			scanner.panics = true
+			scanner.finish()
 
-	result, err := ti.service.Claude(ctx, budgetPayload("PreToolUse"))
-	require.Nil(t, result)
-	shareable, ok := errors.AsType[*oops.ShareableError](err)
-	require.True(t, ok, "got %v", err)
-	goaErr := shareable.AsGoa(ctx)
-	require.Equal(t, string(oops.CodeUnexpected), goaErr.Name)
-	require.True(t, goaErr.Fault)
-	require.False(t, goaErr.Temporary)
+			result, err := ti.service.Claude(ctx, budgetPayload("PreToolUse"))
+			require.NoError(t, err)
+			require.Equal(t, tc.want, result)
+
+			var rm metricdata.ResourceMetrics
+			require.NoError(t, reader.Collect(ctx, &rm))
+			point := findHookEventDurationPoint(t, rm)
+			outcome, _ := point.Attributes.Value(attr.OutcomeKey)
+			require.Equal(t, hookMetricOutcomeHandlerPanic, outcome.AsString())
+		})
+	}
 }
 
 // lockedBuffer collects log output written from several goroutines.

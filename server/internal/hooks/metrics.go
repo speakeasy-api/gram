@@ -23,6 +23,9 @@ const (
 	// hookMetricOutcomeBudgetExceeded marks a response answered from the hooks
 	// fail-open setting after the handler missed its decision budget.
 	hookMetricOutcomeBudgetExceeded = "budget_exceeded"
+	// hookMetricOutcomeHandlerPanic marks a legacy Claude response answered
+	// from the hooks fail-open setting because the handler panicked.
+	hookMetricOutcomeHandlerPanic = "handler_panic"
 
 	hookMetricDecisionAllow = "allow"
 	hookMetricDecisionDeny  = "deny"

@@ -323,15 +323,16 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		return makeHookResult(payload.HookEventName), nil
 	}
 
-	result, answeredFromPosture, err := s.decideClaudeHookWithinBudget(ctx, logger, start, hookEvent, payload.HookEventName)
-	if answeredFromPosture {
-		outcome = hookMetricOutcomeBudgetExceeded
+	result, postureOutcome, err := s.decideClaudeHookWithinBudget(ctx, logger, start, hookEvent, payload.HookEventName)
+	if postureOutcome != "" {
+		outcome = postureOutcome
 	}
 	return result, err
 }
 
 // dispatchClaudeHookEvent routes a normalized Claude hook event to its handler.
-// It runs off the request goroutine, so a handler panic becomes its error.
+// It runs off the request goroutine, so it recovers a handler panic and
+// returns errHandlerPanicked.
 func (s *Service) dispatchClaudeHookEvent(ctx context.Context, logger *slog.Logger, hookEvent any, hookEventName string) (res *gen.ClaudeHookResult, err error) {
 	defer recoverDetachedPanic(ctx, logger, &err)
 	switch ev := hookEvent.(type) {

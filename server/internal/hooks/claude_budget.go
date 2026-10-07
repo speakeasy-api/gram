@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
+	goa "goa.design/goa/v3/pkg"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
@@ -69,27 +69,31 @@ type claudeHookVerdict struct {
 
 // answer returns the verdict as the response and marks the request's risk-scan
 // tracker when the handler scanned.
-func (v claudeHookVerdict) answer(ctx context.Context) (*gen.ClaudeHookResult, bool, error) {
+func (v claudeHookVerdict) answer(ctx context.Context) (*gen.ClaudeHookResult, string, error) {
 	if v.riskScanned {
 		markRiskScanned(ctx)
 	}
-	return v.result, false, v.err
+	return v.result, "", v.err
 }
 
 // decideClaudeHookWithinBudget runs the event's handler and returns its
-// verdict when it lands within claudeBudget of start. Otherwise it answers
-// from the org's fail-open posture and reports answeredFromPosture.
+// verdict when it lands within claudeBudget of start. When the handler
+// overruns the budget or panics, it answers from the org's fail-open posture
+// instead and returns the metric outcome that says why.
 //
 // The handler runs on a detached context either way. The event itself is
 // persisted before dispatch (recordHook), so an overrun never drops it. The
 // posture is read alongside the handler, so the fallback can claim the answer,
 // and mark a pass-through superseded, as soon as the budget fires.
-func (s *Service) decideClaudeHookWithinBudget(ctx context.Context, logger *slog.Logger, start time.Time, hookEvent any, hookEventName string) (*gen.ClaudeHookResult, bool, error) {
+func (s *Service) decideClaudeHookWithinBudget(ctx context.Context, logger *slog.Logger, start time.Time, hookEvent any, hookEventName string) (*gen.ClaudeHookResult, string, error) {
 	ctx, superseded := withVerdictSupersededFlag(ctx)
 	// answered goes to whichever side responds: the handler's verdict or the
-	// budget fallback. Exactly one side wins it.
+	// posture fallback. Exactly one side wins it.
 	answered := new(atomic.Bool)
 	verdicts := make(chan claudeHookVerdict, 1)
+	// panicked closes when the handler panics. It never claims answered, so the
+	// fallback answers instead.
+	panicked := make(chan struct{})
 
 	noun, organizationID, blockable := claudeBlockableEvent(hookEvent)
 	postures := make(chan bool, 1)
@@ -109,6 +113,10 @@ func (s *Service) decideClaudeHookWithinBudget(ctx context.Context, logger *slog
 	s.claudeDrains.Go(func() {
 		defer cancel()
 		result, err := s.dispatchClaudeHookEvent(decisionCtx, logger, hookEvent, hookEventName)
+		if errors.Is(err, errHandlerPanicked) {
+			close(panicked)
+			return
+		}
 		if answered.CompareAndSwap(false, true) {
 			verdicts <- claudeHookVerdict{result: result, err: err, riskScanned: *riskScanned}
 			return
@@ -123,9 +131,12 @@ func (s *Service) decideClaudeHookWithinBudget(ctx context.Context, logger *slog
 		)
 	})
 
+	outcome := hookMetricOutcomeBudgetExceeded
 	select {
 	case verdict := <-verdicts:
 		return verdict.answer(ctx)
+	case <-panicked:
+		outcome = hookMetricOutcomeHandlerPanic
 	case <-time.After(s.claudeBudget - time.Since(start)):
 	}
 
@@ -139,14 +150,15 @@ func (s *Service) decideClaudeHookWithinBudget(ctx context.Context, logger *slog
 	res := claudeBudgetFallback(hookEventName, noun, failOpen)
 	decision := claudeHookDecision(res)
 	trace.SpanFromContext(ctx).SetAttributes(
-		attr.Outcome(hookMetricOutcomeBudgetExceeded),
+		attr.Outcome(outcome),
 		attr.HookDecision(decision),
 	)
-	logger.WarnContext(ctx, "claude hook decision exceeded its budget; answered from the hooks fail-open setting",
-		attr.SlogEvent("claude_hook_decision_budget_exceeded"),
-		attr.SlogHookDecision(decision),
-	)
-	return res, true, nil
+	msg, event := "claude hook decision exceeded its budget; answered from the hooks fail-open setting", "claude_hook_decision_budget_exceeded"
+	if outcome == hookMetricOutcomeHandlerPanic {
+		msg, event = "claude hook handler panicked; answered from the hooks fail-open setting", "claude_hook_handler_panic"
+	}
+	logger.WarnContext(ctx, msg, attr.SlogEvent(event), attr.SlogHookDecision(decision))
+	return res, outcome, nil
 }
 
 // claudeBlockableEvent reports whether the handler for a Claude event can deny
@@ -202,28 +214,26 @@ func (s *Service) hooksFailOpen(ctx context.Context, organizationID string) (fai
 	return enabled
 }
 
+// errHandlerPanicked is the error a legacy Claude handler returns after a
+// recovered panic. recoverDetachedPanic has already logged the panic.
+var errHandlerPanicked = errors.New("claude hook handler panicked")
+
 // recoverDetachedPanic recovers a panic in a legacy Claude goroutine, which the
 // recovery middleware cannot reach and which would otherwise crash the server.
 // It logs the panic as that middleware does and, when err is not nil, sets it
-// to the error the middleware would have answered with. Defer it directly.
+// to errHandlerPanicked. Defer it directly.
 func recoverDetachedPanic(ctx context.Context, logger *slog.Logger, err *error) {
 	recValue := recover()
 	if recValue == nil {
 		return
 	}
-	panicErr := fmt.Errorf("panic: %v", recValue)
-	maybeErr, _ := recValue.(error)
-	shareable, ok := errors.AsType[*oops.ShareableError](maybeErr)
-	if !ok {
-		shareable = oops.E(oops.CodeUnexpected, oops.Permanent(panicErr), "%s", oops.CodeUnexpected.UserMessage())
-	}
 	logger.LogAttrs(ctx, slog.LevelError, "recovered from panic",
-		attr.SlogError(panicErr),
+		attr.SlogError(fmt.Errorf("panic: %v", recValue)),
 		attr.SlogErrorKind("panic"),
 		attr.SlogErrorStack(string(debug.Stack())),
-		attr.SlogErrorID(shareable.AsGoa(ctx).ID),
+		attr.SlogErrorID(goa.NewErrorID()),
 	)
 	if err != nil {
-		*err = shareable
+		*err = errHandlerPanicked
 	}
 }
