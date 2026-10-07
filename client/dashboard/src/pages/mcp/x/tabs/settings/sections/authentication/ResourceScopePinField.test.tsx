@@ -324,6 +324,66 @@ describe("ResourceScopePinField", () => {
     ).toBeDefined();
   });
 
+  it("keeps the server name's casing", () => {
+    render(
+      <ResourceScopePinField
+        pin={pin(["read", "admin"])}
+        scopes={scopes({
+          pinnedScopes: ["read", "admin"],
+          clients: [
+            {
+              clientId: "client-1",
+              scopeSource: "resource_pin",
+              requestedScopes: ["read", "admin"],
+              unadvertisedPinnedScopes: ["admin"],
+              pinWouldDecide: true,
+            },
+          ],
+        })}
+        connectedClientId="client-1"
+        issuerScopes={[]}
+        serverName="eBay"
+        disabled={false}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "eBay does not advertise the following scopes: admin. They will still be requested.",
+      ),
+    ).toBeDefined();
+  });
+
+  it("names the MCP server when it has no name", () => {
+    render(
+      <ResourceScopePinField
+        pin={pin(["read", "admin"])}
+        scopes={scopes({
+          pinnedScopes: ["read", "admin"],
+          clients: [
+            {
+              clientId: "client-1",
+              scopeSource: "resource_pin",
+              requestedScopes: ["read", "admin"],
+              unadvertisedPinnedScopes: ["admin"],
+              pinWouldDecide: true,
+            },
+          ],
+        })}
+        connectedClientId="client-1"
+        issuerScopes={[]}
+        serverName=""
+        disabled={false}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "The MCP server does not advertise the following scopes: admin. They will still be requested.",
+      ),
+    ).toBeDefined();
+  });
+
   it("warns about an unsaved scope the MCP server does not advertise", () => {
     render(
       <ResourceScopePinField

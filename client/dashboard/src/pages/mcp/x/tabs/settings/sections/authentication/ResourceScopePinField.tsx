@@ -11,10 +11,6 @@ import {
   type ResourceScopePin,
 } from "./resourceScopePin";
 
-function sentenceStart(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
 /** "Pinned scopes" for the connected provider: the server's scope pin. */
 export function ResourceScopePinField({
   pin,
@@ -28,7 +24,7 @@ export function ResourceScopePinField({
   scopes: RemoteMcpServerScopes;
   connectedClientId: string | null;
   issuerScopes: string[];
-  /** The MCP server's name, as the rest of the Identity panel names it. */
+  /** This MCP server's name, kept as written; empty when it has none. */
   serverName: string;
   disabled: boolean;
 }): JSX.Element {
@@ -81,7 +77,7 @@ export function ResourceScopePinField({
       ) : null}
       {unadvertised.length > 0 ? (
         <Text small warning className="block">
-          {`${sentenceStart(serverName)} does not advertise the following scopes: ${unadvertised.join(", ")}. They will still be requested.`}
+          {`${serverName || "The MCP server"} does not advertise the following scopes: ${unadvertised.join(", ")}. They will still be requested.`}
         </Text>
       ) : null}
       {status.map((line) => (

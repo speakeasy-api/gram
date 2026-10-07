@@ -580,7 +580,13 @@ export function RemoteMcpIdentitySectionBody({
                     scopes={scopePin.data}
                     connectedClientId={userDraft.connectedClient?.id ?? null}
                     issuerScopes={userDraft.scopeOptions}
-                    serverName={upstreamName}
+                    serverName={
+                      linkedServers
+                        .find(
+                          (server) => server.id === target.permissionResourceId,
+                        )
+                        ?.name?.trim() ?? ""
+                    }
                     // The pin has its own lock: the server checks write
                     // access to every server sharing the resource.
                     disabled={!canWrite || savePending}
