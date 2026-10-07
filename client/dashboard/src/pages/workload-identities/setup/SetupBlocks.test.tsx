@@ -3,12 +3,12 @@ import { afterEach, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { toCatalogEntry } from "./platforms";
 import { SetupBlockView, type SetupBlockContext } from "./SetupBlocks";
-import { testPlatform } from "./testPlatform";
+import { claudeTagPlatform } from "./catalogFixture";
 
 afterEach(cleanup);
 
 const context: SetupBlockContext = {
-  entry: toCatalogEntry(testPlatform),
+  entry: toCatalogEntry(claudeTagPlatform),
   values: {},
   onValueChange: () => {},
   agents: [],
