@@ -29,11 +29,7 @@ export function ConnectionSetupProgress({
   return <SetupProgressSteps current={current} />;
 }
 
-function SetupProgressSteps({
-  current,
-}: {
-  current: number;
-}): JSX.Element {
+function SetupProgressSteps({ current }: { current: number }): JSX.Element {
   return (
     <nav aria-label="Okta setup progress">
       <ol className="grid grid-cols-1 gap-2 sm:grid-cols-3">
