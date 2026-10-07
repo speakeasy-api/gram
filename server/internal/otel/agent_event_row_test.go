@@ -1,7 +1,9 @@
 package otel
 
 import (
+	"fmt"
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
+	"google.golang.org/protobuf/proto"
 	"strings"
 	"testing"
 
@@ -110,7 +112,7 @@ func TestAgentEventRowFromLogHasNoDialectFallbackForCanonicalColumns(t *testing.
 	require.Empty(t, row.SessionID)
 	require.Equal(t, "record-1", row.EventID, "with no subject the event id falls back to the record id")
 	require.Empty(t, row.Model)
-	require.Equal(t, int64(120), row.InputTokens, "a column the transform does not fill yet still comes from the dialect")
+	require.Zero(t, row.InputTokens, "the log writer asks no dialect at all any more")
 }
 
 // The canonical columns are read from the keys as written, whatever the
@@ -216,7 +218,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 		require.Equal(t, string(dialect.EventTypePrompt), row.EventType)
 		require.Equal(t, "claude_code.user_prompt", row.RawEventName)
 		require.Equal(t, "fix the tests", row.Text)
-		require.Contains(t, row.InputContent, `"fix the tests"`)
+		require.Empty(t, row.InputContent, "the content columns are deprecated and no longer filled")
 		require.Empty(t, row.OutputContent)
 	})
 
@@ -268,8 +270,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 		require.Equal(t, string(dialect.EventTypeAPIResponse), row.EventType)
 		require.Equal(t, "msg-9", row.EventID)
 		require.Equal(t, "Done. Two files changed.", row.Text)
-		require.Contains(t, row.OutputContent, `"role":"assistant"`)
-		require.Contains(t, row.OutputContent, `"Done. Two files changed."`)
+		require.Empty(t, row.OutputContent, "the content columns are deprecated and no longer filled")
 		require.Empty(t, row.InputContent)
 		require.Empty(t, row.QuerySource, "query_source describes a request, not its response")
 		require.Equal(t, string(dialect.OutcomeOK), row.Outcome)
@@ -709,4 +710,30 @@ func TestAgentEventRowFromLogClassifiesPayloadsAndCompaction(t *testing.T) {
 		require.Equal(t, string(dialect.OutcomeError), row.Outcome)
 		require.Equal(t, "context window exceeded", row.OutcomeMessage)
 	})
+}
+
+// inboundLogFromRecord round-trips a normalized record back to its inbound
+// shape with the producer's scope name restored, which is what the column
+// enrichers see when the transform runs them. The writer itself no longer
+// needs the inbound shape, since it reads what the enrichers wrote.
+func inboundLogFromRecord(record *otelv1.LogRecord) (*otelv1.InboundLogRecord, error) {
+	encoded, err := proto.Marshal(record)
+	if err != nil {
+		return nil, fmt.Errorf("marshal log record: %w", err)
+	}
+	inbound := &otelv1.InboundLogRecord{}
+	if err := proto.Unmarshal(encoded, inbound); err != nil {
+		return nil, fmt.Errorf("unmarshal log record as gram.otel.v1.InboundLogRecord: %w", err)
+	}
+	for _, kv := range record.GetAttributes() {
+		if kv.GetKey() == string(enrich.OriginalInstrumentationScopeNameKey) && kv.GetValue().HasStringValue() {
+			original := kv.GetValue().GetStringValue()
+			if inbound.GetScope() == nil {
+				inbound.SetScope((&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: &original}).Build())
+			} else {
+				inbound.GetScope().SetName(original)
+			}
+		}
+	}
+	return inbound, nil
 }

@@ -3,7 +3,6 @@ package otel
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 
@@ -19,21 +18,19 @@ import (
 // time the consumer observed it, so the same record always yields the same
 // row and golden tests can pin the projection.
 //
-// A column the transform's column enrichers fill arrives on the record as a
-// canonical speakeasy.agent.<column> attribute, and the builder copies it
-// from there without asking a dialect. There is no dialect fallback for such
-// a column: the transform and this writer deploy together, and a record that
-// reached the normalized topic before the enricher ran lands with that column
-// empty, which is accepted. The columns not yet moved into the transform are
-// still read from the dialect here.
+// Every column the transform's column enrichers fill arrives on a log
+// record as a canonical speakeasy.agent.<column> attribute, and the builder
+// copies it from there; the log path asks no dialect at all. There is no
+// dialect fallback: the transform and this writer deploy together, and a
+// record that reached the normalized topic before the enrichers ran lands
+// with those columns empty, which is accepted.
 //
-// The dialects that know each producer's vocabulary take the inbound record
-// types, while a consumer on the normalized topics holds the outbound ones.
-// The two are wire-compatible by construction (the inbound protos are kept as
-// carbon copies), so the builders round-trip the record back to its inbound
-// shape, exactly the way the transform handler goes the other direction, and
-// hand that to the dialect. That keeps every dialect method on one type
-// family and costs one marshal per record.
+// The span path still answers the same columns from the span dialect until
+// the span transform runs the same enrichers. The dialects take the inbound
+// span type while a consumer on the normalized topic holds the outbound one;
+// the two are wire-compatible by construction (the inbound protos are kept
+// as carbon copies), so the span builder round-trips the span back to its
+// inbound shape and hands that to the dialect.
 
 // agentEventRowFromLog maps a normalized log record to its agent_events row.
 // A non-empty skipReason marks the record unprocessable; redelivery cannot
@@ -74,11 +71,6 @@ func agentEventRowFromLog(record *otelv1.LogRecord, observedAtUnixNano int64) (c
 		recordID = minted
 	}
 
-	inbound, err := inboundLogFromRecord(record)
-	if err != nil {
-		return zero, "convert_inbound"
-	}
-
 	attributes, err := logEventAttributesJSON(record.GetAttributes())
 	if err != nil {
 		return zero, "encode_log_attributes"
@@ -100,22 +92,19 @@ func agentEventRowFromLog(record *otelv1.LogRecord, observedAtUnixNano int64) (c
 		columns.read(kv.GetKey(), value)
 	}
 
-	d := dialect.ForLog(inbound)
-	row := agentEventRow(columns, logAnswers{d: d, record: inbound}, enrichment)
+	row := agentEventRow(columns, enrichment)
 	row.OrganizationID = organizationID
 	row.ProjectID = record.GetProvenance().GetProjectId()
 	row.OccurredAtUnixNano = occurredNano
 	row.ObservedAtUnixNano = observedNano
 	row.RecordID = recordID
 	row.EventID = subjectOrRecordID(row.EventID, recordID)
-	row.InputContent = contentJSON(d.InputContent(inbound))
-	row.OutputContent = contentJSON(d.OutputContent(inbound))
 	row.Attributes = attributes
 	row.ResourceAttributes = resourceAttributes
 	row.ScopeAttributes = scopeAttributes
 
-	// Text is the record in words. When the dialect found none and could not
-	// classify the record, a string body is the closest thing the producer
+	// Text is the record in words. When the transform found none and could
+	// not classify the record, a string body is the closest thing the producer
 	// offered, unless the body is just the event name again.
 	if row.Text == "" && row.EventType == dialect.EventTypeUnclassified {
 		if body := record.GetBody(); body.HasStringValue() && !dialect.BodyRepeatsEventName(body.GetStringValue(), row.RawEventName) {
@@ -185,56 +174,18 @@ func agentEventRowFromSpan(span *otelv1.Span, observedAtUnixNano int64) (chrepo.
 	d := dialect.ForSpan(inbound)
 	recordID := traceID + ":" + spanID
 	columns := columnsFromSpanDialect(d, inbound, enrichment, enrich.CanonicalSource(spanEventServiceName(span)))
-	row := agentEventRow(columns, spanAnswers{d: d, span: inbound}, enrichment)
+	row := agentEventRow(columns, enrichment)
 	row.OrganizationID = organizationID
 	row.ProjectID = span.GetProvenance().GetProjectId()
 	row.OccurredAtUnixNano = startNano
 	row.ObservedAtUnixNano = observedNano
 	row.RecordID = recordID
 	row.EventID = subjectOrRecordID(row.EventID, recordID)
-	row.InputContent = contentJSON(d.InputContent(inbound))
-	row.OutputContent = contentJSON(d.OutputContent(inbound))
 	row.Attributes = attributes
 	row.ResourceAttributes = resourceAttributes
 	row.ScopeAttributes = scopeAttributes
 	return row, ""
 }
-
-// answers is what a dialect says about one record, one question at a time,
-// for the columns the transform does not fill yet. A dialect answers (key,
-// value, err), where the key names the attribute the answer was read from.
-// The row keeps only values the producer stated: an empty key or a read
-// error is absent, never a guess, so the adapters below reduce every answer
-// to its value or the zero value.
-type answers interface {
-	InputTokens() int64
-	OutputTokens() int64
-	CacheReadTokens() int64
-	CacheWriteTokens() int64
-	CostUSD() float64
-}
-
-type logAnswers struct {
-	d      dialect.LogDialect
-	record *otelv1.InboundLogRecord
-}
-
-func (a logAnswers) InputTokens() int64      { return stated(a.d.InputTokens(a.record)) }
-func (a logAnswers) OutputTokens() int64     { return stated(a.d.OutputTokens(a.record)) }
-func (a logAnswers) CacheReadTokens() int64  { return stated(a.d.CacheReadTokens(a.record)) }
-func (a logAnswers) CacheWriteTokens() int64 { return stated(a.d.CacheWriteTokens(a.record)) }
-func (a logAnswers) CostUSD() float64        { return stated(a.d.CostUSD(a.record)) }
-
-type spanAnswers struct {
-	d    dialect.SpanDialect
-	span *otelv1.InboundSpan
-}
-
-func (a spanAnswers) InputTokens() int64      { return stated(a.d.InputTokens(a.span)) }
-func (a spanAnswers) OutputTokens() int64     { return stated(a.d.OutputTokens(a.span)) }
-func (a spanAnswers) CacheReadTokens() int64  { return stated(a.d.CacheReadTokens(a.span)) }
-func (a spanAnswers) CacheWriteTokens() int64 { return stated(a.d.CacheWriteTokens(a.span)) }
-func (a spanAnswers) CostUSD() float64        { return stated(a.d.CostUSD(a.span)) }
 
 // stated keeps a dialect's answer only when it stated one: an empty key or
 // a read error means absent, never a guess.
@@ -247,10 +198,11 @@ func stated[T any](key string, value T, err error) T {
 }
 
 // agentEventRow lays down the parts of a row that come from the canonical
-// columns the transform wrote, what the dialect said about the columns not
-// moved there yet, and what the pipeline stamped, leaving tenancy, timing
-// and delivery identity to the caller. Each column has exactly one source.
-func agentEventRow(columns canonicalColumns, a answers, enrichment rowEnrichment) chrepo.AgentEventRow {
+// columns the transform wrote and what the pipeline stamped, leaving
+// tenancy, timing and delivery identity to the caller. Each column has
+// exactly one source. The deprecated content columns are written empty on
+// purpose: text carries the words and the attributes carry the structure.
+func agentEventRow(columns canonicalColumns, enrichment rowEnrichment) chrepo.AgentEventRow {
 	return chrepo.AgentEventRow{
 		OrganizationID:     "",
 		ProjectID:          "",
@@ -293,11 +245,11 @@ func agentEventRow(columns canonicalColumns, a answers, enrichment rowEnrichment
 		DurationNano:       columns.durationNano,
 		InputContent:       "",
 		OutputContent:      "",
-		InputTokens:        a.InputTokens(),
-		OutputTokens:       a.OutputTokens(),
-		CacheReadTokens:    a.CacheReadTokens(),
-		CacheWriteTokens:   a.CacheWriteTokens(),
-		CostUSD:            a.CostUSD(),
+		InputTokens:        columns.inputTokens,
+		OutputTokens:       columns.outputTokens,
+		CacheReadTokens:    columns.cacheReadTokens,
+		CacheWriteTokens:   columns.cacheWriteTokens,
+		CostUSD:            columns.costUSD,
 		Attributes:         "",
 		ResourceAttributes: "",
 		ScopeAttributes:    "",
@@ -327,38 +279,6 @@ func mintedRecordID(record *otelv1.LogRecord) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func inboundLogFromRecord(record *otelv1.LogRecord) (*otelv1.InboundLogRecord, error) {
-	encoded, err := proto.Marshal(record)
-	if err != nil {
-		return nil, fmt.Errorf("marshal log record: %w", err)
-	}
-	inbound := &otelv1.InboundLogRecord{}
-	if err := proto.Unmarshal(encoded, inbound); err != nil {
-		return nil, fmt.Errorf("unmarshal log record as gram.otel.v1.InboundLogRecord: %w", err)
-	}
-
-	// The transform rewrote the instrumentation scope to Speakeasy's own and kept
-	// the producer's under an attribute. Dialects recognise a producer by its
-	// scope name, so put the original back before asking them anything.
-	if original := logOriginalScopeName(record); original != "" {
-		if inbound.GetScope() == nil {
-			inbound.SetScope((&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: &original}).Build())
-		} else {
-			inbound.GetScope().SetName(original)
-		}
-	}
-	return inbound, nil
-}
-
-func logOriginalScopeName(record *otelv1.LogRecord) string {
-	for _, kv := range record.GetAttributes() {
-		if kv.GetKey() == string(enrich.OriginalInstrumentationScopeNameKey) && kv.GetValue().HasStringValue() {
-			return kv.GetValue().GetStringValue()
-		}
-	}
-	return ""
-}
-
 func inboundSpanFromSpan(span *otelv1.Span) (*otelv1.InboundSpan, error) {
 	encoded, err := proto.Marshal(span)
 	if err != nil {
@@ -386,19 +306,6 @@ func spanOriginalScopeName(span *otelv1.Span) string {
 		}
 	}
 	return ""
-}
-
-// contentJSON renders the dialect's normalized messages for a content column.
-// Absent or unreadable content is an empty column, never an invented one.
-func contentJSON[E any, M ~[]E](_ string, messages M, err error) string {
-	if err != nil || len(messages) == 0 {
-		return ""
-	}
-	encoded, err := json.Marshal(messages)
-	if err != nil {
-		return ""
-	}
-	return string(encoded)
 }
 
 // canonicalColumns is what the transform's column enrichers wrote onto the
@@ -432,6 +339,12 @@ type canonicalColumns struct {
 	outcome        string
 	outcomeMessage string
 	durationNano   int64
+
+	inputTokens      int64
+	outputTokens     int64
+	cacheReadTokens  int64
+	cacheWriteTokens int64
+	costUSD          float64
 }
 
 func (c *canonicalColumns) read(key string, value any) {
@@ -482,6 +395,16 @@ func (c *canonicalColumns) read(key string, value any) {
 		c.outcomeMessage = enrichmentString(value)
 	case string(enrich.DurationNanoColumnKey):
 		c.durationNano = enrichmentInt64(value)
+	case string(enrich.InputTokensColumnKey):
+		c.inputTokens = enrichmentInt64(value)
+	case string(enrich.OutputTokensColumnKey):
+		c.outputTokens = enrichmentInt64(value)
+	case string(enrich.CacheReadTokensColumnKey):
+		c.cacheReadTokens = enrichmentInt64(value)
+	case string(enrich.CacheWriteTokensColumnKey):
+		c.cacheWriteTokens = enrichmentInt64(value)
+	case string(enrich.CostUSDColumnKey):
+		c.costUSD = enrichmentFloat64(value)
 	}
 }
 
@@ -496,29 +419,34 @@ func columnsFromSpanDialect(d dialect.SpanDialect, span *otelv1.InboundSpan, enr
 		provider = stated(d.Provider(span))
 	}
 	return canonicalColumns{
-		eventType:      stated(d.EventType(span)),
-		rawEventName:   stated(d.EventName(span)),
-		source:         source,
-		provider:       provider,
-		surface:        stated(d.Surface(span)),
-		sessionID:      stated(d.SessionID(span)),
-		turnID:         stated(d.TurnID(span)),
-		eventID:        stated(d.SubjectID(span)),
-		userEmail:      stated(d.ExternalUserEmail(span)),
-		externalUserID: stated(d.ExternalUserID(span)),
-		externalOrgID:  stated(d.ExternalOrgID(span)),
-		model:          stated(d.Model(span)),
-		querySource:    stated(d.QuerySource(span)),
-		skillName:      stated(d.SkillName(span)),
-		agentName:      stated(d.AgentName(span)),
-		mcpServerName:  stated(d.MCPServerName(span)),
-		mcpToolName:    stated(d.MCPToolName(span)),
-		name:           stated(d.ToolName(span)),
-		toolName:       stated(d.ToolName(span)),
-		text:           stated(d.Text(span)),
-		outcome:        stated(d.Outcome(span)),
-		outcomeMessage: stated(d.OutcomeMessage(span)),
-		durationNano:   stated(d.DurationNano(span)),
+		eventType:        stated(d.EventType(span)),
+		rawEventName:     stated(d.EventName(span)),
+		source:           source,
+		provider:         provider,
+		surface:          stated(d.Surface(span)),
+		sessionID:        stated(d.SessionID(span)),
+		turnID:           stated(d.TurnID(span)),
+		eventID:          stated(d.SubjectID(span)),
+		userEmail:        stated(d.ExternalUserEmail(span)),
+		externalUserID:   stated(d.ExternalUserID(span)),
+		externalOrgID:    stated(d.ExternalOrgID(span)),
+		model:            stated(d.Model(span)),
+		querySource:      stated(d.QuerySource(span)),
+		skillName:        stated(d.SkillName(span)),
+		agentName:        stated(d.AgentName(span)),
+		mcpServerName:    stated(d.MCPServerName(span)),
+		mcpToolName:      stated(d.MCPToolName(span)),
+		name:             stated(d.ToolName(span)),
+		toolName:         stated(d.ToolName(span)),
+		text:             stated(d.Text(span)),
+		outcome:          stated(d.Outcome(span)),
+		outcomeMessage:   stated(d.OutcomeMessage(span)),
+		durationNano:     stated(d.DurationNano(span)),
+		inputTokens:      stated(d.InputTokens(span)),
+		outputTokens:     stated(d.OutputTokens(span)),
+		cacheReadTokens:  stated(d.CacheReadTokens(span)),
+		cacheWriteTokens: stated(d.CacheWriteTokens(span)),
+		costUSD:          stated(d.CostUSD(span)),
 	}
 }
 
@@ -592,6 +520,17 @@ func enrichmentInt64(value any) int64 {
 		return v
 	case float64:
 		return int64(v)
+	}
+	return 0
+}
+
+// enrichmentFloat64 reads a floating-point column the transform wrote.
+func enrichmentFloat64(value any) float64 {
+	switch v := value.(type) {
+	case float64:
+		return v
+	case int64:
+		return float64(v)
 	}
 	return 0
 }
