@@ -20,8 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -94,29 +92,7 @@ func attachConsentClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 // The member's configured client is whichever client that issuer binds.
 func createMetaMemberOnIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, metaServerID, memberIssuerID uuid.UUID, slug, serverURL string, remoteIssuerID uuid.UUID, sortOrder int32) seededMetaMember {
 	t.Helper()
-	remoteServer, err := remotemcp_repo.New(conn).CreateServer(ctx, remotemcp_repo.CreateServerParams{
-		ID:            uuid.New(),
-		ProjectID:     projectID,
-		TransportType: "sse",
-		Url:           serverURL,
-	})
-	require.NoError(t, err)
-	mcpServer, err := mcpservers_repo.New(conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
-		ID:                  uuid.New(),
-		ProjectID:           projectID,
-		Name:                conv.ToPGText(slug),
-		Slug:                conv.ToPGText(slug),
-		RemoteMcpServerID:   conv.ToNullUUID(remoteServer.ID),
-		Visibility:          "public",
-		UserSessionIssuerID: conv.ToNullUUID(memberIssuerID),
-	})
-	require.NoError(t, err)
-	stampRemoteSessionIssuer(t, ctx, conn, projectID, mcpServer.ID, conv.ToNullUUID(remoteIssuerID))
-	return seededMetaMember{
-		mcpServerID:    mcpServer.ID,
-		remoteServerID: remoteServer.ID,
-		memberID:       attachMetaMemberRow(t, ctx, conn, projectID, metaServerID, mcpServer.ID, sortOrder),
-	}
+	return createMetaMemberGatedBy(t, ctx, conn, projectID, projectID, metaServerID, memberIssuerID, slug, serverURL, conv.ToNullUUID(remoteIssuerID), sortOrder, "public")
 }
 
 // sharedIssuerGateway is a gateway with two members whose upstreams share one

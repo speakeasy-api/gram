@@ -78,6 +78,14 @@ func createMetaMemberWithVisibility(t *testing.T, ctx context.Context, conn *pgx
 // nothing in the schema requires the two projects to agree.
 func createMetaMemberWithUpstreamIn(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, upstreamProjectID, metaServerID uuid.UUID, slug, serverURL string, remoteIssuerID uuid.NullUUID, sortOrder int32, visibility string) seededMetaMember {
 	t.Helper()
+	memberIssuerID := createUserSessionIssuer(t, ctx, conn, projectID)
+	return createMetaMemberGatedBy(t, ctx, conn, projectID, upstreamProjectID, metaServerID, memberIssuerID, slug, serverURL, remoteIssuerID, sortOrder, visibility)
+}
+
+// createMetaMemberGatedBy is createMetaMemberWithUpstreamIn with the member's
+// own user session issuer supplied by the caller.
+func createMetaMemberGatedBy(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, upstreamProjectID, metaServerID, memberIssuerID uuid.UUID, slug, serverURL string, remoteIssuerID uuid.NullUUID, sortOrder int32, visibility string) seededMetaMember {
+	t.Helper()
 
 	remoteServer, err := remotemcp_repo.New(conn).CreateServer(ctx, remotemcp_repo.CreateServerParams{
 		ID:            uuid.New(),
@@ -94,7 +102,7 @@ func createMetaMemberWithUpstreamIn(t *testing.T, ctx context.Context, conn *pgx
 		Slug:                conv.ToPGText(slug),
 		RemoteMcpServerID:   conv.ToNullUUID(remoteServer.ID),
 		Visibility:          visibility,
-		UserSessionIssuerID: conv.ToNullUUID(createUserSessionIssuer(t, ctx, conn, projectID)),
+		UserSessionIssuerID: conv.ToNullUUID(memberIssuerID),
 	})
 	require.NoError(t, err)
 	stampRemoteSessionIssuer(t, ctx, conn, projectID, mcpServer.ID, remoteIssuerID)

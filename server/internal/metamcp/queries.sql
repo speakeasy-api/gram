@@ -315,6 +315,8 @@ RETURNING *;
 -- associated, since that binding is what the association justifies.
 -- gateway_provider_clients counts the live clients the gateway issuer binds
 -- for this authorization server; above one, only associated members claim.
+-- Both count only live issuers and clients owned by the gateway's project or
+-- its organization, as AutoAttachMemberProviderClient binds them.
 SELECT
     s.id AS mcp_server_id,
     s.visibility AS mcp_server_visibility,
@@ -323,6 +325,13 @@ SELECT
     EXISTS (
       SELECT 1
       FROM remote_session_client_user_session_issuers AS l
+      JOIN remote_session_clients AS mc
+        ON mc.id = l.remote_session_client_id
+       AND mc.deleted IS FALSE
+       AND (mc.project_id = p.id OR (mc.project_id IS NULL AND mc.organization_id = p.organization_id))
+      JOIN user_session_issuers AS mi
+        ON mi.id = l.user_session_issuer_id
+       AND mi.deleted IS FALSE
       WHERE l.remote_session_client_id = @remote_session_client_id
         AND l.user_session_issuer_id = s.user_session_issuer_id
         AND s.user_session_issuer_id <> @gateway_user_session_issuer_id
@@ -333,10 +342,16 @@ SELECT
       JOIN remote_session_clients AS gc
         ON gc.id = gl.remote_session_client_id
        AND gc.deleted IS FALSE
+       AND (gc.project_id = p.id OR (gc.project_id IS NULL AND gc.organization_id = p.organization_id))
+      JOIN user_session_issuers AS gi
+        ON gi.id = gl.user_session_issuer_id
+       AND gi.deleted IS FALSE
       WHERE gl.user_session_issuer_id = @gateway_user_session_issuer_id
         AND gc.remote_session_issuer_id = @remote_session_issuer_id
     )::integer AS gateway_provider_clients
 FROM meta_mcp_server_members m
+JOIN projects p
+  ON p.id = m.project_id
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id
  AND s.project_id = m.project_id

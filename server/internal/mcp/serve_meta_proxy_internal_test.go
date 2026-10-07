@@ -109,6 +109,17 @@ func TestRouteMetaMemberToken(t *testing.T) {
 		require.Empty(t, got)
 	})
 
+	t.Run("tunneled fails closed when only one of several bound clients resolved", func(t *testing.T) {
+		t.Parallel()
+		// Partial resolution drops unconnected clients, so the one token
+		// left may be a sibling's; the bound count still makes it ambiguous.
+		partial := own("sibling", "")
+		partial.IssuerBoundClients = 2
+		got, err := routeMetaMemberToken(tokens(partial), tunnelMember, "")
+		require.ErrorIs(t, err, errAmbiguousMemberCredential)
+		require.Empty(t, got)
+	})
+
 	t.Run("tunneled own-issuer qualified token belongs elsewhere", func(t *testing.T) {
 		t.Parallel()
 		got, err := routeMetaMemberToken(tokens(own("a", "https://a.example.com/mcp")), tunnelMember, "")

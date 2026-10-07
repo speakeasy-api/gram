@@ -286,6 +286,7 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, sess remo
 		RemoteSessionClientID: clientID,
 		// The bulk resolvers stamp the issuer from the bound client row.
 		RemoteSessionIssuerID:              uuid.Nil,
+		IssuerBoundClients:                 0,
 		RemoteSessionID:                    sess.ID,
 		RemoteSessionUpdatedAt:             sess.UpdatedAt.Time,
 		RemoteSessionResolvedFromUpdatedAt: resolvedFromUpdatedAt,
@@ -371,6 +372,12 @@ type UpstreamToken struct {
 	// registered with. Set by the bulk resolvers; several gateway clients
 	// may share it, so it never identifies a credential on its own.
 	RemoteSessionIssuerID uuid.UUID
+
+	// IssuerBoundClients is how many clients the user session issuer binds
+	// for RemoteSessionIssuerID, counted before partial resolution drops
+	// clients without a usable token. Set by ResolveGatewayAccessTokens and
+	// zero elsewhere.
+	IssuerBoundClients int
 
 	// RemoteSessionID and RemoteSessionUpdatedAt identify the exact grant row
 	// this token came from. Callers use the pair as a CAS snapshot when
@@ -462,14 +469,21 @@ func (m *ChallengeManager) ResolveAvailableAccessTokens(
 type ClientTokens map[uuid.UUID]UpstreamToken
 
 // ForRemoteIssuer returns the credential resolved for remoteSessionIssuerID
-// and how many resolved clients share that issuer. Callers that select by
+// and how many gateway clients share that issuer. Callers that select by
 // issuer identity must accept the entry only when count is exactly one.
+//
+// The count includes bound clients whose token did not resolve: when one of
+// two clients is connected, the issuer still names no single credential, and
+// accepting the lone token would hand a sibling member's bearer to the caller.
 func (t ClientTokens) ForRemoteIssuer(remoteSessionIssuerID uuid.UUID) (entry UpstreamToken, count int) {
 	for _, candidate := range t {
 		if candidate.RemoteSessionIssuerID == remoteSessionIssuerID {
 			entry = candidate
 			count++
 		}
+	}
+	if count == 1 && entry.IssuerBoundClients > 1 {
+		count = entry.IssuerBoundClients
 	}
 	if count != 1 {
 		var none UpstreamToken
@@ -504,8 +518,13 @@ func (m *ChallengeManager) ResolveGatewayAccessTokens(
 	if err != nil {
 		return nil, err
 	}
+	bound := make(map[uuid.UUID]int, len(clients))
+	for _, c := range clients {
+		bound[c.RemoteSessionIssuerID]++
+	}
 	tokens := make(ClientTokens, len(resolved))
 	for _, token := range resolved {
+		token.IssuerBoundClients = bound[token.RemoteSessionIssuerID]
 		tokens[token.RemoteSessionClientID] = token
 	}
 	return tokens, nil
