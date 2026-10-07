@@ -1,5 +1,12 @@
 # @gram-ai/create-function
 
+## 0.19.0
+
+### Patch Changes
+
+- 261c304: Install and authenticate with the renamed `speakeasy` CLI when scaffolding a project.
+- 261c304: Print a notice that `speakeasy functions init` supersedes this scaffolder. New projects run `speakeasy functions build` and `speakeasy functions push` from their `build` and `push` scripts.
+
 ## 0.18.3
 
 ## 0.18.2
