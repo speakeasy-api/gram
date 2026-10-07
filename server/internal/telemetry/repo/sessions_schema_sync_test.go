@@ -95,10 +95,30 @@ func TestSessionPredicates_SchemaMVStaysInSync(t *testing.T) {
 		sessionModelExpr,
 	}, "\n"))
 
+	// The migration PR lands before the application PR: the MVs already admit
+	// new canonical rows while the old application still emits legacy rows.
+	// Pin the exact legacy Go contract during that staged rollout, rather than
+	// accepting arbitrary drift. Canonical application code must match every
+	// shared fragment again as soon as its ingest-schema predicate lands.
+	canonicalQueries := strings.Contains(sessionHookTurnUsageRowPredicate, "hook.ingest.v1")
+	legacyGoFragments := []string{
+		"hook_source IN ('codex', 'cursor', 'opencode', 'openclaw', 'pi') AND toString(attributes.gram.tool.name) != '' AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')",
+		"hook_source IN ('opencode', 'openclaw', 'pi') AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')",
+		"(toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400)",
+	}
+	if !canonicalQueries {
+		for _, fragment := range legacyGoFragments {
+			require.Contains(t, goConstants, normalizeSQL(fragment), "legacy query authority changed before canonical query rollout")
+		}
+	}
+
 	for _, fragment := range sessionSharedPredicateFragments {
 		normalized := normalizeSQL(fragment)
 		require.Contains(t, mvSQL, normalized,
 			"chat_session_summaries_mv drifted from the pinned session predicate fragment — apply the change on every path (Go constants, MV via MODIFY QUERY + backfill, seed)")
+		if !canonicalQueries && (strings.Contains(fragment, "attributes.gram.hook.schema") || strings.Contains(fragment, "attributes.gram.hook.canonical_event") || strings.Contains(fragment, "attributes.gram.hook.transport")) {
+			continue
+		}
 		require.Contains(t, goConstants, normalized,
 			"session* Go constants drifted from the pinned predicate fragment — apply the change on every path (Go constants, MV via MODIFY QUERY + backfill, seed)")
 	}
