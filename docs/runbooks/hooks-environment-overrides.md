@@ -8,8 +8,11 @@ on top. A variable exported into the shell that launches the coding agent
 therefore reaches every hook process that agent spawns, with no reinstall and
 no edit to the generated package. The detached `speakeasy-hooks drain` that
 replays the offline spool is the exception: it takes its deployment identity
-from the spooled events and reads only `GRAM_HOOKS_DEBUG_LOG` from the
-environment.
+(server, project, org) from the spooled events, not from `speakeasy.json` or
+the environment. It still resolves credentials through `GRAM_HOOKS_AUTH_FILE`
+and `GRAM_HOOKS_API_KEY` (the env key only for the deployment
+`GRAM_HOOKS_SERVER_URL` names, when it names one), and honours
+`GRAM_HOOKS_DEBUG_LOG`.
 
 The environment is not a universal channel. Some providers scrub the hook
 environment before spawning the hook command, so on those only the flags baked
