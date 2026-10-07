@@ -3837,6 +3837,7 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		IntrospectionEndpoint:             v.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: v.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          v.OmitScopeFallback,
 		ResourceIndicatorSupported:                 v.ResourceIndicatorSupported,
 		CreatedAt:                                  *v.CreatedAt,
 		UpdatedAt:                                  *v.UpdatedAt,

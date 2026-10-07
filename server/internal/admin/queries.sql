@@ -1073,6 +1073,7 @@ SELECT
     r.code_challenge_methods_supported AS issuer_code_challenge_methods_supported,
     r.client_id_metadata_document_supported AS issuer_cimd_supported,
     r.scope_override AS issuer_scope_override,
+    r.omit_scope_fallback AS issuer_omit_scope_fallback,
     r.metadata_fetched_at AS issuer_metadata_fetched_at,
     r.metadata_last_error_at AS issuer_metadata_last_error_at,
     r.jwks_last_error_at AS issuer_jwks_last_error_at
