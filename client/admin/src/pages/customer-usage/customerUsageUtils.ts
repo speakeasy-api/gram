@@ -5,13 +5,24 @@ import {
   sumSpendCosts,
   type SpendProductID,
 } from "@/pages/organization/spendBreakdownUtils";
-import type {
-  CustomerPlan,
-  CustomerUsageControls,
-  CustomerUsageSort,
+import {
+  CUSTOMER_PLANS,
+  type CustomerPlan,
+  type CustomerUsageControls,
+  type CustomerUsageSort,
 } from "./customerUsageSearch";
 
 export type CustomerUsage = AdminCustomerUsage;
+
+// "All plans" when no plan or every plan is selected, otherwise the selected
+// plans' names.
+export function planFilterLabel(selected: ReadonlySet<CustomerPlan>): string {
+  const plans = CUSTOMER_PLANS.filter((plan) => selected.has(plan));
+  if (plans.length === 0 || plans.length === CUSTOMER_PLANS.length) {
+    return "All plans";
+  }
+  return plans.map((plan) => PLAN_LABELS[plan]).join(", ");
+}
 
 export const PLAN_LABELS: Record<CustomerPlan, string> = {
   enterprise: "Enterprise",
@@ -159,13 +170,14 @@ export type CustomerUsageView = {
 
 export function customerUsageView(
   customers: readonly CustomerUsage[],
-  controls: Pick<CustomerUsageControls, "q" | "plan" | "sort" | "products">,
+  controls: Pick<CustomerUsageControls, "q" | "plans" | "sort" | "products">,
 ): CustomerUsageView {
   const term = controls.q.trim().toLocaleLowerCase("en");
   const summaries = customers
     .filter(
       (customer) =>
-        (controls.plan === "all" || customer.accountType === controls.plan) &&
+        (controls.plans.size === 0 ||
+          controls.plans.has(customer.accountType as CustomerPlan)) &&
         (term === "" || customer.name.toLocaleLowerCase("en").includes(term)),
     )
     .map((customer) => summarizeCustomer(customer, controls.products))

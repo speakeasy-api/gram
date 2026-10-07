@@ -1,11 +1,19 @@
 import { useMemo, type JSX } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
-import { RefreshCw } from "lucide-react";
+import { ChevronDown, RefreshCw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -29,13 +37,16 @@ import {
   ALL_PRODUCT_IDS,
   CUSTOMER_PLANS,
   customerUsageControls,
+  plansSearchValue,
   productsSearchValue,
+  type CustomerPlan,
   type CustomerUsageSearch,
   type CustomerUsageSort,
 } from "./customerUsageSearch";
 import {
   PLAN_LABELS,
   customerUsageView,
+  planFilterLabel,
   type CustomerUsageSummary,
 } from "./customerUsageUtils";
 
@@ -87,6 +98,12 @@ export function CustomerUsage(): JSX.Element {
   const reset = (): void => {
     void navigate({ search: {}, replace: true, resetScroll: false });
   };
+  const setPlanSelected = (plan: CustomerPlan, selected: boolean): void => {
+    const next = new Set(controls.plans);
+    if (selected) next.add(plan);
+    else next.delete(plan);
+    update({ plans: plansSearchValue(next) });
+  };
   const setProductSelected = (
     productID: SpendProductID,
     selected: boolean,
@@ -137,29 +154,41 @@ export function CustomerUsage(): JSX.Element {
             value={controls.q}
             onChange={(event) => update({ q: event.target.value || undefined })}
           />
-          <Select
-            value={controls.plan}
-            onValueChange={(value) =>
-              update({
-                plan:
-                  value === "all"
-                    ? undefined
-                    : (value as (typeof CUSTOMER_PLANS)[number]),
-              })
-            }
-          >
-            <SelectTrigger aria-label="Plan">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All plans</SelectItem>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                aria-label={`Plans: ${planFilterLabel(controls.plans)}`}
+                className="font-normal"
+              >
+                {planFilterLabel(controls.plans)}
+                <ChevronDown className="text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
               {CUSTOMER_PLANS.map((plan) => (
-                <SelectItem key={plan} value={plan}>
+                <DropdownMenuCheckboxItem
+                  key={plan}
+                  checked={controls.plans.has(plan)}
+                  // Keep the menu open so several plans can be picked in a row.
+                  onSelect={(event) => event.preventDefault()}
+                  onCheckedChange={(checked) => setPlanSelected(plan, checked)}
+                >
                   {PLAN_LABELS[plan]}
-                </SelectItem>
+                </DropdownMenuCheckboxItem>
               ))}
-            </SelectContent>
-          </Select>
+              {controls.plans.size > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => update({ plans: undefined })}
+                  >
+                    Show all plans
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Select
             value={controls.sort}
             onValueChange={(value) =>

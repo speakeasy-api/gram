@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { SpendProductID } from "@/pages/organization/spendBreakdownUtils";
-import { ALL_PRODUCT_IDS } from "./customerUsageSearch";
+import { ALL_PRODUCT_IDS, type CustomerPlan } from "./customerUsageSearch";
 import {
   compareCustomers,
   customerUsageView,
+  planFilterLabel,
   summarizeCustomer,
   type CustomerUsage,
 } from "./customerUsageUtils";
@@ -217,7 +218,7 @@ describe("customerUsageView", () => {
   ];
   const controls = {
     q: "",
-    plan: "all" as const,
+    plans: new Set<CustomerPlan>(),
     sort: "spend" as const,
     products: ALL,
   };
@@ -254,10 +255,38 @@ describe("customerUsageView", () => {
         (summary) => summary.customer.name,
       ),
     ).toEqual(["Example Co"]);
-    const payg = customerUsageView(customers, { ...controls, plan: "payg" });
+    const payg = customerUsageView(customers, {
+      ...controls,
+      plans: new Set<CustomerPlan>(["payg"]),
+    });
     expect(payg.active).toEqual([]);
     expect(payg.idle.map((summary) => summary.customer.name)).toEqual([
       "Idle Inc",
     ]);
+  });
+
+  it("shows every selected plan when several are picked", () => {
+    const view = customerUsageView(customers, {
+      ...controls,
+      plans: new Set<CustomerPlan>(["pro", "payg"]),
+    });
+    expect(view.active.map((summary) => summary.customer.name)).toEqual([
+      "Storage Only",
+    ]);
+    expect(view.idle.map((summary) => summary.customer.name)).toEqual([
+      "Idle Inc",
+    ]);
+  });
+});
+
+describe("planFilterLabel", () => {
+  it("reads All plans for none or every plan, otherwise names the selection", () => {
+    expect(planFilterLabel(new Set())).toBe("All plans");
+    expect(planFilterLabel(new Set(["payg", "pro", "enterprise"]))).toBe(
+      "All plans",
+    );
+    expect(planFilterLabel(new Set(["payg", "enterprise"]))).toBe(
+      "Enterprise, PAYG",
+    );
   });
 });

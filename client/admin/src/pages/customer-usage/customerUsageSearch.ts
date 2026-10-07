@@ -26,7 +26,8 @@ export type CustomerUsageInterval = "daily" | "weekly" | "monthly";
 // the default, which keeps the plain page address the default view.
 const searchSchema = z.object({
   q: z.string().optional().catch(undefined),
-  plan: z.enum(CUSTOMER_PLANS).optional().catch(undefined),
+  // The selected plans. Absent means every plan.
+  plans: z.array(z.enum(CUSTOMER_PLANS)).optional().catch(undefined),
   sort: z.enum(CUSTOMER_USAGE_SORTS).optional().catch(undefined),
   // The selected products. Absent means all of them; an empty list means none.
   products: z
@@ -48,7 +49,8 @@ export function customerUsageSearch(
 
 export type CustomerUsageControls = {
   q: string;
-  plan: CustomerPlan | "all";
+  // Empty means every plan.
+  plans: ReadonlySet<CustomerPlan>;
   sort: CustomerUsageSort;
   products: ReadonlySet<SpendProductID>;
   interval: CustomerUsageInterval;
@@ -60,7 +62,7 @@ export function customerUsageControls(
 ): CustomerUsageControls {
   return {
     q: search.q ?? "",
-    plan: search.plan ?? "all",
+    plans: new Set(search.plans ?? []),
     sort: search.sort ?? "spend",
     products: new Set(search.products ?? ALL_PRODUCT_IDS),
     interval: search.interval ?? "monthly",
@@ -75,4 +77,16 @@ export function productsSearchValue(
 ): SpendProductID[] | undefined {
   const products = ALL_PRODUCT_IDS.filter((id) => selected.has(id));
   return products.length === ALL_PRODUCT_IDS.length ? undefined : products;
+}
+
+// The URL form of a plan selection: absent when no plan or every plan is
+// selected, since both mean "show every plan", otherwise the selected plans in
+// display order.
+export function plansSearchValue(
+  selected: ReadonlySet<CustomerPlan>,
+): CustomerPlan[] | undefined {
+  const plans = CUSTOMER_PLANS.filter((plan) => selected.has(plan));
+  return plans.length === 0 || plans.length === CUSTOMER_PLANS.length
+    ? undefined
+    : plans;
 }

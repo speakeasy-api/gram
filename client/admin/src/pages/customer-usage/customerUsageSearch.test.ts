@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   customerUsageControls,
   customerUsageSearch,
+  plansSearchValue,
   productsSearchValue,
 } from "./customerUsageSearch";
 
@@ -11,7 +12,7 @@ describe("customer usage search", () => {
     const controls = customerUsageControls(customerUsageSearch({}));
     expect(controls).toEqual({
       q: "",
-      plan: "all",
+      plans: new Set(),
       sort: "spend",
       products: new Set([
         "agent_session_storage",
@@ -27,7 +28,7 @@ describe("customer usage search", () => {
     expect(
       customerUsageSearch({
         q: "example",
-        plan: "payg",
+        plans: ["payg", "enterprise"],
         sort: "bogus",
         products: ["mcp_egress"],
         interval: "weekly",
@@ -35,7 +36,7 @@ describe("customer usage search", () => {
       }),
     ).toEqual({
       q: "example",
-      plan: "payg",
+      plans: ["payg", "enterprise"],
       sort: undefined,
       products: ["mcp_egress"],
       interval: "weekly",
@@ -58,5 +59,20 @@ describe("customer usage search", () => {
     expect(
       productsSearchValue(new Set(["mcp_egress", "agent_session_storage"])),
     ).toEqual(["agent_session_storage", "mcp_egress"]);
+  });
+
+  it("leaves no plan and every plan out of the URL", () => {
+    expect(plansSearchValue(new Set())).toBeUndefined();
+    expect(
+      plansSearchValue(new Set(["pro", "payg", "enterprise"])),
+    ).toBeUndefined();
+    expect(plansSearchValue(new Set(["payg", "enterprise"]))).toEqual([
+      "enterprise",
+      "payg",
+    ]);
+  });
+
+  it("drops an unknown plan list", () => {
+    expect(customerUsageSearch({ plans: ["gold"] }).plans).toBeUndefined();
   });
 });
