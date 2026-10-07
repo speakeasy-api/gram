@@ -1346,11 +1346,6 @@ func (s *ServiceCore) CreateAssistant(
 	if err != nil {
 		return assistantRecord{}, err
 	}
-	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
-	if err != nil {
-		return assistantRecord{}, err
-	}
-
 	queries := assistantrepo.New(tx)
 	created, err := queries.CreateAssistant(ctx, assistantrepo.CreateAssistantParams{
 		ProjectID:       projectID,
@@ -1369,6 +1364,11 @@ func (s *ServiceCore) CreateAssistant(
 	record := assistantRecordFromCreateRow(created)
 
 	if err := writeAssistantToolsets(ctx, tx, s.audit, assistantActor(ctx, createdByUserID), record.ID, projectID, resolved); err != nil {
+		return assistantRecord{}, err
+	}
+	// Server rows lock after the hosted sync's domain -> endpoint -> server locks.
+	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
+	if err != nil {
 		return assistantRecord{}, err
 	}
 	if err := writeAssistantMcpServers(ctx, tx, record.ID, projectID, resolvedMcpServers); err != nil {
@@ -1490,15 +1490,6 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 		resolved = r
 	}
-	var resolvedMcpServers []resolvedMcpServerInsert
-	if mcpServers != nil {
-		r, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
-		if err != nil {
-			return assistantRecord{}, err
-		}
-		resolvedMcpServers = r
-	}
-
 	queries := assistantrepo.New(tx)
 	updated, err := queries.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
 		Name:           conv.PtrToPGText(name),
@@ -1521,6 +1512,11 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 	}
 	if mcpServers != nil {
+		// Server rows lock after the hosted sync's domain -> endpoint -> server locks.
+		resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
+		if err != nil {
+			return assistantRecord{}, err
+		}
 		if err := writeAssistantMcpServers(ctx, tx, record.ID, projectID, resolvedMcpServers); err != nil {
 			return assistantRecord{}, err
 		}
