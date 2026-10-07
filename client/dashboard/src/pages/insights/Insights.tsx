@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import { Outlet } from "react-router";
 import { InsightsAgentsContent } from "@/components/observe/InsightsAgents";
-import { InsightsToolsContent } from "@/components/observe/InsightsTools";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { McpToolsPage } from "./McpToolsDashboard";
 
 export function InsightsRoot(): JSX.Element {
   return (
@@ -38,7 +38,7 @@ function ObservePageShell({
 export function InsightsHooksPage(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
-      <InsightsToolsContent />
+      <McpToolsPage />
     </RequireScope>
   );
 }
