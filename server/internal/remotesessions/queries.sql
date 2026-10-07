@@ -1831,7 +1831,15 @@ LEFT JOIN LATERAL (
 WHERE c.id = @id
   AND c.organization_id = @organization_id
   AND c.deleted IS FALSE
-  AND i.deleted IS FALSE;
+  AND i.deleted IS FALSE
+  -- The issuer must be global or belong to the client's project or
+  -- organization, as GetRemoteSessionClientForRotation requires, so a client
+  -- never authenticates at another tenant's token endpoint.
+  AND (
+    i.project_id = c.project_id
+    OR (i.project_id IS NULL AND i.organization_id IS NULL)
+    OR (i.project_id IS NULL AND i.organization_id = c.organization_id)
+  );
 
 -- name: SetRemoteSessionRefreshExpiresAtIfUnknown :execrows
 -- Fills a refresh deadline the provider omitted at exchange but reported through

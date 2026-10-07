@@ -3,6 +3,7 @@ package clientcredentials
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -101,7 +102,7 @@ func newCacheKeys(client repo.GetClientCredentialsGrantClientRow, resource strin
 		client.ExternalClientID, client.TokenEndpointAuthMethod.String, client.ClientSecretEncrypted.String, secretExpiresAt,
 		keySetID, client.ActiveKeyID, client.TokenEndpointAuthAudienceFormat.String,
 		client.IssuerID.String(), client.IssuerUrl, client.TokenEndpoint.String, resourceIndicatorSupported, tunnelID,
-		client.ClientAudience.String, strings.Join(client.ClientScope, " "), resource,
+		client.ClientAudience.String, strings.Join(slices.Sorted(slices.Values(client.ClientScope)), " "), resource,
 	}, "\n")))
 	id := hex.EncodeToString(digest[:])
 

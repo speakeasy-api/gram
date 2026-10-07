@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -302,8 +303,9 @@ func (m *Minter) cachedFailure(ctx context.Context, keys cacheKeys) error {
 }
 
 // rememberFailure records a failure a retry cannot fix, for this request's
-// waiters and for later requests. Transport, signing and server failures may
-// pass on their own and are not recorded.
+// waiters and for later requests. Transport, signing, server and request
+// timeout failures may pass on their own and are not recorded. A 429 is
+// recorded, so a rate limited upstream gets failureTTL of back-off.
 func (m *Minter) rememberFailure(ctx context.Context, logger *slog.Logger, keys cacheKeys, err error) {
 	entry := failureEntry{Key: keys.failure, Configuration: false, StatusCode: 0, Code: ""}
 	rejected, isRejection := errors.AsType[*remotesessions.TokenEndpointError](err)
@@ -311,7 +313,7 @@ func (m *Minter) rememberFailure(ctx context.Context, logger *slog.Logger, keys 
 	switch {
 	case errors.Is(err, remotesessions.ErrTokenEndpointConfiguration):
 		entry.Configuration = true
-	case isRejection && !rejected.Transport && !rejected.Signing && rejected.StatusCode/100 == 4:
+	case isRejection && !rejected.Transport && !rejected.Signing && rejected.StatusCode/100 == 4 && rejected.StatusCode != http.StatusRequestTimeout:
 		entry.StatusCode = rejected.StatusCode
 		entry.Code = rejected.Code
 	default:

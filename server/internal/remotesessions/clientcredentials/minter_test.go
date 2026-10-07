@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 const testResource = "https://api.upstream.example.test/mcp"
@@ -512,6 +513,84 @@ func TestCredential_DoesNotFindGlobalClient(t *testing.T) {
 	_, err = f.newMinter(t).Credential(t.Context(), f.request(client.ID, ""))
 	require.ErrorIs(t, err, ErrClientNotFound)
 	require.Empty(t, f.tokens.received())
+}
+
+func TestCredential_DoesNotUseAnotherOrganizationsIssuer(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, func(int) tokenResponse { return bearerToken("token") })
+	otherOrg := "org-" + uuid.NewString()
+	require.NoError(t, testrepo.New(f.db).SeedDelegationLoaderOrganizationFixture(t.Context(), testrepo.SeedDelegationLoaderOrganizationFixtureParams{OrganizationID: otherOrg, Name: "Other organization", Slug: "other-" + uuid.NewString()[:8]}))
+
+	issuer, err := repo.New(f.db).CreateRemoteSessionIssuer(t.Context(), f.issuerParams(pgtype.Text{String: otherOrg, Valid: true}))
+	require.NoError(t, err)
+
+	clientID := f.secretClientAt(t, issuer.ID)
+
+	_, err = f.newMinter(t).Credential(t.Context(), f.request(clientID, ""))
+	require.ErrorIs(t, err, ErrClientNotFound)
+	require.Empty(t, f.tokens.received())
+}
+
+func TestCredential_UsesGlobalIssuer(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, func(int) tokenResponse { return bearerToken("global-issuer-token") })
+
+	issuer, err := repo.New(f.db).CreateRemoteSessionIssuer(t.Context(), f.issuerParams(pgtype.Text{}))
+	require.NoError(t, err)
+
+	clientID := f.secretClientAt(t, issuer.ID)
+
+	cred, err := f.newMinter(t).Credential(t.Context(), f.request(clientID, ""))
+	require.NoError(t, err)
+	require.Equal(t, "global-issuer-token", cred.Value())
+}
+
+func TestCredential_DoesNotCacheRequestTimeout(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, func(n int) tokenResponse {
+		if n == 0 {
+			return tokenResponse{status: http.StatusRequestTimeout, body: map[string]any{}}
+		}
+
+		return bearerToken("token-after-timeout")
+	})
+	clientID := f.secretClient(t, oauthwire.AuthMethodClientSecretBasic, []string{})
+	minter := f.newMinter(t)
+
+	_, err := minter.Credential(t.Context(), f.request(clientID, ""))
+	require.Error(t, err)
+
+	cred, err := minter.Credential(t.Context(), f.request(clientID, ""))
+	require.NoError(t, err)
+	require.Equal(t, "token-after-timeout", cred.Value())
+	require.Len(t, f.tokens.received(), 2)
+}
+
+func TestNewCacheKeys_IgnoresScopeOrder(t *testing.T) {
+	t.Parallel()
+
+	client := repo.GetClientCredentialsGrantClientRow{ClientID: uuid.New(), ClientScope: []string{"read", "write"}}
+	reordered := client
+	reordered.ClientScope = []string{"write", "read"}
+
+	require.Equal(t, newCacheKeys(client, ""), newCacheKeys(reordered, ""))
+	require.Equal(t, []string{"read", "write"}, client.ClientScope)
+}
+
+func TestNewCredential(t *testing.T) {
+	t.Parallel()
+
+	expiresAt := time.Now().Add(time.Hour)
+
+	cred := NewCredential("api-key", SchemeBearer, expiresAt)
+
+	require.Equal(t, "api-key", cred.Value())
+	require.Equal(t, SchemeBearer, cred.Scheme())
+	require.Equal(t, expiresAt, cred.ExpiresAt())
+	require.Equal(t, "[redacted client credential]", cred.String())
 }
 
 func TestAwait_TakesOverReleasedLease(t *testing.T) {

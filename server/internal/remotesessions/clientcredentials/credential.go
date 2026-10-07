@@ -62,6 +62,13 @@ type Credential struct {
 	entry *credentialEntry
 }
 
+// NewCredential builds a credential for a Source other than the client
+// credentials grant, such as a stored API key. Forget on Minter does not apply
+// to it.
+func NewCredential(value string, scheme Scheme, expiresAt time.Time) Credential {
+	return Credential{value: value, scheme: scheme, expiresAt: expiresAt, mintedAt: time.Time{}, entry: nil}
+}
+
 // Value is the secret presented to the upstream.
 func (c Credential) Value() string { return c.value }
 

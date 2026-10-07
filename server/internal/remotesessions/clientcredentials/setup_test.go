@@ -82,6 +82,12 @@ func newTokenServer(t *testing.T, respond func(n int) tokenResponse) *tokenServe
 
 	ts := &tokenServer{server: nil, mu: sync.Mutex{}, requests: nil, respond: respond}
 	ts.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/token" {
+			http.Error(w, "not the token endpoint", http.StatusNotFound)
+
+			return
+		}
+
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 
@@ -171,18 +177,49 @@ func newFixtureWithIssuer(t *testing.T, respond func(n int) tokenResponse, opts 
 	require.NoError(t, testrepo.New(db).SeedDelegationLoaderOrganizationFixture(ctx, testrepo.SeedDelegationLoaderOrganizationFixtureParams{OrganizationID: org, Name: "Client credentials organization", Slug: "client-credentials-" + uuid.NewString()[:8]}))
 
 	tokens := newTokenServer(t, respond)
-	issuer, err := repo.New(db).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
-		OrganizationID: pgtype.Text{String: org, Valid: true}, Slug: "upstream-" + uuid.NewString()[:8], Issuer: tokens.server.URL,
-		TokenEndpoint:                     pgtype.Text{String: tokens.tokenURL(), Valid: true},
+	f := fixture{db: db, enc: enc, signer: &recordingSigner{mu: sync.Mutex{}, requests: nil}, tokens: tokens, org: org, issuerID: uuid.Nil}
+
+	params := f.issuerParams(pgtype.Text{String: org, Valid: true})
+	params.ResourceIndicatorSupported = opts.resourceIndicatorSupported
+
+	issuer, err := repo.New(db).CreateRemoteSessionIssuer(ctx, params)
+	require.NoError(t, err)
+
+	f.issuerID = issuer.ID
+
+	return f
+}
+
+// issuerParams describes an issuer at the fake token endpoint, owned by
+// organizationID or global when it is NULL.
+func (f fixture) issuerParams(organizationID pgtype.Text) repo.CreateRemoteSessionIssuerParams {
+	return repo.CreateRemoteSessionIssuerParams{
+		OrganizationID: organizationID, Slug: "upstream-" + uuid.NewString()[:8], Issuer: f.tokens.server.URL,
+		TokenEndpoint:                     pgtype.Text{String: f.tokens.tokenURL(), Valid: true},
 		GrantTypesSupported:               []string{oauthwire.GrantTypeClientCredentials},
 		TokenEndpointAuthMethodsSupported: []string{oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodClientSecretPost, oauthwire.AuthMethodPrivateKeyJWT},
-		ResourceIndicatorSupported:        opts.resourceIndicatorSupported,
 		ScopesSupported:                   []string{}, ResponseTypesSupported: []string{}, CodeChallengeMethodsSupported: []string{},
 		IntrospectionEndpointAuthMethodsSupported: []string{}, IDTokenSigningAlgValuesSupported: []string{}, ClaimsSupported: []string{},
+	}
+}
+
+// secretClientAt registers an organization client_secret_basic client at
+// issuerID.
+func (f fixture) secretClientAt(t *testing.T, issuerID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	encrypted, err := f.enc.Encrypt([]byte("client-secret"))
+	require.NoError(t, err)
+
+	client, err := repo.New(f.db).CreateRemoteSessionClient(t.Context(), repo.CreateRemoteSessionClientParams{
+		OrganizationID: pgtype.Text{String: f.org, Valid: true}, RemoteSessionIssuerID: issuerID, ClientID: "gram-client",
+		ClientSecretEncrypted:   pgtype.Text{String: encrypted, Valid: true},
+		TokenEndpointAuthMethod: pgtype.Text{String: oauthwire.AuthMethodClientSecretBasic, Valid: true},
+		Scope:                   []string{},
 	})
 	require.NoError(t, err)
 
-	return fixture{db: db, enc: enc, signer: &recordingSigner{mu: sync.Mutex{}, requests: nil}, tokens: tokens, org: org, issuerID: issuer.ID}
+	return client.ID
 }
 
 // newMinter builds a minter with its own Redis connection and challenge
