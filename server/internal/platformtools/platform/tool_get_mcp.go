@@ -24,7 +24,8 @@ func (t *GetMCP) Descriptor() core.ToolDescriptor {
 		SourceSlug:  platformtools.SourcePlatform,
 		HandlerName: "get_mcp",
 		Name:        platformtools.ToolNameGetMCP,
-		Description: "Get an allowlisted summary of one configured MCP in an explicit project.",
+		Description: "Get an allowlisted summary of one configured MCP in an explicit project. " +
+			"When tool_exposure.next_tool_cursor is present, tool_exposure lists only part of the server's tools and carries no exposure_version: call again with tool_cursor set to it until it is absent.",
 		InputSchema: core.BuildInputSchema[platformmcp.GetMCPInput](),
 		Variables:   nil,
 		Annotations: core.ReadOnlyAnnotations(),
@@ -39,7 +40,7 @@ func (t *GetMCP) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.
 		return fmt.Errorf("platform reader not configured")
 	}
 
-	input := platformmcp.GetMCPInput{ProjectID: "", MCPID: ""}
+	input := platformmcp.GetMCPInput{ProjectID: "", MCPID: "", ToolCursor: ""}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
 	}

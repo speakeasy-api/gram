@@ -3830,6 +3830,10 @@ func TestGeneratePlatformMCPPackageEmitsToolExposureWorkflow(t *testing.T) {
 		"`tool_exposure.exposure_version`",
 		"the `exposure_version` from the step-4 read",
 		"Never reuse the old exposure version",
+		// A long tool list is read page by page, and only a completed read
+		// yields a version a change can be confirmed against.
+		"`tool_exposure.next_tool_cursor`",
+		"A partial page carries no exposure version",
 		"refused to avoid overwriting somebody else's edit",
 		// A shared tool list is structural, so the workflow must not send the
 		// caller back to a fresh read on it the way a conflict does.
