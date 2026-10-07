@@ -344,7 +344,7 @@ func toolExposureFromRow(projectID, mcpID uuid.UUID, row platformrepo.GetPlatfor
 	return MCPToolExposure{
 		ToolsetID:       row.ToolsetID.String(),
 		ToolsetSlug:     row.ToolsetSlug,
-		ExposureVersion: toolExposureVersion(projectID, mcpID, row.ToolsetID, row.ToolsetVersion, row.ToolUrns),
+		ExposureVersion: mv.ToolListVersionToken(projectID, mcpID, row.ToolsetID, row.ToolsetVersion, row.ToolUrns),
 		ToolCount:       len(row.ToolUrns),
 		ToolURNs:        slices.Clone(urns),
 		Truncated:       truncated,
@@ -503,7 +503,7 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 			// Compared against the version computed from the committed list
 			// rather than the public projection, which truncates the list it
 			// reports and would therefore be the wrong thing to hash.
-			committed := toolExposureVersion(project.ID, mcpID, row.ToolsetID, row.ToolsetVersion, row.ToolUrns)
+			committed := mv.ToolListVersionToken(project.ID, mcpID, row.ToolsetID, row.ToolsetVersion, row.ToolUrns)
 			if !hmac.Equal([]byte(committed), []byte(input.ExpectedVersion)) {
 				return toolExposureReceipt{}, toolExposureConflict()
 			}
@@ -981,16 +981,6 @@ func toolExposureUnavailable(cause error) error {
 		Message: "Changing which tools an MCP server exposes is temporarily unavailable.",
 		Cause:   errors.Join(ErrUnavailable, cause),
 	}
-}
-
-// toolExposureVersion is the exposure_version token for one MCP server's tool
-// list. The derivation is shared with the toolset version_token the dashboard
-// sends on toolsets.update, so both paths detect a moved list the same way;
-// see mv.ToolListVersionToken for why the digest is unkeyed. Proof of
-// confirmation is carried separately, by the explicit Confirmed flag and the
-// shipped skill, not by this token.
-func toolExposureVersion(projectID, mcpServerID, toolsetID uuid.UUID, version int64, urns []string) string {
-	return mv.ToolListVersionToken(projectID, mcpServerID, toolsetID, version, urns)
 }
 
 func toolURNStrings(tools []urn.Tool) []string {

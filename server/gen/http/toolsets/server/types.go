@@ -61,8 +61,8 @@ type UpdateToolsetRequestBody struct {
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
 	// The version_token from the toolset read this update was based on. When set,
-	// the update is refused with a conflict if the toolset's tool list has changed
-	// since that read. Omit it to apply the update unconditionally.
+	// the update is refused with a conflict if the toolset's tools or resources
+	// have changed since that read. Omit it to apply the update unconditionally.
 	ExpectedVersionToken *string `form:"expected_version_token,omitempty" json:"expected_version_token,omitempty" xml:"expected_version_token,omitempty"`
 }
 
@@ -135,11 +135,11 @@ type CreateToolsetResponseBody struct {
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
-	// Opaque token identifying the exact tool list this read describes, derived
-	// from toolset_version and tool_urns. Send it back as expected_version_token
-	// on toolsets.update to have the update refused with a conflict if the tool
-	// list changed in between.
-	VersionToken string `form:"version_token" json:"version_token" xml:"version_token"`
+	// Opaque token identifying the toolset version and tool list this read
+	// describes. It changes whenever the toolset's tools or resources change. Send
+	// it back as expected_version_token on toolsets.update to have the update
+	// refused with a conflict if either changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
 	// The resource URNs in this toolset
@@ -228,11 +228,11 @@ type UpdateToolsetResponseBody struct {
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
-	// Opaque token identifying the exact tool list this read describes, derived
-	// from toolset_version and tool_urns. Send it back as expected_version_token
-	// on toolsets.update to have the update refused with a conflict if the tool
-	// list changed in between.
-	VersionToken string `form:"version_token" json:"version_token" xml:"version_token"`
+	// Opaque token identifying the toolset version and tool list this read
+	// describes. It changes whenever the toolset's tools or resources change. Send
+	// it back as expected_version_token on toolsets.update to have the update
+	// refused with a conflict if either changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
 	// The resource URNs in this toolset
@@ -307,11 +307,11 @@ type GetToolsetResponseBody struct {
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
-	// Opaque token identifying the exact tool list this read describes, derived
-	// from toolset_version and tool_urns. Send it back as expected_version_token
-	// on toolsets.update to have the update refused with a conflict if the tool
-	// list changed in between.
-	VersionToken string `form:"version_token" json:"version_token" xml:"version_token"`
+	// Opaque token identifying the toolset version and tool list this read
+	// describes. It changes whenever the toolset's tools or resources change. Send
+	// it back as expected_version_token on toolsets.update to have the update
+	// refused with a conflict if either changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
 	// The resource URNs in this toolset
@@ -414,11 +414,11 @@ type CloneToolsetResponseBody struct {
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
-	// Opaque token identifying the exact tool list this read describes, derived
-	// from toolset_version and tool_urns. Send it back as expected_version_token
-	// on toolsets.update to have the update refused with a conflict if the tool
-	// list changed in between.
-	VersionToken string `form:"version_token" json:"version_token" xml:"version_token"`
+	// Opaque token identifying the toolset version and tool list this read
+	// describes. It changes whenever the toolset's tools or resources change. Send
+	// it back as expected_version_token on toolsets.update to have the update
+	// refused with a conflict if either changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
 	// The resource URNs in this toolset
@@ -493,11 +493,11 @@ type AddExternalOAuthServerResponseBody struct {
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
-	// Opaque token identifying the exact tool list this read describes, derived
-	// from toolset_version and tool_urns. Send it back as expected_version_token
-	// on toolsets.update to have the update refused with a conflict if the tool
-	// list changed in between.
-	VersionToken string `form:"version_token" json:"version_token" xml:"version_token"`
+	// Opaque token identifying the toolset version and tool list this read
+	// describes. It changes whenever the toolset's tools or resources change. Send
+	// it back as expected_version_token on toolsets.update to have the update
+	// refused with a conflict if either changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
 	// The resource URNs in this toolset
@@ -572,11 +572,11 @@ type UpdateExternalOAuthServerResponseBody struct {
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
-	// Opaque token identifying the exact tool list this read describes, derived
-	// from toolset_version and tool_urns. Send it back as expected_version_token
-	// on toolsets.update to have the update refused with a conflict if the tool
-	// list changed in between.
-	VersionToken string `form:"version_token" json:"version_token" xml:"version_token"`
+	// Opaque token identifying the toolset version and tool list this read
+	// describes. It changes whenever the toolset's tools or resources change. Send
+	// it back as expected_version_token on toolsets.update to have the update
+	// refused with a conflict if either changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
 	// The resource URNs in this toolset
@@ -651,11 +651,11 @@ type RemoveOAuthServerResponseBody struct {
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
-	// Opaque token identifying the exact tool list this read describes, derived
-	// from toolset_version and tool_urns. Send it back as expected_version_token
-	// on toolsets.update to have the update refused with a conflict if the tool
-	// list changed in between.
-	VersionToken string `form:"version_token" json:"version_token" xml:"version_token"`
+	// Opaque token identifying the toolset version and tool list this read
+	// describes. It changes whenever the toolset's tools or resources change. Send
+	// it back as expected_version_token on toolsets.update to have the update
+	// refused with a conflict if either changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
 	// The resource URNs in this toolset
@@ -730,11 +730,11 @@ type SetUserSessionIssuerResponseBody struct {
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
-	// Opaque token identifying the exact tool list this read describes, derived
-	// from toolset_version and tool_urns. Send it back as expected_version_token
-	// on toolsets.update to have the update refused with a conflict if the tool
-	// list changed in between.
-	VersionToken string `form:"version_token" json:"version_token" xml:"version_token"`
+	// Opaque token identifying the toolset version and tool list this read
+	// describes. It changes whenever the toolset's tools or resources change. Send
+	// it back as expected_version_token on toolsets.update to have the update
+	// refused with a conflict if either changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
 	// The resource URNs in this toolset
@@ -809,11 +809,11 @@ type SetToolVariationsGroupResponseBody struct {
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion int64 `form:"toolset_version" json:"toolset_version" xml:"toolset_version"`
-	// Opaque token identifying the exact tool list this read describes, derived
-	// from toolset_version and tool_urns. Send it back as expected_version_token
-	// on toolsets.update to have the update refused with a conflict if the tool
-	// list changed in between.
-	VersionToken string `form:"version_token" json:"version_token" xml:"version_token"`
+	// Opaque token identifying the toolset version and tool list this read
+	// describes. It changes whenever the toolset's tools or resources change. Send
+	// it back as expected_version_token on toolsets.update to have the update
+	// refused with a conflict if either changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
 	// The resource URNs in this toolset

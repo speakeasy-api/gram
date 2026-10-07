@@ -41,11 +41,11 @@ type Toolset struct {
 	ToolUrns []string
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion int64
-	// Opaque token identifying the exact tool list this read describes, derived
-	// from toolset_version and tool_urns. Send it back as expected_version_token
-	// on toolsets.update to have the update refused with a conflict if the tool
-	// list changed in between.
-	VersionToken string
+	// Opaque token identifying the toolset version and tool list this read
+	// describes. It changes whenever the toolset's tools or resources change. Send
+	// it back as expected_version_token on toolsets.update to have the update
+	// refused with a conflict if either changed in between.
+	VersionToken *string
 	// The resources in this toolset
 	Resources []*Resource
 	// The resource URNs in this toolset

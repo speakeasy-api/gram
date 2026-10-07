@@ -643,7 +643,14 @@ func DescribeToolset(
 	var resourceUrns []string
 	var toolsetVersion int64
 	latestVersion, err := toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
-	if err == nil {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// No version yet: an empty toolset at version 0.
+	case err != nil:
+		// Falling back to version 0 here would report an empty toolset and a
+		// version_token that toolsets.update would then misread as a conflict.
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset version").LogError(ctx, logger)
+	default:
 		toolUrns = make([]string, len(latestVersion.ToolUrns))
 		for i, urn := range latestVersion.ToolUrns {
 			toolUrns[i] = urn.String()
@@ -807,7 +814,7 @@ func DescribeToolset(
 		Description:                  conv.FromPGText[string](toolset.Description),
 		Tools:                        toolsetTools.Tools,
 		ToolsetVersion:               toolsetVersion,
-		VersionToken:                 ToolsetVersionToken(toolset.ProjectID, toolset.ID, toolsetVersion, toolUrns),
+		VersionToken:                 new(ToolsetVersionToken(toolset.ProjectID, toolset.ID, toolsetVersion, toolUrns)),
 		Resources:                    toolsetTools.Resources,
 		PromptTemplates:              promptTemplates,
 		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),

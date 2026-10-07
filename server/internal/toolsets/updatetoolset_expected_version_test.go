@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -64,7 +65,7 @@ func concurrentToolEditFixture(t *testing.T, ctx context.Context, ti *testInstan
 
 	read, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{SessionToken: nil, ApikeyToken: nil, Slug: string(created.Slug), ProjectSlugInput: nil})
 	require.NoError(t, err)
-	require.NotEmpty(t, read.VersionToken, "a toolset read must report the token an update can be checked against")
+	require.NotEmpty(t, conv.PtrValOrEmpty(read.VersionToken, ""), "a toolset read must report the token an update can be checked against")
 	return read, urns
 }
 
@@ -75,7 +76,7 @@ func TestToolsetsService_UpdateToolset_StaleExpectedVersionIsRefused(t *testing.
 	staleRead, urns := concurrentToolEditFixture(t, ctx, ti)
 
 	// A second editor saves first, from the same read.
-	_, err := ti.service.UpdateToolset(ctx, toolListUpdate(staleRead.Slug, staleRead.Name, []string{urns[0], urns[1]}, &staleRead.VersionToken))
+	_, err := ti.service.UpdateToolset(ctx, toolListUpdate(staleRead.Slug, staleRead.Name, []string{urns[0], urns[1]}, staleRead.VersionToken))
 	require.NoError(t, err)
 	afterWinner, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{SessionToken: nil, ApikeyToken: nil, Slug: string(staleRead.Slug), ProjectSlugInput: nil})
 	require.NoError(t, err)
@@ -85,7 +86,7 @@ func TestToolsetsService_UpdateToolset_StaleExpectedVersionIsRefused(t *testing.
 	require.NoError(t, err)
 
 	// The first editor's save was computed from the older read: refused, not applied.
-	_, err = ti.service.UpdateToolset(ctx, toolListUpdate(staleRead.Slug, "Renamed by the loser", []string{urns[0], urns[2]}, &staleRead.VersionToken))
+	_, err = ti.service.UpdateToolset(ctx, toolListUpdate(staleRead.Slug, "Renamed by the loser", []string{urns[0], urns[2]}, staleRead.VersionToken))
 	require.Error(t, err)
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
@@ -111,14 +112,14 @@ func TestToolsetsService_UpdateToolset_MatchingExpectedVersionSucceeds(t *testin
 	ctx, ti := newTestToolsetsService(t)
 	read, urns := concurrentToolEditFixture(t, ctx, ti)
 
-	result, err := ti.service.UpdateToolset(ctx, toolListUpdate(read.Slug, read.Name, []string{urns[0], urns[1]}, &read.VersionToken))
+	result, err := ti.service.UpdateToolset(ctx, toolListUpdate(read.Slug, read.Name, []string{urns[0], urns[1]}, read.VersionToken))
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{urns[0], urns[1]}, result.ToolUrns)
 	require.Equal(t, read.ToolsetVersion+1, result.ToolsetVersion)
 	require.NotEqual(t, read.VersionToken, result.VersionToken)
 
 	// The token the update returned is itself a valid basis for the next save.
-	chained, err := ti.service.UpdateToolset(ctx, toolListUpdate(read.Slug, read.Name, []string{urns[2]}, &result.VersionToken))
+	chained, err := ti.service.UpdateToolset(ctx, toolListUpdate(read.Slug, read.Name, []string{urns[2]}, result.VersionToken))
 	require.NoError(t, err)
 	require.Equal(t, []string{urns[2]}, chained.ToolUrns)
 }

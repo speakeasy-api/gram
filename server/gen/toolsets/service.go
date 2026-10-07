@@ -316,8 +316,8 @@ type UpdateToolsetPayload struct {
 	// The mode to use for tool selection
 	ToolSelectionMode *string
 	// The version_token from the toolset read this update was based on. When set,
-	// the update is refused with a conflict if the toolset's tool list has changed
-	// since that read. Omit it to apply the update unconditionally.
+	// the update is refused with a conflict if the toolset's tools or resources
+	// have changed since that read. Omit it to apply the update unconditionally.
 	ExpectedVersionToken *string
 	ProjectSlugInput     *string
 }

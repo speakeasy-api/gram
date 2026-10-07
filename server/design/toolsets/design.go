@@ -465,7 +465,7 @@ var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
 	Attribute("network_access_mode", shared.NetworkAccessMode, "Where the hosted MCP is accessible: public_only, dual, or private_only")
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
-	Attribute("expected_version_token", String, "The version_token from the toolset read this update was based on. When set, the update is refused with a conflict if the toolset's tool list has changed since that read. Omit it to apply the update unconditionally.")
+	Attribute("expected_version_token", String, "The version_token from the toolset read this update was based on. When set, the update is refused with a conflict if the toolset's tools or resources have changed since that read. Omit it to apply the update unconditionally.")
 	security.ProjectPayload()
 	Required("slug")
 })

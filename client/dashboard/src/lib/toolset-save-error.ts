@@ -1,3 +1,4 @@
+import { handleAPIError, handleError } from "@/lib/errors";
 import { getHttpStatusCode } from "@/lib/route-errors";
 
 /**
@@ -8,19 +9,32 @@ import { getHttpStatusCode } from "@/lib/route-errors";
 export const TOOLSET_CHANGED_MESSAGE =
   "Someone else changed this toolset after you opened it, so your change was not saved. Reload to see the latest tools, then try again.";
 
-/** True when a toolsets.update was refused because its version_token is stale. */
+/**
+ * True only for the stale-version refusal. toolsets.update returns 409 for other
+ * reasons too (a taken slug, a concurrent slug swap), and those keep their own
+ * message; the server names the stale field in this one.
+ */
 export function isToolsetVersionConflict(error: unknown): boolean {
-  return getHttpStatusCode(error) === 409;
+  return (
+    getHttpStatusCode(error) === 409 &&
+    error instanceof Error &&
+    error.message.includes("expected_version_token")
+  );
 }
 
-/** Readable toast copy for a failed tool-list save. */
-export function toolsetSaveErrorMessage(
+/** Surfaces a failed tool-list save; a stale-version conflict offers a reload. */
+export function handleToolsetSaveError(
   error: unknown,
-  fallback: string,
-): string {
-  if (isToolsetVersionConflict(error)) return TOOLSET_CHANGED_MESSAGE;
-  if (error instanceof Error && error.message.trim() !== "") {
-    return error.message;
+  reload: () => void,
+): void {
+  if (isToolsetVersionConflict(error)) {
+    handleError(error, {
+      title: "Your change was not saved",
+      message: TOOLSET_CHANGED_MESSAGE,
+      persist: true,
+      customAction: { label: "Reload", onClick: reload },
+    });
+    return;
   }
-  return fallback;
+  handleAPIError(error);
 }
