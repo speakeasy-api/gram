@@ -1490,8 +1490,8 @@ func TestIngest_StampsAccountAttributionOnTelemetry(t *testing.T) {
 // ingestHookDeviceRow sends a session.started event the way /rpc/hooks.ingest
 // receives it, through HookDeviceTelemetry with header as the request
 // headers, and returns the gram.hook.device.* attributes stored on the
-// resulting telemetry row.
-func ingestHookDeviceRow(t *testing.T, header http.Header) map[string]any {
+// resulting telemetry row. replayed marks the event as a spool replay.
+func ingestHookDeviceRow(t *testing.T, header http.Header, replayed bool) map[string]any {
 	t.Helper()
 
 	ctx, ti := newTestHooksService(t)
@@ -1510,24 +1510,14 @@ func ingestHookDeviceRow(t *testing.T, header http.Header) map[string]any {
 	occurredAt := timestamp.Format(time.RFC3339Nano)
 	payload := canonicalIngestPayload("claude", "session.started", "hook-device-"+uuid.NewString())
 	payload.Event.OccurredAt = &occurredAt
+	payload.Replayed = &replayed
 
 	result, err := ti.service.Ingest(requestCtx, payload)
 	require.NoError(t, err)
 	require.Equal(t, "allow", result.Decision)
 
-	var logs []telemetryrepo.TelemetryLog
-	require.Eventually(t, func() bool {
-		logs, err = chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
-			GramProjectID: authCtx.ProjectID.String(),
-			TimeStart:     timestamp.Add(-2 * time.Minute).UnixNano(),
-			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
-			GramURNs:      nil,
-			SortOrder:     "desc",
-			Cursor:        "",
-			Limit:         10,
-		})
-		return err == nil && len(logs) == 1
-	}, 2*time.Second, 50*time.Millisecond, "expected the hook row to land in telemetry")
+	// Canonical hook rows carry no gram_urn, so the empty URN selects them.
+	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), "", timestamp, 1)
 
 	// Attribute keys nest on dots in the stored JSON.
 	var stored struct {
@@ -1552,7 +1542,7 @@ func TestIngest_StampsHookDeviceAttributesOnTelemetry(t *testing.T) {
 	header.Set("X-Gram-Device-Harness-Version", "2.0.1")
 	header.Set("X-Gram-Device-Elapsed-Ms", "42")
 
-	device := ingestHookDeviceRow(t, header)
+	device := ingestHookDeviceRow(t, header, false)
 
 	require.Equal(t, "1.2.3", device["binary_version"], "the binary build must ride on the hook row")
 	require.Equal(t, "darwin", device["os"])
@@ -1566,9 +1556,22 @@ func TestIngest_OmitsHookDeviceAttributesWithoutDeviceHeaders(t *testing.T) {
 	t.Parallel()
 
 	// The legacy curl client sends no X-Gram-Device-* headers.
-	device := ingestHookDeviceRow(t, http.Header{})
+	device := ingestHookDeviceRow(t, http.Header{}, false)
 
 	require.Empty(t, device, "rows from senders without device headers must carry no device attributes")
+}
+
+func TestIngest_OmitsHookDeviceAttributesOnSpoolReplay(t *testing.T) {
+	t.Parallel()
+
+	// A drain run's headers describe the draining binary, not the one that
+	// captured the spooled event.
+	header := http.Header{}
+	header.Set("X-Gram-Device-Binary-Version", "1.3.0")
+
+	device := ingestHookDeviceRow(t, header, true)
+
+	require.Empty(t, device, "replayed rows must not carry the draining binary's version")
 }
 
 func TestIngest_PersistsRenderableToolCalls(t *testing.T) {

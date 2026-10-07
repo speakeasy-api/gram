@@ -1402,12 +1402,14 @@ func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.A
 }
 
 func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, timestamp time.Time, toolName string, attrs map[attr.Key]any) {
-	// The binary build, OS, arch, and harness the speakeasy-hooks binary
-	// reported on this request, so rows (and the sessions they belong to) can
-	// be counted per client version. Senders without device headers, such as
-	// the legacy curl client, leave the attributes absent.
-	for key, value := range middleware.HookDeviceAttributes(ctx) {
-		attrs[key] = value
+	// Device details the speakeasy-hooks binary reported, so rows can be
+	// counted per client version. A spool replay's headers describe the binary
+	// draining the spool, which after an upgrade is not the one that captured
+	// the event, so replayed rows stay unstamped rather than miscounted.
+	if replayed, _ := attrs[attr.HookReplayedKey].(bool); !replayed {
+		for key, value := range middleware.HookDeviceAttributes(ctx) {
+			attrs[key] = value
+		}
 	}
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp: timestamp,

@@ -11,12 +11,16 @@ import (
 
 	"github.com/speakeasy-api/gram/hooks/wire"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
+// maxDeviceHeaderLen caps a device-reported header value. Real values (an OS,
+// a semver, a harness name) are a few characters, and the speakeasy-hooks
+// binary truncates to the same cap before sending.
+const maxDeviceHeaderLen = 64
+
 // hookDeviceHeaderAttrs maps the X-Gram-Device-* headers the speakeasy-hooks
-// binary stamps on its requests onto span attribute keys. The elapsed-ms
-// header is handled separately as an integer attribute.
+// binary stamps on its requests onto attribute keys. The elapsed-ms header is
+// handled separately as an integer span attribute.
 var hookDeviceHeaderAttrs = map[string]attribute.Key{
 	wire.HeaderDeviceOS:             attr.HookDeviceOSKey,
 	wire.HeaderDeviceArch:           attr.HookDeviceArchKey,
@@ -26,9 +30,6 @@ var hookDeviceHeaderAttrs = map[string]attribute.Key{
 	wire.HeaderDeviceHarnessVersion: attr.HookDeviceHarnessVersionKey,
 }
 
-// hookDeviceContextKey carries the sanitized X-Gram-Device-* string values of
-// a hook request from HookDeviceTelemetry to the code that writes the
-// request's telemetry rows.
 type hookDeviceContextKey struct{}
 
 // HookDeviceAttributes returns the machine details (OS, arch, binary build,
@@ -53,34 +54,44 @@ func HookDeviceAttributes(ctx context.Context) map[attr.Key]string {
 // before becoming attributes, and non-hook routes are untouched.
 func HookDeviceTelemetry(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/rpc/hooks.") {
-			device := make(map[attr.Key]string, len(hookDeviceHeaderAttrs))
-			for header, key := range hookDeviceHeaderAttrs {
-				if v := sanitizeDeviceHeader(r.Header.Get(header)); v != "" {
-					device[key] = v
-				}
-			}
-			if len(device) > 0 {
-				r = r.WithContext(context.WithValue(r.Context(), hookDeviceContextKey{}, device))
-			}
+		if !strings.HasPrefix(r.URL.Path, "/rpc/hooks.") {
+			next.ServeHTTP(w, r)
+			return
+		}
 
-			span := trace.SpanFromContext(r.Context())
-			if span.IsRecording() {
-				attrs := make([]attribute.KeyValue, 0, len(device)+1)
-				for key, v := range device {
-					attrs = append(attrs, key.String(v))
+		// Allocated on the first reported value, so header-less senders
+		// allocate nothing.
+		var device map[attr.Key]string
+		for header, key := range hookDeviceHeaderAttrs {
+			v := sanitizeDeviceHeader(r.Header.Get(header))
+			if v == "" {
+				continue
+			}
+			if device == nil {
+				device = make(map[attr.Key]string, len(hookDeviceHeaderAttrs))
+			}
+			device[key] = v
+		}
+		if device != nil {
+			r = r.WithContext(context.WithValue(r.Context(), hookDeviceContextKey{}, device))
+		}
+
+		span := trace.SpanFromContext(r.Context())
+		if span.IsRecording() {
+			attrs := make([]attribute.KeyValue, 0, len(device)+1)
+			for key, v := range device {
+				attrs = append(attrs, key.String(v))
+			}
+			if v := r.Header.Get(wire.HeaderDeviceElapsedMS); v != "" {
+				// A day bounds any plausible producer (hook processes live
+				// seconds, drain runs minutes), so absurd values from a
+				// hostile or broken sender are dropped, not recorded.
+				if ms, err := strconv.ParseInt(v, 10, 64); err == nil && ms >= 0 && ms <= 24*60*60*1000 {
+					attrs = append(attrs, attr.HookDeviceElapsedMsKey.Int64(ms))
 				}
-				if v := r.Header.Get(wire.HeaderDeviceElapsedMS); v != "" {
-					// A day bounds any plausible producer — hook processes live
-					// seconds, drain runs minutes — so absurd values from a
-					// hostile or broken sender are dropped, not recorded.
-					if ms, err := strconv.ParseInt(v, 10, 64); err == nil && ms >= 0 && ms <= 24*60*60*1000 {
-						attrs = append(attrs, attr.HookDeviceElapsedMsKey.Int64(ms))
-					}
-				}
-				if len(attrs) > 0 {
-					span.SetAttributes(attrs...)
-				}
+			}
+			if len(attrs) > 0 {
+				span.SetAttributes(attrs...)
 			}
 		}
 		next.ServeHTTP(w, r)
@@ -89,9 +100,14 @@ func HookDeviceTelemetry(next http.Handler) http.Handler {
 
 // sanitizeDeviceHeader bounds an untrusted device-reported header value before
 // it becomes an attribute: trimmed, capped in length, and rejected outright
-// if it carries anything beyond printable ASCII.
+// if it carries anything beyond printable ASCII. The cap is applied in bytes
+// before any decoding, so an oversized header costs no allocation; for the
+// printable-ASCII values that survive, bytes and characters are the same.
 func sanitizeDeviceHeader(v string) string {
-	v = conv.TruncateString(strings.TrimSpace(v), 64)
+	v = strings.TrimSpace(v)
+	if len(v) > maxDeviceHeaderLen {
+		v = v[:maxDeviceHeaderLen]
+	}
 	for _, r := range v {
 		if r < 0x20 || r > 0x7e {
 			return ""
