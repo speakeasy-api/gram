@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@gram-ai/create-function",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "description": "Build AI tools and deploy them to the Speakeasy AI Control Plane",
   "keywords": [],
   "homepage": "https://github.com/speakeasy-api/gram",
