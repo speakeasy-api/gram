@@ -60,10 +60,10 @@ to the Speakeasy SDK generator CLI. `speakeasy stage` and `speakeasy push` use
 `speakeasy.deploy.json` by default, and keep using `gram.deploy.json` when only
 that file exists.
 
-## Gram Functions
+## Speakeasy Functions
 
 The `speakeasy functions` commands create, build and deploy
-[Gram Functions](../ts-framework/functions/README.md) projects:
+[Speakeasy Functions](../ts-framework/functions/README.md) projects:
 
 | Command                          | What it does                                                                                                                                                 |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -104,7 +104,7 @@ when you run `speakeasy functions init`.
    - `cd cli`
    - `go run main.go status`
 
-### Testing Gram Functions
+### Testing Speakeasy Functions
 
 1. Stage zip
    - `go run main.go functions stage --slug test-fn --location fixtures/example.zip`

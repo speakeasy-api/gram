@@ -59,7 +59,10 @@ export async function withFunctions(
 
   await server.connect(serverTransport);
 
-  const client = new Client({ name: "gram-functions-mcp", version: "0.0.0" });
+  const client = new Client({
+    name: "speakeasy-functions-mcp",
+    version: "0.0.0",
+  });
   await client.connect(clientTransport);
 
   let tools = await collectTools(client, options?.variables);

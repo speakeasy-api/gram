@@ -6,7 +6,7 @@
 > `brew install speakeasy-api/tap/cli` or `npm i -g @speakeasy-api/cli`, then
 > run `speakeasy functions init my-tools`.
 
-Scaffold a new [Gram Functions](https://getgram.ai) project:
+Scaffold a new [Speakeasy Functions](../functions/README.md) project:
 
 ```bash
 npm create @gram-ai/function@latest

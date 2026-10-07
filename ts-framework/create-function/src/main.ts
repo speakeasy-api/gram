@@ -26,18 +26,18 @@ Usage:
   ${packageManager} create @gram-ai/function [options]
 
 Options:
-  --template <name>      Template to use (gram, mcp)
+  --template <name>      Template to use (functions, mcp)
   --name <name>          Project name
   --dir <path>           Directory to create project in
   --git <yes|no>         Initialize git repository
   --install <yes|no>     Install dependencies
-  --install-cli <yes|no> Install the Gram CLI
+  --install-cli <yes|no> Install the Speakeasy AI Control Plane CLI
   -y, --yes              Skip all prompts and use defaults
 
 Examples:
   ${packageManager} create @gram-ai/function
   ${packageManager} create @gram-ai/function --template mcp --name ecommerce
-  ${packageManager} create @gram-ai/function --yes --template gram
+  ${packageManager} create @gram-ai/function --yes --template functions
 `);
 }
 
@@ -67,8 +67,8 @@ async function init(argv: string[]): Promise<void> {
     message: "Pick a framework",
     options: [
       {
-        value: "gram",
-        label: "Gram Functions",
+        value: "functions",
+        label: "Speakeasy Functions",
         hint: "Simplest path to start building your own tools - comes with batteries included",
       },
       {
@@ -77,7 +77,7 @@ async function init(argv: string[]): Promise<void> {
         hint: "For advanced use cases where you need more control over MCP responses",
       },
     ],
-  })(args.template);
+  })(args.template === "gram" ? "functions" : args.template); // "gram" is the deprecated name
   if (isCancel(template)) {
     log.info("Operation cancelled.");
     return;
@@ -86,7 +86,7 @@ async function init(argv: string[]): Promise<void> {
   const nameArg = args.name?.trim();
   const name = await textOrClack({
     message: "What do you want to call your project?",
-    defaultValue: "gram-mcp-server",
+    defaultValue: "my-mcp-server",
     validate: (value) => {
       if (packageNameRE.test(value || "")) {
         return undefined;
@@ -104,7 +104,7 @@ async function init(argv: string[]): Promise<void> {
     return;
   }
 
-  const rootDir = name.split("/").pop()?.trim() || "gram-func";
+  const rootDir = name.split("/").pop()?.trim() || "my-functions";
   const dirArg = args.dir?.trim();
   let dir = await textOrClack({
     message: "What directory should we create the project in?",
@@ -155,7 +155,8 @@ async function init(argv: string[]): Promise<void> {
   // check exit code and decide if we should prompt
   if (proc.exitCode !== 0) {
     const res = await confirmOrClack({
-      message: "Install the Gram CLI? Required to deploy tools to Gram.",
+      message:
+        "Install the Speakeasy AI Control Plane CLI? Required to deploy your tools.",
     })(args.yes || yn(args.installCli));
     if (isCancel(res)) {
       log.info("Operation cancelled.");
@@ -175,15 +176,8 @@ async function init(argv: string[]): Promise<void> {
   tlog.message("Scaffolding");
   const dirname = import.meta.dirname;
   // The templates come from the speakeasy CLI, which embeds them; the build
-  // copies them into this package. "gram" is the CLI's "functions" template.
-  const templateDir = resolve(
-    join(
-      dirname,
-      "..",
-      "templates",
-      template === "gram" ? "functions" : template,
-    ),
-  );
+  // copies them into this package.
+  const templateDir = resolve(join(dirname, "..", "templates", template));
   await fs.cp(templateDir, dir, {
     recursive: true,
     filter: (src) => {
@@ -268,7 +262,7 @@ async function init(argv: string[]): Promise<void> {
   }
 
   if (installCli) {
-    tlog.message("Installing Gram CLI");
+    tlog.message("Installing the Speakeasy AI Control Plane CLI");
     // A `speakeasy` on PATH may be the Speakeasy SDK generator CLI, which
     // shares the name, so only skip the installer when the binary prints the
     // AI Control Plane CLI marker. The installer puts the CLI in
@@ -277,7 +271,7 @@ async function init(argv: string[]): Promise<void> {
     await $`speakeasy --control-plane-cli 2>/dev/null | grep -qx speakeasy-ai-control-plane-cli || (curl -fsSL https://ai.speakeasy.com/cli.sh | bash && "\${INSTALL_DIR:-/usr/local/bin}/speakeasy" auth)`;
   }
 
-  let successMessage = `All done! Run \`cd ${dir} && ${packageManager} run build\` to build your first Gram Function.`;
+  let successMessage = `All done! Run \`cd ${dir} && ${packageManager} run build\` to build your first function.`;
   successMessage = await fs
     .readFile(join(templateDir, "NEXT_STEPS.txt"), "utf-8")
     .catch(() => successMessage);

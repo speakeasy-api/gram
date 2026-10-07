@@ -31,7 +31,7 @@ widget renders it with the [`mermaid`](https://mermaid.js.org) library.
 │   └── inlined.ts      # Generated — do not edit
 ├── vite.config.ts
 ├── speakeasy.config.ts
-├── tsconfig.json       # For src/ (gram function)
+├── tsconfig.json       # For src/ (the function)
 └── tsconfig.ui.json    # For ui/ (React app)
 ```
 
@@ -71,7 +71,7 @@ pnpm push
   will reflect that. If you hit payload limits, consider lazy-loading the
   library or pre-rendering SVGs server-side and shipping those instead.
 - The host → widget bridge (`window.Gram.onData`) is inlined in
-  `ui/index.html` so the built bundle is self-sufficient. The gram framework
+  `ui/index.html` so the built bundle is self-sufficient. The functions framework
   also provides this shim automatically when you use the `body` option of
   `experimental_uiResource`; we use the `content` option here because Vite
   emits a complete HTML document.

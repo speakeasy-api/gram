@@ -196,7 +196,7 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
     .nothrow();
 
   // Consume stdio and show loader concurrently
-  const stdioTask = consumeStdio(pushcmd, getLogger(["gram", "cli"]));
+  const stdioTask = consumeStdio(pushcmd, getLogger(["speakeasy", "cli"]));
 
   const result = await Promise.all([stdioTask, pushcmd]).then(
     ([, result]) => result,
