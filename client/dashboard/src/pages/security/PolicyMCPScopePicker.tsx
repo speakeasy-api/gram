@@ -10,6 +10,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Text } from "@/components/ui/Text";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
+import { mcpServerRouteParam } from "@/lib/sources";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type { RiskMCPServerScope } from "@gram/client/models/components/riskmcpserverscope.js";
@@ -935,7 +936,7 @@ function FocusedServerPane({
 function noToolsMessage(source: PickerServer["toolSource"]): string {
   switch (source) {
     case "discovered":
-      return "No tools discovered yet. MCP tools need to be discovered before you can pick them individually. They are discovered when someone who can edit this server opens its Inspect tab.";
+      return "No tools discovered yet. MCP tools need to be discovered before you can pick them individually. They are discovered when someone who can edit this server opens its Inspect tab and the server's tools load.";
     case "unlisted":
       return "Tools on this server can't be listed, so they can't be picked individually.";
     case "toolset":
@@ -996,7 +997,7 @@ function EmptyToolListNotice({
       </Text>
       {discovered ? (
         <Link
-          to={routes.mcp.x.inspect.href(server.slug ?? server.id)}
+          to={routes.mcp.x.inspect.href(mcpServerRouteParam(server))}
           target="_blank"
           rel="noopener noreferrer"
           className="text-muted-foreground hover:text-foreground inline-block text-xs underline"
