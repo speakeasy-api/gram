@@ -690,7 +690,14 @@ func (s *Service) serveRemoteBackend(
 		return err
 	}
 
-	build, err := s.remoteBackendProxyBuilder(ctx, logger, endpoint.ProjectID, organizationID, mcpServer, upstreamAuth, wwwAuthenticate, selection)
+	// Identity auth above stamps an AuthContext for every caller that
+	// presented a Gram credential, so its absence marks an anonymous caller.
+	var options []remotemcp.BuildOption
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); !ok || authCtx == nil {
+		options = append(options, remotemcp.WithAnonymousCaller())
+	}
+
+	build, err := s.remoteBackendProxyBuilder(ctx, logger, endpoint.ProjectID, organizationID, mcpServer, upstreamAuth, wwwAuthenticate, selection, options...)
 	if err != nil {
 		return err
 	}

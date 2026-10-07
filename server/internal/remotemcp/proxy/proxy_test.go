@@ -2559,7 +2559,8 @@ func TestProxy_Post_ToolsListResponseInterceptor_RejectionWritesJSONRPCError(t *
 // members the SDK's ListToolsResult does not model — the MCP 2026-07-28
 // required resultType/ttlMs/cacheScope trio and an invented future member —
 // plus an _meta value whose integer exceeds float64 precision. Mutation
-// tests assert all of them relay intact through SetTools.
+// tests assert they relay intact through SetTools, except ttlMs and
+// cacheScope, which the proxy overwrites with its caller-varying label.
 const toolsListResponseThreeTools = `{
   "jsonrpc": "2.0",
   "id": 2,
@@ -2812,8 +2813,8 @@ func TestProxy_Post_ToolsListResponse_SetTools_RewritesRelayedBody_JSONPath(t *t
 	// SetTools splices only the tools member into the original payload
 	// instead of round-tripping through ListToolsResult.
 	require.Contains(t, rr.Body.String(), `"resultType":"tools/list"`, "unmodeled required member must survive SetTools")
-	require.Contains(t, rr.Body.String(), `"ttlMs":60000`, "unmodeled required member must survive SetTools")
-	require.Contains(t, rr.Body.String(), `"cacheScope":"server"`, "unmodeled required member must survive SetTools")
+	require.Contains(t, rr.Body.String(), `"ttlMs":0`, "the proxy must overwrite the upstream ttl after SetTools")
+	require.Contains(t, rr.Body.String(), `"cacheScope":"private"`, "the proxy must overwrite the upstream scope after SetTools")
 	require.Contains(t, rr.Body.String(), `"futureUnknownField":{"nested":["ok"]}`, "unknown future member must survive SetTools")
 	require.Contains(t, rr.Body.String(), `"_meta":{"upstream/trace":9007199254740993}`,
 		"_meta must relay with its original bytes — no float64 precision loss")

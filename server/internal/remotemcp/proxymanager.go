@@ -40,6 +40,7 @@ import (
 type proxyBuildOptions struct {
 	recordIdentityCoverage bool
 	metaMCPServerID        string
+	anonymousCaller        bool
 }
 
 // BuildOption customizes one proxy without changing the defaults used by
@@ -61,6 +62,14 @@ func WithoutToolsCallIdentityCoverage() BuildOption {
 func WithMetaMCPServerID(metaMCPServerID string) BuildOption {
 	return BuildOption{apply: func(options *proxyBuildOptions) {
 		options.metaMCPServerID = metaMCPServerID
+	}}
+}
+
+// WithAnonymousCaller marks the caller as admitted without a Gram credential.
+// It has no effect on a private server.
+func WithAnonymousCaller() BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.anonymousCaller = true
 	}}
 }
 
@@ -244,7 +253,7 @@ func (f *ProxyManager) BuildTarget(
 	selection *toolfilter.SessionSelection,
 	buildOptions ...BuildOption,
 ) *proxy.Proxy {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: ""}
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", anonymousCaller: false}
 	for _, option := range buildOptions {
 		if option.apply != nil {
 			option.apply(&options)
@@ -384,6 +393,7 @@ func (f *ProxyManager) BuildTarget(
 		UpstreamResponseInterceptor: nil,
 		DisableRedirects:            false,
 		StrictToolSelection:         selection != nil,
+		AnonymousCaller:             options.anonymousCaller && visibility == mcpservers.VisibilityPublic,
 		WWWAuthenticate:             wwwAuthenticate,
 		// The census runs first so every parsed request is counted, including
 		// those a later interceptor rejects — matching the hosted dispatch,
