@@ -2,6 +2,7 @@ package enrich
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -19,14 +20,27 @@ import (
 // attributes, and the agent_events writer copies it from there. The file
 // that declares a column's table is the documentation of that column.
 //
+// Each table entry carries a requirement level, after OpenTelemetry's
+// attribute requirement levels
+// (https://opentelemetry.io/docs/specs/semconv/general/attribute-requirement-level/):
+//
+//	Required                a bare entry                     absence is counted
+//	Conditionally Required  conditionallyRequired(g, when)   absence is counted when the condition holds
+//	Recommended             recommended(g)                   absence is not counted
+//	Opt-In                  optIn(g)                         absence is not counted
+//
+// A gap is counted at Required, and at Conditionally Required when the
+// condition holds, never at Recommended or Opt-In. A stated value is written
+// at every level.
+//
 // The rules every table follows:
 //
 //   - An event type absent from the table means the column is never set for
 //     that type. There is no forbidden list: a tool result never gets tokens
 //     because the tokens table does not name tool results.
-//   - A type in the table whose provider stated nothing writes nothing and is
-//     counted by source, event type and column. Absent is never an error, and
-//     never a guess.
+//   - A type in the table whose provider stated nothing writes nothing. At
+//     Required it is counted by source, event type and column; absent is
+//     never an error, and never a guess.
 //   - An unclassified record matches no table, so no column enricher applies
 //     to it. It still lands with its payload.
 
@@ -66,9 +80,100 @@ func constant[V columnValue](value V) getter[V] {
 	}
 }
 
-// perEventType says, per event type, how a column's value is read. Keys are
-// the agent vocabulary's event types; a table never names the unclassified
-// type, since an unclassified record gets no column enricher.
+// condition is a yes-or-no question about a record, with a leg per signal,
+// for the table entries whose requirement depends on the record itself.
+type condition struct {
+	log  func(dialect.LogDialect, *otelv1.InboundLogRecord) bool
+	span func(dialect.SpanDialect, *otelv1.InboundSpan) bool
+}
+
+// statedBy is the condition that a getter answers with a non-empty key: the
+// record stated that value. It expresses a pair such as the MCP server and
+// tool, where one half is required once the other half is present.
+func statedBy[V columnValue](g getter[V]) condition {
+	return condition{
+		log: func(d dialect.LogDialect, r *otelv1.InboundLogRecord) bool {
+			key, _, err := g.log(d, r)
+			return err == nil && key != ""
+		},
+		span: func(d dialect.SpanDialect, s *otelv1.InboundSpan) bool {
+			key, _, err := g.span(d, s)
+			return err == nil && key != ""
+		},
+	}
+}
+
+// errNotRequired is a getter's answer when the value is absent and its
+// requirement level says that is not a gap: the column stays empty and
+// nothing is counted, since nothing is missing.
+var errNotRequired = errors.New("column is not required on this record")
+
+// recommended marks an entry at the Recommended level: the producer carries
+// the value only sometimes, by nature rather than by omission, such as the
+// skill a request was made on behalf of. An absent value is not counted,
+// since the counter exists to catch a producer renaming an attribute, and a
+// column that is empty most of the time by design would drown that signal.
+func recommended[V columnValue](g getter[V]) getter[V] {
+	return notCountedWhenAbsent(g)
+}
+
+// optIn marks an entry at the Opt-In level: the producer sends the value
+// only when the person running the agent agreed to it, such as the words of
+// a prompt. An absent value is a choice rather than a gap and is not
+// counted.
+func optIn[V columnValue](g getter[V]) getter[V] {
+	return notCountedWhenAbsent(g)
+}
+
+// notCountedWhenAbsent is the one mechanism behind Recommended and Opt-In:
+// the two levels differ in why a value may be absent, not in what the
+// enricher does about it.
+func notCountedWhenAbsent[V columnValue](g getter[V]) getter[V] {
+	return getter[V]{
+		log: func(d dialect.LogDialect, r *otelv1.InboundLogRecord) (string, V, error) {
+			key, value, err := g.log(d, r)
+			if err == nil && key == "" {
+				return "", value, errNotRequired
+			}
+			return key, value, err
+		},
+		span: func(d dialect.SpanDialect, s *otelv1.InboundSpan) (string, V, error) {
+			key, value, err := g.span(d, s)
+			if err == nil && key == "" {
+				return "", value, errNotRequired
+			}
+			return key, value, err
+		},
+	}
+}
+
+// conditionallyRequired marks an entry at the Conditionally Required level:
+// the value is required when the condition holds, such as the message of an
+// outcome that is an error. A stated value is written whichever way the
+// condition goes; an absent one is a gap only when the condition holds.
+func conditionallyRequired[V columnValue](g getter[V], when condition) getter[V] {
+	return getter[V]{
+		log: func(d dialect.LogDialect, r *otelv1.InboundLogRecord) (string, V, error) {
+			key, value, err := g.log(d, r)
+			if err == nil && key == "" && !when.log(d, r) {
+				return "", value, errNotRequired
+			}
+			return key, value, err
+		},
+		span: func(d dialect.SpanDialect, s *otelv1.InboundSpan) (string, V, error) {
+			key, value, err := g.span(d, s)
+			if err == nil && key == "" && !when.span(d, s) {
+				return "", value, errNotRequired
+			}
+			return key, value, err
+		},
+	}
+}
+
+// perEventType says, per event type, how a column's value is read and at
+// which requirement level. Keys are the agent vocabulary's event types; a
+// table never names the unclassified type, since an unclassified record gets
+// no column enricher.
 type perEventType[V columnValue] map[string]getter[V]
 
 // classifiedEventTypes is every event type in the agent vocabulary, for the
@@ -118,6 +223,9 @@ func (e *logColumnEnricher[V]) Enrich(ctx context.Context, record *otelv1.Inboun
 	}
 
 	key, value, err := get.log(d, record)
+	if errors.Is(err, errNotRequired) {
+		return nil, nil
+	}
 	if err != nil || key == "" {
 		// The provider did not say, or said something unreadable. Either way
 		// the column stays empty: absent, never a guess, and counted so a
