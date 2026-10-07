@@ -304,15 +304,23 @@ export function RemoteMcpIdentitySectionBody({
     setConfirmOpen(false);
     try {
       if (leavingUser) await detachUserIdentity();
-      if (leavingAgent) await removeAgentCredential();
-      if (selectedMode === "agent") {
-        await agentDraft.save();
-      } else if (
-        selectedMode === "user" &&
-        (actualMode !== "user" || userDraft.canSave)
-      ) {
-        // A pin or header edit alone must not recommit the connected client.
-        await userDraft.save();
+      if (selectedMode === "user" && leavingAgent) {
+        // Bind the client before dropping the credential, so a failed commit
+        // never leaves the server with no identity; the client outranks the
+        // header while both exist.
+        if (!(await userDraft.save())) return;
+        await removeAgentCredential();
+      } else {
+        if (leavingAgent) await removeAgentCredential();
+        if (selectedMode === "agent") {
+          await agentDraft.save();
+        } else if (
+          selectedMode === "user" &&
+          (actualMode !== "user" || userDraft.canSave)
+        ) {
+          // A pin or header edit alone must not recommit the connected client.
+          await userDraft.save();
+        }
       }
     } catch (error) {
       toast.error(errorMessage(error, "Failed to save identity"));
@@ -581,6 +589,10 @@ export function RemoteMcpIdentitySectionBody({
               ) : scopePinSlot && scopePin.isError ? (
                 <Text muted small className="mt-4 block pl-[52px]">
                   Couldn&apos;t load pinned scopes.
+                </Text>
+              ) : scopePinSlot ? (
+                <Text muted small className="mt-4 block pl-[52px]">
+                  Loading pinned scopes…
                 </Text>
               ) : null}
             </div>

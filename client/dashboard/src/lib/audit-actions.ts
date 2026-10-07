@@ -586,7 +586,7 @@ export function staticActionPhrase(action: AuditAction): string {
     case "mcp-server:delete":
       return "deleted MCP server";
     case "mcp-server:update-scope-pin":
-      return "updated requested scopes on MCP server";
+      return "updated pinned scopes on MCP server";
     case "mcp-server:update-tool-metadata":
       return "updated tool metadata on MCP server";
 

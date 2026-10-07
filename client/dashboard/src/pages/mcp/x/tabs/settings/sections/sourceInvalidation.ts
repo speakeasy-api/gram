@@ -35,7 +35,7 @@ export async function invalidateRemoteMcpSourceViews(
     invalidateAllGetRemoteMcpServer(queryClient, { refetchType: "all" }),
     invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
     resetAllProtectedResourceMetadata(queryClient),
-    invalidateAllGetRemoteMcpServerScopes(queryClient),
+    invalidateAllGetRemoteMcpServerScopes(queryClient, { refetchType: "all" }),
   ]);
 }
 

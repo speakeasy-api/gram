@@ -75,6 +75,10 @@ func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerS
 	if err != nil {
 		return nil, err
 	}
+	// Logins ignore the pin without discovery, so it may only be cleared.
+	if len(scopes) > 0 && !remotesessions.ResourceScopeDiscoveryEnabled(ctx, logger, s.features, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "pinned scopes are not enabled for this organization; a pin can only be cleared")
+	}
 	q := repo.New(dbtx)
 	if err := q.AcquireRemoteProtectedResourceLock(ctx, repo.AcquireRemoteProtectedResourceLockParams{ProjectID: *authCtx.ProjectID, ResourceIdentifier: target.resourceURL}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock protected resource").LogError(ctx, logger)

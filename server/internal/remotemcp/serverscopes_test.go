@@ -160,9 +160,24 @@ func storedPin(t *testing.T, ctx context.Context, ti *testInstance, url string) 
 	return row.ScopeOverride
 }
 
+// seedPin writes a pin straight to the resource row, bypassing the flag gate on the API.
+func seedPin(t *testing.T, ctx context.Context, ti *testInstance, url string, scopes ...string) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, err := repo.New(ti.conn).UpsertRemoteProtectedResourceScopeOverride(ctx, repo.UpsertRemoteProtectedResourceScopeOverrideParams{
+		ProjectID:          *authCtx.ProjectID,
+		OrganizationID:     authCtx.ActiveOrganizationID,
+		ResourceIdentifier: url,
+		ScopeOverride:      scopes,
+	})
+	require.NoError(t, err)
+}
+
 func TestSetServerScopePin_CreatesReplacesAndClears(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
 	srv := seedScopeServer(t, ctx, ti, "https://pin-create.example.com/mcp")
 
 	got, err := setPin(ctx, ti, srv.mcpServerID, " read ", "write", "", "read")
@@ -186,6 +201,7 @@ func TestSetServerScopePin_CreatesReplacesAndClears(t *testing.T) {
 func TestSetServerScopePin_KeepsDiscoveredMetadata(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
 	srv := seedScopeServer(t, ctx, ti, "https://pin-keep.example.com/mcp")
 	recordResource(t, ctx, ti, srv.url, []string{"read", "write"}, time.Now())
 
@@ -231,6 +247,7 @@ func TestSetServerScopePin_RejectsInvalidScopes(t *testing.T) {
 func TestSetServerScopePin_WritesAudit(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
 	srv := seedScopeServer(t, ctx, ti, "https://pin-audit.example.com/mcp")
 
 	_, err := setPin(ctx, ti, srv.mcpServerID, "read")
@@ -345,8 +362,7 @@ func TestGetServerScopes_FlagOffIgnoresPin(t *testing.T) {
 	issuer := seedScopeIssuer(t, ctx, ti, []string{"iss:read"}, []string{"iss:override"})
 	owner := seedScopeClient(t, ctx, ti, issuer, []string{"own:read"}, srv.userSessionIssuerID)
 	bare := seedScopeClient(t, ctx, ti, issuer, nil, srv.userSessionIssuerID)
-	_, err := setPin(ctx, ti, srv.mcpServerID, "read")
-	require.NoError(t, err)
+	seedPin(t, ctx, ti, srv.url, "read")
 
 	got, err := getScopes(ctx, ti, srv.mcpServerID)
 	require.NoError(t, err)
@@ -362,6 +378,7 @@ func TestGetServerScopes_FlagOffIgnoresPin(t *testing.T) {
 func TestServerScopes_RefusesServerWithoutRemoteBackend(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	backend, err := unproxiedrepo.New(ti.conn).CreateServer(ctx, unproxiedrepo.CreateServerParams{
 		ID:          uuid.Must(uuid.NewV7()),
@@ -391,6 +408,7 @@ func TestServerScopes_RefusesServerWithoutRemoteBackend(t *testing.T) {
 func TestServerScopes_CrossProjectServerIsNotFound(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
 	remote := seedOtherProjectServer(t, ctx, ti)
 	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                uuid.Must(uuid.NewV7()),
@@ -413,6 +431,7 @@ func TestServerScopes_CrossProjectServerIsNotFound(t *testing.T) {
 func TestServerScopes_RequiresWriteOnTheServer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
 	srv := seedScopeServer(t, ctx, ti, "https://scopes-rbac.example.com/mcp")
 	other := seedScopeServer(t, ctx, ti, "https://scopes-rbac-other.example.com/mcp")
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -462,6 +481,7 @@ func TestServerScopes_SharedUpstreamRequiresWriteOnEveryServer(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestService(t)
+			enableDiscovery(t, ctx, ti, true)
 			url := "https://shared-" + uuid.NewString()[:8] + ".example.com/mcp"
 			srv := seedScopeServer(t, ctx, ti, url)
 			var sibling string
@@ -517,6 +537,7 @@ func TestGetServerScopes_SharedServerCount(t *testing.T) {
 func TestSetServerScopePin_NoOpWritesNothing(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
 	srv := seedScopeServer(t, ctx, ti, "https://pin-noop.example.com/mcp")
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 
@@ -563,8 +584,7 @@ func TestGetServerScopes_FlagOffClientScopeIgnoresPin(t *testing.T) {
 	srv := seedScopeServer(t, ctx, ti, "https://scopes-off-client.example.com/mcp")
 	issuer := seedScopeIssuer(t, ctx, ti, []string{"iss:read"}, nil)
 	owner := seedScopeClient(t, ctx, ti, issuer, []string{"own:read"}, srv.userSessionIssuerID)
-	_, err := setPin(ctx, ti, srv.mcpServerID, "read")
-	require.NoError(t, err)
+	seedPin(t, ctx, ti, srv.url, "read")
 
 	got, err := getScopes(ctx, ti, srv.mcpServerID)
 	require.NoError(t, err)
@@ -574,4 +594,44 @@ func TestGetServerScopes_FlagOffClientScopeIgnoresPin(t *testing.T) {
 	require.Equal(t, "client_scope", c.ScopeSource)
 	require.Equal(t, []string{"own:read"}, c.RequestedScopes)
 	require.Empty(t, c.UnadvertisedPinnedScopes)
+}
+
+func TestSetServerScopePin_FlagOffRejectsNonEmptyPin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, false)
+	srv := seedScopeServer(t, ctx, ti, "https://pin-off-reject.example.com/mcp")
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+
+	_, err := setPin(ctx, ti, srv.mcpServerID, "read")
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = repo.New(ti.conn).GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: *authCtx.ProjectID, ResourceIdentifier: srv.url})
+	require.Error(t, err, "a rejected pin writes no row")
+	require.Zero(t, auditCount(t, ctx, ti))
+
+	seedPin(t, ctx, ti, srv.url, "read")
+	_, err = setPin(ctx, ti, srv.mcpServerID, "write")
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.Equal(t, []string{"read"}, storedPin(t, ctx, ti, srv.url), "an existing pin cannot be replaced")
+	require.Zero(t, auditCount(t, ctx, ti))
+}
+
+func TestSetServerScopePin_FlagOffAllowsClearing(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, false)
+	srv := seedScopeServer(t, ctx, ti, "https://pin-off-clear.example.com/mcp")
+	seedPin(t, ctx, ti, srv.url, "read", "write")
+
+	got, err := setPin(ctx, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	require.Empty(t, got.PinnedScopes)
+	require.Nil(t, storedPin(t, ctx, ti, srv.url))
+	require.EqualValues(t, 1, auditCount(t, ctx, ti))
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMcpServerScopePinUpdate)
+	require.NoError(t, err)
+	before, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, []any{"read", "write"}, before["pinned_scopes"])
 }

@@ -365,6 +365,34 @@ function connectClient(): void {
   });
 }
 
+function autoConfigurableProvider(): void {
+  mocks.issuers.mockReturnValue({
+    data: {
+      result: {
+        items: [
+          {
+            id: "provider-1",
+            name: "Linear",
+            issuer: "https://mcp.linear.app",
+            slug: "linear",
+            projectId: "project-1",
+            clientIdMetadataDocumentSupported: true,
+            authorizationEndpoint: "https://mcp.linear.app/authorize",
+            tokenEndpoint: "https://mcp.linear.app/token",
+          },
+        ],
+      },
+    },
+  });
+}
+
+// Save, then confirm if the change is destructive enough to ask.
+function confirmSave(): void {
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  const confirm = screen.queryByRole("button", { name: "Save changes" });
+  if (confirm) fireEvent.click(confirm);
+}
+
 const target: AuthTarget = {
   kind: "remote-mcp",
   slug: "remote-server",
@@ -944,6 +972,56 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(mocks.remove).not.toHaveBeenCalled();
     expect(mocks.create).not.toHaveBeenCalled();
     expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("commits the client before removing the credential on Agent to User", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+    autoConfigurableProvider();
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    confirmSave();
+
+    await waitFor(() => expect(mocks.remove).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledOnce();
+    expect(mocks.remove).toHaveBeenCalledWith({ request: { id: "header-1" } });
+    expect(mocks.commit.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.remove.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("keeps the credential and skips headers when Agent to User fails to commit", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+    autoConfigurableProvider();
+    mocks.commit.mockRejectedValue(new Error("commit refused"));
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    addCustomHeader("X-Team", "eng");
+    confirmSave();
+
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalled());
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    expect(mocks.remove).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.setPin).not.toHaveBeenCalled();
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
   });
 
   it("stays Linked when the provider already in force is re-picked", async () => {
@@ -2019,9 +2097,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
       );
       expect(mocks.invalidateScopes).toHaveBeenCalledOnce();
       expect(mocks.invalidateScopes.mock.calls[0]).toHaveLength(1);
-      expect(mocks.invalidateScopes.mock.invocationCallOrder[0]).toBeGreaterThan(
-        mocks.setScopesData.mock.invocationCallOrder[0]!,
-      );
+      expect(
+        mocks.invalidateScopes.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(mocks.setScopesData.mock.invocationCallOrder[0]!);
     });
 
     it("only marks the pin view stale when headers are saved", async () => {
@@ -2229,6 +2307,27 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect(
         screen.queryByRole("combobox", { name: "Pinned scopes" }),
       ).toBeNull();
+    });
+
+    it("says the pin is loading until it arrives", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: undefined, isError: false });
+
+      renderIdentity();
+
+      expect(screen.getByText("Loading pinned scopes…")).toBeDefined();
+      expect(
+        screen.queryByRole("combobox", { name: "Pinned scopes" }),
+      ).toBeNull();
+      expect(screen.queryByText("Couldn't load pinned scopes.")).toBeNull();
+    });
+
+    it("shows no loading line outside User Identity", () => {
+      mocks.scopes.mockReturnValue({ data: undefined, isError: false });
+
+      renderIdentity();
+
+      expect(screen.queryByText("Loading pinned scopes…")).toBeNull();
     });
 
     it("clears the pin with an empty list", async () => {
