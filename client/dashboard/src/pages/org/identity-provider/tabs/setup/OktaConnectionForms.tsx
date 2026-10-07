@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { ApiErrorAlert } from "@/components/api-error-alert";
+import { describeApiError } from "@/lib/api-error";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/Field";
@@ -32,6 +33,16 @@ import {
 type ListingMode = "custom_app" | "oin";
 
 const DEFAULT_LISTING_MODE: ListingMode = "oin";
+
+/** The one create failure a custom API Services app resolves: discovery found no client-secret authentication. */
+function clientSecretUnsupported(error: unknown): boolean {
+  return (
+    error != null &&
+    describeApiError(error).message.includes(
+      "does not advertise client_secret_basic",
+    )
+  );
+}
 
 export function CreateConnectionForm(): JSX.Element {
   const queryClient = useQueryClient();
@@ -121,11 +132,12 @@ export function CreateConnectionForm(): JSX.Element {
             )}
           </Field>
           <ApiErrorAlert error={create.error} />
-          {create.error && (
+          {clientSecretUnsupported(create.error) && (
             <div className="flex flex-col items-start gap-2">
               <Text muted small>
-                If your Okta organization does not support client-secret
-                authentication, use a custom API Services app instead.
+                This Okta organization does not offer client-secret
+                authentication, so the Okta Integration Network install cannot
+                connect. Use a custom API Services app instead.
               </Text>
               <Button
                 variant="secondary"

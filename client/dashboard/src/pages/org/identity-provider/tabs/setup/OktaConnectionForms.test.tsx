@@ -128,6 +128,20 @@ describe("CreateConnectionForm", () => {
     expect(mutation.mutate).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    "the organization already has an Okta connection; revoke it first",
+    "could not discover the Okta org's authorization server metadata",
+    "too many connections created in the last 24 hours",
+  ])("does not offer the custom app for unrelated failures: %s", (message) => {
+    mutation.error = new Error(message);
+    render(<CreateConnectionForm />, { wrapper: Wrapper });
+    expect(
+      screen.queryByRole("button", {
+        name: "Continue with a custom API Services app",
+      }),
+    ).toBeNull();
+  });
+
   it("shows the org URL for a pasted admin console URL", () => {
     render(<CreateConnectionForm />, { wrapper: Wrapper });
     const input = screen.getByLabelText<HTMLInputElement>(
