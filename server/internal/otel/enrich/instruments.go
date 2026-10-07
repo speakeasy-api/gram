@@ -18,6 +18,12 @@ import (
 // so the series stay bounded.
 const meterColumnEnricherMissing = "gram.otel_column_enricher.missing"
 
+// meterColumnEnricherTruncated counts the records where a column enricher
+// cut a value's canonical copy to the column's cap, by surface, event type
+// and column. The producer's own attribute is untouched; only the copy is
+// shortened, and this says how often.
+const meterColumnEnricherTruncated = "gram.otel_column_enricher.truncated"
+
 // MeterReservedAttributesDropped counts the attributes a transform dropped
 // because a producer sent them under Gram's reserved speakeasy namespace,
 // by signal. Only the pipeline may write there; a producer that does, by
@@ -38,6 +44,7 @@ type Instruments struct {
 	metricEnricherDuration    metric.Float64Histogram
 	spanEnricherDuration      metric.Float64Histogram
 	columnValueMissing        metric.Int64Counter
+	columnValueTruncated      metric.Int64Counter
 	reservedAttributesDropped metric.Int64Counter
 }
 
@@ -83,6 +90,14 @@ func NewInstruments(logger *slog.Logger, meterProvider metric.MeterProvider) *In
 		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterColumnEnricherMissing), attr.SlogError(err))
 	}
 
+	columnValueTruncated, err := meter.Int64Counter(
+		meterColumnEnricherTruncated,
+		metric.WithDescription("Records where a column enricher cut a value's canonical copy to the column's cap"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterColumnEnricherTruncated), attr.SlogError(err))
+	}
+
 	reservedAttributesDropped, err := meter.Int64Counter(
 		MeterReservedAttributesDropped,
 		metric.WithDescription("Attributes a transform dropped because a producer sent them under the reserved speakeasy namespace"),
@@ -96,8 +111,25 @@ func NewInstruments(logger *slog.Logger, meterProvider metric.MeterProvider) *In
 		metricEnricherDuration:    metricEnricherDuration,
 		spanEnricherDuration:      spanEnricherDuration,
 		columnValueMissing:        columnValueMissing,
+		columnValueTruncated:      columnValueTruncated,
 		reservedAttributesDropped: reservedAttributesDropped,
 	}
+}
+
+func (m *Instruments) recordColumnValueTruncated(ctx context.Context, surface, eventType, column string) {
+	if m.columnValueTruncated == nil {
+		return
+	}
+
+	m.columnValueTruncated.Add(
+		ctx,
+		1,
+		metric.WithAttributes(
+			attr.AgentEventSurface(surface),
+			attr.AgentEventType(eventType),
+			attr.AgentEventColumn(column),
+		),
+	)
 }
 
 // RecordReservedAttributesDropped counts attributes a transform dropped from

@@ -1,7 +1,6 @@
 package otel
 
 import (
-	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"strings"
 	"testing"
 
@@ -9,6 +8,8 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -341,4 +342,65 @@ func TestLogTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
 	require.Equal(t, []string{testLogProjectID}, values[string(enrich.ProjectIDKey)])
 	require.Equal(t, []string{"claude-sonnet-4"}, values["model"], "the producer's own attributes stay")
 	require.Equal(t, int64(3), agentEventCount(t, reader, enrich.MeterReservedAttributesDropped, attr.OTELSignalKey, string(enrich.SignalLog)))
+}
+
+// A record may arrive at the size limit with its whole budget spent on an
+// opted-in prompt. The transform copies the words onto the canonical text
+// key beside the original, so without a cap the copy would double them and
+// the record would no longer fit a relay export. The copy is cut to the
+// cap, counted, and the enriched record still fits.
+func TestNearLimitPromptStillFitsRelayExportAfterEnrichment(t *testing.T) {
+	t.Parallel()
+
+	// Leave room for the record's own fields and the enrichments other
+	// than the words, which the headroom covers. The words are ordinary
+	// text: the tokens enricher counts a prompt's tokens, and one word of
+	// several megabytes would keep its merge loop busy for an hour.
+	sentence := "the quick brown fox jumps over the lazy dog. "
+	prompt := strings.Repeat(sentence, (maxOTLPLogRecordBytes-16*constants.KiB)/len(sentence))
+	inbound := (&otelv1.InboundLogRecord_builder{
+		RecordId:  new("record-id"),
+		EventName: new("user_prompt"),
+		Resource: (&otelv1.InboundLogRecord_Resource_builder{
+			Attributes: []*otelv1.InboundLogRecord_KeyValue{logStringAttribute("service.name", "claude-code")},
+		}).Build(),
+		Scope: (&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: new(claudeCodeScopeName)}).Build(),
+		Provenance: (&otelv1.InboundLogRecord_Provenance_builder{
+			Source:         new("speakeasy"),
+			OrganizationId: new(testLogOrganizationID),
+			ProjectId:      new(testLogProjectID),
+		}).Build(),
+		Attributes: []*otelv1.InboundLogRecord_KeyValue{
+			logStringAttribute("prompt", prompt),
+			logStringAttribute("message.uuid", "m1"),
+		},
+	}).Build()
+	require.LessOrEqual(t, proto.Size(inbound), maxOTLPLogRecordBytes)
+	require.NoError(t, ValidateInboundLogRecord(inbound))
+
+	var published *otelv1.LogRecord
+	publisher := gcp.NewMockPublisher[*otelv1.LogRecord]()
+	publisher.On("Publish", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		record, ok := args.Get(1).(*otelv1.LogRecord)
+		require.True(t, ok)
+		published = record
+	}).Return(gcp.NewSuccessPublishResult()).Once()
+	reader, meterProvider := readableMeter(t)
+	handler := NewLogTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
+
+	require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
+	require.NotNil(t, published)
+
+	attributes := make(map[string]*otelv1.LogRecord_AnyValue, len(published.GetAttributes()))
+	for _, item := range published.GetAttributes() {
+		attributes[item.GetKey()] = item.GetValue()
+	}
+	require.Equal(t, "prompt", attributes[string(enrich.EventTypeColumnKey)].GetStringValue())
+	require.Len(t, attributes["prompt"].GetStringValue(), len(prompt), "the producer's own words are untouched")
+	require.Len(t, attributes[string(enrich.TextColumnKey)].GetStringValue(), 64*constants.KiB, "the copy is cut to the cap")
+	require.Equal(t, int64(1), agentEventCount(t, reader, "gram.otel_column_enricher.truncated", attr.AgentEventColumnKey, "text"))
+
+	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{published}, true)
+	require.NoError(t, err)
+	require.LessOrEqual(t, proto.Size(request), maxLogRelayExportBytes)
 }

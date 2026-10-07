@@ -230,3 +230,33 @@ func TestInboundLogSourceIsTheEventFeedSlugOrUnknown(t *testing.T) {
 	require.Equal(t, "my-agent", inboundLogSource(inboundTestLog("com.example.app", "My Agent", "")))
 	require.Equal(t, SourceUnknown, inboundLogSource(inboundTestLog("com.example.app", "", "")))
 }
+
+// A capped column cuts the canonical copy of a value the producer sent in
+// full, at a character boundary, and counts the cut; a value within the cap
+// is copied whole and counted as nothing.
+func TestCappedColumnCutsTheCopyAtACharacterBoundaryAndCountsIt(t *testing.T) {
+	t.Parallel()
+
+	reader, meterProvider := readableMeter(t)
+	enricher := cappedColumn{
+		column: column[string]{key: TextColumnKey, byType: perEventType[string]{
+			dialect.EventTypePrompt: {log: dialect.LogDialect.Text, span: dialect.SpanDialect.Text},
+		}},
+		capBytes: 8,
+	}.log(NewInstruments(testenv.NewLogger(t), meterProvider))
+
+	// Seven ASCII bytes then a three-byte character: a byte-wise cut at 8
+	// would split it, so the copy ends after the seventh byte.
+	long := inboundTestLog(claudeCodeScopeName, "claude-code", "user_prompt", logStringAttribute("prompt", "abcdefg€hij"))
+	columns := enrichedColumns(t, enricher, long)
+	require.Equal(t, "abcdefg", columns[TextColumnKey].AsString())
+	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherTruncated,
+		attr.AgentEventSurface("claude_code"),
+		attr.AgentEventType(dialect.EventTypePrompt),
+		attr.AgentEventColumn("text"),
+	))
+
+	short := inboundTestLog(claudeCodeScopeName, "claude-code", "user_prompt", logStringAttribute("prompt", "fix it"))
+	require.Equal(t, "fix it", enrichedColumns(t, enricher, short)[TextColumnKey].AsString())
+	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherTruncated, attr.AgentEventColumn("text")), "a value within the cap is not counted")
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/server/internal/agentsurface"
@@ -228,17 +229,36 @@ type column[V columnValue] struct {
 func (c column[V]) name() string { return columnOf(c.key) }
 
 func (c column[V]) log(in *Instruments) LogEnricher {
-	return &logColumnEnricher[V]{column: c, instruments: in}
+	return &logColumnEnricher[V]{column: c, instruments: in, capBytes: 0}
 }
 
 func (c column[V]) span(in *Instruments) SpanEnricher {
-	return &spanColumnEnricher[V]{column: c, instruments: in}
+	return &spanColumnEnricher[V]{column: c, instruments: in, capBytes: 0}
+}
+
+// cappedColumn is a string column whose canonical copy is bounded. The copy
+// sits beside the producer's own attribute, so a value with no natural
+// size would double a near-limit record and push it past what a relay
+// export may carry. A copy over the cap is cut at a character boundary and
+// counted; the producer's attribute is untouched.
+type cappedColumn struct {
+	column[string]
+	capBytes int
+}
+
+func (c cappedColumn) log(in *Instruments) LogEnricher {
+	return &logColumnEnricher[string]{column: c.column, instruments: in, capBytes: c.capBytes}
+}
+
+func (c cappedColumn) span(in *Instruments) SpanEnricher {
+	return &spanColumnEnricher[string]{column: c.column, instruments: in, capBytes: c.capBytes}
 }
 
 // logColumnEnricher fills one agent_events column for log records.
 type logColumnEnricher[V columnValue] struct {
 	column      column[V]
 	instruments *Instruments
+	capBytes    int
 }
 
 func (e *logColumnEnricher[V]) Name() string {
@@ -247,7 +267,7 @@ func (e *logColumnEnricher[V]) Name() string {
 
 func (e *logColumnEnricher[V]) Enrich(ctx context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
 	d := dialect.ForLog(record)
-	return insertColumn(ctx, e.instruments, e.column, stated(d.EventType(record)), func() string {
+	return insertColumn(ctx, e.instruments, e.column, e.capBytes, stated(d.EventType(record)), func() string {
 		return missingLabelLog(d, record)
 	}, func(get getter[V]) (string, V, error) {
 		return get.log(d, record)
@@ -259,6 +279,7 @@ func (e *logColumnEnricher[V]) Enrich(ctx context.Context, record *otelv1.Inboun
 type spanColumnEnricher[V columnValue] struct {
 	column      column[V]
 	instruments *Instruments
+	capBytes    int
 }
 
 func (e *spanColumnEnricher[V]) Name() string {
@@ -267,7 +288,7 @@ func (e *spanColumnEnricher[V]) Name() string {
 
 func (e *spanColumnEnricher[V]) Enrich(ctx context.Context, span *otelv1.InboundSpan) ([]attribute.KeyValue, error) {
 	d := dialect.ForSpan(span)
-	return insertColumn(ctx, e.instruments, e.column, stated(d.EventType(span)), func() string {
+	return insertColumn(ctx, e.instruments, e.column, e.capBytes, stated(d.EventType(span)), func() string {
 		return missingLabelSpan(d, span)
 	}, func(get getter[V]) (string, V, error) {
 		return get.span(d, span)
@@ -278,12 +299,14 @@ func (e *spanColumnEnricher[V]) Enrich(ctx context.Context, span *otelv1.Inbound
 // Collector attributes processor's insert action: add the attribute when the
 // record has none, never overwrite. It looks the event type up in the
 // column's table, reads the getter the table names, and writes the value or
-// counts its absence. The surface label is read lazily, since it is only
-// needed to count a missing value.
+// counts its absence. A string value longer than capBytes, when the cap is
+// set, is cut and counted. The surface label is read lazily, since it is
+// only needed to count a missing or a cut value.
 func insertColumn[V columnValue](
 	ctx context.Context,
 	in *Instruments,
 	c column[V],
+	capBytes int,
 	eventType string,
 	surface func() string,
 	read func(getter[V]) (string, V, error),
@@ -305,11 +328,29 @@ func insertColumn[V columnValue](
 		return nil, nil
 	}
 
+	if text, ok := any(value).(string); ok && capBytes > 0 && len(text) > capBytes {
+		in.recordColumnValueTruncated(ctx, surface(), eventType, c.name())
+		return []attribute.KeyValue{c.key.String(truncateUTF8(text, capBytes))}, nil
+	}
+
 	kv, err := columnKeyValue(c.key, value)
 	if err != nil {
 		return nil, err
 	}
 	return []attribute.KeyValue{kv}, nil
+}
+
+// truncateUTF8 cuts a string to at most maxBytes without splitting a
+// character, so the copy stays valid UTF-8 for every consumer.
+func truncateUTF8(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	cut := maxBytes
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut]
 }
 
 // missingLabelOther is the missing-value counter's surface label for a

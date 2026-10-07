@@ -1,6 +1,17 @@
 package enrich
 
-import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
+import (
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+)
+
+// maxTextBytes bounds the canonical copy of a record's words. The copy sits
+// beside the producer's own attribute, so an unbounded one would double a
+// large prompt and could push a record that fit when it arrived past the
+// relay export limit. 64 KiB holds any prompt a person types and most that
+// an agent assembles, while staying well inside the 256 KiB the relay
+// export reserves for everything the transform adds.
+const maxTextBytes = 64 * constants.KiB
 
 // columnText fills text: the record in words. A prompt's words are the
 // prompt, an api_response's the response, an api_error's the error and a
@@ -15,13 +26,16 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // rather than a gap and is not counted.
 func columnText() columnDefinition {
 	text := optIn(getter[string]{log: dialect.LogDialect.Text, span: dialect.SpanDialect.Text})
-	return column[string]{
-		key: TextColumnKey,
-		byType: perEventType[string]{
-			dialect.EventTypePrompt:       text,
-			dialect.EventTypeAPIResponse:  text,
-			dialect.EventTypeAPIError:     text,
-			dialect.EventTypeToolDecision: text,
+	return cappedColumn{
+		column: column[string]{
+			key: TextColumnKey,
+			byType: perEventType[string]{
+				dialect.EventTypePrompt:       text,
+				dialect.EventTypeAPIResponse:  text,
+				dialect.EventTypeAPIError:     text,
+				dialect.EventTypeToolDecision: text,
+			},
 		},
+		capBytes: maxTextBytes,
 	}
 }
