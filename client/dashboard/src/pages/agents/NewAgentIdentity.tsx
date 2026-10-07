@@ -3,7 +3,10 @@ import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router";
 
 import { Button } from "@/components/ui/Button";
+import { Text } from "@/components/ui/Text";
 import { FormPage } from "@/components/page-templates";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
 
@@ -22,6 +25,11 @@ export default function NewAgentIdentity(): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
+  // The wizard ends in an issued key, so it belongs to the credentials
+  // rollout and not to `agent-management`: the roster this page is reached
+  // from is on the wider gate, and without this the page would issue a key
+  // for an organization that credentials are not enabled for.
+  const credentials = useFeatureFlag(FEATURE_FLAGS.agentCredentials);
 
   const done = (agentID?: string) => {
     void navigate(
@@ -47,7 +55,15 @@ export default function NewAgentIdentity(): JSX.Element {
         </Button>
       }
     >
-      <ProvisionWizard onDone={done} onBusy={setBusy} />
+      {credentials.status === "loading" ? (
+        <Text muted>Checking what this organization can provision…</Text>
+      ) : credentials.status === "enabled" ? (
+        <ProvisionWizard onDone={done} onBusy={setBusy} />
+      ) : (
+        <Text muted>
+          Issuing agent keys is not enabled for this organization.
+        </Text>
+      )}
     </FormPage>
   );
 }

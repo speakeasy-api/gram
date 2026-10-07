@@ -340,7 +340,10 @@ function AgentAPIKeysContent({
   // list is dated to keep the suggestion usable as typed.
   const takenNames = (knownKeys ?? []).map((key) => key.name).join("\u0000");
   useEffect(() => {
-    if (step !== 2) return;
+    // Nothing is suggested until the list has been read once: a name chosen
+    // against an empty list sticks, because the effect leaves a name the user
+    // may have typed alone, and creation then fails on the uniqueness check.
+    if (step !== 2 || keys.isPending) return;
     setName((current) => {
       if (current.trim()) return current;
       const base = `${agent.name} key`;
@@ -349,7 +352,7 @@ function AgentAPIKeysContent({
       const dated = `${base} ${new Date().toISOString().slice(0, 10)}`;
       return taken.has(dated) ? "" : dated;
     });
-  }, [step, agent.name, takenNames]);
+  }, [step, agent.name, takenNames, keys.isPending]);
   const returnToStep = (next: number) => {
     setStep(next);
     setNarrowings({});

@@ -28,7 +28,7 @@ vi.mock("@/components/identity-link", () => ({
 afterEach(cleanup);
 
 describe("ToolUsageIdentity", () => {
-  it("links readable agents to agent settings with dotted styling and an icon", () => {
+  it("links readable agents to their identity overview with dotted styling and an icon", () => {
     render(
       <MemoryRouter>
         <ToolUsageIdentity

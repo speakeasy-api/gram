@@ -16,6 +16,7 @@ import { useOrganization, useSession } from "@/contexts/Auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { IdentityLink } from "@/components/identity-link";
 import { Text } from "@/components/ui/Text";
+import { dateTimeFormatters } from "@/lib/dates";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 
 import { useAgentsDeleteMutation } from "@gram/client/react-query/agentsDelete.js";
@@ -29,7 +30,11 @@ import { toast } from "sonner";
 function AgentScopeLabel({ agent }: { agent: ManagedAgent }) {
   const organization = useOrganization();
   if (!agent.projectId) {
-    return <Text>{organization.name} (all projects)</Text>;
+    // No project on the row means one of two things, and the server sends the
+    // same absence for both: an agent registered for the whole organization,
+    // or one that predates project scoping and has never been assigned. The
+    // label states what is known rather than claiming a deliberate choice.
+    return <Text>{organization.name} — no project scope</Text>;
   }
   // Named from the organization's own project list rather than the active
   // project, so an agent reached by id from elsewhere still says where it
@@ -45,7 +50,7 @@ function AgentScopeLabel({ agent }: { agent: ManagedAgent }) {
  * at them. The viewer's own profile fills in when the server did not send
  * one, which it does not for the caller themselves.
  */
-function AgentOwner({ agent }: { agent: ManagedAgent }): JSX.Element {
+export function AgentOwner({ agent }: { agent: ManagedAgent }): JSX.Element {
   const { user } = useSession();
   const self = agent.ownerUserId === user.id;
   const profile =
@@ -97,7 +102,28 @@ export function AgentIdentityPanel({
         <dd>
           <LifecycleBadge lifecycle={agent.lifecycle} />
         </dd>
+        <dt className="text-muted-foreground">Registered</dt>
+        <dd>
+          <time
+            className="tabular-nums"
+            title={dateTimeFormatters.full.format(agent.createdAt)}
+            dateTime={agent.createdAt.toISOString()}
+          >
+            {dateTimeFormatters.day.format(agent.createdAt)}
+          </time>
+        </dd>
       </dl>
+      {/* An agent waiting on a new owner cannot be issued keys. That is a
+          fact about the identity, so it belongs here rather than only on the
+          provisioning section where the blocked button explains itself. */}
+      {agent.ownerReassignmentRequiredAt && (
+        <Text role="alert" small>
+          This agent needs a new owner before it can be issued keys
+          {agent.ownerReassignmentReason
+            ? `: ${agent.ownerReassignmentReason}`
+            : "."}
+        </Text>
+      )}
       <Text muted small>
         The principal and the owner are durable. The name can change, and the
         change is recorded in the organization audit log.

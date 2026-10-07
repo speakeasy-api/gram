@@ -1,4 +1,5 @@
 import { useOrganization } from "@/contexts/Auth";
+import { mcpUrlSuffix } from "@/hooks/useToolsetUrl";
 import { useListMcpServersForOrg } from "@gram/client/react-query/listMcpServersForOrg.js";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 
@@ -13,6 +14,7 @@ export interface InventoryServer {
   /** The id a policy selector names, which for a toolset is the toolset. */
   resourceId: string;
   name: string;
+  /** The path under /mcp/ the server answers on, which is what a row shows. */
   slug: string;
   projectId: string;
   projectName: string;
@@ -43,16 +45,24 @@ export function useServerInventory(): ServerInventory {
   const projects = new Map(
     (organization.projects ?? []).map((project) => [project.id, project]),
   );
+  const servableServers = (servers.data?.mcpServers ?? []).filter(
+    (server) =>
+      !server.unproxiedMcpServerId &&
+      server.visibility !== "disabled" &&
+      Boolean(projects.get(server.projectId)?.slug),
+  );
   // A toolset already exposed as an MCP server would otherwise appear twice,
-  // once under each name.
+  // once under each name. Only a wrapper that is itself servable stands in for
+  // the toolset: a disabled one would otherwise take the toolset off the list
+  // with it, leaving nothing to provision.
   const servedToolsets = new Set(
-    servers.data?.mcpServers.flatMap((server) =>
+    servableServers.flatMap((server) =>
       server.toolsetId ? [server.toolsetId] : [],
-    ) ?? [],
+    ),
   );
 
   const inventory: InventoryServer[] = [
-    ...(servers.data?.mcpServers ?? []).map((server) => ({
+    ...servableServers.map((server) => ({
       id: server.id,
       resourceId: server.toolsetId ?? server.id,
       name: server.name ?? server.slug ?? "Unnamed server",
@@ -68,32 +78,31 @@ export function useServerInventory(): ServerInventory {
           : server.remoteMcpServerId
             ? ("Remote" as const)
             : ("Hosted" as const),
-      unproxied: Boolean(server.unproxiedMcpServerId),
-      disabled: server.visibility === "disabled",
     })),
     ...(toolsets.data?.toolsets ?? [])
       .filter(
         (toolset) =>
           toolset.mcpEnabled === true && !servedToolsets.has(toolset.id),
       )
-      .map((toolset) => ({
-        id: toolset.id,
-        resourceId: toolset.id,
-        name: toolset.name,
-        slug: toolset.slug ?? "",
-        projectId: toolset.projectId,
-        projectName: projects.get(toolset.projectId)?.name ?? "",
-        projectSlug: projects.get(toolset.projectId)?.slug ?? "",
-        issuerId: undefined,
-        kind: "Toolset" as const,
-        unproxied: false,
-        disabled: false,
-      })),
-  ]
-    .filter(
-      (server) => !server.unproxied && !server.disabled && server.projectSlug,
-    )
-    .map(({ unproxied: _unproxied, disabled: _disabled, ...server }) => server);
+      .map((toolset) => {
+        const projectSlug = projects.get(toolset.projectId)?.slug ?? "";
+        return {
+          id: toolset.id,
+          resourceId: toolset.id,
+          name: toolset.name,
+          // A toolset answers on its own mcpSlug, or on the legacy
+          // project/toolset/environment route — never on the toolset slug by
+          // itself, so the shared resolver decides the path.
+          slug: mcpUrlSuffix({ slug: projectSlug }, toolset) ?? "",
+          projectId: toolset.projectId,
+          projectName: projects.get(toolset.projectId)?.name ?? "",
+          projectSlug,
+          issuerId: undefined,
+          kind: "Toolset" as const,
+        };
+      })
+      .filter((toolset) => Boolean(toolset.projectSlug)),
+  ];
 
   return {
     servers: inventory,

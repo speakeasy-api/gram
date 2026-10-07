@@ -437,6 +437,12 @@ function ServerAccounts({
       clients: clientsQueries[index]?.data ?? [],
     })),
   };
+  // A row earns a card when it asks for an account, or when it still holds a
+  // binding whose authorization is gone: that binding blocks `ready`, and
+  // disconnecting it is the only way past, so the row has to stay on screen.
+  const shows = (row: (typeof query.data)[number]) =>
+    row.clients.length > 0 ||
+    row.bindings.some((binding) => binding.remoteSession === undefined);
   const ready =
     query.isSuccess &&
     !query.isFetching &&
@@ -523,123 +529,116 @@ function ServerAccounts({
       )}
       {/* A server that asks for nothing gets no card of its own; the sentence
           above already covers it, and an empty card reads as unfinished. */}
-      {query.data
-        ?.filter((row) => row.clients.length > 0)
-        .map((row) => (
-          <section
-            key={`${row.server.projectId}:${row.server.issuerId}`}
-            className="border-border space-y-4 border p-5"
-          >
-            <div className="flex items-center gap-2">
-              <Server
-                aria-hidden="true"
-                className="text-muted-foreground size-4"
-              />
-              <h3 className="text-sm font-medium">{row.server.name}</h3>
-            </div>
-            {row.server.connectUrl && (
-              <a
-                href={row.server.connectUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary inline-flex items-center gap-1.5 text-sm font-medium underline underline-offset-4"
+      {query.data?.filter(shows).map((row) => (
+        <section
+          key={`${row.server.projectId}:${row.server.issuerId}`}
+          className="border-border space-y-4 border p-5"
+        >
+          <div className="flex items-center gap-2">
+            <Server
+              aria-hidden="true"
+              className="text-muted-foreground size-4"
+            />
+            <h3 className="text-sm font-medium">{row.server.name}</h3>
+          </div>
+          {row.server.connectUrl && (
+            <a
+              href={row.server.connectUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary inline-flex items-center gap-1.5 text-sm font-medium underline underline-offset-4"
+            >
+              Connect an account
+              <ExternalLink aria-hidden="true" className="size-3.5" />
+            </a>
+          )}
+          {row.bindings
+            .filter((binding) => !binding.remoteSession)
+            .map((binding) => (
+              <div
+                key={binding.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
               >
-                Connect an account
-                <ExternalLink aria-hidden="true" className="size-3.5" />
-              </a>
-            )}
-            {row.clients.length === 0 && (
-              <Text small muted>
-                No account connection needed.
-              </Text>
-            )}
-            {row.bindings
-              .filter((binding) => !binding.remoteSession)
-              .map((binding) => (
-                <div
-                  key={binding.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
+                <Text small>
+                  Account unavailable. Disconnect its old authorization before
+                  choosing an account again.
+                </Text>
+                <Button
+                  variant="secondary"
+                  disabled={
+                    pending || error || query.isFetching || query.isError
+                  }
+                  onClick={() => void detach(row.server, binding.id)}
                 >
-                  <Text small>
-                    Account unavailable. Disconnect its old authorization before
-                    choosing an account again.
-                  </Text>
-                  <Button
-                    variant="secondary"
-                    disabled={
-                      pending || error || query.isFetching || query.isError
-                    }
-                    onClick={() => void detach(row.server, binding.id)}
-                  >
-                    Disconnect unavailable account
-                  </Button>
-                </div>
-              ))}
-            {row.clients.map((client, clientIndex) => (
-              <div key={client.id} className="space-y-2">
-                {row.clients.length > 1 && (
-                  <Text small muted>
-                    Connection {clientIndex + 1}
-                  </Text>
-                )}
-                {row.candidates
-                  .filter((c) => c.remoteSessionClientId === client.id)
-                  .map((candidate) => {
-                    const attached = row.bindings.some(
-                      (b) =>
-                        b.remoteSession !== undefined &&
-                        b.remoteSessionId === candidate.id,
-                    );
-                    const occupied = row.bindings.some(
-                      (b) => b.remoteSessionClientId === client.id,
-                    );
-                    return (
-                      <div
-                        key={candidate.id}
-                        className="bg-muted/30 flex flex-wrap items-center justify-between gap-3 p-3"
-                      >
-                        <div className="min-w-0 flex-1 space-y-1">
-                          <Text small className="font-medium">
-                            {sessionAccountLabel(candidate)}
-                          </Text>
-                          <Text small muted className="break-words">
-                            {candidate.scopes.length > 0
-                              ? `Access: ${candidate.scopes.join(", ")}`
-                              : "No additional access requested"}
-                          </Text>
-                        </div>
-                        <Button
-                          disabled={
-                            attached ||
-                            occupied ||
-                            pending ||
-                            error ||
-                            query.isFetching ||
-                            query.isError
-                          }
-                          onClick={() => void attach(row.server, candidate.id)}
-                        >
-                          {attached
-                            ? "Connected"
-                            : occupied
-                              ? "Another account in use"
-                              : "Use account"}
-                        </Button>
-                      </div>
-                    );
-                  })}
-                {!row.candidates.some(
-                  (c) => c.remoteSessionClientId === client.id,
-                ) && (
-                  <Text small muted>
-                    No connected accounts yet. Connect an account, then refresh
-                    this list.
-                  </Text>
-                )}
+                  Disconnect unavailable account
+                </Button>
               </div>
             ))}
-          </section>
-        ))}
+          {row.clients.map((client, clientIndex) => (
+            <div key={client.id} className="space-y-2">
+              {row.clients.length > 1 && (
+                <Text small muted>
+                  Connection {clientIndex + 1}
+                </Text>
+              )}
+              {row.candidates
+                .filter((c) => c.remoteSessionClientId === client.id)
+                .map((candidate) => {
+                  const attached = row.bindings.some(
+                    (b) =>
+                      b.remoteSession !== undefined &&
+                      b.remoteSessionId === candidate.id,
+                  );
+                  const occupied = row.bindings.some(
+                    (b) => b.remoteSessionClientId === client.id,
+                  );
+                  return (
+                    <div
+                      key={candidate.id}
+                      className="bg-muted/30 flex flex-wrap items-center justify-between gap-3 p-3"
+                    >
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <Text small className="font-medium">
+                          {sessionAccountLabel(candidate)}
+                        </Text>
+                        <Text small muted className="break-words">
+                          {candidate.scopes.length > 0
+                            ? `Access: ${candidate.scopes.join(", ")}`
+                            : "No additional access requested"}
+                        </Text>
+                      </div>
+                      <Button
+                        disabled={
+                          attached ||
+                          occupied ||
+                          pending ||
+                          error ||
+                          query.isFetching ||
+                          query.isError
+                        }
+                        onClick={() => void attach(row.server, candidate.id)}
+                      >
+                        {attached
+                          ? "Connected"
+                          : occupied
+                            ? "Another account in use"
+                            : "Use account"}
+                      </Button>
+                    </div>
+                  );
+                })}
+              {!row.candidates.some(
+                (c) => c.remoteSessionClientId === client.id,
+              ) && (
+                <Text small muted>
+                  No connected accounts yet. Connect an account, then refresh
+                  this list.
+                </Text>
+              )}
+            </div>
+          ))}
+        </section>
+      ))}
       {error && (
         <Text role="alert">
           Could not confirm the account connection. Refresh to check its status
@@ -647,8 +646,9 @@ function ServerAccounts({
         </Text>
       )}
       {/* Nothing to connect means nothing to refresh, confirm or switch: the
-          step keeps only the sentence that says so. */}
-      {query.data.some((row) => row.clients.length > 0) && (
+          step keeps only the sentence that says so. A failed read reports no
+          clients at all, so it keeps the refresh the alert above asks for. */}
+      {(query.isError || query.data.some(shows)) && (
         <>
           <Button
             variant="secondary"

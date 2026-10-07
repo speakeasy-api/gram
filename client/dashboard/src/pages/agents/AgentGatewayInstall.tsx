@@ -323,6 +323,15 @@ export function AgentGatewayInstall({
           ))}
         </Tabs>
       </div>
+      {/* Every recipe above puts the key in an Authorization header, which is
+          the shape a runtime also uses for a model provider or another MCP
+          server. The key authenticates to Gram and nowhere else, so where it
+          may go has to be said next to the snippets that carry it. */}
+      <Text muted small>
+        This key is a bearer credential for Gram endpoints only. Send it to the
+        gateway URL above and to nothing else — never to a model provider, and
+        never on to an upstream MCP server.
+      </Text>
       {!secret && (
         <Text muted small>
           Your key is shown only once. Replace the placeholder with the key you

@@ -1,7 +1,6 @@
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
-import { Navigate, useNavigate } from "react-router";
+import { Navigate, useNavigate, useSearchParams } from "react-router";
 import { useRoutes } from "@/routes";
-import { registeredAgentHref } from "./identityRoster";
 import { AgentAPIKeys } from "@/pages/agents/AgentAPIKeys";
 import {
   AgentIdentityPanel,
@@ -31,6 +30,18 @@ export function AgentIdentityProfile({
 }): JSX.Element {
   const navigate = useNavigate();
   const routes = useRoutes();
+  // `?credential=new` opens issuance on this section. It is a query rather
+  // than a segment of its own because issuing is a state of the provisioning
+  // section, and because the links that used to name the retired
+  // agent-management page carry it.
+  const [params, setParams] = useSearchParams();
+  const issuing = params.get("credential") === "new";
+  const setIssuing = (open: boolean) => {
+    const next = new URLSearchParams(params);
+    if (open) next.set("credential", "new");
+    else next.delete("credential");
+    setParams(next, { replace: true });
+  };
   switch (section) {
     case "permissions":
       return (
@@ -72,6 +83,20 @@ export function AgentIdentityProfile({
         </IdentitySection>
       );
     case "provisioning":
+      if (issuing) {
+        return (
+          <IdentitySection
+            title="Issue a key"
+            meta="Choose what this key reaches, then install it where the agent runs"
+          >
+            <AgentAPIKeys
+              agent={agent}
+              creation
+              onDone={() => setIssuing(false)}
+            />
+          </IdentitySection>
+        );
+      }
       // An agent holds keys, not provider logins and not machines. The
       // managed-device panel that sat here could only ever say so.
       //
@@ -86,17 +111,13 @@ export function AgentIdentityProfile({
           <IdentityPanel title="Endpoint" contentClassName="p-4">
             <AgentGatewayInstall agentID={agent.id} secret={null} />
           </IdentityPanel>
-          {/* Issuing is a flow of its own, so the button hands off to the
-              page that runs it. Without this the control is enabled and does
-              nothing: the panel only opens its own wizard in creation mode. */}
+          {/* Issuing is a flow of its own, so the button puts this section
+              into it. Without this the control is enabled and does nothing:
+              the panel only opens its own wizard in creation mode. */}
           <AgentAPIKeys
             agent={agent}
             variant="bare"
-            onCreate={() => {
-              void navigate(
-                `${registeredAgentHref(routes.agents.href(), "", agent.id)}&credential=new`,
-              );
-            }}
+            onCreate={() => setIssuing(true)}
           />
         </IdentitySection>
       );

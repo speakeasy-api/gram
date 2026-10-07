@@ -77,6 +77,8 @@ function CodeBlock({
             code={value}
             language={language}
             copyable
+            // Every block carries a copy button, so each one says which.
+            copyLabel={`Copy ${label}`}
             wordWrap
             snippetClassName={breakAnywhere ? "break-all" : undefined}
           />
@@ -107,15 +109,18 @@ export function StepProvision({
   const key = secret ?? `<your ${KEY_ENV}>`;
   // One complete call per runtime, not the pair of values on their own: the
   // question the step has to answer is what to do with them.
+  // Streamable HTTP, not the SDK's built-in "sse" transport: the gateway
+  // answers POST only, and an SSE client opens with a GET it would refuse.
   const vercel = [
     `import { experimental_createMCPClient as createMCPClient } from "ai";`,
+    `import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";`,
     ``,
     `const client = await createMCPClient({`,
-    `  transport: {`,
-    `    type: "sse",`,
-    `    url: "${gatewayURL}",`,
-    `    headers: { Authorization: \`Bearer \${process.env.${KEY_ENV}}\` },`,
-    `  },`,
+    `  transport: new StreamableHTTPClientTransport(new URL("${gatewayURL}"), {`,
+    `    requestInit: {`,
+    `      headers: { Authorization: \`Bearer \${process.env.${KEY_ENV}}\` },`,
+    `    },`,
+    `  }),`,
     `});`,
     ``,
     `const tools = await client.tools();`,

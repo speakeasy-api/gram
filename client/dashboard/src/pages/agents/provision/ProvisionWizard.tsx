@@ -117,8 +117,26 @@ export function ProvisionWizard({
   // a project resolves, project scope would send an empty id, which the server
   // reads as "omitted" — an organization-wide agent created on behalf of
   // someone who asked for a project one.
-  const scope: Scope = chosenScope ?? (project.id ? "project" : "organization");
-  const scopedProjectID = scope === "project" ? project.id : undefined;
+  // An existing agent's scope is its own and is stored on it: the project
+  // being browsed is not necessarily the one it was bound to, and an
+  // organization-wide agent holds grants in projects this one is not.
+  const scope: Scope = existing
+    ? agent.projectId
+      ? "project"
+      : "organization"
+    : (chosenScope ?? (project.id ? "project" : "organization"));
+  // The project the servers on offer belong to, and the binding a new agent
+  // is created with. Undefined reaches every project in the organization.
+  const scopedProjectID = existing
+    ? agent.projectId
+    : scope === "project"
+      ? project.id
+      : undefined;
+  const scopeName = scopedProjectID
+    ? ((organization.projects ?? []).find(
+        (candidate) => candidate.id === scopedProjectID,
+      )?.name ?? project.name)
+    : organization.name;
 
   const gatewayURL = agentID ? agentGatewayURL(agentID) : "";
 
@@ -219,11 +237,30 @@ export function ProvisionWizard({
       const requestedGrants = buildRequestedGrants(
         delegable.map((grant) => ({ grant, narrowing: {} })),
       );
-      if (requestedGrants.length === 0) {
+      // Discovery answers per server, so it can come back covering only some
+      // of them. A key issued on that answer reaches the servers it covers
+      // and silently fails on the rest, while every selected server is still
+      // listed as provisioned — so none of it is issued until the gap is
+      // named.
+      const reachable = new Set(
+        delegable.map(
+          (grant) =>
+            `${grant.selector.projectId ?? ""}:${grant.selector.resourceId}`,
+        ),
+      );
+      const excluded = selected.filter(
+        (entry) =>
+          !reachable.has(
+            `${entry.server.projectId}:${entry.server.resourceId}`,
+          ),
+      );
+      if (excluded.length > 0 || requestedGrants.length === 0) {
         throw new Error(
-          existing
-            ? "Nothing on these servers can be delegated to this agent. Check its permissions, or choose other servers."
-            : "The agent was created, but nothing on these servers could be delegated to it. Open the agent to review its permissions.",
+          excluded.length === selected.length
+            ? existing
+              ? "Nothing on these servers can be delegated to this agent. Check its permissions, or choose other servers."
+              : "The agent was created, but nothing on these servers could be delegated to it. Open the agent to review its permissions."
+            : `Nothing on ${excluded.map((entry) => entry.server.name).join(", ")} can be delegated to this agent, so a key would not reach ${excluded.length === 1 ? "it" : "them"}. Deselect ${excluded.length === 1 ? "that server" : "those servers"}, or check the agent's permissions.`,
         );
       }
 
@@ -270,7 +307,7 @@ export function ProvisionWizard({
         { label: "Owner", value: user.displayName || user.email },
         {
           label: "Scope",
-          value: scope === "project" ? project.name : organization.name,
+          value: scopeName,
         },
         {
           label: "Grants",
@@ -324,7 +361,20 @@ export function ProvisionWizard({
                 </Text>
                 <RadioCardGroup
                   value={scope}
-                  onValueChange={(value) => setChosenScope(value as Scope)}
+                  onValueChange={(value) => {
+                    const next = value as Scope;
+                    setChosenScope(next);
+                    // Narrowing to the project takes the other projects'
+                    // servers off the next step. A selection made before the
+                    // switch would otherwise stay in the draft and be granted
+                    // without ever being shown again.
+                    if (next === "project")
+                      setSelected((current) =>
+                        current.filter(
+                          (entry) => entry.server.projectId === project.id,
+                        ),
+                      );
+                  }}
                   disabled={existing}
                   // The density the design system defines for a choice that
                   // is one field of a step rather than a section of its own.
@@ -357,7 +407,8 @@ export function ProvisionWizard({
           <StepServers
             servers={inventory.servers.filter(
               (server) =>
-                scope === "organization" || server.projectId === project.id,
+                scopedProjectID === undefined ||
+                server.projectId === scopedProjectID,
             )}
             isLoading={inventory.isLoading}
             isError={inventory.isError}

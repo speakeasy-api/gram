@@ -25,6 +25,7 @@ import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useSdkClient, useProjectSlugForRequests } from "@/contexts/Sdk";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { AgentOwner } from "@/pages/agents/agent-admin";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -908,24 +909,17 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
         width: "1fr",
         render: (identity) => {
           const agent = agentsById.get(identity.registeredAgentId ?? "");
-          const name = agent?.ownerProfile?.displayName;
-          if (!agent || !name) {
+          if (!agent) {
             return (
               <Text muted small className="truncate">
                 —
               </Text>
             );
           }
-          // The owner is a person with a page of their own, and answering
-          // "who runs this agent" usually means going to look at them.
-          return (
-            <IdentityLink
-              identifier={{ userId: agent.ownerUserId }}
-              className="truncate"
-            >
-              {name}
-            </IdentityLink>
-          );
+          // The same face the agent's own page shows, so the owner reads as
+          // one person across both: answering "who runs this agent" usually
+          // means going to look at them.
+          return <AgentOwner agent={agent} />;
         },
       },
       {
@@ -1041,7 +1035,11 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
         {/* The table is as tall as its rows, up to the room left under the
             controls. Past that it scrolls itself rather than the page: a short
             roster no longer leaves a band of empty table under the last row. */}
-        <div className="flex max-h-[calc(100dvh-19rem)] flex-col gap-6">
+        {/* The banner-offset comes off the room as well: an impersonation or
+            demo banner pushes everything below it down, and without this the
+            pane kept asking for the height it had before the banner and put
+            the page back on a scrollbar. */}
+        <div className="flex max-h-[calc(100dvh-19rem-var(--banner-offset,0px))] flex-col gap-6">
           {/* No stat tiles: each table states its own count, and the four
               numbers above them repeated it without saying anything the rows
               do not. */}
@@ -1221,30 +1219,38 @@ function IdentityGroup({
           list, so they line up. */}
       {/* Header and rows are one table to the eye: no gap between the two
           elements that make it. */}
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="[&_table]:border-b-0 [&_tbody]:hidden">
-          <Table
-            columns={columns}
-            data={[]}
-            rowKey={() => "header"}
-            sort={sort}
-            onSortChange={onSortChange}
-            noResultsMessage={null}
-          />
-        </div>
-        <div className="border-border min-h-0 flex-1 overflow-auto overscroll-contain border-b [&_table]:border-t-0 [&_table]:border-b-0">
-          <Table
-            columns={columns}
-            data={rows.slice(0, visible)}
-            hideHeader
-            hasMore={hasMore ?? visible < rows.length}
-            onLoadMore={async () => {
-              await onLoadMore();
-            }}
-            rowKey={(row) => row.id}
-            onRowClick={onRowClick}
-            noResultsMessage={emptyMessage}
-          />
+      {/* Sideways is one scroll for both tables. A Table is its own
+          overflow-x box, so narrow enough to run the fixed-width columns past
+          the pane each table scrolled on its own: the rows slid under a header
+          that stayed put. The tables give up their own sideways scrolling here
+          and this box does it for both at once, and min-w-min sets one width
+          they both fill, so a column is the same column in each. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-x-auto overscroll-x-contain [&_table]:overflow-visible">
+        <div className="flex min-h-0 min-w-min flex-1 flex-col">
+          <div className="[&_table]:border-b-0 [&_tbody]:hidden">
+            <Table
+              columns={columns}
+              data={[]}
+              rowKey={() => "header"}
+              sort={sort}
+              onSortChange={onSortChange}
+              noResultsMessage={null}
+            />
+          </div>
+          <div className="border-border min-h-0 flex-1 overflow-y-auto overscroll-y-contain border-b [&_table]:border-t-0 [&_table]:border-b-0">
+            <Table
+              columns={columns}
+              data={rows.slice(0, visible)}
+              hideHeader
+              hasMore={hasMore ?? visible < rows.length}
+              onLoadMore={async () => {
+                await onLoadMore();
+              }}
+              rowKey={(row) => row.id}
+              onRowClick={onRowClick}
+              noResultsMessage={emptyMessage}
+            />
+          </div>
         </div>
       </div>
     </section>

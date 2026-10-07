@@ -1,4 +1,5 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
@@ -87,9 +88,28 @@ vi.mock("@/components/page-layout", () => {
         Leading: Box,
         Actions: Box,
         Search: () => null,
-        Filters: ({ schema }: { schema: { id: string }[] }) => (
+        // Each filter holding a value gets a clear button, the way the real
+        // sheet gives its chips one, so a test can take a filter back off.
+        Filters: ({
+          schema,
+          values,
+          onClear,
+        }: {
+          schema: { id: string }[];
+          values: Record<string, unknown>;
+          onClear: (id: string) => void;
+        }) => (
           <div data-testid="filters">
             {schema.map((item) => item.id).join(",")}
+            {Object.entries(values)
+              .filter(([, value]) =>
+                Array.isArray(value) ? value.length > 0 : value != null,
+              )
+              .map(([id]) => (
+                <button key={id} type="button" onClick={() => onClear(id)}>
+                  Clear {id}
+                </button>
+              ))}
           </div>
         ),
       }),
@@ -210,8 +230,10 @@ it.each(["unknown", "unknown,agent"])(
     ).not.toContain("human@example.com");
     // The kind filter is still honoured and still clearable, now through the
     // filter list rather than a segmented control the two tables made
-    // redundant.
+    // redundant. Clearing it puts the rows it was hiding back.
     expect(screen.getByTestId("filters").textContent).toContain("kind");
+    await userEvent.click(screen.getByRole("button", { name: "Clear kind" }));
+    await waitFor(() => expect(rowsText()).toContain("human@example.com"));
   },
 );
 

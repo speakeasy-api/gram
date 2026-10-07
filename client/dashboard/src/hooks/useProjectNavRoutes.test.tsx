@@ -106,7 +106,9 @@ describe("useProjectNavRoutes", () => {
       testState.featureFlags[FEATURE_FLAGS.agentManagement] = { status };
       const { result } = renderHook(() => useProjectNavRoutes());
       expect(
-        result.current.some((entry) => entry.route === routes.agents),
+        result.current.some(
+          (entry) => entry.route === routes.identities.agents,
+        ),
       ).toBe(false);
     },
   );

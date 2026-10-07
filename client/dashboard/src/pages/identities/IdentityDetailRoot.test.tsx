@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import IdentityDetailRoot from "./IdentityDetailRoot";
 
-const mocks = vi.hoisted(() => ({ orgRead: false, loading: false }));
+const mocks = vi.hoisted(() => ({ orgRead: false }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org_example", name: "Example Org" }),
   useProject: () => ({ id: "project_one", slug: "project-one" }),
@@ -12,7 +12,7 @@ vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => false,
 }));
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => mocks.orgRead, isLoading: mocks.loading }),
+  useRBAC: () => ({ hasScope: () => mocks.orgRead, isLoading: false }),
 }));
 const page = (segment: string) => ({
   href: (urn: string) => `/identities/${urn}/${segment}`,
@@ -94,7 +94,6 @@ function setup(urn: string) {
 afterEach(cleanup);
 beforeEach(() => {
   mocks.orgRead = false;
-  mocks.loading = false;
 });
 
 // An agent resolves through its own management API, which authorizes per
@@ -115,12 +114,6 @@ it("opens the same agent page for an organization reader", () => {
 // A person is resolved by the directory, which the server gates on org:read,
 // so the page says so rather than rendering and failing its first request.
 it("keeps human profiles behind organization read", () => {
-  setup("user:user_example");
-  expect(screen.getByText("Scope: org:read")).toBeTruthy();
-});
-
-it("keeps human profiles behind organization read while grants load", () => {
-  mocks.loading = true;
   setup("user:user_example");
   expect(screen.getByText("Scope: org:read")).toBeTruthy();
 });

@@ -142,19 +142,23 @@ const role: Role = {
   updatedAt: new Date(),
 };
 function renderEditor(editingRole?: Role, confirmAssignmentFor?: string) {
-  return render(
-    <MemoryRouter>
-      <QueryClientProvider client={new QueryClient()}>
-        <CreateRoleDialog
-          open
-          onOpenChange={vi.fn<(open: boolean) => void>()}
-          editingRole={editingRole}
-          confirmAssignmentFor={confirmAssignmentFor}
-          presentation="page"
-        />
-      </QueryClientProvider>
-    </MemoryRouter>,
-  );
+  const client = new QueryClient();
+  return {
+    client,
+    ...render(
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <CreateRoleDialog
+            open
+            onOpenChange={vi.fn<(open: boolean) => void>()}
+            editingRole={editingRole}
+            confirmAssignmentFor={confirmAssignmentFor}
+            presentation="page"
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    ),
+  };
 }
 afterEach(cleanup);
 beforeEach(() => {
@@ -271,8 +275,12 @@ describe("agent management rollout", () => {
 
   it("shows the empty state when the organization has no agents", async () => {
     mocks.enabled = true;
-    renderEditor();
+    const { client } = renderEditor();
     await waitFor(() => expect(mocks.list).toHaveBeenCalled());
+    // The picker renders this same message while the query is still in
+    // flight, so an assertion made now would pass without the fetch
+    // resolving at all. Wait for the empty page to land first.
+    await waitFor(() => expect(client.isFetching()).toBe(0));
     fireEvent.click(screen.getByText("Assign Agents"));
     expect(
       screen.getByText("No agents in this organization yet."),

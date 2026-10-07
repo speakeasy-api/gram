@@ -364,6 +364,13 @@ type mcpInputs struct {
 	// a different member's toolset slug — keying by slug would never find the
 	// record the handshake wrote.
 	clientInfoScope string
+	// clientInfoProjectID overrides the project the session client-info record
+	// is loaded under. Records are keyed by (project, scope, session), and a
+	// gateway writes one record for the whole session under its own project.
+	// Its members may sit in other projects, so a member dispatch keyed by the
+	// member's project would never find it. uuid.Nil falls back to projectID,
+	// which is what the hosted and internal paths rely on.
+	clientInfoProjectID uuid.UUID
 	// toolsetID is the described toolset's id when the builder loaded its
 	// row, so describing the server needs no second lookup by slug. Invalid
 	// for internal callers, which carry only the slug and never handshake.

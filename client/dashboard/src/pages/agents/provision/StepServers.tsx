@@ -41,6 +41,12 @@ export function StepServers({
   const query = search.trim().toLowerCase();
   const isSelected = (id: string) =>
     selected.some((entry) => entry.server.id === id);
+  // A server that authorizes each person separately needs an account attached
+  // to the agent before a key can call it, and this flow has no step for that.
+  // Offering it would issue a key that reaches the gateway and then fails on
+  // every call to that server, so it is shown and not selectable; the agent's
+  // own provisioning section connects the account.
+  const needsAccount = (server: InventoryServer) => Boolean(server.issuerId);
   const shown = servers.filter((server) => {
     if (showSelectedOnly && !isSelected(server.id)) return false;
     if (!query) return true;
@@ -108,10 +114,13 @@ export function StepServers({
               <Button
                 size="sm"
                 variant="secondary"
-                disabled={shown.length === 0}
+                disabled={shown.every((server) => needsAccount(server))}
                 onClick={() => {
                   const additions = shown
-                    .filter((server) => !isSelected(server.id))
+                    .filter(
+                      (server) =>
+                        !isSelected(server.id) && !needsAccount(server),
+                    )
                     .map((server) => ({ server }));
                   onChange([...selected, ...additions]);
                 }}
@@ -143,16 +152,23 @@ export function StepServers({
             <ul className="divide-border divide-y">
               {shown.map((server) => {
                 const checked = isSelected(server.id);
+                const blocked = needsAccount(server);
                 return (
                   <li key={server.id}>
                     <label
                       className={cn(
-                        "flex cursor-pointer items-center gap-4 px-4 py-3",
-                        checked ? "bg-accent/40" : "hover:bg-muted/40",
+                        "flex items-center gap-4 px-4 py-3",
+                        blocked ? "cursor-not-allowed" : "cursor-pointer",
+                        checked
+                          ? "bg-accent/40"
+                          : blocked
+                            ? undefined
+                            : "hover:bg-muted/40",
                       )}
                     >
                       <Checkbox
                         checked={checked}
+                        disabled={blocked}
                         onCheckedChange={() => toggle(server)}
                         aria-label={server.name}
                       />
@@ -166,8 +182,14 @@ export function StepServers({
                         <span className="text-muted-foreground block truncate font-mono text-xs">
                           /mcp/{server.slug}
                         </span>
+                        {blocked && (
+                          <Text as="span" muted small className="block">
+                            Needs a connected account. Add this server from the
+                            agent's provisioning section once it exists.
+                          </Text>
+                        )}
                       </span>
-                      {server.issuerId && (
+                      {blocked && (
                         <Badge variant="neutral" size="sm">
                           Per-user OAuth
                         </Badge>

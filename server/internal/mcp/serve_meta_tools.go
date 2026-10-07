@@ -460,10 +460,14 @@ func (s *Service) buildMemberDispatch(
 		mcpServerID:           &serverID,
 		// Meta members keep their toolset-keyed per-tool checks; the meta
 		// surface's RBAC model is outside the wrapper-governance cutover.
-		wrapperRBACResourceID:    "",
-		wrapperIsPublic:          nil,
-		metaMcpServerID:          gate.metaServerID.String(),
-		clientInfoScope:          metaClientInfoScope(gate.metaServerID),
+		wrapperRBACResourceID: "",
+		wrapperIsPublic:       nil,
+		metaMcpServerID:       gate.metaServerID.String(),
+		clientInfoScope:       metaClientInfoScope(gate.metaServerID),
+		// projectID above is the member's, which is what dispatch needs; the
+		// handshake record was written under the gateway's project, so the
+		// client-info lookup has to follow the write.
+		clientInfoProjectID:      gate.projectID,
 		skipProxyTools:           true,
 		toolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		toolsetIsPublic:          new(toolset.McpIsPublic),
