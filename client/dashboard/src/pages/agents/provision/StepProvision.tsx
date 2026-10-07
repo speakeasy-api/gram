@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/Button";
 import {
   PageTabsList,
   PageTabsTrigger,
@@ -6,7 +5,13 @@ import {
   TabsContent,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
-import { useCallback, useMemo, useState, type JSX } from "react";
+import {
+  useCallback,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type JSX,
+} from "react";
 import { CodeSnippet } from "@/components/ui/CodeSnippet";
 import { ConfigContext } from "@/components/ui/context/config";
 import type { Theme } from "@/components/ui/context/theme";
@@ -30,10 +35,16 @@ function CodeBlock({
   value,
   label,
   language,
+  breakAnywhere = false,
 }: {
   value: string;
   label: string;
   language: string;
+  /**
+   * Break mid-token. Wrapping is by whitespace, so a single long value — a
+   * key — overflows instead, and takes the copy button off the edge with it.
+   */
+  breakAnywhere?: boolean;
 }): JSX.Element {
   const setTheme = useCallback(() => undefined, []);
   const dark = useMemo(
@@ -46,43 +57,31 @@ function CodeBlock({
         {label}
       </span>
       {/* Named, because highlighting splits the code into token elements and
-          the block is the only thing that still reads as one value. */}
-      <div aria-label={label}>
+          the block is the only thing that still reads as one value.
+          The dark tokens are declared on :root.dark, which nothing nested can
+          match, so the snippet's surface stays light however its highlighting
+          is themed. These are the three it paints with, at their dark values,
+          scoped to this block. */}
+      <div
+        aria-label={label}
+        style={
+          {
+            "--card": "var(--color-neutral-900)",
+            "--muted": "var(--color-neutral-900)",
+            "--text-body": "var(--color-neutral-200)",
+          } as CSSProperties
+        }
+      >
         <ConfigContext.Provider value={dark}>
-          <CodeSnippet code={value} language={language} copyable wordWrap />
+          <CodeSnippet
+            code={value}
+            language={language}
+            copyable
+            wordWrap
+            snippetClassName={breakAnywhere ? "break-all" : undefined}
+          />
         </ConfigContext.Provider>
       </div>
-    </div>
-  );
-}
-
-function Copyable({
-  value,
-  label,
-  mono = true,
-}: {
-  value: string;
-  label: string;
-  mono?: boolean;
-}): JSX.Element {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="border-border flex items-start gap-2 border p-3">
-      <code
-        className={`min-w-0 flex-1 break-all text-xs ${mono ? "" : "font-sans"}`}
-      >
-        {value}
-      </code>
-      <Button
-        size="sm"
-        variant="secondary"
-        aria-label={`Copy ${label}`}
-        onClick={() => {
-          void navigator.clipboard.writeText(value).then(() => setCopied(true));
-        }}
-      >
-        {copied ? "Copied" : "Copy"}
-      </Button>
     </div>
   );
 }
@@ -106,14 +105,51 @@ export function StepProvision({
 }): JSX.Element {
   const [tab, setTab] = useState("one-line");
   const key = secret ?? `<your ${KEY_ENV}>`;
-  const code = [
-    `// Read the key from your secret store; never commit it.`,
-    `const gram = {`,
-    `  url: new URL("${gatewayURL}"),`,
-    `  requestInit: {`,
+  // One complete call per runtime, not the pair of values on their own: the
+  // question the step has to answer is what to do with them.
+  const vercel = [
+    `import { experimental_createMCPClient as createMCPClient } from "ai";`,
+    ``,
+    `const client = await createMCPClient({`,
+    `  transport: {`,
+    `    type: "sse",`,
+    `    url: "${gatewayURL}",`,
     `    headers: { Authorization: \`Bearer \${process.env.${KEY_ENV}}\` },`,
     `  },`,
-    `};`,
+    `});`,
+    ``,
+    `const tools = await client.tools();`,
+  ].join("\n");
+
+  const mastra = [
+    `import { MCPClient } from "@mastra/mcp";`,
+    ``,
+    `const mcp = new MCPClient({`,
+    `  servers: {`,
+    `    gram: {`,
+    `      url: new URL("${gatewayURL}"),`,
+    `      requestInit: {`,
+    `        headers: { Authorization: \`Bearer \${process.env.${KEY_ENV}}\` },`,
+    `      },`,
+    `    },`,
+    `  },`,
+    `});`,
+    ``,
+    `const tools = await mcp.getTools();`,
+  ].join("\n");
+
+  const python = [
+    `import os`,
+    `from agents.mcp import MCPServerStreamableHttp`,
+    ``,
+    `server = MCPServerStreamableHttp(`,
+    `    params={`,
+    `        "url": "${gatewayURL}",`,
+    `        "headers": {`,
+    `            "Authorization": f"Bearer {os.environ['${KEY_ENV}']}"`,
+    `        },`,
+    `    },`,
+    `)`,
   ].join("\n");
 
   return (
@@ -148,7 +184,7 @@ export function StepProvision({
                 <CodeBlock
                   value={command}
                   label="setup command"
-                  language="bash"
+                  language="shell"
                 />
               ) : (
                 <Text muted small>
@@ -216,10 +252,12 @@ export function StepProvision({
                 environment as <code className="text-xs">{KEY_ENV}</code>.
               </Text>
               <div className="space-y-2">
-                <span className="text-sm font-medium">
-                  API key — shown once
-                </span>
-                <Copyable value={key} label="API key" />
+                <CodeBlock
+                  value={key}
+                  label="API key — shown once"
+                  language="shell"
+                  breakAnywhere
+                />
                 <Text muted small>
                   Put it where that runtime reads its secrets. The blocks below
                   name it rather than carry it, so they are safe to paste into a
@@ -228,12 +266,12 @@ export function StepProvision({
               </div>
               <CodeBlock
                 value={[
-                  "# Claude Code",
+                  // No "# Claude Code" comment: the block is labelled that.
                   `claude mcp add --transport http gram ${gatewayURL} \\`,
                   `  --header "Authorization: Bearer $${KEY_ENV}"`,
                 ].join("\n")}
                 label="Claude Code"
-                language="bash"
+                language="shell"
               />
               <CodeBlock
                 value={[
@@ -279,15 +317,26 @@ export function StepProvision({
           >
             <div className="space-y-4 p-4">
               <Text muted small>
-                For agents built on an SDK — Mastra, the Vercel AI SDK,
-                LangGraph, CrewAI, the OpenAI Agents SDK. Read the key from your
-                secret store; never commit it.
+                The endpoint speaks MCP over HTTP, so any SDK that takes an MCP
+                server takes this one. Read the key from the environment; never
+                commit it.
               </Text>
               <CodeBlock
-                value={code}
-                label="connection snippet"
+                value={vercel}
+                label="Vercel AI SDK"
                 language="typescript"
               />
+              <CodeBlock value={mastra} label="Mastra" language="typescript" />
+              <CodeBlock
+                value={python}
+                label="OpenAI Agents SDK — Python"
+                language="python"
+              />
+              <Text muted small>
+                LangGraph, CrewAI and the Claude and OpenAI APIs take the same
+                pair — the URL and an Authorization header — in whatever shape
+                their own MCP client expects.
+              </Text>
             </div>
           </TabsContent>
         </Tabs>

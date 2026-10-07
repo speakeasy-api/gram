@@ -906,12 +906,27 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
         key: "owner",
         header: "Owner",
         width: "1fr",
-        render: (identity) => (
-          <Text muted small className="truncate">
-            {agentsById.get(identity.registeredAgentId ?? "")?.ownerProfile
-              ?.displayName ?? "—"}
-          </Text>
-        ),
+        render: (identity) => {
+          const agent = agentsById.get(identity.registeredAgentId ?? "");
+          const name = agent?.ownerProfile?.displayName;
+          if (!agent || !name) {
+            return (
+              <Text muted small className="truncate">
+                —
+              </Text>
+            );
+          }
+          // The owner is a person with a page of their own, and answering
+          // "who runs this agent" usually means going to look at them.
+          return (
+            <IdentityLink
+              identifier={{ userId: agent.ownerUserId }}
+              className="truncate"
+            >
+              {name}
+            </IdentityLink>
+          );
+        },
       },
       {
         key: "created",
@@ -1002,7 +1017,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       <Page.Section.Description>
         {kind === "agent"
           ? "The agent identities you register here, each with its own key, its own permissions and its own line in the audit log."
-          : "The people your identity provider knows about, and what each of them reached through Gram. Gram does not create them."}
+          : "The people your identity provider knows about, and what each of them reached through Speakeasy. Speakeasy does not create them."}
       </Page.Section.Description>
       <Page.Section.CTA>
         {kind === "agent" && agentsEnabled ? (
@@ -1037,7 +1052,9 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
               <Page.Toolbar.Search
                 value={search}
                 onChange={setSearch}
-                placeholder="Search identities…"
+                placeholder={
+                  kind === "agent" ? "Search agents…" : "Search people…"
+                }
                 debounceMs={200}
               />
               <Page.Toolbar.Actions>
@@ -1086,6 +1103,24 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
               onRowClick={openIdentity}
               emptyMessage={rosterMessage("No people match these filters")}
             />
+          )}
+          {/* The other roster is a sibling page with no link from this one,
+              so someone looking for an agent here has nowhere to go. */}
+          {kind === "person" && agentsEnabled && (
+            <div className="border-border bg-card space-y-1.5 border p-4">
+              <Text className="font-medium">Looking for agents?</Text>
+              <Text muted small>
+                Visit the{" "}
+                <Link
+                  to={routes.identities.agents.href()}
+                  className="underline underline-offset-2"
+                >
+                  Agents
+                </Link>{" "}
+                page to see all agent identities configured on the platform, and
+                provision new agent identities.
+              </Text>
+            </div>
           )}
           {kind === "agent" && (
             <IdentityGroup

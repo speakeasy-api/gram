@@ -68,7 +68,7 @@ export function StepVerify({
             key={check.title}
             className="flex items-start justify-between gap-6 px-4 py-3"
           >
-            <div className="flex gap-3">
+            <div className="flex items-baseline gap-3">
               <span className="text-muted-foreground font-mono text-xs">
                 {String(index + 1).padStart(2, "0")}
               </span>
@@ -79,13 +79,27 @@ export function StepVerify({
                 </Text>
               </div>
             </div>
-            <span
-              className={cn(
-                "shrink-0 font-mono text-[10px] tracking-[0.08em] uppercase",
-                check.done ? "text-default-success" : "text-muted-foreground",
-              )}
-            >
-              {check.done ? "Confirmed" : "Waiting"}
+            {/* A dot above the word, because the word alone does not say
+                whether anything is still happening: it pulses while the check
+                is outstanding and settles green once it passes. */}
+            <span className="flex shrink-0 flex-col items-center gap-1.5">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "size-2 rounded-full",
+                  check.done
+                    ? "bg-default-success"
+                    : "bg-warning-default animate-pulse",
+                )}
+              />
+              <span
+                className={cn(
+                  "font-mono text-[10px] tracking-[0.08em] uppercase",
+                  check.done ? "text-default-success" : "text-muted-foreground",
+                )}
+              >
+                {check.done ? "Confirmed" : "Waiting"}
+              </span>
             </span>
           </li>
         ))}

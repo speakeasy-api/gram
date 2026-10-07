@@ -66,6 +66,14 @@ export function identityRailItems(
         href: `${detail.activity.href(encodedUrn)}${search}`,
         active: detail.activity.active,
       },
+      {
+        // Ending an agent is not something you do while reading it, so it
+        // does not sit under the facts about it.
+        key: "controls",
+        title: "Controls & Safety",
+        href: `${detail.controls.href(encodedUrn)}${search}`,
+        active: detail.controls.active,
+      },
     ];
   }
   return [

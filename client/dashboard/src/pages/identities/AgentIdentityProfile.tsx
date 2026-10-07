@@ -49,6 +49,19 @@ export function AgentIdentityProfile({
           <AgentIdentityAudit agent={agent} />
         </IdentitySection>
       );
+    case "controls":
+      return (
+        <IdentitySection
+          title="Controls & Safety"
+          meta="Stop this agent acting, for a while or for good"
+        >
+          <AgentLifecycle
+            agent={agent}
+            refresh={refresh}
+            onDeleted={() => void navigate(routes.identities.agents.href())}
+          />
+        </IdentitySection>
+      );
     case "sessions":
       return (
         <IdentitySection
@@ -118,13 +131,6 @@ export function AgentIdentityProfile({
           <AgentIdentityPermissions agent={agent} />
           <AgentIdentityChallenges agent={agent} />
           <AgentIdentityAudit agent={agent} subject />
-          {/* Ending an agent is not a section of it: it is what you do to
-              the whole thing, so it sits below them all. */}
-          <AgentLifecycle
-            agent={agent}
-            refresh={refresh}
-            onDeleted={() => void navigate(routes.identities.agents.href())}
-          />
         </IdentitySection>
       );
   }

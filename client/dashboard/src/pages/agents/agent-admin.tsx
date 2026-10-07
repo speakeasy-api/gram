@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/Label";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { useOrganization, useSession } from "@/contexts/Auth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { IdentityLink } from "@/components/identity-link";
 import { Text } from "@/components/ui/Text";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 
@@ -38,12 +40,44 @@ function AgentScopeLabel({ agent }: { agent: ManagedAgent }) {
   return <Text>{bound?.name ?? agent.projectId}</Text>;
 }
 
+/**
+ * The person accountable for an agent: their face, and a way to go and look
+ * at them. The viewer's own profile fills in when the server did not send
+ * one, which it does not for the caller themselves.
+ */
+function AgentOwner({ agent }: { agent: ManagedAgent }): JSX.Element {
+  const { user } = useSession();
+  const self = agent.ownerUserId === user.id;
+  const profile =
+    agent.ownerProfile ??
+    (self
+      ? { displayName: user.displayName || user.email, photoUrl: user.photoUrl }
+      : undefined);
+  const name = profile?.displayName || "Unavailable";
+  const face = (
+    <span className="flex min-w-0 items-center gap-2">
+      <Avatar className="size-5">
+        {profile?.photoUrl && <AvatarImage src={profile.photoUrl} alt="" />}
+        <AvatarFallback className="text-[10px]">
+          {name.slice(0, 1).toUpperCase()}
+        </AvatarFallback>
+      </Avatar>
+      <span className="truncate">{name}</span>
+    </span>
+  );
+  if (!profile) return face;
+  return (
+    <IdentityLink identifier={{ userId: agent.ownerUserId }}>
+      {face}
+    </IdentityLink>
+  );
+}
+
 export function AgentIdentityPanel({
   agent,
 }: {
   agent: ManagedAgent;
 }): JSX.Element {
-  const { user } = useSession();
   return (
     <div className="border-border space-y-4 border p-4">
       <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
@@ -53,10 +87,7 @@ export function AgentIdentityPanel({
         <dd className="font-mono text-xs">agent:{agent.id}</dd>
         <dt className="text-muted-foreground">Owner</dt>
         <dd>
-          {agent.ownerProfile?.displayName ??
-            (agent.ownerUserId === user.id
-              ? user.displayName || user.email
-              : "Unavailable")}
+          <AgentOwner agent={agent} />
         </dd>
         <dt className="text-muted-foreground">Scope</dt>
         <dd>

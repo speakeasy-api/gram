@@ -850,6 +850,11 @@ const ROUTE_STRUCTURE = {
             url: "sessions",
             component: IdentityAgentSection,
           },
+          controls: {
+            title: "Agent Controls",
+            url: "controls",
+            component: IdentityAgentSection,
+          },
         },
       },
     },

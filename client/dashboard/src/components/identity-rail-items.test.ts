@@ -18,6 +18,7 @@ function routes(): ReturnType<typeof useRoutes> {
         permissions: page("permissions"),
         provisioning: page("provisioning"),
         sessions: page("sessions"),
+        controls: page("controls"),
         security: page("security"),
         cost: page("cost"),
         connections: page("connections"),
@@ -56,6 +57,7 @@ describe("identityRailItems", () => {
       "provisioning",
       "sessions",
       "activity",
+      "controls",
     ]);
   });
 
@@ -68,6 +70,7 @@ describe("identityRailItems", () => {
     expect(titles["permissions"]).toBe("Permissions");
     expect(titles["provisioning"]).toBe("Provisioning");
     expect(titles["sessions"]).toBe("Sessions");
+    expect(titles["controls"]).toBe("Controls & Safety");
   });
 
   it("carries the current query string onto every link", () => {
