@@ -18,8 +18,10 @@ func TestOptionalConfidence(t *testing.T) {
 	t.Parallel()
 	options := []classifier.Option{classifier.NewOption("a", classifier.Text("a")), classifier.NewOption("b", classifier.Text("b"))}
 	req := classifier.NewRequest(classifier.Text("state")).Ask(classifier.Choice("choice", classifier.Text("choose"), options...)).Ask(classifier.Score("score", classifier.Text("score"), options...))
+
 	planned, err := compileRequest(req)
 	require.NoError(t, err)
+
 	for _, q := range planned {
 		for _, confidence := range []*float64{nil, new(0.0), new(1.0), new(-0.1), new(1.1)} {
 			wire := wireAnswer{Type: q.wire.Type, Choice: new("1"), Score: new(0.75), Probabilities: map[string]*float64{"0": new(0.25), "1": new(0.75)}, Confidence: confidence}
@@ -64,8 +66,10 @@ func TestGuardianDenialPreservesRetryHint(t *testing.T) {
 	limiter.Test(t)
 	t.Cleanup(func() { limiter.AssertExpectations(t) })
 	limiter.On("AllowN", mock.Anything, mock.Anything, mock.Anything, uint32(1)).Return(guardian.RateLimitResult{}, &guardian.ResilienceError{Reason: guardian.ErrRateLimited, RetryAfter: 2 * time.Second}).Once()
+
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithLimiter(&limiter))
 	require.NoError(t, err)
+
 	c := New(policy, conv.NewSecret([]byte("test-key")))
 	result := c.Classify(t.Context(), classifier.NewRequest(classifier.Text("state")).Ask(classifier.Noul("a", classifier.Text("a"))))
 	require.Len(t, result.Outcomes, 1)

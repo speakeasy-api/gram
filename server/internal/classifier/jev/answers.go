@@ -65,10 +65,12 @@ func decodeAnswer(q plannedQuestion, wire wireAnswer) *classifier.Answer {
 		if wire.Choice == nil {
 			return nil
 		}
+
 		index, err := strconv.Atoi(*wire.Choice)
 		if err != nil || index < 0 || index >= len(options) || strconv.Itoa(index) != *wire.Choice || distribution[index].Value+probabilityTolerance < maximum {
 			return nil
 		}
+
 		answer.Choice = &classifier.ChoiceAnswer{Selected: options[index].Key, Distribution: distribution, Confidence: wire.Confidence}
 	} else {
 		if wire.Score == nil || math.IsNaN(*wire.Score) || math.IsInf(*wire.Score, 0) || *wire.Score < 0 || *wire.Score > float64(len(options)-1) || math.Abs(*wire.Score-expected) > probabilityTolerance*float64(len(options)) {

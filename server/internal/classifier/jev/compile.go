@@ -24,10 +24,12 @@ func compileRequest(req *classifier.Request) ([]plannedQuestion, error) {
 	if req == nil || len(req.Questions) == 0 {
 		return nil, fmt.Errorf("jev: request requires questions")
 	}
+
 	state, err := json.Marshal(req.Input)
 	if err != nil {
 		return nil, fmt.Errorf("jev: encode state: %w", err)
 	}
+
 	if string(state) == "null" {
 		return nil, fmt.Errorf("jev: state must be a string, object, or array")
 	}
@@ -38,10 +40,12 @@ func compileRequest(req *classifier.Request) ([]plannedQuestion, error) {
 			return nil, fmt.Errorf("jev: question %d has an empty or duplicate key", i)
 		}
 		keys[q.Key] = true
+
 		wire, err := compile(q)
 		if err != nil {
 			return nil, fmt.Errorf("jev: question %d: %w", i, err)
 		}
+
 		questions = append(questions, plannedQuestion{index: i, question: q, wire: wire})
 	}
 	return questions, nil

@@ -91,16 +91,20 @@ func (c *Classifier) classify(ctx context.Context, req *classifier.Request) (cla
 	var result classifier.Result
 	result.Metadata = classifier.Metadata{Provider: "typesafe", Model: model, CompilerVersion: "1", AccountingVersion: "provider-usage-v1"}
 	result.Usage.Complete = true
+
 	if err := ctx.Err(); err != nil {
 		return result, fmt.Errorf("jev: classify: %w", err)
 	}
+
 	if len(bytes.TrimSpace(c.key.Reveal())) == 0 {
 		return result, fmt.Errorf("jev: API key is required: %w", classifier.ErrDisabled)
 	}
+
 	questions, err := compileRequest(req)
 	if err != nil {
 		return result, fmt.Errorf("%w: %w", classifier.ErrInvalidRequest, err)
 	}
+
 	partial := c.execute(ctx, req.Input, questions)
 	result.Outcomes, result.Usage, result.Models = partial.Outcomes, partial.Usage, partial.Models
 	var sizeError error
@@ -110,9 +114,11 @@ func (c *Classifier) classify(ctx context.Context, req *classifier.Request) (cla
 			break
 		}
 	}
+
 	if err := errors.Join(sizeError, ctx.Err()); err != nil {
 		return result, fmt.Errorf("jev: classify: %w", err)
 	}
+
 	return result, nil
 }
 
@@ -220,17 +226,21 @@ func (c *Classifier) send(ctx context.Context, state classifier.Entry, questions
 	for _, q := range questions {
 		request.Questions[strconv.Itoa(q.index)] = q.wire
 	}
+
 	body, err := json.Marshal(request)
 	if err != nil {
 		return response, failure(classifier.FailureProviderRejected, "Cannot encode provider request", false), false, false
 	}
+
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(body))
 	if err != nil {
 		return response, failure(classifier.FailureProviderRejected, "Cannot construct provider request", false), false, false
 	}
+
 	httpReq.Header.Set("Authorization", "Bearer "+string(c.key.Reveal()))
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
+
 	resp, err := c.client.Do(httpReq)
 	if err != nil {
 		if denial, ok := errors.AsType[*guardian.ResilienceError](err); ok && errors.Is(err, guardian.ErrRateLimited) {
@@ -240,9 +250,11 @@ func (c *Classifier) send(ctx context.Context, state classifier.Entry, questions
 			}
 			return response, failed, false, false
 		}
+
 		return response, failure(classifier.FailureProviderUnavailable, "Provider request failed", true), false, true
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
 	if resp.StatusCode != http.StatusOK {
 		tooLarge := resp.StatusCode == http.StatusRequestEntityTooLarge
 		if resp.StatusCode == http.StatusBadRequest {
@@ -272,10 +284,12 @@ func (c *Classifier) send(ctx context.Context, state classifier.Entry, questions
 		}
 		return response, failed, tooLarge, true
 	}
+
 	body, err = io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return response, failure(classifier.FailureProviderUnavailable, "Cannot read provider response", true), false, true
 	}
+
 	if len(body) > maxResponseBytes || json.Unmarshal(body, &response) != nil {
 		var empty wireResponse
 		return empty, failure(classifier.FailureInvalidResponse, "Provider response is malformed or too large", false), false, true
@@ -288,9 +302,11 @@ func retryAfter(value string) *time.Duration {
 		delay := time.Duration(seconds) * time.Second
 		return &delay
 	}
+
 	if date, err := http.ParseTime(value); err == nil {
 		delay := max(time.Until(date), 0)
 		return &delay
 	}
+
 	return nil
 }

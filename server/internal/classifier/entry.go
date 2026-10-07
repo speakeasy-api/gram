@@ -51,6 +51,7 @@ func NewEntry(value any) (Entry, error) {
 	if err != nil {
 		return Entry{raw: nil}, fmt.Errorf("encode classifier entry: %w", err)
 	}
+
 	return ParseEntry(data)
 }
 
@@ -70,6 +71,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
+
 	*e = entry
 	return nil
 }

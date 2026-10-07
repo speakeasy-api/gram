@@ -24,8 +24,10 @@ func testClient(t *testing.T, handler http.HandlerFunc) *Classifier {
 	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
+
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
+
 	return New(policy, conv.NewSecret([]byte("test-key")), WithEndpoint(server.URL))
 }
 
@@ -56,8 +58,10 @@ func TestGuardianLimitsEverySplitAttempt(t *testing.T) {
 	admitted.Limit = limit
 	admitted.Allowed = 1
 	limiter.On("AllowN", mock.Anything, mock.Anything, limit, uint32(1)).Return(admitted, nil).Times(3)
+
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithLimiter(&limiter))
 	require.NoError(t, err)
+
 	c := New(policy, conv.NewSecret([]byte("test-key")), WithEndpoint(server.URL))
 	req := classifier.NewRequest(classifier.Text("state")).Ask(classifier.Noul("a", classifier.Text("a"))).Ask(classifier.Noul("b", classifier.Text("b")))
 	result := c.Classify(t.Context(), req)
@@ -79,10 +83,13 @@ func TestClassifyAllVariants(t *testing.T) {
 		}
 		_, _ = fmt.Fprint(w, `{"model":"jev-1.13.0","answers":{"0":{"type":"noul","noul":0.8},"1":{"type":"choice","choice":"1","probabilities":{"0":0.1,"1":0.9},"confidence":0.7},"2":{"type":"score","score":0.75,"probabilities":{"0":0.25,"1":0.75},"confidence":0.6}},"usage":{"input_tokens":100,"output_tokens":10}}`)
 	})
+
 	state, err := classifier.ParseEntry([]byte(`{"messages":["hello"]}`))
 	require.NoError(t, err)
+
 	instructions, err := classifier.ParseEntry([]byte(`{"task":"classify","nested":[true,12]}`))
 	require.NoError(t, err)
+
 	req := classifier.NewRequest(state).
 		Ask(classifier.Noul("noul", instructions)).
 		Ask(classifier.Choice("choice", instructions, classifier.NewOption("private-a", instructions), classifier.NewOption("private-b", classifier.Text("b")))).
@@ -101,6 +108,7 @@ func TestClassifyAllVariants(t *testing.T) {
 	require.True(t, result.Usage.Complete)
 	require.Equal(t, int64(100), result.Usage.InputTokens)
 	require.Equal(t, model, captured.Model)
+
 	encoded, err := json.Marshal(captured)
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "private-a")
@@ -122,11 +130,13 @@ func TestClassifySizeRejectionSplitsAndKeepsPartialSuccess(t *testing.T) {
 			w.WriteHeader(413)
 			return
 		}
+
 		if _, exists := req.Questions["1"]; exists {
 			w.Header().Set("Retry-After", "5")
 			w.WriteHeader(429)
 			return
 		}
+
 		_, _ = fmt.Fprint(w, `{"model":"jev-1.13.0","answers":{"0":{"type":"noul","noul":0.4}},"usage":{"input_tokens":20,"output_tokens":2}}`)
 	})
 	req := classifier.NewRequest(classifier.Text("state")).Ask(classifier.Noul("a", classifier.Text("a"))).Ask(classifier.Noul("b", classifier.Text("b")))
@@ -179,10 +189,12 @@ func TestClassifyUnsplittableSizeErrorPreservesSuccess(t *testing.T) {
 			w.WriteHeader(400)
 			return
 		}
+
 		if _, exists := req.Questions["0"]; exists {
 			w.WriteHeader(413)
 			return
 		}
+
 		_, _ = fmt.Fprint(w, `{"model":"jev-1.13.0","answers":{"1":{"type":"noul","noul":0.4}},"usage":{"input_tokens":20,"output_tokens":2}}`)
 	})
 	req := classifier.NewRequest(classifier.Text("state")).Ask(classifier.Noul("large", classifier.Text("a"))).Ask(classifier.Noul("fits", classifier.Text("b")))
@@ -259,11 +271,13 @@ func TestClassifyContextOverflowSplitsAndPreservesSuccess(t *testing.T) {
 			w.WriteHeader(400)
 			return
 		}
+
 		if _, exists := req.Questions["0"]; exists {
 			w.WriteHeader(400)
 			_, _ = fmt.Fprint(w, `{"detail":{"error_type":"max_tokens_exceeded"}}`)
 			return
 		}
+
 		_, _ = fmt.Fprint(w, `{"model":"jev-1.13.0","answers":{"1":{"type":"noul","noul":0.4}},"usage":{"input_tokens":20,"output_tokens":2}}`)
 	})
 	req := classifier.NewRequest(classifier.Text("state")).Ask(classifier.Noul("large", classifier.Text("a"))).Ask(classifier.Noul("fits", classifier.Text("b")))
@@ -406,8 +420,10 @@ func TestClassifyBoundsConcurrentCalls(t *testing.T) {
 func TestDecodeAnswerRejectsInvalidDistributions(t *testing.T) {
 	t.Parallel()
 	q := classifier.Choice("q", classifier.Text("choose"), classifier.NewOption("a", classifier.Text("A")), classifier.NewOption("b", classifier.Text("B")))
+
 	compiled, err := compile(q)
 	require.NoError(t, err)
+
 	planned := plannedQuestion{index: 0, question: q, wire: compiled}
 	for _, raw := range []string{
 		`{"type":"choice","choice":"0","probabilities":{"0":0.1,"1":0.9},"confidence":0.5}`,
@@ -425,13 +441,17 @@ func TestDecodeAnswerRejectsInvalidDistributions(t *testing.T) {
 
 func TestNoulCriteriaMatchOpenRouterSchema(t *testing.T) {
 	t.Parallel()
+
 	without, err := compile(classifier.Noul("q", classifier.Text("Evaluate")))
 	require.NoError(t, err)
+
 	encoded, err := json.Marshal(without)
 	require.NoError(t, err)
 	require.JSONEq(t, `{"type":"noul","instructions":"Evaluate"}`, string(encoded))
+
 	positiveOnly, err := compile(classifier.Noul("q", classifier.Text("Evaluate"), classifier.WithPositive(classifier.Text("Positive"))))
 	require.NoError(t, err)
+
 	encoded, err = json.Marshal(positiveOnly)
 	require.NoError(t, err)
 	require.JSONEq(t, `{"type":"noul","instructions":"Evaluate","criteria":{"true":"Positive","false":""}}`, string(encoded))
