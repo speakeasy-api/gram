@@ -49,6 +49,8 @@ func Run[T any](ctx context.Context, settings Settings,
 	receive func(context.Context, func(context.Context, T)) error,
 	measure func(T) (int, string), reject func(T), handle func(context.Context, []T),
 ) error {
+	handlerCtx, stopHandlers := context.WithCancel(ctx)
+	defer stopHandlers()
 	counts := semaphore.NewWeighted(int64(settings.OutstandingMessages))
 	weights := semaphore.NewWeighted(int64(settings.OutstandingBytes))
 	in := make(chan item[T])
@@ -69,7 +71,14 @@ func Run[T any](ctx context.Context, settings Settings,
 				for i, m := range batch {
 					values[i] = m.value
 				}
-				handle(ctx, values)
+				select {
+				case <-stopped:
+					for _, value := range values {
+						reject(value)
+					}
+				default:
+					handle(handlerCtx, values)
+				}
 			}()
 		}
 	}()
@@ -163,6 +172,7 @@ func Run[T any](ctx context.Context, settings Settings,
 		}
 	})
 	close(stopped)
+	stopHandlers()
 	<-collectorDone
 	<-workerDone
 	return err
