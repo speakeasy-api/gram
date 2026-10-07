@@ -14,7 +14,7 @@ import (
 // It holds a table from event type to a getter: how the value is read for
 // that type, a question the provider dialect answers or a constant the type
 // implies. The value lands on the record as a canonical
-// speakeasy.event.<column> attribute, next to the producer's original
+// speakeasy.agent.<column> attribute, next to the producer's original
 // attributes, and the agent_events writer copies it from there. The file
 // that declares a column's table is the documentation of that column.
 //
@@ -150,7 +150,7 @@ func missingLabelLog(d dialect.LogDialect, record *otelv1.InboundLogRecord) stri
 
 // columnOf is the agent_events column a canonical key carries.
 func columnOf(key attribute.Key) string {
-	return strings.TrimPrefix(string(key), eventColumnKeyPrefix)
+	return strings.TrimPrefix(string(key), agentColumnKeyPrefix)
 }
 
 // columnKeyValue encodes a column's value under its canonical key. A stated

@@ -19,7 +19,7 @@ import (
 const meterColumnEnricherMissing = "gram.otel_column_enricher.missing"
 
 // MeterReservedAttributesDropped counts the attributes a transform dropped
-// because a producer sent them under Gram's reserved speakeasy.event
+// because a producer sent them under Gram's reserved speakeasy.agent
 // namespace, by signal. Only the column enrichers may write there; a
 // producer that does, by accident or on purpose, is otherwise invisible.
 const MeterReservedAttributesDropped = "gram.otel_reserved_attributes_dropped"
@@ -85,7 +85,7 @@ func NewInstruments(logger *slog.Logger, meterProvider metric.MeterProvider) *In
 
 	reservedAttributesDropped, err := meter.Int64Counter(
 		MeterReservedAttributesDropped,
-		metric.WithDescription("Attributes a transform dropped because a producer sent them under the reserved speakeasy.event namespace"),
+		metric.WithDescription("Attributes a transform dropped because a producer sent them under the reserved speakeasy.agent namespace"),
 	)
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(MeterReservedAttributesDropped), attr.SlogError(err))
