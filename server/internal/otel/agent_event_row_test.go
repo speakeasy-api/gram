@@ -97,6 +97,7 @@ func TestAgentEventRowFromLogHasNoDialectFallbackForCanonicalColumns(t *testing.
 		logEventTestKV(string(enrich.OriginalInstrumentationScopeNameKey), claudeCodeScopeName),
 		logEventTestKV("session.id", "session-1"),
 		logEventTestKV("model", "claude-sonnet-4"),
+		agentEventTestIntKV("input_tokens", 120),
 	})
 
 	row, skip := agentEventRowFromLog(record, testObservedAt)
@@ -108,7 +109,8 @@ func TestAgentEventRowFromLogHasNoDialectFallbackForCanonicalColumns(t *testing.
 	require.Empty(t, row.Surface)
 	require.Empty(t, row.SessionID)
 	require.Equal(t, "record-1", row.EventID, "with no subject the event id falls back to the record id")
-	require.Equal(t, "claude-sonnet-4", row.Model, "a column the transform does not fill yet still comes from the dialect")
+	require.Empty(t, row.Model)
+	require.Equal(t, int64(120), row.InputTokens, "a column the transform does not fill yet still comes from the dialect")
 }
 
 // The canonical columns are read from the keys as written, whatever the
@@ -233,7 +235,8 @@ func TestAgentEventRowFromLog(t *testing.T) {
 		require.Empty(t, skip)
 		require.Equal(t, string(dialect.EventTypeToolCallResult), row.EventType)
 		require.Equal(t, "toolu_1", row.EventID)
-		require.Equal(t, "Bash", row.ToolName)
+		require.Equal(t, "Bash", row.Name, "the tool is the subject of the result")
+		require.Equal(t, "Bash", row.ToolName, "and the deprecated column says the same")
 		require.Equal(t, string(dialect.OutcomeError), row.Outcome)
 		require.Equal(t, "exit status 1", row.OutcomeMessage)
 		require.Equal(t, int64(12_000_000), row.DurationNano)
@@ -268,7 +271,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 		require.Contains(t, row.OutputContent, `"role":"assistant"`)
 		require.Contains(t, row.OutputContent, `"Done. Two files changed."`)
 		require.Empty(t, row.InputContent)
-		require.Equal(t, "repl_main_thread", row.QuerySource)
+		require.Empty(t, row.QuerySource, "query_source describes a request, not its response")
 		require.Equal(t, string(dialect.OutcomeOK), row.Outcome)
 	})
 
@@ -619,6 +622,7 @@ func TestAgentEventRowFromLogReadsMCPAttributionFromToolParameters(t *testing.T)
 	row, skip := agentEventRowFromLog(record, testObservedAt)
 	require.Empty(t, skip)
 	require.Equal(t, string(dialect.EventTypeToolCallResult), row.EventType)
+	require.Equal(t, "mcp_tool", row.Name)
 	require.Equal(t, "mcp_tool", row.ToolName)
 	require.Equal(t, "assistants-dev", row.MCPServerName)
 	require.Equal(t, "whoami", row.MCPToolName)
@@ -646,7 +650,7 @@ func TestAgentEventRowFromLogClassifiesPayloadsAndCompaction(t *testing.T) {
 		require.Equal(t, dialect.EventTypeAPIResponseBody, row.EventType)
 		require.Equal(t, "req_011", row.EventID, "the same subject as the api_request it answers")
 		require.Equal(t, "claude-sonnet-4", row.Model)
-		require.Equal(t, "compact", row.QuerySource)
+		require.Empty(t, row.QuerySource, "query_source describes a request; a capture keeps it in the payload")
 		require.Empty(t, row.Outcome, "the request states the outcome, not its payload")
 		require.Contains(t, row.Attributes, `"body"`, "the payload stays in the attributes")
 	})
@@ -684,7 +688,8 @@ func TestAgentEventRowFromLogClassifiesPayloadsAndCompaction(t *testing.T) {
 		require.Equal(t, "compaction", row.RawEventName)
 		require.Equal(t, "session-1", row.SessionID)
 		require.Equal(t, string(dialect.OutcomeOK), row.Outcome)
-		require.Equal(t, int64(2_500_000_000), row.DurationNano)
+		require.Zero(t, row.DurationNano, "a compaction's duration is housekeeping and stays in the payload")
+		require.Contains(t, row.Attributes, `"duration_ms":2500`)
 		require.Zero(t, row.InputTokens, "compaction's token counts are not a request's usage")
 		require.Zero(t, row.OutputTokens)
 		require.Contains(t, row.Attributes, `"pre_tokens":150000`)

@@ -2,6 +2,7 @@ package enrich
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -61,6 +62,37 @@ func constant[V columnValue](value V) question[V] {
 	}
 }
 
+// errNotApplicable is a question's answer when the record, by its own
+// content, has no such value: a built-in tool has no MCP server, a result
+// that succeeded has no error message. The column stays empty and nothing is
+// counted, since nothing is missing.
+var errNotApplicable = errors.New("column does not apply to this record")
+
+// optional marks a question whose answer a type carries only sometimes, by
+// nature rather than by a producer's omission: a request made on behalf of a
+// skill names the skill and every other request names none. An absent answer
+// is then not counted as missing, since the counter exists to catch a
+// producer renaming an attribute, and a column that is empty most of the
+// time by design would drown that signal.
+func optional[V columnValue](q question[V]) question[V] {
+	return question[V]{
+		log: func(d dialect.LogDialect, r *otelv1.InboundLogRecord) (string, V, error) {
+			key, value, err := q.log(d, r)
+			if err == nil && key == "" {
+				return "", value, errNotApplicable
+			}
+			return key, value, err
+		},
+		span: func(d dialect.SpanDialect, s *otelv1.InboundSpan) (string, V, error) {
+			key, value, err := q.span(d, s)
+			if err == nil && key == "" {
+				return "", value, errNotApplicable
+			}
+			return key, value, err
+		},
+	}
+}
+
 // columnTable says, per event type, how a column's value is read. Keys are
 // the agent vocabulary's event types; a table never names the unclassified
 // type, since an unclassified record gets no column enricher.
@@ -113,6 +145,9 @@ func (e *logColumnEnricher[V]) Enrich(ctx context.Context, record *otelv1.Inboun
 	}
 
 	key, value, err := ask.log(d, record)
+	if errors.Is(err, errNotApplicable) {
+		return nil, nil
+	}
 	if err != nil || key == "" {
 		// The provider did not say, or said something unreadable. Either way
 		// the column stays empty: absent, never a guess, and counted so a

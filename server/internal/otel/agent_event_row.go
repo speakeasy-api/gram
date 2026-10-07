@@ -207,17 +207,6 @@ func agentEventRowFromSpan(span *otelv1.Span, observedAtUnixNano int64) (chrepo.
 // error is absent, never a guess, so the adapters below reduce every answer
 // to its value or the zero value.
 type answers interface {
-	Model() string
-	ToolName() string
-	Outcome() string
-	OutcomeMessage() string
-	Text() string
-	QuerySource() string
-	SkillName() string
-	AgentName() string
-	MCPServerName() string
-	MCPToolName() string
-	DurationNano() int64
 	InputTokens() int64
 	OutputTokens() int64
 	CacheReadTokens() int64
@@ -230,17 +219,6 @@ type logAnswers struct {
 	record *otelv1.InboundLogRecord
 }
 
-func (a logAnswers) Model() string           { return stated(a.d.Model(a.record)) }
-func (a logAnswers) ToolName() string        { return stated(a.d.ToolName(a.record)) }
-func (a logAnswers) Outcome() string         { return stated(a.d.Outcome(a.record)) }
-func (a logAnswers) OutcomeMessage() string  { return stated(a.d.OutcomeMessage(a.record)) }
-func (a logAnswers) Text() string            { return stated(a.d.Text(a.record)) }
-func (a logAnswers) QuerySource() string     { return stated(a.d.QuerySource(a.record)) }
-func (a logAnswers) SkillName() string       { return stated(a.d.SkillName(a.record)) }
-func (a logAnswers) AgentName() string       { return stated(a.d.AgentName(a.record)) }
-func (a logAnswers) MCPServerName() string   { return stated(a.d.MCPServerName(a.record)) }
-func (a logAnswers) MCPToolName() string     { return stated(a.d.MCPToolName(a.record)) }
-func (a logAnswers) DurationNano() int64     { return stated(a.d.DurationNano(a.record)) }
 func (a logAnswers) InputTokens() int64      { return stated(a.d.InputTokens(a.record)) }
 func (a logAnswers) OutputTokens() int64     { return stated(a.d.OutputTokens(a.record)) }
 func (a logAnswers) CacheReadTokens() int64  { return stated(a.d.CacheReadTokens(a.record)) }
@@ -252,17 +230,6 @@ type spanAnswers struct {
 	span *otelv1.InboundSpan
 }
 
-func (a spanAnswers) Model() string           { return stated(a.d.Model(a.span)) }
-func (a spanAnswers) ToolName() string        { return stated(a.d.ToolName(a.span)) }
-func (a spanAnswers) Outcome() string         { return stated(a.d.Outcome(a.span)) }
-func (a spanAnswers) OutcomeMessage() string  { return stated(a.d.OutcomeMessage(a.span)) }
-func (a spanAnswers) Text() string            { return stated(a.d.Text(a.span)) }
-func (a spanAnswers) QuerySource() string     { return stated(a.d.QuerySource(a.span)) }
-func (a spanAnswers) SkillName() string       { return stated(a.d.SkillName(a.span)) }
-func (a spanAnswers) AgentName() string       { return stated(a.d.AgentName(a.span)) }
-func (a spanAnswers) MCPServerName() string   { return stated(a.d.MCPServerName(a.span)) }
-func (a spanAnswers) MCPToolName() string     { return stated(a.d.MCPToolName(a.span)) }
-func (a spanAnswers) DurationNano() int64     { return stated(a.d.DurationNano(a.span)) }
 func (a spanAnswers) InputTokens() int64      { return stated(a.d.InputTokens(a.span)) }
 func (a spanAnswers) OutputTokens() int64     { return stated(a.d.OutputTokens(a.span)) }
 func (a spanAnswers) CacheReadTokens() int64  { return stated(a.d.CacheReadTokens(a.span)) }
@@ -295,6 +262,7 @@ func agentEventRow(columns canonicalColumns, a answers, enrichment rowEnrichment
 		EventID:            columns.eventID,
 		EventType:          columns.eventType,
 		RawEventName:       columns.rawEventName,
+		Name:               columns.name,
 		Source:             columns.source,
 		Provider:           columns.provider,
 		Surface:            columns.surface,
@@ -312,17 +280,17 @@ func agentEventRow(columns canonicalColumns, a answers, enrichment rowEnrichment
 		CostCenterName:     enrichment.costCenterName,
 		Roles:              enrichment.roles,
 		Groups:             enrichment.groups,
-		Model:              a.Model(),
-		QuerySource:        a.QuerySource(),
-		SkillName:          a.SkillName(),
-		AgentName:          a.AgentName(),
-		MCPServerName:      a.MCPServerName(),
-		MCPToolName:        a.MCPToolName(),
-		ToolName:           a.ToolName(),
-		Text:               a.Text(),
-		Outcome:            a.Outcome(),
-		OutcomeMessage:     a.OutcomeMessage(),
-		DurationNano:       a.DurationNano(),
+		Model:              columns.model,
+		QuerySource:        columns.querySource,
+		SkillName:          columns.skillName,
+		AgentName:          columns.agentName,
+		MCPServerName:      columns.mcpServerName,
+		MCPToolName:        columns.mcpToolName,
+		ToolName:           columns.toolName,
+		Text:               columns.text,
+		Outcome:            columns.outcome,
+		OutcomeMessage:     columns.outcomeMessage,
+		DurationNano:       columns.durationNano,
 		InputContent:       "",
 		OutputContent:      "",
 		InputTokens:        a.InputTokens(),
@@ -451,6 +419,19 @@ type canonicalColumns struct {
 	userEmail      string
 	externalUserID string
 	externalOrgID  string
+
+	model          string
+	querySource    string
+	skillName      string
+	agentName      string
+	mcpServerName  string
+	mcpToolName    string
+	name           string
+	toolName       string
+	text           string
+	outcome        string
+	outcomeMessage string
+	durationNano   int64
 }
 
 func (c *canonicalColumns) absorb(key string, value any) {
@@ -477,6 +458,30 @@ func (c *canonicalColumns) absorb(key string, value any) {
 		c.externalUserID = enrichmentString(value)
 	case string(enrich.ExternalOrgIDColumnKey):
 		c.externalOrgID = enrichmentString(value)
+	case string(enrich.ModelColumnKey):
+		c.model = enrichmentString(value)
+	case string(enrich.QuerySourceColumnKey):
+		c.querySource = enrichmentString(value)
+	case string(enrich.SkillNameColumnKey):
+		c.skillName = enrichmentString(value)
+	case string(enrich.AgentNameColumnKey):
+		c.agentName = enrichmentString(value)
+	case string(enrich.MCPServerNameColumnKey):
+		c.mcpServerName = enrichmentString(value)
+	case string(enrich.MCPToolNameColumnKey):
+		c.mcpToolName = enrichmentString(value)
+	case string(enrich.NameColumnKey):
+		c.name = enrichmentString(value)
+	case string(enrich.ToolNameColumnKey):
+		c.toolName = enrichmentString(value)
+	case string(enrich.TextColumnKey):
+		c.text = enrichmentString(value)
+	case string(enrich.OutcomeColumnKey):
+		c.outcome = enrichmentString(value)
+	case string(enrich.OutcomeMessageColumnKey):
+		c.outcomeMessage = enrichmentString(value)
+	case string(enrich.DurationNanoColumnKey):
+		c.durationNano = enrichmentInt64(value)
 	}
 }
 
@@ -502,6 +507,18 @@ func columnsFromSpanDialect(d dialect.SpanDialect, span *otelv1.InboundSpan, enr
 		userEmail:      stated(d.ExternalUserEmail(span)),
 		externalUserID: stated(d.ExternalUserID(span)),
 		externalOrgID:  stated(d.ExternalOrgID(span)),
+		model:          stated(d.Model(span)),
+		querySource:    stated(d.QuerySource(span)),
+		skillName:      stated(d.SkillName(span)),
+		agentName:      stated(d.AgentName(span)),
+		mcpServerName:  stated(d.MCPServerName(span)),
+		mcpToolName:    stated(d.MCPToolName(span)),
+		name:           stated(d.ToolName(span)),
+		toolName:       stated(d.ToolName(span)),
+		text:           stated(d.Text(span)),
+		outcome:        stated(d.Outcome(span)),
+		outcomeMessage: stated(d.OutcomeMessage(span)),
+		durationNano:   stated(d.DurationNano(span)),
 	}
 }
 
@@ -565,6 +582,18 @@ func (e *rowEnrichment) absorb(key string, value any) {
 func enrichmentString(value any) string {
 	text, _ := value.(string)
 	return text
+}
+
+// enrichmentInt64 reads an integer column the transform wrote. The OTLP
+// value may arrive as an integer or, through some producers, as a double.
+func enrichmentInt64(value any) int64 {
+	switch v := value.(type) {
+	case int64:
+		return v
+	case float64:
+		return int64(v)
+	}
+	return 0
 }
 
 func enrichmentStrings(value any) []string {
