@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/agentsurface"
 	"strings"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
@@ -311,28 +312,35 @@ func insertColumn[V columnValue](
 	return []attribute.KeyValue{kv}, nil
 }
 
-// missingLabelOther is the missing-value counter's surface label for a
-// producer the dialects do not recognise.
-const missingLabelOther = "other"
+// missingLabelOther is the counters' surface label for a producer whose
+// surface is not in the agent surface vocabulary.
+const missingLabelOther = string(agentsurface.SurfaceOther)
 
-// missingLabelLog is the surface label of the missing-value counter for a
-// log record: the agent surface the dialect recognised, which is a small
-// fixed set, or "other". The producer's service.name is not used as a label
-// because it is free-form, and a label a producer controls would make the
-// counter's series unbounded.
+// missingLabelLog is the surface label the missing-value and unclassified
+// counters use for a log record: the dialect's surface, folded into the
+// agent surface vocabulary (claude_code, claude_chat, cowork, codex, cursor,
+// other). Folding keeps the label set small and fixed whether the dialect
+// knew the surface from the producer's scope or read it off the record, so
+// hook traffic is counted per surface while a free-form value a producer
+// controls can never add a series.
 func missingLabelLog(d dialect.LogDialect, record *otelv1.InboundLogRecord) string {
-	if surface := stated(d.Surface(record)); surface != "" {
-		return surface
-	}
-	return missingLabelOther
+	return missingLabel(d.Surface(record))
 }
 
 // missingLabelSpan is missingLabelLog for a span.
 func missingLabelSpan(d dialect.SpanDialect, span *otelv1.InboundSpan) string {
-	if surface := stated(d.Surface(span)); surface != "" {
-		return surface
+	return missingLabel(d.Surface(span))
+}
+
+func missingLabel(_ string, surface string, err error) string {
+	if err != nil {
+		return missingLabelOther
 	}
-	return missingLabelOther
+	folded, ok := agentsurface.ForHookSource(surface, "")
+	if !ok || folded == agentsurface.SurfaceUnknown {
+		return missingLabelOther
+	}
+	return string(folded)
 }
 
 // columnOf is the agent_events column a canonical key carries.

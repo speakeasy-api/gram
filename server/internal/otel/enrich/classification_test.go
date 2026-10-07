@@ -1,6 +1,7 @@
 package enrich
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/agentsurface"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -116,9 +117,10 @@ func TestEnrichLogClassificationCountsWhatNoDialectNames(t *testing.T) {
 	reader, meterProvider := readableMeter(t)
 	enricher := &logClassification{instruments: NewInstruments(testenv.NewLogger(t), meterProvider)}
 
-	// A Claude Code event the vocabulary does not name is counted on its
-	// surface; a hook row's surface is read off the record, so it is counted
-	// under "other"; a typed record is not counted at all.
+	// An event the vocabulary does not name is counted on its agent surface,
+	// whether the dialect knew the surface from the scope (Claude Code's own
+	// export) or read it off the record (a hook row); a typed record is not
+	// counted at all.
 	columns := enrichedColumns(t, enricher, inboundTestLog(claudeCodeScopeName, "claude-code", "hook_registered"))
 	require.NotContains(t, columns, EventTypeColumnKey)
 	columns = enrichedColumns(t, enricher, inboundTestLog(dialect.HooksLogScopeName, "claude-code", "SessionStart", logStringAttribute("gram.hook.source", "claude-code")))
@@ -126,7 +128,13 @@ func TestEnrichLogClassificationCountsWhatNoDialectNames(t *testing.T) {
 	columns = enrichedColumns(t, enricher, inboundTestLog(dialect.HooksLogScopeName, "codex", "PostToolUse", logStringAttribute("gram.hook.source", "codex")))
 	require.Equal(t, dialect.EventTypeToolCallResult, columns[EventTypeColumnKey].AsString())
 
-	require.Equal(t, int64(1), counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface("claude-code")))
+	require.Equal(t, int64(2), counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface(string(agentsurface.SurfaceClaudeCode))))
+	require.Zero(t, counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface(missingLabelOther)))
+	require.Zero(t, counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface(string(agentsurface.SurfaceCodex))))
+	require.Zero(t, counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface("claude-code")), "the raw surface is never a label")
+
+	// A free-form surface a producer controls is folded to other.
+	columns = enrichedColumns(t, enricher, inboundTestLog(dialect.HooksLogScopeName, "x", "SessionStart", logStringAttribute("gram.hook.source", "my-custom-agent-7")))
+	require.NotContains(t, columns, EventTypeColumnKey)
 	require.Equal(t, int64(1), counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface(missingLabelOther)))
-	require.Zero(t, counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface("codex")))
 }
