@@ -19,8 +19,8 @@ export function DashboardFrame({
   toolbar,
   children,
 }: {
-  /** Where the list of dashboards is. */
-  backHref: string;
+  /** Where the list of dashboards is; a page with no list above it has none. */
+  backHref?: string | undefined;
   name: string;
   description?: string | undefined;
   /** Drawn beside the name: how the dashboard is marked, when it is. */
@@ -36,7 +36,7 @@ export function DashboardFrame({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <DashboardBackLink href={backHref} />
+        {backHref === undefined ? null : <DashboardBackLink href={backHref} />}
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 flex-col gap-1">
             <div className="flex min-w-0 items-center gap-2">
