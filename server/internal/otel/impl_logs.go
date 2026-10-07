@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	collectorlogsv1 "go.opentelemetry.io/proto/otlp/collector/logs/v1"
+	logsv1 "go.opentelemetry.io/proto/otlp/logs/v1"
 	"google.golang.org/protobuf/proto"
 
 	gen "github.com/speakeasy-api/gram/server/gen/otel"
@@ -87,22 +88,10 @@ func inboundLogRecordsFromExport(request *collectorlogsv1.ExportLogsServiceReque
 					continue
 				}
 
-				converted := &otelv1.InboundLogRecord{}
-				if err := transcodeOTLPMessage(record, converted); err != nil {
-					return nil, fmt.Errorf("convert OTLP log record: %w", err)
+				converted, err := newInboundLogRecord(record, resource, scope, provenance, uuid.NewString(), time.Now)
+				if err != nil {
+					return nil, err
 				}
-
-				converted.SetRecordId(uuid.NewString())
-				// OTLP receivers stamp observed time when the producer did
-				// not. Stamping before the first publish keeps the value
-				// stable across Pub/Sub redeliveries, which downstream
-				// ClickHouse writers rely on for a deterministic dedup key.
-				if converted.GetObservedTimeUnixNano() == 0 {
-					converted.SetObservedTimeUnixNano(uint64(time.Now().UnixNano()))
-				}
-				converted.SetResource(resource)
-				converted.SetProvenance(provenance)
-				converted.SetScope(scope)
 
 				if schemaURL := resourceLogs.GetSchemaUrl(); schemaURL != "" {
 					converted.SetResourceSchemaUrl(schemaURL)
@@ -117,6 +106,36 @@ func inboundLogRecordsFromExport(request *collectorlogsv1.ExportLogsServiceReque
 	}
 
 	return records, nil
+}
+
+// newInboundLogRecord is what the ingest edge stamps on one OTLP log record
+// before it is published: the record id it travels under, an observed time
+// when the producer sent none, and the resource, scope and tenancy it
+// arrived with. Stamping observed time before the first publish keeps the
+// value stable across Pub/Sub redeliveries, which the ClickHouse writers rely
+// on for a deterministic dedup key. The tool-call log bridge calls this with
+// the telemetry row's id and time so a bridged record is stamped the same way.
+func newInboundLogRecord(
+	record *logsv1.LogRecord,
+	resource *otelv1.InboundLogRecord_Resource,
+	scope *otelv1.InboundLogRecord_InstrumentationScope,
+	provenance *otelv1.InboundLogRecord_Provenance,
+	recordID string,
+	now func() time.Time,
+) (*otelv1.InboundLogRecord, error) {
+	converted := &otelv1.InboundLogRecord{}
+	if err := transcodeOTLPMessage(record, converted); err != nil {
+		return nil, fmt.Errorf("convert OTLP log record: %w", err)
+	}
+
+	converted.SetRecordId(recordID)
+	if converted.GetObservedTimeUnixNano() == 0 {
+		converted.SetObservedTimeUnixNano(uint64(max(now().UnixNano(), 0)))
+	}
+	converted.SetResource(resource)
+	converted.SetProvenance(provenance)
+	converted.SetScope(scope)
+	return converted, nil
 }
 
 // ValidateInboundLogRecord enforces the ingest-edge contract on a log record

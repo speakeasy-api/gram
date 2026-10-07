@@ -159,3 +159,42 @@ func TestEventIDTableNamesEveryTypeWithASubject(t *testing.T) {
 	require.NotContains(t, definition.byType, dialect.EventTypeAPIRequestBody)
 	require.NotContains(t, definition.byType, dialect.EventTypeCompaction)
 }
+
+func TestIdentityColumnsForGram(t *testing.T) {
+	t.Parallel()
+
+	reader, meterProvider := readableMeter(t)
+	m := NewInstruments(testenv.NewLogger(t), meterProvider)
+
+	// The gateway stamps the MCP session, the external user and the row id;
+	// it has no turn, and the external org is stated only when the caller
+	// carried one, so those are counted.
+	record := inboundTestLog(dialect.GramTelemetryLogScope, "gram-server", dialect.GramToolCallEvent,
+		logStringAttribute("gram.telemetry.log.id", "row-1"),
+		logStringAttribute("gram.session.id", "mcp-session-1"),
+		logStringAttribute("gram.chat.id", "chat-1"),
+		logStringAttribute("gram.external_user.id", "ext-user-1"),
+		logStringAttribute("user.email", "dev@example.com"),
+		logStringAttribute("gram.mcp.client.name", "claude-code"),
+	)
+
+	columns := identity(t, m, record)
+	require.Equal(t, "mcp-session-1", columns[SessionIDColumnKey].AsString())
+	require.Equal(t, "row-1", columns[EventIDColumnKey].AsString())
+	require.Equal(t, "ext-user-1", columns[ExternalUserIDColumnKey].AsString())
+	require.Equal(t, "dev@example.com", columns[UserEmailColumnKey].AsString())
+	require.NotContains(t, columns, TurnIDColumnKey)
+	require.NotContains(t, columns, ExternalOrgIDColumnKey)
+	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing,
+		attr.AgentEventSurface(missingLabelOther),
+		attr.AgentEventType(dialect.EventTypeToolCallResult),
+		attr.AgentEventColumn("turn_id"),
+	))
+	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing,
+		attr.AgentEventSurface(missingLabelOther),
+		attr.AgentEventColumn("external_org_id"),
+	))
+	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventSurface("claude-code")),
+		"a surface read off the record is not a counter label")
+	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("session_id")))
+}

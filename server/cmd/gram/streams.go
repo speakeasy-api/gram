@@ -408,13 +408,14 @@ func newStreamsCommand() *cli.Command {
 			var (
 				findingsPub   gcp.Publisher[*riskv1.Finding]
 				logPub        gcp.Publisher[*otelv1.LogRecord]
+				inboundLogPub gcp.Publisher[*otelv1.InboundLogRecord]
 				metricPub     gcp.Publisher[*otelv1.Metric]
 				spanPub       gcp.Publisher[*otelv1.Span]
 				riskMeterPub  gcp.Publisher[*meteringv1.MeterReading]
 				sessionLogPub gcp.Publisher[*telemetryv1.LogRecord]
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub, sessionLogPub)
+				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, inboundLogPub, metricPub, spanPub, riskMeterPub, sessionLogPub)
 			})
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
@@ -639,6 +640,16 @@ func newStreamsCommand() *cli.Command {
 				guardianPolicy,
 			)
 
+			// The bridge publishes onto the inbound log topic the ingest
+			// edge feeds, with the same back-pressure settings the edge uses.
+			inboundLogPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.InboundLogRecord{},
+				gcp.WithPubSubPublishSettings(&meterPublishSettings),
+			)
+			if err != nil {
+				return fmt.Errorf("create inbound otel log publisher: %w", err)
+			}
+			toolCallLogBridgeHandler := otelsvc.NewToolCallLogBridgeHandler(logger, meterProvider, inboundLogPub)
+
 			sessionLogPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &telemetryv1.LogRecord{})
 			if err != nil {
 				return fmt.Errorf("create session telemetry publisher: %w", err)
@@ -719,6 +730,7 @@ func newStreamsCommand() *cli.Command {
 				mustReceiveBatchWithResult(rg, &otelv1.Span{}, &otelv1.SpanRelay{}, spanRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 				mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingOTELRelay{}, riskFindingRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
 				mustReceiveBatchWithResult(rg, &telemetryv1.LogRecord{}, &telemetryv1.ToolCallLogRelay{}, toolCallLogRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				mustReceiveBatchWithResult(rg, &telemetryv1.LogRecord{}, &telemetryv1.ToolCallLogBridge{}, toolCallLogBridgeHandler, gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})
 
 				// Event feed tee: mirror the normalized OTEL topics into the
 				// otel_logs / otel_traces ClickHouse tables.

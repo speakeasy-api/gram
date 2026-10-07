@@ -264,3 +264,28 @@ func testOTELAuthContext(projectID uuid.UUID) *contextvalues.AuthContext {
 		IsAdmin:               false,
 	}
 }
+
+func TestNewInboundLogRecordLeavesAStatedObservedTimeAlone(t *testing.T) {
+	t.Parallel()
+
+	scopeName := "producer.scope"
+	scope := (&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: &scopeName}).Build()
+	provenance := (&otelv1.InboundLogRecord_Provenance_builder{
+		Source:         new(ProvenanceSource),
+		OrganizationId: new(testLogOrganizationID),
+		ProjectId:      new(testLogProjectID),
+	}).Build()
+	record := &logsv1.LogRecord{
+		TimeUnixNano:         1_000,
+		ObservedTimeUnixNano: 2_000,
+		Body:                 &commonv1.AnyValue{Value: &commonv1.AnyValue_StringValue{StringValue: "already observed"}},
+	}
+
+	converted, err := newInboundLogRecord(record, &otelv1.InboundLogRecord_Resource{}, scope, provenance, "record-1", func() time.Time { return time.Unix(0, 9_000) })
+	require.NoError(t, err)
+	require.Equal(t, "record-1", converted.GetRecordId())
+	require.Equal(t, uint64(1_000), converted.GetTimeUnixNano())
+	require.Equal(t, uint64(2_000), converted.GetObservedTimeUnixNano(), "a producer's observed time is kept, so a bridged row stamps the same value every delivery")
+	require.Equal(t, scopeName, converted.GetScope().GetName())
+	require.Equal(t, testLogOrganizationID, converted.GetProvenance().GetOrganizationId())
+}

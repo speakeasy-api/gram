@@ -76,11 +76,11 @@ const (
 )
 
 func (CodexLog) Provider(*otelv1.InboundLogRecord) (string, string, error) {
-	return scopeNameKey, codexProvider, nil
+	return ScopeNameKey, codexProvider, nil
 }
 
 func (CodexLog) Surface(*otelv1.InboundLogRecord) (string, string, error) {
-	return scopeNameKey, codexSurface, nil
+	return ScopeNameKey, codexSurface, nil
 }
 
 func (CodexLog) EventName(record *otelv1.InboundLogRecord) (string, string, error) {

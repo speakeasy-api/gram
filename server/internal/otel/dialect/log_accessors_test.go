@@ -183,7 +183,7 @@ func TestClaudeCodeLogEventAccessors(t *testing.T) {
 		t.Parallel()
 		key, provider, err := ClaudeCodeLog{}.Provider(accessorTestRecord(claudeScope, "api_request"))
 		require.NoError(t, err)
-		require.Equal(t, scopeNameKey, key)
+		require.Equal(t, ScopeNameKey, key)
 		require.Equal(t, "anthropic", provider)
 	})
 }
@@ -259,7 +259,7 @@ func TestLogFallbackAnswersFieldByField(t *testing.T) {
 
 	key, provider, err := d.Provider(record)
 	require.NoError(t, err)
-	require.Equal(t, scopeNameKey, key)
+	require.Equal(t, ScopeNameKey, key)
 	require.Equal(t, "anthropic", provider)
 
 	key, kind, err := d.EventType(record)

@@ -1,0 +1,26 @@
+edition = "2024";
+
+package gram.telemetry.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1;telemetryv1";
+
+// ToolCallLogBridge republishes the tool call records Gram writes when it
+// runs a tool as inbound OTel log records, so they travel through the same
+// transform and land in agent_events like every other producer's. It is its
+// own subscription so the relay, the noop and the bridge fail and retry
+// independently. Retention matches the relays so a stalled bridge can be
+// caught up rather than losing the window.
+message ToolCallLogBridge {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.telemetry.v1.LogRecord"
+    ack_deadline: {seconds: 60}
+    retention: {seconds: 604800} /* 7 days */
+    retain_acked_messages: true
+    retry_policy: {
+      minimum_backoff: {seconds: 10}
+      maximum_backoff: {seconds: 60}
+    }
+  };
+}

@@ -27,15 +27,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 )
 
 const (
 	meterToolCallLogRelayDropped = "gram.otel_relay.tool_call_logs_dropped"
 	meterToolCallLogRelayFailed  = "gram.otel_relay.tool_call_logs_failed"
-
-	toolCallLogScopeName = "github.com/speakeasy-api/gram/server/internal/telemetry"
-	toolCallLogEventName = "gram.tool_call"
 
 	// toolCallLogEventSource is the gram.event.source value this relay
 	// forwards. The topic mirrors every telemetry_logs row, and most of them
@@ -333,7 +331,7 @@ func buildToolCallLogRelayExport(
 			Resource: group.resource,
 			ScopeLogs: []*logsv1.ScopeLogs{{
 				Scope: &commonv1.InstrumentationScope{
-					Name:                   toolCallLogScopeName,
+					Name:                   dialect.GramTelemetryLogScope,
 					Version:                "",
 					Attributes:             nil,
 					DroppedAttributesCount: 0,
@@ -392,7 +390,7 @@ func toolCallLogRecord(record *telemetryv1.LogRecord, observedAt time.Time) (*lo
 		Flags:                  0,
 		TraceId:                decodeTelemetryTraceID(record.GetTraceId()),
 		SpanId:                 decodeTelemetrySpanID(record.GetSpanId()),
-		EventName:              toolCallLogEventName,
+		EventName:              dialect.GramToolCallEvent,
 	}, nil
 }
 

@@ -369,3 +369,78 @@ func TestOperationColumnsLeaveAToolCallLogWithoutADurationUncounted(t *testing.T
 	require.NotContains(t, operation(t, in, record), DurationNanoColumnKey)
 	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("duration_nano")))
 }
+
+func TestOperationColumnsForGram(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a hosted tool call names the tool and its server, says how it went and how long it took", func(t *testing.T) {
+		t.Parallel()
+		reader, meterProvider := readableMeter(t)
+		in := NewInstruments(testenv.NewLogger(t), meterProvider)
+		record := inboundTestLog(dialect.GramTelemetryLogScope, "gram-server", dialect.GramToolCallEvent,
+			logStringAttribute("gram.tool.name", "list_repos"),
+			logStringAttribute("gram.toolset.slug", "github"),
+			inboundTestIntAttribute("http.response.status_code", 200),
+			inboundTestDoubleAttribute("gram.tool_call.duration", 1.25),
+		)
+
+		columns := operation(t, in, record)
+		require.Equal(t, "list_repos", columns[NameColumnKey].AsString())
+		require.Equal(t, "list_repos", columns[ToolNameColumnKey].AsString())
+		require.Equal(t, "list_repos", columns[MCPToolNameColumnKey].AsString())
+		require.Equal(t, "github", columns[MCPServerNameColumnKey].AsString())
+		require.Equal(t, dialect.OutcomeOK, columns[OutcomeColumnKey].AsString())
+		require.Equal(t, int64(1_250_000_000), columns[DurationNanoColumnKey].AsInt64())
+		require.NotContains(t, columns, ModelColumnKey, "a tool call involves no model")
+		require.NotContains(t, columns, OutcomeMessageColumnKey)
+		require.NotContains(t, columns, TextColumnKey)
+		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("outcome_message")), "a call that went fine owes no message")
+		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("mcp_server_name")))
+	})
+
+	t.Run("a failed call is an error with no message, which is counted", func(t *testing.T) {
+		t.Parallel()
+		reader, meterProvider := readableMeter(t)
+		in := NewInstruments(testenv.NewLogger(t), meterProvider)
+		record := inboundTestLog(dialect.GramTelemetryLogScope, "gram-server", dialect.GramToolCallEvent,
+			logStringAttribute("gram.tool.name", "list_repos"),
+			logStringAttribute("gram.toolset.slug", "github"),
+			inboundTestIntAttribute("http.response.status_code", 502),
+			inboundTestDoubleAttribute("gram.tool_call.duration", 0.5),
+		)
+
+		columns := operation(t, in, record)
+		require.Equal(t, dialect.OutcomeError, columns[OutcomeColumnKey].AsString())
+		require.NotContains(t, columns, OutcomeMessageColumnKey, "the gateway records the result document, not a message about it")
+		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing,
+			attr.AgentEventSurface(missingLabelOther),
+			attr.AgentEventType(dialect.EventTypeToolCallResult),
+			attr.AgentEventColumn("outcome_message"),
+		))
+	})
+
+	t.Run("a remote MCP call carries no toolset, so its server is counted missing under other", func(t *testing.T) {
+		t.Parallel()
+		reader, meterProvider := readableMeter(t)
+		in := NewInstruments(testenv.NewLogger(t), meterProvider)
+		record := inboundTestLog(dialect.GramTelemetryLogScope, "gram-server", dialect.GramToolCallEvent,
+			logStringAttribute("gram.tool.name", "search"),
+			logStringAttribute("gram.mcp.client.name", "cursor"),
+			inboundTestIntAttribute("http.response.status_code", 200),
+			inboundTestDoubleAttribute("http.server.request.duration", 2),
+		)
+
+		columns := operation(t, in, record)
+		require.Equal(t, "search", columns[ToolNameColumnKey].AsString())
+		require.Equal(t, int64(2_000_000_000), columns[DurationNanoColumnKey].AsInt64())
+		require.NotContains(t, columns, MCPServerNameColumnKey)
+		// The surface was read off the record, not known from the scope, so
+		// it is not a label: a producer-controlled value would make the
+		// counter's series unbounded.
+		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing,
+			attr.AgentEventSurface(missingLabelOther),
+			attr.AgentEventColumn("mcp_server_name"),
+		))
+		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventSurface("cursor")))
+	})
+}

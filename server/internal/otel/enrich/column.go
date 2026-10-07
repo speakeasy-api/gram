@@ -316,20 +316,24 @@ func insertColumn[V columnValue](
 const missingLabelOther = "other"
 
 // missingLabelLog is the surface label of the missing-value counter for a
-// log record: the agent surface the dialect recognised, which is a small
-// fixed set, or "other". The producer's service.name is not used as a label
-// because it is free-form, and a label a producer controls would make the
-// counter's series unbounded.
+// log record: the agent surface the dialect knows from recognising the
+// producer, which is a small fixed set, or "other". A surface a dialect read
+// off an attribute is not used, nor is the producer's service.name: both are
+// free-form, and a label a producer controls would make the counter's series
+// unbounded.
 func missingLabelLog(d dialect.LogDialect, record *otelv1.InboundLogRecord) string {
-	if surface := stated(d.Surface(record)); surface != "" {
-		return surface
-	}
-	return missingLabelOther
+	return missingLabel(d.Surface(record))
 }
 
 // missingLabelSpan is missingLabelLog for a span.
 func missingLabelSpan(d dialect.SpanDialect, span *otelv1.InboundSpan) string {
-	if surface := stated(d.Surface(span)); surface != "" {
+	return missingLabel(d.Surface(span))
+}
+
+// missingLabel keeps a surface only when the dialect knew it from the
+// producer's scope rather than reading it from the record.
+func missingLabel(key, surface string, err error) string {
+	if err == nil && key == dialect.ScopeNameKey && surface != "" {
 		return surface
 	}
 	return missingLabelOther

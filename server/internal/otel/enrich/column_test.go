@@ -210,3 +210,28 @@ func TestInboundLogSourceIsTheEventFeedSlugOrUnknown(t *testing.T) {
 	require.Equal(t, "my-agent", inboundLogSource(inboundTestLog("com.example.app", "My Agent", "")))
 	require.Equal(t, SourceUnknown, inboundLogSource(inboundTestLog("com.example.app", "", "")))
 }
+
+func TestLogColumnEnricherLabelsOnlyASurfaceKnownFromTheScope(t *testing.T) {
+	t.Parallel()
+
+	reader, meterProvider := readableMeter(t)
+	enricher := &logColumnEnricher[string]{
+		column:      column[string]{key: TurnIDColumnKey, byType: perEventType[string]{dialect.EventTypeToolCallResult: getter[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}}},
+		instruments: NewInstruments(testenv.NewLogger(t), meterProvider),
+	}
+
+	// Gram's dialect reads the surface off the MCP client's self-reported
+	// name. That is the right column value and the wrong counter label: a
+	// client can call itself anything, so the gap is counted under "other".
+	record := inboundTestLog(dialect.GramTelemetryLogScope, "gram-server", dialect.GramToolCallEvent,
+		logStringAttribute("gram.mcp.client.name", "my-custom-agent-7"),
+	)
+
+	require.Empty(t, enrichedColumns(t, enricher, record))
+	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing,
+		attr.AgentEventSurface(missingLabelOther),
+		attr.AgentEventType(dialect.EventTypeToolCallResult),
+		attr.AgentEventColumn("turn_id"),
+	))
+	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventSurface("my-custom-agent-7")))
+}

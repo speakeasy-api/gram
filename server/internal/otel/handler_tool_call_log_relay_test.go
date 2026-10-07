@@ -2,6 +2,7 @@ package otel
 
 import (
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -204,7 +205,7 @@ func TestToolCallLogRelayHandlerConvertsRowShapeToOTLP(t *testing.T) {
 
 	require.Equal(t, "ERROR", converted.GetSeverityText())
 	require.Equal(t, logsv1.SeverityNumber_SEVERITY_NUMBER_ERROR, converted.GetSeverityNumber())
-	require.Equal(t, toolCallLogEventName, converted.GetEventName())
+	require.Equal(t, dialect.GramToolCallEvent, converted.GetEventName())
 	require.Len(t, converted.GetTraceId(), 16)
 	require.Len(t, converted.GetSpanId(), 8)
 
@@ -442,7 +443,7 @@ func toolCallLogTestDeliveredRecords(t *testing.T, request *collectorlogsv1.Expo
 	t.Helper()
 	require.Len(t, request.GetResourceLogs(), 1)
 	require.Len(t, request.GetResourceLogs()[0].GetScopeLogs(), 1)
-	require.Equal(t, toolCallLogScopeName, request.GetResourceLogs()[0].GetScopeLogs()[0].GetScope().GetName())
+	require.Equal(t, dialect.GramTelemetryLogScope, request.GetResourceLogs()[0].GetScopeLogs()[0].GetScope().GetName())
 	return request.GetResourceLogs()[0].GetScopeLogs()[0].GetLogRecords()
 }
 

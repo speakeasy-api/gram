@@ -53,6 +53,21 @@ func TestEnrichLogClassificationNamesWhatARecordIs(t *testing.T) {
 		require.NotContains(t, columns, SurfaceColumnKey, "the semantic conventions do not say which agent was behind a request")
 	})
 
+	t.Run("a hosted tool call the gateway ran is a tool_call_result from no provider on the client that made it", func(t *testing.T) {
+		t.Parallel()
+		record := inboundTestLog(dialect.GramTelemetryLogScope, "gram-server", dialect.GramToolCallEvent,
+			logStringAttribute("gram.tool.name", "list_repos"),
+			logStringAttribute("gram.mcp.client.name", "claude-code"),
+		)
+
+		columns := enrichedColumns(t, enricher, record)
+		require.Equal(t, dialect.EventTypeToolCallResult, columns[EventTypeColumnKey].AsString())
+		require.Equal(t, dialect.GramToolCallEvent, columns[RawEventNameColumnKey].AsString())
+		require.Equal(t, "gram-server", columns[SourceColumnKey].AsString())
+		require.NotContains(t, columns, ProviderColumnKey, "a tool call involves no model provider")
+		require.Equal(t, "claude-code", columns[SurfaceColumnKey].AsString(), "the surface is whatever MCP client made the call")
+	})
+
 	t.Run("an unclassified Claude Code record keeps its name and producer and gets no type", func(t *testing.T) {
 		t.Parallel()
 		record := inboundTestLog(claudeCodeScopeName, "claude-code", "hook_registered")

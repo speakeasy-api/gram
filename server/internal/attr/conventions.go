@@ -1850,6 +1850,9 @@ func SlogAccessRequestRecipient(v string) slog.Attr {
 func MetricName(v string) attribute.KeyValue { return MetricNameKey.String(v) }
 func SlogMetricName(v string) slog.Attr      { return slog.String(string(MetricNameKey), v) }
 
+func TelemetryLogID(v string) attribute.KeyValue { return TelemetryLogIDKey.String(v) }
+func SlogTelemetryLogID(v string) slog.Attr      { return slog.String(string(TelemetryLogIDKey), v) }
+
 func OAuthAuthorizationEndpoint(v string) attribute.KeyValue {
 	return OAuthAuthorizationEndpointKey.String(v)
 }

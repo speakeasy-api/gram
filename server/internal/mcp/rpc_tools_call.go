@@ -359,6 +359,9 @@ func handleToolsCall(
 
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
+	// Timed from here so the recorded duration covers the whole call Gram
+	// ran, the way a hook or a remote MCP interceptor would time it.
+	start := time.Now()
 	rw := &toolCallResponseWriter{
 		headers:    make(http.Header),
 		body:       new(bytes.Buffer),
@@ -449,6 +452,12 @@ func handleToolsCall(
 		}
 		logAttrs.RecordMCPURL(mcpURL)
 		logAttrs.RecordMCPClient(clientIdentity.Name, clientIdentity.Version)
+		// How long the call took and which MCP session made it, so the row
+		// says what agent_events asks of a tool call result.
+		logAttrs[attr.ToolCallDurationKey] = time.Since(start).Seconds()
+		if payload.sessionID != "" {
+			logAttrs[attr.SessionIDKey] = payload.sessionID
+		}
 		params := tm.LogParams{
 			Timestamp: time.Now(),
 			ToolInfo: tm.ToolInfo{
