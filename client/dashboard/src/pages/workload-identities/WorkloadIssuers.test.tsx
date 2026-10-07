@@ -77,6 +77,16 @@ vi.mock("@gram/client/react-query/workloadPlatforms.js", () => ({
     isPending: false,
   }),
 }));
+vi.mock("@gram/client/react-query/workloadCustomFlows.js", async () => {
+  const { customFlows } = await import("./custom/customFlowsFixture");
+  return {
+    useWorkloadCustomFlows: () => ({
+      data: customFlows,
+      isPending: false,
+      isError: false,
+    }),
+  };
+});
 vi.mock("@gram/client/react-query/registerWorkloadIssuer.js", () => ({
   useRegisterWorkloadIssuerMutation: () => ({
     mutate: vi.fn(),

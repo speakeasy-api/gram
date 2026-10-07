@@ -1,8 +1,19 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
-import { afterEach, expect, it } from "vitest";
-import { AdmitSubjectSheet } from "./AdmitSubjectSheet";
-import { canAdmit } from "./subjectRule";
+import { afterEach, expect, it, vi } from "vitest";
+import { canAdmit } from "../subjectRule";
+import { AccessRuleSheet } from "./AccessRuleSheet";
+
+vi.mock("@gram/client/react-query/workloadCustomFlows.js", async () => {
+  const { customFlows } = await import("./customFlowsFixture");
+  return {
+    useWorkloadCustomFlows: () => ({
+      data: customFlows,
+      isPending: false,
+      isError: false,
+    }),
+  };
+});
 
 afterEach(cleanup);
 
@@ -25,7 +36,7 @@ function issuer(overrides: Partial<WorkloadIssuer> = {}): WorkloadIssuer {
 
 function renderSheet(workloadIssuer: WorkloadIssuer): void {
   render(
-    <AdmitSubjectSheet
+    <AccessRuleSheet
       open
       onOpenChange={() => {}}
       onSubmit={() => {}}
@@ -192,7 +203,7 @@ it("warns in the sheet about whitespace before the terminator", () => {
 function renderEdit(agentId: string): { submitted: () => number } {
   let submissions = 0;
   render(
-    <AdmitSubjectSheet
+    <AccessRuleSheet
       open
       onOpenChange={() => {}}
       onSubmit={() => {
@@ -255,7 +266,7 @@ it("requires an agent before allowing new access", () => {
 
 it("starts a new admission empty each time the sheet opens", () => {
   const sheet = (open: boolean) => (
-    <AdmitSubjectSheet
+    <AccessRuleSheet
       open={open}
       onOpenChange={() => {}}
       onSubmit={() => {}}
@@ -277,7 +288,7 @@ it("starts a new admission empty each time the sheet opens", () => {
 
 it("takes the values handed over in the render that reopens it", () => {
   const sheet = (open: boolean, name: string) => (
-    <AdmitSubjectSheet
+    <AccessRuleSheet
       open={open}
       onOpenChange={() => {}}
       onSubmit={() => {}}

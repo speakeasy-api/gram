@@ -9,6 +9,9 @@ import { isRelativePath } from "./origin";
 const SETUP_PROSE =
   "text-sm [&_ul]:ml-6 [&_ul]:list-disc [&_li]:my-1 [&_strong]:font-semibold";
 
+const SETUP_HELP =
+  "text-muted-foreground text-sm [&_p]:leading-5 [&_code]:border-0 [&_code]:bg-transparent [&_code]:p-0 [&_code]:font-normal";
+
 // Structural subset of an mdast node, enough to walk the tree.
 interface MarkdownNode {
   type: string;
@@ -55,6 +58,14 @@ function SafeMarkdown({
 /** A passage of setup prose. */
 export function SetupText({ markdown }: { markdown: string }): JSX.Element {
   return <SafeMarkdown markdown={markdown} className={SETUP_PROSE} />;
+}
+
+/**
+ * Markdown help under a form control, in the muted small type of a hint.
+ * Inline code keeps the surrounding type rather than the boxed chat style.
+ */
+export function SetupHelp({ markdown }: { markdown: string }): JSX.Element {
+  return <SafeMarkdown markdown={markdown} className={SETUP_HELP} />;
 }
 
 /** An illustration, shown only when src is a path on the dashboard's origin. */
