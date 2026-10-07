@@ -793,6 +793,8 @@ trackedFiles:
   src/funcs/widgetsUpdate.ts: {}
   src/funcs/workloadIdentitiesAdmitSubject.ts: {}
   src/funcs/workloadIdentitiesList.ts: {}
+  src/funcs/workloadIdentitiesListPlatforms.ts: {}
+  src/funcs/workloadIdentitiesListTokenEndpoints.ts: {}
   src/funcs/workloadIdentitiesRegisterIssuer.ts: {}
   src/funcs/workloadIdentitiesUpdateIssuer.ts: {}
   src/funcs/workloadIdentitiesUpdateSubject.ts: {}
@@ -1956,6 +1958,15 @@ trackedFiles:
   src/models/components/workloadadmission.ts: {}
   src/models/components/workloadidentitypolicy.ts: {}
   src/models/components/workloadissuer.ts: {}
+  src/models/components/workloadplatform.ts: {}
+  src/models/components/workloadplatformblock.ts: {}
+  src/models/components/workloadplatformcatalog.ts: {}
+  src/models/components/workloadplatformconstant.ts: {}
+  src/models/components/workloadplatformstep.ts: {}
+  src/models/components/workloadplatformsubject.ts: {}
+  src/models/components/workloadplatformvariable.ts: {}
+  src/models/components/workloadtokenendpoint.ts: {}
+  src/models/components/workloadtokenendpoints.ts: {}
   src/models/components/workosdomainverificationintentoptions.ts: {}
   src/models/components/workosintentoptions.ts: {}
   src/models/components/workosssointentoptions.ts: {}
@@ -2479,6 +2490,8 @@ trackedFiles:
   src/models/operations/listversions.ts: {}
   src/models/operations/listwidgets.ts: {}
   src/models/operations/listworkloadidentities.ts: {}
+  src/models/operations/listworkloadplatforms.ts: {}
+  src/models/operations/listworkloadtokenendpoints.ts: {}
   src/models/operations/loadchat.ts: {}
   src/models/operations/loadchatoverview.ts: {}
   src/models/operations/logout.ts: {}
@@ -3828,6 +3841,10 @@ trackedFiles:
   src/react-query/workUnitsTrend.ts: {}
   src/react-query/workloadIdentities.core.ts: {}
   src/react-query/workloadIdentities.ts: {}
+  src/react-query/workloadPlatforms.core.ts: {}
+  src/react-query/workloadPlatforms.ts: {}
+  src/react-query/workloadTokenEndpoints.core.ts: {}
+  src/react-query/workloadTokenEndpoints.ts: {}
   src/sdk/access.ts: {}
   src/sdk/actorattributes.ts: {}
   src/sdk/adminassets.ts: {}
@@ -10161,6 +10178,24 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listWorkloadPlatforms:
+    speakeasy-default-list-workload-platforms:
+      responses:
+        "200":
+          application/json: {"platforms": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listWorkloadTokenEndpoints:
+    speakeasy-default-list-workload-token-endpoints:
+      responses:
+        "200":
+          application/json: {"items": [{"issuer": "discover", "mcp_host": "<value>", "project_id": "<id>", "project_name": "<value>", "token_endpoint": "<value>", "user_session_issuer_id": "530963df-8f46-458c-8ea8-5db8b2f4ef40", "user_session_issuer_slug": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listXaaReadiness:
     speakeasy-default-list-xaa-readiness:
       parameters:

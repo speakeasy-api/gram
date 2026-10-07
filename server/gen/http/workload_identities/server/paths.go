@@ -12,6 +12,16 @@ func ListWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.list"
 }
 
+// ListPlatformsWorkloadIdentitiesPath returns the URL path to the workloadIdentities service listPlatforms HTTP endpoint.
+func ListPlatformsWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.listPlatforms"
+}
+
+// ListTokenEndpointsWorkloadIdentitiesPath returns the URL path to the workloadIdentities service listTokenEndpoints HTTP endpoint.
+func ListTokenEndpointsWorkloadIdentitiesPath() string {
+	return "/rpc/workloadIdentities.listTokenEndpoints"
+}
+
 // RegisterIssuerWorkloadIdentitiesPath returns the URL path to the workloadIdentities service registerIssuer HTTP endpoint.
 func RegisterIssuerWorkloadIdentitiesPath() string {
 	return "/rpc/workloadIdentities.registerIssuer"

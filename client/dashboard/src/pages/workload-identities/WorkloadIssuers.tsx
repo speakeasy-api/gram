@@ -6,8 +6,6 @@ import { Button } from "@/components/ui/Button";
 import { Card, Cards } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { Stack } from "@/components/ui/Stack";
-import { Text } from "@/components/ui/Text";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import {
   invalidateAllWorkloadIdentities,
@@ -21,6 +19,7 @@ import { Link, Outlet } from "react-router";
 import { useOrgRoutes } from "@/routes";
 import { toast } from "sonner";
 import { issuerMatches } from "./search";
+import { CatalogPlatforms } from "./setup/CatalogPlatforms";
 import {
   RegisterIssuerSheet,
   type RegisterIssuerValues,
@@ -110,30 +109,29 @@ function WorkloadIssuersCatalogue(): JSX.Element {
       <ResourceListPage
         title="Access Hub"
         stage="preview"
-        description="Let agents on other platforms (CI jobs, cloud services, AI agents) sign in to Gram without a stored secret."
-        primaryAction={registerButton}
-      >
-        <Stack
-          direction="horizontal"
-          justify="space-between"
-          align="center"
-          gap={4}
-          className="mb-6"
-        >
-          <SegmentedControl
-            value={view}
-            onChange={setView}
-            options={[
-              { value: "catalog", label: "Catalog" },
-              { value: "custom", label: `Custom (${issuers.length})` },
-            ]}
-          />
-          <Text muted small className="min-w-0 text-right">
+        description={
+          <>
+            Let agents on other platforms (CI jobs, cloud services, AI agents)
+            sign in to Gram without a stored secret.
+            <br />
             {view === "custom"
               ? "Added by hand, with values from the platform's own console."
               : "Platforms Gram knows how to federate with, ready to trust without looking anything up."}
-          </Text>
-        </Stack>
+          </>
+        }
+        // Registering by hand is the Custom tab's job; catalog platforms are
+        // connected from their own pages.
+        primaryAction={view === "custom" ? registerButton : undefined}
+      >
+        <SegmentedControl
+          className="mb-6"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: "catalog", label: "Catalog" },
+            { value: "custom", label: `Custom (${issuers.length})` },
+          ]}
+        />
 
         {view === "custom" ? (
           isError ? (
@@ -189,16 +187,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
             </>
           )
         ) : (
-          // A preset carries what an operator cannot be expected to know for a
-          // platform: its issuer identifier, its JWKS URL, and whether its
-          // subject shape makes wildcard admission sound.
-          <Cards noGrid>
-            <InlineEmptyState
-              icon="layout-grid"
-              heading="No catalog platforms yet"
-              description="Presets for common platforms will appear here, each carrying that platform's issuer identifier, JWKS URL and whether its subjects can safely be matched by a wildcard. Until then, register the platform as a custom one."
-            />
-          </Cards>
+          <CatalogPlatforms issuers={issuers} isPending={isPending} />
         )}
       </ResourceListPage>
 

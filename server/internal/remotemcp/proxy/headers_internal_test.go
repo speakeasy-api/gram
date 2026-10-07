@@ -31,6 +31,37 @@ func TestApplyResponseHeadersStripsTunnelError(t *testing.T) {
 	require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 }
 
+// TestApplyResponseHeadersStripsUpstreamCORS: the CORS middleware sets the
+// Access-Control-* headers for the browser. Relaying the upstream's copies
+// would duplicate them and the browser would reject the response.
+func TestApplyResponseHeadersStripsUpstreamCORS(t *testing.T) {
+	t.Parallel()
+
+	upstream := &http.Response{
+		Header: http.Header{
+			"Access-Control-Allow-Origin":      []string{"*"},
+			"Access-Control-Allow-Credentials": []string{"true"},
+			"Access-Control-Allow-Headers":     []string{"Content-Type, Authorization"},
+			"Access-Control-Allow-Methods":     []string{"POST, OPTIONS"},
+			"Access-Control-Expose-Headers":    []string{"Mcp-Session-Id"},
+			"Access-Control-Max-Age":           []string{"86400"},
+			"Content-Type":                     []string{"text/event-stream"},
+		},
+	}
+
+	rec := httptest.NewRecorder()
+	rec.Header().Set("Access-Control-Allow-Origin", "https://app.example.com")
+	applyResponseHeaders(rec, upstream, "")
+
+	require.Equal(t, []string{"https://app.example.com"}, rec.Header().Values("Access-Control-Allow-Origin"))
+	require.Empty(t, rec.Header().Values("Access-Control-Allow-Credentials"))
+	require.Empty(t, rec.Header().Values("Access-Control-Allow-Headers"))
+	require.Empty(t, rec.Header().Values("Access-Control-Allow-Methods"))
+	require.Empty(t, rec.Header().Values("Access-Control-Expose-Headers"))
+	require.Empty(t, rec.Header().Values("Access-Control-Max-Age"))
+	require.Equal(t, "text/event-stream", rec.Header().Get("Content-Type"))
+}
+
 func TestApplyRequestHeadersUserAuthorizationOverrideWinsConfiguredAuthorization(t *testing.T) {
 	t.Parallel()
 

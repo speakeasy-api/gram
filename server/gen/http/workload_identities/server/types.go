@@ -10,6 +10,7 @@ package server
 import (
 	"unicode/utf8"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	workloadidentities "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -115,6 +116,20 @@ type ListResponseBody struct {
 	Issuers []*WorkloadIssuerResponseBody `form:"issuers" json:"issuers" xml:"issuers"`
 	// Admitted subjects.
 	Admissions []*WorkloadAdmissionResponseBody `form:"admissions" json:"admissions" xml:"admissions"`
+}
+
+// ListPlatformsResponseBody is the type of the "workloadIdentities" service
+// "listPlatforms" endpoint HTTP response body.
+type ListPlatformsResponseBody struct {
+	// The catalog entries.
+	Platforms []*WorkloadPlatformResponseBody `form:"platforms" json:"platforms" xml:"platforms"`
+}
+
+// ListTokenEndpointsResponseBody is the type of the "workloadIdentities"
+// service "listTokenEndpoints" endpoint HTTP response body.
+type ListTokenEndpointsResponseBody struct {
+	// Organization-level issuers first, then by project name and issuer slug.
+	Items []*WorkloadTokenEndpointResponseBody `form:"items" json:"items" xml:"items"`
 }
 
 // RegisterIssuerResponseBody is the type of the "workloadIdentities" service
@@ -337,6 +352,384 @@ type ListUnexpectedResponseBody struct {
 // ListGatewayErrorResponseBody is the type of the "workloadIdentities" service
 // "list" endpoint HTTP response body for the "gateway_error" error.
 type ListGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformsUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "listPlatforms" endpoint HTTP response body for
+// the "unauthorized" error.
+type ListPlatformsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformsForbiddenResponseBody is the type of the "workloadIdentities"
+// service "listPlatforms" endpoint HTTP response body for the "forbidden"
+// error.
+type ListPlatformsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformsBadRequestResponseBody is the type of the "workloadIdentities"
+// service "listPlatforms" endpoint HTTP response body for the "bad_request"
+// error.
+type ListPlatformsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformsNotFoundResponseBody is the type of the "workloadIdentities"
+// service "listPlatforms" endpoint HTTP response body for the "not_found"
+// error.
+type ListPlatformsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformsConflictResponseBody is the type of the "workloadIdentities"
+// service "listPlatforms" endpoint HTTP response body for the "conflict" error.
+type ListPlatformsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformsUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "listPlatforms" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListPlatformsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformsInvalidResponseBody is the type of the "workloadIdentities"
+// service "listPlatforms" endpoint HTTP response body for the "invalid" error.
+type ListPlatformsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformsInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "listPlatforms" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListPlatformsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformsUnexpectedResponseBody is the type of the "workloadIdentities"
+// service "listPlatforms" endpoint HTTP response body for the "unexpected"
+// error.
+type ListPlatformsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformsGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "listPlatforms" endpoint HTTP response body for
+// the "gateway_error" error.
+type ListPlatformsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTokenEndpointsUnauthorizedResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "unauthorized" error.
+type ListTokenEndpointsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTokenEndpointsForbiddenResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "forbidden" error.
+type ListTokenEndpointsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTokenEndpointsBadRequestResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "bad_request" error.
+type ListTokenEndpointsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTokenEndpointsNotFoundResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "not_found" error.
+type ListTokenEndpointsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTokenEndpointsConflictResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "conflict" error.
+type ListTokenEndpointsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTokenEndpointsUnsupportedMediaResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "unsupported_media" error.
+type ListTokenEndpointsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTokenEndpointsInvalidResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "invalid" error.
+type ListTokenEndpointsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTokenEndpointsInvariantViolationResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "invariant_violation" error.
+type ListTokenEndpointsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTokenEndpointsUnexpectedResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "unexpected" error.
+type ListTokenEndpointsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTokenEndpointsGatewayErrorResponseBody is the type of the
+// "workloadIdentities" service "listTokenEndpoints" endpoint HTTP response
+// body for the "gateway_error" error.
+type ListTokenEndpointsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1543,6 +1936,132 @@ type WorkloadAdmissionResponseBody struct {
 	UpdatedAt      string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// WorkloadPlatformResponseBody is used to define fields on response body types.
+type WorkloadPlatformResponseBody struct {
+	// Identifies the entry permanently.
+	Key string `form:"key" json:"key" xml:"key"`
+	// What the operator sees.
+	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+	// What connecting the platform does.
+	Description string `form:"description" json:"description" xml:"description"`
+	// The platform's logo, a path on the dashboard's origin. Empty where it has
+	// none.
+	Icon string `form:"icon" json:"icon" xml:"icon"`
+	// False for a platform listed but not offered.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// The issuer identifier its tokens carry.
+	Issuer *WorkloadPlatformConstantResponseBody `form:"issuer" json:"issuer" xml:"issuer"`
+	// Where it publishes its signing keys.
+	JwksURI *WorkloadPlatformConstantResponseBody `form:"jwks_uri" json:"jwks_uri" xml:"jwks_uri"`
+	// What the operator supplies.
+	Variables []*WorkloadPlatformVariableResponseBody `form:"variables" json:"variables" xml:"variables"`
+	// The access rule it produces.
+	Subject *WorkloadPlatformSubjectResponseBody `form:"subject" json:"subject" xml:"subject"`
+	// The guided setup. Empty for a platform without one, which is listed as
+	// coming soon and cannot be opened.
+	Steps []*WorkloadPlatformStepResponseBody `form:"steps" json:"steps" xml:"steps"`
+}
+
+// WorkloadPlatformConstantResponseBody is used to define fields on response
+// body types.
+type WorkloadPlatformConstantResponseBody struct {
+	// The value, with {key} placeholders for platform-tier variables.
+	Value string `form:"value" json:"value" xml:"value"`
+	// Whether the operator sees the value.
+	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
+}
+
+// WorkloadPlatformVariableResponseBody is used to define fields on response
+// body types.
+type WorkloadPlatformVariableResponseBody struct {
+	// Names the variable in templates, as {key}.
+	Key string `form:"key" json:"key" xml:"key"`
+	// Whether it is supplied once per trusted platform or once per access rule.
+	Tier string `form:"tier" json:"tier" xml:"tier"`
+	// The field's label.
+	Label string `form:"label" json:"label" xml:"label"`
+	// Where the operator finds the value. Empty where there is no help.
+	Help string `form:"help" json:"help" xml:"help"`
+	// Shown in the empty field. Empty where there is none.
+	Placeholder string `form:"placeholder" json:"placeholder" xml:"placeholder"`
+	// A regular expression the whole value must match.
+	Pattern string `form:"pattern" json:"pattern" xml:"pattern"`
+	// Shown when the value does not match. Empty where there is none.
+	PatternMessage string `form:"pattern_message" json:"pattern_message" xml:"pattern_message"`
+}
+
+// WorkloadPlatformSubjectResponseBody is used to define fields on response
+// body types.
+type WorkloadPlatformSubjectResponseBody struct {
+	// The subject with {key} placeholders for rule-tier variables; the stem, for a
+	// wildcard rule.
+	Template string `form:"template" json:"template" xml:"template"`
+	// Whether the rule is the filled template followed by *.
+	Wildcard bool `form:"wildcard" json:"wildcard" xml:"wildcard"`
+}
+
+// WorkloadPlatformStepResponseBody is used to define fields on response body
+// types.
+type WorkloadPlatformStepResponseBody struct {
+	// Stable within the platform; used in the dashboard URL.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Heads the step.
+	Title string `form:"title" json:"title" xml:"title"`
+	// collect steps gather values, the create step writes the rows, connect steps
+	// describe the platform's side.
+	Phase string `form:"phase" json:"phase" xml:"phase"`
+	// Rendered in order.
+	Blocks []*WorkloadPlatformBlockResponseBody `form:"blocks" json:"blocks" xml:"blocks"`
+}
+
+// WorkloadPlatformBlockResponseBody is used to define fields on response body
+// types.
+type WorkloadPlatformBlockResponseBody struct {
+	// The kind of content.
+	Type string `form:"type" json:"type" xml:"type"`
+	// A text block's Markdown, or what a checklist item without a value asks the
+	// operator to do. Raw HTML in it must not be rendered.
+	Markdown string `form:"markdown" json:"markdown" xml:"markdown"`
+	// An image's path on the dashboard's origin.
+	Src string `form:"src" json:"src" xml:"src"`
+	// An image's alternative text.
+	Alt string `form:"alt" json:"alt" xml:"alt"`
+	// Shown under an image.
+	Caption string `form:"caption" json:"caption" xml:"caption"`
+	// A link's https target.
+	Href string `form:"href" json:"href" xml:"href"`
+	// A link's or computed value's label, or the console field or control a
+	// checklist item names.
+	Label string `form:"label" json:"label" xml:"label"`
+	// The variable key a field collects.
+	Variable string `form:"variable" json:"variable" xml:"variable"`
+	// The value a computed block or checklist item shows.
+	Value string `form:"value" json:"value" xml:"value"`
+	// Shown under a computed value or checklist item.
+	Help string `form:"help" json:"help" xml:"help"`
+}
+
+// WorkloadTokenEndpointResponseBody is used to define fields on response body
+// types.
+type WorkloadTokenEndpointResponseBody struct {
+	// The user session issuer id.
+	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	// The user session issuer slug.
+	UserSessionIssuerSlug string `form:"user_session_issuer_slug" json:"user_session_issuer_slug" xml:"user_session_issuer_slug"`
+	// The owning project id; empty for an organization-level issuer.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning project name; empty for an organization-level issuer.
+	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
+	// The authorization server's issuer identifier, as its RFC 8414 metadata
+	// publishes it.
+	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// The authorization server's token endpoint.
+	TokenEndpoint string `form:"token_endpoint" json:"token_endpoint" xml:"token_endpoint"`
+	// The host MCP servers are served on, which a platform calls with the tokens
+	// it is issued.
+	McpHost string `form:"mcp_host" json:"mcp_host" xml:"mcp_host"`
+}
+
 // NewListResponseBody builds the HTTP response body from the result of the
 // "list" endpoint of the "workloadIdentities" service.
 func NewListResponseBody(res *workloadidentities.WorkloadIdentityPolicy) *ListResponseBody {
@@ -1570,6 +2089,45 @@ func NewListResponseBody(res *workloadidentities.WorkloadIdentityPolicy) *ListRe
 		}
 	} else {
 		body.Admissions = []*WorkloadAdmissionResponseBody{}
+	}
+	return body
+}
+
+// NewListPlatformsResponseBody builds the HTTP response body from the result
+// of the "listPlatforms" endpoint of the "workloadIdentities" service.
+func NewListPlatformsResponseBody(res *workloadidentities.WorkloadPlatformCatalog) *ListPlatformsResponseBody {
+	body := &ListPlatformsResponseBody{}
+	if res.Platforms != nil {
+		body.Platforms = make([]*WorkloadPlatformResponseBody, len(res.Platforms))
+		for i, val := range res.Platforms {
+			if val == nil {
+				body.Platforms[i] = nil
+				continue
+			}
+			body.Platforms[i] = marshalWorkloadidentitiesWorkloadPlatformToWorkloadPlatformResponseBody(val)
+		}
+	} else {
+		body.Platforms = []*WorkloadPlatformResponseBody{}
+	}
+	return body
+}
+
+// NewListTokenEndpointsResponseBody builds the HTTP response body from the
+// result of the "listTokenEndpoints" endpoint of the "workloadIdentities"
+// service.
+func NewListTokenEndpointsResponseBody(res *types.WorkloadTokenEndpoints) *ListTokenEndpointsResponseBody {
+	body := &ListTokenEndpointsResponseBody{}
+	if res.Items != nil {
+		body.Items = make([]*WorkloadTokenEndpointResponseBody, len(res.Items))
+		for i, val := range res.Items {
+			if val == nil {
+				body.Items[i] = nil
+				continue
+			}
+			body.Items[i] = marshalTypesWorkloadTokenEndpointToWorkloadTokenEndpointResponseBody(val)
+		}
+	} else {
+		body.Items = []*WorkloadTokenEndpointResponseBody{}
 	}
 	return body
 }
@@ -1890,6 +2448,302 @@ func NewListUnexpectedResponseBody(res *goa.ServiceError) *ListUnexpectedRespons
 // result of the "list" endpoint of the "workloadIdentities" service.
 func NewListGatewayErrorResponseBody(res *goa.ServiceError) *ListGatewayErrorResponseBody {
 	body := &ListGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listPlatforms" endpoint of the "workloadIdentities"
+// service.
+func NewListPlatformsUnauthorizedResponseBody(res *goa.ServiceError) *ListPlatformsUnauthorizedResponseBody {
+	body := &ListPlatformsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformsForbiddenResponseBody builds the HTTP response body from the
+// result of the "listPlatforms" endpoint of the "workloadIdentities" service.
+func NewListPlatformsForbiddenResponseBody(res *goa.ServiceError) *ListPlatformsForbiddenResponseBody {
+	body := &ListPlatformsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformsBadRequestResponseBody builds the HTTP response body from
+// the result of the "listPlatforms" endpoint of the "workloadIdentities"
+// service.
+func NewListPlatformsBadRequestResponseBody(res *goa.ServiceError) *ListPlatformsBadRequestResponseBody {
+	body := &ListPlatformsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformsNotFoundResponseBody builds the HTTP response body from the
+// result of the "listPlatforms" endpoint of the "workloadIdentities" service.
+func NewListPlatformsNotFoundResponseBody(res *goa.ServiceError) *ListPlatformsNotFoundResponseBody {
+	body := &ListPlatformsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformsConflictResponseBody builds the HTTP response body from the
+// result of the "listPlatforms" endpoint of the "workloadIdentities" service.
+func NewListPlatformsConflictResponseBody(res *goa.ServiceError) *ListPlatformsConflictResponseBody {
+	body := &ListPlatformsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listPlatforms" endpoint of the "workloadIdentities"
+// service.
+func NewListPlatformsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListPlatformsUnsupportedMediaResponseBody {
+	body := &ListPlatformsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformsInvalidResponseBody builds the HTTP response body from the
+// result of the "listPlatforms" endpoint of the "workloadIdentities" service.
+func NewListPlatformsInvalidResponseBody(res *goa.ServiceError) *ListPlatformsInvalidResponseBody {
+	body := &ListPlatformsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listPlatforms" endpoint of the "workloadIdentities"
+// service.
+func NewListPlatformsInvariantViolationResponseBody(res *goa.ServiceError) *ListPlatformsInvariantViolationResponseBody {
+	body := &ListPlatformsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listPlatforms" endpoint of the "workloadIdentities"
+// service.
+func NewListPlatformsUnexpectedResponseBody(res *goa.ServiceError) *ListPlatformsUnexpectedResponseBody {
+	body := &ListPlatformsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listPlatforms" endpoint of the "workloadIdentities"
+// service.
+func NewListPlatformsGatewayErrorResponseBody(res *goa.ServiceError) *ListPlatformsGatewayErrorResponseBody {
+	body := &ListPlatformsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTokenEndpointsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listTokenEndpoints" endpoint of the
+// "workloadIdentities" service.
+func NewListTokenEndpointsUnauthorizedResponseBody(res *goa.ServiceError) *ListTokenEndpointsUnauthorizedResponseBody {
+	body := &ListTokenEndpointsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTokenEndpointsForbiddenResponseBody builds the HTTP response body
+// from the result of the "listTokenEndpoints" endpoint of the
+// "workloadIdentities" service.
+func NewListTokenEndpointsForbiddenResponseBody(res *goa.ServiceError) *ListTokenEndpointsForbiddenResponseBody {
+	body := &ListTokenEndpointsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTokenEndpointsBadRequestResponseBody builds the HTTP response body
+// from the result of the "listTokenEndpoints" endpoint of the
+// "workloadIdentities" service.
+func NewListTokenEndpointsBadRequestResponseBody(res *goa.ServiceError) *ListTokenEndpointsBadRequestResponseBody {
+	body := &ListTokenEndpointsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTokenEndpointsNotFoundResponseBody builds the HTTP response body from
+// the result of the "listTokenEndpoints" endpoint of the "workloadIdentities"
+// service.
+func NewListTokenEndpointsNotFoundResponseBody(res *goa.ServiceError) *ListTokenEndpointsNotFoundResponseBody {
+	body := &ListTokenEndpointsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTokenEndpointsConflictResponseBody builds the HTTP response body from
+// the result of the "listTokenEndpoints" endpoint of the "workloadIdentities"
+// service.
+func NewListTokenEndpointsConflictResponseBody(res *goa.ServiceError) *ListTokenEndpointsConflictResponseBody {
+	body := &ListTokenEndpointsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTokenEndpointsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listTokenEndpoints" endpoint of the
+// "workloadIdentities" service.
+func NewListTokenEndpointsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListTokenEndpointsUnsupportedMediaResponseBody {
+	body := &ListTokenEndpointsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTokenEndpointsInvalidResponseBody builds the HTTP response body from
+// the result of the "listTokenEndpoints" endpoint of the "workloadIdentities"
+// service.
+func NewListTokenEndpointsInvalidResponseBody(res *goa.ServiceError) *ListTokenEndpointsInvalidResponseBody {
+	body := &ListTokenEndpointsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTokenEndpointsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listTokenEndpoints" endpoint of the
+// "workloadIdentities" service.
+func NewListTokenEndpointsInvariantViolationResponseBody(res *goa.ServiceError) *ListTokenEndpointsInvariantViolationResponseBody {
+	body := &ListTokenEndpointsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTokenEndpointsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listTokenEndpoints" endpoint of the
+// "workloadIdentities" service.
+func NewListTokenEndpointsUnexpectedResponseBody(res *goa.ServiceError) *ListTokenEndpointsUnexpectedResponseBody {
+	body := &ListTokenEndpointsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTokenEndpointsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listTokenEndpoints" endpoint of the
+// "workloadIdentities" service.
+func NewListTokenEndpointsGatewayErrorResponseBody(res *goa.ServiceError) *ListTokenEndpointsGatewayErrorResponseBody {
+	body := &ListTokenEndpointsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2780,6 +3634,28 @@ func NewWithdrawSubjectGatewayErrorResponseBody(res *goa.ServiceError) *Withdraw
 // NewListPayload builds a workloadIdentities service list endpoint payload.
 func NewListPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.ListPayload {
 	v := &workloadidentities.ListPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListPlatformsPayload builds a workloadIdentities service listPlatforms
+// endpoint payload.
+func NewListPlatformsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.ListPlatformsPayload {
+	v := &workloadidentities.ListPlatformsPayload{}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListTokenEndpointsPayload builds a workloadIdentities service
+// listTokenEndpoints endpoint payload.
+func NewListTokenEndpointsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.ListTokenEndpointsPayload {
+	v := &workloadidentities.ListTokenEndpointsPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
