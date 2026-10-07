@@ -130,10 +130,13 @@ func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerS
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "log scope pin update").LogError(ctx, logger)
 		}
+	}
 
-		if err := dbtx.Commit(ctx); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
-		}
+	// Release the resource lock and connection even for a no-op before the
+	// response queries the pool; waiting until the deferred rollback can deadlock
+	// when other requests occupy the remaining connections waiting on this lock.
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	return s.serverScopes(ctx, logger, authCtx, target, sharedServerCount(sharing, target))

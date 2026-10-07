@@ -558,6 +558,36 @@ func TestSetServerScopePin_NoOpWritesNothing(t *testing.T) {
 	require.EqualValues(t, 1, auditCount(t, ctx, ti), "an unchanged pin writes no audit row")
 }
 
+// A no-op must release its transaction before the response reads from the pool.
+// Otherwise concurrent pin requests can occupy every connection waiting for the
+// resource lock while its holder waits for a second connection to build a response.
+func TestSetServerScopePin_NoOpReleasesConnectionBeforeRead(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://pin-pool.example.com/mcp")
+
+	// Leave one connection available, reproducing an exhausted pool without
+	// depending on the scheduling of concurrent requests.
+	for range ti.conn.Config().MaxConns - 1 {
+		conn, err := ti.conn.Acquire(ctx)
+		require.NoError(t, err)
+		t.Cleanup(conn.Release)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	got, err := setPin(ctx, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	require.Empty(t, got.PinnedScopes)
+
+	_, err = setPin(ctx, ti, srv.mcpServerID, "read")
+	require.NoError(t, err)
+	got, err = setPin(ctx, ti, srv.mcpServerID, "read")
+	require.NoError(t, err)
+	require.Equal(t, []string{"read"}, got.PinnedScopes)
+}
+
 func TestGetServerScopes_CachedResourceWithoutPin(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
