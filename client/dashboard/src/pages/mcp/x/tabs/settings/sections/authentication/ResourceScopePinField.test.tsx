@@ -317,7 +317,7 @@ describe("ResourceScopePinField", () => {
 
     expect(
       screen.getByText(
-        "The MCP server does not advertise admin; they are still requested.",
+        "The MCP server does not advertise the following scopes: admin. They will still be requested.",
       ),
     ).toBeDefined();
   });
@@ -333,7 +333,7 @@ describe("ResourceScopePinField", () => {
       />,
     );
 
-    expect(screen.getByText(/does not advertise admin;/)).toBeDefined();
+    expect(screen.getByText(/following scopes: admin\./)).toBeDefined();
   });
 
   it("does not warn about an edit the pin would not decide", () => {
@@ -401,7 +401,9 @@ describe("ResourceScopePinField", () => {
 
     const field = screen.getByRole("combobox", { name: "Pinned scopes" });
     expect((field as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Clear pinned scopes" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Clear pinned scopes" }),
+    );
     expect(setValue).toHaveBeenCalledWith([]);
   });
 

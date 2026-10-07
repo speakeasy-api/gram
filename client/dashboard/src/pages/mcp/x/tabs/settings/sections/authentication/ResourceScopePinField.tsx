@@ -74,8 +74,7 @@ export function ResourceScopePinField({
       ) : null}
       {unadvertised.length > 0 ? (
         <Text small warning className="block">
-          The MCP server does not advertise {unadvertised.join(", ")}; they are
-          still requested.
+          {`The MCP server does not advertise the following scopes: ${unadvertised.join(", ")}. They will still be requested.`}
         </Text>
       ) : null}
       {status.map((line) => (
