@@ -40,8 +40,13 @@ export interface SeriesSet {
   hidden: number;
 }
 
-/** The label of the series the fold is drawn as. */
-export const OTHER_LABEL = "Other";
+/**
+ * The label of the series the fold is drawn as. It says how many series it
+ * holds, which also keeps it apart from a dimension value called "Other".
+ */
+export function otherLabel(count: number): string {
+  return `Other (${count} series)`;
+}
 
 /** A row's dimension values as one label; the empty tuple reads as "all". */
 export function tupleLabel(row: ResultRow, dimensions: string[]): string {
@@ -143,7 +148,7 @@ function foldOf(folded: Series[], bucketCount: number): Series {
     points.push(sum);
   }
   return {
-    label: OTHER_LABEL,
+    label: otherLabel(folded.length),
     unit: folded[0]?.unit ?? "",
     points,
     other: true,

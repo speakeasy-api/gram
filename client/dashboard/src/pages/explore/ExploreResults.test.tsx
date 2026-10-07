@@ -16,7 +16,12 @@ vi.mock("react-chartjs-2", () => ({
   }: {
     type: string;
     data: {
-      datasets: { label: string; type: string; fill?: string | boolean }[];
+      datasets: {
+        label: string;
+        type: string;
+        fill?: string | boolean;
+        data: unknown[];
+      }[];
     };
     options: { scales: { y: { stacked?: boolean } } };
   }) => (
@@ -24,6 +29,7 @@ vi.mock("react-chartjs-2", () => ({
       data-testid="chart"
       data-type={type}
       data-stacked={String(options.scales.y.stacked ?? false)}
+      data-last-points={JSON.stringify(data.datasets.at(-1)?.data ?? null)}
       data-dataset-types={data.datasets
         .map((dataset) => dataset.type)
         .join(",")}
@@ -271,9 +277,12 @@ describe("ExploreResults", () => {
         result={loaded(rows)}
       />,
     );
-    const labels = screen.getByTestId("chart").textContent?.split(",") ?? [];
+    const chart = screen.getByTestId("chart");
+    const labels = chart.textContent?.split(",") ?? [];
     expect(labels).toHaveLength(MAX_SERIES);
-    expect(labels.at(-1)).toBe("Other");
+    expect(labels.at(-1)).toBe("Other (4 series)");
+    // The four smallest series, counts 1 to 4, are summed into the band.
+    expect(chart.dataset.lastPoints).toBe("[10]");
     expect(
       screen.getByText(
         `Showing the ${MAX_SERIES - 1} largest of ${MAX_SERIES + 3} series; the other 4 are stacked as Other.`,
@@ -319,6 +328,21 @@ describe("ExploreResults", () => {
       />,
     );
     expect(screen.getByText("A stacked chart stacks one measure")).toBeTruthy();
+    expect(screen.queryByTestId("chart")).toBeNull();
+  });
+
+  it("refuses to stack a measure that does not add up", () => {
+    render(
+      <ExploreResults
+        dataset={dataset}
+        spec={spec({
+          chartType: "stacked_area",
+          measures: [{ op: "avg", field: "count" }],
+        })}
+        result={loaded([{ time_bucket: "t", user: "ann", avg_count: 1 }])}
+      />,
+    );
+    expect(screen.getByText("A stacked chart adds its bands up")).toBeTruthy();
     expect(screen.queryByTestId("chart")).toBeNull();
   });
 

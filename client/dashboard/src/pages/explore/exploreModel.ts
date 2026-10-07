@@ -238,6 +238,15 @@ export function isStacked(chartType: ChartType): boolean {
 }
 
 /**
+ * Whether a measure's values add up across the groups it is broken down
+ * by, so a stack of them is a total: a count or a sum is, an average or a
+ * percentile is not. The server holds the same rule.
+ */
+export function additiveOp(op: MeasureOp): boolean {
+  return op === "count" || op === "sum";
+}
+
+/**
  * The chart a spec is drawn with and saved as, as the server will check it.
  * Rows draw only as a table, and a stack with no breakdown is the bar or
  * area it is, whatever the builder's controls were last left on.

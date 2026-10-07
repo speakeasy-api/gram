@@ -127,7 +127,8 @@ export function ResultChart({
             type: "line",
             backgroundColor: color,
             borderWidth: 1,
-            pointRadius: 0,
+            // One bucket has no segment to fill, so its point is drawn.
+            pointRadius: buckets.length === 1 ? 4 : 0,
             pointHoverRadius: 4,
             fill: "stack",
           };
@@ -143,7 +144,7 @@ export function ResultChart({
           spanGaps: true,
         };
       }),
-    [series, chartType, stacked, bars, colors, otherColor],
+    [series, chartType, stacked, bars, colors, otherColor, buckets.length],
   );
 
   const options = useMemo<ChartOptions<"line" | "bar">>(
