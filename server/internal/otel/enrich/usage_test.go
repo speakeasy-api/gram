@@ -16,10 +16,8 @@ import (
 func usage(t *testing.T, in *Instruments, record *otelv1.InboundLogRecord) map[attribute.Key]attribute.Value {
 	t.Helper()
 	columns := map[attribute.Key]attribute.Value{}
-	for _, enricher := range []LogEnricher{
-		columnInputTokens().log(in), columnOutputTokens().log(in), columnCacheReadTokens().log(in), columnCacheWriteTokens().log(in), columnCostUSD().log(in),
-	} {
-		maps.Copy(columns, enrichedColumns(t, enricher, record))
+	for _, definition := range usageColumns() {
+		maps.Copy(columns, enrichedColumns(t, definition.log(in), record))
 	}
 	return columns
 }

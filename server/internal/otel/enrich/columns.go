@@ -7,18 +7,37 @@ package enrich
 // is declared once and used by spans and logs alike
 // (https://opentelemetry.io/docs/specs/semconv/general/semantic-convention-groups/),
 // and it sets a requirement level per event type. One file per column holds
-// its definition and is the documentation of that column.
+// its definition and is the documentation of that column. The three groups
+// below are the three column tickets; tests cover each group through its
+// own function so a column added to a group is covered with it.
 func registry() []columnDefinition {
+	out := make([]columnDefinition, 0, 23)
+	out = append(out, identityColumns()...)
+	out = append(out, operationColumns()...)
+	out = append(out, usageColumns()...)
+	return out
+}
+
+// identityColumns says who an event belongs to: the session, turn, subject,
+// person and account, mirroring the session.*, user.*, enduser.* and
+// gen_ai.conversation.id namespaces.
+func identityColumns() []columnDefinition {
 	return []columnDefinition{
-		// Identity: who the event belongs to.
 		columnSessionID(),
 		columnTurnID(),
 		columnEventID(),
 		columnUserEmail(),
 		columnExternalUserID(),
 		columnExternalOrgID(),
+	}
+}
 
-		// Operation: what the event was about and how it went.
+// operationColumns says what the operation was and how it went: the model,
+// the tool, the skill or agent, the words, the outcome and the duration,
+// mirroring what the GenAI conventions hang off gen_ai.operation.name as
+// request, response, tool, agent and error attributes.
+func operationColumns() []columnDefinition {
+	return []columnDefinition{
 		columnModel(),
 		columnQuerySource(),
 		columnSkillName(),
@@ -31,8 +50,12 @@ func registry() []columnDefinition {
 		columnOutcome(),
 		columnOutcomeMessage(),
 		columnDurationNano(),
+	}
+}
 
-		// Usage, which only a request carries.
+// usageColumns carries what a request used, which only a request carries.
+func usageColumns() []columnDefinition {
+	return []columnDefinition{
 		columnInputTokens(),
 		columnOutputTokens(),
 		columnCacheReadTokens(),

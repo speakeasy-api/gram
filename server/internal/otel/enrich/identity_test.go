@@ -18,11 +18,8 @@ import (
 func identity(t *testing.T, m *Instruments, record *otelv1.InboundLogRecord) map[attribute.Key]attribute.Value {
 	t.Helper()
 	columns := map[attribute.Key]attribute.Value{}
-	for _, enricher := range []LogEnricher{
-		columnSessionID().log(m), columnTurnID().log(m), columnEventID().log(m),
-		columnUserEmail().log(m), columnExternalUserID().log(m), columnExternalOrgID().log(m),
-	} {
-		maps.Copy(columns, enrichedColumns(t, enricher, record))
+	for _, definition := range identityColumns() {
+		maps.Copy(columns, enrichedColumns(t, definition.log(m), record))
 	}
 	return columns
 }
