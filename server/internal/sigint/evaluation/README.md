@@ -65,6 +65,21 @@ per event; cross-event windows and correlation are separate input-building work.
 
 ## Compilation and readiness
 
+Sensor `match_expression` predicates use the shared cached CEL compiler and the
+typed `message.role` field (lowercase persisted roles). Matching happens before
+asset resolution and classification. Nonmatches are counted as skipped; invalid
+predicates and cost exhaustion are terminal per-sensor failures, while canceled
+contexts retry. The compiler retains at most 1024 programs, limits expressions to
+4 KiB, and budgets 10,000 CEL operations per evaluation. Expressions and the
+matching-contract version participate in definition hashes, not reading identity.
+
+The matching contract currently exposes role only. Every input explicitly supplies
+message metadata or declares it unavailable. An unavailable message remains an
+unbound CEL variable, so a negative role comparison cannot treat it as an empty
+role; predicates independent of message metadata can still succeed. Failure
+metrics distinguish compilation, result type, expression size, evaluation, and
+cost-limit errors. Actor, source, replay, and tool metadata are not exposed yet.
+
 Based on the [System One request schema](https://openrouter.ai/docs/api/api-reference/systemone/submit-a-system-one-request):
 
 - Instructions must be present (an empty string is a valid API value).

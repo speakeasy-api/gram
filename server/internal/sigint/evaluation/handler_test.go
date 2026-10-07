@@ -99,9 +99,9 @@ func sensors() []Sensor {
 	instructions := "Evaluate the message"
 	options := []classifier.Option{classifier.NewOption("a", classifier.Text("first")), classifier.NewOption("b", classifier.Text("second"))}
 	return []Sensor{
-		{ID: "multi", Slug: "multi-label", Mode: "multi_label", Instructions: &instructions, Signals: options, SignalSlugs: map[classifier.OptionKey]string{"a": "first", "b": "second"}},
-		{ID: "choice", Slug: "exclusive", Mode: "exclusive", Instructions: &instructions, Signals: options, SignalSlugs: map[classifier.OptionKey]string{"a": "first", "b": "second"}},
-		{ID: "score", Slug: "ordered-score", Mode: "ordered_score", Instructions: &instructions, Signals: options, SignalSlugs: map[classifier.OptionKey]string{"a": "first", "b": "second"}},
+		{ID: "multi", Slug: "multi-label", Mode: "multi_label", MatchExpression: "true", Instructions: &instructions, Signals: options, SignalSlugs: map[classifier.OptionKey]string{"a": "first", "b": "second"}},
+		{ID: "choice", Slug: "exclusive", Mode: "exclusive", MatchExpression: "true", Instructions: &instructions, Signals: options, SignalSlugs: map[classifier.OptionKey]string{"a": "first", "b": "second"}},
+		{ID: "score", Slug: "ordered-score", Mode: "ordered_score", MatchExpression: "true", Instructions: &instructions, Signals: options, SignalSlugs: map[classifier.OptionKey]string{"a": "first", "b": "second"}},
 	}
 }
 

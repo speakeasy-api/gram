@@ -9,6 +9,7 @@ import (
 
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
+	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 )
 
 // Keep this namespace stable so repeated evaluations retain their reading ID.
@@ -69,7 +70,7 @@ func compileSensor(sensor Sensor) (compiledSensor, bool) {
 	for _, signal := range sensor.Signals {
 		signals = append(signals, map[string]any{"id": signal.Key, "criteria": signal.Description})
 	}
-	data, _ := json.Marshal(map[string]any{"version": "sigint-definition-v1", "mode": sensor.Mode, "instructions": instructions, "signals": signals})
+	data, _ := json.Marshal(map[string]any{"version": "sigint-definition-v2", "mode": sensor.Mode, "instructions": instructions, "signals": signals, "match_expression": sensor.MatchExpression, "matching_contract": matching.Version})
 	compiled.hash = digest(data)
 	return compiled, true
 }

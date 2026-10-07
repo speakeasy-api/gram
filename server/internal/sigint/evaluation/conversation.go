@@ -11,6 +11,7 @@ import (
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
+	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 )
@@ -155,6 +156,10 @@ type conversationInput struct {
 
 func (in *conversationInput) Resolve(ctx context.Context) (classifier.Entry, error) {
 	return input(ctx, in.blobs, in.message.GetProjectId(), in.stored)
+}
+
+func (in *conversationInput) MatchingMessage() *matching.Message {
+	return &matching.Message{Role: in.stored.ChatMessage.Role}
 }
 
 func (in *conversationInput) Event() Event {

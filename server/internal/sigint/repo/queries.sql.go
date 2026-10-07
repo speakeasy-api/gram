@@ -808,7 +808,7 @@ func (q *Queries) LoadEvaluationMessages(ctx context.Context, arg LoadEvaluation
 }
 
 const loadEvaluationSensors = `-- name: LoadEvaluationSensors :many
-SELECT sensor.id AS sensor_id, sensor.slug AS sensor_slug, sensor.mode, sensor.instructions,
+SELECT sensor.id AS sensor_id, sensor.slug AS sensor_slug, sensor.mode, sensor.instructions, sensor.match_expression,
        signal.id AS signal_id, signal.slug AS signal_slug, signal.classifier_criteria
 FROM sigint_sensors AS sensor
 JOIN projects AS project ON project.id = sensor.project_id
@@ -835,6 +835,7 @@ type LoadEvaluationSensorsRow struct {
 	SensorSlug         string
 	Mode               string
 	Instructions       pgtype.Text
+	MatchExpression    string
 	SignalID           uuid.NullUUID
 	SignalSlug         pgtype.Text
 	ClassifierCriteria pgtype.Text
@@ -855,6 +856,7 @@ func (q *Queries) LoadEvaluationSensors(ctx context.Context, arg LoadEvaluationS
 			&i.SensorSlug,
 			&i.Mode,
 			&i.Instructions,
+			&i.MatchExpression,
 			&i.SignalID,
 			&i.SignalSlug,
 			&i.ClassifierCriteria,

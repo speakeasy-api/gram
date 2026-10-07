@@ -6,6 +6,7 @@ import (
 
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
+	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 )
 
 // ErrInvalidInput marks source content that cannot succeed on redelivery.
@@ -53,6 +54,10 @@ type Event struct {
 type Input interface {
 	// Event returns the normalized tenant, event identity, and attribution.
 	Event() Event
+
+	// MatchingMessage returns persisted role metadata without I/O. Nil means this
+	// source has no message context; predicates requiring it fail evaluation.
+	MatchingMessage() *matching.Message
 
 	// Resolve returns complete source-specific text or structured JSON. A
 	// wrapped ErrInvalidInput acknowledges invalid content. The conversation adapter's

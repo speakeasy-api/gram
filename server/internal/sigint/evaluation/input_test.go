@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/classifier/classifiertest"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -27,7 +28,8 @@ type eventInput struct {
 	resolved int
 }
 
-func (in *eventInput) Event() Event { return in.event }
+func (in *eventInput) Event() Event                       { return in.event }
+func (in *eventInput) MatchingMessage() *matching.Message { return nil }
 func (in *eventInput) Resolve(context.Context) (classifier.Entry, error) {
 	in.resolved++
 	return in.data, in.err

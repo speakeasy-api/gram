@@ -17,8 +17,10 @@ import (
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/celeval"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 )
 
 // Leave headroom below Pub/Sub's 10 MiB limit for attributes and wire overhead.
@@ -98,7 +100,32 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 		return fmt.Errorf("load sensor definitions: %w", err)
 	}
 	var compiled []compiledSensor
+	matchMessage := in.MatchingMessage()
 	for _, sensor := range sensors {
+		matched, err := matching.Match(ctx, sensor.MatchExpression, matchMessage)
+		if err != nil {
+			if errors.Is(err, celeval.ErrCanceled) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+				return fmt.Errorf("match sensor: %w", err)
+			}
+			reason := "match_evaluation"
+			switch {
+			case errors.Is(err, celeval.ErrExpressionSize):
+				reason = "match_expression_size"
+			case errors.Is(err, celeval.ErrResultType):
+				reason = "match_result_type"
+			case errors.Is(err, celeval.ErrCompile):
+				reason = "match_compile"
+			case errors.Is(err, celeval.ErrCostLimit):
+				reason = "match_cost_limit"
+			}
+			h.failures.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", reason)))
+			h.logger.ErrorContext(ctx, "sensor matching failed", attr.SlogSigintSensorID(sensor.ID), attr.SlogProjectID(event.ProjectID), attr.SlogError(err))
+			continue
+		}
+		if !matched {
+			h.skipped.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "not_matched")))
+			continue
+		}
 		item, ready := compileSensor(sensor)
 		if !ready {
 			h.skipped.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "draft")))
