@@ -738,13 +738,14 @@ BEGIN
   END LOOP;
 
   -- Show the completed one-time onboarding result, not a pending repair job.
-  -- Role plugins stay role-only; the Default plugin remains Everyone.
+  -- Role plugins stay role-only and install by default; the Default plugin
+  -- remains Everyone and is available for members to turn on.
   -- Matching server content is populated after the servers exist below.
   INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
   VALUES (demo_org, proj_a, 'Default', 'default', true)
   RETURNING id INTO custom_role_id;
-  INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-  VALUES (custom_role_id, demo_org, '*');
+  INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn, install_mode)
+  VALUES (custom_role_id, demo_org, '*', 'available');
 
   FOR custom_role IN
     SELECT 'role:organization:' || id AS role_urn, workos_name AS name
@@ -766,8 +767,8 @@ BEGIN
       VALUES (demo_org, proj_a, custom_role.name, custom_role_slug, true)
       RETURNING id INTO custom_role_id;
     END IF;
-    INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-    VALUES (custom_role_id, demo_org, custom_role.role_urn)
+    INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn, install_mode)
+    VALUES (custom_role_id, demo_org, custom_role.role_urn, 'default')
     ON CONFLICT (plugin_id, principal_urn) DO NOTHING;
   END LOOP;
 
