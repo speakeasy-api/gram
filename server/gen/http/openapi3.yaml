@@ -3796,6 +3796,96 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organizations.customerUsage:
+        get:
+            description: 'Returns estimated usage at current PAYG list prices for every active paying organization: enterprise organizations not on a running or ending trial, and pro or payg organizations that never trialled.'
+            operationId: adminListCustomerUsage
+            parameters:
+                - allowEmptyValue: true
+                  description: Chart bucketing. monthly gives one bucket per billing cycle over the last six cycles. daily and weekly bucket the current cycle.
+                  in: query
+                  name: interval
+                  schema:
+                    default: monthly
+                    description: Chart bucketing. monthly gives one bucket per billing cycle over the last six cycles. daily and weekly bucket the current cycle.
+                    enum:
+                        - daily
+                        - weekly
+                        - monthly
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminCustomerUsageResponse'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listCustomerUsage admin
+            tags:
+                - admin
+            x-speakeasy-name-override: listCustomerUsage
     /admin/organizations.getMeterUsage:
         get:
             tags:
@@ -84584,6 +84674,107 @@ components:
                     format: int64
             required:
                 - projects_signaled
+        AdminCustomerUsage:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    enum:
+                        - enterprise
+                        - pro
+                        - payg
+                current_cycle:
+                    $ref: '#/components/schemas/MeterUsageWindow'
+                error:
+                    type: string
+                    description: Why this organization's usage could not be read. products is empty when set.
+                name:
+                    type: string
+                organization_id:
+                    type: string
+                previous_period:
+                    $ref: '#/components/schemas/MeterUsageWindow'
+                previous_period_costs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminCustomerUsageProductCost'
+                    description: Per-product costs over previous_period. Empty when previous_period is absent.
+                products:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SpendProduct'
+                    description: 'The three metered products in stable display order. quantity and cost_usd cover the current cycle to date. buckets are the chart buckets for the requested interval: billing cycles for monthly, days or Monday-start weeks of the current cycle otherwise.'
+                slug:
+                    type: string
+                trial_state:
+                    type: string
+                    enum:
+                        - none
+                        - running
+                        - ending_soon
+                        - expired
+                        - demoted
+                        - converted
+                window:
+                    $ref: '#/components/schemas/MeterUsageWindow'
+            description: One paying organization's estimated usage at current PAYG list prices.
+            required:
+                - organization_id
+                - name
+                - slug
+                - account_type
+                - trial_state
+                - current_cycle
+                - window
+                - products
+                - previous_period_costs
+        AdminCustomerUsageProductCost:
+            type: object
+            properties:
+                cost_usd:
+                    type: string
+                    description: Exact estimated cost at current PAYG list prices
+                product_id:
+                    type: string
+                    enum:
+                        - agent_session_storage
+                        - risk_content_scans
+                        - mcp_egress
+            required:
+                - product_id
+                - cost_usd
+        AdminCustomerUsageResponse:
+            type: object
+            properties:
+                currency:
+                    type: string
+                    enum:
+                        - USD
+                customers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminCustomerUsage'
+                    description: Every qualifying organization, ordered by name
+                interval:
+                    type: string
+                    enum:
+                        - daily
+                        - weekly
+                        - monthly
+                pricing_basis:
+                    type: string
+                    enum:
+                        - current_payg_list_price
+                queried_at:
+                    type: string
+                    description: Retrieval timestamp used to distinguish current and future buckets
+                    format: date-time
+            required:
+                - interval
+                - currency
+                - pricing_basis
+                - queried_at
+                - customers
         AdminDashboardRedirect:
             type: object
             properties:

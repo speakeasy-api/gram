@@ -2830,3 +2830,32 @@ func BuildSetStripeSubscriptionPayload(adminSetStripeSubscriptionBody string, ad
 
 	return v, nil
 }
+
+// BuildListCustomerUsagePayload builds the payload for the admin
+// listCustomerUsage endpoint from CLI flags.
+func BuildListCustomerUsagePayload(adminListCustomerUsageInterval string, adminListCustomerUsageAdminSessionToken string) (*admin.ListCustomerUsagePayload, error) {
+	var err error
+	var interval string
+	{
+		if adminListCustomerUsageInterval != "" {
+			interval = adminListCustomerUsageInterval
+			if !(interval == "daily" || interval == "weekly" || interval == "monthly") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("interval", interval, []any{"daily", "weekly", "monthly"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListCustomerUsageAdminSessionToken != "" {
+			adminSessionToken = &adminListCustomerUsageAdminSessionToken
+		}
+	}
+	v := &admin.ListCustomerUsagePayload{}
+	v.Interval = interval
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

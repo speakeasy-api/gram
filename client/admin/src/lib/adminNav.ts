@@ -18,6 +18,7 @@ import {
   KeyRoundIcon,
   PlugZapIcon,
   ListChecksIcon,
+  ChartColumnStackedIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -93,6 +94,15 @@ export const ADMIN_NAV_GROUPS = [
         label: "Admin MCP",
         keywords: "install connect agents claude codex cursor tailscale",
         icon: PlugZapIcon,
+      },
+      {
+        to: "/customer-usage",
+        label: "Customer usage",
+        keywords: "spend billing usage customers paying growth estimate",
+        icon: ChartColumnStackedIcon,
+        // Rendered after the external Demo organization link rather than in
+        // array order, so the sidebar lists it below that link.
+        afterDemoOrganization: true,
       },
     ],
   },
