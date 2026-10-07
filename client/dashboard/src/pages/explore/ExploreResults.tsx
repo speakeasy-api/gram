@@ -5,6 +5,7 @@ import type { AnalyticsQueryResult } from "@gram/client/models/components/analyt
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { JSX, ReactNode } from "react";
 import {
+  additiveOp,
   completeMeasures,
   drawnChart,
   hasChartShape,
@@ -13,6 +14,7 @@ import {
   queryDimensions,
   specGrain,
   type ExploreSpec,
+  type MeasureDraft,
 } from "./exploreModel";
 import { CHART_HEIGHT, ResultChart } from "./ResultChart";
 import { ResultNumbers } from "./ResultNumbers";
@@ -168,6 +170,18 @@ function ChartOrReason({
   onRangeSelect: ((from: Date, to: Date) => void) | undefined;
 }): JSX.Element {
   const measures = completeMeasures(spec.measures);
+  // Checked before the unit, so what is offered is what lets the stack
+  // draw: several measures of one unit still cannot stack.
+  const stacking = isStacked(spec.chartType) ? stackProblem(measures) : null;
+  if (stacking) {
+    return (
+      <InlineEmptyState
+        icon="chart-line"
+        heading={stacking.heading}
+        description={stacking.description}
+      />
+    );
+  }
   const unit = sharedUnit(dataset, measures);
   if (unit === null) {
     return (
@@ -175,17 +189,6 @@ function ChartOrReason({
         icon="chart-line"
         heading="These measures do not share a unit"
         description="A chart needs one axis. Keep measures with one unit, or switch to a table."
-      />
-    );
-  }
-  // A stack is one measure's composition; a second measure has no place in
-  // it, and an Other band summed across measures would mean nothing.
-  if (isStacked(spec.chartType) && measures.length > 1) {
-    return (
-      <InlineEmptyState
-        icon="chart-line"
-        heading="A stacked chart stacks one measure"
-        description="Keep one measure to see what made up its total, or switch to Line."
       />
     );
   }
@@ -218,6 +221,33 @@ function ChartOrReason({
       <ChartNote spec={spec} drawn={drawn} seriesSet={seriesSet} />
     </div>
   );
+}
+
+/**
+ * Why a stack cannot draw these measures, or null when it can. A stack is
+ * one measure's composition, and its bands and its Other band add up: a
+ * second measure has no place in it, and an average or a percentile does
+ * not add. The server refuses to save the same shapes.
+ */
+function stackProblem(
+  measures: MeasureDraft[],
+): { heading: string; description: string } | null {
+  if (measures.length !== 1) {
+    return {
+      heading: "A stacked chart stacks one measure",
+      description:
+        "Keep one measure to see what made up its total, or switch to Line.",
+    };
+  }
+  const [measure] = measures;
+  if (measure && !additiveOp(measure.op)) {
+    return {
+      heading: "A stacked chart adds its bands up",
+      description:
+        "Stack a count or a sum, or switch to Line to compare the groups.",
+    };
+  }
+  return null;
 }
 
 /**

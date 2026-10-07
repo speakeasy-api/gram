@@ -5,7 +5,7 @@ import {
   bucketTitle,
   isSparse,
   MAX_SERIES,
-  OTHER_LABEL,
+  otherLabel,
   seriesFromRows,
   sharedUnit,
   tupleLabel,
@@ -147,7 +147,8 @@ describe("seriesFromRows", () => {
     expect(set.series).toHaveLength(MAX_SERIES);
     expect(set.hidden).toBe(4);
     const other = set.series.at(-1);
-    expect(other).toMatchObject({ label: OTHER_LABEL, other: true });
+    expect(other).toMatchObject({ label: otherLabel(4), other: true });
+    expect(otherLabel(4)).toBe("Other (4 series)");
     // The four smallest series are user-0 to user-3, with counts 1 to 4.
     expect(other?.points).toEqual([10, 10]);
     expect(set.series.slice(0, -1).every((s) => !s.other)).toBe(true);
