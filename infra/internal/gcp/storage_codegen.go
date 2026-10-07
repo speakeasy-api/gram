@@ -376,7 +376,9 @@ func (e *storageEmitter) emit(n *storageNode, expr, rep string, def, depth int) 
 			if child.kind == "oneof" {
 				v := e.variable("choice")
 				e.g.P("var ", v, " int32")
-				for _, field := range child.oneof.Fields {
+				alternatives := slices.Clone(child.oneof.Fields)
+				slices.SortFunc(alternatives, func(a, b *protogen.Field) int { return cmp.Compare(a.Desc.Number(), b.Desc.Number()) })
+				for _, field := range alternatives {
 					present := e.present(field, expr)
 					e.g.P("if ", present, " { ", v, " = ", field.Desc.Number(), " }")
 				}

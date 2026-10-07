@@ -31,7 +31,7 @@ type Definition struct {
 	// ProtoName is the fixed object prefix and marker's fully qualified name.
 	ProtoName string
 
-	// SubscriptionID is the resolved transport subscription and metric label.
+	// SubscriptionID is the resolved transport subscription, including overrides.
 	SubscriptionID string
 
 	// TopicID is the resolved transport topic recorded in row metadata.

@@ -35,9 +35,7 @@ func TestStorageCodegen_CommittedArtifactsAndDescriptorOrder(t *testing.T) {
 	reorderedCode, reorderedManifest, err := RenderStorage(raw, "storagefixture", "github.com/speakeasy-api/gram/infra/internal/storagefixture")
 	require.NoError(t, err)
 	require.Equal(t, string(manifest), string(reorderedManifest))
-	// protogen preserves source ordering for oneof alternatives, so code is
-	// semantically identical even if the generated presence checks move.
-	require.NotEmpty(t, reorderedCode)
+	require.Equal(t, string(code), string(reorderedCode))
 }
 
 func TestStorageCodegen_ReservedAndCaseInsensitiveColumns(t *testing.T) {
