@@ -16,7 +16,10 @@ pin = true
 "github:speakeasy-api/openapi" = "1.24.0"
 # Keep in sync with speakeasyVersion in .speakeasy/workflow.yaml, otherwise the
 # installed version and the version generation runs on can mismatch.
-"github:speakeasy-api/speakeasy" = "1.796.1"
+# Installed as speakeasy-sdks, not speakeasy: the AI Control Plane CLI built
+# from cli/ is also called speakeasy, and the repo pin would otherwise shadow
+# it in every worktree. Tasks call speakeasy-sdks.
+"github:speakeasy-api/speakeasy" = { version = "1.796.1", rename_exe = "speakeasy-sdks" }
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.2.31"
 flyctl = "0.4.77"
