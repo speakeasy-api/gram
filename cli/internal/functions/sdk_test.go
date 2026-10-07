@@ -55,7 +55,7 @@ func TestBuild_SDKOutdated(t *testing.T) {
 	bin := fakeNode(t, "v24.0.0", `echo '{"error":"outdated"}' > "$SPEAKEASY_FUNCTIONS_RESULT"`+"\n")
 	_, err := testRunner(bin, &bytes.Buffer{}).Build(t.Context(), ProjectOptions{Dir: t.TempDir(), ConfigFile: "", Entrypoint: "", OutDir: ""})
 	require.ErrorIs(t, err, ErrSDKOutdated)
-	require.ErrorContains(t, err, "upgrade it with 'npm install @speakeasy-api/functions@^"+MinSDKVersion+"'")
+	require.ErrorContains(t, err, "upgrade @speakeasy-api/functions with 'npm install @speakeasy-api/functions@^"+MinSDKVersion+"'")
 }
 
 func TestBuild_SDKOutdatedNamesThePackage(t *testing.T) {
@@ -64,7 +64,7 @@ func TestBuild_SDKOutdatedNamesThePackage(t *testing.T) {
 	bin := fakeNode(t, "v24.0.0", `echo '{"error":"outdated","package":"@gram-ai/functions"}' > "$SPEAKEASY_FUNCTIONS_RESULT"`+"\n")
 	_, err := testRunner(bin, &bytes.Buffer{}).Build(t.Context(), ProjectOptions{Dir: t.TempDir(), ConfigFile: "", Entrypoint: "", OutDir: ""})
 	require.ErrorIs(t, err, ErrSDKOutdated)
-	require.EqualError(t, err, "the installed @gram-ai/functions is too old for the speakeasy CLI: upgrade it with 'npm install @gram-ai/functions@^"+MinSDKVersion+"'")
+	require.EqualError(t, err, "functions SDK is too old for the speakeasy CLI: upgrade @gram-ai/functions with 'npm install @gram-ai/functions@^"+MinSDKVersion+"'")
 }
 
 func TestBuild_NodeFails(t *testing.T) {
@@ -186,10 +186,6 @@ func TestBuild_RealNode(t *testing.T) {
 		writeFile(t, filepath.Join(sdkDir, "package.json"), `{"name":"`+pkg+`","type":"module","exports":{"./build":"./build.js"}}`)
 		writeFile(t, filepath.Join(sdkDir, "build.js"), buildJS)
 	}
-	installSDK := func(t *testing.T, dir string, buildJS string) {
-		t.Helper()
-		installPackage(t, dir, LegacySDKPackage, buildJS)
-	}
 	// buildAs returns an SDK build entry whose project slug names who built it.
 	buildAs := func(name string) string {
 		return `export async function build(opts) {
@@ -215,8 +211,8 @@ func TestBuild_RealNode(t *testing.T) {
 			{name: "only the legacy package", current: "", legacy: buildAs("legacy"), wantSlug: "legacy", wantErr: nil, wantMsg: ""},
 			{name: "neither package", current: "", legacy: "", wantSlug: "", wantErr: ErrSDKMissing, wantMsg: "@speakeasy-api/functions is not installed"},
 			{name: "outdated new package falls back to the legacy one", current: tooOld, legacy: buildAs("legacy"), wantSlug: "legacy", wantErr: nil, wantMsg: ""},
-			{name: "outdated legacy package names it", current: "", legacy: tooOld, wantSlug: "", wantErr: ErrSDKOutdated, wantMsg: "the installed @gram-ai/functions is too old"},
-			{name: "both outdated names the new package", current: tooOld, legacy: tooOld, wantSlug: "", wantErr: ErrSDKOutdated, wantMsg: "the installed @speakeasy-api/functions is too old"},
+			{name: "outdated legacy package names it", current: "", legacy: tooOld, wantSlug: "", wantErr: ErrSDKOutdated, wantMsg: "upgrade @gram-ai/functions with"},
+			{name: "both outdated names the new package", current: tooOld, legacy: tooOld, wantSlug: "", wantErr: ErrSDKOutdated, wantMsg: "upgrade @speakeasy-api/functions with"},
 		}
 		for _, tc := range tests {
 			t.Run(tc.name, func(t *testing.T) {
@@ -250,7 +246,7 @@ func TestBuild_RealNode(t *testing.T) {
 	t.Run("outdated", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		installSDK(t, dir, "export function defineConfig(c) { return c; }\n")
+		installPackage(t, dir, LegacySDKPackage, "export function defineConfig(c) { return c; }\n")
 		_, err := newRunner().Build(t.Context(), ProjectOptions{Dir: dir, ConfigFile: "", Entrypoint: "", OutDir: ""})
 		require.ErrorIs(t, err, ErrSDKOutdated)
 	})
@@ -258,7 +254,7 @@ func TestBuild_RealNode(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		installSDK(t, dir, `export async function build(opts) {
+		installPackage(t, dir, LegacySDKPackage, `export async function build(opts) {
   return { project: { cwd: opts.cwd, outDir: opts.outDir, zipFile: opts.outDir + "/gram.zip", deployStagingFile: "", slug: "fake" }, files: [] };
 }
 `)
@@ -285,7 +281,7 @@ func TestBuild_RealNode(t *testing.T) {
 		depDir := filepath.Join(dir, "node_modules", "some-dep")
 		writeFile(t, filepath.Join(depDir, "package.json"), `{"name":"some-dep","type":"module","exports":{".":"./index.js"}}`)
 		writeFile(t, filepath.Join(depDir, "index.js"), "export {};\n")
-		installSDK(t, dir, "import \"some-dep/missing\";\nexport async function build() { return {}; }\n")
+		installPackage(t, dir, LegacySDKPackage, "import \"some-dep/missing\";\nexport async function build() { return {}; }\n")
 		_, err := newRunner().Build(t.Context(), ProjectOptions{Dir: dir, ConfigFile: "", Entrypoint: "", OutDir: ""})
 		require.Error(t, err)
 		require.NotErrorIs(t, err, ErrSDKOutdated)
@@ -295,7 +291,7 @@ func TestBuild_RealNode(t *testing.T) {
 	t.Run("sdk throws", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
-		installSDK(t, dir, "export async function build() { throw new Error(\"entrypoint broke\"); }\n")
+		installPackage(t, dir, LegacySDKPackage, "export async function build() { throw new Error(\"entrypoint broke\"); }\n")
 		_, err := newRunner().Build(t.Context(), ProjectOptions{Dir: dir, ConfigFile: "", Entrypoint: "", OutDir: ""})
 		require.ErrorContains(t, err, "functions SDK build failed")
 	})

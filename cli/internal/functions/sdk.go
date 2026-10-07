@@ -2,13 +2,13 @@ package functions
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 
 	"github.com/Masterminds/semver/v3"
 )
@@ -95,23 +95,9 @@ var (
 	ErrSDKMissing = errors.New(SDKPackage + " is not installed in this project: run your package manager's install command, or add it with 'npm install " + SDKPackage + "@^" + MinSDKVersion + "'")
 
 	// ErrSDKOutdated means the installed SDK predates the build entry. The
-	// error Build returns names the outdated package and how to upgrade it.
-	ErrSDKOutdated = errors.New("the installed functions SDK is too old for the speakeasy CLI")
+	// error Build returns wraps it and names the outdated package.
+	ErrSDKOutdated = errors.New("functions SDK is too old for the speakeasy CLI")
 )
-
-// sdkOutdatedError reports which installed SDK package is too old. It matches
-// ErrSDKOutdated.
-type sdkOutdatedError struct {
-	pkg string
-}
-
-func (e sdkOutdatedError) Error() string {
-	return "the installed " + e.pkg + " is too old for the speakeasy CLI: upgrade it with 'npm install " + e.pkg + "@^" + MinSDKVersion + "'"
-}
-
-func (e sdkOutdatedError) Is(target error) bool {
-	return target == ErrSDKOutdated
-}
 
 // ProjectOptions selects a project and overrides parts of its config.
 type ProjectOptions struct {
@@ -223,11 +209,8 @@ func (r Runner) callSDK(ctx context.Context, action string, opts ProjectOptions,
 	case "missing":
 		return ErrSDKMissing
 	case "outdated":
-		pkg := outcome.Package
-		if !slices.Contains(sdkPackages, pkg) {
-			pkg = SDKPackage
-		}
-		return sdkOutdatedError{pkg: pkg}
+		pkg := cmp.Or(outcome.Package, SDKPackage)
+		return fmt.Errorf("%w: upgrade %s with 'npm install %s@^%s'", ErrSDKOutdated, pkg, pkg, MinSDKVersion)
 	default:
 		return fmt.Errorf("functions SDK %s failed: %s", action, outcome.Error)
 	}

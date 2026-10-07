@@ -2,7 +2,6 @@ package app
 
 import (
 	"bufio"
-	"cmp"
 	"context"
 	"errors"
 	"flag"
@@ -134,7 +133,7 @@ used: the functions template, git init and dependency install.
 				Git:        optionalBool(c, "git"),
 				Install:    optionalBool(c, "install"),
 				UserAgent:  r.Getenv("npm_config_user_agent"),
-				SDKVersion: cmp.Or(r.Getenv(functions.SDKVersionEnv), r.Getenv(functions.LegacySDKVersionEnv)),
+				SDKVersion: sdkVersionOverride(r),
 			})
 			if err != nil {
 				return err
@@ -143,6 +142,20 @@ used: the functions template, git init and dependency install.
 			return r.Init(c.Context, opts)
 		},
 	}
+}
+
+// sdkVersionOverride returns the SDK dependency to write into new projects
+// from SPEAKEASY_AI_FUNCTIONS_SDK_VERSION or the deprecated
+// GRAM_FUNCTIONS_SDK_VERSION, for example
+// "file:/path/to/gram/ts-framework/functions" to develop against a local SDK
+// checkout. It returns "" when neither is set.
+func sdkVersionOverride(r functions.Runner) string {
+	for _, name := range flags.EnvVars("FUNCTIONS_SDK_VERSION") {
+		if v := r.Getenv(name); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // parseFlagsAfterArg parses flags that follow the directory argument, as in

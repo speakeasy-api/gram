@@ -23,23 +23,25 @@ export const CONFIG_FILE_NAMES = [
 const LEGACY_CONFIG_PREFIX = "gram.config.";
 
 /** The entrypoint used when the config does not set one. */
-export const DEFAULT_ENTRYPOINT = path.join("src", "functions.ts");
+const DEFAULT_ENTRYPOINT = path.join("src", "functions.ts");
 
 /** The entrypoint used when {@link DEFAULT_ENTRYPOINT} does not exist. */
-export const LEGACY_ENTRYPOINT = path.join("src", "gram.ts");
+const LEGACY_ENTRYPOINT = path.join("src", "gram.ts");
 
 /** The deployment file used when the config does not set one. */
-export const DEFAULT_DEPLOY_STAGING_FILE = "speakeasy.deploy.json";
+const DEFAULT_DEPLOY_STAGING_FILE = "speakeasy.deploy.json";
 
 /**
  * The deprecated deployment file name, used when it exists and
  * {@link DEFAULT_DEPLOY_STAGING_FILE} does not.
  */
-export const LEGACY_DEPLOY_STAGING_FILE = "gram.deploy.json";
+const LEGACY_DEPLOY_STAGING_FILE = "gram.deploy.json";
 
-/** Prints a one-line note for the user on stderr. */
-export function printNote(message: string): void {
-  process.stderr.write(`Note: ${message}\n`);
+/** Prints a one-line note on stderr that a file name is deprecated. */
+function noteRename(legacy: string, current: string): void {
+  process.stderr.write(
+    `Note: ${legacy} is deprecated and still works. Rename it to ${current}.\n`,
+  );
 }
 
 /**
@@ -52,9 +54,7 @@ export function findConfigFile(dir: string): string | undefined {
   );
   const name = file && path.basename(file);
   if (name?.startsWith(LEGACY_CONFIG_PREFIX)) {
-    printNote(
-      `${name} is deprecated and still works. Rename it to ${name.replace(LEGACY_CONFIG_PREFIX, "speakeasy.config.")}.`,
-    );
+    noteRename(name, name.replace(LEGACY_CONFIG_PREFIX, "speakeasy.config."));
   }
   return file;
 }
@@ -149,10 +149,7 @@ const userConfigSchema = z.object({
   requireInterop: z.boolean().default(true),
 }) satisfies z.ZodType<UserConfig>;
 
-export type ParsedUserConfig = Omit<
-  z.output<typeof userConfigSchema>,
-  "entrypoint" | "deployStagingFile"
-> & {
+export type ParsedUserConfig = z.output<typeof userConfigSchema> & {
   entrypoint: string;
   deployStagingFile: string;
 };
@@ -210,9 +207,7 @@ function defaultDeployStagingFile(dir: string): string {
     LEGACY_DEPLOY_STAGING_FILE,
   );
   if (legacy) {
-    printNote(
-      `${LEGACY_DEPLOY_STAGING_FILE} is deprecated and still works. Rename it to ${DEFAULT_DEPLOY_STAGING_FILE}.`,
-    );
+    noteRename(LEGACY_DEPLOY_STAGING_FILE, DEFAULT_DEPLOY_STAGING_FILE);
   }
   return file;
 }

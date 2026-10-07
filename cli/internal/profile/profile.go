@@ -97,27 +97,20 @@ func legacyPathFor(path string) (string, bool) {
 // profile path and that file does not exist yet, it reads the legacy file
 // instead. It returns (nil, nil) when neither exists.
 func readProfileFile(path string) ([]byte, error) {
-	data, err := os.ReadFile(filepath.Clean(path))
-	if err == nil {
-		return data, nil
+	candidates := []string{path}
+	if legacyPath, ok := legacyPathFor(path); ok {
+		candidates = append(candidates, legacyPath)
 	}
-	if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("failed to read profile file: %w", err)
-	}
-
-	legacyPath, ok := legacyPathFor(path)
-	if !ok {
-		return nil, nil
-	}
-
-	data, err = os.ReadFile(filepath.Clean(legacyPath))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
+	for _, candidate := range candidates {
+		data, err := os.ReadFile(filepath.Clean(candidate))
+		if err == nil {
+			return data, nil
 		}
-		return nil, fmt.Errorf("failed to read profile file: %w", err)
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("failed to read profile file: %w", err)
+		}
 	}
-	return data, nil
+	return nil, nil
 }
 
 // Load reads the profile configuration from the specified path, or from

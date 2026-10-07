@@ -9,25 +9,14 @@ import { $ } from "zx";
 export const CLI_PATH_ENV = "SPEAKEASY_AI_CLI_PATH";
 
 /** Deprecated name of {@link CLI_PATH_ENV}, read when that is unset. */
-export const LEGACY_CLI_PATH_ENV = "GRAM_CLI_PATH";
-
-/** Environment variable that selects the CLI built from this repository. */
-export const DEV_ENV = "SPEAKEASY_AI_DEV";
-
-/** Deprecated name of {@link DEV_ENV}, read when that is unset. */
-export const LEGACY_DEV_ENV = "GRAM_DEV";
+const LEGACY_CLI_PATH_ENV = "GRAM_CLI_PATH";
 
 /**
- * Returns the value of name, or of its deprecated legacy name when name is
- * unset.
+ * Environment variable that selects the CLI built from this repository, and
+ * its deprecated name, read when the new one is unset.
  */
-export function readEnv(
-  env: Record<string, string | undefined>,
-  name: string,
-  legacy: string,
-): string | undefined {
-  return env[name] ?? env[legacy];
-}
+const DEV_ENV = "SPEAKEASY_AI_DEV";
+const LEGACY_DEV_ENV = "GRAM_DEV";
 
 /**
  * Flag that makes the Speakeasy AI Control Plane CLI print
@@ -64,7 +53,7 @@ export type CLIResolverDeps = {
 };
 
 function isLocalDev(env: CLIResolverDeps["env"]): boolean {
-  const value = readEnv(env, DEV_ENV, LEGACY_DEV_ENV);
+  const value = env[DEV_ENV] ?? env[LEGACY_DEV_ENV];
   return value?.toLowerCase() === "true" || value === "1";
 }
 
@@ -80,7 +69,9 @@ function isLocalDev(env: CLIResolverDeps["env"]): boolean {
  * Throws with install instructions when none is available.
  */
 export async function resolveCLI(deps: CLIResolverDeps): Promise<string> {
-  const override = readEnv(deps.env, CLI_PATH_ENV, LEGACY_CLI_PATH_ENV)?.trim();
+  const override = (
+    deps.env[CLI_PATH_ENV] ?? deps.env[LEGACY_CLI_PATH_ENV]
+  )?.trim();
   if (override) {
     return override;
   }
