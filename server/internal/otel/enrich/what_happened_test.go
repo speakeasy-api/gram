@@ -64,7 +64,7 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 		require.NotContains(t, columns, NameColumnKey, "a request has no subject with a name")
 		require.NotContains(t, columns, ToolNameColumnKey)
 		require.NotContains(t, columns, TextColumnKey)
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "outcome"))
+		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("outcome")))
 	})
 
 	t.Run("a plain api_request is not counted missing on what most requests do not carry", func(t *testing.T) {
@@ -82,7 +82,7 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 		require.NotContains(t, columns, AgentNameColumnKey)
 		require.NotContains(t, columns, MCPServerNameColumnKey)
 		for _, column := range []string{"skill_name", "agent_name", "mcp_server_name", "mcp_tool_name"} {
-			require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, column), column)
+			require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn(column)), column)
 		}
 	})
 
@@ -118,10 +118,10 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 		columns := whatHappened(t, in, record)
 		require.Equal(t, dialect.OutcomeOK, columns[OutcomeColumnKey].AsString())
 		require.NotContains(t, columns, OutcomeMessageColumnKey)
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "outcome_message"))
+		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("outcome_message")))
 		require.NotContains(t, columns, MCPServerNameColumnKey, "a built-in tool has no MCP server")
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "mcp_server_name"))
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "mcp_tool_name"))
+		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("mcp_server_name")))
+		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("mcp_tool_name")))
 	})
 
 	t.Run("an MCP tool_result that names the tool but not the server is counted on the server", func(t *testing.T) {
@@ -137,8 +137,8 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 		columns := whatHappened(t, in, record)
 		require.Equal(t, "whoami", columns[MCPToolNameColumnKey].AsString())
 		require.NotContains(t, columns, MCPServerNameColumnKey)
-		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "mcp_server_name"))
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "mcp_tool_name"))
+		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("mcp_server_name")))
+		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("mcp_tool_name")))
 	})
 
 	t.Run("a rejected tool_decision is rejected and an accepted one has no outcome and is not counted", func(t *testing.T) {
@@ -165,7 +165,7 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 		)
 		columns = whatHappened(t, in, accepted)
 		require.NotContains(t, columns, OutcomeColumnKey, "the result row carries how an accepted call went")
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "outcome"))
+		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("outcome")))
 	})
 
 	t.Run("the api event types imply their outcome", func(t *testing.T) {
@@ -213,7 +213,7 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 
 		withoutModel := inboundTestLog(claudeCodeScopeName, "claude-code", "api_response_body", logStringAttribute("body", `{}`))
 		require.NotContains(t, whatHappened(t, in, withoutModel), ModelColumnKey)
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "model"), "a capture states the model only sometimes")
+		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("model")), "a capture states the model only sometimes")
 	})
 
 	t.Run("a compaction states its outcome and, when it failed, why", func(t *testing.T) {
@@ -237,7 +237,7 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 		columns = whatHappened(t, in, failed)
 		require.Equal(t, dialect.OutcomeError, columns[OutcomeColumnKey].AsString())
 		require.Equal(t, "context too large", columns[OutcomeMessageColumnKey].AsString())
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "outcome_message"))
+		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("outcome_message")))
 	})
 
 	t.Run("a prompt whose words were not logged is a choice, not a gap", func(t *testing.T) {
@@ -247,7 +247,7 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 		record := inboundTestLog(claudeCodeScopeName, "claude-code", "user_prompt", inboundTestIntAttribute("prompt_length", 13))
 
 		require.NotContains(t, whatHappened(t, in, record), TextColumnKey)
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "text"))
+		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("text")))
 	})
 }
 
