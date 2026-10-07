@@ -62,6 +62,13 @@ func TestLogTransformHandlerNormalizesEnrichesAndPublishes(t *testing.T) {
 	require.Positive(t, attributes[string(enrich.TokensCountKey)].GetIntValue())
 	require.NotEmpty(t, attributes[string(enrich.TokensCodecKey)].GetStringValue())
 	require.Contains(t, attributes, "gen_ai.input.messages")
+
+	// The column enrichers classified the record on the way through: a
+	// resource without a service name is the unknown source, and a record
+	// no dialect classifies carries no type key at all.
+	require.Equal(t, enrich.SourceUnknown, attributes[string(enrich.SourceColumnKey)].GetStringValue())
+	require.NotContains(t, attributes, string(enrich.EventTypeColumnKey))
+	require.NotContains(t, attributes, string(enrich.RawEventNameColumnKey))
 }
 
 func TestLogAnyValueConvertsHeterogeneousSlice(t *testing.T) {
@@ -157,6 +164,7 @@ func TestMaxSizeLogRecordFitsRelayExportAfterFullEnrichment(t *testing.T) {
 	require.Equal(t, testLogProjectID, attributes[string(enrich.ProjectIDKey)].GetStringValue())
 	require.Positive(t, attributes[string(enrich.TokensCountKey)].GetIntValue())
 	require.NotEmpty(t, attributes[string(enrich.TokensCodecKey)].GetStringValue())
+	require.Equal(t, "pathological-size-test", attributes[string(enrich.SourceColumnKey)].GetStringValue())
 
 	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{published}, true)
 	require.NoError(t, err)

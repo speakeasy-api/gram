@@ -33,6 +33,20 @@ func TestRecordLogEnricherDurationIgnoresUnavailableInstrument(t *testing.T) {
 	})
 }
 
+func TestRecordColumnValueMissingIgnoresUnavailableInstrument(t *testing.T) {
+	t.Parallel()
+
+	m := &Instruments{
+		logEnricherDuration:    nil,
+		metricEnricherDuration: nil,
+		spanEnricherDuration:   nil,
+		columnValueMissing:     nil,
+	}
+	require.NotPanics(t, func() {
+		m.recordColumnValueMissing(t.Context(), "claude-code", "api_request", "turn_id")
+	})
+}
+
 func TestRecordMetricEnricherDurationIgnoresUnavailableInstrument(t *testing.T) {
 	t.Parallel()
 
