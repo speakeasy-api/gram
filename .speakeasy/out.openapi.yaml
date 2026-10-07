@@ -78169,7 +78169,7 @@ components:
           type: array
           items:
             type: string
-          description: Ops a measure admits
+          description: 'Ops a field admits: aggregations on a measure, count_distinct on a dimension'
         default:
           type: boolean
           description: 'Part of the query the dataset opens on: a default dimension is in the opening group-by'
@@ -78231,14 +78231,15 @@ components:
           example: tool_calls
         field:
           type: string
-          description: Measure field the op applies to. Absent for count.
+          description: 'Field the op applies to: a dimension for count_distinct, a measure otherwise. Absent for count.'
           example: tool_call_count
         op:
           type: string
-          description: Aggregation to apply. count takes no field; every other op needs a measure field that admits it, per describe.
+          description: Aggregation to apply. count takes no field; count_distinct takes a dimension that admits it; every other op needs a measure field that admits it, per describe.
           example: sum
           enum:
             - count
+            - count_distinct
             - sum
             - avg
             - min
