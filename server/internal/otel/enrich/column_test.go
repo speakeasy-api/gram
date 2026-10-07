@@ -113,8 +113,10 @@ func TestLogColumnEnricherCountsATypeInTheTableWhoseProviderSaidNothing(t *testi
 
 	// Codex never states a turn id, so its api_request is in the table and
 	// yet writes nothing: absent, not an error, and counted by surface, type
-	// and column on one data point so the gap is visible.
-	record := inboundTestLog(codexScopeName, "codex", "codex.sse_event", logStringAttribute("event.kind", "response.completed"))
+	// and column on one data point so the gap is visible. The service name
+	// is outside the surface vocabulary on purpose: the label must come
+	// from the dialect's surface, never from the resource.
+	record := inboundTestLog(codexScopeName, "codex-prod-1", "codex.sse_event", logStringAttribute("event.kind", "response.completed"))
 
 	require.Empty(t, enrichedColumns(t, enricher, record))
 	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing,

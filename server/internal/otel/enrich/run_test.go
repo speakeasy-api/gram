@@ -131,7 +131,7 @@ func TestMetricConvertsPanicsToErrors(t *testing.T) {
 		}}},
 	)
 
-	require.ErrorContains(t, err, "panic in metric enricher panicking: boom")
+	require.EqualError(t, err, "enrich metric: panic in metric enricher panicking: boom")
 }
 
 func TestMetricWithNoEnrichersWritesNothing(t *testing.T) {

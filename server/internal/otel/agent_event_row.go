@@ -364,7 +364,6 @@ func (c *canonicalColumns) read(key string, value any) {
 // the enrichers put it.
 type rowEnrichment struct {
 	userID      string
-	provider    string
 	accountType string
 	billingMode string
 	deviceID    string
@@ -390,8 +389,6 @@ func (e *rowEnrichment) read(key string, value any) {
 	switch key {
 	case string(attr.UserIDKey):
 		e.userID = enrichmentString(value)
-	case string(attr.ProviderKey):
-		e.provider = enrichmentString(value)
 	case string(attr.AccountTypeKey):
 		e.accountType = enrichmentString(value)
 	case string(attr.BillingModeKey):
