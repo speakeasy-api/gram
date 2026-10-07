@@ -3,6 +3,7 @@ import {
   type BlockRenderers,
 } from "@/components/setup-steps/blockRegistry";
 import { SetupSteps } from "@/components/setup-steps/SetupSteps";
+import { useCheckedItems } from "@/components/setup-steps/useCheckedItems";
 import { genericBlockRenderers } from "@/components/setup-steps/genericBlocks";
 import { LabeledValue } from "@/components/setup-steps/StepBlocks";
 import { Button } from "@/components/ui/Button";
@@ -88,9 +89,7 @@ export function PlatformSetupSheet({
   const [values, setValues] = useState<VariableValues>({});
   const [agentId, setAgentId] = useState("");
   const [tags, setTags] = useState<string[]>([]);
-  const [checkedItems, setCheckedItems] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+  const checklist = useCheckedItems();
   const [creating, setCreating] = useState(false);
   // Set once this flow has trusted the platform, so the platform-side steps
   // unlock without waiting for the refetch that reports it.
@@ -294,15 +293,8 @@ export function PlatformSetupSheet({
         block={block}
         blockKey={blockKey}
         computedValues={setupValues.values}
-        checked={checkedItems.has(blockKey)}
-        onCheckedChange={(key, checked) =>
-          setCheckedItems((current) => {
-            const next = new Set(current);
-            if (checked) next.add(key);
-            else next.delete(key);
-            return next;
-          })
-        }
+        checked={checklist.isChecked(blockKey)}
+        onCheckedChange={checklist.setChecked}
       />
     ),
   };
@@ -331,7 +323,7 @@ export function PlatformSetupSheet({
         complete={activeComplete}
         canCreate={
           activeComplete &&
-          subjectRule(entry, values) !== null &&
+          rule !== null &&
           agentId !== "" &&
           tagsProblem(tags) === null
         }

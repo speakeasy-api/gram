@@ -10,8 +10,11 @@ interface SetupStepsProps<S extends SetupStepsStep> {
   steps: readonly S[];
   /** The step on screen. An id not among steps shows the first. */
   activeStepId: string;
-  /** Whether the step at index can be shown; its dash is disabled if not. */
-  isReachable: (index: number) => boolean;
+  /**
+   * Whether the step at index can be shown; its dash is disabled if not.
+   * Every step is reachable when left out.
+   */
+  isReachable?: (index: number) => boolean;
   onStepChange: (stepId: string) => void;
   /** The body under a step's title. Every step stays mounted for the slide. */
   renderStep: (step: S, index: number) => ReactNode;
@@ -33,7 +36,7 @@ interface SetupStepsProps<S extends SetupStepsStep> {
 export function SetupSteps<S extends SetupStepsStep>({
   steps,
   activeStepId,
-  isReachable,
+  isReachable = alwaysReachable,
   onStepChange,
   renderStep,
   footer,
@@ -84,6 +87,10 @@ export function SetupSteps<S extends SetupStepsStep>({
       {footer}
     </>
   );
+}
+
+function alwaysReachable(): boolean {
+  return true;
 }
 
 /** One dash per step; a dash is a link back to any step that can be shown. */
