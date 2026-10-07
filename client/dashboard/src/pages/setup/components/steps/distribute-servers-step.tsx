@@ -30,11 +30,10 @@ import {
   invalidateAllPlugin,
   usePlugin,
 } from "@gram/client/react-query/plugin";
-import { ClaudeMarketplaceAutoUpdateNote } from "@/components/claude-code-marketplace-notes";
+import { ClaudeCodeSettingsInstall } from "@/components/claude-code-settings-install";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { CopyButton } from "@/components/ui/CopyButton";
 import {
   Sheet,
   SheetContent,
@@ -57,30 +56,28 @@ interface DistributeServersStepProps {
 }
 
 // Mounted only once a marketplace URL exists, so the settings read behind the
-// auto-update note runs only when there is a command to show.
-function SelfInstallCommand({ command }: { command: string }): JSX.Element {
+// marketplace name runs only when there is a snippet to show.
+function SelfInstallSettings({
+  marketplaceUrl,
+  pluginSlug,
+}: {
+  marketplaceUrl: string;
+  pluginSlug: string;
+}): JSX.Element | null {
   const { data: marketplaceSettings } = useMarketplaceSettings(
     undefined,
     undefined,
     { throwOnError: false },
   );
+  const marketplaceName = marketplaceSettings?.effectiveName;
+  if (!marketplaceName) return null;
   return (
-    <div className="space-y-2">
-      <p className="text-foreground text-sm font-medium">
-        Install for yourself in Claude Code
-      </p>
-      <p className="text-muted-foreground text-xs">
-        Registers the marketplace for your own account.
-      </p>
-      <div className="bg-muted/50 flex items-center justify-between gap-2 border p-3">
-        <code className="text-foreground truncate text-xs">{command}</code>
-        <CopyButton text={command} />
-      </div>
-      <ClaudeMarketplaceAutoUpdateNote
-        marketplaceName={marketplaceSettings?.effectiveName}
-        className="mt-0"
-      />
-    </div>
+    <ClaudeCodeSettingsInstall
+      marketplaceName={marketplaceName}
+      marketplaceUrl={marketplaceUrl}
+      plugins={[pluginSlug]}
+      secretUrl
+    />
   );
 }
 
@@ -419,9 +416,6 @@ export function DistributeServersStep({
 
   const isAdding = drawerStep === "adding" && !drawerError;
   const drawerIdx = drawerStep === "done" ? 1 : 0;
-  const marketplaceCommand = publishStatus?.marketplaceUrl
-    ? `/plugin marketplace add ${publishStatus.marketplaceUrl}`
-    : null;
   // Gate the action on actually-deployable servers, not the raw selection:
   // already-distributed picks are filtered out of selectedServerObjects, so
   // counting selected.size could enable a Continue that deploys nothing.
@@ -678,19 +672,19 @@ export function DistributeServersStep({
                   to your marketplace. Share these instructions so your
                   organization can install them.
                 </p>
-                {marketplaceCommand && (
-                  <SelfInstallCommand command={marketplaceCommand} />
+                {publishStatus?.marketplaceUrl && (
+                  <SelfInstallSettings
+                    marketplaceUrl={publishStatus.marketplaceUrl}
+                    pluginSlug={distributedPluginSlug ?? DEFAULT_PLUGIN_SLUG}
+                  />
                 )}
                 {publishStatus?.repoOwner && publishStatus?.repoName && (
                   <div className="space-y-2">
                     <p className="text-foreground text-sm font-medium">
-                      Roll out to your whole organization
+                      Other agents
                     </p>
                     <p className="text-muted-foreground text-xs leading-relaxed">
-                      Push the marketplace to every developer through Claude
-                      Code Managed Settings — no per-user install command
-                      required. The full guide also covers the other supported
-                      platforms.
+                      Cursor, Codex, Claude Cowork, and the rest.
                     </p>
                     <InstallInstructionsButton
                       repoOwner={publishStatus.repoOwner}

@@ -883,6 +883,14 @@ func escapeMarkdownCell(s string) string {
 // marketplace by its marketplace.json name.
 const claudeCodeRequireMarketplaceDocsURL = "https://code.claude.com/docs/en/plugins/org#require-a-marketplace-and-its-plugins"
 
+// claudeCodeSettingsSnippet is the fenced settings.json block every README
+// shows for Claude Code: it registers the marketplace with autoUpdate on and
+// enables one plugin, so no `/plugin marketplace add` or `/plugin install`
+// step is needed. The key order matches the dashboard's snippet.
+func claudeCodeSettingsSnippet(marketplaceName, marketplaceURL, plugin string) string {
+	return fmt.Sprintf("```json\n{\n  \"env\": {\n    \"FORCE_AUTOUPDATE_PLUGINS\": \"1\"\n  },\n  \"extraKnownMarketplaces\": {\n    \"%s\": {\n      \"autoUpdate\": true,\n      \"source\": {\n        \"source\": \"git\",\n        \"url\": \"%s\"\n      }\n    }\n  },\n  \"enabledPlugins\": {\n    \"%s@%s\": true\n  }\n}\n```\n\n", marketplaceName, marketplaceURL, plugin, marketplaceName)
+}
+
 func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	var b strings.Builder
 
@@ -913,25 +921,29 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 
 	b.WriteString("## Installation\n\n")
 	b.WriteString("### Claude Code\n\n")
+	enabledPlugin := "<plugin-slug>"
+	pluginNote := " Replace `<plugin-slug>` with the plugin to enable."
+	if cfg.HooksAPIKey != "" {
+		enabledPlugin = ClaudeObservabilitySlug(cfg)
+		pluginNote = ""
+	}
+	// Claude Code has no plugins.required key and no CLI step is needed:
+	// settings register the marketplace in extraKnownMarketplaces with
+	// autoUpdate on and enable plugins in enabledPlugins, both keyed by the
+	// marketplace.json name. Claude Code applies autoUpdate only from the
+	// entry keyed by that exact name.
+	marketplaceName := resolveMarketplaceName(cfg)
+	fmt.Fprintf(&b, "Add this to `~/.claude/settings.json` for just you, or to managed settings for your organization (the Claude admin console, MDM, or `managed-settings.json`). Replace `<marketplace-url>` with the marketplace URL from the Speakeasy dashboard and keep it private.%s\n\n", pluginNote)
+	b.WriteString(claudeCodeSettingsSnippet(marketplaceName, "<marketplace-url>", enabledPlugin))
+	fmt.Fprintf(&b, "Use this exact marketplace name. Restart Claude Code, then check `/plugin`. See [Require a marketplace and its plugins](%s).\n", claudeCodeRequireMarketplaceDocsURL)
+	b.WriteString("\n### Claude Cowork\n\n")
 	b.WriteString("1. Go to your organization's [Claude admin console](https://claude.ai)\n")
 	b.WriteString("2. Navigate to **Settings → Plugin Marketplaces**\n")
 	b.WriteString("3. Click **Add Marketplace** and paste this repository's URL\n")
 	b.WriteString("4. Plugins will be automatically available to members of your organization\n")
-	enabledPlugin := "<plugin-slug>"
-	replaceNote := "Replace `<marketplace-url>` with the marketplace URL from the Speakeasy dashboard (treat it as a secret) and `<plugin-slug>` with the plugin to enable."
 	if cfg.HooksAPIKey != "" {
-		enabledPlugin = ClaudeObservabilitySlug(cfg)
-		replaceNote = "Replace `<marketplace-url>` with the marketplace URL from the Speakeasy dashboard (treat it as a secret)."
 		fmt.Fprintf(&b, "\nMark the `%s` plugin as **Required** so observability is on by default for all team members.\n", enabledPlugin)
 	}
-	// Claude Code has no plugins.required key: managed settings register the
-	// marketplace in extraKnownMarketplaces and force-enable plugins in
-	// enabledPlugins, both keyed by the marketplace.json name. Claude Code
-	// applies autoUpdate only from the entry keyed by that exact name.
-	marketplaceName := resolveMarketplaceName(cfg)
-	fmt.Fprintf(&b, "\nTo roll out through Claude Code managed settings instead, merge this into your managed `settings.json`. %s\n\n", replaceNote)
-	fmt.Fprintf(&b, "```json\n{\n  \"env\": {\n    \"FORCE_AUTOUPDATE_PLUGINS\": \"1\"\n  },\n  \"extraKnownMarketplaces\": {\n    \"%s\": {\n      \"autoUpdate\": true,\n      \"source\": {\n        \"source\": \"git\",\n        \"url\": \"<marketplace-url>\"\n      }\n    }\n  },\n  \"enabledPlugins\": {\n    \"%s@%s\": true\n  }\n}\n```\n\n", marketplaceName, enabledPlugin, marketplaceName)
-	fmt.Fprintf(&b, "The `extraKnownMarketplaces` key and the `@` suffix in `enabledPlugins` must be exactly `%s`, this marketplace's `name`, not this repository's name. Otherwise Claude Code ignores `autoUpdate` or never installs the plugin. `FORCE_AUTOUPDATE_PLUGINS` keeps plugin auto-update running when `DISABLE_AUTOUPDATER` stops Claude Code's own updates. See [Require a marketplace and its plugins](%s).\n", marketplaceName, claudeCodeRequireMarketplaceDocsURL)
 	b.WriteString("\n### Cursor\n\n")
 	b.WriteString("1. Open your team's [Cursor dashboard](https://cursor.com/dashboard)\n")
 	b.WriteString("2. Navigate to **Settings → Plugins → Import**\n")

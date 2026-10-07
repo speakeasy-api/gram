@@ -1,7 +1,4 @@
-import {
-  ClaudeMarketplaceAutoUpdateNote,
-  ClaudeMarketplaceNameNote,
-} from "@/components/claude-code-marketplace-notes";
+import { ClaudeCodeSettingsInstall } from "@/components/claude-code-settings-install";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
@@ -36,156 +33,35 @@ function ClaudeInstallContent({
   // Marketplace identifiers are a cross-surface contract: Claude Code
   // registers the marketplace under the published marketplace.json `name`
   // (effectiveName) and references plugins as `<plugin>@<name>`.
-  const marketplaceName = marketplaceSettings?.effectiveName ?? null;
+  const marketplaceName = marketplaceSettings?.effectiveName;
 
-  const addCommand = marketplaceUrl
-    ? `claude plugin marketplace add ${marketplaceUrl}`
-    : null;
-  const installCommand =
-    pluginName && marketplaceName
-      ? `claude plugin install ${pluginName}@${marketplaceName}`
-      : null;
-
-  const requireMarketplaceJson =
-    marketplaceUrl && marketplaceName
-      ? JSON.stringify(
-          {
-            env: {
-              FORCE_AUTOUPDATE_PLUGINS: "1",
-            },
-            extraKnownMarketplaces: {
-              [marketplaceName]: {
-                autoUpdate: true,
-                source: { source: "git", url: marketplaceUrl },
-              },
-            },
-          },
-          null,
-          2,
-        )
-      : null;
-  // Managed enabledPlugins force-enables the plugin; Claude Code has no
-  // plugins.required key, so a snippet using one enabled nothing.
-  const requirePluginJson =
-    pluginName && marketplaceName
-      ? JSON.stringify(
-          { enabledPlugins: { [`${pluginName}@${marketplaceName}`]: true } },
-          null,
-          2,
-        )
-      : null;
+  if (!marketplaceUrl || !pluginName || !marketplaceName) {
+    return (
+      <p className="text-muted-foreground text-sm italic">
+        Publish your plugins to GitHub first to get a marketplace install URL.
+      </p>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="mb-2 text-sm font-semibold">Test Yourself</h3>
-        <p className="text-muted-foreground mb-4 text-sm">
-          Install your org's published hooks plugin in your own Claude Code
-          instance:
-        </p>
-        {addCommand && installCommand ? (
-          <div className="bg-muted/50 space-y-2 p-4 font-mono text-sm">
-            <div className="flex items-center justify-between gap-2">
-              <code className="break-all">{addCommand}</code>
-              <CopyButton size="xs" text={addCommand} tooltip="Copy command" />
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <code className="break-all">{installCommand}</code>
-              <CopyButton
-                size="xs"
-                text={installCommand}
-                tooltip="Copy command"
-              />
-            </div>
-          </div>
-        ) : (
-          <p className="text-muted-foreground text-sm italic">
-            Publish your plugins to GitHub first to get a marketplace install
-            URL.
-          </p>
-        )}
-        {addCommand && installCommand && (
-          <ClaudeMarketplaceAutoUpdateNote
-            marketplaceName={marketplaceName ?? undefined}
-          />
-        )}
-      </div>
-
-      <div>
-        <h3 className="mb-2 text-sm font-semibold">Distribute to Your Team</h3>
-        <p className="text-muted-foreground mb-4 text-sm">
-          Require your team to use hooks by configuring their Claude Code
-          settings:
-        </p>
-
-        <div className="space-y-4">
-          <div>
-            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
-              1. Register the marketplace
-            </h4>
-            {requireMarketplaceJson ? (
-              <div className="bg-muted/50 p-4 font-mono text-sm">
-                <div className="flex items-start justify-between gap-2">
-                  <pre className="overflow-x-auto whitespace-pre-wrap">
-                    {requireMarketplaceJson}
-                  </pre>
-                  <CopyButton
-                    size="xs"
-                    text={requireMarketplaceJson}
-                    tooltip="Copy settings.json snippet"
-                  />
-                </div>
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-sm italic">
-                Publish your plugins to GitHub first to get a marketplace
-                install URL.
-              </p>
-            )}
-          </div>
-
-          <div>
-            <h4 className="text-muted-foreground mb-2 text-xs font-medium">
-              2. Require the plugin
-            </h4>
-            {requirePluginJson ? (
-              <div className="bg-muted/50 p-4 font-mono text-sm">
-                <div className="flex items-start justify-between gap-2">
-                  <pre className="overflow-x-auto whitespace-pre-wrap">
-                    {requirePluginJson}
-                  </pre>
-                  <CopyButton
-                    size="xs"
-                    text={requirePluginJson}
-                    tooltip="Copy settings.json snippet"
-                  />
-                </div>
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-sm italic">
-                Publish your plugins to GitHub first to get the plugin
-                identifier.
-              </p>
-            )}
-            {marketplaceName &&
-              (requireMarketplaceJson || requirePluginJson) && (
-                <ClaudeMarketplaceNameNote marketplaceName={marketplaceName} />
-              )}
-          </div>
-
-          <Button variant="secondary" size="sm" asChild>
-            <a
-              href={CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2"
-            >
-              <ExternalLink className="size-4" />
-              View Full Documentation
-            </a>
-          </Button>
-        </div>
-      </div>
+      <ClaudeCodeSettingsInstall
+        marketplaceName={marketplaceName}
+        marketplaceUrl={marketplaceUrl}
+        plugins={[pluginName]}
+        secretUrl
+      />
+      <Button variant="secondary" size="sm" asChild>
+        <a
+          href={CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2"
+        >
+          <ExternalLink className="size-4" />
+          View Full Documentation
+        </a>
+      </Button>
     </div>
   );
 }

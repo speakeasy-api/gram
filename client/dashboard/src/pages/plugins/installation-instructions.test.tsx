@@ -21,6 +21,10 @@ afterEach(() => {
   cleanup();
 });
 
+function bodyText(): string {
+  return document.body.textContent!.replace(/\s+/g, " ");
+}
+
 function openProvider(
   provider: string,
   pluginSlug: string | undefined = "example-plugin",
@@ -63,19 +67,39 @@ describe("installation instructions", () => {
     ).toBe("https://claude.com/docs/plugins/overview#find-and-add-a-plugin");
   });
 
-  it("qualifies Claude server policy eligibility and activation", () => {
-    const text = openProvider("Claude Code");
-    expect(text).toContain("Owner or Primary Owner");
-    expect(text).toContain(
-      "Endpoint-managed policy files and MDM are a separate mechanism",
+  it("installs Claude Code from settings for the user or the organization", () => {
+    openProvider("Claude Code");
+    let text = bodyText();
+    expect(text).toContain("Add to your Claude Code settings");
+    expect(text).toContain("~/.claude/settings.json");
+    expect(text).toContain("Restart Claude Code");
+    // The snippet turns auto-update on, so there is no CLI step and no
+    // auto-update warning.
+    expect(text).not.toContain("plugin marketplace add");
+    expect(text).not.toContain("/plugin install");
+    expect(text).not.toContain("Auto-update is off");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Already have a settings.json?" }),
     );
-    expect(text).toContain("ANTHROPIC_BASE_URL skip the settings fetch");
-    expect(text).toContain("Start a new session");
-    expect(text).toContain("token-bearing marketplace URL as a secret");
-    expect(text).not.toContain("every Claude Code installation");
+    text = bodyText();
+    expect(text).toContain(
+      "add the marketplace entry inside extraKnownMarketplaces and the plugin line inside enabledPlugins",
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: /My organization/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Where are managed settings?" }),
+    );
+    text = bodyText();
+    expect(text).toContain("Team or Enterprise Owners");
+    expect(text).toContain("managed-settings.json");
+    expect(
+      screen.queryByRole("button", { name: "Already have a settings.json?" }),
+    ).toBeNull();
   });
 
-  it("keys Claude Code settings by the marketplace name and turns on auto-update", () => {
+  it("keys Claude Code settings by the marketplace name", () => {
     const text = openProvider("Claude Code");
     expect(text).toContain(
       '"extraKnownMarketplaces": { "example-marketplace": { "autoUpdate": true,',
@@ -84,26 +108,15 @@ describe("installation instructions", () => {
       '"enabledPlugins": { "example-plugin@example-marketplace": true }',
     );
     expect(text).toContain(
-      "must be exactly example-marketplace, not the GitHub repository name. Otherwise Claude Code ignores autoUpdate",
+      "Use this exact marketplace name. Keep the URL private.",
     );
-    expect(text).toContain("Otherwise Claude Code ignores autoUpdate");
     expect(text).not.toContain("<org>-gram");
-    expect(text).toContain(
-      "open /plugin → Marketplaces, select example-marketplace, and choose Enable auto-update",
-    );
     expect(
       screen
-        .getByRole("link", { name: /Claude Code docs/ })
+        .getByRole("link", { name: /Require a marketplace and its plugins/ })
         .getAttribute("href"),
     ).toBe(
       "https://code.claude.com/docs/en/plugins/org#require-a-marketplace-and-its-plugins",
-    );
-    expect(
-      screen
-        .getByRole("link", { name: /Turn on auto-update/ })
-        .getAttribute("href"),
-    ).toBe(
-      "https://code.claude.com/docs/en/plugins/host-marketplace#turn-on-auto-update",
     );
   });
 

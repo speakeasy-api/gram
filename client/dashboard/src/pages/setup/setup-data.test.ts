@@ -167,11 +167,6 @@ describe("getAgentPlatforms", () => {
     const personal = platformSteps(platform, false).find(({ code }) =>
       code?.includes("extraKnownMarketplaces"),
     );
-    const marketplaceName = {
-      code: "{{GRAM_MARKETPLACE_NAME}}",
-      fallback: "your marketplace name",
-    };
-
     for (const step of [managed, personal]) {
       expect(step?.code).toContain('"{{GRAM_MARKETPLACE_NAME}}": {');
       expect(step?.code).toContain('"autoUpdate": true');
@@ -179,9 +174,8 @@ describe("getAgentPlatforms", () => {
       expect(step?.code).toContain(
         '"{{GRAM_CLAUDE_PLUGIN_NAME}}@{{GRAM_MARKETPLACE_NAME}}": true',
       );
-      expect(step?.description).toContainEqual(marketplaceName);
       expect(JSON.stringify(step?.description)).toContain(
-        "not the GitHub repository name. Otherwise Claude Code ignores ",
+        "Use this exact marketplace name.",
       );
     }
     expect(managed?.helpLink?.url).toBe(

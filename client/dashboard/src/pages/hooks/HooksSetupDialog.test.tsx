@@ -18,6 +18,9 @@ vi.mock("@gram/client/react-query/publishStatus", () => ({
     },
   }),
 }));
+vi.mock("@/components/code", () => ({
+  CodeBlock: ({ children }: { children: string }) => <pre>{children}</pre>,
+}));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({ plugins: { href: () => "/plugins" } }),
 }));
@@ -49,16 +52,15 @@ describe("HooksSetupDialog Claude Code instructions", () => {
     // Claude Code has no plugins.required setting; a snippet using it enabled
     // nothing.
     expect(text).not.toContain('"required"');
-    expect(text).toContain("must be exactly example-marketplace");
+    expect(text).toContain("Use this exact marketplace name.");
   });
 
-  it("tells users who add the marketplace themselves to turn on auto-update", () => {
+  it("installs from settings, with no CLI step to run", () => {
     const text = claudeText();
-    expect(text).toContain(
-      "claude plugin marketplace add https://example.invalid/marketplace.git",
-    );
-    expect(text).toContain(
-      "select example-marketplace, and choose Enable auto-update",
-    );
+    expect(text).toContain("Add to your Claude Code settings");
+    expect(text).toContain("Restart Claude Code");
+    expect(text).not.toContain("claude plugin marketplace add");
+    expect(text).not.toContain("claude plugin install");
+    expect(text).not.toContain("Auto-update is off");
   });
 });

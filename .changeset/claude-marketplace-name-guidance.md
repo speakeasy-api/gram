@@ -3,4 +3,4 @@
 "server": patch
 ---
 
-Claude Code install instructions now keep plugin auto-update working. Every managed-settings snippet says that the `extraKnownMarketplaces` key and the `@` suffix in `enabledPlugins` must be exactly the marketplace name shown, not the GitHub repository name, because Claude Code ignores `autoUpdate` under any other key. Each `/plugin marketplace add` command now tells users to turn on auto-update in `/plugin` → Marketplaces. The hooks setup dialog and the generated marketplace README used a `plugins.required` key that Claude Code does not read. They now use `enabledPlugins`, and the README snippet also sets `autoUpdate` and `FORCE_AUTOUPDATE_PLUGINS`.
+Claude Code installs now use one settings snippet instead of CLI commands. Pick Just me (`~/.claude/settings.json`) or My organization (managed settings). The snippet registers the marketplace under its exact name with `autoUpdate` on and enables the plugin, so plugins stay current with no manual step. The generated marketplace READMEs match, and the hooks setup dialog no longer uses the unsupported `plugins.required` key.

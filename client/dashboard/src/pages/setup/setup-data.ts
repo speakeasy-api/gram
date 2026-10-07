@@ -1,6 +1,6 @@
 import {
+  CLAUDE_CODE_EXACT_NAME_NOTE,
   CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL,
-  claudeMarketplaceNameNoteParts,
 } from "@/lib/claude-code-marketplace";
 import { getCursorInstallCommand } from "@/lib/cursor-install-command";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
@@ -41,15 +41,9 @@ const claudeCodeSettingsJSON = (origin: string) => `{
   }
 }`;
 
-// Every step carrying the settings block says the marketplace keys must be the
-// marketplace.json name, with the actual name filled in.
-const claudeCodeMarketplaceNameNote = [
-  " ",
-  ...claudeMarketplaceNameNoteParts({
-    code: "{{GRAM_MARKETPLACE_NAME}}",
-    fallback: "your marketplace name",
-  }),
-];
+// Every step carrying the settings block reminds the reader that the
+// marketplace keys must stay the marketplace.json name shown in the snippet.
+const claudeCodeMarketplaceNameNote = [` ${CLAUDE_CODE_EXACT_NAME_NOTE}`];
 
 // Setup copy names the host the reader is on (app.getgram.ai or
 // ai.speakeasy.com): every platform host serves the OTLP and hooks endpoints.
