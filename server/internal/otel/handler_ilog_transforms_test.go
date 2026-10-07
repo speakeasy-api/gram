@@ -7,6 +7,7 @@ import (
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/mock"
@@ -62,6 +63,13 @@ func TestLogTransformHandlerNormalizesEnrichesAndPublishes(t *testing.T) {
 	require.Positive(t, attributes[string(enrich.TokensCountKey)].GetIntValue())
 	require.NotEmpty(t, attributes[string(enrich.TokensCodecKey)].GetStringValue())
 	require.Contains(t, attributes, "gen_ai.input.messages")
+
+	// The column enrichers classified the record on the way through: a
+	// resource without a service name is the unknown source, and a record
+	// no dialect classifies carries no type key at all.
+	require.Equal(t, enrich.SourceUnknown, attributes[string(enrich.SourceColumnKey)].GetStringValue())
+	require.NotContains(t, attributes, string(enrich.EventTypeColumnKey))
+	require.NotContains(t, attributes, string(enrich.RawEventNameColumnKey))
 }
 
 func TestLogAnyValueConvertsHeterogeneousSlice(t *testing.T) {
@@ -157,6 +165,7 @@ func TestMaxSizeLogRecordFitsRelayExportAfterFullEnrichment(t *testing.T) {
 	require.Equal(t, testLogProjectID, attributes[string(enrich.ProjectIDKey)].GetStringValue())
 	require.Positive(t, attributes[string(enrich.TokensCountKey)].GetIntValue())
 	require.NotEmpty(t, attributes[string(enrich.TokensCodecKey)].GetStringValue())
+	require.Equal(t, "pathological-size-test", attributes[string(enrich.SourceColumnKey)].GetStringValue())
 
 	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{published}, true)
 	require.NoError(t, err)
@@ -186,4 +195,101 @@ func logStringAttribute(key, value string) *otelv1.InboundLogRecord_KeyValue {
 		Key:   &key,
 		Value: (&otelv1.InboundLogRecord_AnyValue_builder{StringValue: &value}).Build(),
 	}).Build()
+}
+
+// A producer may not classify its own record: anything it sends under the
+// reserved speakeasy.agent namespace is dropped, and only what the column
+// enrichers wrote reaches a consumer.
+func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
+	t.Parallel()
+
+	// publish runs one record through the handler and returns what reached
+	// the topic, plus how many reserved attributes the counter says were
+	// dropped on the way.
+	publish := func(t *testing.T, inbound *otelv1.InboundLogRecord) (map[string]*otelv1.LogRecord_AnyValue, int64) {
+		t.Helper()
+		var published *otelv1.LogRecord
+		publisher := gcp.NewMockPublisher[*otelv1.LogRecord]()
+		publisher.On("Publish", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+			record, ok := args.Get(1).(*otelv1.LogRecord)
+			require.True(t, ok)
+			published = record
+		}).Return(gcp.NewSuccessPublishResult()).Once()
+		reader, meterProvider := readableMeter(t)
+		handler := NewLogTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
+		require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
+		require.NotNil(t, published)
+		attributes := make(map[string]*otelv1.LogRecord_AnyValue, len(published.GetAttributes()))
+		for _, item := range published.GetAttributes() {
+			attributes[item.GetKey()] = item.GetValue()
+		}
+		dropped := agentEventCount(t, reader, enrich.MeterReservedAttributesDropped, attr.OTELSignalKey, string(enrich.SignalLog))
+		return attributes, dropped
+	}
+
+	t.Run("a classified record keeps the enricher's classification, not the producer's", func(t *testing.T) {
+		t.Parallel()
+		inbound := (&otelv1.InboundLogRecord_builder{
+			RecordId:  new("record-id"),
+			EventName: new("api_request"),
+			Scope:     (&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: new(claudeCodeScopeName)}).Build(),
+			Provenance: (&otelv1.InboundLogRecord_Provenance_builder{
+				Source:         new("speakeasy"),
+				OrganizationId: new(testLogOrganizationID),
+				ProjectId:      new(testLogProjectID),
+			}).Build(),
+			Attributes: []*otelv1.InboundLogRecord_KeyValue{
+				logStringAttribute(string(enrich.EventTypeColumnKey), "tool_call"),
+				logStringAttribute(string(enrich.ProviderColumnKey), "forged"),
+				logStringAttribute(string(enrich.TextColumnKey), "forged words"),
+			},
+		}).Build()
+
+		attributes, dropped := publish(t, inbound)
+		require.Equal(t, "api_request", attributes[string(enrich.EventTypeColumnKey)].GetStringValue())
+		require.Equal(t, "anthropic", attributes[string(enrich.ProviderColumnKey)].GetStringValue())
+		require.NotContains(t, attributes, string(enrich.TextColumnKey), "a key no enricher writes is gone, not kept")
+		require.Equal(t, int64(3), dropped, "every forged key is counted, so a producer writing the namespace is visible")
+	})
+
+	t.Run("an unclassified record gets no type key however hard the producer tries", func(t *testing.T) {
+		t.Parallel()
+		inbound := (&otelv1.InboundLogRecord_builder{
+			RecordId: new("record-id"),
+			Scope:    (&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: new("producer.scope")}).Build(),
+			Provenance: (&otelv1.InboundLogRecord_Provenance_builder{
+				Source:         new("speakeasy"),
+				OrganizationId: new(testLogOrganizationID),
+				ProjectId:      new(testLogProjectID),
+			}).Build(),
+			Attributes: []*otelv1.InboundLogRecord_KeyValue{
+				logStringAttribute(string(enrich.EventTypeColumnKey), "api_request"),
+				logStringAttribute("gen_ai.input.messages", `[{"role":"user","parts":[{"type":"text","content":"hello"}]}]`),
+			},
+		}).Build()
+
+		attributes, dropped := publish(t, inbound)
+		require.NotContains(t, attributes, string(enrich.EventTypeColumnKey))
+		require.Equal(t, enrich.SourceUnknown, attributes[string(enrich.SourceColumnKey)].GetStringValue())
+		require.Contains(t, attributes, "gen_ai.input.messages", "the producer's own attributes stay")
+		require.Equal(t, int64(1), dropped)
+	})
+
+	t.Run("a record that sends nothing reserved counts nothing", func(t *testing.T) {
+		t.Parallel()
+		inbound := (&otelv1.InboundLogRecord_builder{
+			RecordId:  new("record-id"),
+			EventName: new("api_request"),
+			Scope:     (&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: new(claudeCodeScopeName)}).Build(),
+			Provenance: (&otelv1.InboundLogRecord_Provenance_builder{
+				Source:         new("speakeasy"),
+				OrganizationId: new(testLogOrganizationID),
+				ProjectId:      new(testLogProjectID),
+			}).Build(),
+			Attributes: []*otelv1.InboundLogRecord_KeyValue{logStringAttribute("model", "claude-sonnet-4")},
+		}).Build()
+
+		_, dropped := publish(t, inbound)
+		require.Zero(t, dropped)
+	})
 }

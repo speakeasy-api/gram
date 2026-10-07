@@ -7,6 +7,7 @@ import (
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,8 +51,17 @@ func agentEventTestArrayKV(key string, values ...string) *otelv1.LogRecord_KeyVa
 
 // agentEventTestLog builds a log record the way it looks on the normalized
 // topic: scope rewritten to Gram's, the producer's scope kept as an
-// attribute, tenancy stamped in provenance.
-func agentEventTestLog(originalScope, eventName string, attributes ...*otelv1.LogRecord_KeyValue) *otelv1.LogRecord {
+// attribute, tenancy stamped in provenance, and the canonical columns the
+// transform's column enrichers write.
+func agentEventTestLog(t *testing.T, originalScope, eventName string, attributes ...*otelv1.LogRecord_KeyValue) *otelv1.LogRecord {
+	t.Helper()
+	return agentEventTestTransformed(t, agentEventTestRawLog(originalScope, eventName, attributes...))
+}
+
+// agentEventTestRawLog is agentEventTestLog before the column enrichers
+// ran, for a test that has to shape the record further before classifying
+// it, such as putting the event name in a legacy body.
+func agentEventTestRawLog(originalScope, eventName string, attributes ...*otelv1.LogRecord_KeyValue) *otelv1.LogRecord {
 	record := logEventTestRecord("record-1", "org-1", "claude-code")
 	record.SetEventName(eventName)
 	if originalScope != "" {
@@ -61,12 +71,75 @@ func agentEventTestLog(originalScope, eventName string, attributes ...*otelv1.Lo
 	return record
 }
 
+// agentEventTestTransformed runs the column enrichers over a normalized
+// record the way the log transform does, and applies what they wrote, so the
+// writer sees the record as it reaches the topic.
+func agentEventTestTransformed(t *testing.T, record *otelv1.LogRecord) *otelv1.LogRecord {
+	t.Helper()
+	inbound, err := inboundLogFromRecord(record)
+	require.NoError(t, err)
+	m := enrich.NewInstruments(testenv.NewLogger(t), testenv.NewMeterProvider(t))
+	enrichments, err := enrich.Log(t.Context(), m, inbound, enrich.LogColumns(m))
+	require.NoError(t, err)
+	require.NoError(t, applyLogEnrichments(record, enrichments))
+	return record
+}
+
+// The writer copies the canonical columns the transform wrote and never asks
+// a dialect for them, so a record that reached the topic before the column
+// enrichers ran lands with those columns empty.
+func TestAgentEventRowFromLogHasNoDialectFallbackForCanonicalColumns(t *testing.T) {
+	t.Parallel()
+
+	record := logEventTestRecord("record-1", "org-1", "claude-code")
+	record.SetEventName("api_request")
+	record.SetAttributes([]*otelv1.LogRecord_KeyValue{
+		logEventTestKV(string(enrich.OriginalInstrumentationScopeNameKey), claudeCodeScopeName),
+		logEventTestKV("session.id", "session-1"),
+	})
+
+	row, skip := agentEventRowFromLog(record, testObservedAt)
+	require.Empty(t, skip)
+	require.Empty(t, row.EventType)
+	require.Empty(t, row.RawEventName)
+	require.Empty(t, row.Source)
+	require.Empty(t, row.Provider)
+	require.Empty(t, row.Surface)
+	require.Equal(t, "session-1", row.SessionID, "a column the transform does not fill yet still comes from the dialect")
+}
+
+// The canonical columns are read from the keys as written, whatever the
+// dialect would have said: here a scope no dialect recognises carries a
+// classification the transform decided.
+func TestAgentEventRowFromLogCopiesTheCanonicalColumns(t *testing.T) {
+	t.Parallel()
+
+	record := logEventTestRecord("record-1", "org-1", "")
+	record.SetEventName("")
+	record.SetAttributes([]*otelv1.LogRecord_KeyValue{
+		logEventTestKV(string(enrich.OriginalInstrumentationScopeNameKey), "com.example.app"),
+		logEventTestKV(string(enrich.EventTypeColumnKey), dialect.EventTypePrompt),
+		logEventTestKV(string(enrich.RawEventNameColumnKey), "custom.prompt"),
+		logEventTestKV(string(enrich.SourceColumnKey), "example-app"),
+		logEventTestKV(string(enrich.ProviderColumnKey), "openai"),
+		logEventTestKV(string(enrich.SurfaceColumnKey), "example"),
+	})
+
+	row, skip := agentEventRowFromLog(record, testObservedAt)
+	require.Empty(t, skip)
+	require.Equal(t, dialect.EventTypePrompt, row.EventType)
+	require.Equal(t, "custom.prompt", row.RawEventName)
+	require.Equal(t, "example-app", row.Source)
+	require.Equal(t, "openai", row.Provider)
+	require.Equal(t, "example", row.Surface)
+}
+
 func TestAgentEventRowFromLog(t *testing.T) {
 	t.Parallel()
 
 	t.Run("it projects a Claude Code api_request into an api_request row", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(claudeCodeScopeName, "api_request",
+		record := agentEventTestLog(t, claudeCodeScopeName, "api_request",
 			logEventTestKV("session.id", "session-1"),
 			logEventTestKV("user.email", "dev@example.com"),
 			logEventTestKV("user.account_id", "acct-1"),
@@ -127,13 +200,13 @@ func TestAgentEventRowFromLog(t *testing.T) {
 
 	t.Run("it reads a legacy Claude Code body prefix as the raw event name", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(claudeCodeScopeName, "",
+		record := agentEventTestRawLog(claudeCodeScopeName, "",
 			logEventTestKV("session.id", "session-1"),
 			logEventTestKV("user_prompt", "fix the tests"),
 		)
 		record.SetBody((&otelv1.LogRecord_AnyValue_builder{StringValue: new("claude_code.user_prompt")}).Build())
 
-		row, skip := agentEventRowFromLog(record, testObservedAt)
+		row, skip := agentEventRowFromLog(agentEventTestTransformed(t, record), testObservedAt)
 		require.Empty(t, skip)
 		require.Equal(t, string(dialect.EventTypePrompt), row.EventType)
 		require.Equal(t, "claude_code.user_prompt", row.RawEventName)
@@ -144,7 +217,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 
 	t.Run("it projects a failed Claude Code tool_result with its natural id", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(claudeCodeScopeName, "tool_result",
+		record := agentEventTestLog(t, claudeCodeScopeName, "tool_result",
 			logEventTestKV("session.id", "session-1"),
 			logEventTestKV("tool_name", "Bash"),
 			logEventTestKV("tool_use_id", "toolu_1"),
@@ -165,7 +238,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 
 	t.Run("it projects a successful tool_result as ok", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(claudeCodeScopeName, "tool_result",
+		record := agentEventTestLog(t, claudeCodeScopeName, "tool_result",
 			logEventTestKV("tool_name", "Read"),
 			agentEventTestBoolKV("success", true),
 		)
@@ -177,7 +250,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 
 	t.Run("it projects an assistant_response with its transcript message as the subject", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(claudeCodeScopeName, "assistant_response",
+		record := agentEventTestLog(t, claudeCodeScopeName, "assistant_response",
 			logEventTestKV("message.uuid", "msg-9"),
 			logEventTestKV("request_id", "req_011"),
 			logEventTestKV("model", "claude-sonnet-4"),
@@ -198,7 +271,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 
 	t.Run("it projects an api_refusal as refused", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(claudeCodeScopeName, "api_refusal",
+		record := agentEventTestLog(t, claudeCodeScopeName, "api_refusal",
 			logEventTestKV("request_id", "req_012"),
 			logEventTestKV("model", "claude-sonnet-4"),
 		)
@@ -211,7 +284,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 
 	t.Run("it projects a rejected tool_decision as the terminal observation of that call", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(claudeCodeScopeName, "tool_decision",
+		record := agentEventTestLog(t, claudeCodeScopeName, "tool_decision",
 			logEventTestKV("tool_name", "Bash"),
 			logEventTestKV("tool_use_id", "toolu_2"),
 			logEventTestKV("decision_type", "reject"),
@@ -232,7 +305,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 
 	t.Run("it reads tool attribution out of tool_parameters on a tool_result", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(claudeCodeScopeName, "tool_result",
+		record := agentEventTestLog(t, claudeCodeScopeName, "tool_result",
 			logEventTestKV("tool_name", "Skill"),
 			logEventTestKV("tool_use_id", "toolu_3"),
 			agentEventTestBoolKV("success", true),
@@ -247,7 +320,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 
 	t.Run("it uses the error category when the full error is not logged", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(claudeCodeScopeName, "tool_result",
+		record := agentEventTestLog(t, claudeCodeScopeName, "tool_result",
 			logEventTestKV("tool_name", "Bash"),
 			logEventTestKV("success", "false"),
 			logEventTestKV("error_type", "ShellError"),
@@ -260,7 +333,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 
 	t.Run("it normalizes Codex response.completed usage to disjoint tokens", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(codexScopeName, "codex.sse_event",
+		record := agentEventTestLog(t, codexScopeName, "codex.sse_event",
 			logEventTestKV("event.kind", "response.completed"),
 			logEventTestKV("conversation.id", "conv-1"),
 			logEventTestKV("user.email", "dev@example.com"),
@@ -288,7 +361,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 
 	t.Run("it leaves a non-terminal Codex SSE event unclassified but named", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(codexScopeName, "codex.sse_event",
+		record := agentEventTestLog(t, codexScopeName, "codex.sse_event",
 			logEventTestKV("event.kind", "response.output_item.done"),
 		)
 		row, skip := agentEventRowFromLog(record, testObservedAt)
@@ -300,7 +373,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 
 	t.Run("it keeps a record no dialect recognises, with its body as the text", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog("com.example.app", "")
+		record := agentEventTestLog(t, "com.example.app", "")
 		record.SetBody((&otelv1.LogRecord_AnyValue_builder{StringValue: new("something happened")}).Build())
 
 		row, skip := agentEventRowFromLog(record, testObservedAt)
@@ -316,7 +389,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 
 	t.Run("it prefers pipeline-resolved attribution over what the dialect infers", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(claudeCodeScopeName, "api_request",
+		record := agentEventTestLog(t, claudeCodeScopeName, "api_request",
 			logEventTestKV("gram.provider", "bedrock"),
 			logEventTestKV("gram.account_type", "enterprise"),
 			logEventTestKV("gram.billing_mode", "payg"),
@@ -334,7 +407,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 
 	t.Run("it mints a stable delivery id when the record has none", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(claudeCodeScopeName, "api_request")
+		record := agentEventTestLog(t, claudeCodeScopeName, "api_request")
 		record.SetRecordId("")
 
 		first, skip := agentEventRowFromLog(record, testObservedAt)
@@ -348,7 +421,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 
 	t.Run("it falls back to the consumer clock for observation time", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(claudeCodeScopeName, "api_request")
+		record := agentEventTestLog(t, claudeCodeScopeName, "api_request")
 		record.SetObservedTimeUnixNano(0)
 		row, skip := agentEventRowFromLog(record, testObservedAt)
 		require.Empty(t, skip)
@@ -360,12 +433,12 @@ func TestAgentEventRowFromLog(t *testing.T) {
 		_, skip := agentEventRowFromLog(nil, testObservedAt)
 		require.Equal(t, "nil_record", skip)
 
-		noOrg := agentEventTestLog(claudeCodeScopeName, "api_request")
+		noOrg := agentEventTestLog(t, claudeCodeScopeName, "api_request")
 		noOrg.GetProvenance().SetOrganizationId("")
 		_, skip = agentEventRowFromLog(noOrg, testObservedAt)
 		require.Equal(t, "missing_organization_id", skip)
 
-		noTime := agentEventTestLog(claudeCodeScopeName, "api_request")
+		noTime := agentEventTestLog(t, claudeCodeScopeName, "api_request")
 		noTime.SetTimeUnixNano(0)
 		noTime.SetObservedTimeUnixNano(0)
 		_, skip = agentEventRowFromLog(noTime, 0)
@@ -475,7 +548,7 @@ func TestAgentEventRowFromSpan(t *testing.T) {
 func TestAgentEventRowFromLogReadsWhatClaudeCodeActuallySends(t *testing.T) {
 	t.Parallel()
 
-	record := agentEventTestLog(claudeCodeScopeName, "",
+	record := agentEventTestLog(t, claudeCodeScopeName, "",
 		logEventTestKV("event.name", "user_prompt"),
 		logEventTestKV("event.timestamp", "2026-09-15T00:45:12.569Z"),
 		logEventTestKV("session.id", "session-1"),
@@ -511,7 +584,7 @@ func TestAgentEventRowFromLogReadsWhatClaudeCodeActuallySends(t *testing.T) {
 func TestAgentEventRowFromLogDropsABodyThatRepeatsTheEventName(t *testing.T) {
 	t.Parallel()
 
-	record := agentEventTestLog(claudeCodeScopeName, "",
+	record := agentEventTestLog(t, claudeCodeScopeName, "",
 		logEventTestKV("event.name", "hook_registered"),
 		logEventTestKV("session.id", "session-1"),
 		logEventTestKV("hook_event", "PostToolUse"),
@@ -530,7 +603,7 @@ func TestAgentEventRowFromLogDropsABodyThatRepeatsTheEventName(t *testing.T) {
 func TestAgentEventRowFromLogReadsMCPAttributionFromToolParameters(t *testing.T) {
 	t.Parallel()
 
-	record := agentEventTestLog(claudeCodeScopeName, "",
+	record := agentEventTestLog(t, claudeCodeScopeName, "",
 		logEventTestKV("event.name", "tool_result"),
 		logEventTestKV("session.id", "session-1"),
 		logEventTestKV("tool_name", "mcp_tool"),
@@ -555,7 +628,7 @@ func TestAgentEventRowFromLogClassifiesPayloadsAndCompaction(t *testing.T) {
 
 	t.Run("it lands a response body beside the request it answers", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(claudeCodeScopeName, "",
+		record := agentEventTestLog(t, claudeCodeScopeName, "",
 			logEventTestKV("event.name", "api_response_body"),
 			logEventTestKV("session.id", "session-1"),
 			logEventTestKV("request_id", "req_011"),
@@ -577,7 +650,7 @@ func TestAgentEventRowFromLogClassifiesPayloadsAndCompaction(t *testing.T) {
 
 	t.Run("it keeps a request body under its own record id", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(claudeCodeScopeName, "",
+		record := agentEventTestLog(t, claudeCodeScopeName, "",
 			logEventTestKV("event.name", "api_request_body"),
 			logEventTestKV("session.id", "session-1"),
 			logEventTestKV("model", "claude-sonnet-4"),
@@ -592,7 +665,7 @@ func TestAgentEventRowFromLogClassifiesPayloadsAndCompaction(t *testing.T) {
 
 	t.Run("it projects a compaction with its duration and outcome", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(claudeCodeScopeName, "",
+		record := agentEventTestLog(t, claudeCodeScopeName, "",
 			logEventTestKV("event.name", "compaction"),
 			logEventTestKV("session.id", "session-1"),
 			logEventTestKV("trigger", "auto"),
@@ -616,7 +689,7 @@ func TestAgentEventRowFromLogClassifiesPayloadsAndCompaction(t *testing.T) {
 
 	t.Run("it records why a compaction failed", func(t *testing.T) {
 		t.Parallel()
-		record := agentEventTestLog(claudeCodeScopeName, "",
+		record := agentEventTestLog(t, claudeCodeScopeName, "",
 			logEventTestKV("event.name", "compaction"),
 			logEventTestKV("trigger", "manual"),
 			agentEventTestBoolKV("success", false),
