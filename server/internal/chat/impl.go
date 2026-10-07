@@ -38,7 +38,6 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/chat/server"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
-	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -391,7 +390,7 @@ func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.Auth
 			ExternalUserID:       conv.FromPGText[string](row.ExternalUserID),
 			AssistantID:          conv.FromNullableUUID(row.AssistantID),
 			AssistantName:        conv.FromPGText[string](row.AssistantName),
-			AssistantAgentID:     nil,
+			AssistantAgentID:     conv.FromNullableUUID(row.AssistantAgentID),
 			Source:               conv.FromPGText[string](row.Source),
 			OriginatingClient:    conv.PtrEmpty(row.OriginatingClient),
 			LitellmProxied:       conv.PtrEmpty(row.LitellmProxied),
@@ -439,43 +438,14 @@ func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.Auth
 	for _, channel := range channels {
 		byID[channel.ID.String()] = channel
 	}
-	assistantIDs := make([]uuid.UUID, 0, len(rows))
-	for _, row := range rows {
-		if row.AssistantID.Valid {
-			assistantIDs = append(assistantIDs, row.AssistantID.UUID)
-		}
-	}
-	agentIDs, err := s.assistantAgentIDs(ctx, *authCtx.ProjectID, assistantIDs)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "load assistant agent identities").LogError(ctx, s.logger)
-	}
 	for _, chat := range result {
 		chat.Participants = participants[chat.ID]
-		if chat.AssistantID != nil {
-			chat.AssistantAgentID = agentIDs[*chat.AssistantID]
-		}
 		channel := byID[chat.ID]
 		chat.SlackTeamID = conv.PtrEmpty(channel.SlackTeamID)
 		chat.SlackChannelID = conv.PtrEmpty(channel.SlackChannelID)
 		chat.SlackChannelName = conv.PtrEmpty(channel.SlackChannelName)
 	}
 	return result, nil
-}
-
-// assistantAgentIDs maps each assistant with a dedicated agent identity to that
-// agent's id, keyed by assistant id. Assistants without one are absent.
-func (s *Service) assistantAgentIDs(ctx context.Context, projectID uuid.UUID, assistantIDs []uuid.UUID) (map[string]*string, error) {
-	states, err := assistantidentity.States(ctx, s.db, projectID, assistantIDs)
-	if err != nil {
-		return nil, fmt.Errorf("load assistant identity states: %w", err)
-	}
-	agentIDs := make(map[string]*string, len(states))
-	for assistantID, state := range states {
-		if state.AgentID != nil {
-			agentIDs[assistantID.String()] = new(state.AgentID.String())
-		}
-	}
-	return agentIDs, nil
 }
 
 const assistantSessionSummaryMetricsBatch = 1000
@@ -1482,14 +1452,6 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	if len(channels) > 0 {
 		channel = channels[0]
 	}
-	var assistantAgentID *string
-	if chat.AssistantID.Valid {
-		agentIDs, err := s.assistantAgentIDs(ctx, *authCtx.ProjectID, []uuid.UUID{chat.AssistantID.UUID})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "load assistant agent identity").LogError(ctx, s.logger)
-		}
-		assistantAgentID = agentIDs[chat.AssistantID.UUID.String()]
-	}
 	pinned := chat.PinnedAt.Valid
 	result := &gen.Chat{
 		SlackTeamID:          conv.PtrEmpty(channel.SlackTeamID),
@@ -1502,7 +1464,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		ExternalUserID:       &chat.ExternalUserID.String,
 		AssistantID:          conv.FromNullableUUID(chat.AssistantID),
 		AssistantName:        conv.FromPGText[string](chat.AssistantName),
-		AssistantAgentID:     assistantAgentID,
+		AssistantAgentID:     conv.FromNullableUUID(chat.AssistantAgentID),
 		Source:               source,
 		OriginatingClient:    originatingClient,
 		LitellmProxied:       conv.PtrEmpty(chat.LitellmProxied),
