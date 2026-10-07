@@ -802,3 +802,49 @@ func TestAgentEventRowFromSpanHasNoDialectFallbackForCanonicalColumns(t *testing
 	require.Empty(t, row.SessionID)
 	require.Equal(t, row.RecordID, row.EventID, "with no subject the event id falls back to the record id")
 }
+
+// A PostToolUse the hooks ingest endpoint republished, as the tee shapes
+// it: the row's attributes under the hooks scope with the hook source as
+// the resource's service name.
+func TestAgentEventRowFromLogReadsWhatTheHooksEndpointRecords(t *testing.T) {
+	t.Parallel()
+
+	record := logEventTestRecord("record-1", "org-1", "codex")
+	record.SetEventName("PostToolUse")
+	record.SetAttributes([]*otelv1.LogRecord_KeyValue{
+		logEventTestKV(string(enrich.OriginalInstrumentationScopeNameKey), dialect.HooksLogScopeName),
+		logEventTestKV("gram.event.source", "hook"),
+		logEventTestKV("gram.hook.event", "PostToolUse"),
+		logEventTestKV("gram.hook.source", "codex"),
+		logEventTestKV("gram.hook.adapter", "codex"),
+		logEventTestKV("gram.hook.decision", "allow"),
+		logEventTestKV("session.id", "codex-session-1"),
+		logEventTestKV("gen_ai.conversation.id", "chat-uuid-1"),
+		logEventTestKV("gram.hook.turn_id", "turn-1"),
+		logEventTestKV("gen_ai.tool.call.id", "call-1"),
+		logEventTestKV("gram.tool.name", "shell"),
+		logEventTestKV("user.id", "user-1"),
+		logEventTestKV("user.email", "dev@example.com"),
+		agentEventTestDoubleKV("gram.tool_call.duration", 0.75),
+	})
+	record = agentEventTestTransformed(t, record)
+
+	row, skip := agentEventRowFromLog(record, testObservedAt)
+	require.Empty(t, skip)
+	require.Equal(t, string(dialect.EventTypeToolCallResult), row.EventType)
+	require.Equal(t, "PostToolUse", row.RawEventName)
+	require.Equal(t, "codex", row.Source)
+	require.Equal(t, "codex", row.Surface)
+	require.Equal(t, "openai", row.Provider)
+	require.Equal(t, "codex-session-1", row.SessionID)
+	require.Equal(t, "turn-1", row.TurnID)
+	require.Equal(t, "call-1", row.EventID)
+	require.Equal(t, "user-1", row.UserID)
+	require.Equal(t, "dev@example.com", row.UserEmail)
+	require.Equal(t, "shell", row.Name)
+	require.Equal(t, "shell", row.ToolName)
+	require.Empty(t, row.MCPServerName)
+	require.Equal(t, dialect.OutcomeOK, row.Outcome)
+	require.Empty(t, row.OutcomeMessage)
+	require.Equal(t, int64(750_000_000), row.DurationNano)
+}
