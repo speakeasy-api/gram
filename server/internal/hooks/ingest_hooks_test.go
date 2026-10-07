@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -28,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -1482,6 +1485,90 @@ func TestIngest_StampsAccountAttributionOnTelemetry(t *testing.T) {
 		"account email must ride as its own attribute")
 	require.NotContains(t, logs[0].Attributes, `"email":"personal@gmail.com"`,
 		"account email must not replace the actor's user.email")
+}
+
+// ingestHookDeviceRow sends a session.started event the way /rpc/hooks.ingest
+// receives it, through HookDeviceTelemetry with header as the request
+// headers, and returns the gram.hook.device.* attributes stored on the
+// resulting telemetry row.
+func ingestHookDeviceRow(t *testing.T, header http.Header) map[string]any {
+	t.Helper()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/rpc/hooks.ingest", nil)
+	req.Header = header
+	var requestCtx context.Context
+	middleware.HookDeviceTelemetry(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		requestCtx = r.Context()
+	})).ServeHTTP(httptest.NewRecorder(), req)
+	require.NotNil(t, requestCtx)
+
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	occurredAt := timestamp.Format(time.RFC3339Nano)
+	payload := canonicalIngestPayload("claude", "session.started", "hook-device-"+uuid.NewString())
+	payload.Event.OccurredAt = &occurredAt
+
+	result, err := ti.service.Ingest(requestCtx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", result.Decision)
+
+	var logs []telemetryrepo.TelemetryLog
+	require.Eventually(t, func() bool {
+		logs, err = chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: authCtx.ProjectID.String(),
+			TimeStart:     timestamp.Add(-2 * time.Minute).UnixNano(),
+			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
+			GramURNs:      nil,
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		return err == nil && len(logs) == 1
+	}, 2*time.Second, 50*time.Millisecond, "expected the hook row to land in telemetry")
+
+	// Attribute keys nest on dots in the stored JSON.
+	var stored struct {
+		Gram struct {
+			Hook struct {
+				Device map[string]any `json:"device"`
+			} `json:"hook"`
+		} `json:"gram"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(logs[0].Attributes), &stored))
+	return stored.Gram.Hook.Device
+}
+
+func TestIngest_StampsHookDeviceAttributesOnTelemetry(t *testing.T) {
+	t.Parallel()
+
+	header := http.Header{}
+	header.Set("X-Gram-Device-Binary-Version", "1.2.3")
+	header.Set("X-Gram-Device-Os", "darwin")
+	header.Set("X-Gram-Device-Arch", "arm64")
+	header.Set("X-Gram-Device-Harness", "claude")
+	header.Set("X-Gram-Device-Harness-Version", "2.0.1")
+	header.Set("X-Gram-Device-Elapsed-Ms", "42")
+
+	device := ingestHookDeviceRow(t, header)
+
+	require.Equal(t, "1.2.3", device["binary_version"], "the binary build must ride on the hook row")
+	require.Equal(t, "darwin", device["os"])
+	require.Equal(t, "arm64", device["arch"])
+	require.Equal(t, "claude", device["harness"])
+	require.Equal(t, "2.0.1", device["harness_version"])
+	require.NotContains(t, device, "elapsed_ms", "the per-request elapsed time stays span-only")
+}
+
+func TestIngest_OmitsHookDeviceAttributesWithoutDeviceHeaders(t *testing.T) {
+	t.Parallel()
+
+	// The legacy curl client sends no X-Gram-Device-* headers.
+	device := ingestHookDeviceRow(t, http.Header{})
+
+	require.Empty(t, device, "rows from senders without device headers must carry no device attributes")
 }
 
 func TestIngest_PersistsRenderableToolCalls(t *testing.T) {

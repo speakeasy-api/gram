@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
@@ -1401,6 +1402,13 @@ func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.A
 }
 
 func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, timestamp time.Time, toolName string, attrs map[attr.Key]any) {
+	// The binary build, OS, arch, and harness the speakeasy-hooks binary
+	// reported on this request, so rows (and the sessions they belong to) can
+	// be counted per client version. Senders without device headers, such as
+	// the legacy curl client, leave the attributes absent.
+	for key, value := range middleware.HookDeviceAttributes(ctx) {
+		attrs[key] = value
+	}
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp: timestamp,
 		ToolInfo: telemetry.ToolInfo{

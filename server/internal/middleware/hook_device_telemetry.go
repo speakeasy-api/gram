@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -25,23 +26,49 @@ var hookDeviceHeaderAttrs = map[string]attribute.Key{
 	wire.HeaderDeviceHarnessVersion: attr.HookDeviceHarnessVersionKey,
 }
 
+// hookDeviceContextKey carries the sanitized X-Gram-Device-* string values of
+// a hook request from HookDeviceTelemetry to the code that writes the
+// request's telemetry rows.
+type hookDeviceContextKey struct{}
+
+// HookDeviceAttributes returns the machine details (OS, arch, binary build,
+// harness) the speakeasy-hooks binary reported on the current hook request,
+// keyed by their gram.hook.device.* attribute and already sanitized by
+// HookDeviceTelemetry. It is nil when the request reported none: the legacy
+// curl client and in-process callers send no X-Gram-Device-* headers. The map
+// is shared with the request context, so callers must not modify it.
+func HookDeviceAttributes(ctx context.Context) map[attr.Key]string {
+	device, _ := ctx.Value(hookDeviceContextKey{}).(map[attr.Key]string)
+	return device
+}
+
 // HookDeviceTelemetry lifts the X-Gram-Device-* headers stamped by the
 // speakeasy-hooks binary onto the hook endpoint's server span, so traces the
 // device began carry the machine details (OS, arch, binary build, harness)
 // and the on-device elapsed time needed to measure hook performance end to
-// end. Must be registered after otelhttp so the span is in the request
-// context. Header values are device-supplied input: they are bounded and
-// sanitized before becoming attributes, and non-hook routes are untouched.
+// end. The string details also ride on the request context for the hook
+// telemetry rows (HookDeviceAttributes), whether or not the span is sampled.
+// Must be registered after otelhttp so the span is in the request context.
+// Header values are device-supplied input: they are bounded and sanitized
+// before becoming attributes, and non-hook routes are untouched.
 func HookDeviceTelemetry(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/rpc/hooks.") {
+			device := make(map[attr.Key]string, len(hookDeviceHeaderAttrs))
+			for header, key := range hookDeviceHeaderAttrs {
+				if v := sanitizeDeviceHeader(r.Header.Get(header)); v != "" {
+					device[key] = v
+				}
+			}
+			if len(device) > 0 {
+				r = r.WithContext(context.WithValue(r.Context(), hookDeviceContextKey{}, device))
+			}
+
 			span := trace.SpanFromContext(r.Context())
 			if span.IsRecording() {
-				attrs := make([]attribute.KeyValue, 0, len(hookDeviceHeaderAttrs)+1)
-				for header, key := range hookDeviceHeaderAttrs {
-					if v := sanitizeDeviceHeader(r.Header.Get(header)); v != "" {
-						attrs = append(attrs, key.String(v))
-					}
+				attrs := make([]attribute.KeyValue, 0, len(device)+1)
+				for key, v := range device {
+					attrs = append(attrs, key.String(v))
 				}
 				if v := r.Header.Get(wire.HeaderDeviceElapsedMS); v != "" {
 					// A day bounds any plausible producer — hook processes live
@@ -61,7 +88,7 @@ func HookDeviceTelemetry(next http.Handler) http.Handler {
 }
 
 // sanitizeDeviceHeader bounds an untrusted device-reported header value before
-// it becomes a span attribute: trimmed, capped in length, and rejected outright
+// it becomes an attribute: trimmed, capped in length, and rejected outright
 // if it carries anything beyond printable ASCII.
 func sanitizeDeviceHeader(v string) string {
 	v = conv.TruncateString(strings.TrimSpace(v), 64)
