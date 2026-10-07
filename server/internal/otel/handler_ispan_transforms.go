@@ -103,14 +103,14 @@ func rewriteInstrumentationScope(span *otelv1.Span) error {
 }
 
 // dropReservedSpanAttributes removes what a producer sent under Gram's own
-// speakeasy.event namespace and says how many attributes went, exactly as
+// speakeasy.agent namespace and says how many attributes went, exactly as
 // the log transform does for a log record: only the column enrichers write
 // there, and a producer that sends one would otherwise classify its own
 // span. The enrichers read the inbound span, so what they see is unchanged.
 func dropReservedSpanAttributes(span *otelv1.Span) int {
 	attributes := span.GetAttributes()
 	kept := slices.DeleteFunc(attributes, func(kv *otelv1.Span_KeyValue) bool {
-		return enrich.IsEventColumnKey(kv.GetKey())
+		return enrich.IsAgentColumnKey(kv.GetKey())
 	})
 	dropped := len(attributes) - len(kept)
 	if dropped > 0 {
