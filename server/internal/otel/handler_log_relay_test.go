@@ -22,6 +22,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
@@ -382,7 +383,14 @@ func TestLogRelayExportRedactsSensitiveContentWithoutMutatingSource(t *testing.T
 		relayTestLogAttribute("gen_ai.output.messages", "output"),
 		relayTestLogAttribute("user_prompt", "user"),
 		relayTestLogAttribute("prompt", "prompt"),
+		// The column enrichers' copies of the words and the person are
+		// redacted with their sources, so an exclude destination gets
+		// neither spelling.
+		relayTestLogAttribute(string(enrich.TextColumnKey), "prompt"),
+		relayTestLogAttribute(string(enrich.UserEmailColumnKey), "person@example.com"),
+		relayTestLogAttribute(string(enrich.ExternalUserIDColumnKey), "user-1"),
 		relayTestLogAttribute("model", "preserved"),
+		relayTestLogAttribute(string(enrich.ModelColumnKey), "preserved"),
 	})
 	before := proto.Clone(record)
 
@@ -391,13 +399,14 @@ func TestLogRelayExportRedactsSensitiveContentWithoutMutatingSource(t *testing.T
 	require.True(t, proto.Equal(before, record))
 
 	converted := request.GetResourceLogs()[0].GetScopeLogs()[0].GetLogRecords()[0]
-	require.Len(t, converted.GetAttributes(), 5)
-	for _, attribute := range converted.GetAttributes()[:4] {
-		require.Equal(t, redactedSensitiveDataValue, attribute.GetValue().GetStringValue())
+	require.Len(t, converted.GetAttributes(), 9)
+	for _, attribute := range converted.GetAttributes()[:7] {
+		require.Equal(t, redactedSensitiveDataValue, attribute.GetValue().GetStringValue(), attribute.GetKey())
 	}
 	require.Equal(t, redactedSensitiveDataValue, converted.GetBody().GetStringValue())
-	require.Equal(t, "model", converted.GetAttributes()[4].GetKey())
-	require.Equal(t, "preserved", converted.GetAttributes()[4].GetValue().GetStringValue())
+	for _, attribute := range converted.GetAttributes()[7:] {
+		require.Equal(t, "preserved", attribute.GetValue().GetStringValue(), attribute.GetKey())
+	}
 }
 
 func TestLogRelayExportIncludesSensitiveContent(t *testing.T) {
