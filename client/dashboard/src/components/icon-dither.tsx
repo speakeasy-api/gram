@@ -60,7 +60,7 @@ type Sea = {
   cy: number;
 };
 
-function rollSea(cols: number, rows: number): Sea {
+function rollSea(): Sea {
   // Diagonal, never flat or vertical, travelling either way across the rail.
   const angle =
     (Math.random() < 0.5 ? 1 : -1) * (0.3 + Math.random() * 0.5) +
@@ -69,8 +69,9 @@ function rollSea(cols: number, rows: number): Sea {
     angle,
     seedX: Math.random() * 100,
     seedY: Math.random() * 100,
-    cx: cols / 2,
-    cy: rows / 2,
+    // Set once the canvas is measured.
+    cx: 0,
+    cy: 0,
   };
 }
 
@@ -172,12 +173,7 @@ export function useIconDither(): {
       if (other !== handleRef.current) other.clear();
     }
 
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(canvas.clientWidth * dpr);
-    canvas.height = Math.round(canvas.clientHeight * dpr);
-    const cols = Math.ceil(canvas.clientWidth / CELL);
-    const rows = Math.ceil(canvas.clientHeight / CELL);
-    if (cols === 0 || rows === 0) return;
+    if (canvas.clientWidth === 0 || canvas.clientHeight === 0) return;
 
     // Resolved on every hover rather than cached, so a theme switch is picked
     // up by the next one.
@@ -185,8 +181,37 @@ export function useIconDither(): {
     const ink = getComputedStyle(canvas).color;
 
     hoveringRef.current = true;
-    if (rafRef.current !== null) return;
-    const sea = rollSea(cols, rows);
+    // A re-entry while the last hover is still fading out restarts the loop,
+    // so every hover rolls its own sea. The fade carries on from where it was.
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+
+    let dpr = 0;
+    let width = 0;
+    let height = 0;
+    let cols = 0;
+    let rows = 0;
+    // Measured every tick rather than once, so a card that resizes mid-hover
+    // re-rasterises instead of stretching a stale bitmap.
+    const fit = () => {
+      const nextDpr = window.devicePixelRatio || 1;
+      if (
+        canvas.clientWidth === width &&
+        canvas.clientHeight === height &&
+        nextDpr === dpr
+      ) {
+        return;
+      }
+      dpr = nextDpr;
+      width = canvas.clientWidth;
+      height = canvas.clientHeight;
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      cols = Math.ceil(width / CELL);
+      rows = Math.ceil(height / CELL);
+      sea.cx = cols / 2;
+      sea.cy = rows / 2;
+    };
+    const sea = rollSea();
 
     const loop = (now: number) => {
       rafRef.current = requestAnimationFrame(loop);
@@ -203,6 +228,7 @@ export function useIconDither(): {
         return;
       }
 
+      fit();
       const level = fadeRef.current / FADE_TICKS;
       const t = timeRef.current;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
