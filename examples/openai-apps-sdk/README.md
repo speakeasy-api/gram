@@ -32,5 +32,5 @@ speakeasy auth
 pnpm push
 ```
 
-For more details about this example, refer to the gram
+For more details about this example, refer to the
 [documentation](https://www.speakeasy.com/docs/ai-control-plane/mcp-gateway/building-servers/sources).

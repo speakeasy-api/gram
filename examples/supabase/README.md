@@ -1,6 +1,6 @@
 # Speakeasy Functions x Supabase Example
 
-This Speakeasy Function shows how to connect to a Supabase database and running a query to get data from a table that is then returned as a JSON response.
+This Speakeasy Function shows how to connect to a Supabase database and run a query to get data from a table that is then returned as a JSON response.
 
 ## Usage
 

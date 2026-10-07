@@ -1,10 +1,10 @@
-# Gram Functions for TypeScript
+# Speakeasy Functions for TypeScript
 
-Gram Functions are small pieces of code that represent LLM tools. They are
-deployed to [Gram](https://getgram.ai) and are then exposed to LLMs via MCP
+Speakeasy Functions are small pieces of code that represent LLM tools. They are
+deployed to the [Speakeasy AI Control Plane](https://www.speakeasy.com/docs/ai-control-plane/mcp-gateway/building-servers/functions) and are then exposed to LLMs via MCP
 servers.
 
-This library provides a small framework for authoring Gram Functions in
+This library provides a small framework for authoring Speakeasy Functions in
 TypeScript. The "Hello, World!" example is:
 
 ```typescript
@@ -312,7 +312,7 @@ const functions = new Functions({
 ```
 
 Whenever a tool wants to access a new environment variable, a definition must be
-added to the `envSchema` if one does not exist. When this Gram Function is
+added to the `envSchema` if one does not exist. When this function is
 deployed, end users will then be able to provide values for these variables when
 installing the corresponding MCP servers.
 
@@ -345,7 +345,7 @@ If not provided, the framework falls back to `process.env`.
 ### OAuth Tokens
 
 If your function needs to access external APIs on behalf of the user, you can
-declare an OAuth variable in `authInput`. Gram will handle the OAuth flow and
+declare an OAuth variable in `authInput`. Speakeasy will handle the OAuth flow and
 inject the acquired token into the specified environment variable:
 
 ```typescript
@@ -361,7 +361,7 @@ const functions = new Functions({
 
 ### User Identity
 
-When an authenticated Gram user invokes a tool, you can opt in to receiving
+When an authenticated user invokes a tool, you can opt in to receiving
 their email address by setting `gramEmail: true` in `authInput`. The email will
 be available as the `SPEAKEASY_AI_USER_EMAIL` environment variable. The deprecated
 `GRAM_USER_EMAIL` variable carries the same value, so existing code keeps
@@ -601,7 +601,7 @@ picks the CLI in this order:
 ## Handling Tool Calls
 
 Exporting the `Functions` instance from your module as the default export will allow
-Gram to handle tool calls automatically when deployed:
+Speakeasy to handle tool calls automatically when deployed:
 
 ```typescript
 import { Functions } from "@speakeasy-api/functions";

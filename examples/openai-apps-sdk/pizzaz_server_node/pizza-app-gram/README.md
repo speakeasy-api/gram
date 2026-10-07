@@ -13,7 +13,7 @@ build and deploy [Speakeasy Functions](https://www.speakeasy.com/docs/ai-control
 
 ## Quick start
 
-This is specifically intended at deploying an OpenAI Apps SDK example Pizza Map through Speakeasy Functions.
+This template builds and deploys the OpenAI Apps SDK Pizza Map example through Speakeasy Functions.
 
 To get started, install dependencies:
 

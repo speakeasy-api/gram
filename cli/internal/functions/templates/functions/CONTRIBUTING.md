@@ -425,7 +425,7 @@ setTimeout(() => controller.abort(), 5000);
 
 For tools that need to access OAuth-protected APIs, Speakeasy Functions supports automatic OAuth token injection. Configure the `authInput` option when creating your `Functions` instance, and the OAuth access token will be available through `ctx.env`.
 
-For full setup instructions including configuring OAuth providers, see the [Add OAuth documentation](https://www.getgram.ai/docs/gram-functions/add-oauth).
+For full setup instructions including configuring OAuth providers, see the [Add OAuth documentation](https://www.speakeasy.com/docs/ai-control-plane/mcp-gateway/building-servers/functions/add-oauth).
 
 ### Configuring OAuth
 

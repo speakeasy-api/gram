@@ -145,7 +145,7 @@ help_approval_system();
 
 ### Customization Points
 
-Edit `gram_approve_demo.ts` to customize:
+Edit `src/functions.ts` to customize:
 
 1. **Tool Protection Pattern** (`CONFIG.PROTECTED_TOOL_PREFIX`)
 
@@ -417,7 +417,7 @@ description: "Proxy for YOUR_SERVICE admin tool calls...";
 
 - **Speakeasy Functions Documentation**: [@speakeasy-api/functions](https://www.npmjs.com/package/@speakeasy-api/functions)
 - **MCP Protocol**: [Model Context Protocol](https://modelcontextprotocol.io)
-- **Security Patterns**: See `gram_approve_demo.ts` for commented examples
+- **Security Patterns**: See `src/functions.ts` for commented examples
 
 ## 🤝 Contributing
 

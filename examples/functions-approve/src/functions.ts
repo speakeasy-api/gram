@@ -1,6 +1,6 @@
 /**
  * =============================================================================
- * GRAM MCP APPROVAL FLOW DEMONSTRATION
+ * MCP APPROVAL FLOW DEMONSTRATION
  * =============================================================================
  *
  * This is an educational example demonstrating how to implement approval flows
@@ -191,7 +191,7 @@ function maskSensitiveValue(value: string, visibleChars: number = 4): string {
 }
 
 // =============================================================================
-// GRAM TOOLS - APPROVAL SYSTEM
+// TOOLS - APPROVAL SYSTEM
 // =============================================================================
 
 /**
