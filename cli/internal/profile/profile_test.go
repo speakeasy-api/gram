@@ -62,7 +62,7 @@ func TestDefaultProfilePath_UnderConfigDir(t *testing.T) { //nolint:paralleltest
 	require.Equal(t, filepath.Join(home, ".gram", "profile.json"), legacy)
 }
 
-func TestDefaultProfilePath_RespectsXDGConfigHome(t *testing.T) { //nolint:paralleltest // sets HOME and XDG_CONFIG_HOME
+func TestDefaultProfilePath_RespectsXDGConfigHome(t *testing.T) {
 	setHome(t)
 	xdg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", xdg)
