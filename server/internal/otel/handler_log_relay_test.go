@@ -2,6 +2,7 @@ package otel
 
 import (
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -202,7 +203,7 @@ func TestLogRelayHandlerRightSizesLargeBatchWithoutMixingOrganizations(t *testin
 		{customer: "c", organizationID: testLogThirdOrganizationID, projectID: testLogThirdProjectID, recordCount: 7},
 	}
 
-	recordBodyBytes := maxOTLPLogRecordBytes / 3
+	recordBodyBytes := gramotel.MaxLogRecordBytes / 3
 	expectedNames := make(map[string][]string, len(specs))
 	records := make([]*otelv1.LogRecord, 0, 16)
 	for _, spec := range specs {
@@ -210,7 +211,7 @@ func TestLogRelayHandlerRightSizesLargeBatchWithoutMixingOrganizations(t *testin
 		for index := range spec.recordCount {
 			name := fmt.Sprintf("%s-%d", spec.customer, index)
 			record := relayTestLogRecord(name, spec.organizationID, spec.projectID, recordBodyBytes)
-			require.LessOrEqual(t, proto.Size(record), maxOTLPLogRecordBytes)
+			require.LessOrEqual(t, proto.Size(record), gramotel.MaxLogRecordBytes)
 			records = append(records, record)
 			expectedNames[spec.customer] = append(expectedNames[spec.customer], name)
 		}
@@ -228,7 +229,7 @@ func TestLogRelayHandlerRightSizesLargeBatchWithoutMixingOrganizations(t *testin
 	require.Len(t, requests, 7)
 	for _, captured := range requests {
 		require.NoError(t, captured.err)
-		require.LessOrEqual(t, captured.bodySize, maxLogRelayExportBytes)
+		require.LessOrEqual(t, captured.bodySize, gramotel.MaxLogRelayExportBytes)
 		names := relayRequestLogEventNames(captured.request)
 		require.NotEmpty(t, names)
 		for _, name := range names {
@@ -258,7 +259,7 @@ func TestLogRelayHandlerLimitsDestinationRequestsToFourMiB(t *testing.T) {
 	handler := newLogRelayTestHandler(t, testenv.NewMeterProvider(t))
 	cacheLogRelayTestDestination(t, handler, testLogOrganizationID, testLogProjectID, server.URL, nil, true)
 
-	recordBodyBytes := maxOTLPLogRecordBytes / 2
+	recordBodyBytes := gramotel.MaxLogRecordBytes / 2
 	records := []*otelv1.LogRecord{
 		relayTestLogRecord("large-1", testLogOrganizationID, testLogProjectID, recordBodyBytes),
 		relayTestLogRecord("large-2", testLogOrganizationID, testLogProjectID, recordBodyBytes),
@@ -272,7 +273,7 @@ func TestLogRelayHandlerLimitsDestinationRequestsToFourMiB(t *testing.T) {
 		})
 	}
 	for _, record := range records {
-		require.LessOrEqual(t, proto.Size(record), maxOTLPLogRecordBytes)
+		require.LessOrEqual(t, proto.Size(record), gramotel.MaxLogRecordBytes)
 	}
 	messages, failures := logRelayTestMessages(records...)
 	require.NoError(t, handler.handleBatch(t.Context(), messages))
@@ -285,7 +286,7 @@ func TestLogRelayHandlerLimitsDestinationRequestsToFourMiB(t *testing.T) {
 	deliveredRecords := 0
 	for _, captured := range requests {
 		require.NoError(t, captured.err)
-		require.LessOrEqual(t, captured.bodySize, maxLogRelayExportBytes)
+		require.LessOrEqual(t, captured.bodySize, gramotel.MaxLogRelayExportBytes)
 		for _, resourceLogs := range captured.request.GetResourceLogs() {
 			for _, scopeLogs := range resourceLogs.GetScopeLogs() {
 				for _, record := range scopeLogs.GetLogRecords() {
@@ -312,11 +313,11 @@ func TestLogRelayDestinationRejectsRequestOverFourMiB(t *testing.T) {
 	handler := newLogRelayTestHandler(t, testenv.NewMeterProvider(t))
 	destination := cacheLogRelayTestDestination(t, handler, testLogOrganizationID, testLogProjectID, server.URL, nil, true)
 	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{
-		relayTestLogRecord("oversized", testLogOrganizationID, testLogProjectID, maxLogRelayExportBytes),
+		relayTestLogRecord("oversized", testLogOrganizationID, testLogProjectID, gramotel.MaxLogRelayExportBytes),
 	}, true)
 	require.NoError(t, err)
 
-	err = destination.exportWithLimit(t.Context(), request, maxLogRelayExportBytes)
+	err = destination.exportWithLimit(t.Context(), request, gramotel.MaxLogRelayExportBytes)
 
 	require.ErrorContains(t, err, "limit is 4194304")
 	require.Zero(t, requests.Load())

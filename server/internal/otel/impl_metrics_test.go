@@ -2,6 +2,7 @@ package otel
 
 import (
 	"bytes"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -60,7 +61,7 @@ func TestMetricsPublishesInboundWithoutEnrichment(t *testing.T) {
 	require.Equal(t, "request.duration", published.GetName())
 	require.Equal(t, "producer", published.GetResource().GetAttributes()[0].GetValue().GetStringValue())
 	require.Equal(t, "producer.scope", published.GetScope().GetName())
-	require.Equal(t, ProvenanceSource, published.GetProvenance().GetSource())
+	require.Equal(t, gramotel.ProvenanceSource, published.GetProvenance().GetSource())
 	require.Equal(t, testMetricOrganizationID, published.GetProvenance().GetOrganizationId())
 	require.Equal(t, testMetricProjectID, published.GetProvenance().GetProjectId())
 
@@ -156,7 +157,7 @@ func TestDecodeOTLPMetricExportClearsProducerPrivateSchemaFields(t *testing.T) {
 	require.NoError(t, err)
 
 	provenance := (&otelv1.InboundMetric_Provenance_builder{
-		Source:         new(ProvenanceSource),
+		Source:         new(gramotel.ProvenanceSource),
 		OrganizationId: new(testMetricOrganizationID),
 		ProjectId:      new(testMetricProjectID),
 	}).Build()

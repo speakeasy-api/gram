@@ -2,6 +2,7 @@ package otel
 
 import (
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"strings"
 	"testing"
 
@@ -138,9 +139,9 @@ func TestMaxSizeLogRecordFitsRelayExportAfterFullEnrichment(t *testing.T) {
 			logStringAttribute("gen_ai.output.messages", `[{"role":"assistant","parts":[{"type":"text","content":"done"}],"finish_reason":"stop"}]`),
 		},
 	}).Build()
-	padInboundLogRecordToSize(t, inbound, maxOTLPLogRecordBytes)
-	require.Equal(t, maxOTLPLogRecordBytes, proto.Size(inbound))
-	require.NoError(t, ValidateInboundLogRecord(inbound))
+	padInboundLogRecordToSize(t, inbound, gramotel.MaxLogRecordBytes)
+	require.Equal(t, gramotel.MaxLogRecordBytes, proto.Size(inbound))
+	require.NoError(t, gramotel.ValidateLogRecord(inbound))
 
 	var published *otelv1.LogRecord
 	publisher := gcp.NewMockPublisher[*otelv1.LogRecord]()
@@ -169,7 +170,7 @@ func TestMaxSizeLogRecordFitsRelayExportAfterFullEnrichment(t *testing.T) {
 
 	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{published}, true)
 	require.NoError(t, err)
-	require.LessOrEqual(t, proto.Size(request), maxLogRelayExportBytes)
+	require.LessOrEqual(t, proto.Size(request), gramotel.MaxLogRelayExportBytes)
 }
 
 func padInboundLogRecordToSize(t *testing.T, record *otelv1.InboundLogRecord, target int) {
