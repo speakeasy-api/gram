@@ -112,6 +112,7 @@ func TestCompileSkillDimension(t *testing.T) {
 		Measures: []Measure{
 			{Op: "count", Field: "", Alias: ""},
 			{Op: "count_distinct", Field: "user", Alias: "people"},
+			{Op: "count_distinct", Field: "skill", Alias: ""},
 		},
 		Filters:   []Filter{{Field: "skill", Operator: "in", Values: []string{"deploy", "review"}}},
 		OrderBy:   nil,
@@ -124,8 +125,10 @@ func TestCompileSkillDimension(t *testing.T) {
 		{Name: "skill", Kind: ColumnDimension},
 		{Name: "count", Kind: ColumnMeasure},
 		{Name: "people", Kind: ColumnMeasure},
+		{Name: "count_distinct_skill", Kind: ColumnMeasure},
 	}, plan.Columns)
 	require.Contains(t, plan.SQL, "skill_name AS skill")
+	require.Contains(t, plan.SQL, "uniqExactIf(skill_name, skill_name != '') AS count_distinct_skill", "skills used counts the calls that named one")
 	require.Contains(t, plan.SQL, "WHERE skill_name IN (?,?)")
 	require.Contains(t, plan.SQL, "GROUP BY skill")
 	require.Equal(t, []any{"deploy", "review"}, plan.Args[len(plan.Args)-2:], "the filter values are bound last")

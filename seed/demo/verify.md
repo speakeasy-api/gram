@@ -477,6 +477,13 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     tool_calls dataset, a 7-day window and a table ordered by p95 duration,
     runs it, and returns rows; the bar names the widget with Priya Raman as
     its creator and **Save** stays disabled until something is edited.
+    Still on the Explore tab with tool_calls, open **Group by**: `skill`
+    is offered with its description beneath the name. Group by `skill`,
+    run, and the table shows `review-pr`, `write-tests` and `release-notes`
+    with counts, plus the empty group for calls that named no skill. Add a
+    filter on `skill`: the values picker offers those three names with
+    counts and never an empty value. Then flip the Explore row in
+    `PAGES.md` from `[~]` to `[x]`.
 27. **Check access** — open MCP → **GitHub** → Team Access and pick Mateo
     Alvarez in Check access. Connect is **Blocked**: the Contractors block
     wins, Engineer's grants show as blocked, and his own grant covering

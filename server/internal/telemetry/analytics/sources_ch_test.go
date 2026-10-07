@@ -91,8 +91,14 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 	blocked.ToolName = "Write"
 	blocked.Outcome = "rejected"
 	// A skill invocation: Claude Code reports it as a tool event whose
-	// parameters name the skill, and that name is the skill dimension.
-	skillCall := agentEventFixture(orgID, "r11", "s1", "t2", "tc3", "tool_call_result", base+5)
+	// parameters name the skill, and that name is the skill dimension. Two
+	// observations of the one call name different skills, so the test can
+	// see that the terminal one wins, as it does for every other dimension.
+	skillDecision := agentEventFixture(orgID, "r12", "s1", "t2", "tc3", "tool_decision", base+5)
+	skillDecision.ToolName = "Skill"
+	skillDecision.SkillName = "review"
+	skillDecision.Outcome = "ok"
+	skillCall := agentEventFixture(orgID, "r11", "s1", "t2", "tc3", "tool_call_result", base+6)
 	skillCall.ToolName = "Skill"
 	skillCall.SkillName = "deploy"
 	// A record first filed under s2, then re-emitted with its session
@@ -112,6 +118,7 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		// A blocked call is a decision alone, and still a call.
 		blocked,
 		agentEventFixture(orgID, "r4", "s1", "t2", "r4", "api_request", base+3),
+		skillDecision,
 		skillCall,
 		// How a real session ends: a hook or MCP event with no model on it.
 		trailingHook,
@@ -156,7 +163,7 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		require.Equal(t, int64(2), got[0].turns, "t1 and t2, with the redelivered record counted once")
 		require.Equal(t, int64(3), got[0].toolCalls, "two observations of tc1 are one call, the blocked tc2 another, and the skill call tc3 a third")
 		require.Equal(t, base, got[0].startedAt)
-		require.Equal(t, base+5, got[0].endedAt, "the out-of-window row does not stretch the session")
+		require.Equal(t, base+6, got[0].endedAt, "the out-of-window row does not stretch the session")
 		require.Equal(t, "dev@example.com", got[0].user)
 		require.Equal(t, "claude-sonnet-4", got[0].model, "the trailing hook row, which states no model, does not blank it")
 		require.Equal(t, "s2", got[1].id)
@@ -207,7 +214,9 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 
 		require.Equal(t, "tc3", got[2].id)
 		require.Equal(t, "Skill", got[2].tool)
-		require.Equal(t, "deploy", got[2].skill, "a Skill invocation resolves to the skill it named")
+		require.Equal(t, "deploy", got[2].skill, "a Skill invocation resolves to the skill its terminal observation named")
+		require.Equal(t, base+5, got[2].startedAt)
+		require.Equal(t, base+6, got[2].endedAt)
 	})
 
 	t.Run("deduped keeps one copy of a re-emitted record, the latest observed", func(t *testing.T) {
