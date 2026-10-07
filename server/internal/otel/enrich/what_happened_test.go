@@ -319,20 +319,41 @@ func TestWhatHappenedColumnsForSemconv(t *testing.T) {
 	})
 }
 
-func TestOptionalAndWhenErroredAnswerNotApplicable(t *testing.T) {
+func TestRequirementLevelsSayWhenAnAbsenceIsAGap(t *testing.T) {
 	t.Parallel()
 
-	record := inboundTestLog(claudeCodeScopeName, "claude-code", "tool_result", inboundTestBoolAttribute("success", true))
-	d := dialect.ForLog(record)
+	skill := getter[string]{log: dialect.LogDialect.SkillName, span: dialect.SpanDialect.SkillName}
+	message := getter[string]{log: dialect.LogDialect.OutcomeMessage, span: dialect.SpanDialect.OutcomeMessage}
+	tool := getter[string]{log: dialect.LogDialect.ToolName, span: dialect.SpanDialect.ToolName}
 
-	_, _, err := optional(question[string]{log: dialect.LogDialect.SkillName, span: dialect.SpanDialect.SkillName}).log(d, record)
-	require.ErrorIs(t, err, errNotApplicable)
+	succeeded := inboundTestLog(claudeCodeScopeName, "claude-code", "tool_result", inboundTestBoolAttribute("success", true))
+	d := dialect.ForLog(succeeded)
 
-	_, _, err = whenErrored(question[string]{log: dialect.LogDialect.OutcomeMessage, span: dialect.SpanDialect.OutcomeMessage}).log(d, record)
-	require.ErrorIs(t, err, errNotApplicable)
+	// Recommended and Opt-In: an absent value is not required, so not a gap.
+	_, _, err := recommended(skill).log(d, succeeded)
+	require.ErrorIs(t, err, errNotRequired)
+	_, _, err = optIn(skill).log(d, succeeded)
+	require.ErrorIs(t, err, errNotRequired)
 
-	key, value, err := optional(question[string]{log: dialect.LogDialect.ToolName, span: dialect.SpanDialect.ToolName}).log(d, inboundTestLog(claudeCodeScopeName, "claude-code", "tool_result", logStringAttribute("tool_name", "Bash")))
+	// Conditionally Required: the message of a result that succeeded is not
+	// required, and the message of one that failed is, so its absence there
+	// comes back as a plain gap for the caller to count.
+	_, _, err = conditionallyRequired(message, outcomeIsError).log(d, succeeded)
+	require.ErrorIs(t, err, errNotRequired)
+	failed := inboundTestLog(claudeCodeScopeName, "claude-code", "tool_result", inboundTestBoolAttribute("success", false))
+	key, _, err := conditionallyRequired(message, outcomeIsError).log(dialect.ForLog(failed), failed)
+	require.NoError(t, err)
+	require.Empty(t, key)
+
+	// A stated value is written at every level.
+	named := inboundTestLog(claudeCodeScopeName, "claude-code", "tool_result", logStringAttribute("tool_name", "Bash"))
+	key, value, err := recommended(tool).log(dialect.ForLog(named), named)
 	require.NoError(t, err)
 	require.Equal(t, "tool_name", key)
 	require.Equal(t, "Bash", value)
+
+	// statedBy is the condition behind the MCP pair: one half is required
+	// once the other half is present.
+	require.True(t, statedBy(tool).log(dialect.ForLog(named), named))
+	require.False(t, statedBy(tool).log(d, succeeded))
 }

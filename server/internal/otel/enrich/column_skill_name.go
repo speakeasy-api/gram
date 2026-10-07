@@ -10,10 +10,10 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // counts. The column is deprecated in favour of name, but it stays filled
 // here until a skill event type exists for name to carry the skill on; when
 // one does, this table empties and name takes over. Most requests and most
-// tool events involve no skill, so an absent skill is not counted as
-// missing.
+// tool events involve no skill, so the column is Recommended on all four
+// types and an absent skill is not counted.
 func columnSkillName() columnDefinition {
-	skill := optional(question[string]{log: dialect.LogDialect.SkillName, span: dialect.SpanDialect.SkillName})
+	skill := recommended(getter[string]{log: dialect.LogDialect.SkillName, span: dialect.SpanDialect.SkillName})
 	return column[string]{
 		key: SkillNameColumnKey,
 		byType: columnTable[string]{

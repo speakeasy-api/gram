@@ -8,7 +8,7 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // types, until a contract migration drops it, so nothing that reads it
 // today goes quiet.
 func columnToolName() columnDefinition {
-	tool := question[string]{log: dialect.LogDialect.ToolName, span: dialect.SpanDialect.ToolName}
+	tool := getter[string]{log: dialect.LogDialect.ToolName, span: dialect.SpanDialect.ToolName}
 	return column[string]{
 		key: ToolNameColumnKey,
 		byType: columnTable[string]{

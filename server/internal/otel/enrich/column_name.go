@@ -11,7 +11,7 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // exist, they join this table with the skill and the agent as the subject,
 // and the per-family skill_name and agent_name columns retire.
 func columnName() columnDefinition {
-	tool := question[string]{log: dialect.LogDialect.ToolName, span: dialect.SpanDialect.ToolName}
+	tool := getter[string]{log: dialect.LogDialect.ToolName, span: dialect.SpanDialect.ToolName}
 	return column[string]{
 		key: NameColumnKey,
 		byType: columnTable[string]{

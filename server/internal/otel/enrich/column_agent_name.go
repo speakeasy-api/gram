@@ -9,10 +9,10 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // whose parameters name the agent. The column is deprecated in favour of
 // name and stays filled here until a sub-agent event type exists for name
 // to carry the agent on. Most requests come from the main thread and most
-// tool events start no sub-agent, so an absent agent is not counted as
-// missing.
+// tool events start no sub-agent, so the column is Recommended on all four
+// types and an absent agent is not counted.
 func columnAgentName() columnDefinition {
-	agent := optional(question[string]{log: dialect.LogDialect.AgentName, span: dialect.SpanDialect.AgentName})
+	agent := recommended(getter[string]{log: dialect.LogDialect.AgentName, span: dialect.SpanDialect.AgentName})
 	return column[string]{
 		key: AgentNameColumnKey,
 		byType: columnTable[string]{

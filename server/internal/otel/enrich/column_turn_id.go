@@ -12,6 +12,6 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 func columnTurnID() columnDefinition {
 	return column[string]{
 		key:    TurnIDColumnKey,
-		byType: everyClassifiedType(question[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}),
+		byType: everyClassifiedType(getter[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}),
 	}
 }

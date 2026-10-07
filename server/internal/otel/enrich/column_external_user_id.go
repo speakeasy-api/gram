@@ -10,6 +10,6 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 func columnExternalUserID() columnDefinition {
 	return column[string]{
 		key:    ExternalUserIDColumnKey,
-		byType: everyClassifiedType(question[string]{log: dialect.LogDialect.ExternalUserID, span: dialect.SpanDialect.ExternalUserID}),
+		byType: everyClassifiedType(getter[string]{log: dialect.LogDialect.ExternalUserID, span: dialect.SpanDialect.ExternalUserID}),
 	}
 }

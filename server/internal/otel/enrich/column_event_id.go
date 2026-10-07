@@ -16,7 +16,7 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // back to the record id for them, which is stable across redelivery, so a
 // re-observation of the same record never gets a second subject id.
 func columnEventID() columnDefinition {
-	subject := question[string]{log: dialect.LogDialect.SubjectID, span: dialect.SpanDialect.SubjectID}
+	subject := getter[string]{log: dialect.LogDialect.SubjectID, span: dialect.SpanDialect.SubjectID}
 	return column[string]{
 		key: EventIDColumnKey,
 		byType: columnTable[string]{

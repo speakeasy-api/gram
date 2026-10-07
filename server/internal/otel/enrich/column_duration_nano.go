@@ -8,7 +8,7 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // duration, but it is housekeeping rather than a request or a tool, so it
 // stays in the payload with its token counts rather than here.
 func columnDurationNano() columnDefinition {
-	duration := question[int64]{log: dialect.LogDialect.DurationNano, span: dialect.SpanDialect.DurationNano}
+	duration := getter[int64]{log: dialect.LogDialect.DurationNano, span: dialect.SpanDialect.DurationNano}
 	return column[int64]{
 		key: DurationNanoColumnKey,
 		byType: columnTable[int64]{

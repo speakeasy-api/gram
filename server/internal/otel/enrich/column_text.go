@@ -11,9 +11,10 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // since that is the closest thing the producer offered.
 //
 // Producers log these words only when the person running the agent agreed
-// to it, so an absent text is a choice rather than a gap and is not counted.
+// to it, so text is Opt-In on all four types: an absent text is a choice
+// rather than a gap and is not counted.
 func columnText() columnDefinition {
-	text := optional(question[string]{log: dialect.LogDialect.Text, span: dialect.SpanDialect.Text})
+	text := optIn(getter[string]{log: dialect.LogDialect.Text, span: dialect.SpanDialect.Text})
 	return column[string]{
 		key: TextColumnKey,
 		byType: columnTable[string]{

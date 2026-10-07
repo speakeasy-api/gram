@@ -67,7 +67,7 @@ func TestLogColumnEnricherWritesTheColumnWhenTheTableNamesTheTypeAndTheProviderS
 
 	reader, meterProvider := readableMeter(t)
 	enricher := &logColumnEnricher[string]{
-		column:      column[string]{key: TurnIDColumnKey, byType: columnTable[string]{dialect.EventTypeAPIRequest: question[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}}},
+		column:      column[string]{key: TurnIDColumnKey, byType: columnTable[string]{dialect.EventTypeAPIRequest: getter[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}}},
 		instruments: NewInstruments(testenv.NewLogger(t), meterProvider),
 	}
 	require.Equal(t, "enrich-column-turn_id", enricher.Name())
@@ -85,7 +85,7 @@ func TestLogColumnEnricherWritesNothingForATypeOutsideTheTable(t *testing.T) {
 
 	reader, meterProvider := readableMeter(t)
 	enricher := &logColumnEnricher[string]{
-		column:      column[string]{key: TurnIDColumnKey, byType: columnTable[string]{dialect.EventTypeAPIRequest: question[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}}},
+		column:      column[string]{key: TurnIDColumnKey, byType: columnTable[string]{dialect.EventTypeAPIRequest: getter[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}}},
 		instruments: NewInstruments(testenv.NewLogger(t), meterProvider),
 	}
 
@@ -106,7 +106,7 @@ func TestLogColumnEnricherCountsATypeInTheTableWhoseProviderSaidNothing(t *testi
 
 	reader, meterProvider := readableMeter(t)
 	enricher := &logColumnEnricher[string]{
-		column:      column[string]{key: TurnIDColumnKey, byType: columnTable[string]{dialect.EventTypeAPIRequest: question[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}}},
+		column:      column[string]{key: TurnIDColumnKey, byType: columnTable[string]{dialect.EventTypeAPIRequest: getter[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}}},
 		instruments: NewInstruments(testenv.NewLogger(t), meterProvider),
 	}
 
@@ -165,11 +165,11 @@ func TestLogColumnEnricherWritesNumbersAsNumbers(t *testing.T) {
 
 	m := NewInstruments(testenv.NewLogger(t), testenv.NewMeterProvider(t))
 	tokens := &logColumnEnricher[int64]{
-		column:      column[int64]{key: CacheReadTokensColumnKey, byType: columnTable[int64]{dialect.EventTypeAPIRequest: question[int64]{log: dialect.LogDialect.CacheReadTokens, span: dialect.SpanDialect.CacheReadTokens}}},
+		column:      column[int64]{key: CacheReadTokensColumnKey, byType: columnTable[int64]{dialect.EventTypeAPIRequest: getter[int64]{log: dialect.LogDialect.CacheReadTokens, span: dialect.SpanDialect.CacheReadTokens}}},
 		instruments: m,
 	}
 	cost := &logColumnEnricher[float64]{
-		column:      column[float64]{key: CostUSDColumnKey, byType: columnTable[float64]{dialect.EventTypeAPIRequest: question[float64]{log: dialect.LogDialect.CostUSD, span: dialect.SpanDialect.CostUSD}}},
+		column:      column[float64]{key: CostUSDColumnKey, byType: columnTable[float64]{dialect.EventTypeAPIRequest: getter[float64]{log: dialect.LogDialect.CostUSD, span: dialect.SpanDialect.CostUSD}}},
 		instruments: m,
 	}
 
@@ -192,7 +192,7 @@ func TestLogColumnEnricherWritesNumbersAsNumbers(t *testing.T) {
 func TestEveryClassifiedTypeNamesTheWholeVocabularyAndNeverUnclassified(t *testing.T) {
 	t.Parallel()
 
-	table := everyClassifiedType(question[string]{log: dialect.LogDialect.SessionID, span: dialect.SpanDialect.SessionID})
+	table := everyClassifiedType(getter[string]{log: dialect.LogDialect.SessionID, span: dialect.SpanDialect.SessionID})
 	require.Len(t, table, 11)
 	require.NotContains(t, table, dialect.EventTypeUnclassified)
 	for _, eventType := range []string{
