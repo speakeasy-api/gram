@@ -7,6 +7,7 @@ import (
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/mock"
@@ -202,7 +203,10 @@ func logStringAttribute(key, value string) *otelv1.InboundLogRecord_KeyValue {
 func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 	t.Parallel()
 
-	publish := func(t *testing.T, inbound *otelv1.InboundLogRecord) map[string]*otelv1.LogRecord_AnyValue {
+	// publish runs one record through the handler and returns what reached
+	// the topic, plus how many reserved attributes the counter says were
+	// dropped on the way.
+	publish := func(t *testing.T, inbound *otelv1.InboundLogRecord) (map[string]*otelv1.LogRecord_AnyValue, int64) {
 		t.Helper()
 		var published *otelv1.LogRecord
 		publisher := gcp.NewMockPublisher[*otelv1.LogRecord]()
@@ -211,14 +215,16 @@ func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 			require.True(t, ok)
 			published = record
 		}).Return(gcp.NewSuccessPublishResult()).Once()
-		handler := NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, newTestDatabase(t), cache.NoopCache)
+		reader, meterProvider := readableMeter(t)
+		handler := NewLogTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
 		require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
 		require.NotNil(t, published)
 		attributes := make(map[string]*otelv1.LogRecord_AnyValue, len(published.GetAttributes()))
 		for _, item := range published.GetAttributes() {
 			attributes[item.GetKey()] = item.GetValue()
 		}
-		return attributes
+		dropped := agentEventCount(t, reader, enrich.MeterReservedAttributesDropped, attr.OTELSignalKey, string(enrich.SignalLog))
+		return attributes, dropped
 	}
 
 	t.Run("a classified record keeps the enricher's classification, not the producer's", func(t *testing.T) {
@@ -239,10 +245,11 @@ func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 			},
 		}).Build()
 
-		attributes := publish(t, inbound)
+		attributes, dropped := publish(t, inbound)
 		require.Equal(t, "api_request", attributes[string(enrich.EventTypeColumnKey)].GetStringValue())
 		require.Equal(t, "anthropic", attributes[string(enrich.ProviderColumnKey)].GetStringValue())
 		require.NotContains(t, attributes, string(enrich.TextColumnKey), "a key no enricher writes is gone, not kept")
+		require.Equal(t, int64(3), dropped, "every forged key is counted, so a producer writing the namespace is visible")
 	})
 
 	t.Run("an unclassified record gets no type key however hard the producer tries", func(t *testing.T) {
@@ -261,9 +268,28 @@ func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 			},
 		}).Build()
 
-		attributes := publish(t, inbound)
+		attributes, dropped := publish(t, inbound)
 		require.NotContains(t, attributes, string(enrich.EventTypeColumnKey))
 		require.Equal(t, enrich.SourceUnknown, attributes[string(enrich.SourceColumnKey)].GetStringValue())
 		require.Contains(t, attributes, "gen_ai.input.messages", "the producer's own attributes stay")
+		require.Equal(t, int64(1), dropped)
+	})
+
+	t.Run("a record that sends nothing reserved counts nothing", func(t *testing.T) {
+		t.Parallel()
+		inbound := (&otelv1.InboundLogRecord_builder{
+			RecordId:  new("record-id"),
+			EventName: new("api_request"),
+			Scope:     (&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: new(claudeCodeScopeName)}).Build(),
+			Provenance: (&otelv1.InboundLogRecord_Provenance_builder{
+				Source:         new("speakeasy"),
+				OrganizationId: new(testLogOrganizationID),
+				ProjectId:      new(testLogProjectID),
+			}).Build(),
+			Attributes: []*otelv1.InboundLogRecord_KeyValue{logStringAttribute("model", "claude-sonnet-4")},
+		}).Build()
+
+		_, dropped := publish(t, inbound)
+		require.Zero(t, dropped)
 	})
 }

@@ -59,3 +59,18 @@ func TestRecordMetricEnricherDurationIgnoresUnavailableInstrument(t *testing.T) 
 		m.recordMetricEnricherDuration(t.Context(), "test-enricher", 0.25, o11y.OutcomeSuccess)
 	})
 }
+
+func TestRecordReservedAttributesDroppedIgnoresUnavailableInstrument(t *testing.T) {
+	t.Parallel()
+
+	m := &Instruments{
+		logEnricherDuration:       nil,
+		metricEnricherDuration:    nil,
+		spanEnricherDuration:      nil,
+		columnValueMissing:        nil,
+		reservedAttributesDropped: nil,
+	}
+	require.NotPanics(t, func() {
+		m.RecordReservedAttributesDropped(t.Context(), SignalLog, 2)
+	})
+}

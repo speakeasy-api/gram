@@ -18,11 +18,27 @@ import (
 // so the series stay bounded.
 const meterColumnEnricherMissing = "gram.otel_column_enricher.missing"
 
+// MeterReservedAttributesDropped counts the attributes a transform dropped
+// because a producer sent them under Gram's reserved speakeasy.event
+// namespace, by signal. Only the column enrichers may write there; a
+// producer that does, by accident or on purpose, is otherwise invisible.
+const MeterReservedAttributesDropped = "gram.otel_reserved_attributes_dropped"
+
+// Signal names which kind of record a transform handles, for the metrics
+// the transforms share.
+type Signal string
+
+const (
+	SignalLog  Signal = "log"
+	SignalSpan Signal = "span"
+)
+
 type Instruments struct {
-	logEnricherDuration    metric.Float64Histogram
-	metricEnricherDuration metric.Float64Histogram
-	spanEnricherDuration   metric.Float64Histogram
-	columnValueMissing     metric.Int64Counter
+	logEnricherDuration       metric.Float64Histogram
+	metricEnricherDuration    metric.Float64Histogram
+	spanEnricherDuration      metric.Float64Histogram
+	columnValueMissing        metric.Int64Counter
+	reservedAttributesDropped metric.Int64Counter
 }
 
 func NewInstruments(logger *slog.Logger, meterProvider metric.MeterProvider) *Instruments {
@@ -67,12 +83,35 @@ func NewInstruments(logger *slog.Logger, meterProvider metric.MeterProvider) *In
 		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterColumnEnricherMissing), attr.SlogError(err))
 	}
 
-	return &Instruments{
-		logEnricherDuration:    logEnricherDuration,
-		metricEnricherDuration: metricEnricherDuration,
-		spanEnricherDuration:   spanEnricherDuration,
-		columnValueMissing:     columnValueMissing,
+	reservedAttributesDropped, err := meter.Int64Counter(
+		MeterReservedAttributesDropped,
+		metric.WithDescription("Attributes a transform dropped because a producer sent them under the reserved speakeasy.event namespace"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(MeterReservedAttributesDropped), attr.SlogError(err))
 	}
+
+	return &Instruments{
+		logEnricherDuration:       logEnricherDuration,
+		metricEnricherDuration:    metricEnricherDuration,
+		spanEnricherDuration:      spanEnricherDuration,
+		columnValueMissing:        columnValueMissing,
+		reservedAttributesDropped: reservedAttributesDropped,
+	}
+}
+
+// RecordReservedAttributesDropped counts attributes a transform dropped from
+// one record because a producer sent them under the reserved namespace.
+func (m *Instruments) RecordReservedAttributesDropped(ctx context.Context, signal Signal, count int) {
+	if m.reservedAttributesDropped == nil || count <= 0 {
+		return
+	}
+
+	m.reservedAttributesDropped.Add(
+		ctx,
+		int64(count),
+		metric.WithAttributes(attr.OTELSignal(signal)),
+	)
 }
 
 func (m *Instruments) recordColumnValueMissing(ctx context.Context, surface, eventType, column string) {

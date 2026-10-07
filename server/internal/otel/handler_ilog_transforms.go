@@ -62,7 +62,7 @@ func (h *LogTransformHandler) Handle(ctx context.Context, record *otelv1.Inbound
 	if err := rewriteLogInstrumentationScope(out); err != nil {
 		return fmt.Errorf("rewrite instrumentation scope: %w", err)
 	}
-	dropReservedLogAttributes(out)
+	h.instruments.RecordReservedAttributesDropped(ctx, enrich.SignalLog, dropReservedLogAttributes(out))
 
 	enrichments, err := enrich.Log(ctx, h.instruments, record, h.enrichers)
 	if err != nil {
@@ -103,19 +103,22 @@ func rewriteLogInstrumentationScope(record *otelv1.LogRecord) error {
 }
 
 // dropReservedLogAttributes removes what a producer sent under Gram's own
-// speakeasy.event namespace. Only the column enrichers write there, and they
-// leave a key off when a record carries no value for it, so a producer that
-// sends one would otherwise classify its own record. The enrichers read the
-// inbound record, so what they see is unchanged; the outbound record is what
-// every consumer and relay receives.
-func dropReservedLogAttributes(record *otelv1.LogRecord) {
+// speakeasy.event namespace and says how many attributes went. Only the
+// column enrichers write there, and they leave a key off when a record
+// carries no value for it, so a producer that sends one would otherwise
+// classify its own record. The enrichers read the inbound record, so what
+// they see is unchanged; the outbound record is what every consumer and
+// relay receives.
+func dropReservedLogAttributes(record *otelv1.LogRecord) int {
 	attributes := record.GetAttributes()
 	kept := slices.DeleteFunc(attributes, func(kv *otelv1.LogRecord_KeyValue) bool {
 		return enrich.IsEventColumnKey(kv.GetKey())
 	})
-	if len(kept) != len(attributes) {
+	dropped := len(attributes) - len(kept)
+	if dropped > 0 {
 		record.SetAttributes(kept)
 	}
+	return dropped
 }
 
 func applyLogEnrichments(out *otelv1.LogRecord, enrichments []otelattr.KeyValue) error {
