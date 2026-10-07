@@ -192,3 +192,37 @@ export const CustomContent: Story = {
     );
   },
 };
+
+export const WithDetail: Story = {
+  render: function Render() {
+    const [value, setValue] = useState("standard");
+
+    return (
+      <RadioCardGroup
+        aria-label="Delivery speed"
+        size="sm"
+        value={value}
+        onValueChange={setValue}
+      >
+        {["standard", "express"].map((option) => (
+          <RadioCard
+            key={option}
+            value={option}
+            title={
+              option === "standard" ? "Standard delivery" : "Express delivery"
+            }
+            detail={
+              value === option ? (
+                <p className="text-muted-foreground text-sm">
+                  Shown only for the selected option, outside its description.
+                </p>
+              ) : null
+            }
+          >
+            {option === "standard" ? "Three to five days." : "Next day."}
+          </RadioCard>
+        ))}
+      </RadioCardGroup>
+    );
+  },
+};

@@ -76,7 +76,7 @@ var audienceBlockLevels = []string{
 }
 
 // Agent restrictions use the same server-local exclusions as other principals.
-// They constrain live parent policy, not the allow-only delegated credential.
+// They constrain live parent policy and are carried into delegated credentials.
 var agentAudienceLevels = []string{audienceLevelUse, audienceLevelView, audienceLevelManage, audienceLevelBlocked, audienceLevelBlockedView, audienceLevelBlockedManage}
 
 // Widest first: a principal holding several scopes is reported at its highest

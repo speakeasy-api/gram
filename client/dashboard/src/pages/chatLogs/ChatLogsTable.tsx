@@ -5,6 +5,8 @@ import { SlackChannelLink } from "@/components/slack-channel-link";
 import { IdentityAvatar } from "@/components/identity-avatar";
 import { AccountTypeIcon } from "@/components/account-type-icon";
 import { ChatOwnerLabel } from "@/components/chat-owner-label";
+import { chatOwnerLabel } from "@/lib/chat-owner";
+import { AssistantActorLink } from "@/components/assistant-actor-link";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { Dialog } from "@/components/ui/Dialog";
@@ -485,6 +487,12 @@ export function ChatLogsTable({
                       </span>
                       <span className="text-muted-foreground/40">·</span>
                       <span className="inline-flex items-center gap-1.5">
+                        {chat.assistantName && (
+                          <AssistantActorLink
+                            chat={chat}
+                            className="pointer-events-auto max-w-[200px]"
+                          />
+                        )}
                         {(chat.participants?.length ?? 0) > 0 && (
                           <span
                             className="flex shrink-0 -space-x-1"
@@ -536,19 +544,36 @@ export function ChatLogsTable({
                         )}
                         {(chat.participants?.length ?? 0) === 0 &&
                           (chat.assistantName ? (
-                            <>
-                              <Icon
-                                name="bot"
-                                className="size-3.5 opacity-60"
-                              />
-                              <span className="max-w-[120px] truncate">
-                                {chat.assistantName}
-                              </span>
-                            </>
+                            (chat.userId || chat.externalUserId) && (
+                              <>
+                                <span className="text-muted-foreground/70">
+                                  for
+                                </span>
+                                <AccountTypeIcon
+                                  accountType={chat.accountType}
+                                />
+                                <span
+                                  className="pointer-events-auto max-w-[120px] truncate"
+                                  title={`Acting on behalf of ${chatOwnerLabel(
+                                    membersData?.members,
+                                    chat,
+                                    user,
+                                    personalAccountEmail(chat),
+                                  )}`}
+                                >
+                                  <ChatOwnerLabel
+                                    members={membersData?.members}
+                                    chat={chat}
+                                    currentUser={user}
+                                    accountEmail={personalAccountEmail(chat)}
+                                  />
+                                </span>
+                              </>
+                            )
                           ) : (
                             <>
                               <AccountTypeIcon accountType={chat.accountType} />
-                              <span className="max-w-[120px] truncate">
+                              <span className="pointer-events-auto max-w-[120px] truncate">
                                 <ChatOwnerLabel
                                   members={membersData?.members}
                                   chat={chat}

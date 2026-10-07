@@ -52,7 +52,7 @@ func (s *ServiceCore) delegableGrants(ctx context.Context, organizationID string
 		}
 		policies = append(policies, grants)
 	}
-	grants, err := runtimepolicy.DelegableGrants(ceiling, policies[0], policies[1])
+	grants, err := runtimepolicy.DelegableGrantsWithExclusions(ceiling, policies[0], policies[1])
 	if err != nil {
 		return nil, fmt.Errorf("derive turn credential grants: %w", err)
 	}

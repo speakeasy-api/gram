@@ -20,8 +20,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -52,7 +54,7 @@ func newTunnelHTTPClient(c *cli.Context, guardianPolicy *guardian.Policy, redisC
 	return tunnelrouting.NewHTTPClient(route.NewRedis(redisClient), c.String("tunnel-forward-token"), guardianPolicy, cidrs), nil
 }
 
-func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, redisClient *redis.Client, serverURL *url.URL, callbackOrigins remotesessions.CallbackOrigins, auditLogger *audit.Logger, assertionSigner remotesessions.TokenEndpointAssertionSigner) (*mcpRemoteSessionDependencies, error) {
+func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, redisClient *redis.Client, serverURL *url.URL, callbackOrigins remotesessions.CallbackOrigins, auditLogger *audit.Logger, assertionSigner remotesessions.TokenEndpointAssertionSigner, protectedResources *protectedresource.Prober, features feature.Provider) (*mcpRemoteSessionDependencies, error) {
 	idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, guardianPolicy, meterProvider, ratelimit.NewRedisStore(redisClient))
 	if err != nil {
 		return nil, fmt.Errorf("initialize remote session id token key resolver: %w", err)
@@ -70,6 +72,8 @@ func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.T
 		remotesessions.WithSessionEnricher(enricher),
 		remotesessions.WithRegistrationAuditLogger(auditLogger),
 		remotesessions.WithTokenEndpointAssertionSigner(assertionSigner),
-		remotesessions.WithCallbackOrigins(callbackOrigins))
+		remotesessions.WithCallbackOrigins(callbackOrigins),
+		remotesessions.WithProtectedResourceProber(protectedResources),
+		remotesessions.WithFeatureFlags(features))
 	return &mcpRemoteSessionDependencies{Verifier: verifier, Refresher: refresher, Enricher: enricher, Challenges: challenges}, nil
 }

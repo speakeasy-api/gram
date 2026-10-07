@@ -229,6 +229,11 @@ type CreateGlobalIssuerRequestBody struct {
 	// authorize redirect in place of the resolved scope set. Omit or send an empty
 	// array to leave it unset.
 	ScopeOverride []string `form:"scope_override,omitempty" json:"scope_override,omitempty" xml:"scope_override,omitempty"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Omit to leave it unset: such a login requests the provider's whole
+	// scopes_supported.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
 	// unset: the parameter is then sent, and a login or refresh the issuer answers
 	// with invalid_target is retried once without it. Set false to never send it.
@@ -321,6 +326,11 @@ type UpdateGlobalIssuerRequestBody struct {
 	// Set or clear the operator-pinned scope request. Omitting the field (or
 	// sending null) leaves the stored value unchanged; an empty array clears it.
 	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Omit or send null to keep the stored value; false restores the
+	// default.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omitting the
 	// field leaves the stored value unchanged.
 	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
@@ -1313,6 +1323,10 @@ type CreateGlobalIssuerResponseBody struct {
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
 	// redirect in place of the resolved scope set. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Null when unset.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
 	ResourceIndicatorSupported *bool   `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
@@ -1455,6 +1469,10 @@ type UpdateGlobalIssuerResponseBody struct {
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
 	// redirect in place of the resolved scope set. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Null when unset.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
 	ResourceIndicatorSupported *bool   `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
@@ -18313,6 +18331,10 @@ type RemoteSessionIssuerResponseBody struct {
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
 	// redirect in place of the resolved scope set. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Null when unset.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
 	ResourceIndicatorSupported *bool   `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
@@ -18664,6 +18686,9 @@ type AdminMcpServerHealthRemoteSessionIssuerResponseBody struct {
 	// Operator-pinned scopes sent in place of the discovered set. Absent when
 	// unset.
 	ScopeOverride []string `form:"scope_override,omitempty" json:"scope_override,omitempty" xml:"scope_override,omitempty"`
+	// Whether a login with no other scope source sends no scope instead of the
+	// issuer's whole scopes_supported. Absent when unset, which behaves as false.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Last successful metadata discovery.
 	MetadataFetchedAt *string `form:"metadata_fetched_at,omitempty" json:"metadata_fetched_at,omitempty" xml:"metadata_fetched_at,omitempty"`
 	// Last failed metadata discovery.
@@ -19067,6 +19092,7 @@ func NewCreateGlobalIssuerRequestBody(p *admin.CreateGlobalIssuerPayload) *Creat
 		IntrospectionEndpoint:             p.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        p.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: p.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          p.OmitScopeFallback,
 		ResourceIndicatorSupported:                 p.ResourceIndicatorSupported,
 	}
 	if p.ScopesSupported != nil {
@@ -19158,6 +19184,7 @@ func NewUpdateGlobalIssuerRequestBody(p *admin.UpdateGlobalIssuerPayload) *Updat
 		IntrospectionEndpoint:             p.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        p.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: p.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          p.OmitScopeFallback,
 		ResourceIndicatorSupported:                 p.ResourceIndicatorSupported,
 	}
 	if p.ScopesSupported != nil {
@@ -25798,6 +25825,7 @@ func NewCreateGlobalIssuerRemoteSessionIssuerOK(body *CreateGlobalIssuerResponse
 		IntrospectionEndpoint:             body.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: body.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          body.OmitScopeFallback,
 		ResourceIndicatorSupported:                 body.ResourceIndicatorSupported,
 		CreatedAt:                                  *body.CreatedAt,
 		UpdatedAt:                                  *body.UpdatedAt,
@@ -26605,6 +26633,7 @@ func NewUpdateGlobalIssuerRemoteSessionIssuerOK(body *UpdateGlobalIssuerResponse
 		IntrospectionEndpoint:             body.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: body.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          body.OmitScopeFallback,
 		ResourceIndicatorSupported:                 body.ResourceIndicatorSupported,
 		CreatedAt:                                  *body.CreatedAt,
 		UpdatedAt:                                  *body.UpdatedAt,

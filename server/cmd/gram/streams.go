@@ -85,6 +85,24 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/webhooks/svixrelay"
 )
 
+const (
+	// spanEventWriterBatchMessages gives a single receiver headroom above a
+	// sizing target of 1,000 spans per second while keeping insert batches bounded.
+	spanEventWriterBatchMessages = 2000
+
+	// spanEventWriterBatchBytes flushes large spans when their batch payload
+	// reaches the 10 MiB insert budget.
+	spanEventWriterBatchBytes = 10 * constants.MiB
+
+	// spanEventWriterBatchLatency bounds the wait for a partial batch so sparse
+	// traffic and byte-limited deliveries are acknowledged promptly.
+	spanEventWriterBatchLatency = time.Second
+
+	// spanEventWriterOutstandingBatches allows one batch to fill while another
+	// is being inserted and acknowledged by the Pub/Sub service.
+	spanEventWriterOutstandingBatches = 2
+)
+
 func newStreamsCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 
@@ -723,7 +741,14 @@ func newStreamsCommand() *cli.Command {
 				// Event feed tee: mirror the normalized OTEL topics into the
 				// otel_logs / otel_traces ClickHouse tables.
 				mustReceiveBatch(rg, &otelv1.LogRecord{}, &otelv1.LogEventCHWriter{}, otelsvc.NewLogEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
-				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.SpanEventCHWriter{}, otelsvc.NewSpanEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				spanEventReceiveSettings := pubsub.DefaultReceiveSettings
+				spanEventReceiveSettings.MaxOutstandingMessages = spanEventWriterOutstandingBatches * spanEventWriterBatchMessages
+				spanEventReceiveSettings.MaxOutstandingBytes = spanEventWriterOutstandingBatches * spanEventWriterBatchBytes
+				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.SpanEventCHWriter{}, otelsvc.NewSpanEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{
+					MaxMessages: spanEventWriterBatchMessages,
+					MaxBytes:    spanEventWriterBatchBytes,
+					MaxLatency:  spanEventWriterBatchLatency,
+				}, gcp.WithPubSubReceiveSettings(&spanEventReceiveSettings))
 
 				// Agent session tee: project the same normalized OTEL topics into
 				// agent_events, in agent vocabulary, for the semantic query layer.

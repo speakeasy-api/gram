@@ -10,13 +10,15 @@ func (f *ProxyManager) SetAfterChallengeScopes(fn func()) { f.afterChallengeScop
 
 // SetBeforeProtectedResourceProbe runs fn synchronously when detached work is scheduled.
 func (f *ProxyManager) SetBeforeProtectedResourceProbe(fn func()) {
-	f.beforeProtectedResourceProbe = fn
+	f.protectedResources.SetBeforeDetached(fn)
 }
 
 // SetAfterProtectedResourceProbe runs fn after a detached on-use probe finishes.
-func (f *ProxyManager) SetAfterProtectedResourceProbe(fn func()) { f.afterProtectedResourceProbe = fn }
+func (f *ProxyManager) SetAfterProtectedResourceProbe(fn func()) {
+	f.protectedResources.SetAfterDetached(fn)
+}
 
 // SetProtectedResourceProbeClock replaces the clock the on-use probe reads.
 func (f *ProxyManager) SetProtectedResourceProbeClock(now func() time.Time) {
-	f.protectedResourceProbes.now = now
+	f.protectedResources.SetClock(now)
 }

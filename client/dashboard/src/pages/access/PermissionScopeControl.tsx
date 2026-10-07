@@ -3,7 +3,10 @@ import { Text } from "@/components/ui/Text";
 import { X } from "lucide-react";
 import type { JSX } from "react";
 import type { ResourceType, ScopeRule } from "./types";
-import { isProjectScopedResourceType } from "./types";
+import {
+  isProjectFilteredResourceType,
+  isProjectScopedResourceType,
+} from "./types";
 
 /**
  * What one permission applies to, as a single control.
@@ -44,12 +47,18 @@ export function PermissionScopeControl({
 }): JSX.Element | null {
   if (!allowRule) return null;
 
-  const everything = isProjectScopedResourceType(resourceType)
-    ? "All projects"
-    : "All servers";
-  const specific = isProjectScopedResourceType(resourceType)
-    ? "Specific projects…"
-    : "Specific servers…";
+  const everything = isProjectFilteredResourceType(resourceType)
+    ? "All assistants"
+    : isProjectScopedResourceType(resourceType)
+      ? "All projects"
+      : "All servers";
+  // The picker offers both narrowings for assistants: whole projects, or
+  // individual assistants.
+  const specific = isProjectFilteredResourceType(resourceType)
+    ? "Specific assistants or projects…"
+    : isProjectScopedResourceType(resourceType)
+      ? "Specific projects…"
+      : "Specific servers…";
 
   return (
     // One sentence: "Applies to All servers except 1 server". The exception is
