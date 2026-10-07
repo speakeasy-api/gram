@@ -1,7 +1,7 @@
 // Command gen-workload-catalog-fixture writes the workload platform catalog,
 // exactly as workloadIdentities.listPlatforms serves it, to the dashboard's
-// test fixture. Dashboard tests then render the real catalog entries instead
-// of a hand-kept copy that can drift from them.
+// test fixture, so dashboard tests render the catalog entries the server
+// serves.
 package main
 
 import (
