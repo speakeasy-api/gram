@@ -34,6 +34,10 @@ const (
 	discoverProtectedResourceMaxBodyBytes = 1 << 20
 )
 
+// DiscoveryCodeTimeout is the ProtectedResourceDiscoveryError code for a probe
+// whose deadline expired during the probe, before or while reading the response.
+const DiscoveryCodeTimeout = "timeout"
+
 // errReadProbeBody marks a probe failure that happened while consuming the
 // response body of a 200 OK upstream. It exists so Code() can distinguish a
 // connection that died mid-response (transport_error) from a body that was
@@ -84,7 +88,7 @@ func (e *ProtectedResourceDiscoveryError) Code() string {
 	case errors.Is(e.cause, guardian.ErrBlockedIP), errors.Is(e.cause, guardian.ErrBadHost):
 		return "host_blocked"
 	case errors.Is(e.cause, context.DeadlineExceeded):
-		return "timeout"
+		return DiscoveryCodeTimeout
 	case e.ProbeURL == "":
 		return "invalid_url"
 	case e.Status == http.StatusNotFound:
@@ -99,7 +103,7 @@ func (e *ProtectedResourceDiscoveryError) Code() string {
 		return "http_error"
 	default:
 		if netErr, ok := errors.AsType[net.Error](e.cause); ok && netErr.Timeout() {
-			return "timeout"
+			return DiscoveryCodeTimeout
 		}
 		return "transport_error"
 	}
@@ -115,7 +119,7 @@ func (e *ProtectedResourceDiscoveryError) UserMessage() string {
 		return "Could not compute OAuth protected resource metadata URL for the remote MCP server"
 	case "host_blocked":
 		return "Host is not allowed by network policy"
-	case "timeout":
+	case DiscoveryCodeTimeout:
 		return fmt.Sprintf("Timed out probing OAuth protected resource metadata at %s", probeURL)
 	case "not_found":
 		return fmt.Sprintf("OAuth protected resource metadata not advertised at %s", probeURL)
