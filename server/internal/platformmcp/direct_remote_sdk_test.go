@@ -550,3 +550,36 @@ func TestDirectRemoteSDKRejectsEmptyCallResponses(t *testing.T) {
 	_, err := inspector.Inspect(t.Context(), "https://remote.example.test/mcp")
 	require.Equal(t, SetupCategoryInvalidMCPResponse, setupCategoryFromError(err))
 }
+
+// TestDirectRemoteSDKIgnoresInboundProtocolVersion inspects from inside a tool
+// call on a stateless go-sdk server, as inspect_mcp_candidate does. The caller
+// negotiates 2026-07-28; the legacy fixture fails the test if tools/list does
+// not carry the 2025-06-18 version it negotiated.
+func TestDirectRemoteSDKIgnoresInboundProtocolVersion(t *testing.T) {
+	t.Parallel()
+	inspector, methods := directRemoteProtocolFixture(t, "legacy")
+
+	var toolNames []string
+	platformServer := mcp.NewServer(&mcp.Implementation{Name: "platform", Version: "1"}, nil)
+	platformServer.AddTool(&mcp.Tool{Name: "inspect", InputSchema: json.RawMessage(`{"type":"object"}`)}, func(ctx context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		result, err := inspector.Inspect(ctx, "https://remote.example.test/mcp")
+		if err != nil {
+			return nil, err
+		}
+		toolNames = result.ToolNames
+		return &mcp.CallToolResult{}, nil
+	})
+	platform := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return platformServer }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true}))
+	t.Cleanup(platform.Close)
+
+	caller := mcp.NewClient(&mcp.Implementation{Name: "caller", Version: "1"}, nil)
+	session, err := caller.Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: platform.URL, MaxRetries: -1, DisableStandaloneSSE: true}, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Close() })
+
+	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "inspect"})
+	require.NoError(t, err)
+	require.False(t, result.IsError)
+	require.Equal(t, []string{"example"}, toolNames)
+	require.Equal(t, []string{"server/discover", "initialize", "notifications/initialized", "tools/list"}, methods())
+}
