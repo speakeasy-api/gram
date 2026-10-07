@@ -294,7 +294,7 @@ func (s *Service) buildRemoteConnectURL(
 		for i := range bound {
 			boundIDs = append(boundIDs, bound[i].ID)
 		}
-		clientResource, rerr = s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, client.ID, boundIDs, endpoint.UpstreamResource)
+		clientResource, rerr = s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, endpoint.OrganizationID, client.ID, boundIDs, endpoint.UpstreamResource)
 	}
 	if rerr != nil {
 		return "", false, oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)

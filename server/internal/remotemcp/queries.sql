@@ -230,6 +230,73 @@ SET
     updated_at = clock_timestamp()
 RETURNING *;
 
+-- name: UpsertRemoteProtectedResourceIfChanged :execrows
+-- UpsertRemoteProtectedResource for a login's read: an existing row is only
+-- rewritten when the document or its location changed, a failure is on
+-- record, or the last good read is older than a day. jsonb compares by
+-- value, so whitespace and key order in the upstream body do not count as a
+-- change. Zero rows means the row already held this read.
+INSERT INTO remote_protected_resources (
+    project_id,
+    organization_id,
+    resource_identifier,
+    metadata_url,
+    authorization_servers,
+    scopes_supported,
+    bearer_methods_supported,
+    resource_name,
+    resource_documentation,
+    resource_policy_uri,
+    resource_tos_uri,
+    dpop_bound_access_tokens_required,
+    dpop_signing_alg_values_supported,
+    tls_client_certificate_bound_access_tokens,
+    metadata,
+    metadata_fetched_at
+)
+VALUES (
+    @project_id,
+    @organization_id,
+    @resource_identifier::text,
+    NULLIF(@metadata_url::text, ''),
+    sqlc.narg(authorization_servers)::text[],
+    sqlc.narg(scopes_supported)::text[],
+    sqlc.narg(bearer_methods_supported)::text[],
+    NULLIF(@resource_name::text, ''),
+    NULLIF(@resource_documentation::text, ''),
+    NULLIF(@resource_policy_uri::text, ''),
+    NULLIF(@resource_tos_uri::text, ''),
+    sqlc.narg(dpop_bound_access_tokens_required)::boolean,
+    sqlc.narg(dpop_signing_alg_values_supported)::text[],
+    sqlc.narg(tls_client_certificate_bound_access_tokens)::boolean,
+    NULLIF(@metadata::text, '')::jsonb,
+    clock_timestamp()
+)
+ON CONFLICT (project_id, resource_identifier) WHERE deleted IS FALSE DO UPDATE
+SET
+    organization_id = EXCLUDED.organization_id,
+    metadata_url = EXCLUDED.metadata_url,
+    authorization_servers = EXCLUDED.authorization_servers,
+    scopes_supported = EXCLUDED.scopes_supported,
+    bearer_methods_supported = EXCLUDED.bearer_methods_supported,
+    resource_name = EXCLUDED.resource_name,
+    resource_documentation = EXCLUDED.resource_documentation,
+    resource_policy_uri = EXCLUDED.resource_policy_uri,
+    resource_tos_uri = EXCLUDED.resource_tos_uri,
+    dpop_bound_access_tokens_required = EXCLUDED.dpop_bound_access_tokens_required,
+    dpop_signing_alg_values_supported = EXCLUDED.dpop_signing_alg_values_supported,
+    tls_client_certificate_bound_access_tokens = EXCLUDED.tls_client_certificate_bound_access_tokens,
+    metadata = EXCLUDED.metadata,
+    metadata_fetched_at = clock_timestamp(),
+    metadata_last_error = NULL,
+    metadata_last_error_at = NULL,
+    updated_at = clock_timestamp()
+WHERE remote_protected_resources.metadata IS DISTINCT FROM EXCLUDED.metadata
+   OR remote_protected_resources.metadata_url IS DISTINCT FROM EXCLUDED.metadata_url
+   OR remote_protected_resources.metadata_last_error_at IS NOT NULL
+   OR remote_protected_resources.metadata_fetched_at IS NULL
+   OR remote_protected_resources.metadata_fetched_at < clock_timestamp() - INTERVAL '24 hours';
+
 -- name: RecordRemoteProtectedResourceFetchError :one
 -- Records why the last read of resource_identifier failed without touching
 -- what an earlier read advertised. Creates the row when none exists.
@@ -263,6 +330,26 @@ SET
     challenge_scopes = @challenge_scopes::text[],
     challenge_scopes_seen_at = clock_timestamp(),
     updated_at = clock_timestamp()
+WHERE project_id = @project_id
+    AND resource_identifier = @resource_identifier::text
+    AND deleted IS FALSE;
+
+-- name: SetRemoteProtectedResourceScopeOverride :execrows
+-- Pins the scopes logins to this resource request; NULL or an empty array clears the pin.
+UPDATE remote_protected_resources
+SET
+    scope_override = CASE WHEN cardinality(sqlc.narg(scope_override)::text[]) > 0 THEN sqlc.narg(scope_override)::text[] END,
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id
+    AND resource_identifier = @resource_identifier::text
+    AND deleted IS FALSE;
+
+-- name: SetRemoteProtectedResourceMetadataTimestamps :execrows
+-- Test fixture: backdates when the row was last read or last failed.
+UPDATE remote_protected_resources
+SET
+    metadata_fetched_at = sqlc.narg(metadata_fetched_at)::timestamptz,
+    metadata_last_error_at = sqlc.narg(metadata_last_error_at)::timestamptz
 WHERE project_id = @project_id
     AND resource_identifier = @resource_identifier::text
     AND deleted IS FALSE;

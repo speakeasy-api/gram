@@ -618,6 +618,7 @@ func (s *Service) createConnectionRows(ctx context.Context, logger *slog.Logger,
 		BackchannelLogoutSupported:                 pgtype.Bool{Bool: metadata.BackchannelLogoutSupported, Valid: true},
 		AuthorizationResponseIssParameterSupported: pgtype.Bool{Bool: metadata.AuthorizationResponseIssParameterSupported, Valid: true},
 		ScopeOverride:                              nil,
+		OmitScopeFallback:                          pgtype.Bool{Bool: false, Valid: false},
 		ResourceIndicatorSupported:                 pgtype.Bool{Bool: false, Valid: false},
 		Metadata:                                   metadata.Metadata,
 		MetadataFetchedAt:                          conv.ToPGTimestamptz(now),
@@ -993,8 +994,19 @@ func (s *Service) SetSetupMethod(ctx context.Context, payload *gen.SetSetupMetho
 		ListingMode:      listingMode,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName: authCtx.Email,
+		Record: func(ctx context.Context, dbtx pgx.Tx, client *ManagedClient) error {
+			after := *before
+			after.Okta.ListingMode = listingMode
+			after.Managed = client
+			if err := s.audit.LogIdentityProviderConnectionSetSetupMethod(ctx, dbtx, s.auditEvent(authCtx, id, snapshot(*before), snapshot(after))); err != nil {
+				return fmt.Errorf("log setup method change: %w", err)
+			}
+			return nil
+		},
 	})
 	switch {
+	case errors.Is(err, ErrAuthMethodMismatch):
+		return nil, oops.E(oops.CodeConflict, err, "the setup method changed concurrently; reload and try again")
 	case errors.Is(err, ErrClientIDAlreadySet):
 		return nil, oops.E(oops.CodeConflict, err, "the setup method can only change before the client ID is submitted")
 	case errors.Is(err, ErrConnectionNotFound), errors.Is(err, ErrNotProvisioned):
@@ -1009,9 +1021,6 @@ func (s *Service) SetSetupMethod(ctx context.Context, payload *gen.SetSetupMetho
 	after, err := s.load(ctx, logger, authCtx.ActiveOrganizationID, conv.ToNullUUID(id))
 	if err != nil {
 		return nil, err
-	}
-	if err := s.audit.LogIdentityProviderConnectionSetSetupMethod(ctx, s.db, s.auditEvent(authCtx, id, snapshot(*before), snapshot(*after))); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log setup method change").LogError(ctx, logger)
 	}
 	return s.view(ctx, logger, s.db, *after), nil
 }
@@ -1395,6 +1404,12 @@ func (s *Service) Revoke(ctx context.Context, payload *gen.RevokePayload) (*gen.
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit connection revocation").LogError(ctx, logger)
 	}
+	// A setup-method switch can mint a key between the early revocation and the
+	// tombstone; none can start after it, so a second pass catches that key.
+	if _, err := s.provisioner.RevokeClient(ctx, authCtx.ActiveOrganizationID, id); err != nil && !errors.Is(err, ErrNotProvisioned) {
+		logger.ErrorContext(ctx, "failed to revoke credential after tombstoning the connection; revoke it by hand", attr.SlogError(err))
+	}
+	s.oktaClients.Forget(existing.OktaIdentityProviderConnection.RemoteSessionClientID)
 
 	// The managed client lookup reflects the revoked key set.
 	rows, err := s.withRevokedManagedClient(ctx, logger, s.db, connection, oktaRow)

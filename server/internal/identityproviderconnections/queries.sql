@@ -399,6 +399,17 @@ WHERE s.organization_id = @organization_id
 ORDER BY s.created_at DESC
 FOR UPDATE OF s;
 
+-- Rechecked after the parked set is locked: reattachment takes the same set
+-- lock first, so a set seen detached here cannot be reattached before commit.
+-- name: KeySetAttached :one
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_clients
+  WHERE organization_id = @organization_id
+    AND json_web_key_set_id = @json_web_key_set_id
+    AND deleted IS FALSE
+);
+
 -- name: SetOktaListingMode :one
 UPDATE okta_identity_provider_connections
 SET listing_mode = @listing_mode,

@@ -100,6 +100,10 @@ type RemoteSessionIssuer struct {
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
 	// redirect in place of the resolved scope set. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Null when unset.
+	OmitScopeFallback *bool
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
 	ResourceIndicatorSupported *bool
