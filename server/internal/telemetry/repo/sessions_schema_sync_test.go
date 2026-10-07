@@ -15,7 +15,7 @@ import (
 // ListSessions path). This test pins the shared SQL fragments on both sides —
 // editing the Go constants or the MV without moving the other breaks it,
 // forcing the change to be applied everywhere (including a MODIFY QUERY
-// migration + backfill for the MV; see the clickhouse skill).
+// migration for future inserts; see the clickhouse skill).
 //
 // There used to be a third copy, in the local seed script's
 // chatSessionBackfillSQL, with its own test. The seed no longer re-derives
@@ -36,14 +36,19 @@ var sessionSharedPredicateFragments = []string{
 	// LiteLLM normalized model spans.
 	"gram_urn = 'litellm:otel:traces' AND event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')",
 	// Agent completed tool-call hook rows.
-	"hook_source IN ('codex', 'cursor', 'opencode', 'openclaw', 'pi') AND toString(attributes.gram.tool.name) != '' AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')",
+	"(toString(attributes.gram.hook.schema) != 'hook.ingest.v1' AND hook_source IN ('codex', 'cursor', 'opencode', 'openclaw', 'pi') AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure') AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor'))",
 	// Unified-ingest per-turn usage rows (opencode, openclaw, Pi).
-	"hook_source IN ('opencode', 'openclaw', 'pi') AND toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')",
+	"(toString(attributes.gram.hook.schema) != 'hook.ingest.v1' AND hook_source IN ('opencode', 'openclaw', 'pi') AND toString(attributes.gram.hook.event) = 'AfterAgentResponse')",
+	// Ingest-stamped canonical rows, including unknown harnesses.
+	"(gram_urn = '' AND toString(attributes.gram.hook.schema) = 'hook.ingest.v1')",
+	"(hook_source NOT IN ('claude', 'claude-code', 'cowork') OR toString(attributes.gram.hook.transport) = 'ahp') AND toString(attributes.gram.hook.canonical_event) IN ('tool.completed', 'tool.failed')",
+	"toString(attributes.gram.hook.transport) != 'ahp' AND hook_source NOT IN ('claude', 'claude-code', 'cowork', 'codex', 'cursor', 'claude_chat', 'chatgpt', 'litellm') AND toString(attributes.gram.hook.canonical_event) = 'assistant.responded'",
+	"toString(attributes.gram.hook.transport) = 'ahp' AND toString(attributes.gram.hook.canonical_event) = 'usage.reported' AND toString(attributes.gram.hook.usage_authority) = 'model_attempt'",
 	// Tool-call dedup identity.
 	"multiIf(toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id), toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id), toString(id))",
 	// Failed tool-call markers.
 	"toString(attributes.success) = 'false'",
-	"(toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400)",
+	"(toString(attributes.gram.hook.canonical_event) = 'tool.failed' OR toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400)",
 	// Cost fallback chain.
 	"multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0)",
 	// total_tokens = input + output + cache writes.

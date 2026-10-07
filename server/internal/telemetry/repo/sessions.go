@@ -64,18 +64,23 @@ const (
 	// the summaries cover agent surfaces only, and claude-code:usage
 	// duplicates the OTEL api_request stream.
 	sessionAgentUsageRowPredicate = "(startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage'))"
-	// sessionHookTurnUsageRowPredicate matches opencode's, openclaw's and Pi's
-	// per-turn usage rows. Both report tokens and cost on their unified-ingest
-	// assistant.responded rows, under the canonical gen_ai.usage.* keys the
-	// generic fallback branches already read. Neither has an OTEL stream and the
-	// unified-ingest path stamps no gram_urn, so provenance anchors on
-	// hook_source. The AfterAgentResponse event guard keeps a session's other
-	// rows (thoughts, usage.reported, tool calls, lifecycle) from double-counting
-	// as usage turns; cost is part of the guard so a cost-only turn still counts.
-	// Mirrors is_hook_turn_usage_row in the MVs (server/clickhouse/schema.sql).
+	// New canonical hooks require ingest-stamped provenance and no provider URN.
+	sessionCanonicalHookRowPredicate = "(gram_urn = '' AND toString(attributes.gram.hook.schema) = 'hook.ingest.v1')"
+	// AHP counts only backend-selected usage.reported model-attempt samples.
+	// Presentation messages and turn-total companions are not usage authorities.
+	// Other canonical hooks retain assistant.responded as their per-turn source.
+	// Keep the legacy allowlist only for unstamped rows (no historical backfill).
 	sessionHookTurnUsageRowPredicate = "(" +
+		"((" + sessionCanonicalHookRowPredicate + " AND " +
+		"((toString(attributes.gram.hook.transport) = 'ahp' AND " +
+		"toString(attributes.gram.hook.canonical_event) = 'usage.reported' AND " +
+		"toString(attributes.gram.hook.usage_authority) = 'model_attempt') OR " +
+		"(toString(attributes.gram.hook.transport) != 'ahp' AND " +
+		"hook_source NOT IN ('claude', 'claude-code', 'cowork', 'codex', 'cursor', 'claude_chat', 'chatgpt', 'litellm') AND " +
+		"toString(attributes.gram.hook.canonical_event) = 'assistant.responded'))) OR " +
+		"(toString(attributes.gram.hook.schema) != 'hook.ingest.v1' AND " +
 		"hook_source IN ('opencode', 'openclaw', 'pi') AND " +
-		"toString(attributes.gram.hook.event) = 'AfterAgentResponse' AND " +
+		"toString(attributes.gram.hook.event) = 'AfterAgentResponse')) AND " +
 		"(toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')" +
 		")"
 	// sessionLiteLLMUsageRowPredicate matches only normalized LiteLLM client
@@ -85,15 +90,21 @@ const (
 		"gram_urn = 'litellm:otel:traces' AND " +
 		"event_urn IN ('urn:telemetry:provider_otel:span:chat', 'urn:telemetry:provider_otel:span:embeddings', 'urn:telemetry:provider_otel:span:text_completion')" +
 		")"
-	// sessionAgentToolCallPredicate matches Codex/Cursor/opencode/openclaw/Pi
-	// completed tool-call hook rows (they have no OTEL stream). The hook.event
-	// guard excludes the PreToolUse companion row; provider names are not tool
-	// calls.
+	// Count executed canonical completions from arbitrary harnesses, except
+	// Claude whose OTEL tool_result stream remains authoritative. Denied/skipped
+	// AHP tool.after observations must not be stamped as canonical completions.
+	// AHP is a native authority independent of the caller-selected harness name.
+	// The backend must emit one usage.reported/model_attempt sample per model
+	// attempt and must not emit a second sample alongside provider OTEL.
 	sessionAgentToolCallPredicate = "(" +
+		"((" + sessionCanonicalHookRowPredicate + " AND " +
+		"(hook_source NOT IN ('claude', 'claude-code', 'cowork') OR toString(attributes.gram.hook.transport) = 'ahp') AND " +
+		"toString(attributes.gram.hook.canonical_event) IN ('tool.completed', 'tool.failed')) OR " +
+		"(toString(attributes.gram.hook.schema) != 'hook.ingest.v1' AND " +
 		"hook_source IN ('codex', 'cursor', 'opencode', 'openclaw', 'pi') AND " +
-		"toString(attributes.gram.tool.name) != '' AND " +
-		"toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor') AND " +
-		"toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')" +
+		"toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure') AND " +
+		"toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor'))) AND " +
+		"toString(attributes.gram.tool.name) != ''" +
 		")"
 	sessionCountedToolCallPredicate = "(" + sessionClaudeToolResultPredicate + " OR " + sessionAgentToolCallPredicate + ")"
 	// sessionFailedToolCallPredicate marks a counted tool call as failed: Claude
@@ -102,7 +113,7 @@ const (
 	sessionFailedToolCallPredicate = "(" +
 		"(" + sessionClaudeToolResultPredicate + " AND toString(attributes.success) = 'false') OR " +
 		"(" + sessionAgentToolCallPredicate + " AND " +
-		"(toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))" +
+		"(toString(attributes.gram.hook.canonical_event) = 'tool.failed' OR toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))" +
 		")"
 	// sessionToolCallDedupIDExpr is the call's identity for deduplicated
 	// counting: Claude tool_result rows carry tool_use_id, Cursor/unified-ingest

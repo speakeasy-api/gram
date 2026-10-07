@@ -24,6 +24,9 @@ func (s *Service) checkQuarantineGate(ctx context.Context, ev hookevents.Event) 
 	defer span.End()
 
 	if s.cache == nil || ev.ConversationID == "" {
+		if s.cache == nil {
+			markAHPFailure(ctx, "quarantine_gate_unavailable")
+		}
 		return nil
 	}
 	q, err := sessionquarantine.Read(
@@ -37,6 +40,7 @@ func (s *Service) checkQuarantineGate(ctx context.Context, ev hookevents.Event) 
 		return q
 	}
 
+	markAHPFailure(ctx, "quarantine_gate_unavailable")
 	s.logger.WarnContext(ctx, "session quarantine gate check failed",
 		attr.SlogError(err),
 		attr.SlogEvent("session_quarantine_gate_error"),
