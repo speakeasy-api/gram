@@ -67,7 +67,8 @@ it("registers a platform once its values pass the checks", () => {
   });
 
   const problem = document.getElementById("workload-issuer-url-error");
-  expect(problem?.textContent).not.toBe("");
+  expect(problem).not.toBeNull();
+  expect(problem!.textContent?.trim()).toBeTruthy();
   expect(field("Issuer").getAttribute("aria-invalid")).toBe("true");
   expect(button("Register").disabled).toBe(true);
 
