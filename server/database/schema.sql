@@ -4025,6 +4025,11 @@ CREATE INDEX IF NOT EXISTS assistant_threads_project_id_assistant_id_last_event_
 ON assistant_threads (project_id, assistant_id, last_event_at DESC)
 WHERE deleted IS FALSE;
 
+-- Thread lookup by chat (chats.list picks each page row's thread) and the
+-- ON DELETE CASCADE from chats. Not partial so the cascade can use it too.
+CREATE INDEX IF NOT EXISTS assistant_threads_chat_id_idx
+ON assistant_threads (chat_id);
+
 CREATE TABLE IF NOT EXISTS assistant_runtimes (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   -- v1 rows pin one VM per thread and stamp the thread's id here. v2 rows
