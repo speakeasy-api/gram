@@ -1862,6 +1862,20 @@ pubsub:
         name: gram-telemetry-v1-session-observed
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-tool-call-log-bridge
+      topic_proto_message: gram-telemetry-v1-log-record
+    name: gram-telemetry-v1-tool-call-log-bridge
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-telemetry-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-tool-call-log-relay
       topic_proto_message: gram-telemetry-v1-log-record
     name: gram-telemetry-v1-tool-call-log-relay

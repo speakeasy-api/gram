@@ -74,6 +74,7 @@ flowchart LR
   s_gram_role_distribution_v1_role_distribution_setup_handler["gram-role-distribution-v1-role-distribution-setup-handler<br/>(sub)"]:::sub
   s_gram_telemetry_v1_noop["gram-telemetry-v1-noop<br/>(sub)"]:::sub
   s_gram_telemetry_v1_session_observed_ch_writer["gram-telemetry-v1-session-observed-ch-writer<br/>(sub)"]:::sub
+  s_gram_telemetry_v1_tool_call_log_bridge["gram-telemetry-v1-tool-call-log-bridge<br/>(sub)"]:::sub
   s_gram_telemetry_v1_tool_call_log_relay["gram-telemetry-v1-tool-call-log-relay<br/>(sub)"]:::sub
   s_gram_webhooks_v1_svix_relay["gram-webhooks-v1-svix-relay<br/>(sub)"]:::sub
 
@@ -161,6 +162,7 @@ flowchart LR
   t_gram_role_distribution_v1_role_distribution_setup_requested_v1 --> s_gram_role_distribution_v1_role_distribution_setup_handler
   t_gram_telemetry_v1_log_record --> s_gram_telemetry_v1_noop
   t_gram_telemetry_v1_session_observed --> s_gram_telemetry_v1_session_observed_ch_writer
+  t_gram_telemetry_v1_log_record --> s_gram_telemetry_v1_tool_call_log_bridge
   t_gram_telemetry_v1_log_record --> s_gram_telemetry_v1_tool_call_log_relay
   t_gram_webhooks_v1_event --> s_gram_webhooks_v1_svix_relay
   c26[\"📥<br/>server/cmd/gram/streams.go<br/>authz.NewChallengeCHWriter<br/>(batch)"\]:::go
@@ -227,10 +229,12 @@ flowchart LR
   s_gram_telemetry_v1_noop --> c56
   c57[\"📥<br/>server/cmd/gram/streams.go<br/>telemetry.NewSessionObservedHandler<br/>(batch)"\]:::go
   s_gram_telemetry_v1_session_observed_ch_writer --> c57
-  c58[\"📥<br/>server/cmd/gram/streams.go<br/>toolCallLogRelayHandler<br/>(batch)"\]:::go
-  s_gram_telemetry_v1_tool_call_log_relay --> c58
-  c59[\"📥<br/>server/cmd/gram/streams.go<br/>webhookEventHandler"\]:::go
-  s_gram_webhooks_v1_svix_relay --> c59
+  c58[\"📥<br/>server/cmd/gram/streams.go<br/>toolCallLogBridgeHandler<br/>(batch)"\]:::go
+  s_gram_telemetry_v1_tool_call_log_bridge --> c58
+  c59[\"📥<br/>server/cmd/gram/streams.go<br/>toolCallLogRelayHandler<br/>(batch)"\]:::go
+  s_gram_telemetry_v1_tool_call_log_relay --> c59
+  c60[\"📥<br/>server/cmd/gram/streams.go<br/>webhookEventHandler"\]:::go
+  s_gram_webhooks_v1_svix_relay --> c60
 ```
 
 ## Topics
@@ -301,6 +305,7 @@ flowchart LR
 | [`gram-role-distribution-v1-role-distribution-setup-handler`](../infra/proto/gram/role_distribution/v1/setup_handler.proto) | `gram-role-distribution-v1-role-distribution-setup-requested-v1` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-telemetry-v1-noop`](../infra/proto/gram/telemetry/v1/noop.proto) | `gram-telemetry-v1-log-record` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-telemetry-v1-session-observed-ch-writer`](../infra/proto/gram/telemetry/v1/session_observed_ch_writer.proto) | `gram-telemetry-v1-session-observed` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-telemetry-v1-tool-call-log-bridge`](../infra/proto/gram/telemetry/v1/tool_call_log_bridge.proto) | `gram-telemetry-v1-log-record` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-telemetry-v1-tool-call-log-relay`](../infra/proto/gram/telemetry/v1/tool_call_log_relay.proto) | `gram-telemetry-v1-log-record` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-webhooks-v1-svix-relay`](../infra/proto/gram/webhooks/v1/svix_relay.proto) | `gram-webhooks-v1-event` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 
