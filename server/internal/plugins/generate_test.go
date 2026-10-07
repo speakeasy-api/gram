@@ -2930,7 +2930,8 @@ func TestGenerateReadmeKeysClaudeManagedSettingsByMarketplaceName(t *testing.T) 
 
 			readme := string(files["README.md"])
 			require.NotContains(t, readme, `"required"`, "Claude Code has no plugins.required setting")
-			require.Contains(t, readme, "Use this exact marketplace name. Restart Claude Code, then check `/plugin`.")
+			require.Contains(t, readme, "Merge this into `~/.claude/settings.json`")
+			require.Contains(t, readme, "Keep the marketplace name `"+tc.marketplaceName+"` exactly as shown, including after `@`.")
 			require.NotContains(t, readme, "<org>-gram", "new users never saw the retired <org>-gram default")
 			// Settings register the marketplace with autoUpdate on, so there is
 			// no CLI step to run.

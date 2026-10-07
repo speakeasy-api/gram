@@ -933,9 +933,9 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	// marketplace.json name. Claude Code applies autoUpdate only from the
 	// entry keyed by that exact name.
 	marketplaceName := resolveMarketplaceName(cfg)
-	fmt.Fprintf(&b, "Add this to `~/.claude/settings.json` for just you, or to managed settings for your organization (the Claude admin console, MDM, or `managed-settings.json`). Replace `<marketplace-url>` with the marketplace URL from the Speakeasy dashboard and keep it private.%s\n\n", pluginNote)
+	fmt.Fprintf(&b, "Merge this into `~/.claude/settings.json` for just you, or into managed settings for your organization (the Claude admin console, MDM, or `managed-settings.json`). Replace `<marketplace-url>` with the marketplace URL from the Speakeasy dashboard and keep it private.%s\n\n", pluginNote)
 	b.WriteString(claudeCodeSettingsSnippet(marketplaceName, "<marketplace-url>", enabledPlugin))
-	fmt.Fprintf(&b, "Use this exact marketplace name. Restart Claude Code, then check `/plugin`. See [Require a marketplace and its plugins](%s).\n", claudeCodeRequireMarketplaceDocsURL)
+	fmt.Fprintf(&b, "Keep the marketplace name `%s` exactly as shown, including after `@`. Restart Claude Code, then check `/plugin`. See [Require a marketplace and its plugins](%s).\n", marketplaceName, claudeCodeRequireMarketplaceDocsURL)
 	b.WriteString("\n### Claude Cowork\n\n")
 	b.WriteString("1. Go to your organization's [Claude admin console](https://claude.ai)\n")
 	b.WriteString("2. Navigate to **Settings → Plugin Marketplaces**\n")

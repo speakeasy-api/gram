@@ -7,7 +7,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
-import { CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL } from "@/lib/claude-code-marketplace";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
@@ -29,13 +28,7 @@ function ClaudeInstallContent({
   marketplaceUrl?: string;
   pluginName?: string;
 }) {
-  const { data: marketplaceSettings } = useMarketplaceSettings();
-  // Marketplace identifiers are a cross-surface contract: Claude Code
-  // registers the marketplace under the published marketplace.json `name`
-  // (effectiveName) and references plugins as `<plugin>@<name>`.
-  const marketplaceName = marketplaceSettings?.effectiveName;
-
-  if (!marketplaceUrl || !pluginName || !marketplaceName) {
+  if (!marketplaceUrl) {
     return (
       <p className="text-muted-foreground text-sm italic">
         Publish your plugins to GitHub first to get a marketplace install URL.
@@ -44,24 +37,20 @@ function ClaudeInstallContent({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
+      {/* With observability off the marketplace ships no hooks plugin; the
+          snippet still registers the marketplace. */}
+      {!pluginName && (
+        <p className="text-muted-foreground text-sm">
+          Your marketplace has no observability plugin yet, so this only
+          registers the marketplace.
+        </p>
+      )}
       <ClaudeCodeSettingsInstall
-        marketplaceName={marketplaceName}
         marketplaceUrl={marketplaceUrl}
-        plugins={[pluginName]}
+        plugins={pluginName ? [pluginName] : []}
         secretUrl
       />
-      <Button variant="secondary" size="sm" asChild>
-        <a
-          href={CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2"
-        >
-          <ExternalLink className="size-4" />
-          View Full Documentation
-        </a>
-      </Button>
     </div>
   );
 }

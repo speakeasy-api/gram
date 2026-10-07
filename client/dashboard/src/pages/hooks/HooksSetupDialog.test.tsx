@@ -3,10 +3,25 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { HooksSetupDialog } from "./HooksSetupDialog";
 
+const { state, defaults } = vi.hoisted(() => {
+  const defaults = (): {
+    marketplaceSettings: {
+      data?: { effectiveName: string };
+      isPending: boolean;
+    };
+    observabilityPlugin?: string;
+  } => ({
+    marketplaceSettings: {
+      data: { effectiveName: "example-marketplace" },
+      isPending: false,
+    },
+    observabilityPlugin: "example-observability",
+  });
+  return { state: defaults(), defaults };
+});
+
 vi.mock("@gram/client/react-query/marketplaceSettings", () => ({
-  useMarketplaceSettings: () => ({
-    data: { effectiveName: "example-marketplace" },
-  }),
+  useMarketplaceSettings: () => state.marketplaceSettings,
 }));
 vi.mock("@gram/client/react-query/publishStatus", () => ({
   usePublishStatus: () => ({
@@ -14,7 +29,7 @@ vi.mock("@gram/client/react-query/publishStatus", () => ({
       configured: false,
       connected: false,
       marketplaceUrl: "https://example.invalid/marketplace.git",
-      claudeObservabilityPlugin: "example-observability",
+      claudeObservabilityPlugin: state.observabilityPlugin,
     },
   }),
 }));
@@ -25,7 +40,10 @@ vi.mock("@/routes", () => ({
   useRoutes: () => ({ plugins: { href: () => "/plugins" } }),
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  Object.assign(state, defaults());
+});
 
 function claudeText(): string {
   render(
@@ -62,5 +80,21 @@ describe("HooksSetupDialog Claude Code instructions", () => {
     expect(text).not.toContain("claude plugin marketplace add");
     expect(text).not.toContain("claude plugin install");
     expect(text).not.toContain("Auto-update is off");
+  });
+
+  it("still registers the marketplace when there is no observability plugin", () => {
+    state.observabilityPlugin = undefined;
+    const text = claudeText();
+    expect(text).toContain("no observability plugin yet");
+    expect(text).toContain('"extraKnownMarketplaces": { "example-marketplace"');
+    expect(text).not.toContain("enabledPlugins");
+  });
+
+  it("waits for the marketplace name instead of hiding the instructions", () => {
+    state.marketplaceSettings = { data: undefined, isPending: true };
+    const text = claudeText();
+    expect(text).toContain("Add to your Claude Code settings");
+    expect(text).toContain("Loading the marketplace name");
+    expect(text).not.toContain("Publish your plugins to GitHub first");
   });
 });

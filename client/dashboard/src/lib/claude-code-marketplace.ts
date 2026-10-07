@@ -23,27 +23,28 @@ export function claudeCodeSettingsJson({
   marketplaceName,
   marketplaceUrl,
   plugins,
-  env = {},
 }: {
   marketplaceName: string;
   marketplaceUrl: string;
+  /** Empty registers the marketplace without enabling a plugin. */
   plugins: string[];
-  env?: Record<string, string>;
 }): string {
   return JSON.stringify(
     {
       // Keeps plugin auto-update running when DISABLE_AUTOUPDATER stops
       // Claude Code's own updates.
-      env: { ...env, FORCE_AUTOUPDATE_PLUGINS: "1" },
+      env: { FORCE_AUTOUPDATE_PLUGINS: "1" },
       extraKnownMarketplaces: {
         [marketplaceName]: {
           autoUpdate: true,
           source: { source: "git", url: marketplaceUrl },
         },
       },
-      enabledPlugins: Object.fromEntries(
-        plugins.map((plugin) => [`${plugin}@${marketplaceName}`, true]),
-      ),
+      ...(plugins.length > 0 && {
+        enabledPlugins: Object.fromEntries(
+          plugins.map((plugin) => [`${plugin}@${marketplaceName}`, true]),
+        ),
+      }),
     },
     null,
     2,

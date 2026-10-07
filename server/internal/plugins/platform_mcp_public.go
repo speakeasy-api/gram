@@ -210,7 +210,7 @@ func platformMCPMarketplaceReadme(marketplaceRepoURL string, mode platformMCPMar
 	}
 
 	b.WriteString("## Claude Code\n\n")
-	b.WriteString("Add this to `~/.claude/settings.json`, or to managed settings for your organization:\n\n")
+	b.WriteString("Merge this into `~/.claude/settings.json`, or into managed settings for your organization:\n\n")
 	b.WriteString(claudeCodeSettingsSnippet(PublicMarketplaceName, marketplaceRepoURL, platformMCPPluginName))
 	b.WriteString("Restart Claude Code, then open `/mcp`, select Platform MCP, and choose Authenticate.\n\n")
 

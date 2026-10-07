@@ -1,5 +1,4 @@
 import { ClaudeCodeSettingsInstall } from "@/components/claude-code-settings-install";
-import { CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL } from "@/lib/claude-code-marketplace";
 import { CodeBlock } from "@/components/code";
 import { InstallSteps } from "@/components/install-steps";
 import { Button } from "@/components/ui/Button";
@@ -115,7 +114,7 @@ function ClaudeCodeInstallContent({
 }: Pick<ContentProps, "marketplaceUrl" | "pluginSlug"> & {
   marketplaceName: string | undefined;
 }) {
-  if (!marketplaceUrl || !marketplaceName) {
+  if (!marketplaceUrl) {
     return (
       <p className="text-muted-foreground text-sm italic">
         Re-publish to mint a marketplace install URL.
@@ -140,10 +139,6 @@ function ClaudeCodeInstallContent({
       )}
       <RelatedLinks
         links={[
-          {
-            href: CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL,
-            label: "Require a marketplace and its plugins",
-          },
           {
             href: CLAUDE_CODE_SETTINGS_DOCS_URL,
             label: "Claude Code settings and precedence",

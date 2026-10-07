@@ -18,7 +18,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
-import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { MarketplaceSection } from "../marketplace-section";
 import { isMarketplacePublished } from "../marketplace-status";
 import { StepSection } from "../step-section";
@@ -53,32 +52,6 @@ const INITIAL_VISIBLE = 10;
 
 interface DistributeServersStepProps {
   onComplete: () => void;
-}
-
-// Mounted only once a marketplace URL exists, so the settings read behind the
-// marketplace name runs only when there is a snippet to show.
-function SelfInstallSettings({
-  marketplaceUrl,
-  pluginSlug,
-}: {
-  marketplaceUrl: string;
-  pluginSlug: string;
-}): JSX.Element | null {
-  const { data: marketplaceSettings } = useMarketplaceSettings(
-    undefined,
-    undefined,
-    { throwOnError: false },
-  );
-  const marketplaceName = marketplaceSettings?.effectiveName;
-  if (!marketplaceName) return null;
-  return (
-    <ClaudeCodeSettingsInstall
-      marketplaceName={marketplaceName}
-      marketplaceUrl={marketplaceUrl}
-      plugins={[pluginSlug]}
-      secretUrl
-    />
-  );
 }
 
 /** Stable selection key for a catalog server, matching the catalog page convention. */
@@ -673,18 +646,19 @@ export function DistributeServersStep({
                   organization can install them.
                 </p>
                 {publishStatus?.marketplaceUrl && (
-                  <SelfInstallSettings
+                  <ClaudeCodeSettingsInstall
                     marketplaceUrl={publishStatus.marketplaceUrl}
-                    pluginSlug={distributedPluginSlug ?? DEFAULT_PLUGIN_SLUG}
+                    plugins={[distributedPluginSlug ?? DEFAULT_PLUGIN_SLUG]}
+                    secretUrl
                   />
                 )}
                 {publishStatus?.repoOwner && publishStatus?.repoName && (
                   <div className="space-y-2">
                     <p className="text-foreground text-sm font-medium">
-                      Other agents
+                      All agents
                     </p>
                     <p className="text-muted-foreground text-xs leading-relaxed">
-                      Cursor, Codex, Claude Cowork, and the rest.
+                      Install instructions for every supported agent.
                     </p>
                     <InstallInstructionsButton
                       repoOwner={publishStatus.repoOwner}

@@ -35,7 +35,7 @@ function openProvider(
         open
         onOpenChange={vi.fn<() => void>()}
         repoOwner="example-owner"
-        repoName="example-marketplace"
+        repoName="example-org-plugins"
         marketplaceUrl="https://example.invalid/marketplace"
         pluginName="Example plugin"
         pluginSlug={pluginSlug}
@@ -67,11 +67,10 @@ describe("installation instructions", () => {
     ).toBe("https://claude.com/docs/plugins/overview#find-and-add-a-plugin");
   });
 
-  it("installs Claude Code from settings for the user or the organization", () => {
+  it("installs Claude Code from settings for the organization or the user", () => {
     openProvider("Claude Code");
     let text = bodyText();
     expect(text).toContain("Add to your Claude Code settings");
-    expect(text).toContain("~/.claude/settings.json");
     expect(text).toContain("Restart Claude Code");
     // The snippet turns auto-update on, so there is no CLI step and no
     // auto-update warning.
@@ -79,23 +78,35 @@ describe("installation instructions", () => {
     expect(text).not.toContain("/plugin install");
     expect(text).not.toContain("Auto-update is off");
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Already have a settings.json?" }),
-    );
-    text = bodyText();
-    expect(text).toContain(
-      "add the marketplace entry inside extraKnownMarketplaces and the plugin line inside enabledPlugins",
+    // My organization comes first and is selected by default; its radio is
+    // described by the tagline only, not the revealed snippet.
+    const org = screen.getByRole("radio", { name: /My organization/ });
+    expect(screen.getAllByRole("radio")[0]).toBe(org);
+    expect(org.getAttribute("aria-checked")).toBe("true");
+    const describedBy = org.getAttribute("aria-describedby") ?? "";
+    expect(document.getElementById(describedBy)?.textContent).toBe(
+      "Managed settings, applied to everyone",
     );
 
-    fireEvent.click(screen.getByRole("radio", { name: /My organization/ }));
     fireEvent.click(
       screen.getByRole("button", { name: "Where are managed settings?" }),
     );
     text = bodyText();
     expect(text).toContain("Team or Enterprise Owners");
     expect(text).toContain("managed-settings.json");
+    expect(text).toContain("Not fetched with a custom ANTHROPIC_BASE_URL");
+
+    fireEvent.click(screen.getByRole("radio", { name: /Just me/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Already have a settings.json?" }),
+    );
+    text = bodyText();
+    expect(text).toContain("~/.claude/settings.json");
+    expect(text).toContain(
+      "Otherwise merge each top-level key into the one in your file.",
+    );
     expect(
-      screen.queryByRole("button", { name: "Already have a settings.json?" }),
+      screen.queryByRole("button", { name: "Where are managed settings?" }),
     ).toBeNull();
   });
 
@@ -107,14 +118,15 @@ describe("installation instructions", () => {
     expect(text).toContain(
       '"enabledPlugins": { "example-plugin@example-marketplace": true }',
     );
+    // The repository name differs from the marketplace name; only the
+    // marketplace name may key the settings.
+    expect(text).not.toContain("example-org-plugins");
     expect(text).toContain(
       "Use this exact marketplace name. Keep the URL private.",
     );
     expect(text).not.toContain("<org>-gram");
     expect(
-      screen
-        .getByRole("link", { name: /Require a marketplace and its plugins/ })
-        .getAttribute("href"),
+      screen.getByRole("link", { name: /Docs/ }).getAttribute("href"),
     ).toBe(
       "https://code.claude.com/docs/en/plugins/org#require-a-marketplace-and-its-plugins",
     );
