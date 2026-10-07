@@ -2694,6 +2694,29 @@ Channel context stays in the Raw view.
   INSERT INTO chat_session_links (project_id, organization_id, parent_chat_id, child_chat_id, parent_session_id, child_session_id, kind, target_harness, source_surface)
   VALUES (proj_a, demo_org, chat_id, demo.det_uuid('gram-demo-claude-tag-helper'), chat_id::text, demo.det_uuid('gram-demo-claude-tag-helper')::text, 'subagent', 'claude-tag', 'claude-tag');
 
+  -- One dashboard session per assistant: the bound one names its agent and the
+  -- member it acted for; the legacy one links to the assistant itself.
+  INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
+  SELECT demo.det_uuid('gram-demo-assistant-session-' || fixture), proj_a, demo_org, demo_user_ids[2], demo_user_emails[2],
+         title, now() - interval '40 minutes', now() - interval '38 minutes'
+  FROM (VALUES ('bound', 'Weekly project activity summary'),
+               ('legacy', 'Open risk findings recap')) AS sessions(fixture, title);
+  INSERT INTO chat_messages (id, chat_id, project_id, role, content, created_at, risk_analyzed_at)
+  SELECT demo.det_uuid('gram-demo-assistant-session-' || fixture || '-' || role),
+         demo.det_uuid('gram-demo-assistant-session-' || fixture), proj_a, role, content,
+         now() - offset_interval, now()
+  FROM (VALUES
+    ('bound', 'user', 'Summarize this week''s project activity.', interval '40 minutes'),
+    ('bound', 'assistant', 'Tool usage rose this week and two new MCP servers were connected.', interval '39 minutes'),
+    ('legacy', 'user', 'Recap the open risk findings.', interval '40 minutes'),
+    ('legacy', 'assistant', 'Three findings remain open, all in coding agent sessions.', interval '39 minutes')
+  ) AS messages(fixture, role, content, offset_interval);
+  INSERT INTO assistant_threads (id, assistant_id, project_id, correlation_id, chat_id, source_kind, last_event_at)
+  SELECT demo.det_uuid('gram-demo-assistant-thread-' || fixture), demo.det_uuid('gram-demo-assistant-' || fixture), proj_a,
+         'demo-dashboard-' || fixture, demo.det_uuid('gram-demo-assistant-session-' || fixture), 'dashboard',
+         now() - interval '38 minutes'
+  FROM (VALUES ('bound'), ('legacy')) AS threads(fixture);
+
   -- Historical shortened trial: audit history shows both dates, not an extension.
   INSERT INTO audit_logs
     (id, organization_id, actor_id, actor_type, actor_display_name,
@@ -3667,6 +3690,10 @@ Channel context stays in the Raw view.
   WHERE organization_id = demo_org AND project_id = proj_a;
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 1 assistant binding, found %', stray;
+  END IF;
+  SELECT count(*) INTO stray FROM assistant_threads WHERE project_id = proj_a;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 assistant threads, found %', stray;
   END IF;
   SELECT count(*) INTO stray FROM trigger_workload_bindings
   WHERE organization_id = demo_org AND project_id = proj_a;

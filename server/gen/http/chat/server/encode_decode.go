@@ -3448,6 +3448,7 @@ func marshalChatChatOverviewToChatOverviewResponseBody(v *chat.ChatOverview) *Ch
 		ExternalUserID:       v.ExternalUserID,
 		AssistantID:          v.AssistantID,
 		AssistantName:        v.AssistantName,
+		AssistantAgentID:     v.AssistantAgentID,
 		NumMessages:          v.NumMessages,
 		Source:               v.Source,
 		OriginatingClient:    v.OriginatingClient,

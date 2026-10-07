@@ -1,6 +1,7 @@
 import { SlackChannelLink } from "@/components/slack-channel-link";
 import { claudeTagMetadata, projectClaudeTagRows } from "./claudeTag";
 import { IdentityLink } from "@/components/identity-link";
+import { AssistantActorLink } from "@/components/assistant-actor-link";
 import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft,
@@ -276,6 +277,9 @@ function SessionSummary({
 }: {
   chat: {
     externalUserId?: string;
+    assistantId?: string;
+    assistantName?: string;
+    assistantAgentId?: string;
     accountType?: string;
     accountEmail?: string;
     source?: string;
@@ -354,7 +358,16 @@ function SessionSummary({
         <div className="space-y-1">
           <div className="mb-1 text-sm font-semibold">Session details</div>
           <div className="divide-border divide-y">
-            <MetaRow label="User">{userLabel}</MetaRow>
+            {chat.assistantName ? (
+              <>
+                <MetaRow label="Agent">
+                  <AssistantActorLink chat={chat} className="[&_a]:pb-0.5" />
+                </MetaRow>
+                <MetaRow label="On behalf of">{userLabel}</MetaRow>
+              </>
+            ) : (
+              <MetaRow label="User">{userLabel}</MetaRow>
+            )}
             {accountEmail && (
               <MetaRow label="Account">
                 <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
@@ -753,6 +766,24 @@ function ChatDetailHeader({
                 <span className="font-mono">
                   ({format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm")})
                 </span>
+              </span>
+              <span className="text-muted-foreground inline-flex max-w-full flex-wrap items-center gap-1.5 text-sm">
+                {chat.assistantName ? (
+                  <>
+                    <AssistantActorLink
+                      chat={chat}
+                      className="text-foreground [&_a]:pb-0.5"
+                    />
+                    <span>on behalf of</span>
+                    <span className="text-foreground min-w-0 break-words">
+                      {userLabel}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-foreground min-w-0 break-words">
+                    {userLabel}
+                  </span>
+                )}
               </span>
               {compactMetadata ? (
                 <ChatDetailMetadataBadges
