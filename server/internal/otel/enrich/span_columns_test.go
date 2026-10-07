@@ -152,7 +152,7 @@ func TestSpanColumnsAnswerFromTheSameTablesAsLogs(t *testing.T) {
 		// in the table.
 		require.NotContains(t, columns, OutcomeColumnKey)
 		require.NotContains(t, columns, OutcomeMessageColumnKey)
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "outcome"))
+		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("outcome")))
 	})
 
 	t.Run("a tool span names its tool and the call", func(t *testing.T) {
@@ -182,7 +182,7 @@ func TestSpanColumnsAnswerFromTheSameTablesAsLogs(t *testing.T) {
 		)
 
 		require.NotContains(t, enrichedSpanColumns(t, in, span), SessionIDColumnKey)
-		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "session_id"))
-		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.EventSourceKey, "litellm"))
+		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("session_id")))
+		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventSurface(counterSurfaceOther)))
 	})
 }

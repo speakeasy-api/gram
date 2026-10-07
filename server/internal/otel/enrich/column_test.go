@@ -129,8 +129,7 @@ func TestLogColumnEnricherLabelsAnUnrecognisedProducerAsOther(t *testing.T) {
 
 	reader, meterProvider := readableMeter(t)
 	enricher := &logColumnEnricher[string]{
-		column:      TurnIDColumnKey,
-		byType:      columnTable[string]{dialect.EventTypeAPIRequest: question[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}},
+		column:      column[string]{key: TurnIDColumnKey, byType: columnTable[string]{dialect.EventTypeAPIRequest: getter[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}}},
 		instruments: NewInstruments(testenv.NewLogger(t), meterProvider),
 	}
 
