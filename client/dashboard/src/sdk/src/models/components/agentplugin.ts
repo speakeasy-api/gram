@@ -40,7 +40,7 @@ export type AgentPlugin = {
    */
   name?: string | undefined;
   /**
-   * Plugin slug. Combined with marketplace_name, this identifies the plugin the agent enables in the managed tool.
+   * Plugin slug. Combined with marketplace_name, this identifies the plugin in the managed tool.
    */
   slug: string;
 };

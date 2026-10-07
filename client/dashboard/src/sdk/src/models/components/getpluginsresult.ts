@@ -34,7 +34,7 @@ export type GetPluginsResult = {
    */
   marketplaces: Array<AgentMarketplace>;
   /**
-   * Plugins the agent should enable. Each entry references one of the marketplaces above by name.
+   * Plugins assigned to the caller. Each entry's install_mode says whether the agent installs it (`required`, `default`) or only offers it for the user to turn on (`available`). Each entry references one of the marketplaces above by name.
    */
   plugins: Array<AgentPlugin>;
   principal?: AgentPollingPrincipal | undefined;
