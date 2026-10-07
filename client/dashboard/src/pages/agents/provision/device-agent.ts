@@ -174,8 +174,9 @@ const INSTALL_URL = /^https:\/\/[^\s']+\/agent-mcp\/install\/[A-Za-z0-9_-]+$/;
 /**
  * The one-line command as download-then-run, or null if it holds no install
  * URL. The script holds the key, so it goes to a fresh owner-only mktemp file
- * (no existing path is reused), which is removed if the download fails and
- * after the run, keeping the exit status. Both lines run in the same shell.
+ * (no existing path is reused). It is removed if the download fails and after
+ * the run, keeping curl's or the script's exit status. Both lines run in the
+ * same shell.
  */
 export function reviewCommands(
   command: string,
@@ -183,7 +184,7 @@ export function reviewCommands(
   const url = command.split(" ").find((token) => INSTALL_URL.test(token));
   if (!url) return null;
   return {
-    fetch: `f=$(mktemp ./gram-device-agent.XXXXXX) && if curl -fsSL '${url}' -o "$f"; then echo "Saved to $f"; else rm -f "$f"; fi`,
+    fetch: `f=$(mktemp ./gram-device-agent.XXXXXX) && if curl -fsSL '${url}' -o "$f"; then echo "Saved to $f"; else rc=$?; rm -f "$f"; (exit "$rc"); fi`,
     run: `(sh "$f"; rc=$?; rm -f "$f"; exit $rc)`,
   };
 }

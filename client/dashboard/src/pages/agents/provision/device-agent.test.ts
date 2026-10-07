@@ -217,7 +217,7 @@ describe("review-first commands", () => {
 
   it("downloads to a fresh owner-only file, never an existing path", () => {
     expect(commands?.fetch).toBe(
-      `f=$(mktemp ./gram-device-agent.XXXXXX) && if curl -fsSL 'https://gram.example.test/agent-mcp/install/code_1' -o "$f"; then echo "Saved to $f"; else rm -f "$f"; fi`,
+      `f=$(mktemp ./gram-device-agent.XXXXXX) && if curl -fsSL 'https://gram.example.test/agent-mcp/install/code_1' -o "$f"; then echo "Saved to $f"; else rc=$?; rm -f "$f"; (exit "$rc"); fi`,
     );
   });
 

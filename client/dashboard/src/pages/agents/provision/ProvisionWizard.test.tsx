@@ -387,7 +387,7 @@ describe("Provisioning a device agent", () => {
     // The review-first form spends the same code without piping it to a shell.
     expect(
       screen.getByText(
-        /setup_code' -o "\$f"; then echo "Saved to \$f"; else rm -f "\$f"; fi$/,
+        /setup_code' -o "\$f"; then echo "Saved to \$f"; else rc=\$\?; rm -f "\$f"; \(exit "\$rc"\); fi$/,
       ),
     ).toBeTruthy();
   });
