@@ -933,8 +933,10 @@ ALTER TABLE organization_features ADD CONSTRAINT test_reject_entitlements CHECK 
 -- for a toolset-only server, the toolset id. A toolset-backed wrapper takes its
 -- issuer from its own row, not its toolset's, matching how the MCP endpoint
 -- resolves it; the legacy OAuth columns live on the toolset only.
--- toolset_wrapper_count counts live wrappers of the toolset, so the caller can
--- drop a toolset slug that would also select another wrapper's calls.
+-- toolset_wrapper_count counts the live wrappers competing for the toolset's
+-- slug, so the caller can drop a toolset slug that would also select another
+-- wrapper's calls. A live canonical wrapper (id = toolset id) owns the slug
+-- outright: it counts as one, and any other wrapper of that toolset as two.
 -- url_slug is the slug in the /mcp/<slug> path clients call: the primary live
 -- endpoint's (custom domain first, as mcpendpoints.PrimaryEndpoint ranks them;
 -- a domain root has no such path), else the server's own slug, else the
@@ -962,8 +964,17 @@ SELECT
 FROM mcp_servers m
 LEFT JOIN toolsets t ON t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
 CROSS JOIN LATERAL (
-    SELECT count(*)::bigint AS wrapper_count FROM mcp_servers o
-    WHERE o.toolset_id = m.toolset_id AND o.project_id = m.project_id AND o.deleted IS FALSE
+    SELECT CASE
+        WHEN m.id = m.toolset_id THEN 1
+        WHEN EXISTS (
+            SELECT 1 FROM mcp_servers c
+            WHERE c.id = m.toolset_id AND c.project_id = m.project_id AND c.deleted IS FALSE
+        ) THEN 2
+        ELSE (
+            SELECT count(*) FROM mcp_servers o
+            WHERE o.toolset_id = m.toolset_id AND o.project_id = m.project_id AND o.deleted IS FALSE
+        )
+    END::bigint AS wrapper_count
 ) w
 WHERE m.id = @id
   AND m.project_id = @project_id

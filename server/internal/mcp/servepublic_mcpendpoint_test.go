@@ -76,6 +76,23 @@ func createToolsetMcpEndpoint(
 	t.Helper()
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
+	return createToolsetMcpEndpointWithID(t, ctx, conn, id, projectID, toolsetID, slug, visibility, customDomainID, issuerID)
+}
+
+// createToolsetMcpEndpointWithID is createToolsetMcpEndpoint with an explicit
+// server id; passing the toolset id creates the toolset's canonical wrapper.
+func createToolsetMcpEndpointWithID(
+	t *testing.T,
+	ctx context.Context,
+	conn *pgxpool.Pool,
+	id uuid.UUID,
+	projectID uuid.UUID,
+	toolsetID uuid.UUID,
+	slug, visibility string,
+	customDomainID uuid.NullUUID,
+	issuerID uuid.UUID,
+) mcpserversrepo.McpServer {
+	t.Helper()
 
 	var issuer uuid.NullUUID
 	if issuerID != uuid.Nil {
