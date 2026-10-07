@@ -1695,8 +1695,19 @@ func newStartCommand() *cli.Command {
 			}
 			networkIngressService := networkingress.NewServiceWithPublication(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, networkingress.NewOutboxRequester(networkIngressQueue), ingressPublicationRequester, networkIngressClient)
 			networkingress.Attach(mux, networkIngressService, networkIngressEnabled)
+			// A server that starts fronting a toolset can be what makes that
+			// toolset need a tool-search index; the toolsets trigger decides
+			// whether it does and schedules the build. Needing none is not a
+			// failure for the server write to report.
+			toolsetIndexTrigger := func(ctx context.Context, projectID, toolsetID uuid.UUID) error {
+				err := toolsets.TriggerToolsetIndexForVersion(ctx, logger, db, temporalEnv, projectID, toolsetID)
+				if err == nil || errors.Is(err, toolsets.ErrToolsetIndexNotRequired) {
+					return nil
+				}
+				return fmt.Errorf("trigger toolset index: %w", err)
+			}
 			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker, networkIngressAdmission).
-				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit)
+				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit).WithToolsetIndexTrigger(toolsetIndexTrigger)
 			mcpservers.Attach(mux, mcpServersService)
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil).
 				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit))

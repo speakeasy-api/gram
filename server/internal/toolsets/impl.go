@@ -345,23 +345,24 @@ func TriggerToolsetIndex(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	return nil
 }
 
-// TriggerToolsetIndexForVersion is the entry point for a caller that created a
-// toolset version without holding the toolset view, such as the incremental
-// tool-exposure change. It loads that view by id and then schedules exactly
-// what the dashboard's own update schedules.
+// TriggerToolsetIndexForVersion is the entry point for a caller that holds
+// only the toolset's id: the incremental tool-exposure change, which created a
+// version, and an MCP server write, which may have made the toolset served. It
+// loads that view by id and then schedules exactly what the dashboard's own
+// update schedules.
 func TriggerToolsetIndexForVersion(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, temporalEnv *tenv.Environment, projectID, toolsetID uuid.UUID) error {
 	if logger == nil || db == nil || projectID == uuid.Nil || toolsetID == uuid.Nil {
 		return ErrToolsetIndexUnavailable
 	}
 	toolset, err := repo.New(db).GetToolsetByIDAndProject(ctx, repo.GetToolsetByIDAndProjectParams{ID: toolsetID, ProjectID: projectID})
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to load toolset for indexing after a tool exposure change", attr.SlogError(err))
-		return fmt.Errorf("load toolset for indexing after a tool exposure change: %w", err)
+		logger.ErrorContext(ctx, "failed to load toolset for indexing", attr.SlogError(err))
+		return fmt.Errorf("load toolset for indexing: %w", err)
 	}
 	view, err := mv.DescribeToolset(ctx, logger, db, mv.ProjectID(projectID), mv.ToolsetSlug(toolset.Slug), nil, nil)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to describe toolset for indexing after a tool exposure change", attr.SlogError(err))
-		return fmt.Errorf("describe toolset for indexing after a tool exposure change: %w", err)
+		logger.ErrorContext(ctx, "failed to describe toolset for indexing", attr.SlogError(err))
+		return fmt.Errorf("describe toolset for indexing: %w", err)
 	}
 	return TriggerToolsetIndex(ctx, logger, db, temporalEnv, view)
 }

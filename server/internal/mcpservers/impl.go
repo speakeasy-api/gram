@@ -80,6 +80,7 @@ type Service struct {
 	networkAccessEligibility networkaccess.EligibilityChecker
 	distributionAdmission    *admission.Guard
 	publicationRequests      plugins.PublicationRequests
+	toolsetIndexTrigger      ToolsetIndexTrigger
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -116,7 +117,16 @@ func NewService(
 		networkAccessEligibility: networkAccessEligibility,
 		distributionAdmission:    admission.NewGuard(nil, nil),
 		publicationRequests:      plugins.PublicationRequests{Enabled: false},
+		toolsetIndexTrigger:      nil,
 	}
+}
+
+// WithToolsetIndexTrigger lets server writes request the tool-search index of
+// a toolset they make a server front. Without it, those toolsets wait for the
+// periodic indexing sweep.
+func (s *Service) WithToolsetIndexTrigger(trigger ToolsetIndexTrigger) *Service {
+	s.toolsetIndexTrigger = trigger
+	return s
 }
 
 func (s *Service) WithPublicationRequests(enabled bool) *Service {
@@ -242,6 +252,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	}
 
 	s.scheduleDefaultServerIcon(ctx, *authCtx.ProjectID, server.ID, ids)
+	s.requestToolsetIndex(ctx, logger, nil, server)
 
 	return mv.BuildMcpServerView(server), nil
 }
@@ -885,6 +896,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 			updated = refreshed
 		}
 	}
+	s.requestToolsetIndex(ctx, logger, &existing, updated)
 	afterView := mv.BuildMcpServerView(updated)
 
 	// A live server's mode, name or visibility can change generated package
