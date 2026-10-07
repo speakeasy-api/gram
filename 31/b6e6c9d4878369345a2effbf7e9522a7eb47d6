@@ -1,0 +1,93 @@
+server/internal/metamcp/queries.sql
+  h_9630b74bdac540 311-317,322-338
+server/internal/mcp/serve_meta_proxy.go
+  h_9630b74bdac540 47,54,57,82-97
+  s_b4930e327097f5::t_15904b027515aa 98-99
+.changeset/gateway-member-credentials-readers.md
+  h_9630b74bdac540 1-5
+server/internal/mcp/serve_meta_proxy_internal_test.go
+  h_9630b74bdac540 27-29,39-46,97,102-109,114,139,147,166,177
+  s_25e70d83d8a578::t_b3fb5495d58aaa 110-111
+server/internal/mcp/authnchallenge_consent_meta_shared_issuer_test.go
+  h_9630b74bdac540 1-239
+server/internal/mcp/serve_meta.go
+  h_9630b74bdac540 57-60,155,162
+server/internal/mcp/serve_meta_tools_internal_test.go
+  h_9630b74bdac540 12-14,20-21,23-26,28,32-35,37
+  s_0d9db060724f11::t_7b24f425ae2e7b 27
+server/internal/mcp/serve_meta_tools.go
+  h_9630b74bdac540 478-486,490-491
+server/internal/mcp/authnchallenge_consent_meta_resource.go
+  h_9630b74bdac540 22,26-27,29,38,40,65-68,70-71,80-83,87,89,94-98,107,114-130
+  s_0d9db060724f11::t_95bc42f1bc4f06 131-132
+server/internal/mcp/authnchallenge_consent_routability.go
+  h_9630b74bdac540 36-37,54,78,120,124
+server/internal/remotesessions/tokenservice_resolve_test.go
+  h_9630b74bdac540 101-103,107-111,117
+server/internal/mcp/authnchallenge_consent_validate.go
+  h_9630b74bdac540 102-116,130,198-199,207,227,241,246,253,256-257,260-261,290
+  s_77047492c9f52a::t_e8289006384bd8 197
+server/internal/remotesessions/tokenservice.go
+  h_9630b74bdac540 287-288,327-328,370-374,419-422,442-447,458-518,537-541,544-549,554-560,562-563,565-578,611-612
+  s_fc893b6b970049::t_febf1710c799a3 284-286,519-520,561,564
+server/internal/mcp/authnchallenge.go
+  h_9630b74bdac540 970-972,1075-1086,1089-1092
+  s_b4930e327097f5::t_c3ecdb986f94fa 1087-1088,1093-1096
+server/internal/mcp/authnchallenge_consent_action.go
+  h_9630b74bdac540 288
+server/internal/metamcp/repo/queries.sql.go
+  s_0d9db060724f11::t_1cdd55d7d46474 809-825,840-841,850-854,858-863,879-885,887-893,906-907
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "31b6e6c9d4878369345a2effbf7e9522a7eb47d6",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_0d9db060724f11": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7cf000a-e7b5-4dea-9b5e-503786dd7765",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    },
+    "s_25e70d83d8a578": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "18227d1e-0e96-4735-9136-fb6a618dc835",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    },
+    "s_77047492c9f52a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7e931dc4-4a47-4edc-a612-daf3dbed51ad",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    },
+    "s_b4930e327097f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cab6233c-c908-48ae-8639-f2b951aacf9d",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    },
+    "s_fc893b6b970049": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc5784e5-aa04-4552-b176-067bd3c47a75",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
