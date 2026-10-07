@@ -20,9 +20,13 @@ const maxValueDepth = 32
 // with its resource and instrumentation scope, leaving record id, observed
 // time and provenance to the caller.
 func inboundFromSDK(record *sdklog.Record) (*otelv1.InboundLogRecord, error) {
-	body, err := anyValue(record.Body(), 0)
-	if err != nil {
-		return nil, fmt.Errorf("convert body: %w", err)
+	var body *otelv1.InboundLogRecord_AnyValue
+	if !record.Body().Empty() {
+		converted, err := anyValue(record.Body(), 0)
+		if err != nil {
+			return nil, fmt.Errorf("convert body: %w", err)
+		}
+		body = converted
 	}
 
 	attributes := make([]*otelv1.InboundLogRecord_KeyValue, 0, record.AttributesLen())
@@ -104,12 +108,27 @@ func severityNumber(severity log.Severity) otelv1.InboundLogRecord_SeverityNumbe
 }
 
 // unixNano converts a time to OTLP's unsigned nanoseconds; the zero time and
-// anything before the epoch are "not stated".
+// anything before the epoch are "not stated". It works from seconds rather
+// than time.UnixNano, whose int64 result is undefined after the year 2262,
+// and saturates at the largest value OTLP can carry.
 func unixNano(t time.Time) uint64 {
 	if t.IsZero() {
 		return 0
 	}
-	return uint64(max(t.UnixNano(), 0))
+	seconds := t.Unix()
+	if seconds < 0 {
+		return 0
+	}
+	// Nanosecond is always in [0, 1e9); the guard makes that visible.
+	var nanos uint64
+	if n := t.Nanosecond(); n > 0 {
+		nanos = uint64(n)
+	}
+	const nanosPerSecond = uint64(time.Second)
+	if uint64(seconds) > (math.MaxUint64-nanos)/nanosPerSecond {
+		return math.MaxUint64
+	}
+	return uint64(seconds)*nanosPerSecond + nanos
 }
 
 func anyValue(value log.Value, depth int) (*otelv1.InboundLogRecord_AnyValue, error) {
@@ -118,7 +137,9 @@ func anyValue(value log.Value, depth int) (*otelv1.InboundLogRecord_AnyValue, er
 	}
 	switch value.Kind() {
 	case log.KindEmpty:
-		return nil, nil
+		// A non-nil empty value, so an empty element of a slice or map never
+		// becomes a nil message, which protobuf refuses to marshal.
+		return (&otelv1.InboundLogRecord_AnyValue_builder{}).Build(), nil
 	case log.KindBool:
 		v := value.AsBool()
 		return (&otelv1.InboundLogRecord_AnyValue_builder{BoolValue: &v}).Build(), nil
@@ -132,7 +153,12 @@ func anyValue(value log.Value, depth int) (*otelv1.InboundLogRecord_AnyValue, er
 		v := value.AsString()
 		return (&otelv1.InboundLogRecord_AnyValue_builder{StringValue: &v}).Build(), nil
 	case log.KindBytes:
-		return (&otelv1.InboundLogRecord_AnyValue_builder{BytesValue: value.AsBytes()}).Build(), nil
+		// A nil slice would leave the oneof unset and lose the value's kind.
+		bytes := value.AsBytes()
+		if bytes == nil {
+			bytes = []byte{}
+		}
+		return (&otelv1.InboundLogRecord_AnyValue_builder{BytesValue: bytes}).Build(), nil
 	case log.KindSlice:
 		items := value.AsSlice()
 		values := make([]*otelv1.InboundLogRecord_AnyValue, 0, len(items))

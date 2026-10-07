@@ -51,8 +51,11 @@ func resultFrom(ctx context.Context) *Result {
 	return result
 }
 
-// WithRecordID sets the record id the next Emit under this context is
-// published with. Without it, the id is derived from the record's content,
+// WithRecordID sets the record id that every Emit made with the returned
+// context is published with. Records that share an id are treated as one by
+// readers that de-duplicate on it, so derive a fresh context for each record
+// unless sharing the id is the point, as with a tool call's started and
+// completed records. Without it, the id is derived from the record's content,
 // so emitting the same record twice yields the same id.
 func WithRecordID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, recordIDKey{}, id)
@@ -79,8 +82,10 @@ func WithTenant(ctx context.Context, organizationID, projectID string) context.C
 // tenantFrom resolves tenancy the way the ingest edge does: from
 // WithTenant when set, otherwise from the authenticated request.
 func tenantFrom(ctx context.Context) (tenant, bool) {
-	if t, ok := ctx.Value(tenantKey{}).(tenant); ok && t.organizationID != "" && t.projectID != "" {
-		return t, true
+	// An explicit tenant always wins, and an incomplete one is refused rather
+	// than silently replaced by the request's tenant.
+	if t, ok := ctx.Value(tenantKey{}).(tenant); ok {
+		return t, t.organizationID != "" && t.projectID != ""
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" || authCtx.ProjectID == nil {

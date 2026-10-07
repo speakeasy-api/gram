@@ -92,9 +92,17 @@ func (p *processor) inbound(ctx context.Context, record *sdklog.Record) (*otelv1
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
-	for _, kv := range inbound.GetAttributes() {
-		if enrich.IsAgentColumnKey(kv.GetKey()) {
-			return nil, fmt.Errorf("%w: attribute %q is in the reserved namespace", ErrInvalid, kv.GetKey())
+	// The reserved namespace is refused wherever an attribute can sit: on the
+	// record, its resource and its instrumentation scope.
+	for _, attrs := range [][]*otelv1.InboundLogRecord_KeyValue{
+		inbound.GetAttributes(),
+		inbound.GetResource().GetAttributes(),
+		inbound.GetScope().GetAttributes(),
+	} {
+		for _, kv := range attrs {
+			if enrich.IsAgentColumnKey(kv.GetKey()) {
+				return nil, fmt.Errorf("%w: attribute %q is in the reserved namespace", ErrInvalid, kv.GetKey())
+			}
 		}
 	}
 
@@ -111,7 +119,7 @@ func (p *processor) inbound(ctx context.Context, record *sdklog.Record) (*otelv1
 	if id == "" {
 		id, err = contentRecordID(inbound)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
 		}
 	}
 	inbound.SetRecordId(id)
