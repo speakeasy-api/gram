@@ -42,6 +42,7 @@ const mocks = vi.hoisted(() => ({
   scopes: vi.fn(),
   setPin: vi.fn(),
   invalidateScopes: vi.fn(),
+  setScopesData: vi.fn(),
   toastError: vi.fn(),
 }));
 
@@ -212,7 +213,8 @@ vi.mock("@/lib/remote-identity/queries/useProtectedResourceMetadata", () => ({
 
 vi.mock("@gram/client/react-query/getRemoteMcpServerScopes.js", () => ({
   useGetRemoteMcpServerScopes: (...args: unknown[]) => mocks.scopes(...args),
-  setGetRemoteMcpServerScopesData: vi.fn(),
+  setGetRemoteMcpServerScopesData: (...args: unknown[]) =>
+    mocks.setScopesData(...args),
   invalidateAllGetRemoteMcpServerScopes: (...args: unknown[]) =>
     mocks.invalidateScopes(...args),
 }));
@@ -308,10 +310,24 @@ function serverScopes(overrides: Record<string, unknown> = {}) {
         scopeSource: "resource_pin",
         requestedScopes: ["read"],
         unadvertisedPinnedScopes: [],
+        pinWouldDecide: true,
       },
     ],
     ...overrides,
   };
+}
+
+function sharedSource(): void {
+  mocks.siblings.mockReturnValue({
+    data: {
+      mcpServers: [
+        { id: "mcp-server-1", remoteMcpServerId: "remote-source-1" },
+        { id: "mcp-server-2", remoteMcpServerId: "remote-source-1" },
+      ],
+    },
+    isLoading: false,
+    isError: false,
+  });
 }
 
 function connectClient(): void {
@@ -1981,7 +1997,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       );
     });
 
-    it("updates the pin view itself rather than refetching it", async () => {
+    it("writes the saved pin into the view, then refetches it once", async () => {
       connectClient();
       mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
 
@@ -1995,10 +2011,20 @@ describe("RemoteMcpIdentitySectionBody", () => {
           "Pinned scopes updated",
         ),
       );
-      expect(mocks.invalidateScopes).not.toHaveBeenCalled();
+      expect(mocks.setScopesData).toHaveBeenCalledOnce();
+      expect(mocks.setScopesData).toHaveBeenCalledWith(
+        expect.anything(),
+        [{ mcpServerId: "mcp-server-1" }],
+        serverScopes({ pinnedScopes: ["read", "write"] }),
+      );
+      expect(mocks.invalidateScopes).toHaveBeenCalledOnce();
+      expect(mocks.invalidateScopes.mock.calls[0]).toHaveLength(1);
+      expect(mocks.invalidateScopes.mock.invocationCallOrder[0]).toBeGreaterThan(
+        mocks.setScopesData.mock.invocationCallOrder[0]!,
+      );
     });
 
-    it("refreshes the pin view when headers are saved", async () => {
+    it("only marks the pin view stale when headers are saved", async () => {
       connectClient();
       mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
 
@@ -2007,7 +2033,121 @@ describe("RemoteMcpIdentitySectionBody", () => {
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
       await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
-      await waitFor(() => expect(mocks.invalidateScopes).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(mocks.invalidateScopes).toHaveBeenCalledWith(expect.anything(), {
+          refetchType: "none",
+        }),
+      );
+    });
+
+    it("refetches the pin view once, after both the pin and headers land", async () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
+      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
+      addCustomHeader("X-Team", "eng");
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() =>
+        expect(mocks.toastSuccess).toHaveBeenCalledWith(
+          "Upstream headers updated",
+        ),
+      );
+      const refetches = mocks.invalidateScopes.mock.calls
+        .map((call, i) => ({
+          call,
+          order: mocks.invalidateScopes.mock.invocationCallOrder[i]!,
+        }))
+        .filter(({ call }) => call.length === 1);
+      expect(refetches).toHaveLength(1);
+      expect(refetches[0]!.order).toBeGreaterThan(
+        mocks.setScopesData.mock.invocationCallOrder[0]!,
+      );
+      expect(refetches[0]!.order).toBeGreaterThan(
+        mocks.create.mock.invocationCallOrder[0]!,
+      );
+    });
+
+    it("lets a pin-only edit through a locked identity", async () => {
+      sharedSource();
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+      expect(
+        (
+          screen.getByRole("radio", {
+            name: /Service Account/,
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(true);
+      const field = screen.getByRole("combobox", { name: "Pinned scopes" });
+      expect((field as HTMLButtonElement).disabled).toBe(false);
+      const save = screen.getByRole("button", { name: "Save" });
+      expect((save as HTMLButtonElement).disabled).toBe(true);
+
+      fireEvent.click(field);
+      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
+      expect((save as HTMLButtonElement).disabled).toBe(false);
+      fireEvent.click(save);
+
+      await waitFor(() => expect(mocks.setPin).toHaveBeenCalledOnce());
+      expect(mocks.setPin).toHaveBeenCalledWith({
+        request: {
+          setServerScopePinRequestBody: {
+            mcpServerId: "mcp-server-1",
+            scopes: ["read", "write"],
+          },
+        },
+      });
+      expect(mocks.commit).not.toHaveBeenCalled();
+      expect(mocks.create).not.toHaveBeenCalled();
+    });
+
+    it("keeps Save shut under a locked identity once headers are also edited", () => {
+      sharedSource();
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
+      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
+      addCustomHeader("X-Team", "eng");
+
+      const save = screen.getByRole("button", { name: "Save" });
+      expect((save as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("saves a cleared pin with the flag off", async () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({
+        data: serverScopes({ discoveryEnabled: false }),
+        isError: false,
+      });
+
+      renderIdentity();
+      const field = screen.getByRole("combobox", { name: "Pinned scopes" });
+      expect((field as HTMLButtonElement).disabled).toBe(true);
+      const save = screen.getByRole("button", { name: "Save" });
+      expect((save as HTMLButtonElement).disabled).toBe(true);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Clear pinned scopes" }),
+      );
+      expect((save as HTMLButtonElement).disabled).toBe(false);
+      fireEvent.click(save);
+
+      await waitFor(() => expect(mocks.setPin).toHaveBeenCalledOnce());
+      expect(mocks.setPin).toHaveBeenCalledWith({
+        request: {
+          setServerScopePinRequestBody: {
+            mcpServerId: "mcp-server-1",
+            scopes: [],
+          },
+        },
+      });
     });
 
     it("drops a draft edited back to the saved pin", () => {

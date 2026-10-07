@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/Button";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
 import { ScopeMultiSelect } from "@/lib/remote-identity";
@@ -33,8 +34,9 @@ export function ResourceScopePinField({
     ],
     [scopes, issuerScopes],
   );
-  // Flag off, a saved pin stays editable only so it can be cleared.
-  const readOnly = !scopes.discoveryEnabled && scopes.pinnedScopes.length === 0;
+  // Flag off, the pin can only be cleared, never added to.
+  const readOnly = !scopes.discoveryEnabled;
+  const canClear = readOnly && pin.value.length > 0;
   const status = scopePinStatus(scopes, connectedClientId);
   const unadvertised = unadvertisedPinnedScopes(
     scopes,
@@ -60,6 +62,16 @@ export function ResourceScopePinField({
         }
         disabled={disabled || readOnly}
       />
+      {canClear ? (
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={disabled}
+          onClick={() => pin.setValue([])}
+        >
+          <Button.Text>Clear pinned scopes</Button.Text>
+        </Button>
+      ) : null}
       {unadvertised.length > 0 ? (
         <Text small warning className="block">
           The MCP server does not advertise {unadvertised.join(", ")}; they are

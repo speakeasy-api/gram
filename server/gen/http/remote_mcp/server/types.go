@@ -3452,6 +3452,10 @@ type RemoteMcpServerClientScopesResponseBody struct {
 	// Pinned scopes the resource does not advertise; sent regardless. Empty when
 	// the pin does not decide or the resource's list is unknown.
 	UnadvertisedPinnedScopes []string `form:"unadvertised_pinned_scopes" json:"unadvertised_pinned_scopes" xml:"unadvertised_pinned_scopes"`
+	// Whether a pin, if set, decides this client's request: discovery is on, the
+	// client owns the resource, and neither its own scope nor a challenge outranks
+	// the pin.
+	PinWouldDecide bool `form:"pin_would_decide" json:"pin_would_decide" xml:"pin_would_decide"`
 }
 
 // RemoteMcpServerHeaderResponseBody is used to define fields on response body

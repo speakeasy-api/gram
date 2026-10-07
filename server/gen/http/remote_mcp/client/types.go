@@ -3450,6 +3450,10 @@ type RemoteMcpServerClientScopesResponseBody struct {
 	// Pinned scopes the resource does not advertise; sent regardless. Empty when
 	// the pin does not decide or the resource's list is unknown.
 	UnadvertisedPinnedScopes []string `form:"unadvertised_pinned_scopes,omitempty" json:"unadvertised_pinned_scopes,omitempty" xml:"unadvertised_pinned_scopes,omitempty"`
+	// Whether a pin, if set, decides this client's request: discovery is on, the
+	// client owns the resource, and neither its own scope nor a challenge outranks
+	// the pin.
+	PinWouldDecide *bool `form:"pin_would_decide,omitempty" json:"pin_would_decide,omitempty" xml:"pin_would_decide,omitempty"`
 }
 
 // RemoteMcpServerHeaderResponseBody is used to define fields on response body
@@ -6447,6 +6451,9 @@ func ValidateGetServerScopesResponseBody(body *GetServerScopesResponseBody) (err
 	if body.SharedServerCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("shared_server_count", "body"))
 	}
+	if body.ResourceURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource_url", *body.ResourceURL, goa.FormatURI))
+	}
 	for _, e := range body.Clients {
 		if e != nil {
 			if err2 := ValidateRemoteMcpServerClientScopesResponseBody(e); err2 != nil {
@@ -6480,6 +6487,9 @@ func ValidateSetServerScopePinResponseBody(body *SetServerScopePinResponseBody) 
 	}
 	if body.SharedServerCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("shared_server_count", "body"))
+	}
+	if body.ResourceURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource_url", *body.ResourceURL, goa.FormatURI))
 	}
 	for _, e := range body.Clients {
 		if e != nil {
@@ -10619,6 +10629,9 @@ func ValidateRemoteMcpServerClientScopesResponseBody(body *RemoteMcpServerClient
 	}
 	if body.UnadvertisedPinnedScopes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("unadvertised_pinned_scopes", "body"))
+	}
+	if body.PinWouldDecide == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pin_would_decide", "body"))
 	}
 	if body.ClientID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id", *body.ClientID, goa.FormatUUID))

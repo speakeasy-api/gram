@@ -3965,8 +3965,9 @@ func unmarshalProtectedResourceMetadataUnavailableResponseBodyToRemotemcpProtect
 // of type *RemoteMcpServerClientScopesResponseBody.
 func unmarshalRemoteMcpServerClientScopesResponseBodyToRemotemcpRemoteMcpServerClientScopes(v *RemoteMcpServerClientScopesResponseBody) *remotemcp.RemoteMcpServerClientScopes {
 	res := &remotemcp.RemoteMcpServerClientScopes{
-		ClientID:    *v.ClientID,
-		ScopeSource: *v.ScopeSource,
+		ClientID:       *v.ClientID,
+		ScopeSource:    *v.ScopeSource,
+		PinWouldDecide: *v.PinWouldDecide,
 	}
 	res.RequestedScopes = make([]string, len(v.RequestedScopes))
 	for i, val := range v.RequestedScopes {

@@ -160,8 +160,10 @@ Linear's protected resource (`https://mcp.linear.app/mcp`) has a PG
 `remote_protected_resources` row read two hours before the seed ran,
 advertising `read` and `write`, with a scope pin of `read`. What the server's
 Identity panel (`remoteMcp.getServerScopes`) shows depends on the
-`remote-session-live-resource-scopes` rollout flag. Off, the pin field is
-read-only and says pins are not enabled for the organization. On, Linear's
+`remote-session-live-resource-scopes` rollout flag. Off, the pin picker is
+read-only and says pins are not enabled for the organization; because a pin is
+seeded, a "Clear pinned scopes" button is shown (clearing is allowed, adding is
+not). On, Linear's
 seeded client sets its own scopes, so the pin reads "Not used: this
 connection requests its own scopes". The advertised `read` and `write` are
 offered as picker options. Browser verification: `[~]`.

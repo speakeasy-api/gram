@@ -325,6 +325,8 @@ export function RemoteMcpIdentitySectionBody({
       scopePinDirty ? scopePin.save() : Promise.resolve(false),
       headerDrafts.save(),
     ]);
+    // One refetch once both have landed, so neither overwrites the other.
+    void invalidateAllGetRemoteMcpServerScopes(queryClient);
     if (pinResult.status === "rejected") {
       toast.error(
         errorMessage(pinResult.reason, "Failed to save pinned scopes"),
@@ -374,6 +376,9 @@ export function RemoteMcpIdentitySectionBody({
     // No Identity commits only the removal it implies.
     identityCanSave = destructive;
   }
+  // A locked identity still lets a pin-only edit through.
+  const pinOnlyChange =
+    scopePinDirty && !identityCanSave && !headerDrafts.isDirty;
   // Rows that cannot be written stop the whole commit rather than letting the
   // identity half through and dropping the rest on the floor.
   const headersBlocked =
@@ -567,7 +572,9 @@ export function RemoteMcpIdentitySectionBody({
                     scopes={scopePin.data}
                     connectedClientId={userDraft.connectedClient?.id ?? null}
                     issuerScopes={userDraft.scopeOptions}
-                    disabled={identityReadOnly || savePending}
+                    // The pin has its own lock: the server checks write
+                    // access to every server sharing the resource.
+                    disabled={!canWrite || savePending}
                   />
                 </div>
               ) : scopePinSlot && scopePin.isError ? (
@@ -641,7 +648,11 @@ export function RemoteMcpIdentitySectionBody({
               >
                 <FooterSaveButton
                   pending={savePending}
-                  disabled={!canSave || savePending || identityReadOnly}
+                  disabled={
+                    !canSave ||
+                    savePending ||
+                    (identityReadOnly && !pinOnlyChange)
+                  }
                   onClick={() => {
                     if (destructive) setConfirmOpen(true);
                     else void performSave();

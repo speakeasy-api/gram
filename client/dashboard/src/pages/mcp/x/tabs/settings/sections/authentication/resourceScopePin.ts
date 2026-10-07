@@ -1,5 +1,4 @@
 import { normalizeScopes } from "@/lib/remote-identity";
-import type { ScopeSource } from "@gram/client/models/components/remotemcpserverclientscopes.js";
 import type { RemoteMcpServerScopes } from "@gram/client/models/components/remotemcpserverscopes.js";
 import {
   setGetRemoteMcpServerScopesData,
@@ -68,16 +67,6 @@ export function useResourceScopePin({
     saving: mutation.isPending,
   };
 }
-
-// Sources a saved pin would outrank; with no pin they are where it would land.
-const PIN_FALLBACK_SOURCES: ReadonlySet<ScopeSource> = new Set<ScopeSource>([
-  "cached_resource",
-  "live_resource",
-  "issuer_override",
-  "issuer_catalogue",
-  "issuer_omitted",
-  "none",
-]);
 
 function connectedEntry(
   scopes: RemoteMcpServerScopes,
@@ -150,12 +139,8 @@ export function unadvertisedPinnedScopes(
   if (!entry || !scopes.discoveryEnabled || !scopes.advertisedScopesKnown) {
     return [];
   }
-  // An edit only matters where the pin would decide the request.
-  const pinWouldDecide =
-    entry.scopeSource === "resource_pin" ||
-    (scopes.pinnedScopes.length === 0 &&
-      PIN_FALLBACK_SOURCES.has(entry.scopeSource));
-  if (!pinWouldDecide) return [];
+  // An edit only matters where the server says a pin would decide.
+  if (!entry.pinWouldDecide) return [];
   const advertised = scopes.advertisedScopes ?? [];
   return value.filter((scope) => !advertised.includes(scope));
 }

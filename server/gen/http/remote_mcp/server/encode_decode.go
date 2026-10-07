@@ -3832,8 +3832,9 @@ func marshalRemotemcpProtectedResourceMetadataUnavailableToProtectedResourceMeta
 // of type *remotemcp.RemoteMcpServerClientScopes.
 func marshalRemotemcpRemoteMcpServerClientScopesToRemoteMcpServerClientScopesResponseBody(v *remotemcp.RemoteMcpServerClientScopes) *RemoteMcpServerClientScopesResponseBody {
 	res := &RemoteMcpServerClientScopesResponseBody{
-		ClientID:    v.ClientID,
-		ScopeSource: v.ScopeSource,
+		ClientID:       v.ClientID,
+		ScopeSource:    v.ScopeSource,
+		PinWouldDecide: v.PinWouldDecide,
 	}
 	if v.RequestedScopes != nil {
 		res.RequestedScopes = make([]string, len(v.RequestedScopes))

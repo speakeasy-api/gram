@@ -674,14 +674,17 @@ var RemoteMcpServerClientScopes = Type("RemoteMcpServerClientScopes", func() {
 	})
 	Attribute("requested_scopes", ArrayOf(String), "The scope parameter the login would send; empty sends none.")
 	Attribute("unadvertised_pinned_scopes", ArrayOf(String), "Pinned scopes the resource does not advertise; sent regardless. Empty when the pin does not decide or the resource's list is unknown.")
+	Attribute("pin_would_decide", Boolean, "Whether a pin, if set, decides this client's request: discovery is on, the client owns the resource, and neither its own scope nor a challenge outranks the pin.")
 
-	Required("client_id", "scope_source", "requested_scopes", "unadvertised_pinned_scopes")
+	Required("client_id", "scope_source", "requested_scopes", "unadvertised_pinned_scopes", "pin_would_decide")
 })
 
 var RemoteMcpServerScopes = Type("RemoteMcpServerScopes", func() {
 	Description("Scope state of the protected resource a remote-backed MCP server's logins are for.")
 
-	Attribute("resource_url", String, "The protected resource: the server's upstream URL.")
+	Attribute("resource_url", String, "The protected resource: the server's upstream URL.", func() {
+		Format(FormatURI)
+	})
 	Attribute("pinned_scopes", ArrayOf(String), "The operator's scope pin on the protected resource, shared by servers with the same upstream URL; empty when unset.")
 	Attribute("advertised_scopes_known", Boolean, "Whether a read of the resource's metadata within the last good window captured an advertised list.")
 	Attribute("advertised_scopes", ArrayOf(String), "The resource's advertised scopes_supported from that read. Absent when unknown or empty; see advertised_scopes_known.")

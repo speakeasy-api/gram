@@ -292,15 +292,18 @@ func TestGetServerScopes_ReportsResourceAndPerClientResolution(t *testing.T) {
 	require.Equal(t, "client_scope", c.ScopeSource)
 	require.Equal(t, []string{"own:read", "openid"}, c.RequestedScopes)
 	require.Empty(t, c.UnadvertisedPinnedScopes)
+	require.False(t, c.PinWouldDecide, "the client's own scope outranks a pin")
 
 	// The challenge outranks the pin.
 	c = clientEntry(t, got, owner)
 	require.Equal(t, "challenge_scope", c.ScopeSource)
 	require.Equal(t, []string{"challenged", "openid"}, c.RequestedScopes)
+	require.False(t, c.PinWouldDecide, "a challenge outranks a pin")
 
 	c = clientEntry(t, got, shared)
 	require.Equal(t, "issuer_catalogue", c.ScopeSource, "a client that does not own the resource ignores the pin")
 	require.Equal(t, []string{"openid", "iss:read"}, c.RequestedScopes)
+	require.False(t, c.PinWouldDecide, "a non-owner never uses the pin")
 
 	_, err = repo.New(ti.conn).RecordRemoteProtectedResourceChallengeScopes(ctx, repo.RecordRemoteProtectedResourceChallengeScopesParams{ChallengeScopes: nil, ProjectID: *authCtx.ProjectID, ResourceIdentifier: srv.url})
 	require.NoError(t, err)
@@ -311,6 +314,7 @@ func TestGetServerScopes_ReportsResourceAndPerClientResolution(t *testing.T) {
 	require.Equal(t, "resource_pin", c.ScopeSource)
 	require.Equal(t, []string{"read", "admin", "openid"}, c.RequestedScopes)
 	require.Equal(t, []string{"admin"}, c.UnadvertisedPinnedScopes)
+	require.True(t, c.PinWouldDecide)
 }
 
 func TestGetServerScopes_StaleAdvertisedListIsUnknown(t *testing.T) {
@@ -340,6 +344,7 @@ func TestGetServerScopes_FlagOffIgnoresPin(t *testing.T) {
 	srv := seedScopeServer(t, ctx, ti, "https://scopes-off.example.com/mcp")
 	issuer := seedScopeIssuer(t, ctx, ti, []string{"iss:read"}, []string{"iss:override"})
 	owner := seedScopeClient(t, ctx, ti, issuer, []string{"own:read"}, srv.userSessionIssuerID)
+	bare := seedScopeClient(t, ctx, ti, issuer, nil, srv.userSessionIssuerID)
 	_, err := setPin(ctx, ti, srv.mcpServerID, "read")
 	require.NoError(t, err)
 
@@ -350,6 +355,8 @@ func TestGetServerScopes_FlagOffIgnoresPin(t *testing.T) {
 	c := clientEntry(t, got, owner)
 	require.Equal(t, "issuer_override", c.ScopeSource, "without discovery the issuer override beats even the client scope")
 	require.Equal(t, []string{"iss:override"}, c.RequestedScopes)
+	require.False(t, c.PinWouldDecide)
+	require.False(t, clientEntry(t, got, bare).PinWouldDecide, "without discovery no pin decides")
 }
 
 func TestServerScopes_RefusesServerWithoutRemoteBackend(t *testing.T) {
@@ -546,6 +553,7 @@ func TestGetServerScopes_CachedResourceWithoutPin(t *testing.T) {
 	require.Equal(t, "cached_resource", c.ScopeSource)
 	require.Equal(t, []string{"read", "write"}, c.RequestedScopes)
 	require.Empty(t, c.UnadvertisedPinnedScopes)
+	require.True(t, c.PinWouldDecide, "with no pin, one set now would decide")
 }
 
 func TestGetServerScopes_FlagOffClientScopeIgnoresPin(t *testing.T) {

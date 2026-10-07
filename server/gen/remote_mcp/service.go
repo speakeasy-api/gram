@@ -346,6 +346,10 @@ type RemoteMcpServerClientScopes struct {
 	// Pinned scopes the resource does not advertise; sent regardless. Empty when
 	// the pin does not decide or the resource's list is unknown.
 	UnadvertisedPinnedScopes []string
+	// Whether a pin, if set, decides this client's request: discovery is on, the
+	// client owns the resource, and neither its own scope nor a challenge outranks
+	// the pin.
+	PinWouldDecide bool
 }
 
 // RemoteMcpServerScopes is the result type of the remoteMcp service

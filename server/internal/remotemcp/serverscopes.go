@@ -75,14 +75,14 @@ func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerS
 	if err != nil {
 		return nil, err
 	}
-	sharing, err := s.authorizeSharingServers(ctx, dbtx, logger, authCtx, target)
-	if err != nil {
-		return nil, err
-	}
-
 	q := repo.New(dbtx)
 	if err := q.AcquireRemoteProtectedResourceLock(ctx, repo.AcquireRemoteProtectedResourceLockParams{ProjectID: *authCtx.ProjectID, ResourceIdentifier: target.resourceURL}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock protected resource").LogError(ctx, logger)
+	}
+	// Authorized under the lock, so concurrent pin writes see one sharing set.
+	sharing, err := s.authorizeSharingServers(ctx, dbtx, logger, authCtx, target)
+	if err != nil {
+		return nil, err
 	}
 	var before []string
 	existing, err := q.GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: *authCtx.ProjectID, ResourceIdentifier: target.resourceURL})
@@ -275,6 +275,7 @@ func (s *Service) clientScopes(ctx context.Context, projectID uuid.UUID, orgID s
 			ScopeSource:              string(resolved.Source),
 			RequestedScopes:          conv.DefaultSlice(resolved.Scopes, []string{}),
 			UnadvertisedPinnedScopes: conv.DefaultSlice(resolved.Unadvertised, []string{}),
+			PinWouldDecide:           discover && owners[r.ClientID] && len(r.ClientScope) == 0 && len(cached.ChallengeScopes) == 0,
 		})
 	}
 	return out, nil

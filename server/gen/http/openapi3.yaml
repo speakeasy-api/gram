@@ -104652,6 +104652,9 @@ components:
                     type: string
                     description: The remote session client's ID.
                     format: uuid
+                pin_would_decide:
+                    type: boolean
+                    description: 'Whether a pin, if set, decides this client''s request: discovery is on, the client owns the resource, and neither its own scope nor a challenge outranks the pin.'
                 requested_scopes:
                     type: array
                     items:
@@ -104681,6 +104684,7 @@ components:
                 - scope_source
                 - requested_scopes
                 - unadvertised_pinned_scopes
+                - pin_would_decide
         RemoteMcpServerHeader:
             type: object
             properties:
@@ -104754,6 +104758,7 @@ components:
                 resource_url:
                     type: string
                     description: 'The protected resource: the server''s upstream URL.'
+                    format: uri
                 shared_server_count:
                     type: integer
                     description: How many other live MCP servers in the project share this upstream URL, and so this pin.

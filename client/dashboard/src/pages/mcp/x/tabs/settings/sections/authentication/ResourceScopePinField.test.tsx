@@ -1,6 +1,6 @@
 import type { RemoteMcpServerScopes } from "@gram/client/models/components/remotemcpserverscopes.js";
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ResourceScopePinField } from "./ResourceScopePinField";
 import {
   scopePinStatus,
@@ -30,6 +30,7 @@ function scopes(
         scopeSource: "resource_pin",
         requestedScopes: ["read"],
         unadvertisedPinnedScopes: [],
+        pinWouldDecide: true,
       },
     ],
     ...overrides,
@@ -40,6 +41,7 @@ function withSource(
   scopeSource: RemoteMcpServerScopes["clients"][number]["scopeSource"],
   overrides: Partial<RemoteMcpServerScopes> = {},
   unadvertised: string[] = [],
+  pinWouldDecide = scopeSource === "resource_pin",
 ): RemoteMcpServerScopes {
   return scopes({
     clients: [
@@ -48,18 +50,23 @@ function withSource(
         scopeSource,
         requestedScopes: [],
         unadvertisedPinnedScopes: unadvertised,
+        pinWouldDecide,
       },
     ],
     ...overrides,
   });
 }
 
-function pin(value: string[], dirty = false): ResourceScopePin {
+function pin(
+  value: string[],
+  dirty = false,
+  setValue: (values: string[]) => void = () => undefined,
+): ResourceScopePin {
   return {
     data: undefined,
     isError: false,
     value,
-    setValue: () => undefined,
+    setValue,
     dirty,
     save: () => Promise.resolve(false),
     saving: false,
@@ -174,7 +181,7 @@ describe("unadvertisedPinnedScopes", () => {
     ).toEqual([]);
   });
 
-  it("checks an edit locally only where the pin would decide", () => {
+  it("checks an edit locally only where the server says the pin would decide", () => {
     const edit = ["read", "admin"];
     expect(
       unadvertisedPinnedScopes(
@@ -186,12 +193,21 @@ describe("unadvertisedPinnedScopes", () => {
     ).toEqual(["admin"]);
     expect(
       unadvertisedPinnedScopes(
-        withSource("cached_resource", { pinnedScopes: [] }),
+        withSource("cached_resource", { pinnedScopes: [] }, [], true),
         edit,
         true,
         "client-1",
       ),
     ).toEqual(["admin"]);
+    // A client that does not own the resource: no pin, yet the pin would not decide.
+    expect(
+      unadvertisedPinnedScopes(
+        withSource("issuer_catalogue", { pinnedScopes: [] }, [], false),
+        edit,
+        true,
+        "client-1",
+      ),
+    ).toEqual([]);
     expect(
       unadvertisedPinnedScopes(
         withSource("cached_resource"),
@@ -289,6 +305,7 @@ describe("ResourceScopePinField", () => {
               scopeSource: "resource_pin",
               requestedScopes: ["read", "admin"],
               unadvertisedPinnedScopes: ["admin"],
+              pinWouldDecide: true,
             },
           ],
         })}
@@ -317,6 +334,20 @@ describe("ResourceScopePinField", () => {
     );
 
     expect(screen.getByText(/does not advertise admin;/)).toBeDefined();
+  });
+
+  it("does not warn about an edit the pin would not decide", () => {
+    render(
+      <ResourceScopePinField
+        pin={pin(["admin"], true)}
+        scopes={withSource("issuer_catalogue", { pinnedScopes: [] }, [], false)}
+        connectedClientId="client-1"
+        issuerScopes={[]}
+        disabled={false}
+      />,
+    );
+
+    expect(screen.queryByText(/does not advertise/)).toBeNull();
   });
 
   it("does not warn when the advertised list is unknown", () => {
@@ -351,12 +382,16 @@ describe("ResourceScopePinField", () => {
     expect(screen.getByText("No pinned scopes")).toBeDefined();
     expect(screen.getByText(FLAG_OFF)).toBeDefined();
     expect(screen.queryByText(/enrolled/)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Clear pinned scopes" }),
+    ).toBeNull();
   });
 
-  it("keeps a saved pin clearable with the flag off", () => {
+  it("only clears a saved pin with the flag off", () => {
+    const setValue = vi.fn<(values: string[]) => void>();
     render(
       <ResourceScopePinField
-        pin={pin(["read"])}
+        pin={pin(["read"], false, setValue)}
         scopes={scopes({ discoveryEnabled: false })}
         connectedClientId="client-1"
         issuerScopes={[]}
@@ -365,7 +400,25 @@ describe("ResourceScopePinField", () => {
     );
 
     const field = screen.getByRole("combobox", { name: "Pinned scopes" });
-    expect((field as HTMLButtonElement).disabled).toBe(false);
+    expect((field as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Clear pinned scopes" }));
+    expect(setValue).toHaveBeenCalledWith([]);
+  });
+
+  it("offers no Clear button with the flag on", () => {
+    render(
+      <ResourceScopePinField
+        pin={pin(["read"])}
+        scopes={scopes()}
+        connectedClientId="client-1"
+        issuerScopes={[]}
+        disabled={false}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Clear pinned scopes" }),
+    ).toBeNull();
   });
 
   it("offers the advertised scopes as the placeholder with the flag on", () => {

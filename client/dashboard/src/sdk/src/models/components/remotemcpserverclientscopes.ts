@@ -37,6 +37,10 @@ export type RemoteMcpServerClientScopes = {
    */
   clientId: string;
   /**
+   * Whether a pin, if set, decides this client's request: discovery is on, the client owns the resource, and neither its own scope nor a challenge outranks the pin.
+   */
+  pinWouldDecide: boolean;
+  /**
    * The scope parameter the login would send; empty sends none.
    */
   requestedScopes: Array<string>;
@@ -61,6 +65,7 @@ export const RemoteMcpServerClientScopes$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     client_id: z.string(),
+    pin_would_decide: z.boolean(),
     requested_scopes: z.array(z.string()),
     scope_source: ScopeSource$inboundSchema,
     unadvertised_pinned_scopes: z.array(z.string()),
@@ -68,6 +73,7 @@ export const RemoteMcpServerClientScopes$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "client_id": "clientId",
+      "pin_would_decide": "pinWouldDecide",
       "requested_scopes": "requestedScopes",
       "scope_source": "scopeSource",
       "unadvertised_pinned_scopes": "unadvertisedPinnedScopes",
