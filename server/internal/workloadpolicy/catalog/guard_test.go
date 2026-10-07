@@ -39,7 +39,7 @@ func TestNoPlatformDefinitionsOutsideTheCatalog(t *testing.T) {
 			return err
 		}
 		if entry.IsDir() {
-			if skippedDirs[entry.Name()] {
+			if skippedDirs[entry.Name()] || isNestedCheckout(path) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -68,6 +68,17 @@ func TestNoPlatformDefinitionsOutsideTheCatalog(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, copies, "platform definitions belong only in %s", definitionsDir)
+}
+
+// isNestedCheckout reports whether dir, below the repository root, is another
+// checkout of the repository, such as a git worktree or a submodule. Its files
+// belong to that checkout, not this one.
+func isNestedCheckout(dir string) bool {
+	if filepath.Clean(dir) == filepath.Clean(repositoryRoot) {
+		return false
+	}
+	_, err := os.Lstat(filepath.Join(dir, ".git"))
+	return err == nil
 }
 
 // looksLikePlatformDefinition reports whether raw is a YAML mapping carrying
