@@ -284,6 +284,9 @@ const (
 	EnvVarNameKey                  = attribute.Key("gram.envvar.name")
 	EventSourceKey                 = attribute.Key("gram.event.source")
 	EventURNKey                    = attribute.Key("gram.event.urn")
+	AgentEventTypeKey              = attribute.Key("gram.agent_event.type")
+	AgentEventColumnKey            = attribute.Key("gram.agent_event.column")
+	AgentEventSurfaceKey           = attribute.Key("gram.agent_event.surface")
 	FilterExpressionKey            = attribute.Key("gram.filter.src")
 	TriggerCorrelationIDKey        = attribute.Key("gram.trigger.correlation_id")
 	TriggerDefinitionSlugKey       = attribute.Key("gram.trigger.definition_slug")
@@ -807,6 +810,7 @@ const (
 	OTELSpanEnricherNameKey   = attribute.Key("gram.otel.span_enricher_name")
 	OTELLogEnricherNameKey    = attribute.Key("gram.otel.log_enricher_name")
 	OTELMetricEnricherNameKey = attribute.Key("gram.otel.metric_enricher_name")
+	OTELSignalKey             = attribute.Key("gram.otel.signal")
 
 	// GenAI semantic convention keys (OTel GenAI semconv - experimental)
 	// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
@@ -1119,6 +1123,8 @@ func OTELLogEnricherName(v string) attribute.KeyValue { return OTELLogEnricherNa
 func OTELMetricEnricherName(v string) attribute.KeyValue { return OTELMetricEnricherNameKey.String(v) }
 
 func OTELSpanEnricherName(v string) attribute.KeyValue { return OTELSpanEnricherNameKey.String(v) }
+
+func OTELSignal[V ~string](v V) attribute.KeyValue { return OTELSignalKey.String(string(v)) }
 func SlogOTELSpanEnricherName(v string) slog.Attr {
 	return slog.String(string(OTELSpanEnricherNameKey), v)
 }
@@ -1653,6 +1659,15 @@ func SlogEventSource(v string) slog.Attr      { return slog.String(string(EventS
 
 func EventURN(v string) attribute.KeyValue { return EventURNKey.String(v) }
 func SlogEventURN(v string) slog.Attr      { return slog.String(string(EventURNKey), v) }
+
+func AgentEventType(v string) attribute.KeyValue { return AgentEventTypeKey.String(v) }
+func SlogAgentEventType(v string) slog.Attr      { return slog.String(string(AgentEventTypeKey), v) }
+
+func AgentEventColumn(v string) attribute.KeyValue { return AgentEventColumnKey.String(v) }
+func SlogAgentEventColumn(v string) slog.Attr      { return slog.String(string(AgentEventColumnKey), v) }
+
+func AgentEventSurface(v string) attribute.KeyValue { return AgentEventSurfaceKey.String(v) }
+func SlogAgentEventSurface(v string) slog.Attr      { return slog.String(string(AgentEventSurfaceKey), v) }
 
 func ErrorID(v string) attribute.KeyValue { return ErrorIDKey.String(v) }
 func SlogErrorID(v string) slog.Attr      { return slog.String(string(ErrorIDKey), v) }

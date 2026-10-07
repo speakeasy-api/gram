@@ -37,15 +37,20 @@ func NewLogTransformHandler(
 ) *LogTransformHandler {
 	logger = logger.With(attr.SlogComponent("log-transform-handler"))
 
+	in := enrich.NewInstruments(logger, meterProvider)
+
+	enrichers := []enrich.LogEnricher{
+		enrich.NewLogTenancy(),
+		enrich.NewLogTokens(),
+		enrich.NewLogDirectory(logger, replicaDB, cacheImpl),
+	}
+	enrichers = append(enrichers, enrich.LogColumns(in)...)
+
 	return &LogTransformHandler{
 		logger:       logger,
-		instruments:  enrich.NewInstruments(logger, meterProvider),
+		instruments:  in,
 		logPublisher: logPublisher,
-		enrichers: []enrich.LogEnricher{
-			enrich.NewLogTenancy(),
-			enrich.NewLogTokens(),
-			enrich.NewLogDirectory(logger, replicaDB, cacheImpl),
-		},
+		enrichers:    enrichers,
 	}
 }
 
@@ -57,6 +62,7 @@ func (h *LogTransformHandler) Handle(ctx context.Context, record *otelv1.Inbound
 	if err := rewriteLogInstrumentationScope(out); err != nil {
 		return fmt.Errorf("rewrite instrumentation scope: %w", err)
 	}
+	h.instruments.RecordReservedAttributesDropped(ctx, enrich.SignalLog, dropReservedLogAttributes(out))
 
 	enrichments, err := enrich.Log(ctx, h.instruments, record, h.enrichers)
 	if err != nil {
@@ -94,6 +100,25 @@ func rewriteLogInstrumentationScope(record *otelv1.LogRecord) error {
 	return applyLogEnrichments(record, []otelattr.KeyValue{
 		enrich.OriginalInstrumentationScopeName(originalName),
 	})
+}
+
+// dropReservedLogAttributes removes what a producer sent under Gram's own
+// speakeasy.agent namespace and says how many attributes went. Only the
+// column enrichers write there, and they leave a key off when a record
+// carries no value for it, so a producer that sends one would otherwise
+// classify its own record. The enrichers read the inbound record, so what
+// they see is unchanged; the outbound record is what every consumer and
+// relay receives.
+func dropReservedLogAttributes(record *otelv1.LogRecord) int {
+	attributes := record.GetAttributes()
+	kept := slices.DeleteFunc(attributes, func(kv *otelv1.LogRecord_KeyValue) bool {
+		return enrich.IsAgentColumnKey(kv.GetKey())
+	})
+	dropped := len(attributes) - len(kept)
+	if dropped > 0 {
+		record.SetAttributes(kept)
+	}
+	return dropped
 }
 
 func applyLogEnrichments(out *otelv1.LogRecord, enrichments []otelattr.KeyValue) error {
