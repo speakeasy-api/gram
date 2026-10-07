@@ -1516,7 +1516,7 @@ func (s *ServiceCore) UpdateAssistant(
 	record := assistantRecordFromUpdateRow(updated)
 
 	if toolsets != nil {
-		if err := writeAssistantToolsets(ctx, tx, s.audit, assistantActor(ctx, ""), record.ID, projectID, resolved); err != nil {
+		if err := writeAssistantToolsets(ctx, tx, s.audit, assistantActor(ctx, record.CreatedByUserID), record.ID, projectID, resolved); err != nil {
 			return assistantRecord{}, err
 		}
 	}
