@@ -765,6 +765,15 @@ func TestAnalyzeBatch_PromptInjectionPublishesBoundedOversizedInputs(t *testing.
 	})
 	require.NoError(t, err)
 	toolID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": strings.Repeat("c", 4*bound)})
+	// Two calls survive the budget, so this publishes as structured tool calls.
+	multiID := insertAssistantToolCallsWithArgs(t, conn, td, []struct {
+		name string
+		args map[string]any
+	}{
+		{name: "Bash", args: map[string]any{"command": "ls"}},
+		{name: "Write", args: map[string]any{"content": strings.Repeat("w", 4*bound)}},
+		{name: "Bash", args: map[string]any{"command": strings.Repeat("c", 4*bound)}},
+	})
 
 	assetStorage := assetstest.NewTestBlobStore(t)
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, assetStorage)
@@ -816,7 +825,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesBoundedOversizedInputs(t *testing.
 		OrganizationID:   td.orgID,
 		RiskPolicyID:     td.policyID,
 		PolicyVersion:    td.policyVersion,
-		MessageIDs:       []uuid.UUID{userID, toolID},
+		MessageIDs:       []uuid.UUID{userID, toolID, multiID},
 		ContentPartIDs:   []uuid.UUID{partID},
 		Sources:          []string{risk_analysis.SourcePromptInjection},
 		PresidioEntities: nil,
@@ -826,15 +835,24 @@ func TestAnalyzeBatch_PromptInjectionPublishesBoundedOversizedInputs(t *testing.
 	var result risk_analysis.AnalyzeBatchResult
 	require.NoError(t, val.Get(&result))
 
-	require.Len(t, *published, 3)
+	require.Len(t, *published, 4)
+	sawToolCalls := false
 	for _, req := range *published {
 		require.LessOrEqual(t, len(req.GetContent()), bound)
 		require.LessOrEqual(t, len(req.GetBody()), bound)
+		argBytes := 0
 		for _, call := range req.GetToolCalls() {
-			require.LessOrEqual(t, len(call.GetArguments()), bound)
+			argBytes += len(call.GetArguments())
+		}
+		require.LessOrEqual(t, argBytes, bound)
+		if len(req.GetToolCalls()) > 0 {
+			sawToolCalls = true
+			require.Len(t, req.GetToolCalls(), 2)
+			continue
 		}
 		require.NotEmpty(t, req.GetContent()+req.GetBody())
 	}
+	require.True(t, sawToolCalls, "expected a multi-call request with structured tool calls")
 }
 
 func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(t *testing.T) {

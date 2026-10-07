@@ -120,8 +120,8 @@ func newRiskMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *ri
 
 	batchInputTruncations, err := meter.Int64Counter(
 		meterRiskBatchInputTruncations,
-		metric.WithDescription("Batch scan inputs cut to batchScanMaxContentBytes when loaded"),
-		metric.WithUnit("{message}"),
+		metric.WithDescription("Batch scan inputs cut to the 50 KiB load-time bound"),
+		metric.WithUnit("{input}"),
 	)
 	if err != nil {
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRiskBatchInputTruncations), attr.SlogError(err))

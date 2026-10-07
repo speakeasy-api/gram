@@ -17,8 +17,8 @@ import (
 )
 
 // batchScanMaxContentBytes bounds every batch scan input when it is loaded, so
-// no scanner or Pub/Sub publish sees an unbounded message. It matches the
-// enforcement dispatch default, so both lanes scan the same prefix.
+// no scanner or Pub/Sub publish sees an unbounded message. Same value as the
+// enforcement dispatch default, which caps each field separately instead.
 const batchScanMaxContentBytes = 50 * 1024
 
 type batchMessage struct {
@@ -47,18 +47,29 @@ type batchMessage struct {
 	Truncated bool
 }
 
-// bound cuts Content and tool-call arguments to one shared
-// batchScanMaxContentBytes budget, in scan-surface order, and RawToolCalls to
-// the same size on its own.
+// bound cuts Content and every tool call's name, id and arguments to one shared
+// batchScanMaxContentBytes budget, dropping calls past it. RawToolCalls is cut
+// to the same size on its own.
 func (m *batchMessage) bound() {
 	remaining := batchScanMaxContentBytes
 	m.Content = m.boundText(m.Content, &remaining)
 	for i := range m.ToolCalls {
-		m.ToolCalls[i].Function.Arguments = m.boundText(m.ToolCalls[i].Function.Arguments, &remaining)
+		if remaining == 0 {
+			m.ToolCalls = m.ToolCalls[:i]
+			m.Truncated = true
+			break
+		}
+		call := &m.ToolCalls[i]
+		call.Function.Name = m.boundText(call.Function.Name, &remaining)
+		call.ID = m.boundText(call.ID, &remaining)
+		call.Function.Arguments = m.boundText(call.Function.Arguments, &remaining)
 	}
 	if len(m.RawToolCalls) > batchScanMaxContentBytes {
 		m.RawToolCalls = []byte(truncateAtRuneBoundary(string(m.RawToolCalls), batchScanMaxContentBytes))
-		m.Truncated = true
+		// Raw JSON is only scanned when no calls parsed.
+		if len(m.ToolCalls) == 0 {
+			m.Truncated = true
+		}
 	}
 }
 
