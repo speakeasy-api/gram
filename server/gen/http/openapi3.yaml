@@ -92566,6 +92566,10 @@ components:
                 instructions:
                     type: string
                     description: Optional classification instructions; empty stores no value
+                match_expression:
+                    type: string
+                    description: Boolean CEL predicate; omission defaults to message.role == "user"
+                    maxLength: 4096
                 mode:
                     type: string
                     description: 'How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.'
@@ -111922,6 +111926,9 @@ components:
                 instructions:
                     type: string
                     description: Optional framing instructions for classification
+                match_expression:
+                    type: string
+                    description: Boolean CEL predicate over message.role (lowercase user, assistant, system, or tool)
                 mode:
                     type: string
                     description: 'How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.'
@@ -111953,6 +111960,7 @@ components:
                     format: date-time
             description: A project-scoped sensor with ordered live references to custom signals. signal_ids is always present, including when empty.
             required:
+                - match_expression
                 - id
                 - project_id
                 - name
@@ -118393,6 +118401,10 @@ components:
                 instructions:
                     type: string
                     description: Replacement instructions; empty clears it
+                match_expression:
+                    type: string
+                    description: Replacement boolean CEL predicate; omission preserves it
+                    maxLength: 4096
                 mode:
                     type: string
                     description: 'How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.'

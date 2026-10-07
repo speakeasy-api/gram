@@ -29,6 +29,10 @@ export type CreateSigintSensorForm = {
    */
   instructions?: string | undefined;
   /**
+   * Boolean CEL predicate; omission defaults to message.role == "user"
+   */
+  matchExpression?: string | undefined;
+  /**
    * How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.
    */
   mode: Mode;
@@ -53,6 +57,7 @@ export const Mode$outboundSchema: z.ZodMiniEnum<typeof Mode> = z.enum(Mode);
 export type CreateSigintSensorForm$Outbound = {
   description?: string | undefined;
   instructions?: string | undefined;
+  match_expression?: string | undefined;
   mode: string;
   name: string;
   signal_ids?: Array<string> | undefined;
@@ -67,6 +72,7 @@ export const CreateSigintSensorForm$outboundSchema: z.ZodMiniType<
   z.object({
     description: z.optional(z.string()),
     instructions: z.optional(z.string()),
+    matchExpression: z.optional(z.string()),
     mode: Mode$outboundSchema,
     name: z.string(),
     signalIds: z.optional(z.array(z.string())),
@@ -74,6 +80,7 @@ export const CreateSigintSensorForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      matchExpression: "match_expression",
       signalIds: "signal_ids",
     });
   }),

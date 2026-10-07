@@ -49,6 +49,8 @@ type UpdateSignalRequestBody struct {
 // CreateSensorRequestBody is the type of the "sigint" service "createSensor"
 // endpoint HTTP request body.
 type CreateSensorRequestBody struct {
+	// Boolean CEL predicate; omission defaults to message.role == "user"
+	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
 	// Optional project-scoped slug; defaults to a slugified display name. Must be
 	// unique including deleted sensors.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
@@ -66,6 +68,8 @@ type CreateSensorRequestBody struct {
 // UpdateSensorRequestBody is the type of the "sigint" service "updateSensor"
 // endpoint HTTP request body.
 type UpdateSensorRequestBody struct {
+	// Replacement boolean CEL predicate; omission preserves it
+	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
 	// Replacement slug; omission preserves it. Changing it changes the identifier
 	// used by future exports.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
@@ -180,6 +184,9 @@ type DeleteSignalResponseBody struct {
 // CreateSensorResponseBody is the type of the "sigint" service "createSensor"
 // endpoint HTTP response body.
 type CreateSensorResponseBody struct {
+	// Boolean CEL predicate over message.role (lowercase user, assistant, system,
+	// or tool)
+	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
 	// Project-scoped sensor identifier for analytics and integrations
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Sensor ID
@@ -205,6 +212,9 @@ type CreateSensorResponseBody struct {
 // GetSensorResponseBody is the type of the "sigint" service "getSensor"
 // endpoint HTTP response body.
 type GetSensorResponseBody struct {
+	// Boolean CEL predicate over message.role (lowercase user, assistant, system,
+	// or tool)
+	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
 	// Project-scoped sensor identifier for analytics and integrations
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Sensor ID
@@ -239,6 +249,9 @@ type ListSensorsResponseBody struct {
 // UpdateSensorResponseBody is the type of the "sigint" service "updateSensor"
 // endpoint HTTP response body.
 type UpdateSensorResponseBody struct {
+	// Boolean CEL predicate over message.role (lowercase user, assistant, system,
+	// or tool)
+	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
 	// Project-scoped sensor identifier for analytics and integrations
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Sensor ID
@@ -264,6 +277,9 @@ type UpdateSensorResponseBody struct {
 // DeleteSensorResponseBody is the type of the "sigint" service "deleteSensor"
 // endpoint HTTP response body.
 type DeleteSensorResponseBody struct {
+	// Boolean CEL predicate over message.role (lowercase user, assistant, system,
+	// or tool)
+	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
 	// Project-scoped sensor identifier for analytics and integrations
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Sensor ID
@@ -2116,6 +2132,9 @@ type SigintSignalResponseBody struct {
 
 // SigintSensorResponseBody is used to define fields on response body types.
 type SigintSensorResponseBody struct {
+	// Boolean CEL predicate over message.role (lowercase user, assistant, system,
+	// or tool)
+	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
 	// Project-scoped sensor identifier for analytics and integrations
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Sensor ID
@@ -2173,10 +2192,11 @@ func NewUpdateSignalRequestBody(p *sigint.UpdateSignalPayload) *UpdateSignalRequ
 // the "createSensor" endpoint of the "sigint" service.
 func NewCreateSensorRequestBody(p *sigint.CreateSensorPayload) *CreateSensorRequestBody {
 	body := &CreateSensorRequestBody{
-		Name:         p.Name,
-		Description:  p.Description,
-		Instructions: p.Instructions,
-		Mode:         string(p.Mode),
+		MatchExpression: p.MatchExpression,
+		Name:            p.Name,
+		Description:     p.Description,
+		Instructions:    p.Instructions,
+		Mode:            string(p.Mode),
 	}
 	if p.Slug != nil {
 		slug := string(*p.Slug)
@@ -2195,10 +2215,11 @@ func NewCreateSensorRequestBody(p *sigint.CreateSensorPayload) *CreateSensorRequ
 // the "updateSensor" endpoint of the "sigint" service.
 func NewUpdateSensorRequestBody(p *sigint.UpdateSensorPayload) *UpdateSensorRequestBody {
 	body := &UpdateSensorRequestBody{
-		ID:           p.ID,
-		Name:         p.Name,
-		Description:  p.Description,
-		Instructions: p.Instructions,
+		MatchExpression: p.MatchExpression,
+		ID:              p.ID,
+		Name:            p.Name,
+		Description:     p.Description,
+		Instructions:    p.Instructions,
 	}
 	if p.Slug != nil {
 		slug := string(*p.Slug)
@@ -3056,15 +3077,16 @@ func NewDeleteSignalGatewayError(body *DeleteSignalGatewayErrorResponseBody) *go
 // endpoint result from a HTTP "OK" response.
 func NewCreateSensorSigintSensorOK(body *CreateSensorResponseBody) *types.SigintSensor {
 	v := &types.SigintSensor{
-		Slug:         types.Slug(*body.Slug),
-		ID:           *body.ID,
-		ProjectID:    *body.ProjectID,
-		Name:         *body.Name,
-		Description:  body.Description,
-		Instructions: body.Instructions,
-		Mode:         types.SigintSensorMode(*body.Mode),
-		CreatedAt:    *body.CreatedAt,
-		UpdatedAt:    *body.UpdatedAt,
+		MatchExpression: *body.MatchExpression,
+		Slug:            types.Slug(*body.Slug),
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		Name:            *body.Name,
+		Description:     body.Description,
+		Instructions:    body.Instructions,
+		Mode:            types.SigintSensorMode(*body.Mode),
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
 	}
 	v.SignalIds = make([]string, len(body.SignalIds))
 	for i, val := range body.SignalIds {
@@ -3228,15 +3250,16 @@ func NewCreateSensorGatewayError(body *CreateSensorGatewayErrorResponseBody) *go
 // result from a HTTP "OK" response.
 func NewGetSensorSigintSensorOK(body *GetSensorResponseBody) *types.SigintSensor {
 	v := &types.SigintSensor{
-		Slug:         types.Slug(*body.Slug),
-		ID:           *body.ID,
-		ProjectID:    *body.ProjectID,
-		Name:         *body.Name,
-		Description:  body.Description,
-		Instructions: body.Instructions,
-		Mode:         types.SigintSensorMode(*body.Mode),
-		CreatedAt:    *body.CreatedAt,
-		UpdatedAt:    *body.UpdatedAt,
+		MatchExpression: *body.MatchExpression,
+		Slug:            types.Slug(*body.Slug),
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		Name:            *body.Name,
+		Description:     body.Description,
+		Instructions:    body.Instructions,
+		Mode:            types.SigintSensorMode(*body.Mode),
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
 	}
 	v.SignalIds = make([]string, len(body.SignalIds))
 	for i, val := range body.SignalIds {
@@ -3567,15 +3590,16 @@ func NewListSensorsGatewayError(body *ListSensorsGatewayErrorResponseBody) *goa.
 // endpoint result from a HTTP "OK" response.
 func NewUpdateSensorSigintSensorOK(body *UpdateSensorResponseBody) *types.SigintSensor {
 	v := &types.SigintSensor{
-		Slug:         types.Slug(*body.Slug),
-		ID:           *body.ID,
-		ProjectID:    *body.ProjectID,
-		Name:         *body.Name,
-		Description:  body.Description,
-		Instructions: body.Instructions,
-		Mode:         types.SigintSensorMode(*body.Mode),
-		CreatedAt:    *body.CreatedAt,
-		UpdatedAt:    *body.UpdatedAt,
+		MatchExpression: *body.MatchExpression,
+		Slug:            types.Slug(*body.Slug),
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		Name:            *body.Name,
+		Description:     body.Description,
+		Instructions:    body.Instructions,
+		Mode:            types.SigintSensorMode(*body.Mode),
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
 	}
 	v.SignalIds = make([]string, len(body.SignalIds))
 	for i, val := range body.SignalIds {
@@ -3739,15 +3763,16 @@ func NewUpdateSensorGatewayError(body *UpdateSensorGatewayErrorResponseBody) *go
 // endpoint result from a HTTP "OK" response.
 func NewDeleteSensorSigintSensorOK(body *DeleteSensorResponseBody) *types.SigintSensor {
 	v := &types.SigintSensor{
-		Slug:         types.Slug(*body.Slug),
-		ID:           *body.ID,
-		ProjectID:    *body.ProjectID,
-		Name:         *body.Name,
-		Description:  body.Description,
-		Instructions: body.Instructions,
-		Mode:         types.SigintSensorMode(*body.Mode),
-		CreatedAt:    *body.CreatedAt,
-		UpdatedAt:    *body.UpdatedAt,
+		MatchExpression: *body.MatchExpression,
+		Slug:            types.Slug(*body.Slug),
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		Name:            *body.Name,
+		Description:     body.Description,
+		Instructions:    body.Instructions,
+		Mode:            types.SigintSensorMode(*body.Mode),
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
 	}
 	v.SignalIds = make([]string, len(body.SignalIds))
 	for i, val := range body.SignalIds {
@@ -4105,6 +4130,9 @@ func ValidateDeleteSignalResponseBody(body *DeleteSignalResponseBody) (err error
 // ValidateCreateSensorResponseBody runs the validations defined on
 // CreateSensorResponseBody
 func ValidateCreateSensorResponseBody(body *CreateSensorResponseBody) (err error) {
+	if body.MatchExpression == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_expression", "body"))
+	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -4163,6 +4191,9 @@ func ValidateCreateSensorResponseBody(body *CreateSensorResponseBody) (err error
 // ValidateGetSensorResponseBody runs the validations defined on
 // GetSensorResponseBody
 func ValidateGetSensorResponseBody(body *GetSensorResponseBody) (err error) {
+	if body.MatchExpression == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_expression", "body"))
+	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -4240,6 +4271,9 @@ func ValidateListSensorsResponseBody(body *ListSensorsResponseBody) (err error) 
 // ValidateUpdateSensorResponseBody runs the validations defined on
 // UpdateSensorResponseBody
 func ValidateUpdateSensorResponseBody(body *UpdateSensorResponseBody) (err error) {
+	if body.MatchExpression == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_expression", "body"))
+	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -4298,6 +4332,9 @@ func ValidateUpdateSensorResponseBody(body *UpdateSensorResponseBody) (err error
 // ValidateDeleteSensorResponseBody runs the validations defined on
 // DeleteSensorResponseBody
 func ValidateDeleteSensorResponseBody(body *DeleteSensorResponseBody) (err error) {
+	if body.MatchExpression == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_expression", "body"))
+	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -6800,6 +6837,9 @@ func ValidateSigintSignalResponseBody(body *SigintSignalResponseBody) (err error
 // ValidateSigintSensorResponseBody runs the validations defined on
 // SigintSensorResponseBody
 func ValidateSigintSensorResponseBody(body *SigintSensorResponseBody) (err error) {
+	if body.MatchExpression == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_expression", "body"))
+	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}

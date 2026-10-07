@@ -39,16 +39,17 @@ func BuildSigintSensorView(sensor repo.GetSensorRow) *types.SigintSensor {
 	}
 
 	return &types.SigintSensor{
-		ID:           sensor.ID.String(),
-		ProjectID:    sensor.ProjectID.String(),
-		Name:         sensor.Name,
-		Slug:         types.Slug(sensor.Slug),
-		Description:  conv.FromPGText[string](sensor.Description),
-		Instructions: conv.FromPGText[string](sensor.Instructions),
-		Mode:         types.SigintSensorMode(sensor.Mode),
-		SignalIds:    signalIDs,
-		CreatedAt:    sensor.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:    sensor.UpdatedAt.Time.Format(time.RFC3339),
+		ID:              sensor.ID.String(),
+		ProjectID:       sensor.ProjectID.String(),
+		Name:            sensor.Name,
+		Slug:            types.Slug(sensor.Slug),
+		Description:     conv.FromPGText[string](sensor.Description),
+		Instructions:    conv.FromPGText[string](sensor.Instructions),
+		Mode:            types.SigintSensorMode(sensor.Mode),
+		MatchExpression: sensor.MatchExpression,
+		SignalIds:       signalIDs,
+		CreatedAt:       sensor.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:       sensor.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 
@@ -61,16 +62,17 @@ func BuildSigintSensorListView(sensors []repo.ListSensorsRow) []*types.SigintSen
 			signalIDs[j] = id.String()
 		}
 		result[i] = &types.SigintSensor{
-			ID:           sensor.ID.String(),
-			ProjectID:    sensor.ProjectID.String(),
-			Name:         sensor.Name,
-			Slug:         types.Slug(sensor.Slug),
-			Description:  conv.FromPGText[string](sensor.Description),
-			Instructions: conv.FromPGText[string](sensor.Instructions),
-			Mode:         types.SigintSensorMode(sensor.Mode),
-			SignalIds:    signalIDs,
-			CreatedAt:    sensor.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:    sensor.UpdatedAt.Time.Format(time.RFC3339),
+			ID:              sensor.ID.String(),
+			ProjectID:       sensor.ProjectID.String(),
+			Name:            sensor.Name,
+			Slug:            types.Slug(sensor.Slug),
+			Description:     conv.FromPGText[string](sensor.Description),
+			Instructions:    conv.FromPGText[string](sensor.Instructions),
+			Mode:            types.SigintSensorMode(sensor.Mode),
+			MatchExpression: sensor.MatchExpression,
+			SignalIds:       signalIDs,
+			CreatedAt:       sensor.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:       sensor.UpdatedAt.Time.Format(time.RFC3339),
 		}
 	}
 	return result
@@ -83,15 +85,16 @@ func BuildSigintSensorByIDsView(sensor repo.GetSensorsByIDsRow) *types.SigintSen
 		signalIDs[i] = id.String()
 	}
 	return &types.SigintSensor{
-		ID:           sensor.ID.String(),
-		ProjectID:    sensor.ProjectID.String(),
-		Name:         sensor.Name,
-		Slug:         types.Slug(sensor.Slug),
-		Description:  conv.FromPGText[string](sensor.Description),
-		Instructions: conv.FromPGText[string](sensor.Instructions),
-		Mode:         types.SigintSensorMode(sensor.Mode),
-		SignalIds:    signalIDs,
-		CreatedAt:    sensor.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:    sensor.UpdatedAt.Time.Format(time.RFC3339),
+		ID:              sensor.ID.String(),
+		ProjectID:       sensor.ProjectID.String(),
+		Name:            sensor.Name,
+		Slug:            types.Slug(sensor.Slug),
+		Description:     conv.FromPGText[string](sensor.Description),
+		Instructions:    conv.FromPGText[string](sensor.Instructions),
+		Mode:            types.SigintSensorMode(sensor.Mode),
+		MatchExpression: sensor.MatchExpression,
+		SignalIds:       signalIDs,
+		CreatedAt:       sensor.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:       sensor.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }

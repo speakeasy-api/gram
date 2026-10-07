@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -391,6 +392,13 @@ func (s *Service) CreateSensor(ctx context.Context, payload *gen.CreateSensorPay
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor slug")
 	}
 	mode := string(payload.Mode)
+	expression := matching.DefaultExpression
+	if payload.MatchExpression != nil {
+		expression = *payload.MatchExpression
+	}
+	if err := matching.Validate(expression); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor match expression")
+	}
 	if err := validateSensorConfiguration(mode, len(payload.SignalIds)); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor configuration").LogError(ctx, s.logger)
 	}
@@ -422,6 +430,7 @@ func (s *Service) CreateSensor(ctx context.Context, payload *gen.CreateSensorPay
 		Slug: slug,
 		ID:   id, ProjectID: *authCtx.ProjectID, Name: name,
 		Description: conv.PtrToPGTextEmpty(payload.Description), Instructions: conv.PtrToPGTextEmpty(payload.Instructions), Mode: mode,
+		MatchExpression: expression,
 	})
 	if isSlugConflict(err) {
 		return nil, oops.E(oops.CodeConflict, err, "sensor slug already exists")
@@ -534,6 +543,7 @@ func (s *Service) UpdateSensor(ctx context.Context, payload *gen.UpdateSensorPay
 		Slug: beforeRow.Slug,
 		Name: beforeRow.Name, Description: beforeRow.Description, Instructions: beforeRow.Instructions,
 		Mode: beforeRow.Mode, ID: id, ProjectID: *authCtx.ProjectID,
+		MatchExpression: beforeRow.MatchExpression,
 	}
 	if payload.Name != nil {
 		params.Name, err = validateName(*payload.Name)
@@ -549,6 +559,12 @@ func (s *Service) UpdateSensor(ctx context.Context, payload *gen.UpdateSensorPay
 	}
 	if payload.Mode != nil {
 		params.Mode = string(*payload.Mode)
+	}
+	if payload.MatchExpression != nil {
+		if err := matching.Validate(*payload.MatchExpression); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor match expression")
+		}
+		params.MatchExpression = *payload.MatchExpression
 	}
 	finalCount := len(beforeRow.SignalIds)
 	if payload.SignalIds != nil {
@@ -726,6 +742,7 @@ func sensorViewFromAffected(sensor repo.ListSensorsForSignalRow) *types.SigintSe
 		ID:   sensor.ID.String(), ProjectID: sensor.ProjectID.String(), Name: sensor.Name,
 		Description: conv.FromPGText[string](sensor.Description), Instructions: conv.FromPGText[string](sensor.Instructions),
 		Mode: types.SigintSensorMode(sensor.Mode), SignalIds: signalIDs,
-		CreatedAt: sensor.CreatedAt.Time.Format(time.RFC3339), UpdatedAt: sensor.UpdatedAt.Time.Format(time.RFC3339),
+		MatchExpression: sensor.MatchExpression,
+		CreatedAt:       sensor.CreatedAt.Time.Format(time.RFC3339), UpdatedAt: sensor.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }

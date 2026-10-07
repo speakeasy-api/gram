@@ -9,6 +9,9 @@ package types
 
 // SigintSensor is the result type of the sigint service createSensor method.
 type SigintSensor struct {
+	// Boolean CEL predicate over message.role (lowercase user, assistant, system,
+	// or tool)
+	MatchExpression string
 	// Project-scoped sensor identifier for analytics and integrations
 	Slug Slug
 	// Sensor ID

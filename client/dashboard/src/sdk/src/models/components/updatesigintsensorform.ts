@@ -35,6 +35,10 @@ export type UpdateSigintSensorForm = {
    */
   instructions?: string | undefined;
   /**
+   * Replacement boolean CEL predicate; omission preserves it
+   */
+  matchExpression?: string | undefined;
+  /**
    * How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.
    */
   mode?: UpdateSigintSensorFormMode | undefined;
@@ -62,6 +66,7 @@ export type UpdateSigintSensorForm$Outbound = {
   description?: string | undefined;
   id: string;
   instructions?: string | undefined;
+  match_expression?: string | undefined;
   mode?: string | undefined;
   name?: string | undefined;
   signal_ids?: Array<string> | undefined;
@@ -77,6 +82,7 @@ export const UpdateSigintSensorForm$outboundSchema: z.ZodMiniType<
     description: z.optional(z.string()),
     id: z.string(),
     instructions: z.optional(z.string()),
+    matchExpression: z.optional(z.string()),
     mode: z.optional(UpdateSigintSensorFormMode$outboundSchema),
     name: z.optional(z.string()),
     signalIds: z.optional(z.array(z.string())),
@@ -84,6 +90,7 @@ export const UpdateSigintSensorForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      matchExpression: "match_expression",
       signalIds: "signal_ids",
     });
   }),

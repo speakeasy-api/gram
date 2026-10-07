@@ -43,6 +43,10 @@ export type SigintSensor = {
    */
   instructions?: string | undefined;
   /**
+   * Boolean CEL predicate over message.role (lowercase user, assistant, system, or tool)
+   */
+  matchExpression: string;
+  /**
    * How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.
    */
   mode: SigintSensorMode;
@@ -84,6 +88,7 @@ export const SigintSensor$inboundSchema: z.ZodMiniType<SigintSensor, unknown> =
       description: z.optional(z.string()),
       id: z.string(),
       instructions: z.optional(z.string()),
+      match_expression: z.string(),
       mode: SigintSensorMode$inboundSchema,
       name: z.string(),
       project_id: z.string(),
@@ -97,6 +102,7 @@ export const SigintSensor$inboundSchema: z.ZodMiniType<SigintSensor, unknown> =
     z.transform((v) => {
       return remap$(v, {
         "created_at": "createdAt",
+        "match_expression": "matchExpression",
         "project_id": "projectId",
         "signal_ids": "signalIds",
         "updated_at": "updatedAt",

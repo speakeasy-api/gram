@@ -23,15 +23,16 @@ type SigintCustomSignal struct {
 }
 
 type SigintSensor struct {
-	ID           uuid.UUID
-	ProjectID    uuid.UUID
-	Name         string
-	Slug         string
-	Description  pgtype.Text
-	Instructions pgtype.Text
-	Mode         string
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	DeletedAt    pgtype.Timestamptz
-	Deleted      bool
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	Name            string
+	Slug            string
+	Description     pgtype.Text
+	Instructions    pgtype.Text
+	Mode            string
+	MatchExpression string
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
