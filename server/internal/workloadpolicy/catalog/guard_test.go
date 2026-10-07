@@ -1,6 +1,7 @@
 package catalog_test
 
 import (
+	"bytes"
 	"fmt"
 	"io/fs"
 	"os"
@@ -85,6 +86,8 @@ func TestLooksLikeCustomFlows(t *testing.T) {
 	require.False(t, looksLikeCustomFlows([]byte("access:\n  title: Allow access\n")))
 	require.False(t, looksLikeCustomFlows([]byte("- allow_access\n")))
 	require.False(t, looksLikeCustomFlows([]byte("allow_access: {{ .Value }}\n  broken: [\n")))
+	require.True(t, looksLikeCustomFlows([]byte("name: unrelated\n---\nallow_access:\n  title: Allow access\n")))
+	require.True(t, looksLikePlatformDefinition([]byte("name: unrelated\n---\nissuer: {}\njwks_uri: {}\nsubject: {}\n")))
 }
 
 // isNestedCheckout reports whether dir, below the repository root, is another
@@ -98,33 +101,46 @@ func isNestedCheckout(dir string) bool {
 	return err == nil
 }
 
-// looksLikePlatformDefinition reports whether raw is a YAML mapping carrying
-// the keys every platform definition has. A file that does not parse as a YAML
-// mapping, such as a templated one, is not a definition.
+// looksLikePlatformDefinition reports whether any YAML document in raw is a
+// mapping carrying the keys every platform definition has. A file that does
+// not parse as YAML, such as a templated one, holds no definition.
 func looksLikePlatformDefinition(raw []byte) bool {
-	var document map[string]yaml.Node
-	if err := yaml.Unmarshal(raw, &document); err != nil {
-		return false
-	}
-	for _, key := range []string{"issuer", "jwks_uri", "subject"} {
-		if _, ok := document[key]; !ok {
-			return false
+	return anyDocument(raw, func(document map[string]yaml.Node) bool {
+		for _, key := range []string{"issuer", "jwks_uri", "subject"} {
+			if _, ok := document[key]; !ok {
+				return false
+			}
 		}
-	}
-	return true
+		return true
+	})
 }
 
-// looksLikeCustomFlows reports whether raw is a YAML mapping holding any of
-// the custom flows' keys.
+// looksLikeCustomFlows reports whether any YAML document in raw is a mapping
+// holding one of the custom flows' keys.
 func looksLikeCustomFlows(raw []byte) bool {
-	var document map[string]yaml.Node
-	if err := yaml.Unmarshal(raw, &document); err != nil {
+	return anyDocument(raw, func(document map[string]yaml.Node) bool {
+		for _, key := range customFlowKeys {
+			if _, ok := document[key]; ok {
+				return true
+			}
+		}
 		return false
-	}
-	for _, key := range customFlowKeys {
-		if _, ok := document[key]; ok {
+	})
+}
+
+// anyDocument reports whether match holds for any mapping document in raw.
+// Documents that are not mappings are skipped; decoding stops at the end of
+// raw or at the first document that does not parse.
+func anyDocument(raw []byte, match func(map[string]yaml.Node) bool) bool {
+	decoder := yaml.NewDecoder(bytes.NewReader(raw))
+	for {
+		var node yaml.Node
+		if err := decoder.Decode(&node); err != nil {
+			return false
+		}
+		var document map[string]yaml.Node
+		if node.Decode(&document) == nil && match(document) {
 			return true
 		}
 	}
-	return false
 }

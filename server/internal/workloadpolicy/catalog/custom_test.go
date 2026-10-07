@@ -42,7 +42,7 @@ func TestParseCustomFlowsRefusesContractViolations(t *testing.T) {
 	}{
 		{
 			name:    "missing required field",
-			from:    "- type: input\n          field: jwks_uri\n          format: jwks_uri\n          label: JWKS URI\n          placeholder: https://identity.example.com/.well-known/jwks.json\n",
+			from:    "- type: input\n          field: jwks_uri\n          format: jwks_uri\n          label: JWKS URI\n          placeholder: https://identity.example.com/.well-known/jwks.json\n          help: Where the issuer publishes its signing keys. This is the only field Gram reads when verifying an assertion.\n",
 			to:      "- type: link\n          href: https://identity.example.com/.well-known/jwks.json\n          label: JWKS URI\n",
 			wantErr: `register_platform: step "platform": input jwks_uri is required`,
 		},
@@ -95,9 +95,15 @@ func TestParseCustomFlowsRefusesContractViolations(t *testing.T) {
 			wantErr: "register_platform: step \"platform\" block 5: agent_picker is not allowed in this flow",
 		},
 		{
+			name:    "markdown on an input",
+			from:    "- type: input\n          field: name\n",
+			to:      "- type: input\n          markdown: Name\n          field: name\n",
+			wantErr: "input blocks do not take markdown",
+		},
+		{
 			name:    "missing agent picker",
-			from:    "        - type: agent_picker\n          label: Agent\n",
-			to:      "        - type: text\n          markdown: Agent\n          label: Agent\n",
+			from:    "        - type: agent_picker\n          label: Agent\n          placeholder: Select an agent\n          help: Choose the most narrowly scoped agent that can do the job. The machine inherits its policy in full.\n",
+			to:      "        - type: text\n          markdown: Agent\n",
 			wantErr: "allow_access: step \"access\": agent_picker is required",
 		},
 		{
@@ -122,13 +128,13 @@ func TestParseCustomFlowsRefusesContractViolations(t *testing.T) {
 			name:    "input setting on tags",
 			from:    "          placeholder: support, production\n",
 			to:      "          placeholder: support, production\n          read_only: true\n",
-			wantErr: "tags: field, format, multiline and read_only belong to inputs",
+			wantErr: "tags blocks do not take read_only",
 		},
 		{
 			name:    "catalog setting on a custom block",
 			from:    "        - type: wildcard_caution\n",
 			to:      "        - type: wildcard_caution\n          value: token_endpoint\n",
-			wantErr: "belong to catalog platforms",
+			wantErr: "blocks do not take",
 		},
 		{
 			name:    "image in help",

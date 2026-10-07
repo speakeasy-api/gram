@@ -328,11 +328,10 @@ func validateCustomBlock(b Block, contract flowContract, placed map[FormField]bo
 
 	// Refused rather than ignored, so a setting the form never reads cannot look
 	// like it took effect.
-	if b.Src != "" || b.Alt != "" || b.Caption != "" || b.Variable != "" || b.Value != "" {
-		return fmt.Errorf("%s: src, alt, caption, variable and value belong to catalog platforms", b.Type)
-	}
-	if b.Type != BlockInput && (b.Field != "" || b.Format != "" || b.Multiline || b.ReadOnly) {
-		return fmt.Errorf("%s: field, format, multiline and read_only belong to inputs", b.Type)
+	for _, name := range setProperties(b) {
+		if !slices.Contains(customBlockProperties(b.Type), name) {
+			return fmt.Errorf("%s blocks do not take %s", b.Type, name)
+		}
 	}
 
 	// A form control's help is Markdown, and an image in it could load from any
@@ -371,6 +370,55 @@ func validateCustomBlock(b Block, contract flowContract, placed map[FormField]bo
 	case BlockText, BlockLink, BlockImage, BlockField, BlockSubjectRule, BlockComputedStatus, BlockComputed, BlockChecklistItem:
 	}
 	return nil
+}
+
+// customBlockProperties are the settings a custom flow block of type t reads,
+// by their YAML keys. Catalog-only types read none here, because a custom flow
+// refuses them before their settings are checked.
+func customBlockProperties(t BlockType) []string {
+	switch t {
+	case BlockText:
+		return []string{"markdown"}
+	case BlockLink:
+		return []string{"href", "label"}
+	case BlockInput:
+		return []string{"field", "format", "label", "placeholder", "help", "multiline", "read_only"}
+	case BlockAgentPicker, BlockTags:
+		return []string{"label", "placeholder", "help"}
+	case BlockWildcardCaution, BlockImage, BlockField, BlockSubjectRule, BlockComputedStatus, BlockComputed, BlockChecklistItem:
+		return nil
+	}
+	return nil
+}
+
+// setProperties names the settings b carries, by their YAML keys.
+func setProperties(b Block) []string {
+	properties := []struct {
+		name string
+		set  bool
+	}{
+		{"markdown", b.Markdown != ""},
+		{"src", b.Src != ""},
+		{"alt", b.Alt != ""},
+		{"caption", b.Caption != ""},
+		{"href", b.Href != ""},
+		{"label", b.Label != ""},
+		{"variable", b.Variable != ""},
+		{"value", b.Value != ""},
+		{"help", b.Help != ""},
+		{"field", b.Field != ""},
+		{"placeholder", b.Placeholder != ""},
+		{"multiline", b.Multiline},
+		{"read_only", b.ReadOnly},
+		{"format", b.Format != ""},
+	}
+	var set []string
+	for _, property := range properties {
+		if property.set {
+			set = append(set, property.name)
+		}
+	}
+	return set
 }
 
 func requireLabel(b Block) error {
