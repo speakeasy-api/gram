@@ -41,6 +41,7 @@ INSERT INTO remote_session_issuers (
     backchannel_logout_supported,
     authorization_response_iss_parameter_supported,
     scope_override,
+    omit_scope_fallback,
     resource_indicator_supported,
     metadata,
     metadata_fetched_at,
@@ -89,6 +90,7 @@ VALUES (
     @authorization_response_iss_parameter_supported,
     -- Operator knobs, nullable: NULL is "not set".
     @scope_override,
+    @omit_scope_fallback,
     @resource_indicator_supported,
     @metadata,
     @metadata_fetched_at,
@@ -174,6 +176,7 @@ SET
     backchannel_logout_supported = NULL,
     authorization_response_iss_parameter_supported = NULL,
     scope_override = NULL,
+    omit_scope_fallback = NULL,
     resource_indicator_supported = NULL,
     metadata = NULL,
     metadata_fetched_at = NULL,
@@ -470,6 +473,7 @@ SET
         WHEN cardinality(sqlc.narg('scope_override')::text[]) = 0 THEN NULL
         ELSE sqlc.narg('scope_override')::text[]
     END,
+    omit_scope_fallback = COALESCE(sqlc.narg('omit_scope_fallback'), omit_scope_fallback),
     resource_indicator_supported = COALESCE(sqlc.narg('resource_indicator_supported'), resource_indicator_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
@@ -2864,6 +2868,7 @@ SET
         WHEN cardinality(sqlc.narg('scope_override')::text[]) = 0 THEN NULL
         ELSE sqlc.narg('scope_override')::text[]
     END,
+    omit_scope_fallback = COALESCE(sqlc.narg('omit_scope_fallback'), omit_scope_fallback),
     resource_indicator_supported = COALESCE(sqlc.narg('resource_indicator_supported'), resource_indicator_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
@@ -3671,6 +3676,7 @@ SET
         WHEN cardinality(sqlc.narg('scope_override')::text[]) = 0 THEN NULL
         ELSE sqlc.narg('scope_override')::text[]
     END,
+    omit_scope_fallback = COALESCE(sqlc.narg('omit_scope_fallback'), omit_scope_fallback),
     resource_indicator_supported = COALESCE(sqlc.narg('resource_indicator_supported'), resource_indicator_supported),
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),

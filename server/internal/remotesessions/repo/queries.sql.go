@@ -1326,6 +1326,7 @@ SET
     backchannel_logout_supported = NULL,
     authorization_response_iss_parameter_supported = NULL,
     scope_override = NULL,
+    omit_scope_fallback = NULL,
     resource_indicator_supported = NULL,
     metadata = NULL,
     metadata_fetched_at = NULL,
@@ -1677,6 +1678,7 @@ INSERT INTO remote_session_issuers (
     backchannel_logout_supported,
     authorization_response_iss_parameter_supported,
     scope_override,
+    omit_scope_fallback,
     resource_indicator_supported,
     metadata,
     metadata_fetched_at,
@@ -1728,12 +1730,13 @@ VALUES (
     $31,
     $32,
     $33,
-    NULLIF($34::text, ''),
-    CASE WHEN $34::text = '' THEN NULL ELSE clock_timestamp() END,
+    $34,
     NULLIF($35::text, ''),
-    $36,
+    CASE WHEN $35::text = '' THEN NULL ELSE clock_timestamp() END,
+    NULLIF($36::text, ''),
     $37,
-    $38
+    $38,
+    $39
 )
 RETURNING id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, omit_scope_fallback, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
@@ -1769,6 +1772,7 @@ type CreateRemoteSessionIssuerParams struct {
 	BackchannelLogoutSupported                 pgtype.Bool
 	AuthorizationResponseIssParameterSupported pgtype.Bool
 	ScopeOverride                              []string
+	OmitScopeFallback                          pgtype.Bool
 	ResourceIndicatorSupported                 pgtype.Bool
 	Metadata                                   []byte
 	MetadataFetchedAt                          pgtype.Timestamptz
@@ -1821,6 +1825,7 @@ func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemot
 		arg.BackchannelLogoutSupported,
 		arg.AuthorizationResponseIssParameterSupported,
 		arg.ScopeOverride,
+		arg.OmitScopeFallback,
 		arg.ResourceIndicatorSupported,
 		arg.Metadata,
 		arg.MetadataFetchedAt,
@@ -12151,11 +12156,12 @@ SET
         WHEN cardinality($28::text[]) = 0 THEN NULL
         ELSE $28::text[]
     END,
-    resource_indicator_supported = COALESCE($29, resource_indicator_supported),
-    oidc = COALESCE($30, oidc),
-    passthrough = COALESCE($31, passthrough),
+    omit_scope_fallback = COALESCE($29, omit_scope_fallback),
+    resource_indicator_supported = COALESCE($30, resource_indicator_supported),
+    oidc = COALESCE($31, oidc),
+    passthrough = COALESCE($32, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $32 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
+WHERE id = $33 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
 RETURNING id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, omit_scope_fallback, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -12188,6 +12194,7 @@ type UpdateGlobalRemoteSessionIssuerParams struct {
 	BackchannelLogoutSupported                 pgtype.Bool
 	AuthorizationResponseIssParameterSupported pgtype.Bool
 	ScopeOverride                              []string
+	OmitScopeFallback                          pgtype.Bool
 	ResourceIndicatorSupported                 pgtype.Bool
 	Oidc                                       pgtype.Bool
 	Passthrough                                pgtype.Bool
@@ -12226,6 +12233,7 @@ func (q *Queries) UpdateGlobalRemoteSessionIssuer(ctx context.Context, arg Updat
 		arg.BackchannelLogoutSupported,
 		arg.AuthorizationResponseIssParameterSupported,
 		arg.ScopeOverride,
+		arg.OmitScopeFallback,
 		arg.ResourceIndicatorSupported,
 		arg.Oidc,
 		arg.Passthrough,
@@ -12474,16 +12482,17 @@ SET
         WHEN cardinality($28::text[]) = 0 THEN NULL
         ELSE $28::text[]
     END,
-    resource_indicator_supported = COALESCE($29, resource_indicator_supported),
-    oidc = COALESCE($30, oidc),
-    passthrough = COALESCE($31, passthrough),
+    omit_scope_fallback = COALESCE($29, omit_scope_fallback),
+    resource_indicator_supported = COALESCE($30, resource_indicator_supported),
+    oidc = COALESCE($31, oidc),
+    passthrough = COALESCE($32, passthrough),
     tunneled_mcp_server_id = CASE
-        WHEN $32::text = '' THEN NULL
-        WHEN $32::text IS NULL THEN tunneled_mcp_server_id
-        ELSE ($32::text)::uuid
+        WHEN $33::text = '' THEN NULL
+        WHEN $33::text IS NULL THEN tunneled_mcp_server_id
+        ELSE ($33::text)::uuid
     END,
     updated_at = clock_timestamp()
-WHERE id = $33 AND organization_id = $34 AND deleted IS FALSE
+WHERE id = $34 AND organization_id = $35 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, omit_scope_fallback, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -12516,6 +12525,7 @@ type UpdateOrganizationRemoteSessionIssuerParams struct {
 	BackchannelLogoutSupported                 pgtype.Bool
 	AuthorizationResponseIssParameterSupported pgtype.Bool
 	ScopeOverride                              []string
+	OmitScopeFallback                          pgtype.Bool
 	ResourceIndicatorSupported                 pgtype.Bool
 	Oidc                                       pgtype.Bool
 	Passthrough                                pgtype.Bool
@@ -12556,6 +12566,7 @@ func (q *Queries) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, arg
 		arg.BackchannelLogoutSupported,
 		arg.AuthorizationResponseIssParameterSupported,
 		arg.ScopeOverride,
+		arg.OmitScopeFallback,
 		arg.ResourceIndicatorSupported,
 		arg.Oidc,
 		arg.Passthrough,
@@ -13045,16 +13056,17 @@ SET
         WHEN cardinality($28::text[]) = 0 THEN NULL
         ELSE $28::text[]
     END,
-    resource_indicator_supported = COALESCE($29, resource_indicator_supported),
-    oidc = COALESCE($30, oidc),
-    passthrough = COALESCE($31, passthrough),
+    omit_scope_fallback = COALESCE($29, omit_scope_fallback),
+    resource_indicator_supported = COALESCE($30, resource_indicator_supported),
+    oidc = COALESCE($31, oidc),
+    passthrough = COALESCE($32, passthrough),
     tunneled_mcp_server_id = CASE
-        WHEN $32::text = '' THEN NULL
-        WHEN $32::text IS NULL THEN tunneled_mcp_server_id
-        ELSE ($32::text)::uuid
+        WHEN $33::text = '' THEN NULL
+        WHEN $33::text IS NULL THEN tunneled_mcp_server_id
+        ELSE ($33::text)::uuid
     END,
     updated_at = clock_timestamp()
-WHERE id = $33 AND project_id = $34 AND deleted IS FALSE
+WHERE id = $34 AND project_id = $35 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, omit_scope_fallback, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -13087,6 +13099,7 @@ type UpdateRemoteSessionIssuerParams struct {
 	BackchannelLogoutSupported                 pgtype.Bool
 	AuthorizationResponseIssParameterSupported pgtype.Bool
 	ScopeOverride                              []string
+	OmitScopeFallback                          pgtype.Bool
 	ResourceIndicatorSupported                 pgtype.Bool
 	Oidc                                       pgtype.Bool
 	Passthrough                                pgtype.Bool
@@ -13134,6 +13147,7 @@ func (q *Queries) UpdateRemoteSessionIssuer(ctx context.Context, arg UpdateRemot
 		arg.BackchannelLogoutSupported,
 		arg.AuthorizationResponseIssParameterSupported,
 		arg.ScopeOverride,
+		arg.OmitScopeFallback,
 		arg.ResourceIndicatorSupported,
 		arg.Oidc,
 		arg.Passthrough,

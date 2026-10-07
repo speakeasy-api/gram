@@ -81267,6 +81267,9 @@ components:
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour. Default false.
+        omit_scope_fallback:
+          type: boolean
+          description: 'When true, a login that would otherwise request the authorization server''s whole scopes_supported omits the scope parameter so the server applies its default. Omit to leave it unset: such a login requests the provider''s whole scopes_supported.'
         op_policy_uri:
           type: string
           description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
@@ -81883,6 +81886,9 @@ components:
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour. Default false.
+        omit_scope_fallback:
+          type: boolean
+          description: 'When true, a login that would otherwise request the authorization server''s whole scopes_supported omits the scope parameter so the server applies its default. Omit to leave it unset: such a login requests the provider''s whole scopes_supported.'
         op_policy_uri:
           type: string
           description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
@@ -95995,6 +96001,9 @@ components:
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour.
+        omit_scope_fallback:
+          type: boolean
+          description: When true, a login that would otherwise request the authorization server's whole scopes_supported omits the scope parameter so the server applies its default. Null when unset.
         op_policy_uri:
           type: string
           description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not advertised.
@@ -106012,6 +106021,9 @@ components:
           description: Set or clear the display name. An empty string clears it to NULL.
         oidc:
           type: boolean
+        omit_scope_fallback:
+          type: boolean
+          description: When true, a login that would otherwise request the authorization server's whole scopes_supported omits the scope parameter so the server applies its default. Omit or send null to keep the stored value; false restores the default.
         op_policy_uri:
           type: string
           description: Set or clear RFC 8414 op_policy_uri. An empty string clears it to NULL; any other value must be an absolute http(s) URL.

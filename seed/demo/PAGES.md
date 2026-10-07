@@ -150,11 +150,12 @@ Browser verification: `[~]` (not yet verified); see check 18 in `verify.md`.
 
 That upstream client sits under the **Example Workspace Identity** provider,
 which carries a scope override (`read`), shown on its Overview and editable on its
-Settings tab. Its client sets its own scopes and is flagged as a legacy callback
-client. Platform admins see the legacy callback warning with its Migrate button
-on the client's pages and the compatibility-mode switch on its Settings tab;
-everyone else sees neither. The Settings tab also warns that the client's scopes
-have no effect. Browser verification: `[~]`.
+Settings tab; the Scope fallback row reads Every advertised scope. Its client
+sets its own scopes and is flagged as a legacy callback client. Platform admins
+see the legacy callback warning with its Migrate button on the client's pages
+and the compatibility-mode switch on its Settings tab; everyone else sees
+neither. The Settings tab also warns that the client's scopes have no effect.
+Browser verification: `[~]`.
 
 ### Upstream session validation outcomes
 
