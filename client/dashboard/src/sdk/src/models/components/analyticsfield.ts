@@ -33,6 +33,10 @@ export type AnalyticsField = {
    * Part of the query the dataset opens on: a default dimension is in the opening group-by
    */
   default: boolean;
+  /**
+   * What the field is and which producers fill it, when the catalog has something to say beyond the name
+   */
+  description?: string | undefined;
   name: string;
   /**
    * Filter operators a dimension admits
@@ -61,6 +65,7 @@ export const AnalyticsField$inboundSchema: z.ZodMiniType<
 > = z.object({
   aggregations: z.optional(z.array(z.string())),
   default: z.boolean(),
+  description: z.optional(z.string()),
   name: z.string(),
   operators: z.optional(z.array(z.string())),
   role: AnalyticsFieldRole$inboundSchema,

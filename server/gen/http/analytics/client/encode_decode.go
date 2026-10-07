@@ -875,11 +875,12 @@ func unmarshalAnalyticsDatasetResponseBodyToAnalyticsAnalyticsDataset(v *Analyti
 // *AnalyticsFieldResponseBody.
 func unmarshalAnalyticsFieldResponseBodyToAnalyticsAnalyticsField(v *AnalyticsFieldResponseBody) *analytics.AnalyticsField {
 	res := &analytics.AnalyticsField{
-		Name:    *v.Name,
-		Type:    *v.Type,
-		Role:    *v.Role,
-		Default: *v.Default,
-		Unit:    v.Unit,
+		Name:        *v.Name,
+		Type:        *v.Type,
+		Role:        *v.Role,
+		Default:     *v.Default,
+		Unit:        v.Unit,
+		Description: v.Description,
 	}
 	if v.Operators != nil {
 		res.Operators = make([]string, len(v.Operators))

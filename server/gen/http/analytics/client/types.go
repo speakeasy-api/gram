@@ -678,6 +678,9 @@ type AnalyticsFieldResponseBody struct {
 	Operators []string `form:"operators,omitempty" json:"operators,omitempty" xml:"operators,omitempty"`
 	// Ops a field admits: aggregations on a measure, count_distinct on a dimension
 	Aggregations []string `form:"aggregations,omitempty" json:"aggregations,omitempty" xml:"aggregations,omitempty"`
+	// What the field is and which producers fill it, when the catalog has
+	// something to say beyond the name
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 }
 
 // AnalyticsDimensionValueResponseBody is used to define fields on response
