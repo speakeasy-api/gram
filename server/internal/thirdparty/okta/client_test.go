@@ -513,22 +513,7 @@ func TestClient_NeverLogsOrTracesCredentials(t *testing.T) {
 	_, err := tc.client.GetApp(t.Context(), "missing")
 	require.True(t, IsNotFound(err))
 
-	spans := exporter.GetSpans()
-	require.NotEmpty(t, spans)
-	var dump strings.Builder
-	for _, span := range spans {
-		for _, kv := range span.Attributes {
-			fmt.Fprintf(&dump, "%s=%s\n", kv.Key, kv.Value.Emit())
-		}
-		for _, ev := range span.Events {
-			for _, kv := range ev.Attributes {
-				fmt.Fprintf(&dump, "%s=%s\n", kv.Key, kv.Value.Emit())
-			}
-		}
-	}
-	dump.WriteString(logs.String())
-	output := dump.String()
-	require.NotEmpty(t, logs.String())
+	output := telemetryDump(t, exporter, &logs)
 
 	for _, tok := range tc.stub.issuedTokens() {
 		require.NotContains(t, output, tok)
@@ -545,6 +530,27 @@ func TestClient_NeverLogsOrTracesCredentials(t *testing.T) {
 	require.NotContains(t, output, "dpop")
 	require.NotContains(t, output, "access_token")
 	require.NotContains(t, output, "client_assertion")
+}
+
+// telemetryDump renders every span attribute, span event attribute, and log line.
+func telemetryDump(t *testing.T, exporter *tracetest.InMemoryExporter, logs *bytes.Buffer) string {
+	t.Helper()
+	spans := exporter.GetSpans()
+	require.NotEmpty(t, spans)
+	require.NotEmpty(t, logs.String())
+	var dump strings.Builder
+	for _, span := range spans {
+		for _, kv := range span.Attributes {
+			fmt.Fprintf(&dump, "%s=%s\n", kv.Key, kv.Value.Emit())
+		}
+		for _, ev := range span.Events {
+			for _, kv := range ev.Attributes {
+				fmt.Fprintf(&dump, "%s=%s\n", kv.Key, kv.Value.Emit())
+			}
+		}
+	}
+	dump.WriteString(logs.String())
+	return dump.String()
 }
 
 func TestPartitionByHashedHost_NeverExposesHostname(t *testing.T) {
@@ -679,7 +685,7 @@ func TestNewClient_RequiresTokenEndpointAudienceFormat(t *testing.T) {
 	t.Parallel()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""})
+	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""}, &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0})
 
 	cfg := testConfig()
 	cfg.OrgURL = "https://example.okta.com"
@@ -708,7 +714,7 @@ func TestNewClient_OrgURLRequiresHTTPSExceptLoopback(t *testing.T) {
 	t.Parallel()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""})
+	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""}, &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0})
 
 	cfg := testConfig()
 	cfg.ClientID = stubClientID
@@ -762,9 +768,10 @@ func TestNewClient_OrgURLRequiresHTTPSExceptLoopback(t *testing.T) {
 	require.EqualError(t, err, `okta: org url "https://example.okta.com/oauth2" must be an origin without path, query, fragment, or userinfo`)
 }
 
-func TestClient_VerifyScopes_BearerTokenIsNotOK(t *testing.T) {
+func TestClient_VerifyScopes_PrivateKeyJWTRejectsBearerToken(t *testing.T) {
 	t.Parallel()
 	tc := newDefaultTestClient(t)
+	tc.stub.setApps(stubApps(1))
 	tc.stub.setTokenType("Bearer")
 
 	v, err := tc.client.VerifyScopes(t.Context(), []string{"okta.apps.read", "okta.groups.read"})
@@ -775,7 +782,25 @@ func TestClient_VerifyScopes_BearerTokenIsNotOK(t *testing.T) {
 	require.False(t, v.OK())
 
 	_, err = tc.client.ListApps(t.Context(), ListAppsRequest{Query: "", Status: "", Limit: 0})
-	require.EqualError(t, err, `okta token response type "Bearer" is not DPoP`)
+	require.EqualError(t, err, `okta token type "Bearer" is not accepted for private_key_jwt`)
+}
+
+func TestClient_VerifyScopes_ClientSecretBasicAcceptsBearerToken(t *testing.T) {
+	t.Parallel()
+	tc := newTestClient(t, testenv.NewTracerProvider(t), testenv.NewLogger(t), basicTestConfig("stub-secret"))
+	tc.stub.setApps(stubApps(1))
+	tc.stub.setGrantedScopes(defaultScopes)
+	tc.stub.setTokenType("Bearer")
+
+	v, err := tc.client.VerifyScopes(t.Context(), defaultScopes)
+	require.NoError(t, err)
+	require.Empty(t, v.Missing)
+	require.False(t, v.DPoPBound)
+	require.False(t, v.OK())
+
+	requests := tc.stub.counts().tokenRequests
+	require.Len(t, listApps(t, tc), 1)
+	require.Equal(t, requests, tc.stub.counts().tokenRequests, "the verification token is cached and reused")
 }
 
 func TestClient_ResourceRedirectIsNotFollowed(t *testing.T) {
@@ -958,7 +983,7 @@ func TestNewClient_CanonicalOrgURLMatchesProofHTU(t *testing.T) {
 
 	cfg := tc.client.cfg
 	cfg.OrgURL = "https://Example.okta.com:443"
-	client, err := NewClient(testenv.NewLogger(t), tc.client.httpClient, tc.signer, cfg)
+	client, err := NewClient(testenv.NewLogger(t), tc.client.httpClient, tc.signer, tc.decrypter, cfg)
 	require.NoError(t, err)
 	impl, ok := client.(*httpClient)
 	require.True(t, ok)
@@ -1185,7 +1210,7 @@ func TestClientFactory_MemoizesAndForgets(t *testing.T) {
 	t.Parallel()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""})
+	factory := NewClientFactory(testenv.NewLogger(t), policy, &stubSigner{clock: &fakeClock{mu: sync.Mutex{}, now: time.Now()}, mu: sync.Mutex{}, calls: 0, requests: nil, jtis: nil, replay: false, last: ""}, &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0})
 
 	cfg := testConfig()
 	cfg.OrgURL = "https://example.okta.com"

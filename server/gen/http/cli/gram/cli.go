@@ -146,7 +146,7 @@ func UsageCommands() []string {
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics|get-status)",
 		"identity resolve",
-		"identity-provider-connections (create|submit-client-id|verify|get|record-agent|revoke|sync-applications|list-applications)",
+		"identity-provider-connections (create|submit-client-id|replace-client-secret|set-setup-method|verify|get|record-agent|revoke|sync-applications|list-applications)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
@@ -1545,6 +1545,14 @@ func ParseEndpoint(
 		identityProviderConnectionsSubmitClientIDFlags            = flag.NewFlagSet("submit-client-id", flag.ExitOnError)
 		identityProviderConnectionsSubmitClientIDBodyFlag         = identityProviderConnectionsSubmitClientIDFlags.String("body", "REQUIRED", "")
 		identityProviderConnectionsSubmitClientIDSessionTokenFlag = identityProviderConnectionsSubmitClientIDFlags.String("session-token", "", "")
+
+		identityProviderConnectionsReplaceClientSecretFlags            = flag.NewFlagSet("replace-client-secret", flag.ExitOnError)
+		identityProviderConnectionsReplaceClientSecretBodyFlag         = identityProviderConnectionsReplaceClientSecretFlags.String("body", "REQUIRED", "")
+		identityProviderConnectionsReplaceClientSecretSessionTokenFlag = identityProviderConnectionsReplaceClientSecretFlags.String("session-token", "", "")
+
+		identityProviderConnectionsSetSetupMethodFlags            = flag.NewFlagSet("set-setup-method", flag.ExitOnError)
+		identityProviderConnectionsSetSetupMethodBodyFlag         = identityProviderConnectionsSetSetupMethodFlags.String("body", "REQUIRED", "")
+		identityProviderConnectionsSetSetupMethodSessionTokenFlag = identityProviderConnectionsSetSetupMethodFlags.String("session-token", "", "")
 
 		identityProviderConnectionsVerifyFlags            = flag.NewFlagSet("verify", flag.ExitOnError)
 		identityProviderConnectionsVerifyBodyFlag         = identityProviderConnectionsVerifyFlags.String("body", "REQUIRED", "")
@@ -5177,6 +5185,8 @@ func ParseEndpoint(
 	identityProviderConnectionsFlags.Usage = identityProviderConnectionsUsage
 	identityProviderConnectionsCreateFlags.Usage = identityProviderConnectionsCreateUsage
 	identityProviderConnectionsSubmitClientIDFlags.Usage = identityProviderConnectionsSubmitClientIDUsage
+	identityProviderConnectionsReplaceClientSecretFlags.Usage = identityProviderConnectionsReplaceClientSecretUsage
+	identityProviderConnectionsSetSetupMethodFlags.Usage = identityProviderConnectionsSetSetupMethodUsage
 	identityProviderConnectionsVerifyFlags.Usage = identityProviderConnectionsVerifyUsage
 	identityProviderConnectionsGetFlags.Usage = identityProviderConnectionsGetUsage
 	identityProviderConnectionsRecordAgentFlags.Usage = identityProviderConnectionsRecordAgentUsage
@@ -6981,6 +6991,12 @@ func ParseEndpoint(
 
 			case "submit-client-id":
 				epf = identityProviderConnectionsSubmitClientIDFlags
+
+			case "replace-client-secret":
+				epf = identityProviderConnectionsReplaceClientSecretFlags
+
+			case "set-setup-method":
+				epf = identityProviderConnectionsSetSetupMethodFlags
 
 			case "verify":
 				epf = identityProviderConnectionsVerifyFlags
@@ -9942,6 +9958,12 @@ func ParseEndpoint(
 			case "submit-client-id":
 				endpoint = c.SubmitClientID()
 				data, err = identityproviderconnectionsc.BuildSubmitClientIDPayload(*identityProviderConnectionsSubmitClientIDBodyFlag, *identityProviderConnectionsSubmitClientIDSessionTokenFlag)
+			case "replace-client-secret":
+				endpoint = c.ReplaceClientSecret()
+				data, err = identityproviderconnectionsc.BuildReplaceClientSecretPayload(*identityProviderConnectionsReplaceClientSecretBodyFlag, *identityProviderConnectionsReplaceClientSecretSessionTokenFlag)
+			case "set-setup-method":
+				endpoint = c.SetSetupMethod()
+				data, err = identityproviderconnectionsc.BuildSetSetupMethodPayload(*identityProviderConnectionsSetSetupMethodBodyFlag, *identityProviderConnectionsSetSetupMethodSessionTokenFlag)
 			case "verify":
 				endpoint = c.Verify()
 				data, err = identityproviderconnectionsc.BuildVerifyPayload(*identityProviderConnectionsVerifyBodyFlag, *identityProviderConnectionsVerifySessionTokenFlag)
@@ -17975,7 +17997,9 @@ func identityProviderConnectionsUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] identity-provider-connections COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create: Create the organization's Okta connection. Discovers the org's authorization server, provisions a signing key and JWKS URL, and returns the console checklist. Requires org:admin and the okta-connections rollout. One live connection per organization; creation is rate limited.`)
-	fmt.Fprintln(os.Stderr, `    submit-client-id: Record the client ID of the Okta API Services application and verify it. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    submit-client-id: Record the client ID of the Okta API Services application and verify it. Connections installed from the Okta Integration Network also take the client secret. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    replace-client-secret: Replace the client secret of a connection installed from the Okta Integration Network and re-verify it. The previous secret is kept if Okta rejects the new one. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    set-setup-method: Switch how a pending connection connects to Okta: an install from the Okta Integration Network (client secret) or a custom API Services app (private key). Allowed until the client ID is submitted. Switching to the custom app provisions a signing key and JWKS URL once; switching away stops serving the key and switching back reuses it. A key left unused is retired when the client ID is submitted or the connection is revoked. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    verify: Re-verify the connection against Okta: mint a token, confirm each required scope with a read, and record the outcome. Rate limited per organization. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get: Get a connection by ID, or the organization's live Okta connection when no ID is given. Session only; requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    record-agent: Record the Okta AI agent ID and the application it is bound to, for display. Okta does not expose these through its API. Requires org:admin.`)
@@ -18015,7 +18039,7 @@ func identityProviderConnectionsSubmitClientIDUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Record the client ID of the Okta API Services application and verify it. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Record the client ID of the Okta API Services application and verify it. Connections installed from the Okta Integration Network also take the client secret. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -18023,7 +18047,47 @@ func identityProviderConnectionsSubmitClientIDUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections submit-client-id --body '{\n      \"client_id\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections submit-client-id --body '{\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsReplaceClientSecretUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections replace-client-secret", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace the client secret of a connection installed from the Okta Integration Network and re-verify it. The previous secret is kept if Okta rejects the new one. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections replace-client-secret --body '{\n      \"client_secret\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsSetSetupMethodUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections set-setup-method", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Switch how a pending connection connects to Okta: an install from the Okta Integration Network (client secret) or a custom API Services app (private key). Allowed until the client ID is submitted. Switching to the custom app provisions a signing key and JWKS URL once; switching away stops serving the key and switching back reuses it. A key left unused is retired when the client ID is submitted or the connection is revoked. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections set-setup-method --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"listing_mode\": \"oin\"\n   }' --session-token \"abc123\"")
 }
 
 func identityProviderConnectionsVerifyUsage() {

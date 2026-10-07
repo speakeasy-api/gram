@@ -46,6 +46,19 @@ type IdentityProviderConnection struct {
 	Deleted        bool
 }
 
+type JsonWebKeySet struct {
+	ID                           uuid.UUID
+	OrganizationID               string
+	ProjectID                    uuid.NullUUID
+	ExternalKeyID                uuid.UUID
+	Name                         string
+	IdentityProviderConnectionID uuid.NullUUID
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+	DeletedAt                    pgtype.Timestamptz
+	Deleted                      bool
+}
+
 type OktaIdentityProviderConnection struct {
 	IdentityProviderConnectionID        uuid.UUID
 	IdentityProviderConnectionsProvider string

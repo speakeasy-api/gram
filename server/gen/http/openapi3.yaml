@@ -32420,6 +32420,111 @@ paths:
             x-speakeasy-name-override: recordAgent
             x-speakeasy-react-hook:
                 name: RecordIdentityProviderConnectionAgent
+    /rpc/identityProviderConnections.replaceClientSecret:
+        post:
+            description: Replace the client secret of a connection installed from the Okta Integration Network and re-verify it. The previous secret is kept if Okta rejects the new one. Requires org:admin.
+            operationId: replaceIdentityProviderConnectionClientSecret
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ReplaceIdentityProviderConnectionClientSecretRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OktaIdentityProviderConnection'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'rate_limit_exceeded: rate limit exceeded'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - session_header_Gram-Session: []
+            summary: replaceClientSecret identityProviderConnections
+            tags:
+                - identityProviderConnections
+            x-speakeasy-name-override: replaceClientSecret
+            x-speakeasy-react-hook:
+                name: ReplaceIdentityProviderConnectionClientSecret
     /rpc/identityProviderConnections.revoke:
         post:
             description: 'Revoke the connection: withdraw every signing key from the JWKS, disable the key material, and tombstone the connection so a new one can be created. Idempotent. Requires org:admin.'
@@ -32513,9 +32618,114 @@ paths:
             x-speakeasy-name-override: revoke
             x-speakeasy-react-hook:
                 name: RevokeIdentityProviderConnection
+    /rpc/identityProviderConnections.setSetupMethod:
+        post:
+            description: 'Switch how a pending connection connects to Okta: an install from the Okta Integration Network (client secret) or a custom API Services app (private key). Allowed until the client ID is submitted. Switching to the custom app provisions a signing key and JWKS URL once; switching away stops serving the key and switching back reuses it. A key left unused is retired when the client ID is submitted or the connection is revoked. Requires org:admin.'
+            operationId: setIdentityProviderConnectionSetupMethod
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetIdentityProviderConnectionSetupMethodRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OktaIdentityProviderConnection'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'rate_limit_exceeded: rate limit exceeded'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - session_header_Gram-Session: []
+            summary: setSetupMethod identityProviderConnections
+            tags:
+                - identityProviderConnections
+            x-speakeasy-name-override: setSetupMethod
+            x-speakeasy-react-hook:
+                name: SetIdentityProviderConnectionSetupMethod
     /rpc/identityProviderConnections.submitClientId:
         post:
-            description: Record the client ID of the Okta API Services application and verify it. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.
+            description: Record the client ID of the Okta API Services application and verify it. Connections installed from the Okta Integration Network also take the client secret. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.
             operationId: submitIdentityProviderConnectionClientId
             parameters:
                 - allowEmptyValue: true
@@ -101434,7 +101644,7 @@ components:
                     description: Discovered authorization server issuer. Equal to org_url by construction.
                 jwks_url:
                     type: string
-                    description: Public JWKS URL the Okta app is configured to trust for private_key_jwt.
+                    description: Public JWKS URL the Okta app is configured to trust for private_key_jwt. Omitted for connections installed from the Okta Integration Network, which authenticate with a client secret.
                 last_error:
                     type: string
                     description: 'Why the last verification did not complete: Okta rejected the credential, or could not be reached. Omitted when it completed.'
@@ -101492,6 +101702,7 @@ components:
                             - missing_role
                             - dpop_not_bound
                             - key_not_fetched
+                            - secret_rejected
                             - read_failed:okta.apps.read
                             - read_failed:okta.users.read
                             - read_failed:okta.groups.read
@@ -101505,7 +101716,6 @@ components:
                 - org_url
                 - issuer_url
                 - listing_mode
-                - jwks_url
                 - client_id_submitted
                 - dpop_required
                 - required_scopes
@@ -105252,6 +105462,19 @@ components:
                     description: The rendered prompt
             required:
                 - prompt
+        ReplaceIdentityProviderConnectionClientSecretRequestBody:
+            type: object
+            properties:
+                client_secret:
+                    type: string
+                    description: New client secret from the Speakeasy integration in Okta. Encrypted before persisting and never returned.
+                id:
+                    type: string
+                    description: Connection ID.
+                    format: uuid
+            required:
+                - id
+                - client_secret
         ReportAIScanRequestBody:
             type: object
             properties:
@@ -108823,6 +109046,22 @@ components:
             required:
                 - source_kind
                 - role_urn
+        SetIdentityProviderConnectionSetupMethodRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Connection ID.
+                    format: uuid
+                listing_mode:
+                    type: string
+                    description: Setup method.
+                    enum:
+                        - custom_app
+                        - oin
+            required:
+                - id
+                - listing_mode
         SetInferenceKeyMonthlyLimitRequestBody:
             type: object
             properties:
@@ -111633,6 +111872,9 @@ components:
                 client_id:
                     type: string
                     description: Okta application client ID (0oa...).
+                client_secret:
+                    type: string
+                    description: Client secret from the Speakeasy integration installed from the Okta Integration Network. Required for connections created with listing_mode oin; rejected otherwise. Encrypted before persisting and never returned.
                 id:
                     type: string
                     description: Connection ID.

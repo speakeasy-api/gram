@@ -149,9 +149,11 @@ export function ConnectionFacts({
       <Fact label="Okta organization URL" mono>
         <ExternalValueLink href={connection.orgUrl} />
       </Fact>
-      <Fact label="Public key URL (JWKS)" mono>
-        <CopyableValue value={connection.jwksUrl} />
-      </Fact>
+      {connection.jwksUrl && (
+        <Fact label="Public key URL (JWKS)" mono>
+          <CopyableValue value={connection.jwksUrl} />
+        </Fact>
+      )}
       <Fact label="Client ID" mono>
         {connection.clientId ? (
           <CopyableValue value={connection.clientId} />
@@ -170,20 +172,23 @@ export function ConnectionFacts({
       <Fact label="Last verified">
         <LastVerified connection={connection} />
       </Fact>
-      <Fact label="Active signing key ID" mono>
-        {connection.activeKey ? (
-          <>
-            <CopyableValue value={connection.activeKey.kid} />
-            <Text muted small className="font-sans">
-              since <HumanizeDateTime date={connection.activeKey.activatedAt} />
+      {connection.jwksUrl && (
+        <Fact label="Active signing key ID" mono>
+          {connection.activeKey ? (
+            <>
+              <CopyableValue value={connection.activeKey.kid} />
+              <Text muted small className="font-sans">
+                since{" "}
+                <HumanizeDateTime date={connection.activeKey.activatedAt} />
+              </Text>
+            </>
+          ) : (
+            <Text muted small>
+              Withdrawn
             </Text>
-          </>
-        ) : (
-          <Text muted small>
-            Withdrawn
-          </Text>
-        )}
-      </Fact>
+          )}
+        </Fact>
+      )}
     </FactList>
   );
 }

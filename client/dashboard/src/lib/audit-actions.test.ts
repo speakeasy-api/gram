@@ -129,6 +129,8 @@ describe("AUDIT_ACTIONS", () => {
         [
           "identity-provider-connection:create",
           "identity-provider-connection:submit-client-id",
+          "identity-provider-connection:replace-client-secret",
+          "identity-provider-connection:set-setup-method",
           "identity-provider-connection:verify",
           "identity-provider-connection:record-agent",
           "identity-provider-connection:revoke",
@@ -137,6 +139,8 @@ describe("AUDIT_ACTIONS", () => {
     ).toEqual([
       "connected identity provider okta",
       "submitted client ID for identity provider okta",
+      "replaced client secret for identity provider okta",
+      "changed setup method for identity provider okta",
       "verified identity provider connection to okta",
       "recorded agent for identity provider okta",
       "revoked identity provider connection to okta",
