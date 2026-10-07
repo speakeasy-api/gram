@@ -1118,6 +1118,22 @@ func (q *Queries) EnablePreparationFixtureCIMD(ctx context.Context, arg EnablePr
 	return err
 }
 
+const expirePlatformMCPOperationReceiptFixture = `-- name: ExpirePlatformMCPOperationReceiptFixture :one
+UPDATE platform_mcp_operation_receipts
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = $1
+RETURNING expires_at
+`
+
+// Test-only fixture expiring an idempotency receipt by the database clock,
+// the clock both the replay pre-check and the locked path judge expiry with.
+func (q *Queries) ExpirePlatformMCPOperationReceiptFixture(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, expirePlatformMCPOperationReceiptFixture, id)
+	var expires_at pgtype.Timestamptz
+	err := row.Scan(&expires_at)
+	return expires_at, err
+}
+
 const expirePlatformMCPSetupHandoffFixture = `-- name: ExpirePlatformMCPSetupHandoffFixture :exec
 UPDATE platform_mcp_setup_handoffs
 SET expires_at = clock_timestamp() - interval '1 second'
@@ -3245,6 +3261,34 @@ func (q *Queries) ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture(ctx co
 			return nil, err
 		}
 		items = append(items, disable_causes)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPOperationReceiptIDsFixture = `-- name: ListPlatformMCPOperationReceiptIDsFixture :many
+SELECT id
+FROM platform_mcp_operation_receipts
+WHERE organization_id = $1
+ORDER BY id
+`
+
+// Test-only inspection of which receipts an organization still holds.
+func (q *Queries) ListPlatformMCPOperationReceiptIDsFixture(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPOperationReceiptIDsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

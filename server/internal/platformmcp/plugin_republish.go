@@ -162,12 +162,6 @@ func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principa
 	if err != nil {
 		return RepublishPluginOutput{}, err
 	}
-	// Charged after the target is resolved and before anything is written, so
-	// a refused call does not spend the allowance.
-	if err := s.republishBudget.AllowConnectionOrOrganization(ctx, principal); err != nil {
-		return RepublishPluginOutput{}, err
-	}
-
 	payload, err := json.Marshal(normalizedRepublishPlugin{ProjectID: project.ID.String(), PluginID: target.ID.String()})
 	if err != nil {
 		return RepublishPluginOutput{}, pluginRepublishInvalid("The republish request could not be normalized.")
@@ -175,7 +169,12 @@ func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principa
 	digest := sha256.Sum256(append([]byte("platform-mcp-plugin-republish-v1\x00"), payload...))
 	plugin := RepublishedPlugin{ID: target.ID.String(), Name: target.Name, Slug: target.Slug, IsDefault: target.IsDefault}
 
-	receipt, err := executeMutationReceipt(ctx, mutationReceiptExecution[pluginRepublishReceipt]{
+	// Charged after the target is resolved, so a refused call does not spend
+	// the allowance, and only when no completed receipt answers the request;
+	// see executeChargedMutationReceipt.
+	receipt, err := executeChargedMutationReceipt(ctx, func(ctx context.Context) error {
+		return s.republishBudget.AllowConnectionOrOrganization(ctx, principal)
+	}, mutationReceiptExecution[pluginRepublishReceipt]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operationRepublishPlugin,
 		IdempotencyKey: input.IdempotencyKey, InputHash: hex.EncodeToString(digest[:]), Label: "plugin republish",
 		Invalid: func(error) error { return pluginRepublishInvalid("The republish request is invalid.") },

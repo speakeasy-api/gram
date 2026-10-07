@@ -175,29 +175,17 @@ func (s *MCPToolExposureService) createMCPFromFunctions(ctx context.Context, pri
 	digest := sha256.Sum256(append([]byte("platform-mcp-create-from-functions-v1\x00"), payload...))
 	inputHash := hex.EncodeToString(digest[:])
 
-	// A retry of a creation that already committed returns its stored result
-	// without spending the allowance. Both the lookup and the charge run here,
-	// outside any transaction: the limiter is a network round-trip, and taking
-	// it inside the receipt transaction would hold a database connection and
-	// the receipt lock for as long as the limiter takes to answer. The
-	// executor's locked re-check still replays a duplicate that commits
-	// between this lookup and its own.
-	if replay, ok, err := s.completedMCPFromFunctionsReceipt(ctx, principal, project.ID, input.IdempotencyKey, inputHash); err != nil {
-		return CreateMCPFromFunctionsOutput{}, mcpFromFunctionsUnavailable(err)
-	} else if ok {
-		var stored mcpFromFunctionsReceipt
-		if err := json.Unmarshal(replay.ResultPayload, &stored); err != nil {
-			return CreateMCPFromFunctionsOutput{}, mcpFromFunctionsUnavailable(err)
+	// A retry of a creation that already committed replays its stored result
+	// without spending the allowance; see executeChargedMutationReceipt. The
+	// allowance is the one the other writes that change what a server exposes
+	// share, so a creation loop cannot outrun them.
+	charge := func(ctx context.Context) error {
+		if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
+			return mcpFromFunctionsBudgetError(err)
 		}
-		return s.finishMCPFromFunctions(ctx, principal, project, stored, replay), nil
+		return nil
 	}
-	// The same allowance as the other writes that change what a server
-	// exposes, so a creation loop cannot outrun them.
-	if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
-		return CreateMCPFromFunctionsOutput{}, mcpFromFunctionsBudgetError(err)
-	}
-
-	receipt, err := executeMutationReceipt(ctx, mutationReceiptExecution[mcpFromFunctionsReceipt]{
+	receipt, err := executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[mcpFromFunctionsReceipt]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operationCreateMCPFromFunctions,
 		IdempotencyKey: input.IdempotencyKey, InputHash: inputHash, Label: "MCP server from functions",
 		Invalid: func(error) error { return mcpFromFunctionsInvalid("The MCP server request is invalid.") },
@@ -339,28 +327,6 @@ func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, pri
 	output.Exposure = &exposure
 	output.SnapshotScope = "fresh_read_after_commit"
 	return output
-}
-
-// completedMCPFromFunctionsReceipt is a read-only lookup, on the pool rather
-// than in a transaction, for a creation with this exact key and input that
-// already committed and has not expired. Anything else — no receipt, a pending
-// one, different input under the same key — is left to the executor, which
-// decides it under the receipt lock.
-func (s *MCPToolExposureService) completedMCPFromFunctionsReceipt(ctx context.Context, principal Principal, projectID uuid.UUID, idempotencyKey, inputHash string) (OperationReceipt, bool, error) {
-	row, err := s.queries.GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
-		OrganizationID: principal.OrganizationID, ProjectID: projectID, Operation: operationCreateMCPFromFunctions,
-		IdempotencyKey: idempotencyKey, UserID: conv.ToPGText(principal.UserID), SubjectUrn: userSubjectURN(principal.UserID),
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return OperationReceipt{}, false, nil
-	}
-	if err != nil {
-		return OperationReceipt{}, false, fmt.Errorf("look up MCP server from functions receipt: %w", err)
-	}
-	if row.Status != receiptStatusSucceeded || len(row.ResultPayload) == 0 || row.InputHash != inputHash || !row.ExpiresAt.Valid || !row.ExpiresAt.Time.After(s.now()) {
-		return OperationReceipt{}, false, nil
-	}
-	return operationReceiptFromRow(row, true), true, nil
 }
 
 // MCPFromFunctionsPreview is what an unconfirmed create_mcp_from_functions

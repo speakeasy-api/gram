@@ -396,13 +396,6 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 	if err != nil {
 		return MCPToolExposureMutationOutput{}, err
 	}
-	// Charged after validation and authorization and before anything is read
-	// or written, matching the other Platform MCP mutations: a refused or
-	// unauthorized call must not consume the allowance, and no lock is taken
-	// until the write is paid for.
-	if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
-		return MCPToolExposureMutationOutput{}, toolExposureBudgetError(err, "Changing which tools an MCP server exposes was asked for too often just now.")
-	}
 	// The fresh target read, the version check and the tool-name check all
 	// happen inside the receipt transaction. Doing any of them here would
 	// defeat replay: a retry of a change that already committed would report a
@@ -419,7 +412,16 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 	}
 	digest := sha256.Sum256(append([]byte("platform-mcp-tool-exposure-v1\x00"+operation+"\x00"), payload...))
 
-	receipt, err := executeMutationReceipt(ctx, mutationReceiptExecution[toolExposureReceipt]{
+	// Charged after validation and authorization, so a refused or unauthorized
+	// call never consumes the allowance, and only when no completed receipt
+	// answers the request; see executeChargedMutationReceipt.
+	charge := func(ctx context.Context) error {
+		if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
+			return toolExposureBudgetError(err, "Changing which tools an MCP server exposes was asked for too often just now.")
+		}
+		return nil
+	}
+	receipt, err := executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[toolExposureReceipt]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operation,
 		IdempotencyKey: input.IdempotencyKey, InputHash: hex.EncodeToString(digest[:]), Label: "MCP tool exposure",
 		Invalid: func(error) error { return toolExposureInvalid("The tool exposure request is invalid.") },

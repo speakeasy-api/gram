@@ -173,7 +173,7 @@ func (s *riskPolicyMutationService) createPolicyTool(ctx context.Context, _ *mcp
 	var committed *policycore.MutationResult
 	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, RiskMutationReceiptRequest{
 		Operation: operationCreateRiskPolicy, IdempotencyKey: input.IdempotencyKey, Input: prepared.normalized,
-	}, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+	}, s.controls.Charge(principal), func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
 		if err := shadowadmission.LockProject(ctx, tx, project.ID); err != nil {
 			return nil, fmt.Errorf("lock shadow mcp admission project for risk policy create: %w", err)
 		}
@@ -280,7 +280,7 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, RiskMutationReceiptRequest{
 		Operation: operation, IdempotencyKey: input.IdempotencyKey,
 		Input: map[string]any{"project_slug": project.Slug, "policy_id": policyID.String(), "expected_version": input.ExpectedVersion, "patch": normalizedPatch},
-	}, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+	}, s.controls.Charge(principal), func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
 		if err := shadowadmission.LockProject(ctx, tx, project.ID); err != nil {
 			return nil, fmt.Errorf("lock shadow mcp admission project for risk policy update: %w", err)
 		}

@@ -32,6 +32,69 @@ type mutationReceiptExecution[T any] struct {
 	Mutate         func(context.Context, pgx.Tx) (T, error)
 }
 
+// executeChargedMutationReceipt is the entry point for a write that spends an
+// operation budget. A replay does no work, so it must cost nothing, and the
+// budget is a Redis round-trip, so it must never be charged while a
+// PostgreSQL connection or the receipt lock is held. The order is therefore:
+//
+//  1. an unlocked, read-only lookup of a completed, unexpired receipt for
+//     exactly this request, answered without charging;
+//  2. on a miss, charge, still outside any transaction;
+//  3. executeMutationReceipt, whose locked re-check still replays a duplicate
+//     that committed concurrently. Two racing first attempts may then both be
+//     charged, which errs on the side of the budget.
+//
+// Callers run their validation and authorization before this, so a caller
+// cannot use the replay to probe for a target it may not see.
+func executeChargedMutationReceipt[T any](ctx context.Context, charge func(context.Context) error, execution mutationReceiptExecution[T]) (OperationReceipt, error) {
+	if charge == nil {
+		return OperationReceipt{}, execution.Unavailable(errors.New("mutation receipt charge is missing"))
+	}
+	if replay, ok := completedMutationReceipt(ctx, execution); ok {
+		return replay, nil
+	}
+	if err := charge(ctx); err != nil {
+		return OperationReceipt{}, err
+	}
+	return executeMutationReceipt(ctx, execution)
+}
+
+// noReplay is the empty receipt a pre-check returns beside false.
+var noReplay OperationReceipt
+
+// completedMutationReceipt is the unlocked pre-check. Anything but a completed,
+// unexpired receipt for exactly this input — no receipt, a pending one, a
+// different input under the same key, an invalid payload, or a failed read —
+// is a miss, and executeMutationReceipt decides it under its lock.
+func completedMutationReceipt[T any](ctx context.Context, execution mutationReceiptExecution[T]) (OperationReceipt, bool) {
+	if execution.DB == nil || execution.ValidateReplay == nil {
+		return noReplay, false
+	}
+	// A caller the locked path would refuse as malformed gets no replay here
+	// either; it falls through to that refusal.
+	if _, _, err := principalConnection(execution.Principal); err != nil {
+		return noReplay, false
+	}
+	row, err := platformrepo.New(execution.DB).GetUnexpiredPlatformMCPOperationReceipt(ctx, platformrepo.GetUnexpiredPlatformMCPOperationReceiptParams{
+		OrganizationID: execution.Principal.OrganizationID, ProjectID: execution.Project.ID, Operation: execution.Operation, IdempotencyKey: execution.IdempotencyKey,
+		UserID: conv.ToPGText(execution.Principal.UserID), SubjectUrn: userSubjectURN(execution.Principal.UserID),
+	})
+	if err != nil {
+		return noReplay, false
+	}
+	return replayableReceipt(row, execution.InputHash, execution.ValidateReplay)
+}
+
+// replayableReceipt reports whether a stored receipt answers this exact
+// request. Expiry is not judged here: the query that loaded the row already
+// filtered it with the database clock, the same clock the locked path uses.
+func replayableReceipt(row platformrepo.PlatformMcpOperationReceipt, inputHash string, valid func([]byte) bool) (OperationReceipt, bool) {
+	if row.InputHash != inputHash || row.Status != receiptStatusSucceeded || len(row.ResultPayload) == 0 || !valid(row.ResultPayload) {
+		return noReplay, false
+	}
+	return operationReceiptFromRow(row, true), true
+}
+
 // executeMutationReceipt owns the common idempotency transaction used by
 // access-affecting Platform MCP mutations: advisory lock, exact replay,
 // pending receipt, domain+audit callback, result persistence, and one commit.

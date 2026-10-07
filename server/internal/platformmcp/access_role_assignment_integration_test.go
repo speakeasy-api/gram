@@ -226,7 +226,7 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 	legacyReceipt, err := service.receipts.Execute(ctx, principal, project, "legacy-receipt", normalizedAccessRoleAssignment{
 		ProjectID: project.ID.String(), MemberID: memberID, RoleID: role.ID, ExpectedVersion: input.ExpectedVersion,
 		MCPID: "", ExpectedRoleVersion: "",
-	}, func(context.Context, pgx.Tx) (AccessRoleAssignmentReceiptResult, error) {
+	}, noReceiptCharge, func(context.Context, pgx.Tx) (AccessRoleAssignmentReceiptResult, error) {
 		return AccessRoleAssignmentReceiptResult{MaskedIdentity: first.Member.MaskedIdentity, Roles: first.Member.Roles,
 			Version: first.Member.Version, AssignedRole: first.AssignedRole, ResultCategory: first.ResultCategory, Reconciliation: "pending"}, nil
 	})

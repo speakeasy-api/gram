@@ -331,6 +331,37 @@ func TestAddToolsToMCPReplaysOneIdempotencyKeyWithoutAppendingTwice(t *testing.T
 	require.Equal(t, []string{fixture.tools[0]}, replay.Exposure.ToolURNs)
 }
 
+// A retry of a change that already committed does no work, so it must still
+// return its stored result once the caller's allowance is spent, rather than
+// coming back rate_limited.
+func TestAddToolsToMCPReplaysWithASpentAllowance(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_add_tools_replay_spent")
+
+	current, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID)
+	require.NoError(t, err)
+	input := ChangeMCPToolsInput{
+		ProjectID: fixture.project.ID.String(), MCPID: fixture.toolsetID.String(),
+		ToolURNs: []string{fixture.tools[0]}, ExpectedVersion: current.ExposureVersion,
+		IdempotencyKey: uuid.NewString(), Confirmed: true,
+	}
+	first, err := fixture.service.AddTools(ctx, fixture.principal, input)
+	require.NoError(t, err)
+
+	fixture.service.changes = OperationBudget{Connection: denyOperationLimiter{}, Organization: denyOperationLimiter{}}
+	replay, err := fixture.service.AddTools(ctx, fixture.principal, input)
+	require.NoError(t, err, "a replay must not be charged against a spent allowance")
+	require.True(t, replay.Receipt.Replayed)
+	require.Equal(t, first.Receipt.ID, replay.Receipt.ID)
+
+	fresh := input
+	fresh.IdempotencyKey = uuid.NewString()
+	_, err = fixture.service.AddTools(ctx, fixture.principal, fresh)
+	var refusal *MCPToolExposureError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "rate_limited", refusal.Code, "a request that is not a replay is still charged")
+}
+
 // A server that fronts an upstream, and a caller naming something that is not
 // a server at all, must both reach the readable dashboard refusal on the
 // mutation path too — not a forbidden error or a bare not-found leaking out

@@ -99,7 +99,7 @@ func (s *AccessRoleAssignmentService) Assign(ctx context.Context, principal Prin
 	// but the fresh callback below refuses that shape for a new assignment.
 	normalized := normalizedAccessRoleAssignment{ProjectID: project.ID.String(), MemberID: memberID, RoleID: roleID, ExpectedVersion: input.ExpectedVersion, MCPID: input.MCPID, ExpectedRoleVersion: input.ExpectedRoleVersion}
 	var reconciliation access.MemberRoleReconciliation
-	receipt, err := s.receipts.Execute(ctx, principal, project, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (AccessRoleAssignmentReceiptResult, error) {
+	receipt, err := s.receipts.Execute(ctx, principal, project, input.IdempotencyKey, normalized, s.roles.charge(principal), func(ctx context.Context, tx pgx.Tx) (AccessRoleAssignmentReceiptResult, error) {
 		if _, err := s.roles.reads.references.Decode(input.MemberReference, principal, subjectKindAccessMember, s.roles.reads.now()); err != nil {
 			return AccessRoleAssignmentReceiptResult{}, accessRoleMutationNotFound()
 		}
