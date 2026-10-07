@@ -2,8 +2,8 @@ import { Functions } from "@speakeasy-api/functions";
 import { z } from "zod";
 import * as snowflake from "./snowflake.ts";
 
-// To learn more about Gram Functions, check out our documentation at:
-// https://www.speakeasy.com/docs/gram/gram-functions/functions-framework
+// To learn more about Speakeasy Functions, check out our documentation at:
+// https://www.speakeasy.com/docs/ai-control-plane/mcp-gateway/building-servers/functions/functions-framework
 const functions = new Functions({
   envSchema: {
     SNOWFLAKE_ACCOUNT_IDENTIFIER: z

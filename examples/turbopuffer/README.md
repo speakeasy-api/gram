@@ -1,7 +1,6 @@
 # Semantic Movie Search with Turbopuffer
 
-This example demonstrates how to build a **semantic search** system using [Gram
-Functions](https://getgram.ai), [Turbopuffer](https://turbopuffer.com)'s cloud-based
+This example demonstrates how to build a **semantic search** system using [Speakeasy Functions](https://www.speakeasy.com/docs/ai-control-plane/mcp-gateway/building-servers/functions), [Turbopuffer](https://turbopuffer.com)'s cloud-based
 vector database, and OpenRouter's embedding API. Users can search for movies using
 natural language queries, and the system returns semantically similar results based
 on vector embeddings.
@@ -11,7 +10,7 @@ on vector embeddings.
 - **Vector similarity search** using Turbopuffer's cloud vector database
 - **Semantic search** that understands meaning, not just keywords (e.g., "space adventure" matches "Star Wars")
 - **Real-time embedding generation** using OpenRouter's API
-- **Gram Functions framework** for building LLM-compatible tools
+- **Speakeasy Functions framework** for building LLM-compatible tools
 - **Cloud-based setup** with no local infrastructure required
 
 ## Why Turbopuffer?
@@ -160,7 +159,7 @@ Traditional keyword search only matches exact words. Vector similarity search un
 ├── scripts/
 │   └── seed.ts          # Script to load and parse movie dataset
 ├── src/
-│   ├── functions.ts     # Main Gram Function with search tool
+│   ├── functions.ts     # Main Speakeasy Function with search tool
 │   └── server.ts        # MCP server setup
 ├── .env.example         # Environment variable template
 ├── package.json         # Dependencies and scripts
@@ -179,15 +178,15 @@ Traditional keyword search only matches exact words. Vector similarity search un
 
 **`scripts/seed.ts`**: Parses the CSV dataset and uploads movies with their embeddings to Turbopuffer's "movies" namespace.
 
-## Deploying to Gram
+## Deploying
 
-To deploy this function to Gram and make it available as an MCP server:
+To deploy this function to Speakeasy and make it available as an MCP server:
 
 ```bash
 # Build the deployment package
 npm run build
 
-# Push to Gram
+# Push
 npm run push
 ```
 
@@ -195,14 +194,14 @@ After deploying, users can install your MCP server and use the semantic search t
 
 ## Additional Resources
 
-- [Gram Functions Documentation](https://www.speakeasy.com/docs/gram/gram-functions)
+- [Speakeasy Functions Documentation](https://www.speakeasy.com/docs/ai-control-plane/mcp-gateway/building-servers/functions)
 - [Turbopuffer Documentation](https://turbopuffer.com/docs)
 - [OpenRouter API Documentation](https://openrouter.ai/docs)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 
 ## Learn More
 
-To learn more about building Gram Functions, check out:
+To learn more about building Speakeasy Functions, check out:
 
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Framework usage guide
 - [CLAUDE.md](./CLAUDE.md) - Development guidelines

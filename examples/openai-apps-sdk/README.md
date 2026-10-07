@@ -20,10 +20,10 @@ pnpm i @speakeasy-api/functions
 pnpm run inline:app
 ```
 
-## Deploying to Gram
+## Deploying
 
-Any typescript-based MCP server, once built, can be deployed to Gram via Gram
-functions. Deploy this MCP server to Gram by running the following commands
+Any typescript-based MCP server, once built, can be deployed to the Speakeasy AI Control Plane
+functions. Deploy this MCP server to Speakeasy by running the following commands
 from `pizzaz_node_server/pizza-app-gram`:
 
 ```bash
@@ -33,4 +33,4 @@ pnpm push
 ```
 
 For more details about this example, refer to the gram
-[documentation](https://www.speakeasy.com/docs/gram/examples/open-ai-apps-sdk).
+[documentation](https://www.speakeasy.com/docs/ai-control-plane/mcp-gateway/building-servers/sources).

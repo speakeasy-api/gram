@@ -1,6 +1,6 @@
-# Gram Functions x Temporal Example
+# Speakeasy Functions x Temporal Example
 
-This Gram Function shows how to connect to a a gram function to a Temporal client for the purposes of querying workflows. This is a starting point, more tools could be added. A temporal client from temporal TS SDK connects to the temporal server over gRPC.
+This Speakeasy Function shows how to connect to a a gram function to a Temporal client for the purposes of querying workflows. This is a starting point, more tools could be added. A temporal client from temporal TS SDK connects to the temporal server over gRPC.
 
 ## Usage
 
@@ -10,5 +10,5 @@ This Gram Function shows how to connect to a a gram function to a Temporal clien
   - `TEMPORAL_API_KEY`
   - `TEMPORAL_GRPC_ENDPOINT`
   - `TEMPORAL_NAMESPACE`
-- You're all set to build and push this Gram Function!
+- You're all set to build and push this Speakeasy Function!
   - Run `npm install && npm run build && npm run push`.

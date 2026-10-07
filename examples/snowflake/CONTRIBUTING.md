@@ -1,12 +1,12 @@
 # Project Contribution Guide
 
-- This is a Node.js project using TypeScript to build [Gram](https://gram.ai) Functions.
+- This is a Node.js project using TypeScript to build [Speakeasy Functions](https://www.speakeasy.com/docs/ai-control-plane/mcp-gateway/building-servers/functions).
 - The codebase assumes Node.js v22 or later is in use and TypeScript v5.9 or later is required.
 - When working in this codebase prefer using the Web APIs and Node.js standard library where possible instead of third-party libraries.
 
 ## Project Structure
 
-- `src/` - Contains the source TypeScript code for the Gram Functions.
+- `src/` - Contains the source TypeScript code for the Speakeasy Functions.
 - `dist/` - Output directory for the built code (generated after running `npm run build`).
 - `package.json` - Defines project metadata, dependencies, and scripts.
 - `tsconfig.json` - TypeScript configuration file.
@@ -14,7 +14,7 @@
 ## `package.json` scripts
 
 - `dev` - Runs the MCP Inspector playground with hot reloading enabled.
-- `build` - Bundles the Gram Functions code into a zip file for deployment and places it in the `dist/` directory.
+- `build` - Bundles the Speakeasy Functions code into a zip file for deployment and places it in the `dist/` directory.
 - `lint` - Runs the TypeScript compiler in `noEmit` mode to check for type errors.
 
 <details open>
@@ -197,7 +197,7 @@ const functions = new Functions({
 ```
 
 Whenever a tool wants to access a new environment variable, a definition must be
-added to the `envSchema` if one does not exist. When this Gram Function is
+added to the `envSchema` if one does not exist. When this Speakeasy Function is
 deployed, end users will then be able to provide values for these variables when
 installing the corresponding MCP servers.
 

@@ -1,6 +1,6 @@
-# Gram MCP Approval Flow - Quick Start Guide
+# MCP Approval Flow - Quick Start Guide
 
-This guide demonstrates how to implement approval flows for MCP (Model Context Protocol) server tool calls using Gram Functions. The approval system provides a security layer that intercepts protected tool calls and validates admin approval before execution.
+This guide demonstrates how to implement approval flows for MCP (Model Context Protocol) server tool calls using Speakeasy Functions. The approval system provides a security layer that intercepts protected tool calls and validates admin approval before execution.
 
 ## 🎯 What This Solves
 
@@ -415,7 +415,7 @@ description: "Proxy for YOUR_SERVICE admin tool calls...";
 
 ## 📚 Additional Resources
 
-- **Gram Functions Documentation**: [@speakeasy-api/functions](https://www.npmjs.com/package/@speakeasy-api/functions)
+- **Speakeasy Functions Documentation**: [@speakeasy-api/functions](https://www.npmjs.com/package/@speakeasy-api/functions)
 - **MCP Protocol**: [Model Context Protocol](https://modelcontextprotocol.io)
 - **Security Patterns**: See `gram_approve_demo.ts` for commented examples
 

@@ -3,8 +3,8 @@ import { OpenRouter } from "@openrouter/sdk";
 import Turbopuffer from "@turbopuffer/turbopuffer";
 import { z } from "zod";
 
-// To learn more about Gram Functions, check out our documentation at:
-// https://www.speakeasy.com/docs/gram/gram-functions/functions-framework
+// To learn more about Speakeasy Functions, check out our documentation at:
+// https://www.speakeasy.com/docs/ai-control-plane/mcp-gateway/building-servers/functions/functions-framework
 const functions = new Functions({
   envSchema: {
     TURBOPUFFER_API_KEY: z

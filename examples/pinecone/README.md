@@ -1,13 +1,13 @@
 # Semantic Movie Search with Pinecone Local
 
-This example demonstrates how to build a **semantic search** system using [Gram Functions](https://getgram.ai), Pinecone Local (Docker-based vector database), and OpenRouter's embedding API. Users can search for movies using natural language queries, and the system returns semantically similar results based on vector embeddings.
+This example demonstrates how to build a **semantic search** system using [Speakeasy Functions](https://www.speakeasy.com/docs/ai-control-plane/mcp-gateway/building-servers/functions), Pinecone Local (Docker-based vector database), and OpenRouter's embedding API. Users can search for movies using natural language queries, and the system returns semantically similar results based on vector embeddings.
 
 ## What This Example Demonstrates
 
 - **Vector similarity search** using Pinecone Local (in-memory vector database)
 - **Semantic search** that understands meaning, not just keywords (e.g., "space adventure" matches "Star Wars")
 - **Real-time embedding generation** using OpenRouter's API
-- **Gram Functions framework** for building LLM-compatible tools
+- **Speakeasy Functions framework** for building LLM-compatible tools
 - **Docker-based local development** with automatic seeding
 
 ## Prerequisites
@@ -144,7 +144,7 @@ Traditional keyword search only matches exact words. Vector similarity search un
 ├── scripts/
 │   └── seed.ts          # Script to create index and load movie dataset
 ├── src/
-│   ├── functions.ts     # Main Gram Function with search tool
+│   ├── functions.ts     # Main Speakeasy Function with search tool
 │   └── server.ts        # MCP server setup
 ├── docker-compose.yml   # Pinecone Local Docker setup
 ├── .env.example         # Environment variable template
@@ -200,15 +200,15 @@ To transition from local to cloud:
 5. Update `scripts/seed.ts` similarly to remove the host parameter
 6. Re-run the seed script to populate your cloud index
 
-## Deploying to Gram
+## Deploying
 
-To deploy this function to Gram and make it available as an MCP server:
+To deploy this function to Speakeasy and make it available as an MCP server:
 
 ```bash
 # Build the deployment package
 npm run build
 
-# Push to Gram
+# Push
 npm run push
 ```
 
@@ -218,7 +218,7 @@ After deploying, users can install your MCP server and use the semantic search t
 
 ## Additional Resources
 
-- [Gram Functions Documentation](https://www.speakeasy.com/docs/gram/gram-functions)
+- [Speakeasy Functions Documentation](https://www.speakeasy.com/docs/ai-control-plane/mcp-gateway/building-servers/functions)
 - [Pinecone Documentation](https://docs.pinecone.io/)
 - [Pinecone Local Guide](https://docs.pinecone.io/guides/operations/local-development)
 - [OpenRouter API Documentation](https://openrouter.ai/docs)
@@ -226,7 +226,7 @@ After deploying, users can install your MCP server and use the semantic search t
 
 ## Learn More
 
-To learn more about building Gram Functions, check out:
+To learn more about building Speakeasy Functions, check out:
 
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Framework usage guide
 - [CLAUDE.md](./CLAUDE.md) - Development guidelines

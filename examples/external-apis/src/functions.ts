@@ -2,7 +2,7 @@ import { Functions } from "@speakeasy-api/functions";
 import { z } from "zod";
 
 /**
- * This example shows how to use the Gram Functions framework to create a tool that calls an external API.
+ * This example shows how to use the Speakeasy Functions framework to create a tool that calls an external API.
  * It uses the OpenWeatherMap API to get the current weather conditions for a specific city.
  *
  * After running `speakeasy functions init`, replace the contents of `src/functions.ts` with this example.
@@ -31,7 +31,7 @@ const functions = new Functions({
       url.searchParams.append("q", query);
       url.searchParams.append("appid", ctx.env.OPENWEATHER_API_KEY);
 
-      // Gram Functions handle Response objects natively, so no need to process the response at all
+      // Speakeasy Functions handle Response objects natively, so no need to process the response at all
       return await fetch(url.toString());
     },
   })

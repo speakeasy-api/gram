@@ -7,7 +7,7 @@
   "private": true,
   "keywords": [
     "mcp",
-    "getgram.ai"
+    "speakeasy"
   ],
   "license": "ISC",
   "main": "dist/functions.js",

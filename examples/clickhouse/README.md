@@ -1,6 +1,6 @@
-# ClickHouse Gram Function
+# ClickHouse Speakeasy Function
 
-This Gram Function provides a tool for executing SQL queries against a ClickHouse database using the `@clickhouse/client-web` driver for serverless environments.
+This Speakeasy Function provides a tool for executing SQL queries against a ClickHouse database using the `@clickhouse/client-web` driver for serverless environments.
 
 ## Overview
 
@@ -128,7 +128,7 @@ This automatically starts ClickHouse (if not running) and spins up [MCP inspecto
 
 ## Testing
 
-The test suite demonstrates how to programmatically call Gram tools using `functions.handleToolCall()` - the same interface an LLM would use when invoking your tools. This allows you to verify tool behavior and test your functions locally before deployment.
+The test suite demonstrates how to programmatically call the tools using `functions.handleToolCall()` - the same interface an LLM would use when invoking your tools. This allows you to verify tool behavior and test your functions locally before deployment.
 
 ### Running Tests
 
@@ -190,7 +190,7 @@ docker compose ps
 
 ## Learn More
 
-To learn more about using the Gram Functions framework, check out [CONTRIBUTING.md](./CONTRIBUTING.md).
+To learn more about using the Speakeasy Functions framework, check out [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 For ClickHouse documentation:
 

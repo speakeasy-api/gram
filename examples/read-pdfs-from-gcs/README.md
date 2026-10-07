@@ -1,6 +1,6 @@
-# Gram Functions: PDF Reader with Google Cloud Storage
+# Speakeasy Functions: PDF Reader with Google Cloud Storage
 
-This example demonstrates how to build [Gram Functions](https://www.speakeasy.com/docs/gram/gram-functions/introduction) that interact with Google Cloud Storage to search for and read PDF files. Perfect for building document processing workflows with LLMs.
+This example demonstrates how to build [Speakeasy Functions](https://www.speakeasy.com/docs/ai-control-plane/mcp-gateway/building-servers/functions) that interact with Google Cloud Storage to search for and read PDF files. Perfect for building document processing workflows with LLMs.
 
 ## What's Included
 
@@ -88,7 +88,7 @@ Build a deployment package:
 npm build
 ```
 
-Push your function to Gram:
+Push your function to Speakeasy:
 
 ```bash
 npm push
@@ -138,6 +138,6 @@ pdf-reader/
 
 ## Learn More
 
-- [Gram Functions Documentation](https://www.speakeasy.com/docs/gram/gram-functions/introduction)
+- [Speakeasy Functions Documentation](https://www.speakeasy.com/docs/ai-control-plane/mcp-gateway/building-servers/functions)
 - [Google Cloud Storage Node.js Client](https://cloud.google.com/nodejs/docs/reference/storage/latest)
 - [pdf-parse Library](https://www.npmjs.com/package/pdf-parse)

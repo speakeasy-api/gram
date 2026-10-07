@@ -1,6 +1,6 @@
-# Gram Functions x Supabase Example
+# Speakeasy Functions x Supabase Example
 
-This Gram Function shows how to connect to a Supabase database and running a query to get data from a table that is then returned as a JSON response.
+This Speakeasy Function shows how to connect to a Supabase database and running a query to get data from a table that is then returned as a JSON response.
 
 ## Usage
 
@@ -45,5 +45,5 @@ This Gram Function shows how to connect to a Supabase database and running a que
   \copy land_registry_price_paid_uk FROM '/path/to/pp-complete.csv' with (format csv, encoding 'win1252', header false, null '', quote '"', force_null (postcode, saon, paon, street, locality, city, district))
   ```
 
-- You're all set to build and push this Gram Function!
+- You're all set to build and push this Speakeasy Function!
   - Run `pnpm install && pnpm build && pnpm push`.

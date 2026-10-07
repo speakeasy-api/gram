@@ -4,7 +4,7 @@
  * =============================================================================
  *
  * This is an educational example demonstrating how to implement approval flows
- * for MCP (Model Context Protocol) server tool calls using Gram Functions.
+ * for MCP (Model Context Protocol) server tool calls using Speakeasy Functions.
  *
  * APPROVAL FLOW PATTERN:
  * 1. Intercept tool calls that require approval
