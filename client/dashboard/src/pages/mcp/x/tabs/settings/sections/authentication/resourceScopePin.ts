@@ -101,7 +101,7 @@ export function scopePinStatus(
     return [
       draft.length > 0
         ? "After you save, sign-ins request these scopes."
-        : "After you save, sign-ins use the scopes the MCP server advertises.",
+        : "After you save, sign-ins use the scopes the MCP server advertises, or the identity provider's scopes if it advertises none.",
     ];
   }
   const lines: string[] = [];

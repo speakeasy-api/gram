@@ -171,7 +171,7 @@ describe("scopePinStatus", () => {
       ),
     ).toEqual(["After you save, sign-ins request these scopes."]);
     expect(scopePinStatus(withSource("resource_pin"), "client-1", [])).toEqual([
-      "After you save, sign-ins use the scopes the MCP server advertises.",
+      "After you save, sign-ins use the scopes the MCP server advertises, or the identity provider's scopes if it advertises none.",
     ]);
   });
 
