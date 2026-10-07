@@ -153,6 +153,13 @@ Per-user attribution on shared gateways is tracked separately in DNO-971.
    - `openclaw plugins list` shows `speakeasy-observability` enabled?
    - Is the model on the Claude CLI harness? (see the coverage table above)
    - Gateway logs for `speakeasy-observability` errors.
+   - Still nothing? Set `GRAM_HOOKS_DEBUG_LOG=<path>` in the gateway's
+     environment, restart it, and reproduce: the relay records diagnostic
+     lines for each event, including the server and status when it sends a
+     request. A launchd-managed gateway (`ai.openclaw.open`) does not inherit
+     shell exports; use `launchctl setenv GRAM_HOOKS_DEBUG_LOG <path>` before
+     restarting it, and `launchctl unsetenv` afterwards. See
+     [Hooks environment overrides](./hooks-environment-overrides.md).
 
 ## Enforcement
 

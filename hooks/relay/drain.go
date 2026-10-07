@@ -74,14 +74,21 @@ func RunDrain(ctx context.Context, out io.Writer) int {
 // on Windows, where the lock is a no-op, a racing double-send is harmless
 // because both carry the same Idempotency-Key.
 func Drain(ctx context.Context) DrainSummary {
+	// The drain is its own process, invoked without the deployment flags the
+	// hook command carries, so GRAM_HOOKS_DEBUG_LOG is the only way to turn
+	// its diagnostics on.
+	debugLog := envDebugLog()
 	var s DrainSummary
 	dir := spoolDirPath()
 	if dir == "" {
+		debugLogf(debugLog, "drain: no writable state dir")
 		return s
 	}
 	withFileLock(filepath.Join(dir, "drain"), func() {
 		s = drainSpool(ctx, dir)
 	})
+	debugLogf(debugLog, "drain: replayed=%d dropped=%d expired=%d skipped=%d remaining=%d aborted=%t",
+		s.Replayed, s.Dropped, s.Expired, s.Skipped, s.Remaining, s.Aborted)
 	return s
 }
 
