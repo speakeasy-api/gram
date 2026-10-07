@@ -32,7 +32,6 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
 
 const ORG = anOrganization();
 const FEATURES: ProductFeatures = {
-  automaticRoleDistribution: false,
   aiPlatformPushIntegrationsEnabled: false,
   authzChallengeLoggingEnabled: true,
   consentToolFilteringEnabled: false,
@@ -56,7 +55,6 @@ const FEATURES: ProductFeatures = {
 };
 
 const FEATURES_RESPONSE = {
-  automatic_role_distribution: false,
   ai_platform_push_integrations_enabled: false,
   authz_challenge_logging_enabled: true,
   consent_tool_filtering_enabled: false,
@@ -80,11 +78,6 @@ const FEATURES_RESPONSE = {
 };
 
 const TOGGLE_FEATURES = [
-  {
-    featureName: "automatic-role-distribution",
-    enabledKey: "automaticRoleDistribution",
-    label: "Automatic role distribution",
-  },
   {
     featureName: "ai_platform_push_integrations",
     enabledKey: "aiPlatformPushIntegrationsEnabled",
@@ -186,10 +179,7 @@ beforeEach(() => {
       enabled: boolean;
       feature_name: string;
     };
-    const responseKey =
-      body.feature_name === "automatic-role-distribution"
-        ? "automatic_role_distribution"
-        : `${body.feature_name}_enabled`;
+    const responseKey = `${body.feature_name}_enabled`;
     return jsonResponse({
       ...FEATURES_RESPONSE,
       [responseKey]: body.enabled,

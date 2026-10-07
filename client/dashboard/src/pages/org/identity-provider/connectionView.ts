@@ -62,6 +62,8 @@ export type ChecklistGroup = {
   id: ChecklistGroupId;
   title: string;
   description: string;
+  /** Replaces the description once every step is complete; none hides it. */
+  completeDescription?: string;
   items: IdentityProviderConnectionChecklistItem[];
   /** Steps completed according to the server’s verification evidence. */
   completedCount: number;
@@ -69,17 +71,18 @@ export type ChecklistGroup = {
 
 const CHECKLIST_GROUPS: Record<
   ChecklistGroupId,
-  { title: string; description: string }
+  { title: string; description: string; completeDescription?: string }
 > = {
   connect: {
     title: "Connect",
     description:
       "Set up an API Services app so Speakeasy can connect to Okta, then paste its Client ID to verify access.",
+    completeDescription: "Okta connection and required access verified.",
   },
   cross_app_access: {
     title: "Cross App Access setup",
     description:
-      "Connecting Okta and syncing applications alone does not give AI agents access to your MCP servers.",
+      "Enterprise Managed Auth lets your AI agents reach MCP servers with the identity Okta gives them. Register the Speakeasy AI agent in Okta once, then connect it to each server below.",
   },
 };
 

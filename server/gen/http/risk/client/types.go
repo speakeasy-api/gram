@@ -175,6 +175,13 @@ type UnmaskRiskResultRequestBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 }
 
+// RevealRiskResultPayloadRequestBody is the type of the "risk" service
+// "revealRiskResultPayload" endpoint HTTP request body.
+type RevealRiskResultPayloadRequestBody struct {
+	// The resource ID.
+	ID string `form:"id" json:"id" xml:"id"`
+}
+
 // MarkRiskResultsFalsePositiveRequestBody is the type of the "risk" service
 // "markRiskResultsFalsePositive" endpoint HTTP request body.
 type MarkRiskResultsFalsePositiveRequestBody struct {
@@ -793,6 +800,26 @@ type UnmaskRiskResultResponseBody struct {
 	// Whether plaintext was revealed or the MCP finding evidence is unavailable or
 	// expired.
 	RevealState *string `form:"reveal_state,omitempty" json:"reveal_state,omitempty" xml:"reveal_state,omitempty"`
+}
+
+// RevealRiskResultPayloadResponseBody is the type of the "risk" service
+// "revealRiskResultPayload" endpoint HTTP response body.
+type RevealRiskResultPayloadResponseBody struct {
+	// The risk result ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Whether the payload was revealed or its evidence is unavailable or expired.
+	RevealState *string `form:"reveal_state,omitempty" json:"reveal_state,omitempty" xml:"reveal_state,omitempty"`
+	// The mediated execution the payload belongs to.
+	ExecutionID *string `form:"execution_id,omitempty" json:"execution_id,omitempty" xml:"execution_id,omitempty"`
+	// Execution phase the payload was scanned in (request or response).
+	Phase *string `form:"phase,omitempty" json:"phase,omitempty" xml:"phase,omitempty"`
+	// The exact text the scanners inspected: the tools/call arguments JSON for a
+	// request, or the extracted result text for a response. Empty when
+	// reveal_state is evidence_not_stored.
+	Payload *string `form:"payload,omitempty" json:"payload,omitempty" xml:"payload,omitempty"`
+	// When the stored payload is deleted. Absent when reveal_state is
+	// evidence_not_stored.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
 // ListRiskResultsByChatResponseBody is the type of the "risk" service
@@ -3818,6 +3845,196 @@ type UnmaskRiskResultUnexpectedResponseBody struct {
 // UnmaskRiskResultGatewayErrorResponseBody is the type of the "risk" service
 // "unmaskRiskResult" endpoint HTTP response body for the "gateway_error" error.
 type UnmaskRiskResultGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevealRiskResultPayloadUnauthorizedResponseBody is the type of the "risk"
+// service "revealRiskResultPayload" endpoint HTTP response body for the
+// "unauthorized" error.
+type RevealRiskResultPayloadUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevealRiskResultPayloadForbiddenResponseBody is the type of the "risk"
+// service "revealRiskResultPayload" endpoint HTTP response body for the
+// "forbidden" error.
+type RevealRiskResultPayloadForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevealRiskResultPayloadBadRequestResponseBody is the type of the "risk"
+// service "revealRiskResultPayload" endpoint HTTP response body for the
+// "bad_request" error.
+type RevealRiskResultPayloadBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevealRiskResultPayloadNotFoundResponseBody is the type of the "risk"
+// service "revealRiskResultPayload" endpoint HTTP response body for the
+// "not_found" error.
+type RevealRiskResultPayloadNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevealRiskResultPayloadConflictResponseBody is the type of the "risk"
+// service "revealRiskResultPayload" endpoint HTTP response body for the
+// "conflict" error.
+type RevealRiskResultPayloadConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevealRiskResultPayloadUnsupportedMediaResponseBody is the type of the
+// "risk" service "revealRiskResultPayload" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RevealRiskResultPayloadUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevealRiskResultPayloadInvalidResponseBody is the type of the "risk" service
+// "revealRiskResultPayload" endpoint HTTP response body for the "invalid"
+// error.
+type RevealRiskResultPayloadInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevealRiskResultPayloadInvariantViolationResponseBody is the type of the
+// "risk" service "revealRiskResultPayload" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RevealRiskResultPayloadInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevealRiskResultPayloadUnexpectedResponseBody is the type of the "risk"
+// service "revealRiskResultPayload" endpoint HTTP response body for the
+// "unexpected" error.
+type RevealRiskResultPayloadUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RevealRiskResultPayloadGatewayErrorResponseBody is the type of the "risk"
+// service "revealRiskResultPayload" endpoint HTTP response body for the
+// "gateway_error" error.
+type RevealRiskResultPayloadGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -11592,7 +11809,9 @@ type RiskResultResponseBody struct {
 	PolicyID *string `form:"policy_id,omitempty" json:"policy_id,omitempty" xml:"policy_id,omitempty"`
 	// Policy version when this result was produced.
 	PolicyVersion *int64 `form:"policy_version,omitempty" json:"policy_version,omitempty" xml:"policy_version,omitempty"`
-	// Identity of the concrete mediated execution.
+	// The mediated MCP execution (tool call, resource read or prompt get) that
+	// raised this finding. Filter listResults by it to list that execution's
+	// non-dismissed findings.
 	ExecutionID *string `form:"execution_id,omitempty" json:"execution_id,omitempty" xml:"execution_id,omitempty"`
 	// Concrete MCP server that executed the operation.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
@@ -11602,7 +11821,8 @@ type RiskResultResponseBody struct {
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// Name of the concrete tool, when applicable.
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
-	// Execution phase inspected by risk.
+	// Which phase of the mediated MCP execution was scanned: its request or its
+	// response.
 	Phase *string `form:"phase,omitempty" json:"phase,omitempty" xml:"phase,omitempty"`
 	// Concrete mediation surface where the execution was observed.
 	MediationSurface *string `form:"mediation_surface,omitempty" json:"mediation_surface,omitempty" xml:"mediation_surface,omitempty"`
@@ -11702,7 +11922,9 @@ type RiskResultRedactedResponseBody struct {
 	PolicyID *string `form:"policy_id,omitempty" json:"policy_id,omitempty" xml:"policy_id,omitempty"`
 	// Policy version when this result was produced.
 	PolicyVersion *int64 `form:"policy_version,omitempty" json:"policy_version,omitempty" xml:"policy_version,omitempty"`
-	// Identity of the concrete mediated execution.
+	// The mediated MCP execution (tool call, resource read or prompt get) that
+	// raised this finding. Filter listResults by it to list that execution's
+	// non-dismissed findings.
 	ExecutionID *string `form:"execution_id,omitempty" json:"execution_id,omitempty" xml:"execution_id,omitempty"`
 	// Concrete MCP server that executed the operation.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
@@ -11712,7 +11934,8 @@ type RiskResultRedactedResponseBody struct {
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// Name of the concrete tool, when applicable.
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
-	// Execution phase inspected by risk.
+	// Which phase of the mediated MCP execution was scanned: its request or its
+	// response.
 	Phase *string `form:"phase,omitempty" json:"phase,omitempty" xml:"phase,omitempty"`
 	// Concrete mediation surface where the execution was observed.
 	MediationSurface *string `form:"mediation_surface,omitempty" json:"mediation_surface,omitempty" xml:"mediation_surface,omitempty"`
@@ -12329,6 +12552,15 @@ func NewReleaseSessionQuarantineRequestBody(p *risk.ReleaseSessionQuarantinePayl
 // of the "unmaskRiskResult" endpoint of the "risk" service.
 func NewUnmaskRiskResultRequestBody(p *risk.UnmaskRiskResultPayload) *UnmaskRiskResultRequestBody {
 	body := &UnmaskRiskResultRequestBody{
+		ID: p.ID,
+	}
+	return body
+}
+
+// NewRevealRiskResultPayloadRequestBody builds the HTTP request body from the
+// payload of the "revealRiskResultPayload" endpoint of the "risk" service.
+func NewRevealRiskResultPayloadRequestBody(p *risk.RevealRiskResultPayloadPayload) *RevealRiskResultPayloadRequestBody {
+	body := &RevealRiskResultPayloadRequestBody{
 		ID: p.ID,
 	}
 	return body
@@ -14989,6 +15221,171 @@ func NewUnmaskRiskResultUnexpected(body *UnmaskRiskResultUnexpectedResponseBody)
 // NewUnmaskRiskResultGatewayError builds a risk service unmaskRiskResult
 // endpoint gateway_error error.
 func NewUnmaskRiskResultGatewayError(body *UnmaskRiskResultGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevealRiskResultPayloadRiskRevealPayloadResultOK builds a "risk" service
+// "revealRiskResultPayload" endpoint result from a HTTP "OK" response.
+func NewRevealRiskResultPayloadRiskRevealPayloadResultOK(body *RevealRiskResultPayloadResponseBody) *risk.RiskRevealPayloadResult {
+	v := &risk.RiskRevealPayloadResult{
+		ID:          *body.ID,
+		RevealState: *body.RevealState,
+		ExecutionID: body.ExecutionID,
+		Phase:       body.Phase,
+		Payload:     *body.Payload,
+		ExpiresAt:   body.ExpiresAt,
+	}
+
+	return v
+}
+
+// NewRevealRiskResultPayloadUnauthorized builds a risk service
+// revealRiskResultPayload endpoint unauthorized error.
+func NewRevealRiskResultPayloadUnauthorized(body *RevealRiskResultPayloadUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevealRiskResultPayloadForbidden builds a risk service
+// revealRiskResultPayload endpoint forbidden error.
+func NewRevealRiskResultPayloadForbidden(body *RevealRiskResultPayloadForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevealRiskResultPayloadBadRequest builds a risk service
+// revealRiskResultPayload endpoint bad_request error.
+func NewRevealRiskResultPayloadBadRequest(body *RevealRiskResultPayloadBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevealRiskResultPayloadNotFound builds a risk service
+// revealRiskResultPayload endpoint not_found error.
+func NewRevealRiskResultPayloadNotFound(body *RevealRiskResultPayloadNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevealRiskResultPayloadConflict builds a risk service
+// revealRiskResultPayload endpoint conflict error.
+func NewRevealRiskResultPayloadConflict(body *RevealRiskResultPayloadConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevealRiskResultPayloadUnsupportedMedia builds a risk service
+// revealRiskResultPayload endpoint unsupported_media error.
+func NewRevealRiskResultPayloadUnsupportedMedia(body *RevealRiskResultPayloadUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevealRiskResultPayloadInvalid builds a risk service
+// revealRiskResultPayload endpoint invalid error.
+func NewRevealRiskResultPayloadInvalid(body *RevealRiskResultPayloadInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevealRiskResultPayloadInvariantViolation builds a risk service
+// revealRiskResultPayload endpoint invariant_violation error.
+func NewRevealRiskResultPayloadInvariantViolation(body *RevealRiskResultPayloadInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevealRiskResultPayloadUnexpected builds a risk service
+// revealRiskResultPayload endpoint unexpected error.
+func NewRevealRiskResultPayloadUnexpected(body *RevealRiskResultPayloadUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRevealRiskResultPayloadGatewayError builds a risk service
+// revealRiskResultPayload endpoint gateway_error error.
+func NewRevealRiskResultPayloadGatewayError(body *RevealRiskResultPayloadGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -22198,6 +22595,32 @@ func ValidateUnmaskRiskResultResponseBody(body *UnmaskRiskResultResponseBody) (e
 	return
 }
 
+// ValidateRevealRiskResultPayloadResponseBody runs the validations defined on
+// RevealRiskResultPayloadResponseBody
+func ValidateRevealRiskResultPayloadResponseBody(body *RevealRiskResultPayloadResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.RevealState == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reveal_state", "body"))
+	}
+	if body.Payload == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("payload", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.RevealState != nil {
+		if !(*body.RevealState == "available" || *body.RevealState == "evidence_not_stored") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.reveal_state", *body.RevealState, []any{"available", "evidence_not_stored"}))
+		}
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	return
+}
+
 // ValidateListRiskResultsByChatResponseBody runs the validations defined on
 // ListRiskResultsByChatResponseBody
 func ValidateListRiskResultsByChatResponseBody(body *ListRiskResultsByChatResponseBody) (err error) {
@@ -26384,6 +26807,248 @@ func ValidateUnmaskRiskResultUnexpectedResponseBody(body *UnmaskRiskResultUnexpe
 // ValidateUnmaskRiskResultGatewayErrorResponseBody runs the validations
 // defined on unmaskRiskResult_gateway_error_response_body
 func ValidateUnmaskRiskResultGatewayErrorResponseBody(body *UnmaskRiskResultGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevealRiskResultPayloadUnauthorizedResponseBody runs the validations
+// defined on revealRiskResultPayload_unauthorized_response_body
+func ValidateRevealRiskResultPayloadUnauthorizedResponseBody(body *RevealRiskResultPayloadUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevealRiskResultPayloadForbiddenResponseBody runs the validations
+// defined on revealRiskResultPayload_forbidden_response_body
+func ValidateRevealRiskResultPayloadForbiddenResponseBody(body *RevealRiskResultPayloadForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevealRiskResultPayloadBadRequestResponseBody runs the validations
+// defined on revealRiskResultPayload_bad_request_response_body
+func ValidateRevealRiskResultPayloadBadRequestResponseBody(body *RevealRiskResultPayloadBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevealRiskResultPayloadNotFoundResponseBody runs the validations
+// defined on revealRiskResultPayload_not_found_response_body
+func ValidateRevealRiskResultPayloadNotFoundResponseBody(body *RevealRiskResultPayloadNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevealRiskResultPayloadConflictResponseBody runs the validations
+// defined on revealRiskResultPayload_conflict_response_body
+func ValidateRevealRiskResultPayloadConflictResponseBody(body *RevealRiskResultPayloadConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevealRiskResultPayloadUnsupportedMediaResponseBody runs the
+// validations defined on
+// revealRiskResultPayload_unsupported_media_response_body
+func ValidateRevealRiskResultPayloadUnsupportedMediaResponseBody(body *RevealRiskResultPayloadUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevealRiskResultPayloadInvalidResponseBody runs the validations
+// defined on revealRiskResultPayload_invalid_response_body
+func ValidateRevealRiskResultPayloadInvalidResponseBody(body *RevealRiskResultPayloadInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevealRiskResultPayloadInvariantViolationResponseBody runs the
+// validations defined on
+// revealRiskResultPayload_invariant_violation_response_body
+func ValidateRevealRiskResultPayloadInvariantViolationResponseBody(body *RevealRiskResultPayloadInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevealRiskResultPayloadUnexpectedResponseBody runs the validations
+// defined on revealRiskResultPayload_unexpected_response_body
+func ValidateRevealRiskResultPayloadUnexpectedResponseBody(body *RevealRiskResultPayloadUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRevealRiskResultPayloadGatewayErrorResponseBody runs the validations
+// defined on revealRiskResultPayload_gateway_error_response_body
+func ValidateRevealRiskResultPayloadGatewayErrorResponseBody(body *RevealRiskResultPayloadGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

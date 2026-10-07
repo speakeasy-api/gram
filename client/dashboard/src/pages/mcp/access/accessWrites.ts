@@ -411,28 +411,22 @@ export function revokeRowWrite(
   };
 }
 
-/** Give people connect access to this server. */
+/** Give principals connect access to this server. */
 export function addPrincipalsWrite(
   direct: AudienceRule[],
   principalUrns: string[],
   resourceName?: string,
 ): AudienceWrite {
   const server = serverLabel(resourceName);
-  // Named by what was actually added: the picker grants people and agents
-  // separately, and "1 person" is wrong for either an agent or a mixed set.
-  const agents = principalUrns.filter((principalUrn) =>
-    principalUrn.startsWith("agent:"),
-  ).length;
-  const noun =
-    agents === principalUrns.length
-      ? principalUrns.length === 1
-        ? "1 agent"
-        : `${principalUrns.length} agents`
-      : agents === 0
-        ? principalUrns.length === 1
-          ? "1 person"
-          : `${principalUrns.length} people`
-        : `${principalUrns.length} principals`;
+  // Name the kind selected in the picker, without calling roles people.
+  const count = principalUrns.length;
+  const noun = principalUrns.every((urn) => urn.startsWith("role:"))
+    ? `${count} ${count === 1 ? "role" : "roles"}`
+    : principalUrns.every((urn) => urn.startsWith("agent:"))
+      ? `${count} ${count === 1 ? "agent" : "agents"}`
+      : principalUrns.every((urn) => urn.startsWith("user:"))
+        ? `${count} ${count === 1 ? "person" : "people"}`
+        : `${count} principals`;
   return {
     entries: withAdded(direct, principalUrns),
     message: `${noun} can now connect to ${server}.`,

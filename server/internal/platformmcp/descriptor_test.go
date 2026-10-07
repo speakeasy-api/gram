@@ -411,21 +411,34 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	// get_xaa_readiness reads an org-wide snapshot under live member org-admin
 	// authority, which managed assistants do not have; it stays external-only.
 	for _, name := range []string{
+		upgradeAssistantIdentityToolName,
 		"get_network_ingress",
 		"get_xaa_readiness",
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
 		operationSetPluginAssignments,
+		operationCreatePlugin,
+		operationRenamePlugin,
 		operationRepublishPlugin,
 		"list_my_sessions",
 		"continue_session",
 		"list_data_exports",
 		"create_data_export",
+		pauseDataExportToolName,
+		resumeDataExportToolName,
 		// Changing which tools a server exposes republishes every plugin that
 		// carries it to everyone holding one, so it stays on the surface an
 		// administrator drives directly, like the other distribution writes.
 		addToolsToMCPToolName,
 		removeToolsFromMCPToolName,
+		// Authoring a new server from a project's functions is the same kind
+		// of administrator decision.
+		createMCPFromFunctionsToolName,
+		// An assistant is bound to its own project: creating another is
+		// outside its reach, and renaming its own is a decision for a person
+		// with write access to it, not for the assistant.
+		createProjectToolName,
+		renameProjectToolName,
 	} {
 		require.False(t, admitted[name], "tool %q must not be admitted to the assistant", name)
 	}

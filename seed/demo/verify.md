@@ -477,6 +477,14 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     tool_calls dataset, a 7-day window and a table ordered by p95 duration,
     runs it, and returns rows; the bar names the widget with Priya Raman as
     its creator and **Save** stays disabled until something is edited.
+27. **Check access** — open MCP → **GitHub** → Team Access and pick Mateo
+    Alvarez in Check access. Connect is **Blocked**: the Contractors block
+    wins, Engineer's grants show as blocked, and his own grant covering
+    every server is blocked because it does not name GitHub. Contractors
+    reads "Mapped from employee_type = contractor" for an organization
+    admin. View and Manage stay allowed, since the block covers Connect
+    only. Pick Priya Raman: Connect is **Allowed** because her grant naming
+    GitHub overrides the Contractors block, which shows as overridden.
 
 ## On failure
 
@@ -503,3 +511,14 @@ Open Amara Okafor's identity and select Accounts & devices. Work identities shou
 Repeat in the seeded local organization. An employee can read their own mapped accounts and sees contact-admin guidance, without a link to the members table. Another employee's profile must not request these accounts. Verify the empty state for a person without mappings and retry after a failed read. Following Open in Slack members must not create a mapping or change its revision. Seed data demonstrates navigation and retained mappings; live OAuth requires the configured Slack app.
 
 In shared Explore Demo, verify the mapping dialog shows its read-only notice and disables Personnel selection and Confirm. Verify Sync members is disabled. In the retargeted local organization, personnel changes remain available.
+
+## Assistant identity fixtures
+
+1. Open Assistants. Confirm the identity-bound and legacy examples are listed.
+2. Inspect the bound example and its dedicated managed agent. Confirm the agent
+   has no grants and there is one stable dashboard root, not one per delivery.
+3. Inspect API identity configuration: the bound example reports its agent and
+   generation, while the legacy example reports `NEVER_CONFIGURED`.
+4. Do not run workloads using the illustrative issuer/JWKS URLs: these fixtures
+   are display-only, not usable credentials. Leave the page marked `[~]` until
+   the browser checks above are performed.

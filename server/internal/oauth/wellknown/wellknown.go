@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -65,8 +66,16 @@ type OAuthProtectedResourceMetadata struct {
 	// ResourceTosURI links the resource server's terms of service; discovery drops non-http(s) values.
 	ResourceTosURI string `json:"resource_tos_uri,omitempty"`
 
+	// Token-binding members (RFC 9728 §2); nil when the document omits them.
+	DPoPBoundAccessTokensRequired         *bool    `json:"dpop_bound_access_tokens_required,omitempty"`
+	DPoPSigningAlgValuesSupported         []string `json:"dpop_signing_alg_values_supported,omitempty"`
+	TLSClientCertificateBoundAccessTokens *bool    `json:"tls_client_certificate_bound_access_tokens,omitempty"`
+
 	// Raw is the probed document verbatim, before any sanitizing; never emitted when serving.
 	Raw json.RawMessage `json:"-"`
+
+	// MetadataURL is the well-known URL the document was read from; empty when not probed.
+	MetadataURL string `json:"-"`
 }
 
 // IdentifiesResource reports whether the document names resourceURL as its
@@ -75,6 +84,23 @@ type OAuthProtectedResourceMetadata struct {
 // persist display members must not do so unless this holds.
 func (m OAuthProtectedResourceMetadata) IdentifiesResource(resourceURL string) bool {
 	return SameResource(m.Resource, resourceURL)
+}
+
+// ValidForResource reports whether a discovered document can be used for the
+// exact requested identifier (RFC 9728 §3.3). In addition to the resource
+// member, check provenance: a speculative origin fallback is not the metadata
+// location derived from a path-bearing identifier. Diagnostic discovery may
+// still return such documents, but callers must not trust their contents.
+func (m OAuthProtectedResourceMetadata) ValidForResource(resourceURL string) bool {
+	if m.Resource == "" || m.Resource != resourceURL {
+		return false
+	}
+	u, err := url.Parse(resourceURL)
+	if err != nil || u.Fragment != "" || u.User != nil {
+		return false
+	}
+	candidates, err := protectedResourceProbeCandidates(resourceURL)
+	return err == nil && m.MetadataURL == candidates[0]
 }
 
 // SameResource reports whether two resource identifiers name one resource,
@@ -247,15 +273,19 @@ func ResolveOAuthProtectedResourceFromToolset(
 		}
 
 		return &OAuthProtectedResourceMetadata{
-			Resource:               resourceURL,
-			AuthorizationServers:   []string{authorizationServer},
-			ScopesSupported:        nil,
-			BearerMethodsSupported: nil,
-			ResourceDocumentation:  "",
-			ResourceName:           "",
-			ResourcePolicyURI:      "",
-			ResourceTosURI:         "",
-			Raw:                    nil,
+			Resource:                              resourceURL,
+			AuthorizationServers:                  []string{authorizationServer},
+			ScopesSupported:                       nil,
+			BearerMethodsSupported:                nil,
+			ResourceDocumentation:                 "",
+			ResourceName:                          "",
+			ResourcePolicyURI:                     "",
+			ResourceTosURI:                        "",
+			DPoPBoundAccessTokensRequired:         nil,
+			DPoPSigningAlgValuesSupported:         nil,
+			TLSClientCertificateBoundAccessTokens: nil,
+			Raw:                                   nil,
+			MetadataURL:                           "",
 		}, nil
 	}
 

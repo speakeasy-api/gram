@@ -412,10 +412,10 @@ func grantRoutesToUpstream(resource, upstream string, tunneled bool) bool {
 	if tunneled && resource == "" {
 		return true
 	}
-	// Whole-string trim, the same normalization the grant's resource was
-	// recorded with (resolveUpstreamResource, resolveMetaMemberResource), so
-	// stored grants and live upstreams compare under one rule. An encoded
-	// slash is untouched and stays a distinct audience.
+	// Whole-string trim on both sides: grants record the upstream's resource
+	// verbatim, and older grants recorded it trimmed, so stored grants and live
+	// upstreams compare under one rule. An encoded slash is untouched and stays
+	// a distinct audience.
 	want := strings.TrimRight(upstream, "/")
 	return want != "" && strings.TrimRight(resource, "/") == want
 }
@@ -617,8 +617,10 @@ func (s *Service) BuildResolvedMcpEndpointForServer(
 }
 
 // resolveUpstreamResource derives the RFC 8707 resource indicator for an
-// mcp_server's upstream: the remote backend URL without trailing slashes, or
-// the tunneled backend's saved resource identifier verbatim. Other backends
+// mcp_server's upstream: the remote backend URL or the tunneled backend's saved
+// resource identifier, both verbatim. The value may be sent upstream as the
+// resource, and a provider may match it exactly, trailing slash included;
+// credential routing ignores trailing slashes when comparing. Other backends
 // have no upstream resource.
 func (s *Service) resolveUpstreamResource(
 	ctx context.Context,
@@ -638,7 +640,7 @@ func (s *Service) resolveUpstreamResource(
 		case err != nil:
 			return "", oops.E(oops.CodeUnexpected, err, "load remote mcp server").LogError(ctx, logger)
 		}
-		return strings.TrimRight(remote.Url, "/"), nil
+		return remote.Url, nil
 	case mcpServer.TunneledMcpServerID.Valid:
 		tunneled, err := tunneledmcprepo.New(s.db).GetServerByID(ctx, tunneledmcprepo.GetServerByIDParams{
 			ID:        mcpServer.TunneledMcpServerID.UUID,
@@ -870,6 +872,9 @@ func (s *Service) prepareProxyBackendContext(
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
 			if !ok || authCtx == nil || project.OrganizationID != authCtx.ActiveOrganizationID {
 				return nil, "", oops.C(oops.CodeUnauthorized)
+			}
+			if err := requirePrincipalCredentialProject(ctx, project.ID); err != nil {
+				return nil, "", err
 			}
 			ctx = setProxyBackendProjectContext(ctx, authCtx, project.ID, project.Slug)
 		}

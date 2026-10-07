@@ -88,6 +88,18 @@ export function platformEndpointSlug(
     ?.slug;
 }
 
+// Gateway install pages are session-gated and the session cookie is host-only,
+// so they open on the Gram origin; ?domain=custom resolves a custom-domain slug there.
+export function gatewayInstallPageUrl(
+  endpoints: Array<Pick<McpEndpoint, "slug" | "customDomainId">>,
+): string | undefined {
+  const platformSlug = platformEndpointSlug(endpoints);
+  if (platformSlug) return `${getServerURL()}/mcp/${platformSlug}/install`;
+  const customSlug = endpoints.find((endpoint) => endpoint.slug)?.slug;
+  if (!customSlug) return undefined;
+  return `${getServerURL()}/mcp/${customSlug}/install?domain=custom`;
+}
+
 // useResolvedMcpServerUrl resolves the runtime MCP URL for an mcp_server from
 // its endpoints, preferring a custom-domain endpoint. While that domain is
 // unresolved, it falls back only to a separately registered platform endpoint;

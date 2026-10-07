@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -190,15 +191,11 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
 		return nil, fmt.Errorf("finalize network access admission: %w", err)
 	}
-	if err := verifyServerReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, ids); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
-	}
-
 	if err := verifyTunneledPublicConsent(ctx, dbtx, *authCtx.ProjectID, ids.TunneledMcpServerID, string(payload.Visibility)); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
 	}
 
-	server, err := CreateMCPServerInTransaction(ctx, dbtx, s.audit, MCPServerTransactionInput{
+	server, err := CreateProjectMCPServerInTransaction(ctx, dbtx, s.audit, MCPServerTransactionInput{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		ProjectID:             *authCtx.ProjectID,
 		ActorUserID:           authCtx.UserID,
@@ -215,6 +212,9 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		ToolVariationsGroupID: ids.ToolVariationsGroupID,
 	})
 	if err != nil {
+		if errors.Is(err, ErrServerReferenceOutsideProject) {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
+		}
 		if errors.Is(err, usersessionbindings.ErrNotFound) {
 			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 		}
@@ -935,14 +935,18 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 		return false, false, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, s.logger)
 	}
 
-	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
+	ctx = roledelivery.WithProjectAdmission(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, rollout, rolloutErr)
+	pluginCreated, err := plugins.AttachToDefaultAndRolePluginsAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		McpServerID:    uuid.NullUUID{UUID: server.ID, Valid: true},
 		DisplayName:    ServerDisplayName(server),
-	})
+	}, s.distributionAdmission)
 	if err != nil {
+		if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {
+			return false, false, oops.E(oops.CodeConflict, err, "direct-remote distribution is not admitted")
+		}
 		return false, false, oops.E(oops.CodeUnexpected, err, "attach mcp server to default plugin").LogError(ctx, s.logger)
 	}
 
@@ -1516,7 +1520,7 @@ func verifyServerReferenceOwnership(
 			ProjectID: projectID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("environment_id does not reference a resource in this project")
+				return fmt.Errorf("%w: environment_id does not reference a resource in this project", ErrServerReferenceOutsideProject)
 			}
 			return fmt.Errorf("check environment ownership: %w", err)
 		}
@@ -1528,7 +1532,7 @@ func verifyServerReferenceOwnership(
 			ProjectID: projectID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("remote_mcp_server_id does not reference a resource in this project")
+				return fmt.Errorf("%w: remote_mcp_server_id does not reference a resource in this project", ErrServerReferenceOutsideProject)
 			}
 			return fmt.Errorf("check remote mcp server ownership: %w", err)
 		}
@@ -1540,7 +1544,7 @@ func verifyServerReferenceOwnership(
 			ProjectID: projectID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("tunneled_mcp_server_id does not reference a resource in this project")
+				return fmt.Errorf("%w: tunneled_mcp_server_id does not reference a resource in this project", ErrServerReferenceOutsideProject)
 			}
 			return fmt.Errorf("check tunneled mcp server ownership: %w", err)
 		}
@@ -1552,7 +1556,7 @@ func verifyServerReferenceOwnership(
 			ProjectID: projectID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("toolset_id does not reference a resource in this project")
+				return fmt.Errorf("%w: toolset_id does not reference a resource in this project", ErrServerReferenceOutsideProject)
 			}
 			return fmt.Errorf("check toolset ownership: %w", err)
 		}
@@ -1564,7 +1568,7 @@ func verifyServerReferenceOwnership(
 			ProjectID: projectID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("unproxied_mcp_server_id does not reference a resource in this project")
+				return fmt.Errorf("%w: unproxied_mcp_server_id does not reference a resource in this project", ErrServerReferenceOutsideProject)
 			}
 			return fmt.Errorf("check unproxied mcp server ownership: %w", err)
 		}
@@ -1576,7 +1580,7 @@ func verifyServerReferenceOwnership(
 			ProjectID: projectID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("tool_variations_group_id does not reference a resource in this project")
+				return fmt.Errorf("%w: tool_variations_group_id does not reference a resource in this project", ErrServerReferenceOutsideProject)
 			}
 			return fmt.Errorf("check tool variations group ownership: %w", err)
 		}

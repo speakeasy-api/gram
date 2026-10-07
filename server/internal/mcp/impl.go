@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -133,8 +134,12 @@ type Service struct {
 	// authenticationHostBaseURL is the authentication host's base URL, empty
 	// when none is configured. Set by AttachAuthenticationHost.
 	authenticationHostBaseURL string
-	siteURL                   *url.URL
-	posthog                   *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	// platformHosts maps the deployment's extra first-party hosts, by
+	// canonical host, to the base URL rendered for requests on them. Set by
+	// SetPlatformHosts; nil means the server URL is the only platform host.
+	platformHosts map[string]string
+	siteURL       *url.URL
+	posthog       *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	// features resolves flag-controlled behavior (the managed assistant's
 	// Platform MCP toolset variant). Wired from the environment-aware
 	// provider: the posthog client in production, the CSV-backed in-memory
@@ -169,6 +174,7 @@ type Service struct {
 	telemLogger            *tm.Logger
 	vectorToolStore        *rag.ToolsetVectorStore
 	assistantTokens        *assistanttokens.Manager
+	principalCredentials   *principalcredential.Issuer
 	sessions               *sessions.Manager
 	consentBindings        ConsentBindingService
 	identityResolver       IdentityResolver
@@ -409,6 +415,7 @@ func NewService(
 	triggerApp *bgtriggers.App,
 	authzEngine *authz.Engine,
 	assistantTokens *assistanttokens.Manager,
+	principalCredentials *principalcredential.Issuer,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
 	platformExtras []platformtools.ExternalTool,
@@ -475,6 +482,7 @@ func NewService(
 		serverURL:                 serverURL,
 		callbackOrigins:           remotesessions.CallbackOrigins{Outbound: nil, Registration: nil},
 		authenticationHostBaseURL: "",
+		platformHosts:             nil,
 		siteURL:                   siteURL,
 		posthog:                   posthog,
 		features:                  features,
@@ -502,6 +510,7 @@ func NewService(
 		telemLogger:            telemLogger,
 		vectorToolStore:        vectorToolStore,
 		assistantTokens:        assistantTokens,
+		principalCredentials:   principalCredentials,
 		sessions:               sessions,
 		chatSessionsManager:    chatSessionsManager,
 		enc:                    enc,
@@ -682,7 +691,7 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
-	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.MCPErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
 	// Both stops of the remote login browser hop: the bind stop on a remote
@@ -731,6 +740,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/token", oops.ErrHandle(service.logger, service.HandleToken).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/revoke", oops.ErrHandle(service.logger, service.HandleRevoke).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
+
+	attachSharedAuthorizationServers(mux, service)
 }
 
 // HandleRemoteLoginCallback is the chi handler at
@@ -1294,6 +1305,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 			}
 		}
 
+		if err := requirePrincipalCredentialProject(ctx, toolset.ProjectID); err != nil {
+			return err
+		}
 		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.APIKeyID != "" {
 			if authCtx.ProjectID != nil && *authCtx.ProjectID != toolset.ProjectID {
 				return oops.E(oops.CodeForbidden, nil, "api key project does not match toolset project")
@@ -1487,9 +1501,10 @@ func (s *Service) enforceHostedToolsCall(ctx context.Context, organizationID str
 			Code:    oops.MCPCodeForbidden,
 			Message: note,
 			Data: &oops.MCPErrorData{
-				Code:      oops.MCPErrorDataCodeToolCallsPaused,
-				Supported: nil,
-				Requested: "",
+				Code:                 oops.MCPErrorDataCodeToolCallsPaused,
+				Supported:            nil,
+				Requested:            "",
+				RequiredCapabilities: nil,
 			},
 		}
 	case killswitches.TransportDispositionInfrastructureRejection:
@@ -1710,34 +1725,21 @@ func parseMcpEnvVariables(r *http.Request, headerDisplayNames map[string]string)
 	envVars := map[string]string{}
 	for k := range r.Header {
 		keySanitized := strings.ToLower(k)
+		// The standard request headers (MCP-Protocol-Version, Mcp-Method,
+		// Mcp-Name, Mcp-Param-*) are protocol metadata a conforming client
+		// sends on its own, carrying values such as the tool name. They never
+		// become tool variables, on any protocol revision, and configuration
+		// rejects variable names and display names that would need one.
+		if httpheaders.IsStandardMCPRequestHeader(k) {
+			continue
+		}
 		if strings.HasPrefix(keySanitized, "mcp-") && !slices.Contains(ignoredHeaders, keySanitized) {
 			// Extract the key without MCP- prefix and normalize
 			normalizedKey := strings.ReplaceAll(strings.TrimPrefix(keySanitized, "mcp-"), "-", "_")
 
 			// Check if this is a display name and map to actual header name
-			actualKey, aliased := displayNameToActual[normalizedKey]
-			if aliased {
+			if actualKey, aliased := displayNameToActual[normalizedKey]; aliased {
 				normalizedKey = actualKey
-			}
-
-			// The MCP-Protocol-Version header is protocol metadata every
-			// conforming client stamps on every request since 2025-06-18, and
-			// without this skip it silently becomes a `protocol_version`
-			// variable. The skip is alias-aware: a toolset whose configured
-			// display name maps to it keeps receiving it as before.
-			//
-			// The remaining 2026-07-28 standard headers (Mcp-Method, Mcp-Name,
-			// Mcp-Param-*; httpheaders.IsStandardMCPRequestHeader is the
-			// canonical set) are deliberately NOT skipped yet. Clients on that
-			// revision are not measurably present, while skipping now would
-			// silently break any variable whose actual name collides — default
-			// variable headers are minted as MCP-<VAR> and never appear in the
-			// display-name alias map, so the alias exception cannot save them.
-			// Reserving those headers belongs to the 2026-07-28 support work,
-			// where header-body validation gives clients a visible rejection
-			// instead of a silently dropped value.
-			if !aliased && strings.EqualFold(keySanitized, mcpversions.HTTPHeader) {
-				continue
 			}
 
 			envVars[normalizedKey] = r.Header.Get(k)
@@ -1887,6 +1889,9 @@ func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, is
 // the resource is a toolset id; remote-backend callers pass false and the
 // id is decorative.
 //
+// Principal credentials are authenticated and admitted as their agent or
+// workload principal, like agent API keys.
+//
 // Each successful strategy stamps its mcpidentity provenance here, at the
 // point of credential validation: assistant tokens are KindAssistant, API
 // keys (either scope) are KindAPIKey, and chat-session tokens are
@@ -1898,6 +1903,10 @@ func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, is
 func (s *Service) authenticateToken(ctx context.Context, token string, oauthResourceID uuid.UUID, isOAuthCapable bool) (context.Context, error) {
 	if token == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+
+	if principalcredential.IsToken(token) {
+		return s.authenticatePrincipalCredential(ctx, token)
 	}
 
 	if authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token); err == nil {

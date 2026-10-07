@@ -2461,6 +2461,12 @@ func EncodeListRiskResultsRequest(encoder func(*http.Request) goahttp.Encoder) f
 		if p.McpServerID != nil {
 			values.Add("mcp_server_id", *p.McpServerID)
 		}
+		if p.ResultID != nil {
+			values.Add("result_id", *p.ResultID)
+		}
+		if p.ExecutionID != nil {
+			values.Add("execution_id", *p.ExecutionID)
+		}
 		if p.Category != nil {
 			values.Add("category", *p.Category)
 		}
@@ -3216,6 +3222,249 @@ func DecodeUnmaskRiskResultResponse(decoder func(*http.Response) goahttp.Decoder
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("risk", "unmaskRiskResult", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRevealRiskResultPayloadRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "revealRiskResultPayload"
+// endpoint
+func (c *Client) BuildRevealRiskResultPayloadRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RevealRiskResultPayloadRiskPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "revealRiskResultPayload", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRevealRiskResultPayloadRequest returns an encoder for requests sent to
+// the risk revealRiskResultPayload server.
+func EncodeRevealRiskResultPayloadRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.RevealRiskResultPayloadPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "revealRiskResultPayload", "*risk.RevealRiskResultPayloadPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewRevealRiskResultPayloadRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("risk", "revealRiskResultPayload", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRevealRiskResultPayloadResponse returns a decoder for responses
+// returned by the risk revealRiskResultPayload endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeRevealRiskResultPayloadResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRevealRiskResultPayloadResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RevealRiskResultPayloadResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "revealRiskResultPayload", err)
+			}
+			err = ValidateRevealRiskResultPayloadResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "revealRiskResultPayload", err)
+			}
+			res := NewRevealRiskResultPayloadRiskRevealPayloadResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RevealRiskResultPayloadUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "revealRiskResultPayload", err)
+			}
+			err = ValidateRevealRiskResultPayloadUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "revealRiskResultPayload", err)
+			}
+			return nil, NewRevealRiskResultPayloadUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RevealRiskResultPayloadForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "revealRiskResultPayload", err)
+			}
+			err = ValidateRevealRiskResultPayloadForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "revealRiskResultPayload", err)
+			}
+			return nil, NewRevealRiskResultPayloadForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RevealRiskResultPayloadBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "revealRiskResultPayload", err)
+			}
+			err = ValidateRevealRiskResultPayloadBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "revealRiskResultPayload", err)
+			}
+			return nil, NewRevealRiskResultPayloadBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RevealRiskResultPayloadNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "revealRiskResultPayload", err)
+			}
+			err = ValidateRevealRiskResultPayloadNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "revealRiskResultPayload", err)
+			}
+			return nil, NewRevealRiskResultPayloadNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RevealRiskResultPayloadConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "revealRiskResultPayload", err)
+			}
+			err = ValidateRevealRiskResultPayloadConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "revealRiskResultPayload", err)
+			}
+			return nil, NewRevealRiskResultPayloadConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RevealRiskResultPayloadUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "revealRiskResultPayload", err)
+			}
+			err = ValidateRevealRiskResultPayloadUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "revealRiskResultPayload", err)
+			}
+			return nil, NewRevealRiskResultPayloadUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RevealRiskResultPayloadInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "revealRiskResultPayload", err)
+			}
+			err = ValidateRevealRiskResultPayloadInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "revealRiskResultPayload", err)
+			}
+			return nil, NewRevealRiskResultPayloadInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RevealRiskResultPayloadInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "revealRiskResultPayload", err)
+				}
+				err = ValidateRevealRiskResultPayloadInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "revealRiskResultPayload", err)
+				}
+				return nil, NewRevealRiskResultPayloadInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RevealRiskResultPayloadUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "revealRiskResultPayload", err)
+				}
+				err = ValidateRevealRiskResultPayloadUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "revealRiskResultPayload", err)
+				}
+				return nil, NewRevealRiskResultPayloadUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "revealRiskResultPayload", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RevealRiskResultPayloadGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "revealRiskResultPayload", err)
+			}
+			err = ValidateRevealRiskResultPayloadGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "revealRiskResultPayload", err)
+			}
+			return nil, NewRevealRiskResultPayloadGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "revealRiskResultPayload", resp.StatusCode, string(body))
 		}
 	}
 }

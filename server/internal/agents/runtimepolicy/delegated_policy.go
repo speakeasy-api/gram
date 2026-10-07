@@ -19,8 +19,10 @@ type DelegatedPolicyVersion int32
 const (
 	DelegatedPolicyVersion1 DelegatedPolicyVersion = 1
 	DelegatedPolicyVersion2 DelegatedPolicyVersion = 2
+	DelegatedPolicyVersion3 DelegatedPolicyVersion = 3
+	DelegatedPolicyVersion4 DelegatedPolicyVersion = 4
 
-	CurrentDelegatedPolicyVersion = DelegatedPolicyVersion2
+	CurrentDelegatedPolicyVersion = DelegatedPolicyVersion4
 )
 
 // ErrInvalidDelegatedPolicy marks a policy that must fail closed.

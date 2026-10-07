@@ -2,6 +2,8 @@ package platformmcp
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -335,4 +337,93 @@ func attachmentTestMCPServer(t *testing.T, conn *pgxpool.Pool, projectID, userSe
 	})
 	require.NoError(t, err)
 	return server.ID
+}
+
+// attachmentTestCIMDMetadata is a provider with no registration_endpoint that
+// supports Client ID Metadata Documents for public PKCE clients.
+func attachmentTestCIMDMetadata(issuerURL string) remotesessions.DiscoveredIssuerMetadata {
+	metadata := attachmentTestIssuerMetadata(issuerURL)
+	metadata.RegistrationEndpoint = ""
+	metadata.TokenEndpointAuthMethodsSupported = []string{"none"}
+	metadata.ClientIDMetadataDocumentSupported = true
+	return metadata
+}
+
+// attachmentTestRegister runs the attachment's own identity plan through
+// registration and, when it is ready, commits it.
+func attachmentTestRegister(t *testing.T, service *CatalogIdentityProviderAttachmentService, principal Principal, project ResolvedProject, userSessionIssuerID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata, resource wellknown.OAuthProtectedResourceMetadata) remotesessions.Registration {
+	t.Helper()
+	ctx := t.Context()
+	existing, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
+	require.NoError(t, err)
+	commit := service.identity.Prepare(attachmentIdentityPlan(principal, project, uuid.New(), userSessionIssuerID, metadata, existing, reuse, resource.Resource, resource))
+	require.NoError(t, commit.Preflight(ctx))
+	reg, err := commit.Register(ctx)
+	require.NoError(t, err)
+	if !reg.Ready() {
+		return reg
+	}
+	tx, err := commit.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	require.NoError(t, commit.Lock(ctx, tx))
+	require.NoError(t, commit.Bind(ctx, tx, reg))
+	_, err = commit.Commit(ctx, tx)
+	require.NoError(t, err)
+	return reg
+}
+
+func attachmentTestCIMDService(t *testing.T, conn *pgxpool.Pool) *CatalogIdentityProviderAttachmentService {
+	t.Helper()
+	serverURL := &url.URL{Scheme: "https", Host: "app.example.com"}
+	return &CatalogIdentityProviderAttachmentService{db: conn, identity: remotesessions.NewIdentityCommitter(testenv.NewLogger(t), conn, nil, audit.NewLogger(), serverURL, nil, nil, nil), policy: nil, serverURL: serverURL}
+}
+
+// A provider without dynamic registration that supports Client ID Metadata
+// Documents is attached through one, as the dashboard's automatic setup does,
+// instead of being refused as needing manual setup.
+func TestAttachmentUsesClientIDMetadataDocumentWithoutDynamicRegistration(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_cimd")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := attachmentTestCIMDService(t, conn)
+	metadata := attachmentTestCIMDMetadata("https://auth.example.com")
+	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
+	resource := attachmentTestResource("https://mcp.example.com/mcp", "Example", "")
+
+	reg := attachmentTestRegister(t, service, principal, project, usi, metadata, resource)
+	require.True(t, reg.Ready())
+	require.Equal(t, remotesessions.RegistrationCIMD, reg.Method)
+
+	clients := attachmentTestClients(t, conn, principal, project, usi)
+	require.Len(t, clients, 1)
+	require.True(t, strings.HasPrefix(clients[0].ExternalClientID, "https://app.example.com/.well-known/oauth-client/"), clients[0].ExternalClientID)
+	require.False(t, clients[0].ClientSecretEncrypted.Valid)
+
+	issuer, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
+	require.NoError(t, err)
+	require.True(t, reuse, "a stored provider supporting only client ID metadata documents is reusable")
+	require.False(t, issuer.RegistrationEndpoint.Valid, "no registration endpoint is stored for a provider that advertises none")
+	require.True(t, issuer.ClientIDMetadataDocumentSupported)
+}
+
+// A provider offering neither dynamic registration nor Client ID Metadata
+// Documents still needs manual setup and stores no client.
+func TestAttachmentRequiresManualSetupWithoutAutomaticRegistration(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_manual")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := attachmentTestCIMDService(t, conn)
+	metadata := attachmentTestCIMDMetadata("https://auth.example.com")
+	metadata.ClientIDMetadataDocumentSupported = false
+	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
+
+	reg := attachmentTestRegister(t, service, principal, project, usi, metadata, attachmentTestResource("https://mcp.example.com/mcp", "Example", ""))
+	require.True(t, reg.ManualSetupRequired)
+	require.ErrorIs(t, identityProviderRegistrationError(reg), ErrIdentityProviderAttachmentUnsupported)
+	require.Empty(t, attachmentTestClients(t, conn, principal, project, usi))
 }

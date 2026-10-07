@@ -900,7 +900,22 @@ func TestNormalizeOktaOrgURL(t *testing.T) {
 		_, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
 		require.NoError(t, err, raw)
 	}
-	for _, raw := range []string{"https://okta.com", "https://okta.com.evil.com", "https://example.okta.com/path", "http://localhost", "https://[::1]", "https://example.okta.com.", "https://xn--exmple-cua.okta.com", "https://exämple.okta.com", "https://%zz.okta.com", "https://\u212Aexample.okta.com", "https://example.okta.com?", "https://example.okta.com#", "https://example.okta.com/#"} {
+	for raw, want := range map[string]string{
+		"https://acme-admin.okta.com":                    "https://acme.okta.com",
+		"https://acme-admin.oktapreview.com/":            "https://acme.oktapreview.com",
+		"https://acme-admin.okta-emea.com/admin":         "https://acme.okta-emea.com",
+		"https://acme-admin.okta.mil/admin/home":         "https://acme.okta.mil",
+		"https://Dev-1-Admin.okta.com/admin/apps/active": "https://dev-1.okta.com",
+		"https://myadmin-co.okta.com":                    "https://myadmin-co.okta.com",
+		"https://admin-team.okta.com":                    "https://admin-team.okta.com",
+		"https://acme-admin.sub.okta.com":                "https://acme-admin.sub.okta.com",
+		"https://sub.acme-admin.okta.com/admin/home":     "https://sub.acme.okta.com",
+	} {
+		got, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
+		require.NoError(t, err, raw)
+		require.Equal(t, want, got, raw)
+	}
+	for _, raw := range []string{"https://example.okta.com/admin/home", "https://acme-admin.okta.com/app/UserHome", "https://acme-admin.okta.com/admin/home?x=1", "https://acme-admin.okta.com/administrator", "https://-admin.okta.com", "https://acme-admin-admin.okta.com", "https://acme-admin.okta.com/%61dmin", "https://acme-admin.okta.com/admin%2Fx", "https://acme-admin.okta.com/admin/a b", "https://acme-admin.okta.com//admin", "https://okta.com", "https://okta.com.evil.com", "https://example.okta.com/path", "http://localhost", "https://[::1]", "https://example.okta.com.", "https://xn--exmple-cua.okta.com", "https://exämple.okta.com", "https://%zz.okta.com", "https://\u212Aexample.okta.com", "https://example.okta.com?", "https://example.okta.com#", "https://example.okta.com/#"} {
 		_, err := identityproviderconnections.NormalizeOktaOrgURL(raw)
 		require.Error(t, err, raw)
 	}

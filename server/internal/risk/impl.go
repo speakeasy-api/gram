@@ -1341,6 +1341,17 @@ func redactResultMatchInPlace(r *types.RiskResult, orgID string) {
 	r.Spans = nil
 }
 
+func parseOptionalMCPServerID(raw *string) (string, error) {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return "", nil
+	}
+	id, err := uuid.Parse(*raw)
+	if err != nil {
+		return "", oops.E(oops.CodeInvalid, err, "invalid MCP server ID")
+	}
+	return id.String(), nil
+}
+
 // listRiskResultsRaw is the shared, always-unredacted fetch behind both
 // ListRiskResults (which may redact its output) and ListRiskResultsForAgent
 // (which always redacts). Keeping this as the single source of raw data
@@ -1362,13 +1373,9 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	}
 
 	pageSize := resolvePageSize(payload.Limit)
-	mcpServerID := ""
-	if payload.McpServerID != nil && strings.TrimSpace(*payload.McpServerID) != "" {
-		id, err := uuid.Parse(*payload.McpServerID)
-		if err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid MCP server ID")
-		}
-		mcpServerID = id.String()
+	mcpServerID, err := parseOptionalMCPServerID(payload.McpServerID)
+	if err != nil {
+		return nil, err
 	}
 	chatID := ""
 	if payload.ChatID != nil && strings.TrimSpace(*payload.ChatID) != "" {
@@ -1378,8 +1385,21 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		}
 		chatID = id.String()
 	}
+	resultIDInput := payload.ResultID
+	if resultIDInput != nil && strings.TrimSpace(*resultIDInput) == "" {
+		resultIDInput = nil
+	}
+	resultID, err := conv.PtrToNullUUID(resultIDInput)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid result ID")
+	}
+	executionID, ok := ParseExecutionIDFilter(conv.PtrValOr(payload.ExecutionID, ""))
+	if !ok {
+		return nil, oops.E(oops.CodeInvalid, nil, "invalid execution ID")
+	}
 
-	if chatID != "" && mcpServerID == "" {
+	// The Postgres chat listing cannot narrow by finding or execution.
+	if chatID != "" && mcpServerID == "" && !resultID.Valid && executionID == "" {
 		totalCount, err := s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
 		if err != nil {
 			totalCount = 0
@@ -1441,7 +1461,7 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	if toTime.Valid {
 		to = &toTime.Time
 	}
-	return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, mcpServerID, chatID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to)
+	return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, mcpServerID, chatID, resultID, executionID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to)
 }
 
 func parseOptionalTimestamptz(raw *string) (pgtype.Timestamptz, error) {
@@ -1476,6 +1496,8 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 		PolicyID:         payload.PolicyID,
 		ChatID:           payload.ChatID,
 		McpServerID:      payload.McpServerID,
+		ResultID:         nil,
+		ExecutionID:      nil,
 		Category:         payload.Category,
 		RuleID:           payload.RuleID,
 		// The agent surface lists its own project's findings; it has no

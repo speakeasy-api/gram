@@ -82,7 +82,7 @@ func (s *Service) ResolvePublicationEvidence(ctx context.Context, organizationID
 	if err != nil {
 		return nil, fmt.Errorf("read observability plugin setting: %w", err)
 	}
-	cfg := s.generateConfig(ctx, project.ID, project.Slug, project.ProjectSlug, projectID)
+	cfg := s.generateConfig(ctx, project.ID, project.Slug, project.ProjectSlug, projectID, conn.PublishedHooksConfig)
 	fingerprints, err := MCPFingerprints(allInfos, cfg, observabilityEnabled)
 	if err != nil {
 		return nil, fmt.Errorf("compute publication fingerprints: %w", err)

@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -82,7 +83,7 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(single.Close)
 	reads := NewAccessReadService(logger, single, allowBudget(), "assignment-integration-key")
-	manager := access.NewRoleManager(logger, single, workos.NewStubClient(), audit.NewLogger())
+	manager := access.NewRoleManager(logger, single, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, nil)
 	roles, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "assignment-integration-key", manager)
 	require.NoError(t, err)
 	service, err := NewAccessRoleAssignmentService(roles)

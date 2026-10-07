@@ -9,7 +9,6 @@ import {
 } from "@/components/member-facepile";
 import { RequireScope } from "@/components/require-scope";
 import { useRBAC } from "@/hooks/useRBAC";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import {
@@ -23,8 +22,12 @@ import { useOrgRoutes } from "@/routes";
 import { useNavigate } from "react-router";
 import type { SetResourceAudienceEntry } from "@gram/client/models/components/setresourceaudienceentry.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
+import { invalidateAllExplainResourceAccess } from "@gram/client/react-query/explainResourceAccess.js";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { useSetResourceAudienceMutation } from "@gram/client/react-query/setResourceAudience.js";
+import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
+import { invalidateAllPlugin } from "@gram/client/react-query/plugin.js";
+import { invalidateAllPlugins } from "@gram/client/react-query/plugins.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -34,6 +37,7 @@ import {
   Pencil,
   PencilOff,
   Plus,
+  Shield,
   Trash2,
   User,
 } from "lucide-react";
@@ -44,7 +48,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { cn } from "@/lib/utils";
-import { useMemo, useState, type ComponentProps, type JSX } from "react";
+import { useMemo, useState, type JSX } from "react";
 import { toast } from "sonner";
 import { AddAudienceDialog } from "./AddAudienceDialog";
 import { RemoveAudienceDialog } from "./RemoveAudienceDialog";
@@ -74,6 +78,7 @@ import {
   revokeScopeWrite,
   type AudienceWrite,
 } from "./accessWrites";
+import { PrincipalBadge } from "./PrincipalBadge";
 import { RoleLink } from "./RoleLink";
 import { isUnnarrowed, ownRules, LEVEL_VERB } from "./serverAudience";
 
@@ -123,10 +128,8 @@ export function ManageAccess({
   const { hasAnyScope } = useRBAC();
   const canManage = hasAnyScope(["org:admin"]);
   const [page, setPage] = useState(0);
-  // Which kind of principal the picker is open for. People and agents are
-  // different enough — one is a person in the directory, one is a credentialed
-  // agent — that the button asks first rather than mixing them in one list.
-  const [adding, setAdding] = useState<"user" | "agent" | null>(null);
+  // Which kind of principal the picker is open for.
+  const [adding, setAdding] = useState<"user" | "agent" | "role" | null>(null);
   const [narrowing, setNarrowing] = useState<NarrowingTarget | null>(null);
   // The row whose removal is waiting to be confirmed, when the write is not
   // the plain deletion the button looks like.
@@ -184,7 +187,14 @@ export function ManageAccess({
 
   const setAudience = useSetResourceAudienceMutation({
     onSuccess: async () => {
-      await invalidateAllResourceAudience(queryClient);
+      // Check access answers from the same rules, so an open answer is redone.
+      await Promise.all([
+        invalidateAllResourceAudience(queryClient),
+        invalidateAllExplainResourceAccess(queryClient),
+        invalidateAllRoles(queryClient),
+        invalidateAllPlugin(queryClient),
+        invalidateAllPlugins(queryClient),
+      ]);
       setAdding(null);
     },
     // The server refuses some writes for a reason worth reading — blocking
@@ -329,6 +339,10 @@ export function ManageAccess({
                   <User className="h-4 w-4" />
                   Person
                 </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setAdding("role")}>
+                  <Shield className="h-4 w-4" />
+                  Role
+                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => setAdding("agent")}>
                   <Bot className="h-4 w-4" />
                   Agent
@@ -436,11 +450,19 @@ export function ManageAccess({
 
       {adding && (
         <AddAudienceDialog
-          title={adding === "agent" ? "Grant agent access" : "Grant access"}
+          title={
+            adding === "agent"
+              ? "Grant agent access"
+              : adding === "role"
+                ? "Grant role access"
+                : "Grant access"
+          }
           description={
             adding === "agent"
               ? `Give agents access to ${resourceName ?? "this server"} only. An agent still cannot do more here than its own policy and its owner allow.`
-              : `Give people access to ${resourceName ?? "this server"} only. To give a role access, edit the role.`
+              : adding === "role"
+                ? `Give roles access to ${resourceName ?? "this server"} only.`
+                : `Give people access to ${resourceName ?? "this server"} only.`
           }
           kinds={[adding]}
           alreadyAdded={direct.map((entry) => entry.principalUrn)}
@@ -805,33 +827,6 @@ function ownDestructiveBlockOnly(row: AccessRow): boolean {
     (own.tools ?? []).length === 0 &&
     (own.dispositions ?? []).length === 1 &&
     (own.dispositions ?? []).includes("destructive")
-  );
-}
-
-/** What kind of thing a row names, so a role does not read as a person. */
-const PRINCIPAL_BADGE: Record<
-  string,
-  { label: string; variant: ComponentProps<typeof Badge>["variant"] }
-> = {
-  role: { label: "Role", variant: "warning" },
-  user: { label: "Person", variant: "information" },
-  agent: { label: "Agent", variant: "information" },
-  everyone: { label: "Everyone", variant: "neutral" },
-  directory_group: { label: "Group", variant: "neutral" },
-  directory_attribute: { label: "Attribute", variant: "neutral" },
-};
-
-function PrincipalBadge({
-  kind,
-}: {
-  kind: AccessRow["kind"];
-}): JSX.Element | null {
-  const badge = PRINCIPAL_BADGE[kind];
-  if (!badge) return null;
-  return (
-    <Badge variant={badge.variant} size="sm">
-      {badge.label}
-    </Badge>
   );
 }
 

@@ -5558,6 +5558,42 @@ func (q *Queries) SetUserPlatformAdminFixture(ctx context.Context, arg SetUserPl
 	return err
 }
 
+const setUserSessionIssuerAuthorizationServerModeFixture = `-- name: SetUserSessionIssuerAuthorizationServerModeFixture :execrows
+UPDATE user_session_issuers AS issuer
+SET authorization_server_mode = $1,
+    pinned_issuer_url = $2
+WHERE issuer.id = $3
+  AND issuer.deleted IS FALSE
+  AND COALESCE(
+    issuer.organization_id,
+    (SELECT p.organization_id FROM projects AS p WHERE p.id = issuer.project_id)
+  ) = $4::text
+`
+
+type SetUserSessionIssuerAuthorizationServerModeFixtureParams struct {
+	AuthorizationServerMode string
+	PinnedIssuerUrl         pgtype.Text
+	IssuerID                uuid.UUID
+	OrganizationID          string
+}
+
+// Test-only fixture that switches an issuer's authorization server mode and
+// pinned issuer URL, ahead of a management API that sets them. Project-scoped
+// issuers carry no organization_id, so their tenancy is read through the
+// project.
+func (q *Queries) SetUserSessionIssuerAuthorizationServerModeFixture(ctx context.Context, arg SetUserSessionIssuerAuthorizationServerModeFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserSessionIssuerAuthorizationServerModeFixture,
+		arg.AuthorizationServerMode,
+		arg.PinnedIssuerUrl,
+		arg.IssuerID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setUserSessionIssuerCIMDAdmissionMode = `-- name: SetUserSessionIssuerCIMDAdmissionMode :exec
 UPDATE user_session_issuers
 SET client_id_metadata_admission_mode = $1

@@ -52,6 +52,7 @@ func TestRuntimeScopeAllowlist(t *testing.T) {
 		authz.ScopeMCPRead, authz.ScopeMCPWrite, authz.ScopeMCPConnect,
 		authz.ScopeEnvironmentRead, authz.ScopeEnvironmentWrite,
 		authz.ScopeSkillRead, authz.ScopeSkillWrite,
+		authz.ScopeAssistantRead, authz.ScopeAssistantWrite,
 		authz.ScopeRiskPolicyEvaluate,
 		authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest,
 	}
@@ -62,15 +63,25 @@ func TestRuntimeScopeAllowlist(t *testing.T) {
 	for _, scope := range []authz.Scope{authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest} {
 		require.False(t, IsRuntimeScopeSafe(RuntimeScopeRegistryVersion1, scope), scope)
 	}
+	for _, scope := range []authz.Scope{authz.ScopeAssistantRead, authz.ScopeAssistantWrite} {
+		require.False(t, IsRuntimeScopeSafe(RuntimeScopeRegistryVersion2, scope), scope)
+	}
+	delegableExclusions := []authz.Scope{
+		authz.ScopeProjectBlockedRead, authz.ScopeProjectBlockedWrite,
+		authz.ScopeMCPBlockedRead, authz.ScopeMCPBlockedWrite, authz.ScopeMCPBlockedConnect,
+		authz.ScopeEnvironmentBlockedRead, authz.ScopeEnvironmentBlockedWrite,
+		authz.ScopeSkillBlockedRead, authz.ScopeSkillBlockedWrite,
+		authz.ScopeAssistantBlockedRead, authz.ScopeAssistantBlockedWrite,
+	}
+	for _, scope := range delegableExclusions {
+		require.True(t, IsRuntimeScopeSafe(CurrentRuntimeScopeRegistryVersion, scope), scope)
+		require.False(t, IsRuntimeScopeSafe(RuntimeScopeRegistryVersion3, scope), scope)
+	}
 
 	unsafe := []authz.Scope{
 		authz.Scope("unknown:scope"),
 		authz.ScopeRoot,
 		authz.ScopeOrgRead, authz.ScopeOrgBlockedRead, authz.ScopeOrgAdmin, authz.ScopeOrgBlockedAdmin,
-		authz.ScopeProjectBlockedRead, authz.ScopeProjectBlockedWrite,
-		authz.ScopeMCPBlockedRead, authz.ScopeMCPBlockedWrite, authz.ScopeMCPBlockedConnect,
-		authz.ScopeEnvironmentBlockedRead, authz.ScopeEnvironmentBlockedWrite,
-		authz.ScopeSkillBlockedRead, authz.ScopeSkillBlockedWrite,
 		authz.ScopePluginWrite, authz.ScopePluginBlockedWrite,
 		authz.ScopeRiskPolicyBypass, authz.ScopeRiskPolicyBlock,
 		authz.ScopeChatRead, authz.ScopeChatWrite,

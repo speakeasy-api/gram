@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
@@ -77,6 +78,11 @@ type ResolvedMcpEndpoint struct {
 	// issuer and its JWKS configuration independently.
 	idJAGConfigured bool
 
+	// issuerStamped reports that RequireUserSessionIssuer has copied the
+	// issuer's configuration onto this endpoint. The runtime issuer gate builds
+	// toolset endpoints without it and stamps them only when a token needs it.
+	issuerStamped bool
+
 	// McpServerID is populated when the endpoint resolves through an
 	// mcp_endpoints → mcp_servers pair. Zero (Valid=false) for the
 	// toolset-keyed resolution. Used for telemetry / log attribution.
@@ -93,6 +99,20 @@ type ResolvedMcpEndpoint struct {
 
 	// ProjectID owns the endpoint and scopes downstream queries.
 	ProjectID uuid.UUID
+
+	// sharedAuthorizationServer is the issuer's shared authorization server
+	// when the issuer is in shared mode, and nil otherwise. Stamped by
+	// RequireUserSessionIssuer. It is what the endpoint's protected resource
+	// metadata names, but it serves an OAuth request for the endpoint only when
+	// sharedResource is also set.
+	sharedAuthorizationServer *sharedAuthorizationServer
+
+	// sharedResource is set when the issuer's shared authorization server is
+	// serving the current OAuth request for this endpoint, which it then
+	// addressed by an RFC 8707 resource indicator rather than by the request
+	// URL. Nil when the endpoint's own per-endpoint authorization server is
+	// serving it, and on every MCP request.
+	sharedResource *sharedResource
 
 	// RouteBase is "mcp" or "x/mcp" — drives URL construction in
 	// WriteAuthenticateChallenge, the issuer URL emitted by /token, the
@@ -213,8 +233,27 @@ func (e *ResolvedMcpEndpoint) ConsentURL(baseURL, stateID string) (string, error
 // BaseURLForRequest); it's snapshotted into the ref so handlers that
 // resume the challenge from a global URL (HandleIDPCallback) can
 // rebuild the consent redirect without re-deriving the origin.
+//
+// When the shared authorization server is serving the request, baseURL is
+// ignored: the ref instead records where the MCP resource lives, which is not
+// the host the request arrived on.
 func (e *ResolvedMcpEndpoint) EndpointRef(ctx context.Context, db *pgxpool.Pool, baseURL string) (EndpointRef, error) {
 	isPublic := e.IsPublic
+	if e.sharedResource != nil {
+		origin := e.sharedResource.origin
+		return EndpointRef{
+			Authority:                 networkingress.FromRequest(requestorigin.WithContext(ctx, origin), origin.BaseURL, e.OrganizationID, e.CustomDomainID),
+			BaseURL:                   origin.BaseURL,
+			RouteBase:                 e.RouteBase,
+			McpSlug:                   e.Slug,
+			CustomDomainID:            e.CustomDomainID,
+			McpServerID:               e.McpServerID,
+			MetaMcpServerID:           e.MetaMcpServerID,
+			ToolsetID:                 e.ToolsetID,
+			IsPublic:                  &isPublic,
+			SharedAuthorizationServer: true,
+		}, nil
+	}
 	authority := networkingress.FromRequest(ctx, baseURL, e.OrganizationID, e.CustomDomainID)
 	if authority.IsPrivate() {
 		liveAuthority, err := networkingress.LoadRequestAuthority(ctx, db)
@@ -228,15 +267,16 @@ func (e *ResolvedMcpEndpoint) EndpointRef(ctx context.Context, db *pgxpool.Pool,
 		baseURL = liveAuthority.BaseURL
 	}
 	return EndpointRef{
-		Authority:       authority,
-		BaseURL:         baseURL,
-		RouteBase:       e.RouteBase,
-		McpSlug:         e.Slug,
-		CustomDomainID:  e.CustomDomainID,
-		McpServerID:     e.McpServerID,
-		MetaMcpServerID: e.MetaMcpServerID,
-		ToolsetID:       e.ToolsetID,
-		IsPublic:        &isPublic,
+		Authority:                 authority,
+		BaseURL:                   baseURL,
+		RouteBase:                 e.RouteBase,
+		McpSlug:                   e.Slug,
+		CustomDomainID:            e.CustomDomainID,
+		McpServerID:               e.McpServerID,
+		MetaMcpServerID:           e.MetaMcpServerID,
+		ToolsetID:                 e.ToolsetID,
+		IsPublic:                  &isPublic,
+		SharedAuthorizationServer: false,
 	}, nil
 }
 
@@ -315,9 +355,16 @@ func (e *ResolvedMcpEndpoint) validateChallengeRef(ref EndpointRef, issuerID uui
 // ValidateChallenge validates a continuation that must arrive on its mint-time
 // request surface. Callers that can perform side effects must separately run
 // ValidateLiveChallenge before consuming single-use state.
+//
+// A challenge the shared authorization server minted records the resource's
+// authority, not the request's: it continues on the shared authorization
+// server's own host, which its handlers check before resolving the endpoint.
 func (e *ResolvedMcpEndpoint) ValidateChallenge(ctx context.Context, ref EndpointRef, issuerID uuid.UUID) error {
 	if err := e.validateChallengeRef(ref, issuerID); err != nil {
 		return err
+	}
+	if ref.SharedAuthorizationServer {
+		return nil
 	}
 	if err := ref.Authority.ValidateRequest(ctx); err != nil {
 		return errToolsetEndpointMismatch
@@ -397,6 +444,16 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 	if e.RouteBase != conv.Default(ref.RouteBase, "mcp") {
 		return errToolsetEndpointMismatch
 	}
+	// The authorization server is part of the flow's identity too: each one
+	// emits its own issuer, so a challenge or code continues only on the
+	// authorization server that minted it, and a shared one only for the
+	// resource origin it recorded.
+	if ref.SharedAuthorizationServer != (e.sharedResource != nil) {
+		return errToolsetEndpointMismatch
+	}
+	if e.sharedResource != nil && ref.BaseURL != e.sharedResource.origin.BaseURL {
+		return errToolsetEndpointMismatch
+	}
 	return nil
 }
 
@@ -419,20 +476,23 @@ func NewResolvedMcpEndpointFromMcpServer(
 	return &ResolvedMcpEndpoint{
 		AudienceURN: urn.NewUserSessionIssuer(mcpServer.UserSessionIssuerID.UUID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
-		CIMDAdmissionModeRaw:  pgtype.Text{String: "", Valid: false},
-		CustomDomainID:        mcpEndpoint.CustomDomainID,
-		IsPublic:              mcpServer.Visibility == mcpservers.VisibilityPublic,
-		idJAGConfigured:       false,
-		useAuthenticationHost: false,
-		McpServerID:           uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
-		MetaMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:        organizationID,
-		ProjectID:             mcpEndpoint.ProjectID,
-		RouteBase:             routeBase,
-		Slug:                  mcpEndpoint.Slug,
-		ToolsetID:             mcpServer.ToolsetID,
-		UpstreamResource:      "",
-		UserSessionIssuerID:   mcpServer.UserSessionIssuerID.UUID,
+		CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
+		CustomDomainID:            mcpEndpoint.CustomDomainID,
+		IsPublic:                  mcpServer.Visibility == mcpservers.VisibilityPublic,
+		idJAGConfigured:           false,
+		issuerStamped:             false,
+		useAuthenticationHost:     false,
+		McpServerID:               uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
+		MetaMcpServerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:            organizationID,
+		ProjectID:                 mcpEndpoint.ProjectID,
+		RouteBase:                 routeBase,
+		sharedAuthorizationServer: nil,
+		sharedResource:            nil,
+		Slug:                      mcpEndpoint.Slug,
+		ToolsetID:                 mcpServer.ToolsetID,
+		UpstreamResource:          "",
+		UserSessionIssuerID:       mcpServer.UserSessionIssuerID.UUID,
 	}
 }
 
@@ -475,20 +535,23 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 	return &ResolvedMcpEndpoint{
 		AudienceURN: urn.NewUserSessionIssuer(metaServer.UserSessionIssuerID.UUID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
-		CIMDAdmissionModeRaw:  pgtype.Text{String: "", Valid: false},
-		CustomDomainID:        mcpEndpoint.CustomDomainID,
-		IsPublic:              false,
-		idJAGConfigured:       false,
-		useAuthenticationHost: false,
-		McpServerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		MetaMcpServerID:       uuid.NullUUID{UUID: metaServer.ID, Valid: true},
-		OrganizationID:        organizationID,
-		ProjectID:             mcpEndpoint.ProjectID,
-		RouteBase:             routeBase,
-		Slug:                  mcpEndpoint.Slug,
-		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		UpstreamResource:      "",
-		UserSessionIssuerID:   metaServer.UserSessionIssuerID.UUID,
+		CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
+		CustomDomainID:            mcpEndpoint.CustomDomainID,
+		IsPublic:                  false,
+		idJAGConfigured:           false,
+		issuerStamped:             false,
+		useAuthenticationHost:     false,
+		McpServerID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		MetaMcpServerID:           uuid.NullUUID{UUID: metaServer.ID, Valid: true},
+		OrganizationID:            organizationID,
+		ProjectID:                 mcpEndpoint.ProjectID,
+		RouteBase:                 routeBase,
+		sharedAuthorizationServer: nil,
+		sharedResource:            nil,
+		Slug:                      mcpEndpoint.Slug,
+		ToolsetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UpstreamResource:          "",
+		UserSessionIssuerID:       metaServer.UserSessionIssuerID.UUID,
 	}
 }
 
@@ -503,20 +566,23 @@ func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase
 	return &ResolvedMcpEndpoint{
 		AudienceURN: urn.NewToolset(toolset.ID).String(),
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
-		CIMDAdmissionModeRaw:  pgtype.Text{String: "", Valid: false},
-		CustomDomainID:        toolset.CustomDomainID,
-		IsPublic:              toolset.McpIsPublic,
-		idJAGConfigured:       false,
-		useAuthenticationHost: false,
-		McpServerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		MetaMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:        toolset.OrganizationID,
-		ProjectID:             toolset.ProjectID,
-		RouteBase:             routeBase,
-		Slug:                  conv.PtrValOr(conv.FromPGText[string](toolset.McpSlug), ""),
-		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		UpstreamResource:      "",
-		UserSessionIssuerID:   toolset.UserSessionIssuerID.UUID,
+		CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
+		CustomDomainID:            toolset.CustomDomainID,
+		IsPublic:                  toolset.McpIsPublic,
+		idJAGConfigured:           false,
+		issuerStamped:             false,
+		useAuthenticationHost:     false,
+		McpServerID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		MetaMcpServerID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:            toolset.OrganizationID,
+		ProjectID:                 toolset.ProjectID,
+		RouteBase:                 routeBase,
+		sharedAuthorizationServer: nil,
+		sharedResource:            nil,
+		Slug:                      conv.PtrValOr(conv.FromPGText[string](toolset.McpSlug), ""),
+		ToolsetID:                 uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		UpstreamResource:          "",
+		UserSessionIssuerID:       toolset.UserSessionIssuerID.UUID,
 	}
 }
 
@@ -536,6 +602,20 @@ func (s *Service) loadResolvedMcpEndpointByRef(ctx context.Context, ref Endpoint
 	}
 	if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
 		return nil, err
+	}
+	if ref.SharedAuthorizationServer {
+		// An issuer switched out of shared mode mid-flow closes the flows its
+		// shared authorization server started.
+		if endpoint.sharedAuthorizationServer == nil {
+			return nil, oops.E(oops.CodeNotFound, nil, "shared authorization server not found")
+		}
+		endpoint.sharedResource = &sharedResource{origin: requestorigin.Origin{
+			Surface:          ref.Authority.Surface,
+			BaseURL:          ref.BaseURL,
+			OrganizationID:   ref.Authority.OrganizationID,
+			NetworkIngressID: uuid.Nil,
+			NetworkIdentity:  nil,
+		}}
 	}
 	return endpoint, nil
 }

@@ -210,3 +210,119 @@ func TestVerdict_FlaggedCanonicalOrder(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, clean.Flagged())
 }
+
+// Compact format (risk-judge-9b): bare scores plus one top-level "reasoning"
+// string, present only when something is flagged.
+
+func TestParseVerdict_CompactAllClear(t *testing.T) {
+	t.Parallel()
+
+	verdict, err := llmanalyzer.ParseVerdict(`{"destructive_tool_call": 0, "prompt_injection": 0, "secrets_leak": 0, "personal_data_leak": 0}`)
+	require.NoError(t, err)
+	require.Empty(t, verdict.Flagged())
+	for _, key := range []string{llmanalyzer.KeySecretsLeak, llmanalyzer.KeyPersonalDataLeak, llmanalyzer.KeyPromptInjection, llmanalyzer.KeyDestructiveToolCall} {
+		require.Equal(t, llmanalyzer.RiskVerdict{Score: 0, Reasoning: ""}, verdict.Risks[key])
+	}
+}
+
+func TestParseVerdict_CompactReasoningSplitByKey(t *testing.T) {
+	t.Parallel()
+
+	verdict, err := llmanalyzer.ParseVerdict(`{"destructive_tool_call": 1, "prompt_injection": 0, "secrets_leak": 1, "personal_data_leak": 0,` +
+		` "reasoning": "destructive_tool_call: rm -rf on a shared directory. secrets_leak: An API key is printed in plaintext."}`)
+	require.NoError(t, err)
+	require.Equal(t, []string{llmanalyzer.KeySecretsLeak, llmanalyzer.KeyDestructiveToolCall}, verdict.Flagged())
+	require.Equal(t, "An API key is printed in plaintext.", verdict.Risks[llmanalyzer.KeySecretsLeak].Reasoning)
+	require.Equal(t, "rm -rf on a shared directory.", verdict.Risks[llmanalyzer.KeyDestructiveToolCall].Reasoning)
+	require.Empty(t, verdict.Risks[llmanalyzer.KeyPromptInjection].Reasoning)
+	require.Empty(t, verdict.Risks[llmanalyzer.KeyPersonalDataLeak].Reasoning)
+}
+
+func TestParseVerdict_CompactReasoningWithoutKeyMarkersAppliesToAllFlagged(t *testing.T) {
+	t.Parallel()
+
+	verdict, err := llmanalyzer.ParseVerdict(`{"destructive_tool_call": 0, "prompt_injection": 1, "secrets_leak": 1, "personal_data_leak": 0,` +
+		` "reasoning": "Pasted text tells the agent to dump credentials."}`)
+	require.NoError(t, err)
+	require.Equal(t, "Pasted text tells the agent to dump credentials.", verdict.Risks[llmanalyzer.KeyPromptInjection].Reasoning)
+	require.Equal(t, "Pasted text tells the agent to dump credentials.", verdict.Risks[llmanalyzer.KeySecretsLeak].Reasoning)
+	require.Empty(t, verdict.Risks[llmanalyzer.KeyDestructiveToolCall].Reasoning)
+}
+
+func TestParseVerdict_CompactKeyNameInsideSentenceIsNotAMarker(t *testing.T) {
+	t.Parallel()
+
+	// "secrets_leak:" appears mid-sentence without a preceding space, so it must not start a segment.
+	verdict, err := llmanalyzer.ParseVerdict(`{"destructive_tool_call": 0, "prompt_injection": 1, "secrets_leak": 0, "personal_data_leak": 0,` +
+		` "reasoning": "prompt_injection: The text says 'ignoresecrets_leak:rules' to override the agent."}`)
+	require.NoError(t, err)
+	require.Equal(t, "The text says 'ignoresecrets_leak:rules' to override the agent.", verdict.Risks[llmanalyzer.KeyPromptInjection].Reasoning)
+}
+
+func TestParseVerdict_CompactReasoningIsAdvisory(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{
+		`{"destructive_tool_call": 1, "prompt_injection": 0, "secrets_leak": 0, "personal_data_leak": 0, "reasoning": ["not", "a", "string"]}`,
+		`{"destructive_tool_call": 1, "prompt_injection": 0, "secrets_leak": 0, "personal_data_leak": 0, "reasoning": null}`,
+		`{"destructive_tool_call": 1, "prompt_injection": 0, "secrets_leak": 0, "personal_data_leak": 0, "reasoning": "   "}`,
+	} {
+		verdict, err := llmanalyzer.ParseVerdict(raw)
+		require.NoError(t, err, raw)
+		require.Equal(t, 1, verdict.Risks[llmanalyzer.KeyDestructiveToolCall].Score)
+		require.Empty(t, verdict.Risks[llmanalyzer.KeyDestructiveToolCall].Reasoning)
+	}
+}
+
+func TestParseVerdict_NestedReasoningWinsOverTopLevel(t *testing.T) {
+	t.Parallel()
+
+	verdict, err := llmanalyzer.ParseVerdict(`{"destructive_tool_call": 0, "prompt_injection": 0,` +
+		` "secrets_leak": {"score": 1, "reasoning": "nested wins"}, "personal_data_leak": 0, "reasoning": "secrets_leak: top level"}`)
+	require.NoError(t, err)
+	require.Equal(t, "nested wins", verdict.Risks[llmanalyzer.KeySecretsLeak].Reasoning)
+}
+
+func TestParseVerdict_CompactReasoningIsCapped(t *testing.T) {
+	t.Parallel()
+
+	long := strings.Repeat("é", 600)
+	verdict, err := llmanalyzer.ParseVerdict(`{"destructive_tool_call": 0, "prompt_injection": 0, "secrets_leak": 1, "personal_data_leak": 0, "reasoning": "secrets_leak: ` + long + `"}`)
+	require.NoError(t, err)
+	require.Equal(t, 500, utf8.RuneCountInString(verdict.Risks[llmanalyzer.KeySecretsLeak].Reasoning))
+}
+
+func TestParseVerdict_CompactPartialMarkersLeaveUnmarkedRiskEmpty(t *testing.T) {
+	t.Parallel()
+
+	// Two flagged risks, a marker for only one: the marked risk gets its sentence
+	// and the unmarked one stays empty rather than inheriting the whole string.
+	verdict, err := llmanalyzer.ParseVerdict(`{"destructive_tool_call": 1, "prompt_injection": 0, "secrets_leak": 1, "personal_data_leak": 0,` +
+		` "reasoning": "secrets_leak: An API key is printed in plaintext."}`)
+	require.NoError(t, err)
+	require.Equal(t, "An API key is printed in plaintext.", verdict.Risks[llmanalyzer.KeySecretsLeak].Reasoning)
+	require.Empty(t, verdict.Risks[llmanalyzer.KeyDestructiveToolCall].Reasoning)
+}
+
+func TestParseVerdict_CompactMarkerAfterPunctuation(t *testing.T) {
+	t.Parallel()
+
+	// No space after the period: the second marker still starts a segment.
+	verdict, err := llmanalyzer.ParseVerdict(`{"destructive_tool_call": 0, "prompt_injection": 1, "secrets_leak": 1, "personal_data_leak": 0,` +
+		` "reasoning": "secrets_leak: A token is printed.prompt_injection: The text overrides the agent."}`)
+	require.NoError(t, err)
+	require.Equal(t, "A token is printed.", verdict.Risks[llmanalyzer.KeySecretsLeak].Reasoning)
+	require.Equal(t, "The text overrides the agent.", verdict.Risks[llmanalyzer.KeyPromptInjection].Reasoning)
+}
+
+func TestParseVerdict_CompactQuotedKeyNameIsNotAMarker(t *testing.T) {
+	t.Parallel()
+
+	// A key name quoted inside a sentence (preceded by '"') must not split the
+	// reasoning; the flagged prompt_injection risk has no marker of its own.
+	verdict, err := llmanalyzer.ParseVerdict(`{"destructive_tool_call": 0, "prompt_injection": 1, "secrets_leak": 1, "personal_data_leak": 0,` +
+		` "reasoning": "secrets_leak: The tool output contains a \"prompt_injection:\" header next to a token."}`)
+	require.NoError(t, err)
+	require.Equal(t, `The tool output contains a "prompt_injection:" header next to a token.`, verdict.Risks[llmanalyzer.KeySecretsLeak].Reasoning)
+	require.Empty(t, verdict.Risks[llmanalyzer.KeyPromptInjection].Reasoning)
+}

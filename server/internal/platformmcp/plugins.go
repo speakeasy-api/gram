@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"slices"
 	"strings"
@@ -427,8 +428,10 @@ func (s *PluginsService) readPublicationEvidence(ctx context.Context, principal 
 // PluginsService answers what plugins a project has and what is inside one,
 // and resolves the exact plugin a distribution names.
 type PluginsService struct {
+	serverRemoval        *plugindelivery.Service
 	publicationEvidence  publicationEvidenceReader
 	publishStatus        publishstatus.Describer
+	publicationRequests  plugindelivery.PublicationRequests
 	db                   *pgxpool.Pool
 	authorization        *authz.Engine
 	dashboardURL         *url.URL
@@ -452,9 +455,16 @@ type PluginsService struct {
 	distributionAdmission     *admission.Guard
 	distributionAdmissionRead distributionAdmissionReader
 
+	// publication and publisher request a plugin publish. republish_plugin
+	// uses both; create_plugin and rename_plugin signal through publisher
+	// after their own publication request commits.
 	publication     plugindelivery.PublicationRequests
 	publisher       plugindelivery.PluginPublishSignaler
 	republishBudget OperationBudget
+
+	metadataLogger *slog.Logger
+	metadataCore   *plugindelivery.PluginMetadataCore
+	metadataBudget OperationBudget
 }
 
 func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMaterial string) *PluginsService {
@@ -492,7 +502,17 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		publication:           plugindelivery.PublicationRequests{Enabled: false},
 		publisher:             nil,
 		republishBudget:       OperationBudget{},
+		metadataLogger:        nil,
+		metadataCore:          nil,
+		metadataBudget:        OperationBudget{},
 	}
+}
+
+func (s *PluginsService) WithPublicationRequests(requests plugindelivery.PublicationRequests) *PluginsService {
+	if s != nil {
+		s.publicationRequests = requests
+	}
+	return s
 }
 
 func (s *PluginsService) WithPublicationEvidence(reader publicationEvidenceReader) *PluginsService {

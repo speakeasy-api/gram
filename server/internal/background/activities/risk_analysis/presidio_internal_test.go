@@ -828,9 +828,9 @@ func TestReformatJSONAsYAML_PreservesTrailingBytes(t *testing.T) {
 	assert.Contains(t, out, "sarah@example.com", "trailing bytes must survive into the Presidio payload")
 }
 
-// TestReformatJSONAsYAML_SortsMapKeys makes the output deterministic so
-// repeated scans of the same payload produce stable Presidio offsets.
-func TestReformatJSONAsYAML_SortsMapKeys(t *testing.T) {
+// TestReformatJSONAsYAML_KeepsSourceKeyOrder keeps values in source order so
+// finding offsets can be mapped back to the same occurrence in the source.
+func TestReformatJSONAsYAML_KeepsSourceKeyOrder(t *testing.T) {
 	t.Parallel()
 
 	in := `{"zebra":"z","apple":"a","mango":"m"}`
@@ -842,8 +842,8 @@ func TestReformatJSONAsYAML_SortsMapKeys(t *testing.T) {
 	require.GreaterOrEqual(t, appleIdx, 0)
 	require.GreaterOrEqual(t, mangoIdx, 0)
 	require.GreaterOrEqual(t, zebraIdx, 0)
+	assert.Less(t, zebraIdx, appleIdx)
 	assert.Less(t, appleIdx, mangoIdx)
-	assert.Less(t, mangoIdx, zebraIdx)
 }
 
 // TestAnalyzeOncePayloadIsYAMLForJSONInput is the end-to-end assertion
@@ -936,4 +936,50 @@ func newTestPresidioClient(t *testing.T, baseURL string) *PresidioClient {
 	// production default so retry-related assertions stay representative.
 	client.baseBackoff = 0
 	return client
+}
+
+func TestRemapPresidioOffsets_IndexesSourceText(t *testing.T) {
+	t.Parallel()
+
+	source := `{"a":"x@y.io","b":"note","c":"mail x@y.io and \u00e9 z@w.io"}`
+	scanned := reformatJSONAsYAML(source)
+	require.NotEqual(t, source, scanned)
+
+	var findings []scanners.Finding
+	for _, m := range []string{"x@y.io", "x@y.io", "z@w.io"} {
+		from := 0
+		if len(findings) > 0 && findings[len(findings)-1].Match == m {
+			from = findings[len(findings)-1].EndPos
+		}
+		idx := strings.Index(scanned[from:], m)
+		require.GreaterOrEqual(t, idx, 0)
+		findings = append(findings, scanners.Finding{Match: m, StartPos: from + idx, EndPos: from + idx + len(m)})
+	}
+	findings = append(findings, scanners.Finding{Match: "and é", StartPos: strings.Index(scanned, "and é"), EndPos: 0})
+
+	remapPresidioOffsets(source, scanned, findings)
+
+	for _, f := range findings[:3] {
+		assert.Equal(t, f.Match, source[f.StartPos:f.EndPos])
+	}
+	assert.Less(t, findings[0].StartPos, findings[1].StartPos, "repeated matches keep their order")
+	assert.Equal(t, 0, findings[3].StartPos, "a match spanning an escape has no source span")
+	assert.Equal(t, 0, findings[3].EndPos)
+
+	// Keys a and z would sort the other way; the rewrite keeps source order.
+	source = `{"z":"x@y.io","a":"x@y.io"}`
+	scanned = reformatJSONAsYAML(source)
+	start := strings.Index(scanned, "a: ") + len("a: ")
+	reordered := []scanners.Finding{{Match: "x@y.io", StartPos: start, EndPos: start + len("x@y.io")}}
+	remapPresidioOffsets(source, scanned, reordered)
+	assert.Equal(t, strings.Index(source, `"a":"`)+len(`"a":"`), reordered[0].StartPos, "a duplicated value maps to its own key's occurrence")
+
+	// The escaped occurrence makes the ordinal of the verbatim one ambiguous.
+	source = `{"a":"\u0078@y.io","b":"x@y.io"}`
+	scanned = reformatJSONAsYAML(source)
+	start = strings.LastIndex(scanned, "x@y.io")
+	escaped := []scanners.Finding{{Match: "x@y.io", StartPos: start, EndPos: start + len("x@y.io")}}
+	remapPresidioOffsets(source, scanned, escaped)
+	assert.Equal(t, 0, escaped[0].StartPos, "ambiguous occurrence counts get an empty span")
+	assert.Equal(t, 0, escaped[0].EndPos)
 }

@@ -402,19 +402,12 @@ func (q *Queries) DeleteRoleSetupWorkOSRoleFixture(ctx context.Context, arg Dele
 	return err
 }
 
-const disableRoleSetupFeatureFixture = `-- name: DisableRoleSetupFeatureFixture :exec
-UPDATE organization_features SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND feature_name = 'automatic-role-distribution'
-`
-
-func (q *Queries) DisableRoleSetupFeatureFixture(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, disableRoleSetupFeatureFixture, organizationID)
-	return err
-}
-
 const disableRoleSetupOrganizationFixture = `-- name: DisableRoleSetupOrganizationFixture :exec
+
 UPDATE organization_metadata SET disabled_at = clock_timestamp() WHERE id = $1
 `
 
+// Test fixtures for role setup lifecycle and transactional fault injection.
 func (q *Queries) DisableRoleSetupOrganizationFixture(ctx context.Context, id string) error {
 	_, err := q.db.Exec(ctx, disableRoleSetupOrganizationFixture, id)
 	return err
@@ -431,14 +424,26 @@ func (q *Queries) DropRoleSetupPublicationFailureTriggerFixture(ctx context.Cont
 	return err
 }
 
-const enableRoleSetupFeatureFixture = `-- name: EnableRoleSetupFeatureFixture :exec
-
-INSERT INTO organization_features (organization_id, feature_name) VALUES ($1, 'automatic-role-distribution') ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+const forgetPublishedMarketplaceName = `-- name: ForgetPublishedMarketplaceName :exec
+UPDATE plugin_github_connections
+SET published_hooks_config = published_hooks_config - 'published_marketplace_name'
+WHERE project_id = $1
+  AND published_hooks_config ->> 'published_marketplace_name' = $2::text
 `
 
-// Test fixtures for role setup lifecycle and transactional fault injection.
-func (q *Queries) EnableRoleSetupFeatureFixture(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, enableRoleSetupFeatureFixture, organizationID)
+type ForgetPublishedMarketplaceNameParams struct {
+	ProjectID       uuid.UUID
+	ClearedOverride string
+}
+
+// Drops the recorded published marketplace name when it is the override an
+// admin just cleared. That name came from the override, not from the project's
+// default, so the project returns to its computed name and records it on its
+// next publish. A recorded name that differs from the cleared override is
+// still live in the repo (the override never published), so it stays.
+// updated_at stays the last-published timestamp.
+func (q *Queries) ForgetPublishedMarketplaceName(ctx context.Context, arg ForgetPublishedMarketplaceNameParams) error {
+	_, err := q.db.Exec(ctx, forgetPublishedMarketplaceName, arg.ProjectID, arg.ClearedOverride)
 	return err
 }
 
@@ -1040,6 +1045,54 @@ func (q *Queries) HasPluginMembershipForToolset(ctx context.Context, arg HasPlug
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const hasRoleDeliveryMembership = `-- name: HasRoleDeliveryMembership :one
+SELECT EXISTS (
+  SELECT 1 FROM plugin_servers ps JOIN plugins p ON p.id = ps.plugin_id
+  WHERE p.id = $1 AND p.organization_id = $2 AND p.project_id = $3
+    AND ((ps.toolset_id = $4::uuid)
+      OR (ps.mcp_server_id = $5::uuid)
+      OR (ps.toolset_id = $6::uuid)
+      OR (ps.mcp_server_id IN (
+        SELECT m.id FROM mcp_servers m
+        WHERE m.toolset_id = $4::uuid
+          AND m.project_id = $3 AND m.deleted IS FALSE
+      ))
+      OR (ps.toolset_id IN (
+        SELECT m.toolset_id FROM mcp_servers m
+        WHERE m.id = $5::uuid
+          AND m.project_id = $3 AND m.deleted IS FALSE
+      )))
+    AND (ps.deleted IS FALSE OR $7::boolean)
+)
+`
+
+type HasRoleDeliveryMembershipParams struct {
+	PluginID        uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	ToolsetID       uuid.NullUUID
+	McpServerID     uuid.NullUUID
+	LegacyToolsetID uuid.NullUUID
+	PreserveRemoval bool
+}
+
+// A legacy toolset membership and its typed MCP wrapper are the same delivery.
+// Setup/eligibility preserve deleted history; explicit new grants/audiences do not.
+func (q *Queries) HasRoleDeliveryMembership(ctx context.Context, arg HasRoleDeliveryMembershipParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasRoleDeliveryMembership,
+		arg.PluginID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ToolsetID,
+		arg.McpServerID,
+		arg.LegacyToolsetID,
+		arg.PreserveRemoval,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const isDefaultProject = `-- name: IsDefaultProject :one
@@ -2257,6 +2310,178 @@ func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, arg List
 	return items, nil
 }
 
+const listProjectRoleDeliveryPluginsForUpdate = `-- name: ListProjectRoleDeliveryPluginsForUpdate :many
+SELECT p.id FROM plugins p
+WHERE p.organization_id = $1 AND p.project_id = $2 AND p.deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.plugin_id = p.id AND a.organization_id = $1
+    AND (a.principal_urn LIKE 'role:organization:%' OR a.principal_urn LIKE 'role:global:%'))
+ORDER BY p.id FOR UPDATE OF p
+`
+
+type ListProjectRoleDeliveryPluginsForUpdateParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) ListProjectRoleDeliveryPluginsForUpdate(ctx context.Context, arg ListProjectRoleDeliveryPluginsForUpdateParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProjectRoleDeliveryPluginsForUpdate, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRoleDeliveryPlugins = `-- name: ListRoleDeliveryPlugins :many
+SELECT p.id, p.project_id
+FROM plugins p JOIN projects project ON project.id = p.project_id
+WHERE p.organization_id = $1 AND project.organization_id = $1
+  AND p.deleted IS FALSE AND project.deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.plugin_id = p.id
+    AND a.organization_id = $1 AND a.principal_urn = $2)
+ORDER BY p.project_id, p.id
+`
+
+type ListRoleDeliveryPluginsParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+}
+
+type ListRoleDeliveryPluginsRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Organization-scoped role event discovery; locks and writes retain exact project scope.
+func (q *Queries) ListRoleDeliveryPlugins(ctx context.Context, arg ListRoleDeliveryPluginsParams) ([]ListRoleDeliveryPluginsRow, error) {
+	rows, err := q.db.Query(ctx, listRoleDeliveryPlugins, arg.OrganizationID, arg.PrincipalUrn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRoleDeliveryPluginsRow
+	for rows.Next() {
+		var i ListRoleDeliveryPluginsRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRoleDeliveryProjects = `-- name: ListRoleDeliveryProjects :many
+SELECT p.id, p.slug, o.slug AS organization_slug
+FROM projects p JOIN organization_metadata o ON o.id = p.organization_id
+WHERE p.organization_id = $1 AND p.deleted IS FALSE AND o.disabled_at IS NULL
+ORDER BY p.id
+`
+
+type ListRoleDeliveryProjectsRow struct {
+	ID               uuid.UUID
+	Slug             string
+	OrganizationSlug string
+}
+
+// Organization-scoped discovery; every subsequent content write uses the discovered project.
+func (q *Queries) ListRoleDeliveryProjects(ctx context.Context, organizationID string) ([]ListRoleDeliveryProjectsRow, error) {
+	rows, err := q.db.Query(ctx, listRoleDeliveryProjects, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRoleDeliveryProjectsRow
+	for rows.Next() {
+		var i ListRoleDeliveryProjectsRow
+		if err := rows.Scan(&i.ID, &i.Slug, &i.OrganizationSlug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRoleDeliveryServers = `-- name: ListRoleDeliveryServers :many
+SELECT m.id, m.project_id, COALESCE(NULLIF(m.name, ''), NULLIF(m.slug, ''), m.id::text)::text AS name,
+  'mcp_server'::text AS backend_kind, COALESCE(m.toolset_id, m.id)::uuid AS resource_id, m.toolset_id AS legacy_toolset_id,
+  (m.visibility <> 'disabled' AND (m.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
+    SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = m.id AND e.project_id = p.id AND e.deleted IS FALSE
+  )))::boolean AS eligible
+FROM mcp_servers m JOIN projects p ON p.id = m.project_id
+WHERE p.organization_id = $1 AND p.id = $2
+  AND p.deleted IS FALSE AND m.deleted IS FALSE
+UNION ALL
+SELECT t.id, t.project_id, t.name, 'toolset'::text, t.id, t.id,
+  (t.mcp_enabled AND COALESCE(t.mcp_slug, '') <> '' AND NOT EXISTS (
+    SELECT 1 FROM mcp_servers m WHERE m.toolset_id = t.id AND m.project_id = p.id AND m.deleted IS FALSE
+  ))::boolean
+FROM toolsets t JOIN projects p ON p.id = t.project_id
+WHERE p.organization_id = $1 AND p.id = $2
+  AND p.deleted IS FALSE AND t.deleted IS FALSE
+ORDER BY id
+`
+
+type ListRoleDeliveryServersParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type ListRoleDeliveryServersRow struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	Name            string
+	BackendKind     string
+	ResourceID      uuid.UUID
+	LegacyToolsetID uuid.NullUUID
+	Eligible        bool
+}
+
+// Keep ineligible live backends as removal candidates. Only additions require eligibility.
+func (q *Queries) ListRoleDeliveryServers(ctx context.Context, arg ListRoleDeliveryServersParams) ([]ListRoleDeliveryServersRow, error) {
+	rows, err := q.db.Query(ctx, listRoleDeliveryServers, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRoleDeliveryServersRow
+	for rows.Next() {
+		var i ListRoleDeliveryServersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.BackendKind,
+			&i.ResourceID,
+			&i.LegacyToolsetID,
+			&i.Eligible,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockMarketplaceSettings = `-- name: LockMarketplaceSettings :one
 INSERT INTO project_marketplace_settings (project_id)
 VALUES ($1)
@@ -2282,6 +2507,43 @@ func (q *Queries) LockMarketplaceSettings(ctx context.Context, projectID uuid.UU
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const lockRoleDeliveryPlugin = `-- name: LockRoleDeliveryPlugin :one
+SELECT id FROM plugins
+WHERE id = $1 AND organization_id = $2 AND project_id = $3 AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockRoleDeliveryPluginParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) LockRoleDeliveryPlugin(ctx context.Context, arg LockRoleDeliveryPluginParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockRoleDeliveryPlugin, arg.PluginID, arg.OrganizationID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockRoleDeliveryProject = `-- name: LockRoleDeliveryProject :one
+SELECT id FROM projects
+WHERE id = $1 AND organization_id = $2 AND deleted IS FALSE
+FOR SHARE
+`
+
+type LockRoleDeliveryProjectParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockRoleDeliveryProject(ctx context.Context, arg LockRoleDeliveryProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockRoleDeliveryProject, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const lockRoleSetupPauseFixture = `-- name: LockRoleSetupPauseFixture :exec
@@ -2361,6 +2623,36 @@ func (q *Queries) PromoteToDefaultPlugin(ctx context.Context, arg PromoteToDefau
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const recordPublishedMarketplaceName = `-- name: RecordPublishedMarketplaceName :exec
+UPDATE plugin_github_connections
+SET published_hooks_config = jsonb_set(
+    COALESCE(published_hooks_config, '{}'::jsonb),
+    '{published_marketplace_name}',
+    to_jsonb($1::text)
+  )
+WHERE project_id = $2
+  AND published_hooks_config ->> 'published_marketplace_name' IS NOT DISTINCT FROM $3::text
+`
+
+type RecordPublishedMarketplaceNameParams struct {
+	MarketplaceName         string
+	ProjectID               uuid.UUID
+	RecordedMarketplaceName pgtype.Text
+}
+
+// Records the marketplace.json name a project's repo is known to hold, under
+// the published_marketplace_name key of published_hooks_config, without a
+// republish. The publish path calls it when it skips an unchanged publish:
+// matching shared MCP fingerprints prove the repo already carries that name.
+// It writes only while the recorded name still equals the one the caller read
+// (NULL when none was recorded), so it never overwrites a name that a
+// concurrent publish recorded. updated_at stays the last-published timestamp.
+// The key is not a hooks config field, so this never reads as a hooks change.
+func (q *Queries) RecordPublishedMarketplaceName(ctx context.Context, arg RecordPublishedMarketplaceNameParams) error {
+	_, err := q.db.Exec(ctx, recordPublishedMarketplaceName, arg.MarketplaceName, arg.ProjectID, arg.RecordedMarketplaceName)
+	return err
 }
 
 const removeAllPluginAssignments = `-- name: RemoveAllPluginAssignments :execrows
@@ -2520,15 +2812,6 @@ func (q *Queries) ResolvePluginPublishActor(ctx context.Context, arg ResolvePlug
 	var user_id string
 	err := row.Scan(&user_id)
 	return user_id, err
-}
-
-const restoreRoleSetupFeatureFixture = `-- name: RestoreRoleSetupFeatureFixture :exec
-UPDATE organization_features SET deleted_at = NULL WHERE organization_id = $1 AND feature_name = 'automatic-role-distribution'
-`
-
-func (q *Queries) RestoreRoleSetupFeatureFixture(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, restoreRoleSetupFeatureFixture, organizationID)
-	return err
 }
 
 const restoreRoleSetupProjectFixture = `-- name: RestoreRoleSetupProjectFixture :exec
@@ -2984,7 +3267,9 @@ type UpsertGitHubConnectionParams struct {
 // config just published; all are always overwritten so subsequent rollout runs
 // can detect independently whether the MCP or hooks component changed (including
 // hooks config drift a version bump can't capture, e.g. a marketplace rename or
-// browser-login toggle).
+// browser-login toggle). published_hooks_config also records, under
+// published_marketplace_name, the marketplace name the repo was published under,
+// which freezes the project's marketplace name.
 func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubConnectionParams) (PluginGithubConnection, error) {
 	row := q.db.QueryRow(ctx, upsertGitHubConnection,
 		arg.ProjectID,

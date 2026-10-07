@@ -1874,6 +1874,48 @@ func (q *Queries) ListAssistants(ctx context.Context, projectID uuid.UUID) ([]Li
 	return items, nil
 }
 
+const listAttachmentTargetIDs = `-- name: ListAttachmentTargetIDs :many
+SELECT t.id
+FROM toolsets t
+WHERE t.project_id = $1
+  AND t.slug = ANY($2::TEXT[])
+  AND t.deleted IS FALSE
+UNION ALL
+SELECT ms.id
+FROM mcp_servers ms
+WHERE ms.project_id = $1
+  AND ms.slug = ANY($3::TEXT[])
+  AND ms.deleted IS FALSE
+`
+
+type ListAttachmentTargetIDsParams struct {
+	ProjectID      uuid.UUID
+	ToolsetSlugs   []string
+	McpServerSlugs []string
+}
+
+// Resolves the toolsets and MCP servers a write would attach so the handler
+// can authorize them first. Read-only: the write locks them itself.
+func (q *Queries) ListAttachmentTargetIDs(ctx context.Context, arg ListAttachmentTargetIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listAttachmentTargetIDs, arg.ProjectID, arg.ToolsetSlugs, arg.McpServerSlugs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatAttachmentAssets = `-- name: ListChatAttachmentAssets :many
 SELECT id, name, url, content_type, content_length
 FROM assets
@@ -3245,22 +3287,25 @@ const resetAssistantThreadEventToPending = `-- name: ResetAssistantThreadEventTo
 UPDATE assistant_thread_events
 SET
   status = $1,
-  last_error = $2,
+  attempts = GREATEST(0, attempts - CASE WHEN $2::boolean THEN 1 ELSE 0 END),
+  last_error = $3,
   updated_at = clock_timestamp()
-WHERE id = $3
-  AND project_id = $4
+WHERE id = $4
+  AND project_id = $5
 `
 
 type ResetAssistantThreadEventToPendingParams struct {
-	PendingStatus string
-	LastError     pgtype.Text
-	EventID       uuid.UUID
-	ProjectID     uuid.UUID
+	PendingStatus  string
+	RestoreAttempt bool
+	LastError      pgtype.Text
+	EventID        uuid.UUID
+	ProjectID      uuid.UUID
 }
 
 func (q *Queries) ResetAssistantThreadEventToPending(ctx context.Context, arg ResetAssistantThreadEventToPendingParams) error {
 	_, err := q.db.Exec(ctx, resetAssistantThreadEventToPending,
 		arg.PendingStatus,
+		arg.RestoreAttempt,
 		arg.LastError,
 		arg.EventID,
 		arg.ProjectID,

@@ -124,6 +124,11 @@
        header and mode switcher with it, so the top bar appears to shrink. */
     overscroll-behavior-y: none;
   }
+  /* Headless mode scrolls inside its own pane, so the document never needs
+     the reserved gutter: it would sit empty beside the pane's scrollbar. */
+  html:has([data-headless-mode]) {
+    scrollbar-gutter: auto;
+  }
   body[data-scroll-locked] {
     margin-right: 0 !important;
     padding-right: 0 !important;
@@ -448,6 +453,15 @@ html.chat-launching::view-transition-new(root) {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: nav-shimmer 1.2s ease-in-out infinite;
+}
+
+/* Corner radius of a pane parked on its mode-switch card. Registered so it can
+   transition alongside the pane's transform; descendants (the card's ring)
+   inherit the in-flight value even though their own transitions are frozen. */
+@property --mode-card-radius {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
 }
 
 /* The Headless mode tab advertises itself while the user is anywhere else: the

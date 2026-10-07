@@ -14,7 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -401,6 +403,31 @@ func backendIDSuffix(params AttachToDefaultPluginParams) string {
 	return s[len(s)-4:]
 }
 
+// AttachToDefaultAndRolePluginsAudited attaches a newly eligible server to the
+// Default plugin and matching role-audience plugins in the caller's transaction.
+// Callers enqueue publication only after commit; the returned bool reports
+// whether the Default plugin was lazily created.
+func AttachToDefaultAndRolePluginsAudited(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams, guard *admission.Guard) (bool, error) {
+	outcome, err := AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, params, guard)
+	return outcome.PluginCreated, err
+}
+
+// AttachToDefaultAndRolePluginsAuditedWithOutcome also reports whether the
+// server joined the Default plugin, independently of role-audience delivery.
+func AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams, guard *admission.Guard) (DefaultPluginAttachOutcome, error) {
+	if err := admission.LockProject(ctx, dbtx, params.ProjectID); err != nil {
+		return DefaultPluginAttachOutcome{}, fmt.Errorf("lock eligible server admission: %w", err)
+	}
+	outcome, err := AttachToDefaultPluginAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, params)
+	if err != nil {
+		return DefaultPluginAttachOutcome{}, err
+	}
+	if _, err := roledelivery.Eligible(ctx, dbtx, params.OrganizationID, params.ProjectID, params.ToolsetID, params.McpServerID, guard); err != nil {
+		return DefaultPluginAttachOutcome{}, fmt.Errorf("deliver newly eligible server: %w", err)
+	}
+	return outcome, nil
+}
+
 // AttachToDefaultPluginAudited runs AttachToDefaultPlugin and records the
 // same audit trail a manual "add server to plugin" produces: a plugin
 // creation event when the Default plugin was lazily provisioned, and a
@@ -414,12 +441,27 @@ func backendIDSuffix(params AttachToDefaultPluginParams) string {
 // marketplace publish for it, but only after their own transaction commits,
 // since this runs pre-commit and the DB writes could still roll back.
 func AttachToDefaultPluginAudited(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams) (bool, error) {
+	outcome, err := AttachToDefaultPluginAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, params)
+	return outcome.PluginCreated, err
+}
+
+// DefaultPluginAttachOutcome reports what AttachToDefaultPluginAuditedWithOutcome
+// actually did, so a caller can tell people who now receives a server rather
+// than inferring it from the inputs.
+type DefaultPluginAttachOutcome struct {
+	Attached      bool
+	PluginCreated bool
+}
+
+// AttachToDefaultPluginAuditedWithOutcome is AttachToDefaultPluginAudited for a
+// caller that must report whether the server really joined the Default plugin.
+func AttachToDefaultPluginAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams) (DefaultPluginAttachOutcome, error) {
 	attached, err := AttachToDefaultPlugin(ctx, dbtx, params)
 	if err != nil {
-		return false, fmt.Errorf("attach server to default plugin: %w", err)
+		return DefaultPluginAttachOutcome{}, fmt.Errorf("attach server to default plugin: %w", err)
 	}
 	if attached == nil {
-		return false, nil
+		return DefaultPluginAttachOutcome{Attached: false, PluginCreated: false}, nil
 	}
 
 	if attached.PluginCreated {
@@ -433,7 +475,7 @@ func AttachToDefaultPluginAudited(ctx context.Context, dbtx pgx.Tx, auditLogger 
 			PluginName:       attached.PluginName,
 			PluginSlug:       attached.PluginSlug,
 		}); err != nil {
-			return false, fmt.Errorf("audit log default plugin create: %w", err)
+			return DefaultPluginAttachOutcome{}, fmt.Errorf("audit log default plugin create: %w", err)
 		}
 	}
 
@@ -467,8 +509,8 @@ func AttachToDefaultPluginAudited(ctx context.Context, dbtx pgx.Tx, auditLogger 
 		McpServerURN:      mcpServerURN,
 		MetaMcpServerURN:  nil,
 	}); err != nil {
-		return false, fmt.Errorf("audit log default plugin server add: %w", err)
+		return DefaultPluginAttachOutcome{}, fmt.Errorf("audit log default plugin server add: %w", err)
 	}
 
-	return attached.PluginCreated, nil
+	return DefaultPluginAttachOutcome{Attached: true, PluginCreated: attached.PluginCreated}, nil
 }

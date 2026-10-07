@@ -156,9 +156,6 @@ func TestServePublic_MetaEndpoint_Initialize(t *testing.T) {
 	w, err := servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
-	// makeInitializeBody requests 2025-03-26; a supported requested revision
-	// is echoed, not upgraded — this is what lets mainstream clients connect.
-	require.Equal(t, mcpversions.Version20250326, w.Header().Get(mcpversions.HTTPHeader))
 
 	envelope := decodeRPCResponse(t, w)
 	var result struct {
@@ -169,6 +166,8 @@ func TestServePublic_MetaEndpoint_Initialize(t *testing.T) {
 		Instructions string `json:"instructions"`
 	}
 	require.NoError(t, json.Unmarshal(envelope["result"], &result))
+	// makeInitializeBody requests 2025-03-26; a supported requested revision
+	// is echoed, not upgraded — this is what lets mainstream clients connect.
 	require.Equal(t, mcpversions.Version20250326, result.ProtocolVersion)
 	require.Equal(t, "Gram Gateway", result.ServerInfo.Name)
 	// Instructions are deliberately generic: the member inventory belongs to
@@ -259,9 +258,24 @@ func TestServePublic_MetaEndpoint_ServerDiscoverRequires20260728(t *testing.T) {
 	require.Equal(t, -32601, rpcError.Code)
 	require.Empty(t, w.Header().Get("Mcp-Session-Id"))
 
-	w, err = servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodServerDiscover, nil), "", map[string]string{mcpversions.HTTPHeader: mcpversions.Version20260728})
+	w, err = servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodServerDiscover, map[string]any{
+		"_meta": map[string]any{
+			"io.modelcontextprotocol/protocolVersion":    mcpversions.Version20260728,
+			"io.modelcontextprotocol/clientInfo":         map[string]any{"name": "discovery-client", "version": "1.0.0"},
+			"io.modelcontextprotocol/clientCapabilities": map[string]any{},
+		},
+	}), "", map[string]string{
+		mcpversions.HTTPHeader: mcpversions.Version20260728,
+		"Mcp-Method":           mcpversions.MethodServerDiscover,
+	})
 	require.NoError(t, err)
-	requireUnsupportedProtocolVersionResponse(t, w, mcpversions.Version20260728, mcpversions.SupportedMetaServer())
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	envelope = decodeRPCResponse(t, w)
+	var result struct {
+		SupportedVersions []string `json:"supportedVersions"`
+	}
+	require.NoError(t, json.Unmarshal(envelope["result"], &result), "body=%s", w.Body.String())
+	require.Equal(t, mcpversions.SupportedMetaServer(), result.SupportedVersions)
 	require.Empty(t, w.Header().Get("Mcp-Session-Id"))
 }
 
@@ -394,11 +408,10 @@ func TestServePublic_MetaEndpoint_UnsupportedDeclaredVersion(t *testing.T) {
 	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 
 	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodToolsList, map[string]any{}), "", map[string]string{
-		mcpversions.HTTPHeader: "2031-01-01",
+		mcpversions.HTTPHeader: unservedProtocolVersion,
 	})
 	require.NoError(t, err)
-	require.Equal(t, mcpversions.DefaultInEffect, w.Header().Get(mcpversions.HTTPHeader))
-	requireUnsupportedProtocolVersionResponse(t, w, "2031-01-01", mcpversions.SupportedMetaServer())
+	requireUnsupportedProtocolVersionResponse(t, w, unservedProtocolVersion, mcpversions.SupportedMetaServer())
 }
 
 // TestServePublic_MetaEndpoint_OlderKnownDeclaredVersionAccepted pins the
@@ -424,7 +437,6 @@ func TestServePublic_MetaEndpoint_OlderKnownDeclaredVersionAccepted(t *testing.T
 
 	envelope := decodeRPCResponse(t, w)
 	require.NotContains(t, envelope, "error", "an older served revision must be accepted")
-	require.Equal(t, mcpversions.Version20250326, w.Header().Get(mcpversions.HTTPHeader))
 
 	w, err = servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodToolsList, map[string]any{}), "", map[string]string{
 		mcpversions.HTTPHeader: mcpversions.Version20251125,
@@ -433,22 +445,14 @@ func TestServePublic_MetaEndpoint_OlderKnownDeclaredVersionAccepted(t *testing.T
 	require.Equal(t, http.StatusOK, w.Code)
 	envelope = decodeRPCResponse(t, w)
 	require.NotContains(t, envelope, "error")
-	require.Equal(t, mcpversions.Version20251125, w.Header().Get(mcpversions.HTTPHeader))
-
-	// A recognized-but-unserved declaration (2026-07-28 before the
-	// platform-wide flip) is rejected like any other unserved revision.
-	w, err = servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodToolsList, map[string]any{}), "", map[string]string{
-		mcpversions.HTTPHeader: mcpversions.Version20260728,
-	})
-	require.NoError(t, err)
-	requireUnsupportedProtocolVersionResponse(t, w, mcpversions.Version20260728, mcpversions.SupportedMetaServer())
 }
 
 // TestServePublic_MetaEndpoint_UnsanitizableDeclaredVersion pins that a
-// declared version that fails sanitization (here: an embedded control byte)
-// is treated as a malformed declaration — an invalid-request error rather
-// than UnsupportedProtocolVersionError — and that the hostile raw bytes are
-// never echoed back.
+// declared version header that fails sanitization (here: an embedded control
+// byte) is a malformed header — MCP 2026-07-28's HeaderMismatch, answered
+// under that revision's rules because the request names no usable revision —
+// rather than UnsupportedProtocolVersionError, and that the hostile raw bytes
+// are never echoed back.
 func TestServePublic_MetaEndpoint_UnsanitizableDeclaredVersion(t *testing.T) {
 	t.Parallel()
 
@@ -464,25 +468,23 @@ func TestServePublic_MetaEndpoint_UnsanitizableDeclaredVersion(t *testing.T) {
 		mcpversions.HTTPHeader: "2026-07-28\x00hostile",
 	})
 	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, mcpversions.DefaultInEffect, w.Header().Get(mcpversions.HTTPHeader))
+	require.Equal(t, http.StatusBadRequest, w.Code)
 
 	envelope := decodeRPCResponse(t, w)
-	require.Contains(t, string(envelope["error"]), "invalid protocol version declaration")
-	require.Contains(t, string(envelope["error"]), "(unparseable)")
+	require.Contains(t, string(envelope["error"]), "MCP-Protocol-Version header is malformed")
 	require.NotContains(t, w.Body.String(), "hostile", "raw declaration bytes must not be echoed")
 	var errorBody struct {
 		Code oops.MCPCode `json:"code"`
 	}
 	require.NoError(t, json.Unmarshal(envelope["error"], &errorBody))
-	require.Equal(t, oops.MCPCodeInvalidRequest, errorBody.Code)
+	require.Equal(t, oops.MCPCodeHeaderMismatch, errorBody.Code)
 }
 
 // TestServePublic_MetaEndpoint_MistypedMetaVersionDeclaration pins that a
-// `_meta` protocol-version member that is present but not a string is a
-// malformed declaration — an invalid-request error rather than
-// UnsupportedProtocolVersionError — instead of silently collapsing to
-// "absent".
+// `_meta` protocol-version member that is present but not a string is
+// malformed required metadata — MCP 2026-07-28's InvalidParams, answered
+// under that revision's rules because the request names no usable revision —
+// instead of silently collapsing to "absent".
 func TestServePublic_MetaEndpoint_MistypedMetaVersionDeclaration(t *testing.T) {
 	t.Parallel()
 
@@ -500,11 +502,48 @@ func TestServePublic_MetaEndpoint_MistypedMetaVersionDeclaration(t *testing.T) {
 		},
 	}), "", nil)
 	require.NoError(t, err)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+
+	envelope := decodeRPCResponse(t, w)
+	require.Contains(t, string(envelope["error"]), "must be a protocol version string")
+	var errorBody struct {
+		Code oops.MCPCode `json:"code"`
+	}
+	require.NoError(t, json.Unmarshal(envelope["error"], &errorBody))
+	require.Equal(t, oops.MCPCodeInvalidParams, errorBody.Code)
+}
+
+// TestServePublic_MetaEndpoint_MistypedMetaVersionWithUsableHeader pins that
+// a malformed `_meta` declaration alongside a usable header is answered under
+// the header's revision: 2025-11-25 carries JSON-RPC errors in a successful
+// HTTP response.
+func TestServePublic_MetaEndpoint_MistypedMetaVersionWithUsableHeader(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	slug := "meta-" + uuid.NewString()
+	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, mcpversions.MethodToolsList, map[string]any{
+		"_meta": map[string]any{
+			"io.modelcontextprotocol/protocolVersion": 20260728,
+		},
+	}), "", map[string]string{
+		mcpversions.HTTPHeader: mcpversions.Version20251125,
+	})
+	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 
 	envelope := decodeRPCResponse(t, w)
-	require.Contains(t, string(envelope["error"]), "invalid protocol version declaration")
-	require.Contains(t, string(envelope["error"]), "(unparseable)")
+	var errorBody struct {
+		Code oops.MCPCode `json:"code"`
+	}
+	require.NoError(t, json.Unmarshal(envelope["error"], &errorBody))
+	require.Equal(t, oops.MCPCodeInvalidParams, errorBody.Code)
 }
 
 func TestServePublic_MetaEndpoint_ConflictingVersionDeclarations(t *testing.T) {
@@ -526,10 +565,15 @@ func TestServePublic_MetaEndpoint_ConflictingVersionDeclarations(t *testing.T) {
 		mcpversions.HTTPHeader: mcpversions.Version20260728,
 	})
 	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, http.StatusBadRequest, w.Code)
 
 	envelope := decodeRPCResponse(t, w)
 	require.Contains(t, string(envelope["error"]), "conflicting protocol version declarations")
+	var errorBody struct {
+		Code oops.MCPCode `json:"code"`
+	}
+	require.NoError(t, json.Unmarshal(envelope["error"], &errorBody))
+	require.Equal(t, oops.MCPCodeHeaderMismatch, errorBody.Code)
 }
 
 func TestServePublic_MetaEndpoint_IssuerGated_NoAuth_EmitsChallenge(t *testing.T) {
@@ -553,9 +597,9 @@ func TestServePublic_MetaEndpoint_IssuerGated_NoAuth_EmitsChallenge(t *testing.T
 	wwwAuth := w.Header().Get("WWW-Authenticate")
 	expected := `Bearer resource_metadata="` + ti.serverURL.String() + `/.well-known/oauth-protected-resource/mcp/` + slug + `"`
 	require.Equal(t, expected, wwwAuth)
-	// The provisional version header (the surface's newest revision) is
-	// stamped before the issuer gate can bail out.
-	require.Equal(t, mcpversions.Version20251125, w.Header().Get(mcpversions.HTTPHeader))
+	// MCP-Protocol-Version is a request header in every revision, so no
+	// response carries it, including one that bails before the body is read.
+	require.Empty(t, w.Header().Get(mcpversions.HTTPHeader))
 }
 
 func TestServePublic_MetaEndpoint_IssuerGated_EmptyBodyRequiresAuthentication(t *testing.T) {
@@ -590,10 +634,10 @@ func TestServePublic_MetaEndpoint_UnsupportedVersionPrecedesIssuerAuthentication
 	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuerID)
 
 	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, mcpversions.MethodToolsList, map[string]any{}), "", map[string]string{
-		mcpversions.HTTPHeader: mcpversions.Version20260728,
+		mcpversions.HTTPHeader: unservedProtocolVersion,
 	})
 	require.NoError(t, err)
-	requireUnsupportedProtocolVersionResponse(t, w, mcpversions.Version20260728, mcpversions.SupportedMetaServer())
+	requireUnsupportedProtocolVersionResponse(t, w, unservedProtocolVersion, mcpversions.SupportedMetaServer())
 	require.Empty(t, w.Header().Get("WWW-Authenticate"))
 }
 
@@ -736,9 +780,9 @@ func TestServePublic_MetaEndpoint_Initialize_Negotiation(t *testing.T) {
 		want      string
 	}{
 		{"echoes 2025-06-18", mcpversions.Version20250618, mcpversions.Version20250618},
-		{"echoes the ceiling", mcpversions.Version20251125, mcpversions.Version20251125},
-		{"unserved 2026-07-28 gets the newest served", mcpversions.Version20260728, mcpversions.Version20251125},
-		{"unknown gets the newest", "2031-01-01", mcpversions.Version20251125},
+		{"echoes the newest handshake revision", mcpversions.Version20251125, mcpversions.Version20251125},
+		{"2026-07-28 has no handshake so gets the newest handshake revision", mcpversions.Version20260728, mcpversions.Version20251125},
+		{"unknown gets the newest", unservedProtocolVersion, mcpversions.Version20251125},
 		{"absent gets the default", "", mcpversions.DefaultInEffect},
 	}
 	for _, tc := range cases {
@@ -748,7 +792,6 @@ func TestServePublic_MetaEndpoint_Initialize_Negotiation(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
 			require.Equal(t, tc.want, answeredProtocolVersion(t, w))
-			require.Equal(t, tc.want, w.Header().Get(mcpversions.HTTPHeader))
 		})
 	}
 }

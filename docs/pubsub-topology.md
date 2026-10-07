@@ -16,56 +16,32 @@ flowchart LR
   classDef deprecated stroke-dasharray:4 3,opacity:0.55;
 
   t_gram_authz_v1_challenge(["gram-authz-v1-challenge<br/>(topic)"]):::topic
-  t_gram_authz_v1_challenge_ch_writer_dlq(["gram-authz-v1-challenge-ch-writer-dlq<br/>(dlq)"]):::dlq
+  t_gram_conversation_v1_message_event(["gram-conversation-v1-message-event<br/>(topic)"]):::topic
   t_gram_metering_v1_meter_reading(["gram-metering-v1-meter-reading<br/>(topic)"]):::topic
-  t_gram_metering_v1_meter_reading_ch_writer_dlq(["gram-metering-v1-meter-reading-ch-writer-dlq<br/>(dlq)"]):::dlq
   t_gram_networkingress_v1_reconcile_requested(["gram-networkingress-v1-reconcile-requested<br/>(topic)"]):::topic
-  t_gram_networkingress_v1_reconciler_dlq(["gram-networkingress-v1-reconciler-dlq<br/>(dlq)"]):::dlq
-  t_gram_otel_v1_agent_event_log_ch_writer_dlq(["gram-otel-v1-agent-event-log-ch-writer-dlq<br/>(dlq)"]):::dlq
-  t_gram_otel_v1_agent_event_span_ch_writer_dlq(["gram-otel-v1-agent-event-span-ch-writer-dlq<br/>(dlq)"]):::dlq
   t_gram_otel_v1_inbound_log_record(["gram-otel-v1-inbound-log-record<br/>(topic)"]):::topic
-  t_gram_otel_v1_inbound_log_record_transformer_dlq(["gram-otel-v1-inbound-log-record-transformer-dlq<br/>(dlq)"]):::dlq
   t_gram_otel_v1_inbound_metric(["gram-otel-v1-inbound-metric<br/>(topic)"]):::topic
-  t_gram_otel_v1_inbound_metric_transformer_dlq(["gram-otel-v1-inbound-metric-transformer-dlq<br/>(dlq)"]):::dlq
   t_gram_otel_v1_inbound_span(["gram-otel-v1-inbound-span<br/>(topic)"]):::topic
-  t_gram_otel_v1_inbound_span_transformer_dlq(["gram-otel-v1-inbound-span-transformer-dlq<br/>(dlq)"]):::dlq
-  t_gram_otel_v1_log_event_ch_writer_dlq(["gram-otel-v1-log-event-ch-writer-dlq<br/>(dlq)"]):::dlq
   t_gram_otel_v1_log_record(["gram-otel-v1-log-record<br/>(topic)"]):::topic
-  t_gram_otel_v1_log_relay_dlq(["gram-otel-v1-log-relay-dlq<br/>(dlq)"]):::dlq
   t_gram_otel_v1_metric(["gram-otel-v1-metric<br/>(topic)"]):::topic
-  t_gram_otel_v1_metric_relay_dlq(["gram-otel-v1-metric-relay-dlq<br/>(dlq)"]):::dlq
   t_gram_otel_v1_span(["gram-otel-v1-span<br/>(topic)"]):::topic
-  t_gram_otel_v1_span_event_ch_writer_dlq(["gram-otel-v1-span-event-ch-writer-dlq<br/>(dlq)"]):::dlq
-  t_gram_otel_v1_span_relay_dlq(["gram-otel-v1-span-relay-dlq<br/>(dlq)"]):::dlq
   t_gram_ping_v2_message(["gram-ping-v2-message<br/>(topic)"]):::topic
-  t_gram_ping_v2_processor_dlq(["gram-ping-v2-processor-dlq<br/>(dlq)"]):::dlq
-  t_gram_ping_v2_py_processor_dlq(["gram-ping-v2-py-processor-dlq<br/>(dlq)"]):::dlq
   t_gram_plugins_v1_organization_publication_requested(["gram-plugins-v1-organization-publication-requested<br/>(topic)"]):::topic
-  t_gram_plugins_v1_organization_publication_scheduler_dlq(["gram-plugins-v1-organization-publication-scheduler-dlq<br/>(dlq)"]):::dlq
   t_gram_plugins_v1_publication_requested(["gram-plugins-v1-publication-requested<br/>(topic)"]):::topic
-  t_gram_plugins_v1_publication_scheduler_dlq(["gram-plugins-v1-publication-scheduler-dlq<br/>(dlq)"]):::dlq
   t_gram_risk_v1_custom_rules_analysis(["gram-risk-v1-custom-rules-analysis<br/>(topic)"]):::topic
   t_gram_risk_v1_finding(["gram-risk-v1-finding<br/>(topic)"]):::topic
-  t_gram_risk_v1_finding_otel_relay_dlq(["gram-risk-v1-finding-otel-relay-dlq<br/>(dlq)"]):::dlq
   t_gram_risk_v1_gitleaks_analysis(["gram-risk-v1-gitleaks-analysis<br/>(topic)"]):::topic
   t_gram_risk_v1_gitleaks_enforcement(["gram-risk-v1-gitleaks-enforcement<br/>(topic)"]):::topic
-  t_gram_risk_v1_gitleaks_enforcer_dlq(["gram-risk-v1-gitleaks-enforcer-dlq<br/>(dlq)"]):::dlq
   t_gram_risk_v1_llm_analysis(["gram-risk-v1-llm-analysis<br/>(topic)"]):::topic
   t_gram_risk_v1_llm_enforcement(["gram-risk-v1-llm-enforcement<br/>(topic)"]):::topic
-  t_gram_risk_v1_llm_enforcer_dlq(["gram-risk-v1-llm-enforcer-dlq<br/>(dlq)"]):::dlq
   t_gram_risk_v1_presidio_analysis(["gram-risk-v1-presidio-analysis<br/>(topic)"]):::topic
   t_gram_risk_v1_presidio_enforcement(["gram-risk-v1-presidio-enforcement<br/>(topic)"]):::topic
-  t_gram_risk_v1_presidio_enforcer_dlq(["gram-risk-v1-presidio-enforcer-dlq<br/>(dlq)"]):::dlq
   t_gram_risk_v1_prompt_injection_analysis(["gram-risk-v1-prompt-injection-analysis<br/>(topic)"]):::topic
   t_gram_risk_v1_prompt_policy_analysis(["gram-risk-v1-prompt-policy-analysis<br/>(topic)"]):::topic
-  t_gram_role_distribution_v1_role_distribution_setup_handler_dlq(["gram-role-distribution-v1-role-distribution-setup-handler-dlq<br/>(dlq)"]):::dlq
   t_gram_role_distribution_v1_role_distribution_setup_requested_v1(["gram-role-distribution-v1-role-distribution-setup-requested-v1<br/>(topic)"]):::topic
   t_gram_telemetry_v1_log_record(["gram-telemetry-v1-log-record<br/>(topic)"]):::topic
   t_gram_telemetry_v1_session_observed(["gram-telemetry-v1-session-observed<br/>(topic)"]):::topic
-  t_gram_telemetry_v1_session_observed_ch_writer_dlq(["gram-telemetry-v1-session-observed-ch-writer-dlq<br/>(dlq)"]):::dlq
-  t_gram_telemetry_v1_tool_call_log_relay_dlq(["gram-telemetry-v1-tool-call-log-relay-dlq<br/>(dlq)"]):::dlq
   t_gram_webhooks_v1_event(["gram-webhooks-v1-event<br/>(topic)"]):::topic
-  t_gram_webhooks_v1_svix_relay_dlq(["gram-webhooks-v1-svix-relay-dlq<br/>(dlq)"]):::dlq
   s_gram_authz_v1_challenge_ch_writer["gram-authz-v1-challenge-ch-writer<br/>(sub)"]:::sub
   s_gram_metering_v1_meter_reading_ch_writer["gram-metering-v1-meter-reading-ch-writer<br/>(sub)"]:::sub
   s_gram_metering_v1_meter_reading_stripe_exporter["gram-metering-v1-meter-reading-stripe-exporter<br/>(sub)"]:::sub
@@ -103,27 +79,27 @@ flowchart LR
 
   p0[/"📤<br/>server/internal/authz/challenge_logger.go"/]:::go
   p0 --> t_gram_authz_v1_challenge
-  p1[/"📤<br/>pystreams/src/pystreams/risk/metering.py"/]:::python
-  p1 --> t_gram_metering_v1_meter_reading
-  p2[/"📤<br/>server/internal/networkingress/reconcile_requests.go"/]:::go
-  p2 --> t_gram_networkingress_v1_reconcile_requested
-  p3[/"📤<br/>server/internal/hooks/otel_tee.go"/]:::go
-  p3 --> t_gram_otel_v1_inbound_log_record
-  p4[/"📤<br/>server/internal/ping/publisher.go"/]:::go
-  p4 --> t_gram_ping_v2_message
-  p5[/"📤<br/>server/internal/plugins/organization_publication_handler.go"/]:::go
-  p5 --> t_gram_plugins_v1_organization_publication_requested
-  p6[/"📤<br/>server/internal/plugins/publication_requests.go"/]:::go
+  p1[/"📤<br/>server/internal/chat/message_publication.go"/]:::go
+  p1 --> t_gram_conversation_v1_message_event
+  p2[/"📤<br/>pystreams/src/pystreams/risk/metering.py"/]:::python
+  p2 --> t_gram_metering_v1_meter_reading
+  p3[/"📤<br/>server/internal/networkingress/reconcile_requests.go"/]:::go
+  p3 --> t_gram_networkingress_v1_reconcile_requested
+  p4[/"📤<br/>server/internal/hooks/otel_tee.go"/]:::go
+  p4 --> t_gram_otel_v1_inbound_log_record
+  p5[/"📤<br/>server/internal/ping/publisher.go"/]:::go
+  p5 --> t_gram_ping_v2_message
+  p6[/"📤<br/>server/internal/plugins/organization_publication_handler.go"/]:::go
   p6 --> t_gram_plugins_v1_organization_publication_requested
-  p7[/"📤<br/>server/internal/plugins/organization_publication_handler.go"/]:::go
-  p7 --> t_gram_plugins_v1_publication_requested
-  p8[/"📤<br/>server/internal/plugins/publication_requests.go"/]:::go
+  p7[/"📤<br/>server/internal/plugins/publication_requests.go"/]:::go
+  p7 --> t_gram_plugins_v1_organization_publication_requested
+  p8[/"📤<br/>server/internal/plugins/organization_publication_handler.go"/]:::go
   p8 --> t_gram_plugins_v1_publication_requested
-  p9[/"📤<br/>server/internal/background/activities/risk_analysis/scan_custom_rules.go"/]:::go
-  p9 --> t_gram_risk_v1_custom_rules_analysis
-  p10[/"📤<br/>pystreams/src/pystreams/risk/handler.py"/]:::python
-  p10 --> t_gram_risk_v1_finding
-  p11[/"📤<br/>server/internal/risk/false_positive.go"/]:::go
+  p9[/"📤<br/>server/internal/plugins/publication_requests.go"/]:::go
+  p9 --> t_gram_plugins_v1_publication_requested
+  p10[/"📤<br/>server/internal/background/activities/risk_analysis/scan_custom_rules.go"/]:::go
+  p10 --> t_gram_risk_v1_custom_rules_analysis
+  p11[/"📤<br/>pystreams/src/pystreams/risk/handler.py"/]:::python
   p11 --> t_gram_risk_v1_finding
   p12[/"📤<br/>server/internal/scanners/publish.go"/]:::go
   p12 --> t_gram_risk_v1_finding
@@ -154,64 +130,39 @@ flowchart LR
   p25[/"📤<br/>server/internal/outbox/webhooks.go"/]:::go
   p25 --> t_gram_webhooks_v1_event
   t_gram_authz_v1_challenge --> s_gram_authz_v1_challenge_ch_writer
-  s_gram_authz_v1_challenge_ch_writer -. dead-letter .-> t_gram_authz_v1_challenge_ch_writer_dlq
   t_gram_metering_v1_meter_reading --> s_gram_metering_v1_meter_reading_ch_writer
-  s_gram_metering_v1_meter_reading_ch_writer -. dead-letter .-> t_gram_metering_v1_meter_reading_ch_writer_dlq
   t_gram_metering_v1_meter_reading --> s_gram_metering_v1_meter_reading_stripe_exporter
   t_gram_networkingress_v1_reconcile_requested --> s_gram_networkingress_v1_reconciler
-  s_gram_networkingress_v1_reconciler -. dead-letter .-> t_gram_networkingress_v1_reconciler_dlq
   t_gram_otel_v1_log_record --> s_gram_otel_v1_agent_event_log_ch_writer
-  s_gram_otel_v1_agent_event_log_ch_writer -. dead-letter .-> t_gram_otel_v1_agent_event_log_ch_writer_dlq
   t_gram_otel_v1_span --> s_gram_otel_v1_agent_event_span_ch_writer
-  s_gram_otel_v1_agent_event_span_ch_writer -. dead-letter .-> t_gram_otel_v1_agent_event_span_ch_writer_dlq
   t_gram_otel_v1_inbound_log_record --> s_gram_otel_v1_inbound_log_record_transformer
-  s_gram_otel_v1_inbound_log_record_transformer -. dead-letter .-> t_gram_otel_v1_inbound_log_record_transformer_dlq
   t_gram_otel_v1_inbound_metric --> s_gram_otel_v1_inbound_metric_transformer
-  s_gram_otel_v1_inbound_metric_transformer -. dead-letter .-> t_gram_otel_v1_inbound_metric_transformer_dlq
   t_gram_otel_v1_inbound_span --> s_gram_otel_v1_inbound_span_transformer
-  s_gram_otel_v1_inbound_span_transformer -. dead-letter .-> t_gram_otel_v1_inbound_span_transformer_dlq
   t_gram_otel_v1_log_record --> s_gram_otel_v1_log_event_ch_writer
-  s_gram_otel_v1_log_event_ch_writer -. dead-letter .-> t_gram_otel_v1_log_event_ch_writer_dlq
   t_gram_otel_v1_log_record --> s_gram_otel_v1_log_relay
-  s_gram_otel_v1_log_relay -. dead-letter .-> t_gram_otel_v1_log_relay_dlq
   t_gram_otel_v1_metric --> s_gram_otel_v1_metric_relay
-  s_gram_otel_v1_metric_relay -. dead-letter .-> t_gram_otel_v1_metric_relay_dlq
   t_gram_otel_v1_span --> s_gram_otel_v1_span_event_ch_writer
-  s_gram_otel_v1_span_event_ch_writer -. dead-letter .-> t_gram_otel_v1_span_event_ch_writer_dlq
   t_gram_otel_v1_span --> s_gram_otel_v1_span_relay
-  s_gram_otel_v1_span_relay -. dead-letter .-> t_gram_otel_v1_span_relay_dlq
   t_gram_ping_v2_message --> s_gram_ping_v2_processor
-  s_gram_ping_v2_processor -. dead-letter .-> t_gram_ping_v2_processor_dlq
   t_gram_ping_v2_message --> s_gram_ping_v2_py_processor
-  s_gram_ping_v2_py_processor -. dead-letter .-> t_gram_ping_v2_py_processor_dlq
   t_gram_plugins_v1_organization_publication_requested --> s_gram_plugins_v1_organization_publication_scheduler
-  s_gram_plugins_v1_organization_publication_scheduler -. dead-letter .-> t_gram_plugins_v1_organization_publication_scheduler_dlq
   t_gram_plugins_v1_publication_requested --> s_gram_plugins_v1_publication_scheduler
-  s_gram_plugins_v1_publication_scheduler -. dead-letter .-> t_gram_plugins_v1_publication_scheduler_dlq
   t_gram_risk_v1_custom_rules_analysis --> s_gram_risk_v1_custom_rules_analyzer
   t_gram_risk_v1_finding --> s_gram_risk_v1_finding_ch_writer
   t_gram_risk_v1_finding --> s_gram_risk_v1_finding_otel_relay
-  s_gram_risk_v1_finding_otel_relay -. dead-letter .-> t_gram_risk_v1_finding_otel_relay_dlq
   t_gram_risk_v1_gitleaks_analysis --> s_gram_risk_v1_gitleaks_analyzer
   t_gram_risk_v1_gitleaks_enforcement --> s_gram_risk_v1_gitleaks_enforcer
-  s_gram_risk_v1_gitleaks_enforcer -. dead-letter .-> t_gram_risk_v1_gitleaks_enforcer_dlq
   t_gram_risk_v1_llm_analysis --> s_gram_risk_v1_llm_analyzer
   t_gram_risk_v1_llm_enforcement --> s_gram_risk_v1_llm_enforcer
-  s_gram_risk_v1_llm_enforcer -. dead-letter .-> t_gram_risk_v1_llm_enforcer_dlq
   t_gram_risk_v1_presidio_analysis --> s_gram_risk_v1_presidio_analyzer
   t_gram_risk_v1_presidio_enforcement --> s_gram_risk_v1_presidio_enforcer
-  s_gram_risk_v1_presidio_enforcer -. dead-letter .-> t_gram_risk_v1_presidio_enforcer_dlq
   t_gram_risk_v1_prompt_injection_analysis --> s_gram_risk_v1_prompt_injection_analyzer
   t_gram_risk_v1_prompt_policy_analysis --> s_gram_risk_v1_prompt_policy_analyzer
   t_gram_role_distribution_v1_role_distribution_setup_requested_v1 --> s_gram_role_distribution_v1_role_distribution_setup_handler
-  s_gram_role_distribution_v1_role_distribution_setup_handler -. dead-letter .-> t_gram_role_distribution_v1_role_distribution_setup_handler_dlq
   t_gram_telemetry_v1_log_record --> s_gram_telemetry_v1_noop
   t_gram_telemetry_v1_session_observed --> s_gram_telemetry_v1_session_observed_ch_writer
-  s_gram_telemetry_v1_session_observed_ch_writer -. dead-letter .-> t_gram_telemetry_v1_session_observed_ch_writer_dlq
   t_gram_telemetry_v1_log_record --> s_gram_telemetry_v1_tool_call_log_relay
-  s_gram_telemetry_v1_tool_call_log_relay -. dead-letter .-> t_gram_telemetry_v1_tool_call_log_relay_dlq
   t_gram_webhooks_v1_event --> s_gram_webhooks_v1_svix_relay
-  s_gram_webhooks_v1_svix_relay -. dead-letter .-> t_gram_webhooks_v1_svix_relay_dlq
   c26[\"📥<br/>server/cmd/gram/streams.go<br/>authz.NewChallengeCHWriter<br/>(batch)"\]:::go
   s_gram_authz_v1_challenge_ch_writer --> c26
   c27[\"📥<br/>server/cmd/gram/streams.go<br/>metering.NewMeterReadingCHWriter<br/>(batch)"\]:::go
@@ -287,95 +238,71 @@ flowchart LR
 | Topic | Kind | Retention | Published by |
 | --- | --- | --- | --- |
 | [`gram-authz-v1-challenge`](../infra/proto/gram/authz/v1/challenge.proto) | topic | 7d | [`server/internal/authz/challenge_logger.go`](../server/internal/authz/challenge_logger.go) |
-| [`gram-authz-v1-challenge-ch-writer-dlq`](../infra/proto/gram/authz/v1/challenge_ch_writer.proto) | DLQ | 7d | — |
+| [`gram-conversation-v1-message-event`](../infra/proto/gram/conversation/v1/message_event.proto) | topic | 4d | [`server/internal/chat/message_publication.go`](../server/internal/chat/message_publication.go) |
 | [`gram-metering-v1-meter-reading`](../infra/proto/gram/metering/v1/meter_reading.proto) | topic | 4d | [`pystreams/src/pystreams/risk/metering.py`](../pystreams/src/pystreams/risk/metering.py) |
-| [`gram-metering-v1-meter-reading-ch-writer-dlq`](../infra/proto/gram/metering/v1/meter_reading_ch_writer.proto) | DLQ | 4d | — |
 | [`gram-networkingress-v1-reconcile-requested`](../infra/proto/gram/networkingress/v1/reconcile_requested.proto) | topic | 7d | [`server/internal/networkingress/reconcile_requests.go`](../server/internal/networkingress/reconcile_requests.go) |
-| [`gram-networkingress-v1-reconciler-dlq`](../infra/proto/gram/networkingress/v1/reconciler.proto) | DLQ | 7d | — |
-| [`gram-otel-v1-agent-event-log-ch-writer-dlq`](../infra/proto/gram/otel/v1/agent_event_log_ch_writer.proto) | DLQ | 7d | — |
-| [`gram-otel-v1-agent-event-span-ch-writer-dlq`](../infra/proto/gram/otel/v1/agent_event_span_ch_writer.proto) | DLQ | 7d | — |
 | [`gram-otel-v1-inbound-log-record`](../infra/proto/gram/otel/v1/inbound_log_record.proto) | topic | — | [`server/internal/hooks/otel_tee.go`](../server/internal/hooks/otel_tee.go) |
-| [`gram-otel-v1-inbound-log-record-transformer-dlq`](../infra/proto/gram/otel/v1/inbound_log_record_transformer.proto) | DLQ | 7d | — |
 | [`gram-otel-v1-inbound-metric`](../infra/proto/gram/otel/v1/inbound_metric.proto) | topic | 7d | — |
-| [`gram-otel-v1-inbound-metric-transformer-dlq`](../infra/proto/gram/otel/v1/inbound_metric_transformer.proto) | DLQ | 7d | — |
 | [`gram-otel-v1-inbound-span`](../infra/proto/gram/otel/v1/inbound_span.proto) | topic | — | — |
-| [`gram-otel-v1-inbound-span-transformer-dlq`](../infra/proto/gram/otel/v1/inbound_span_transformer.proto) | DLQ | 7d | — |
-| [`gram-otel-v1-log-event-ch-writer-dlq`](../infra/proto/gram/otel/v1/log_event_ch_writer.proto) | DLQ | 7d | — |
 | [`gram-otel-v1-log-record`](../infra/proto/gram/otel/v1/log_record.proto) | topic | 7d | — |
-| [`gram-otel-v1-log-relay-dlq`](../infra/proto/gram/otel/v1/log_relay.proto) | DLQ | 7d | — |
 | [`gram-otel-v1-metric`](../infra/proto/gram/otel/v1/metric.proto) | topic | 7d | — |
-| [`gram-otel-v1-metric-relay-dlq`](../infra/proto/gram/otel/v1/metric_relay.proto) | DLQ | 7d | — |
 | [`gram-otel-v1-span`](../infra/proto/gram/otel/v1/span.proto) | topic | 7d | — |
-| [`gram-otel-v1-span-event-ch-writer-dlq`](../infra/proto/gram/otel/v1/span_event_ch_writer.proto) | DLQ | 7d | — |
-| [`gram-otel-v1-span-relay-dlq`](../infra/proto/gram/otel/v1/span_relay.proto) | DLQ | 7d | — |
 | [`gram-ping-v2-message`](../infra/proto/gram/ping/v2/ping.proto) | topic | 1d | [`server/internal/ping/publisher.go`](../server/internal/ping/publisher.go) |
-| [`gram-ping-v2-processor-dlq`](../infra/proto/gram/ping/v2/processor.proto) | DLQ | 1h | — |
-| [`gram-ping-v2-py-processor-dlq`](../infra/proto/gram/ping/v2/processor.proto) | DLQ | 1h | — |
 | [`gram-plugins-v1-organization-publication-requested`](../infra/proto/gram/plugins/v1/organization_publication_requested.proto) | topic | 7d | [`server/internal/plugins/organization_publication_handler.go`](../server/internal/plugins/organization_publication_handler.go)<br/>[`server/internal/plugins/publication_requests.go`](../server/internal/plugins/publication_requests.go) |
-| [`gram-plugins-v1-organization-publication-scheduler-dlq`](../infra/proto/gram/plugins/v1/organization_publication_scheduler.proto) | DLQ | 7d | — |
 | [`gram-plugins-v1-publication-requested`](../infra/proto/gram/plugins/v1/publication_requested.proto) | topic | 7d | [`server/internal/plugins/organization_publication_handler.go`](../server/internal/plugins/organization_publication_handler.go)<br/>[`server/internal/plugins/publication_requests.go`](../server/internal/plugins/publication_requests.go) |
-| [`gram-plugins-v1-publication-scheduler-dlq`](../infra/proto/gram/plugins/v1/publication_scheduler.proto) | DLQ | 7d | — |
 | [`gram-risk-v1-custom-rules-analysis`](../infra/proto/gram/risk/v1/custom_rules_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_custom_rules.go`](../server/internal/background/activities/risk_analysis/scan_custom_rules.go) |
-| [`gram-risk-v1-finding`](../infra/proto/gram/risk/v1/finding.proto) | topic | 7d | [`pystreams/src/pystreams/risk/handler.py`](../pystreams/src/pystreams/risk/handler.py)<br/>[`server/internal/risk/false_positive.go`](../server/internal/risk/false_positive.go)<br/>[`server/internal/scanners/publish.go`](../server/internal/scanners/publish.go) |
-| [`gram-risk-v1-finding-otel-relay-dlq`](../infra/proto/gram/risk/v1/finding_otel_relay.proto) | DLQ | 7d | — |
+| [`gram-risk-v1-finding`](../infra/proto/gram/risk/v1/finding.proto) | topic | 7d | [`pystreams/src/pystreams/risk/handler.py`](../pystreams/src/pystreams/risk/handler.py)<br/>[`server/internal/scanners/publish.go`](../server/internal/scanners/publish.go) |
 | [`gram-risk-v1-gitleaks-analysis`](../infra/proto/gram/risk/v1/gitleaks_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_gitleaks.go`](../server/internal/background/activities/risk_analysis/scan_gitleaks.go) |
 | [`gram-risk-v1-gitleaks-enforcement`](../infra/proto/gram/risk/v1/gitleaks_enforcement.proto) | topic | 10m | [`server/internal/risk/enforcereply/dispatch.go`](../server/internal/risk/enforcereply/dispatch.go) |
-| [`gram-risk-v1-gitleaks-enforcer-dlq`](../infra/proto/gram/risk/v1/gitleaks_enforcer.proto) | DLQ | 10m | — |
 | [`gram-risk-v1-llm-analysis`](../infra/proto/gram/risk/v1/llm_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_llm.go`](../server/internal/background/activities/risk_analysis/scan_llm.go) |
 | [`gram-risk-v1-llm-enforcement`](../infra/proto/gram/risk/v1/llm_enforcement.proto) | topic | 10m | [`server/internal/risk/enforcereply/dispatch.go`](../server/internal/risk/enforcereply/dispatch.go) |
-| [`gram-risk-v1-llm-enforcer-dlq`](../infra/proto/gram/risk/v1/llm_enforcer.proto) | DLQ | 10m | — |
 | [`gram-risk-v1-presidio-analysis`](../infra/proto/gram/risk/v1/presidio_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_presidio.go`](../server/internal/background/activities/risk_analysis/scan_presidio.go) |
 | [`gram-risk-v1-presidio-enforcement`](../infra/proto/gram/risk/v1/presidio_enforcement.proto) | topic | 10m | [`server/internal/risk/enforcereply/dispatch.go`](../server/internal/risk/enforcereply/dispatch.go) |
-| [`gram-risk-v1-presidio-enforcer-dlq`](../infra/proto/gram/risk/v1/presidio_enforcer.proto) | DLQ | 10m | — |
 | [`gram-risk-v1-prompt-injection-analysis`](../infra/proto/gram/risk/v1/prompt_injection_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_prompt_injection.go`](../server/internal/background/activities/risk_analysis/scan_prompt_injection.go) |
 | [`gram-risk-v1-prompt-policy-analysis`](../infra/proto/gram/risk/v1/prompt_policy_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/prompt_judge_batch.go`](../server/internal/background/activities/risk_analysis/prompt_judge_batch.go) |
-| [`gram-role-distribution-v1-role-distribution-setup-handler-dlq`](../infra/proto/gram/role_distribution/v1/setup_handler.proto) | DLQ | 7d | — |
 | [`gram-role-distribution-v1-role-distribution-setup-requested-v1`](../infra/proto/gram/role_distribution/v1/setup_requested.proto) | topic | 7d | [`server/internal/roledistribution/requests/requests.go`](../server/internal/roledistribution/requests/requests.go) |
 | [`gram-telemetry-v1-log-record`](../infra/proto/gram/telemetry/v1/log_record.proto) | topic | 7d | [`server/internal/telemetry/log_publisher.go`](../server/internal/telemetry/log_publisher.go) |
 | [`gram-telemetry-v1-session-observed`](../infra/proto/gram/telemetry/v1/session_observed.proto) | topic | 7d | [`server/cmd/gram/replaysessions.go`](../server/cmd/gram/replaysessions.go)<br/>[`server/internal/chat/message_store.go`](../server/internal/chat/message_store.go) |
-| [`gram-telemetry-v1-session-observed-ch-writer-dlq`](../infra/proto/gram/telemetry/v1/session_observed_ch_writer.proto) | DLQ | 7d | — |
-| [`gram-telemetry-v1-tool-call-log-relay-dlq`](../infra/proto/gram/telemetry/v1/tool_call_log_relay.proto) | DLQ | 7d | — |
 | [`gram-webhooks-v1-event`](../infra/proto/gram/webhooks/v1/event.proto) | topic | 7d | [`server/internal/outbox/webhooks.go`](../server/internal/outbox/webhooks.go) |
-| [`gram-webhooks-v1-svix-relay-dlq`](../infra/proto/gram/webhooks/v1/svix_relay.proto) | DLQ | 7d | — |
 
 ## Subscriptions
 
 | Subscription | Topic | Ack | DLQ | Consumed by |
 | --- | --- | --- | --- | --- |
-| [`gram-authz-v1-challenge-ch-writer`](../infra/proto/gram/authz/v1/challenge_ch_writer.proto) | `gram-authz-v1-challenge` | 1m | `gram-authz-v1-challenge-ch-writer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-metering-v1-meter-reading-ch-writer`](../infra/proto/gram/metering/v1/meter_reading_ch_writer.proto) | `gram-metering-v1-meter-reading` | 1m | `gram-metering-v1-meter-reading-ch-writer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-authz-v1-challenge-ch-writer`](../infra/proto/gram/authz/v1/challenge_ch_writer.proto) | `gram-authz-v1-challenge` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-metering-v1-meter-reading-ch-writer`](../infra/proto/gram/metering/v1/meter_reading_ch_writer.proto) | `gram-metering-v1-meter-reading` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-metering-v1-meter-reading-stripe-exporter`](../infra/proto/gram/metering/v1/meter_reading_stripe_exporter.proto) | `gram-metering-v1-meter-reading` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-networkingress-v1-reconciler`](../infra/proto/gram/networkingress/v1/reconciler.proto) | `gram-networkingress-v1-reconcile-requested` | 1m | `gram-networkingress-v1-reconciler-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-otel-v1-agent-event-log-ch-writer`](../infra/proto/gram/otel/v1/agent_event_log_ch_writer.proto) | `gram-otel-v1-log-record` | 1m | `gram-otel-v1-agent-event-log-ch-writer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-otel-v1-agent-event-span-ch-writer`](../infra/proto/gram/otel/v1/agent_event_span_ch_writer.proto) | `gram-otel-v1-span` | 1m | `gram-otel-v1-agent-event-span-ch-writer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-otel-v1-inbound-log-record-transformer`](../infra/proto/gram/otel/v1/inbound_log_record_transformer.proto) | `gram-otel-v1-inbound-log-record` | 1m | `gram-otel-v1-inbound-log-record-transformer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-otel-v1-inbound-metric-transformer`](../infra/proto/gram/otel/v1/inbound_metric_transformer.proto) | `gram-otel-v1-inbound-metric` | 1m | `gram-otel-v1-inbound-metric-transformer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-otel-v1-inbound-span-transformer`](../infra/proto/gram/otel/v1/inbound_span_transformer.proto) | `gram-otel-v1-inbound-span` | 1m | `gram-otel-v1-inbound-span-transformer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-otel-v1-log-event-ch-writer`](../infra/proto/gram/otel/v1/log_event_ch_writer.proto) | `gram-otel-v1-log-record` | 1m | `gram-otel-v1-log-event-ch-writer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-otel-v1-log-relay`](../infra/proto/gram/otel/v1/log_relay.proto) | `gram-otel-v1-log-record` | 1m | `gram-otel-v1-log-relay-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-otel-v1-metric-relay`](../infra/proto/gram/otel/v1/metric_relay.proto) | `gram-otel-v1-metric` | 1m | `gram-otel-v1-metric-relay-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-otel-v1-span-event-ch-writer`](../infra/proto/gram/otel/v1/span_event_ch_writer.proto) | `gram-otel-v1-span` | 1m | `gram-otel-v1-span-event-ch-writer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-otel-v1-span-relay`](../infra/proto/gram/otel/v1/span_relay.proto) | `gram-otel-v1-span` | 1m | `gram-otel-v1-span-relay-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-ping-v2-processor`](../infra/proto/gram/ping/v2/processor.proto) | `gram-ping-v2-message` | 30s | `gram-ping-v2-processor-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-ping-v2-py-processor`](../infra/proto/gram/ping/v2/processor.proto) | `gram-ping-v2-message` | 30s | `gram-ping-v2-py-processor-dlq` | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |
-| [`gram-plugins-v1-organization-publication-scheduler`](../infra/proto/gram/plugins/v1/organization_publication_scheduler.proto) | `gram-plugins-v1-organization-publication-requested` | 1m | `gram-plugins-v1-organization-publication-scheduler-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-plugins-v1-publication-scheduler`](../infra/proto/gram/plugins/v1/publication_scheduler.proto) | `gram-plugins-v1-publication-requested` | 1m | `gram-plugins-v1-publication-scheduler-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-networkingress-v1-reconciler`](../infra/proto/gram/networkingress/v1/reconciler.proto) | `gram-networkingress-v1-reconcile-requested` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-otel-v1-agent-event-log-ch-writer`](../infra/proto/gram/otel/v1/agent_event_log_ch_writer.proto) | `gram-otel-v1-log-record` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-otel-v1-agent-event-span-ch-writer`](../infra/proto/gram/otel/v1/agent_event_span_ch_writer.proto) | `gram-otel-v1-span` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-otel-v1-inbound-log-record-transformer`](../infra/proto/gram/otel/v1/inbound_log_record_transformer.proto) | `gram-otel-v1-inbound-log-record` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-otel-v1-inbound-metric-transformer`](../infra/proto/gram/otel/v1/inbound_metric_transformer.proto) | `gram-otel-v1-inbound-metric` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-otel-v1-inbound-span-transformer`](../infra/proto/gram/otel/v1/inbound_span_transformer.proto) | `gram-otel-v1-inbound-span` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-otel-v1-log-event-ch-writer`](../infra/proto/gram/otel/v1/log_event_ch_writer.proto) | `gram-otel-v1-log-record` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-otel-v1-log-relay`](../infra/proto/gram/otel/v1/log_relay.proto) | `gram-otel-v1-log-record` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-otel-v1-metric-relay`](../infra/proto/gram/otel/v1/metric_relay.proto) | `gram-otel-v1-metric` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-otel-v1-span-event-ch-writer`](../infra/proto/gram/otel/v1/span_event_ch_writer.proto) | `gram-otel-v1-span` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-otel-v1-span-relay`](../infra/proto/gram/otel/v1/span_relay.proto) | `gram-otel-v1-span` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-ping-v2-processor`](../infra/proto/gram/ping/v2/processor.proto) | `gram-ping-v2-message` | 30s | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-ping-v2-py-processor`](../infra/proto/gram/ping/v2/processor.proto) | `gram-ping-v2-message` | 30s | — | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |
+| [`gram-plugins-v1-organization-publication-scheduler`](../infra/proto/gram/plugins/v1/organization_publication_scheduler.proto) | `gram-plugins-v1-organization-publication-requested` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-plugins-v1-publication-scheduler`](../infra/proto/gram/plugins/v1/publication_scheduler.proto) | `gram-plugins-v1-publication-requested` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-custom-rules-analyzer`](../infra/proto/gram/risk/v1/custom_rules_analyzer.proto) | `gram-risk-v1-custom-rules-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-finding-ch-writer`](../infra/proto/gram/risk/v1/finding_ch_writer.proto) | `gram-risk-v1-finding` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-risk-v1-finding-otel-relay`](../infra/proto/gram/risk/v1/finding_otel_relay.proto) | `gram-risk-v1-finding` | 1m | `gram-risk-v1-finding-otel-relay-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-risk-v1-finding-otel-relay`](../infra/proto/gram/risk/v1/finding_otel_relay.proto) | `gram-risk-v1-finding` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-gitleaks-analyzer`](../infra/proto/gram/risk/v1/gitleaks_analyzer.proto) | `gram-risk-v1-gitleaks-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-risk-v1-gitleaks-enforcer`](../infra/proto/gram/risk/v1/gitleaks_enforcer.proto) | `gram-risk-v1-gitleaks-enforcement` | 10s | `gram-risk-v1-gitleaks-enforcer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-risk-v1-gitleaks-enforcer`](../infra/proto/gram/risk/v1/gitleaks_enforcer.proto) | `gram-risk-v1-gitleaks-enforcement` | 10s | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-llm-analyzer`](../infra/proto/gram/risk/v1/llm_analyzer.proto) | `gram-risk-v1-llm-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-risk-v1-llm-enforcer`](../infra/proto/gram/risk/v1/llm_enforcer.proto) | `gram-risk-v1-llm-enforcement` | 30s | `gram-risk-v1-llm-enforcer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-risk-v1-llm-enforcer`](../infra/proto/gram/risk/v1/llm_enforcer.proto) | `gram-risk-v1-llm-enforcement` | 30s | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-presidio-analyzer`](../infra/proto/gram/risk/v1/presidio_analyzer.proto) | `gram-risk-v1-presidio-analysis` | 1m | — | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |
-| [`gram-risk-v1-presidio-enforcer`](../infra/proto/gram/risk/v1/presidio_enforcer.proto) | `gram-risk-v1-presidio-enforcement` | 10s | `gram-risk-v1-presidio-enforcer-dlq` | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |
+| [`gram-risk-v1-presidio-enforcer`](../infra/proto/gram/risk/v1/presidio_enforcer.proto) | `gram-risk-v1-presidio-enforcement` | 10s | — | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |
 | [`gram-risk-v1-prompt-injection-analyzer`](../infra/proto/gram/risk/v1/prompt_injection_analyzer.proto) | `gram-risk-v1-prompt-injection-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-risk-v1-prompt-policy-analyzer`](../infra/proto/gram/risk/v1/prompt_policy_analyzer.proto) | `gram-risk-v1-prompt-policy-analysis` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-role-distribution-v1-role-distribution-setup-handler`](../infra/proto/gram/role_distribution/v1/setup_handler.proto) | `gram-role-distribution-v1-role-distribution-setup-requested-v1` | 1m | `gram-role-distribution-v1-role-distribution-setup-handler-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-role-distribution-v1-role-distribution-setup-handler`](../infra/proto/gram/role_distribution/v1/setup_handler.proto) | `gram-role-distribution-v1-role-distribution-setup-requested-v1` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-telemetry-v1-noop`](../infra/proto/gram/telemetry/v1/noop.proto) | `gram-telemetry-v1-log-record` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-telemetry-v1-session-observed-ch-writer`](../infra/proto/gram/telemetry/v1/session_observed_ch_writer.proto) | `gram-telemetry-v1-session-observed` | 1m | `gram-telemetry-v1-session-observed-ch-writer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-telemetry-v1-tool-call-log-relay`](../infra/proto/gram/telemetry/v1/tool_call_log_relay.proto) | `gram-telemetry-v1-log-record` | 1m | `gram-telemetry-v1-tool-call-log-relay-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
-| [`gram-webhooks-v1-svix-relay`](../infra/proto/gram/webhooks/v1/svix_relay.proto) | `gram-webhooks-v1-event` | 1m | `gram-webhooks-v1-svix-relay-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-telemetry-v1-session-observed-ch-writer`](../infra/proto/gram/telemetry/v1/session_observed_ch_writer.proto) | `gram-telemetry-v1-session-observed` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-telemetry-v1-tool-call-log-relay`](../infra/proto/gram/telemetry/v1/tool_call_log_relay.proto) | `gram-telemetry-v1-log-record` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-webhooks-v1-svix-relay`](../infra/proto/gram/webhooks/v1/svix_relay.proto) | `gram-webhooks-v1-event` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 
 ## Notes
 

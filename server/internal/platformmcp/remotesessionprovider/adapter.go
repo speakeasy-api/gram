@@ -163,6 +163,7 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 		McpServerID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		FinalRedirectURI:    descriptor.ProviderSetupCompletionURL,
+		ConsentURL:          "",
 		Resource:            descriptor.Resource,
 		AutoRefresh:         nil,
 		Authority: networkingress.Authority{

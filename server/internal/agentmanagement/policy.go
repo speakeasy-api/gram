@@ -194,6 +194,10 @@ func validatePolicyGrant(rawScope, effect string, input *gen.AgentPolicySelector
 		return "", nil, oops.E(oops.CodeBadRequest, nil, "agent policy grants must use allow effect")
 	}
 	scope := authz.Scope(rawScope)
+	// Agent restrictions are written through the resource audience surface.
+	if authz.IsBlocklistScope(scope) {
+		return "", nil, oops.E(oops.CodeBadRequest, nil, "agent policy grants cannot use blocklist scopes")
+	}
 	if err := runtimepolicy.ValidateRuntimeScope(runtimepolicy.CurrentRuntimeScopeRegistryVersion, scope); err != nil {
 		return "", nil, oops.E(oops.CodeBadRequest, err, "scope is not allowed for agent policy")
 	}

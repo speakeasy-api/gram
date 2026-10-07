@@ -52,3 +52,26 @@ WHERE project_id = @project_id
   AND id = @id
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListWidgetDashboards :many
+-- Which live dashboards each of the project's widgets is on, once each,
+-- however many cards show it.
+SELECT DISTINCT p.widget_id, d.id AS dashboard_id, d.name AS dashboard_name
+FROM dashboard_widgets p
+JOIN dashboards d ON d.id = p.dashboard_id AND d.project_id = p.project_id AND d.deleted IS FALSE
+WHERE p.project_id = @project_id
+ORDER BY p.widget_id, d.name, d.id;
+
+-- name: ListDashboardsForWidget :many
+SELECT DISTINCT d.id AS dashboard_id, d.name AS dashboard_name
+FROM dashboard_widgets p
+JOIN dashboards d ON d.id = p.dashboard_id AND d.project_id = p.project_id AND d.deleted IS FALSE
+WHERE p.project_id = @project_id
+  AND p.widget_id = @widget_id
+ORDER BY d.name, d.id;
+
+-- name: DeleteWidgetPlacements :exec
+-- A deleted widget comes off every dashboard it was on.
+DELETE FROM dashboard_widgets
+WHERE project_id = @project_id
+  AND widget_id = @widget_id;

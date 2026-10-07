@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/Button";
 import { MoreActions } from "@/components/ui/MoreActions";
 import type { Widget } from "@gram/client/models/components/widget.js";
-import { useState, type JSX } from "react";
+import { useId, useState, type JSX } from "react";
 import type { ExploreSpec } from "./exploreModel";
 import { useCanEditWidget } from "./useCanEditWidget";
 import { useWidgetMutations } from "./useWidgetMutations";
@@ -9,9 +9,10 @@ import {
   DeleteWidgetDialog,
   UnsavedDot,
   WidgetDetailsDialog,
-  type WidgetDetails,
+  type Details,
 } from "./WidgetDialogs";
 import { copyName } from "./widgetNames";
+import { describeDashboards } from "./widgetUsage";
 import {
   differsFromWidget,
   specFromStoredWidget,
@@ -19,6 +20,8 @@ import {
 } from "./widgetSpec";
 
 type Naming = "create" | "copy" | "rename";
+
+const RANGED_REASON = "Pick a window to save: a widget keeps a relative one";
 
 /**
  * The widget the builder has open, above the builder: its name, whether the
@@ -64,12 +67,12 @@ export function WidgetBar({
   const [naming, setNaming] = useState<Naming | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const draft = (details: WidgetDetails) => ({
+  const draft = (details: Details) => ({
     ...details,
     dataset: spec.dataset,
     ...widgetFromSpec(spec),
   });
-  const submit = (details: WidgetDetails) => {
+  const submit = (details: Details) => {
     if (naming === "rename" && open) {
       // Renaming changes the name and description alone, so edits not yet
       // saved stay unsaved.
@@ -95,6 +98,27 @@ export function WidgetBar({
   // has no edits to mark and saving would overwrite it with something else.
   const readable = open ? specFromStoredWidget(open) !== null : false;
   const changed = open && readable ? differsFromWidget(spec, open) : false;
+  // A widget keeps a relative window and follows you forward in time, so a
+  // query over an absolute range is shared by its link, not saved.
+  const ranged = spec.range !== undefined;
+  // A disabled button takes no focus and shows no tooltip, so the reason it
+  // is disabled is shown beside it and named as its description.
+  const rangedHintId = useId();
+  const rangedHint = ranged ? (
+    <span id={rangedHintId} className="text-muted-foreground text-xs">
+      {RANGED_REASON}
+    </span>
+  ) : null;
+  // A widget is linked onto its dashboards, so saving edits changes the
+  // card on each of them: said beside Save, once there is something to save.
+  const usageHintId = useId();
+  const usage = open?.dashboards ?? [];
+  const usageHint =
+    changed && !ranged && usage.length > 0 ? (
+      <span id={usageHintId} className="text-muted-foreground text-xs">
+        Saving changes its card on {describeDashboards(usage)}
+      </span>
+    ) : null;
 
   return (
     <div className="flex min-w-0 items-center gap-2">
@@ -105,12 +129,17 @@ export function WidgetBar({
           ) : null}
           {/* Someone else's widget without project write cannot be
               changed, only copied. */}
+          {editable ? rangedHint : null}
+          {editable ? usageHint : null}
           {editable ? (
             <Button
               variant="secondary"
               size="sm"
               icon="save"
-              disabled={!readable || !changed || mutations.pending}
+              disabled={!readable || !changed || ranged || mutations.pending}
+              aria-describedby={
+                ranged ? rangedHintId : usageHint ? usageHintId : undefined
+              }
               onClick={() =>
                 mutations.update(
                   open.id,
@@ -136,7 +165,10 @@ export function WidgetBar({
               {
                 label: "Save as new widget",
                 icon: "file-plus",
-                description: "Keeps the builder's unsaved edits",
+                description: ranged
+                  ? RANGED_REASON
+                  : "Keeps the builder's unsaved edits",
+                disabled: ranged,
                 onClick: () => setNaming("copy"),
               },
               {
@@ -163,11 +195,13 @@ export function WidgetBar({
       ) : (
         <>
           <UnsavedDot label="Unsaved widget" tooltip="Not saved yet" />
+          {rangedHint}
           <Button
             variant="secondary"
             size="sm"
             icon="save"
-            disabled={resolving}
+            disabled={resolving || ranged}
+            aria-describedby={ranged ? rangedHintId : undefined}
             onClick={() => setNaming("create")}
           >
             Save widget
@@ -200,6 +234,7 @@ export function WidgetBar({
       {open ? (
         <DeleteWidgetDialog
           name={open.name}
+          dashboards={open.dashboards}
           open={deleting}
           pending={mutations.pending}
           onCancel={() => setDeleting(false)}
