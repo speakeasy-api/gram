@@ -137,8 +137,8 @@ func preflightCIMDIssuer(issuer remotesessions_repo.RemoteSessionIssuer) error {
 // client registration: it must advertise client_id_metadata_document_supported
 // and, when it enumerates token endpoint auth methods, accept "none" (CIMD
 // clients are public). An empty method list means the issuer did not advertise
-// them, so it is not second-guessed. Every caller that chooses between CIMD,
-// dynamic registration and manual setup uses this one predicate.
+// them, so it is not second-guessed. ChooseRegistration applies it for every
+// caller that chooses between CIMD, dynamic registration and manual setup.
 func SupportsClientIDMetadataDocument(clientIDMetadataDocumentSupported bool, tokenEndpointAuthMethodsSupported []string) bool {
 	if !clientIDMetadataDocumentSupported {
 		return false

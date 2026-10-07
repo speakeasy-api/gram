@@ -2,7 +2,6 @@ package platformmcp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -148,9 +148,9 @@ func TestDirectRemoteAutomaticRegistration(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			var metadata map[string]any
-			require.NoError(t, json.Unmarshal([]byte(test.metadata), &metadata))
-			require.Equal(t, test.want, directRemoteAutomaticRegistration(metadata))
+			var capabilities remotesessions.RegistrationCapabilities
+			require.NoError(t, decodeDirectRemoteMetadata([]byte(test.metadata), &capabilities))
+			require.Equal(t, test.want, directRemoteAutomaticRegistration(capabilities))
 		})
 	}
 }

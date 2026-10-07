@@ -27,7 +27,6 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -202,7 +201,7 @@ func (s *CatalogIdentityProviderAttachmentService) discoverSupportedIssuerMetada
 			continue
 		}
 		metadata, err := remotesessions.DiscoverIssuerMetadata(probeCtx, s.policy, authorizationServer)
-		if err != nil || strings.TrimSpace(metadata.Issuer) == "" || !sameIssuerURL(metadata.Issuer, authorizationServer) || strings.TrimSpace(metadata.AuthorizationEndpoint) == "" || strings.TrimSpace(metadata.TokenEndpoint) == "" || !supportsAutomaticClientRegistration(metadata.RegistrationEndpoint, metadata.ClientIDMetadataDocumentSupported, metadata.TokenEndpointAuthMethodsSupported) {
+		if err != nil || strings.TrimSpace(metadata.Issuer) == "" || !sameIssuerURL(metadata.Issuer, authorizationServer) || strings.TrimSpace(metadata.AuthorizationEndpoint) == "" || strings.TrimSpace(metadata.TokenEndpoint) == "" || !attachmentSupportsRegistration(metadata.RegistrationCapabilities()) {
 			continue
 		}
 		return metadata, nil
@@ -259,7 +258,7 @@ func (s *CatalogIdentityProviderAttachmentService) reusableIssuer(ctx context.Co
 		return none, false, nil
 	}
 	issuer := issuers[0]
-	if !issuer.ProjectID.Valid || issuer.ProjectID.UUID != project.ID || !issuer.OrganizationID.Valid || issuer.OrganizationID.String != principal.OrganizationID || !issuer.AuthorizationEndpoint.Valid || issuer.AuthorizationEndpoint.String == "" || !issuer.TokenEndpoint.Valid || issuer.TokenEndpoint.String == "" || !supportsAutomaticClientRegistration(issuer.RegistrationEndpoint.String, issuer.ClientIDMetadataDocumentSupported, issuer.TokenEndpointAuthMethodsSupported) {
+	if !issuer.ProjectID.Valid || issuer.ProjectID.UUID != project.ID || !issuer.OrganizationID.Valid || issuer.OrganizationID.String != principal.OrganizationID || !issuer.AuthorizationEndpoint.Valid || issuer.AuthorizationEndpoint.String == "" || !issuer.TokenEndpoint.Valid || issuer.TokenEndpoint.String == "" || !attachmentSupportsRegistration(remotesessions.IssuerRegistrationCapabilities(issuer)) {
 		return none, false, ErrIdentityProviderAttachmentConflict
 	}
 	if issuer.TunneledMcpServerID.Valid {
@@ -270,20 +269,14 @@ func (s *CatalogIdentityProviderAttachmentService) reusableIssuer(ctx context.Co
 
 // attachmentIdentityPlan describes the attachment's identity write: the
 // discovered provider (or the reusable stored one) and a client this flow
-// registers itself. Dynamic registration stays the path for a provider where
-// this flow can use it, so existing attachments are unchanged; otherwise a
-// provider is set up through a Client ID Metadata Document when it supports
-// one, the same path the dashboard's automatic setup takes. A provider offering
-// neither leaves the registration needing manual setup.
+// registers itself under attachmentRegistrationPolicy. A provider offering
+// neither automatic path leaves the registration needing manual setup.
 func attachmentIdentityPlan(principal Principal, project ResolvedProject, registrationID, userSessionIssuerID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata, existing remotesessionsrepo.RemoteSessionIssuer, reuse bool, resourceURL string, resourceMetadata wellknown.OAuthProtectedResourceMetadata) remotesessions.IdentityPlan {
 	var provider remotesessions.ProviderChoice
-	var allowCIMD bool
 	if reuse {
 		provider = remotesessions.UseProvider(existing.ID)
-		allowCIMD = !attachmentCanUseDynamicRegistration(existing.RegistrationEndpoint.String, existing.TokenEndpointAuthMethodsSupported)
 	} else {
 		provider = remotesessions.CreateProvider(discoveredIssuerParams(principal, project, registrationID, metadata))
-		allowCIMD = !attachmentCanUseDynamicRegistration(metadata.RegistrationEndpoint, metadata.TokenEndpointAuthMethodsSupported)
 	}
 	return remotesessions.IdentityPlan{
 		Scope: remotesessions.IdentityScope{
@@ -294,15 +287,9 @@ func attachmentIdentityPlan(principal Principal, project ResolvedProject, regist
 		},
 		UserSessionIssuerID: userSessionIssuerID,
 		Provider:            provider,
-		Client: remotesessions.RegisterClient(remotesessions.RegistrationPolicy{
-			Scope:                   append([]string(nil), resourceMetadata.ScopesSupported...),
-			Audience:                nil,
-			TokenEndpointAuthMethod: optionalString(browserCatalogDCRAuthMethod),
-			RequireClientSecret:     true,
-			AllowCIMD:               allowCIMD,
-		}),
-		Bound:           remotesessions.ReuseBound,
-		ResourceDisplay: &remotesessions.ResourceDisplay{ResourceURL: resourceURL, Metadata: resourceMetadata},
+		Client:              remotesessions.RegisterClient(attachmentRegistrationPolicy(append([]string(nil), resourceMetadata.ScopesSupported...))),
+		Bound:               remotesessions.ReuseBound,
+		ResourceDisplay:     &remotesessions.ResourceDisplay{ResourceURL: resourceURL, Metadata: resourceMetadata},
 	}
 }
 
@@ -392,26 +379,29 @@ func sameIssuerURL(a, b string) bool {
 	return a == b
 }
 
-// supportsAutomaticClientRegistration reports whether this flow can obtain a
-// client from a provider without manual setup: through dynamic client
-// registration it can use, or through a Client ID Metadata Document under the
-// predicate the dashboard's automatic setup uses. An issuer offering neither is
+// attachmentRegistrationPolicy is how attachment obtains a client: dynamic
+// registration of a client_secret_basic client at an https endpoint, which
+// keeps existing attachments unchanged, and otherwise a Client ID Metadata
+// Document. A provider whose token endpoint excludes client_secret_basic
+// would only hand back a client this flow refuses, so dynamic registration is
+// not attempted there. Discovery and reuse classify providers with the same
+// policy the commit registers under, so a provider offering neither path is
 // skipped before any upstream client is registered.
-func supportsAutomaticClientRegistration(registrationEndpoint string, clientIDMetadataDocumentSupported bool, tokenEndpointAuthMethodsSupported []string) bool {
-	return attachmentCanUseDynamicRegistration(registrationEndpoint, tokenEndpointAuthMethodsSupported) || remotesessions.SupportsClientIDMetadataDocument(clientIDMetadataDocumentSupported, tokenEndpointAuthMethodsSupported)
+func attachmentRegistrationPolicy(scope []string) remotesessions.RegistrationPolicy {
+	return remotesessions.RegistrationPolicy{
+		Scope:                             scope,
+		Audience:                          nil,
+		TokenEndpointAuthMethod:           optionalString(browserCatalogDCRAuthMethod),
+		RequireClientSecret:               true,
+		Order:                             remotesessions.RegistrationOrderDCRFirst,
+		AllowLoopbackRegistrationEndpoint: false,
+	}
 }
 
-// attachmentCanUseDynamicRegistration reports whether dynamic registration can
-// give this flow the client it requires: a valid endpoint, and a token
-// endpoint that accepts client_secret_basic (an unlisted method set defaults
-// to it under RFC 8414). A provider that excludes it would only hand back a
-// client this flow refuses.
-func attachmentCanUseDynamicRegistration(registrationEndpoint string, tokenEndpointAuthMethodsSupported []string) bool {
-	return validDynamicClientRegistrationEndpoint(registrationEndpoint) && (len(tokenEndpointAuthMethodsSupported) == 0 || slices.Contains(tokenEndpointAuthMethodsSupported, browserCatalogDCRAuthMethod))
-}
-
-func validDynamicClientRegistrationEndpoint(raw string) bool {
-	return urls.IsAbsoluteHTTPS(raw)
+// attachmentSupportsRegistration reports whether attachment can obtain a
+// client from a provider with capabilities without manual setup.
+func attachmentSupportsRegistration(capabilities remotesessions.RegistrationCapabilities) bool {
+	return remotesessions.ChooseRegistration(capabilities, attachmentRegistrationPolicy(nil)) != remotesessions.RegistrationPathManual
 }
 
 func optionalString(value string) *string {

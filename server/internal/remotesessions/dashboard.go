@@ -231,7 +231,10 @@ func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target m
 			Audience:                r.clientConfiguration.Audience,
 			TokenEndpointAuthMethod: r.clientConfiguration.TokenEndpointAuthMethod,
 			RequireClientSecret:     false,
-			AllowCIMD:               r.registrationMethod != serverIdentityRegistrationMethodDCR,
+			Order:                   conv.Ternary(r.registrationMethod == serverIdentityRegistrationMethodDCR, RegistrationOrderDCROnly, RegistrationOrderCIMDFirst),
+			// Local development registers against an identity provider on
+			// loopback; guardian refuses loopback egress in production.
+			AllowLoopbackRegistrationEndpoint: true,
 		})
 	}
 	return IdentityPlan{

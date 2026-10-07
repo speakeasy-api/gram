@@ -16,18 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func TestValidDynamicClientRegistrationEndpoint(t *testing.T) {
-	t.Parallel()
-
-	require.True(t, validDynamicClientRegistrationEndpoint("https://identity.example/register"))
-	require.False(t, validDynamicClientRegistrationEndpoint("http://localhost/register"))
-	require.False(t, validDynamicClientRegistrationEndpoint(""))
-	require.False(t, validDynamicClientRegistrationEndpoint("not a URL"))
-	require.False(t, validDynamicClientRegistrationEndpoint("ftp://identity.example/register"))
-	require.False(t, validDynamicClientRegistrationEndpoint("https:///register"))
-	require.False(t, validDynamicClientRegistrationEndpoint("https://user:password@identity.example/register"))
-}
-
 func TestDiscoverSupportedIssuerMetadataRejectsEmptyCandidates(t *testing.T) {
 	t.Parallel()
 
@@ -124,7 +112,7 @@ func TestPublicClientOnlyDynamicRegistrationInspectorVersusAttachment(t *testing
 	t.Parallel()
 
 	metadata := map[string]any{"registration_endpoint": "https://issuer.example.com/register", "token_endpoint_auth_methods_supported": []any{"none"}}
-	require.Equal(t, oauthDiscoveryAvailableDCR, directRemoteAutomaticRegistration(metadata))
+	require.Equal(t, oauthDiscoveryAvailableDCR, directRemoteAutomaticRegistration(remotesessions.RegistrationCapabilities{RegistrationEndpoint: "https://issuer.example.com/register", TokenEndpointAuthMethodsSupported: []string{"none"}, ClientIDMetadataDocumentSupported: false}))
 
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -144,32 +132,6 @@ func TestPublicClientOnlyDynamicRegistrationInspectorVersusAttachment(t *testing
 
 	_, err = service.discoverSupportedIssuerMetadata(t.Context(), []string{server.URL})
 	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
-}
-
-func TestSupportsAutomaticClientRegistration(t *testing.T) {
-	t.Parallel()
-
-	require.True(t, supportsAutomaticClientRegistration("https://issuer.example.com/register", false, nil))
-	require.True(t, supportsAutomaticClientRegistration("", true, []string{"none"}))
-	require.True(t, supportsAutomaticClientRegistration("", true, nil))
-	require.False(t, supportsAutomaticClientRegistration("", true, []string{"client_secret_post"}))
-	require.False(t, supportsAutomaticClientRegistration("", false, []string{"none"}))
-	require.False(t, supportsAutomaticClientRegistration("http://issuer.example.com/register", false, nil))
-	require.False(t, supportsAutomaticClientRegistration("https://issuer.example.com/register", false, []string{"none"}))
-}
-
-// Dynamic registration is chosen over a Client ID Metadata Document only when
-// it can produce the client_secret_basic client attachment requires.
-func TestAttachmentCanUseDynamicRegistration(t *testing.T) {
-	t.Parallel()
-
-	const endpoint = "https://issuer.example.com/register"
-	require.True(t, attachmentCanUseDynamicRegistration(endpoint, nil))
-	require.True(t, attachmentCanUseDynamicRegistration(endpoint, []string{"none", "client_secret_basic"}))
-	require.False(t, attachmentCanUseDynamicRegistration(endpoint, []string{"none"}))
-	require.False(t, attachmentCanUseDynamicRegistration(endpoint, []string{"client_secret_post"}))
-	require.False(t, attachmentCanUseDynamicRegistration("", nil))
-	require.False(t, attachmentCanUseDynamicRegistration("http://issuer.example.com/register", nil))
 }
 
 func TestIdentityProviderRegistrationErrorTreatsTimeoutAndRateLimitAsRetryable(t *testing.T) {

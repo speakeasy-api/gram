@@ -42,6 +42,10 @@ func TestRegistrationPathCharacterisation(t *testing.T) {
 		{name: "dcr loopback and cimd", endpoint: loopbackEndpoint, cimd: true, wantAttach: remotesessions.RegistrationPathCIMD, wantInspector: oauthDiscoveryAvailableCIMD},
 		{name: "plain http dcr endpoint", endpoint: "http://idp.example.com/register", wantAttach: remotesessions.RegistrationPathManual, wantInspector: ""},
 		{name: "relative dcr endpoint", endpoint: "/register", wantAttach: remotesessions.RegistrationPathManual, wantInspector: ""},
+		{name: "unparseable dcr endpoint", endpoint: "not a URL", wantAttach: remotesessions.RegistrationPathManual, wantInspector: ""},
+		{name: "non-http dcr endpoint", endpoint: "ftp://idp.example.com/register", wantAttach: remotesessions.RegistrationPathManual, wantInspector: ""},
+		{name: "dcr endpoint without a host", endpoint: "https:///register", wantAttach: remotesessions.RegistrationPathManual, wantInspector: ""},
+		{name: "dcr endpoint with userinfo", endpoint: "https://user:password@idp.example.com/register", wantAttach: remotesessions.RegistrationPathManual, wantInspector: ""},
 		{name: "neither", methods: []string{"none"}, wantAttach: remotesessions.RegistrationPathManual, wantInspector: ""},
 	}
 	for _, test := range tests {
@@ -67,21 +71,15 @@ func TestRegistrationPathCharacterisation(t *testing.T) {
 // manual when discovery skips the provider (and reuse refuses it), otherwise
 // the path its plan commits to.
 func attachmentRegistrationPath(endpoint string, cimd bool, methods []string) remotesessions.RegistrationPath {
-	switch {
-	case !supportsAutomaticClientRegistration(endpoint, cimd, methods):
-		return remotesessions.RegistrationPathManual
-	case attachmentCanUseDynamicRegistration(endpoint, methods):
-		return remotesessions.RegistrationPathDCR
-	default:
-		return remotesessions.RegistrationPathCIMD
-	}
+	capabilities := remotesessions.RegistrationCapabilities{RegistrationEndpoint: endpoint, TokenEndpointAuthMethodsSupported: methods, ClientIDMetadataDocumentSupported: cimd}
+	return remotesessions.ChooseRegistration(capabilities, attachmentRegistrationPolicy(nil))
 }
 
 // inspectorRegistration is the oauth_discovery value the inspector reports
 // for one authorization server metadata document.
 func inspectorRegistration(t *testing.T, payload []byte) string {
 	t.Helper()
-	var metadata map[string]any
-	require.NoError(t, json.Unmarshal(payload, &metadata))
-	return directRemoteAutomaticRegistration(metadata)
+	var capabilities remotesessions.RegistrationCapabilities
+	require.NoError(t, decodeDirectRemoteMetadata(payload, &capabilities))
+	return directRemoteAutomaticRegistration(capabilities)
 }

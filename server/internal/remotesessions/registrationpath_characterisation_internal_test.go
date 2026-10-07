@@ -10,11 +10,12 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 // refused is the expected outcome of a commit that refuses the provider's
 // registration endpoint outright rather than asking for manual setup.
-const refused RegistrationPath = "refused"
+var refused = RegistrationPath("refused")
 
 // TestDashboardRegistrationPathCharacterisation pins which registration path
 // the dashboard's automatic setup takes for each kind of provider, in its
@@ -53,21 +54,22 @@ func TestDashboardRegistrationPathCharacterisation(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			capabilities := providerCapabilities{
-				registrationEndpoint:              pgtype.Text{String: test.endpoint, Valid: test.endpoint != ""},
-				tokenEndpointAuthMethodsSupported: test.methods,
-				clientIDMetadataDocumentSupported: test.cimd,
+			provider := repo.RemoteSessionIssuer{
+				RegistrationEndpoint:              pgtype.Text{String: test.endpoint, Valid: test.endpoint != ""},
+				TokenEndpointAuthMethodsSupported: test.methods,
+				ClientIDMetadataDocumentSupported: test.cimd,
 			}
-			require.Equal(t, test.wantAuto, dashboardRegistrationPath(t, "", capabilities), "automatic setup")
-			require.Equal(t, test.wantAuto, dashboardRegistrationPath(t, "cimd", capabilities), "automatic setup preferring cimd")
-			require.Equal(t, test.wantSkipCIMD, dashboardRegistrationPath(t, serverIdentityRegistrationMethodDCR, capabilities), "automatic setup skipping cimd")
+			require.Equal(t, test.wantAuto, dashboardRegistrationPath(t, "", provider), "automatic setup")
+			require.Equal(t, test.wantAuto, dashboardRegistrationPath(t, "cimd", provider), "automatic setup preferring cimd")
+			require.Equal(t, test.wantSkipCIMD, dashboardRegistrationPath(t, serverIdentityRegistrationMethodDCR, provider), "automatic setup skipping cimd")
 		})
 	}
 }
 
-// dashboardRegistrationPath is the path a commit takes for the policy the
-// dashboard's automatic setup builds with registrationMethod.
-func dashboardRegistrationPath(t *testing.T, registrationMethod string, capabilities providerCapabilities) RegistrationPath {
+// dashboardRegistrationPath is the path a commit for the stored provider takes
+// under the policy the dashboard's automatic setup builds with
+// registrationMethod.
+func dashboardRegistrationPath(t *testing.T, registrationMethod string, provider repo.RemoteSessionIssuer) RegistrationPath {
 	t.Helper()
 	projectID := uuid.New()
 	request := serverIdentityRequest{
@@ -77,7 +79,8 @@ func dashboardRegistrationPath(t *testing.T, registrationMethod string, capabili
 	}
 	plan := request.plan(&contextvalues.AuthContext{ProjectID: &projectID}, mcpserversrepo.McpServer{})
 	require.Equal(t, clientRegister, plan.Client.kind)
-	path, err := commitRegistrationPath(plan.Client.policy, capabilities)
+	commit := &IdentityCommit{plan: plan, provider: provider}
+	path, err := commitRegistrationPath(plan.Client.policy, commit.capabilities())
 	if err != nil {
 		require.ErrorIs(t, err, ErrIdentityInvalid)
 		return refused

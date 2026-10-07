@@ -11,7 +11,7 @@ import (
 func TestRegisteredAuthMethodRequiresConfidentialClient(t *testing.T) {
 	t.Parallel()
 
-	policy := RegistrationPolicy{Scope: nil, Audience: nil, TokenEndpointAuthMethod: conv.PtrEmpty(string(TokenEndpointAuthMethodBasic)), RequireClientSecret: true, AllowCIMD: false}
+	policy := RegistrationPolicy{Scope: nil, Audience: nil, TokenEndpointAuthMethod: conv.PtrEmpty(string(TokenEndpointAuthMethodBasic)), RequireClientSecret: true, Order: RegistrationOrderDCROnly, AllowLoopbackRegistrationEndpoint: false}
 	accepted := func(response ProxyRegisterResponse) bool {
 		_, ok := registeredAuthMethod(response, policy)
 		return ok
@@ -29,7 +29,7 @@ func TestRegisteredAuthMethodRequiresConfidentialClient(t *testing.T) {
 func TestRegisteredAuthMethodAcceptsPublicClientUnlessRequired(t *testing.T) {
 	t.Parallel()
 
-	policy := RegistrationPolicy{Scope: nil, Audience: nil, TokenEndpointAuthMethod: nil, RequireClientSecret: false, AllowCIMD: true}
+	policy := RegistrationPolicy{Scope: nil, Audience: nil, TokenEndpointAuthMethod: nil, RequireClientSecret: false, Order: RegistrationOrderCIMDFirst, AllowLoopbackRegistrationEndpoint: true}
 
 	method, ok := registeredAuthMethod(ProxyRegisterResponse{ClientID: "client"}, policy)
 	require.True(t, ok)
