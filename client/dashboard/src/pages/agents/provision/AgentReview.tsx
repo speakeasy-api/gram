@@ -71,25 +71,34 @@ export function AgentReview({
     throwOnError: false,
   });
   const inventory = useServerInventory();
-  const serverSummaries = (grants.data ?? [])
-    .filter((grant) => grant.selector.resourceKind === "mcp")
-    .map((grant) => {
-      const id = grant.selector.resourceId ?? "*";
-      if (id === "*")
-        return { id: "*", name: "Every MCP server", detail: "all servers" };
-      const server = inventory.servers.find(
-        (candidate) => candidate.resourceId === id || candidate.id === id,
-      );
-      return {
-        id,
-        name: server?.name ?? id,
-        detail: grant.selector.tool ? grant.selector.tool : "all tools",
-      };
-    })
-    .filter(
-      (entry, index, all) =>
-        all.findIndex((other) => other.id === entry.id) === index,
-    );
+  // One row per server, but its detail gathers every grant on that server:
+  // deduplicating by server id alone kept the first grant and dropped the
+  // rest, so an agent reaching three named tools was shown reaching one.
+  const serverTools = new Map<string, { name: string; tools: Set<string> }>();
+  for (const grant of grants.data ?? []) {
+    if (grant.selector.resourceKind !== "mcp") continue;
+    const id = grant.selector.resourceId ?? "*";
+    const name =
+      id === "*"
+        ? "Every MCP server"
+        : (inventory.servers.find(
+            (candidate) => candidate.resourceId === id || candidate.id === id,
+          )?.name ?? id);
+    const entry = serverTools.get(id) ?? { name, tools: new Set<string>() };
+    // A grant with no tool reaches all of them, which no list of named tools
+    // can narrow.
+    entry.tools.add(grant.selector.tool ?? "*");
+    serverTools.set(id, entry);
+  }
+  const serverSummaries = [...serverTools].map(([id, entry]) => ({
+    id,
+    name: entry.name,
+    detail: entry.tools.has("*")
+      ? id === "*"
+        ? "all servers"
+        : "all tools"
+      : [...entry.tools].sort().join(", "),
+  }));
 
   // The scopes the agent's stored policy actually grants. A literal here
   // described every agent as mcp:connect, whatever its policy said two panels
@@ -199,6 +208,14 @@ export function AgentReview({
                       </code>
                     ))}
                   </span>
+                ) : grants.isPending ? (
+                  <Text muted small>
+                    Loading…
+                  </Text>
+                ) : grants.isError ? (
+                  <Text muted small>
+                    Unavailable
+                  </Text>
                 ) : (
                   <Text muted small>
                     None yet

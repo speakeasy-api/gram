@@ -116,8 +116,7 @@ export function WizardSummary({
         aria-hidden="true"
         className="h-0.5 w-full"
         style={{
-          background:
-            "linear-gradient(90deg,#320F1E 0%,#C83228 13%,#FB873F 25%,#D2DC91 38%,#5A8250 50%,#002314 62%,#00143C 74%,#2873D7 86%,#9BC3FF 100%)",
+          background: "var(--gradient-brand-primary)",
         }}
       />
       <div className="space-y-4 p-4">
@@ -136,7 +135,7 @@ export function WizardSummary({
           <div className="contents">
             <dt className="text-muted-foreground">Name</dt>
             <dd className="min-w-0 text-right break-words">
-              {name || <Skeleton className="ml-auto h-5 w-28" />}
+              {name.trim() || <Skeleton className="ml-auto h-5 w-28" />}
             </dd>
           </div>
           {rows.map((row) => (

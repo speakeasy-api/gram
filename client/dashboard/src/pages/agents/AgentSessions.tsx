@@ -159,11 +159,15 @@ export function AgentSessionsSection({
       width: "140px",
       // The one column where elapsed time is the answer: "2 days ago" says
       // whether this session is still in use, which a date does not.
+      //
+      // Absent is not never: a session older than the tracking reports no
+      // last use, and "Never" would state something about it that is not
+      // known.
       render: (session) =>
         session.lastUsedAt ? (
           <HumanizeDateTime date={session.lastUsedAt} />
         ) : (
-          "Never"
+          "Unknown"
         ),
     },
     {

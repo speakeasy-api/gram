@@ -416,18 +416,57 @@ export default function IdentitiesIndex({
 }: {
   kind: RosterKind;
 }): JSX.Element {
-  return (
-    <RequireScope scope={["project:read"]} level="page">
+  const agentManagementFlag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
+  const page = (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <IdentitiesIndexContent kind={kind} />
+      </Page.Body>
+    </Page>
+  );
+
+  // The people roster is built from project telemetry, so it needs the
+  // project. An agent is authorized by who owns it, which the server decides
+  // per agent — gating the page on project:read would shut someone out of
+  // agents that are theirs.
+  if (kind === "person") {
+    return (
+      <RequireScope scope={["project:read"]} level="page">
+        {page}
+      </RequireScope>
+    );
+  }
+
+  // Say the roster is unavailable rather than showing an empty one. Without
+  // the rollout the query never runs, and "no agents" is a claim about the
+  // organization rather than about the feature being off.
+  if (agentManagementFlag.status !== "enabled") {
+    return (
       <Page>
         <Page.Header>
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <IdentitiesIndexContent kind={kind} />
+          <Page.Section>
+            <Page.Section.Title>Agents</Page.Section.Title>
+            <Page.Section.Description>
+              {agentManagementFlag.status === "loading"
+                ? "Checking whether agent identities are available here."
+                : agentManagementFlag.status === "disabled"
+                  ? "Agent identities are not enabled for this organization."
+                  : "Could not tell whether agent identities are available here. Try again later."}
+            </Page.Section.Description>
+            <Page.Section.Body>{null}</Page.Section.Body>
+          </Page.Section>
         </Page.Body>
       </Page>
-    </RequireScope>
-  );
+    );
+  }
+
+  return page;
 }
 
 /** The bare /identities URL lands on the people roster. */
@@ -1063,7 +1102,13 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
               }
               visible={agentRows.length}
               hasMore={agentsQuery.hasNextPage}
-              onLoadMore={() => void agentsQuery.fetchNextPage()}
+              onLoadMore={async () => {
+                // Returned, not discarded: the table keeps its loading state
+                // until this settles. Guarded, so a second scroll to the end
+                // cannot start the same page twice.
+                if (agentsQuery.isFetchingNextPage) return;
+                await agentsQuery.fetchNextPage();
+              }}
               onRowClick={openIdentity}
               emptyMessage={rosterMessage("No agents match these filters")}
             />

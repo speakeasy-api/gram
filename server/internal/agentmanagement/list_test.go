@@ -307,38 +307,60 @@ func TestListAgentsRejectsACursorThatIsNotUTF8(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-func TestListAgentsKeepsPagingWhenTheScanCapIsHit(t *testing.T) {
+func TestListAgentsWalksPastRowsTheCallerMayNotRead(t *testing.T) {
 	t.Parallel()
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
 	seedOrganizationUser(t, conn, "org-a", "caller")
 	seedOrganizationUser(t, conn, "org-a", "other")
-	// Each scan reads limit+1 rows, so the cap covers 2*maxAgentPageScans rows
-	// at limit 1. Seed more unreadable agents than that, with a readable one
-	// beyond them: the first page cannot reach it, so it must hand back a
-	// cursor rather than report the list exhausted.
-	for i := range 2*maxAgentPageScans + 2 {
+	// A long run of unreadable agents ahead of a readable one. Each scan reads
+	// limit+1 rows, so at limit 1 this takes many of them: the walk must keep
+	// going rather than hand back a short page that reads as the end.
+	for i := range 60 {
 		createAgent(t, conn, "org-a", "other", fmt.Sprintf("Hidden %03d", i))
 	}
 	visible := createAgent(t, conn, "org-a", "caller", "Zzz visible")
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-a", "caller")
 
-	seen := make([]string, 0, 1)
-	var cursor *string
-	for range maxAgentPageScans + 4 {
-		result, err := service.List(ctx, &gen.ListPayload{Limit: 1, Cursor: cursor})
-		require.NoError(t, err)
-		for _, agent := range result.Items {
-			seen = append(seen, agent.ID)
-		}
-		cursor = result.NextCursor
-		if cursor == nil {
-			break
-		}
-	}
-	require.Nil(t, cursor, "pagination must terminate")
-	require.Equal(t, []string{visible.ID.String()}, seen)
+	result, err := service.List(ctx, &gen.ListPayload{Limit: 1})
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, visible.ID.String(), result.Items[0].ID)
+	require.Nil(t, result.NextCursor, "the readable agent is the last one")
+}
+
+func TestListAgentsCursorNamesOnlyAgentsTheCallerCanRead(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "caller")
+	seedOrganizationUser(t, conn, "org-a", "other")
+	// Readable rows either side of an unreadable one, so the page boundary
+	// falls next to a hidden agent.
+	createAgent(t, conn, "org-a", "caller", "Alpha visible")
+	createAgent(t, conn, "org-a", "other", "Bravo hidden")
+	createAgent(t, conn, "org-a", "caller", "Charlie visible")
+	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx := validatedHumanContext(t, "org-a", "caller")
+
+	result, err := service.List(ctx, &gen.ListPayload{Limit: 1})
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.NotNil(t, result.NextCursor)
+
+	// The cursor is reversible base64, so whatever it names is readable by
+	// anyone holding it. It must never name an agent withheld from them.
+	name, _, err := decodeAgentCursor(*result.NextCursor)
+	require.NoError(t, err)
+	require.Equal(t, "alpha visible", name)
+	require.NotContains(t, name, "hidden")
+
+	// And the walk still reaches what is past the hidden row.
+	next, err := service.List(ctx, &gen.ListPayload{Limit: 1, Cursor: result.NextCursor})
+	require.NoError(t, err)
+	require.Len(t, next.Items, 1)
+	require.Equal(t, "Charlie visible", next.Items[0].Name)
 }
 
 func TestListAgentsRejectsAnOutOfRangeLimit(t *testing.T) {

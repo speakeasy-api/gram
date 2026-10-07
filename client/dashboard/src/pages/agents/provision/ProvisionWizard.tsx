@@ -228,7 +228,10 @@ export function ProvisionWizard({
       const issued = await sdk.keys.create({
         createKeyForm: {
           agentId: target.id,
-          name: `${name.trim()} key ${new Date().toISOString().slice(0, 10)}`,
+          // Unique per issue, not per day: live key names are unique across
+          // the organization, so a date alone makes the second key of the day
+          // collide and the issue fail with a 409.
+          name: `${name.trim()} key ${new Date().toISOString().replace(/[:.]/g, "-")}`,
           expiresAt,
           delegatedGrantsVersion: 2,
           requestedGrants,

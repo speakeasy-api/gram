@@ -62,9 +62,6 @@ export function ScopeGatedNavGroup({
           key={entry.item.url}
           item={entry.item}
           label={entry.label}
-          // A route that declares a release stage says so on its own row, not
-          // only when it happens to be a group header.
-          stage={entry.item.stage}
         />
       ))}
     </CollapsibleNavGroup>

@@ -18,11 +18,17 @@ import (
 const (
 	defaultAgentPageSize = 50
 	maxAgentPageSize     = 200
-	// Readability is decided in Go, after the query, so a batch of exactly one
-	// page can come back entirely invisible and still leave pages to walk. The
-	// loop below keeps reading until it has filled a page, and this bounds how
-	// many reads that costs.
-	maxAgentPageScans = 20
+	// Readability is decided in Go, after the query, so a batch can come back
+	// entirely invisible while rows the caller may read remain further down.
+	// The loop below keeps reading until it has filled a page, and this bounds
+	// the work one request may do.
+	//
+	// Rows, not batches: a batch bound would make the limit the caller chose
+	// decide how far the scan reaches. The ceiling is far above any real
+	// inventory, and hitting it is reported rather than papered over — a short
+	// page would read as the end of the list, and a cursor naming the last row
+	// scanned would name an agent the caller is not allowed to see.
+	maxAgentRowsScanned = 20_000
 )
 
 // List uses the same independent grant-or-ownership decisions as selected-agent
@@ -106,11 +112,8 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	ownerIDs := make([]string, 0, limit+1)
 	seenOwners := make(map[string]bool)
 
-	// Set when the scan cap stopped a walk that still had rows to read. The
-	// page is then short of a full one but not the end of the list, so it must
-	// still carry a cursor or the client stops early on agents it may read.
-	var capped *repo.Agent
-	for scan := 0; scan < maxAgentPageScans && len(readable) <= limit; scan++ {
+	scanned := 0
+	for len(readable) <= limit {
 		rows, err := queries.ListManagedAgents(ctx, repo.ListManagedAgentsParams{
 			OrganizationID:   human.Auth.ActiveOrganizationID,
 			Search:           search,
@@ -129,6 +132,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		if len(rows) == 0 {
 			break
 		}
+		scanned += len(rows)
 
 		for _, agent := range rows {
 			permissions, err := s.authorizer.Permissions(ctx, human, agent)
@@ -155,22 +159,21 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		last := rows[len(rows)-1]
 		cursorName = pgtype.Text{String: strings.ToLower(last.Name), Valid: true}
 		cursorID = uuid.NullUUID{UUID: last.ID, Valid: true}
-		if scan == maxAgentPageScans-1 && len(readable) <= limit {
-			row := last
-			capped = &row
+
+		if scanned >= maxAgentRowsScanned {
+			return nil, oops.E(oops.CodeUnexpected, nil,
+				"this organization has more agents than one page can be assembled from; narrow the list with a search or a filter")
 		}
 	}
 
+	// Only a row the caller has been shown may be named by the cursor. It is
+	// base64, not a sealed token, so naming a row they could not read would
+	// hand them that agent's name and id.
 	var nextCursor *string
-	switch {
-	case len(readable) > limit:
+	if len(readable) > limit {
 		readable = readable[:limit]
-		value := encodeAgentCursor(readable[len(readable)-1].Name, readable[len(readable)-1].ID)
-		nextCursor = &value
-	case capped != nil:
-		// The cursor names the last row scanned, readable or not: it is a
-		// position in the ordering, not a row the caller is being shown.
-		value := encodeAgentCursor(capped.Name, capped.ID)
+		last := readable[len(readable)-1]
+		value := encodeAgentCursor(last.Name, last.ID)
 		nextCursor = &value
 	}
 

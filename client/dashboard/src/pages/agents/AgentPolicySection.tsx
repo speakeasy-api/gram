@@ -60,16 +60,7 @@ export function AgentPolicySection({
           issued, so adding a permission here grants nothing on its own.
         </SettingsSection.Description>
       </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <AgentPolicyContent
-          // A draft is only valid for the context it was built in, so any of
-          // these changing must discard it.
-          key={`${organization.id}:${user.id}:${agent.id}:${agent.permissions.write}`}
-          agent={agent}
-          organizationId={organization.id}
-          userId={user.id}
-        />
-      </SettingsSection.Panel>
+      <SettingsSection.Panel>{content}</SettingsSection.Panel>
     </SettingsSection>
   );
 }
