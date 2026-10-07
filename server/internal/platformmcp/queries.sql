@@ -3708,7 +3708,7 @@ WHERE htd.deployment_id IN (SELECT id FROM all_deployment_ids)
 -- Takes the toolset row lock, and must run BEFORE the server row is locked.
 --
 -- The order is the constraint, not the lock. toolsets.UpdateToolset holds this
--- same row (via GetToolsetForUpdate) and then, inside reconcileHostedNetworkAccess,
+-- same row (via GetToolsetForUpdate) and then, inside hostedmcp.Sync,
 -- updates the hosted mcp_servers row — an exclusive row lock taken by a plain
 -- UPDATE rather than an explicit FOR UPDATE. For a hosted server both ids are
 -- the toolset id, so it is the same pair of rows this path touches. Locking the

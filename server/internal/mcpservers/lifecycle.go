@@ -15,6 +15,7 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/tombstone"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -123,7 +124,7 @@ func LockMCPServerVisibilityDependencies(ctx context.Context, tx pgx.Tx, organiz
 	if err != nil {
 		return fmt.Errorf("list MCP server custom domains: %w", err)
 	}
-	if err := lockMcpServerCustomDomains(ctx, tx, domainIDs); err != nil {
+	if err := tombstone.LockCustomDomains(ctx, tx, domainIDs); err != nil {
 		return fmt.Errorf("lock MCP server custom domains: %w", err)
 	}
 	if _, err := mcpendpointsrepo.New(tx).LockRootMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockRootMCPEndpointsByMCPServerIDParams{McpServerID: serverID, ProjectID: projectID}); err != nil {
@@ -151,40 +152,11 @@ func UpdateMCPServerVisibilityInTransaction(ctx context.Context, tx pgx.Tx, audi
 		if err != nil {
 			return MCPServerVisibilityResult{}, fmt.Errorf("clear MCP server root endpoints: %w", err)
 		}
-		if err := logMCPServerRootAutoClears(ctx, tx, auditLogger, input.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID), input.ActorEmail, cleared); err != nil {
-			return MCPServerVisibilityResult{}, err
+		if err := tombstone.LogRootAutoClears(ctx, tx, auditLogger, input.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID), input.ActorEmail, cleared); err != nil {
+			return MCPServerVisibilityResult{}, fmt.Errorf("log MCP root cleanup: %w", err)
 		}
 	}
-	return MCPServerVisibilityResult{Server: updated, ClearedRootDomainIDs: rootDomainIDs(cleared)}, nil
-}
-
-func logMCPServerRootAutoClears(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, organizationID string, actor urn.Principal, actorDisplayName *string, rootEndpoints []mcpendpointsrepo.McpEndpoint) error {
-	if auditLogger == nil || organizationID == "" {
-		return fmt.Errorf("invalid MCP root cleanup audit input")
-	}
-	repository := customdomainsrepo.New(tx)
-	for _, endpoint := range rootEndpoints {
-		if !endpoint.CustomDomainID.Valid {
-			continue
-		}
-		domain, err := repository.GetCustomDomainByID(ctx, endpoint.CustomDomainID.UUID)
-		if err != nil {
-			return fmt.Errorf("load custom domain for MCP root cleanup audit: %w", err)
-		}
-		if err := auditLogger.LogCustomDomainUpdate(ctx, tx, audit.LogCustomDomainUpdateEvent{
-			OrganizationID:             organizationID,
-			Actor:                      actor,
-			ActorDisplayName:           actorDisplayName,
-			ActorSlug:                  nil,
-			CustomDomainURN:            urn.NewCustomDomain(domain.ID),
-			DomainName:                 domain.Domain,
-			CustomDomainSnapshotBefore: mv.BuildCustomDomainView(domain, false, endpoint.ID),
-			CustomDomainSnapshotAfter:  mv.BuildCustomDomainView(domain, false, uuid.Nil),
-		}); err != nil {
-			return fmt.Errorf("audit MCP root cleanup: %w", err)
-		}
-	}
-	return nil
+	return MCPServerVisibilityResult{Server: updated, ClearedRootDomainIDs: tombstone.RootDomainIDs(cleared)}, nil
 }
 
 // UpdateMCPServerLifecycleInTransaction updates only the name-derived slug and

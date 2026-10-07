@@ -221,6 +221,23 @@ SET
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
+-- name: SyncHostedMCPServer :one
+-- Projects a toolset's hosting columns onto its canonical wrapper (id = toolset id).
+UPDATE mcp_servers
+SET
+    name = @name,
+    slug = @slug,
+    visibility = @visibility,
+    user_session_issuer_id = @user_session_issuer_id,
+    tool_variations_group_id = @tool_variations_group_id,
+    network_access_mode = @network_access_mode,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND toolset_id = @id
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: DeleteMCPServer :one
 UPDATE mcp_servers
 SET deleted_at = clock_timestamp()

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -207,6 +208,9 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 		ToolsetSlug:      created.Slug,
 	}); err != nil {
 		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "failed to log toolset creation").LogError(ctx, logger)
+	}
+	if _, err := hostedmcp.Sync(ctx, tx, auditLogger, hostedmcp.Actor{UserID: input.ActorUserID, Email: input.ActorEmail}, created, nil); err != nil {
+		return ToolsetCreateResult{}, err //nolint:wrapcheck // oops errors pass through.
 	}
 
 	result := ToolsetCreateResult{Toolset: created, McpEnabled: params.McpEnabled, AddedToDefaultPlugin: false, PluginCreated: false}

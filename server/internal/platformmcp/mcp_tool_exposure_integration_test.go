@@ -599,7 +599,7 @@ func TestToolsetRowLockBlocksAttachingAnotherServerToIt(t *testing.T) {
 }
 
 // Lock ORDER, not lock presence. toolsets.UpdateToolset holds the toolset row
-// (GetToolsetForUpdate) and then, inside reconcileHostedNetworkAccess, runs a
+// (GetToolsetForUpdate) and then, inside hostedmcp.Sync, runs a
 // plain `UPDATE mcp_servers ... WHERE id = $6 AND toolset_id = $6` — an
 // exclusive row lock taken without any FOR UPDATE syntax. For a hosted server
 // both ids are the toolset id, so that is the same pair of rows this path
