@@ -19,6 +19,8 @@ func TestIsPipelineKeyCoversWhatThePipelineWrites(t *testing.T) {
 		string(EventTypeColumnKey),
 		string(OriginalInstrumentationScopeNameKey),
 		string(OrganizationIDKey),
+		string(TokensCountKey),
+		string(TokensCodecKey),
 		string(GramUserRolesKey),
 		string(DirectoryIDKey),
 		string(DirectoryGroupNamesKey),
