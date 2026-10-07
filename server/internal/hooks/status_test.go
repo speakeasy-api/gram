@@ -21,6 +21,23 @@ func getStatusPayload() *gen.GetStatusPayload {
 	return &gen.GetStatusPayload{ApikeyToken: nil, SessionToken: nil, ProjectSlugInput: nil}
 }
 
+func mintStatusKey(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, projectID uuid.NullUUID, scopes []string) {
+	t.Helper()
+	key := "gram_local_" + uuid.NewString()
+	hash, err := auth.GetAPIKeyHash(key)
+	require.NoError(t, err)
+	_, err = keysrepo.New(ti.conn).CreateAPIKey(t.Context(), keysrepo.CreateAPIKeyParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		ProjectID:       projectID,
+		CreatedByUserID: authCtx.UserID,
+		Name:            "status-" + uuid.NewString(),
+		KeyPrefix:       key[:16],
+		KeyHash:         hash,
+		Scopes:          scopes,
+	})
+	require.NoError(t, err)
+}
+
 func TestHooks_GetStatus_Unconfigured(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -32,41 +49,41 @@ func TestHooks_GetStatus_Unconfigured(t *testing.T) {
 	require.False(t, status.AnthropicInferenceHooks)
 }
 
-func TestHooks_GetStatus_HooksScopedKey(t *testing.T) {
+func TestHooks_GetStatus_ProjectBoundHooksKey(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-
-	mintKey := func(scopes []string) {
-		key := "gram_local_" + uuid.NewString()
-		hash, err := auth.GetAPIKeyHash(key)
-		require.NoError(t, err)
-		_, err = keysrepo.New(ti.conn).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
-			OrganizationID:  authCtx.ActiveOrganizationID,
-			ProjectID:       uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-			CreatedByUserID: authCtx.UserID,
-			Name:            "status-" + uuid.NewString(),
-			KeyPrefix:       key[:16],
-			KeyHash:         hash,
-			Scopes:          scopes,
-		})
-		require.NoError(t, err)
-	}
+	ownProject := uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
 
 	// A key without the hooks scope does not count.
-	mintKey([]string{"producer"})
+	mintStatusKey(t, ti, authCtx, ownProject, []string{"producer"})
 	status, err := ti.service.GetStatus(ctx, getStatusPayload())
 	require.NoError(t, err)
 	require.False(t, status.Configured)
 
-	mintKey([]string{"hooks"})
+	mintStatusKey(t, ti, authCtx, ownProject, []string{"hooks"})
 	status, err = ti.service.GetStatus(ctx, getStatusPayload())
 	require.NoError(t, err)
 	require.True(t, status.Configured)
 	require.True(t, status.AgentHooksKey)
 	require.False(t, status.AnthropicInferenceHooks)
+}
+
+func TestHooks_GetStatus_OrganizationWideHooksKey(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// A key with no project binding feeds every project in the organization.
+	mintStatusKey(t, ti, authCtx, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, []string{"hooks"})
+
+	status, err := ti.service.GetStatus(ctx, getStatusPayload())
+	require.NoError(t, err)
+	require.True(t, status.Configured)
+	require.True(t, status.AgentHooksKey)
 }
 
 func TestHooks_GetStatus_AnthropicInferenceHooks(t *testing.T) {
@@ -94,16 +111,15 @@ func TestHooks_GetStatus_AnthropicInferenceHooks(t *testing.T) {
 	require.True(t, status.AnthropicInferenceHooks)
 }
 
-func TestHooks_GetStatus_RequiresOrgRead(t *testing.T) {
+func TestHooks_GetStatus_RequiresProjectRead(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	projectID := authCtx.ProjectID.String()
 	ctx = authztest.WithExactGrants(t, ctx,
-		authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, projectID)},
+		authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)},
 	)
 
 	_, err := ti.service.GetStatus(ctx, getStatusPayload())

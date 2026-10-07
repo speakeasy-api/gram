@@ -1206,15 +1206,16 @@ function ScopeStep({
   });
   const mcpScoped = mcpScope.mode === "mcp";
   const chosen = mcpScope.mode !== "unset";
-  // Fail open on a status error so a transient failure never blocks authoring.
-  const sessionsAvailable =
-    hooksStatus.isError || (hooksStatus.data?.configured ?? false);
+  // Only a successful read offers Client sessions. A failed read offers no
+  // cards and asks for a retry: guessing either way would let the author save
+  // a policy whose scope was never verified.
+  const sessionsAvailable = hooksStatus.data?.configured ?? false;
   // Fail closed while the flag loads or is unavailable. A stored scope or an
   // in-progress MCP draft keeps the MCP option so the form never strands the
   // user in MCP mode without the control to change it.
   const mcpAvailable =
     mcpScopeFlag.status === "enabled" || hasStoredMcpScope || mcpScoped;
-  const settled = !hooksStatus.isPending && mcpScopeFlag.status !== "loading";
+  const settled = hooksStatus.isSuccess && mcpScopeFlag.status !== "loading";
   // A single available option is taken without a click: an org without hooks
   // goes straight to MCP scope, an org without the MCP flag to client
   // sessions. Waits for both signals so a value still loading never pre-empts
@@ -1227,6 +1228,20 @@ function ScopeStep({
   return (
     <Card>
       <Stack gap={6}>
+        {hooksStatus.isError ? (
+          <div className="flex items-center gap-3">
+            <Text small muted>
+              Could not check whether hooks are configured.
+            </Text>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void hooksStatus.refetch()}
+            >
+              <Button.Text>Retry</Button.Text>
+            </Button>
+          </div>
+        ) : null}
         {settled ? (
           <PolicyScopeModeCards
             value={mcpScope.mode}
@@ -1234,9 +1249,10 @@ function ScopeStep({
             mcpAvailable={mcpAvailable}
             onChange={(mode) => setMcpScope({ ...mcpScope, mode })}
           />
-        ) : (
+        ) : null}
+        {!settled && !hooksStatus.isError ? (
           <Skeleton className="h-28 w-full" />
-        )}
+        ) : null}
         {settled && !chosen && (sessionsAvailable || mcpAvailable) ? (
           <Text small muted>
             Choose where this policy applies to continue.

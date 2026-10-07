@@ -468,14 +468,16 @@ UPDATE chats SET external_chat_id = @session_id::text
 WHERE id = @chat_id AND project_id = @project_id AND external_chat_id IS NULL;
 
 -- name: GetHooksConfiguration :one
--- Whether the organization has any hook telemetry source set up: an active
--- hooks-scoped API key (minted by the hooks setup dialog, plugin download or
--- setup wizard) or a connected Anthropic inference hooks integration.
+-- Whether the project has any hook telemetry source set up: an active
+-- hooks-scoped API key usable by the project (bound to it, or organization
+-- wide) or a connected Anthropic inference hooks integration for the project.
+-- Keys and integrations bound to another project feed only that project.
 SELECT
   EXISTS (
     SELECT 1
     FROM api_keys
     WHERE organization_id = @org_id::text
+      AND (project_id IS NULL OR project_id = @project_id::uuid)
       AND deleted IS FALSE
       AND scopes @> ARRAY['hooks']::text[]
       AND (expires_at IS NULL OR expires_at > clock_timestamp())
@@ -484,6 +486,7 @@ SELECT
     SELECT 1
     FROM ai_integration_configs
     WHERE organization_id = @org_id::text
+      AND project_id = @project_id::uuid
       AND provider = 'anthropic_inference'
       AND enabled IS TRUE
       AND deleted IS FALSE

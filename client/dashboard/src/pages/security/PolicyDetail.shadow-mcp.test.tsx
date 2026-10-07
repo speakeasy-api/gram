@@ -57,6 +57,7 @@ vi.mock("@gram/client/react-query/getHooksStatus.js", () => ({
       anthropicInferenceHooks: false,
     },
     isPending: false,
+    isSuccess: true,
     isError: false,
   }),
 }));

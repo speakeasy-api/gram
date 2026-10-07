@@ -45,6 +45,7 @@ const HOOKS_CONFIGURED = {
     anthropicInferenceHooks: false,
   },
   isPending: false,
+  isSuccess: true,
   isError: false,
 };
 const HOOKS_UNCONFIGURED = {
@@ -54,6 +55,7 @@ const HOOKS_UNCONFIGURED = {
     anthropicInferenceHooks: false,
   },
   isPending: false,
+  isSuccess: true,
   isError: false,
 };
 
@@ -918,6 +920,7 @@ describe("StandardPolicyEditor hooks availability", () => {
     mocks.hooksStatus.mockReturnValue({
       data: undefined,
       isPending: true,
+      isSuccess: false,
       isError: false,
     });
 
@@ -929,19 +932,24 @@ describe("StandardPolicyEditor hooks availability", () => {
     ).toBeNull();
   });
 
-  it("offers both cards when the hooks status cannot be read", () => {
+  it("offers no cards and asks for a retry when the hooks status cannot be read", () => {
+    const refetch = vi.fn();
     mocks.hooksStatus.mockReturnValue({
       data: undefined,
       isPending: false,
+      isSuccess: false,
       isError: true,
+      refetch,
     });
 
     renderEditor(null);
 
-    expect(screen.getByRole("radio", { name: "Client sessions" })).toBeTruthy();
+    expect(screen.queryByRole("radio")).toBeNull();
     expect(
-      screen.getByRole("radio", { name: "Specific MCP servers" }),
+      screen.getByText("Could not check whether hooks are configured."),
     ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 });
 
