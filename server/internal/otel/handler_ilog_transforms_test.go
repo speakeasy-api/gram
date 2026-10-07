@@ -293,3 +293,52 @@ func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 		require.Zero(t, dropped)
 	})
 }
+
+// The pipeline owns the whole speakeasy namespace, not only the column
+// keys: a producer that sends the pipeline's own keys could claim another
+// tenant or pose as another producer's scope, which is how the relays tell
+// a gateway record from a customer's. Every such key is dropped before the
+// transform writes its own, so exactly one copy of each is left.
+func TestLogTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
+	t.Parallel()
+
+	inbound := (&otelv1.InboundLogRecord_builder{
+		RecordId:  new("record-id"),
+		EventName: new("api_request"),
+		Scope:     (&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: new(claudeCodeScopeName)}).Build(),
+		Provenance: (&otelv1.InboundLogRecord_Provenance_builder{
+			Source:         new("speakeasy"),
+			OrganizationId: new(testLogOrganizationID),
+			ProjectId:      new(testLogProjectID),
+		}).Build(),
+		Attributes: []*otelv1.InboundLogRecord_KeyValue{
+			logStringAttribute(string(enrich.OriginalInstrumentationScopeNameKey), "com.example.forged"),
+			logStringAttribute(string(enrich.OrganizationIDKey), "forged-org"),
+			logStringAttribute(string(enrich.ProjectIDKey), "forged-project"),
+			logStringAttribute("model", "claude-sonnet-4"),
+		},
+	}).Build()
+
+	var published *otelv1.LogRecord
+	publisher := gcp.NewMockPublisher[*otelv1.LogRecord]()
+	publisher.On("Publish", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		record, ok := args.Get(1).(*otelv1.LogRecord)
+		require.True(t, ok)
+		published = record
+	}).Return(gcp.NewSuccessPublishResult()).Once()
+	reader, meterProvider := readableMeter(t)
+	handler := NewLogTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
+
+	require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
+	require.NotNil(t, published)
+
+	values := make(map[string][]string)
+	for _, item := range published.GetAttributes() {
+		values[item.GetKey()] = append(values[item.GetKey()], item.GetValue().GetStringValue())
+	}
+	require.Equal(t, []string{claudeCodeScopeName}, values[string(enrich.OriginalInstrumentationScopeNameKey)], "the transform's copy of the scope is the only one")
+	require.Equal(t, []string{testLogOrganizationID}, values[string(enrich.OrganizationIDKey)], "tenancy comes from provenance, not from the producer")
+	require.Equal(t, []string{testLogProjectID}, values[string(enrich.ProjectIDKey)])
+	require.Equal(t, []string{"claude-sonnet-4"}, values["model"], "the producer's own attributes stay")
+	require.Equal(t, int64(3), agentEventCount(t, reader, enrich.MeterReservedAttributesDropped, attr.OTELSignalKey, string(enrich.SignalLog)))
+}

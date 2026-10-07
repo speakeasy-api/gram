@@ -378,3 +378,50 @@ func TestSpanTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 		require.Zero(t, dropped)
 	})
 }
+
+// A producer that sends the pipeline's own keys on a span is treated as for
+// a log record: every speakeasy.* key it sent is dropped before the
+// transform writes its own, so the relays can trust the one copy left.
+func TestSpanTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
+	t.Parallel()
+
+	inbound := (&otelv1.InboundSpan_builder{
+		TraceId:           []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+		SpanId:            []byte{1, 2, 3, 4, 5, 6, 7, 8},
+		Name:              new("chat gpt-4o"),
+		StartTimeUnixNano: new(uint64(1_724_500_000_000_000_001)),
+		EndTimeUnixNano:   new(uint64(1_724_500_000_000_000_501)),
+		Scope:             (&otelv1.InboundSpan_InstrumentationScope_builder{Name: new("litellm")}).Build(),
+		Provenance: (&otelv1.InboundSpan_Provenance_builder{
+			Source:         new("speakeasy"),
+			OrganizationId: new(testLogOrganizationID),
+			ProjectId:      new(testLogProjectID),
+		}).Build(),
+		Attributes: []*otelv1.InboundSpan_KeyValue{
+			spanTestStringAttribute("gen_ai.operation.name", "chat"),
+			spanTestStringAttribute(string(enrich.OriginalInstrumentationScopeNameKey), "com.example.forged"),
+			spanTestStringAttribute(string(enrich.OrganizationIDKey), "forged-org"),
+		},
+	}).Build()
+
+	var published *otelv1.Span
+	publisher := gcp.NewMockPublisher[*otelv1.Span]()
+	publisher.On("Publish", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		span, ok := args.Get(1).(*otelv1.Span)
+		require.True(t, ok)
+		published = span
+	}).Return(gcp.NewSuccessPublishResult()).Once()
+	reader, meterProvider := readableMeter(t)
+	handler := NewSpanTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
+
+	require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
+	require.NotNil(t, published)
+
+	values := make(map[string][]string)
+	for _, item := range published.GetAttributes() {
+		values[item.GetKey()] = append(values[item.GetKey()], item.GetValue().GetStringValue())
+	}
+	require.Equal(t, []string{"litellm"}, values[string(enrich.OriginalInstrumentationScopeNameKey)], "the transform's copy of the scope is the only one")
+	require.Equal(t, []string{testLogOrganizationID}, values[string(enrich.OrganizationIDKey)], "tenancy comes from provenance, not from the producer")
+	require.Equal(t, int64(2), agentEventCount(t, reader, enrich.MeterReservedAttributesDropped, attr.OTELSignalKey, string(enrich.SignalSpan)))
+}

@@ -125,3 +125,19 @@ const (
 func IsAgentColumnKey(key string) bool {
 	return strings.HasPrefix(key, agentColumnKeyPrefix)
 }
+
+// pipelineKeyPrefix is the namespace of every attribute the pipeline itself
+// writes on a record: tenancy, token counts, the producer's original scope,
+// directory roles and the agent_events columns.
+const pipelineKeyPrefix = "speakeasy."
+
+// IsPipelineKey reports whether an attribute key is in the speakeasy
+// namespace, which the pipeline owns outright. Nothing upstream of the
+// transform writes there, so a key a producer sends under it is either a
+// mistake or an attempt to pass as the pipeline: to classify its own record
+// (speakeasy.agent), to claim another tenant (speakeasy.organization) or to
+// pose as another producer (speakeasy.original_instrumentation_scope). The
+// transform drops every such key before it writes its own.
+func IsPipelineKey(key string) bool {
+	return strings.HasPrefix(key, pipelineKeyPrefix)
+}

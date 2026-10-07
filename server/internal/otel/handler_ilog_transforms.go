@@ -59,10 +59,13 @@ func (h *LogTransformHandler) Handle(ctx context.Context, record *otelv1.Inbound
 	if err != nil {
 		return fmt.Errorf("convert inbound log record: %w", o11y.LogError(ctx, h.logger, err, "failed to convert inbound log record"))
 	}
+	// The producer's copy of anything in the pipeline's namespace goes
+	// before the pipeline writes its own, so the scope rewrite below and
+	// the enrichers after it leave exactly one copy of each key.
+	h.instruments.RecordReservedAttributesDropped(ctx, enrich.SignalLog, dropReservedLogAttributes(out))
 	if err := rewriteLogInstrumentationScope(out); err != nil {
 		return fmt.Errorf("rewrite instrumentation scope: %w", err)
 	}
-	h.instruments.RecordReservedAttributesDropped(ctx, enrich.SignalLog, dropReservedLogAttributes(out))
 
 	enrichments, err := enrich.Log(ctx, h.instruments, record, h.enrichers)
 	if err != nil {
@@ -103,16 +106,16 @@ func rewriteLogInstrumentationScope(record *otelv1.LogRecord) error {
 }
 
 // dropReservedLogAttributes removes what a producer sent under Gram's own
-// speakeasy.agent namespace and says how many attributes went. Only the
-// column enrichers write there, and they leave a key off when a record
-// carries no value for it, so a producer that sends one would otherwise
-// classify its own record. The enrichers read the inbound record, so what
-// they see is unchanged; the outbound record is what every consumer and
-// relay receives.
+// speakeasy namespace and says how many attributes went. Only the pipeline
+// writes there, and it leaves a key off when a record carries no value for
+// it, so a producer that sends one would otherwise classify its own record,
+// claim another tenant, or pose as another producer's scope. The enrichers
+// read the inbound record, so what they see is unchanged; the outbound
+// record is what every consumer and relay receives.
 func dropReservedLogAttributes(record *otelv1.LogRecord) int {
 	attributes := record.GetAttributes()
 	kept := slices.DeleteFunc(attributes, func(kv *otelv1.LogRecord_KeyValue) bool {
-		return enrich.IsAgentColumnKey(kv.GetKey())
+		return enrich.IsPipelineKey(kv.GetKey())
 	})
 	dropped := len(attributes) - len(kept)
 	if dropped > 0 {

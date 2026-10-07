@@ -58,10 +58,13 @@ func (h *SpanTransformHandler) Handle(ctx context.Context, m *otelv1.InboundSpan
 	if err != nil {
 		return fmt.Errorf("convert inbound span: %w", o11y.LogError(ctx, h.logger, err, "failed to convert inbound span"))
 	}
+	// The producer's copy of anything in the pipeline's namespace goes
+	// before the pipeline writes its own, so the scope rewrite below and
+	// the enrichers after it leave exactly one copy of each key.
+	h.instruments.RecordReservedAttributesDropped(ctx, enrich.SignalSpan, dropReservedSpanAttributes(out))
 	if err := rewriteInstrumentationScope(out); err != nil {
 		return fmt.Errorf("rewrite instrumentation scope: %w", err)
 	}
-	h.instruments.RecordReservedAttributesDropped(ctx, enrich.SignalSpan, dropReservedSpanAttributes(out))
 
 	enrichments, err := enrich.Span(ctx, h.instruments, m, h.enrichers)
 	if err != nil {
@@ -103,14 +106,15 @@ func rewriteInstrumentationScope(span *otelv1.Span) error {
 }
 
 // dropReservedSpanAttributes removes what a producer sent under Gram's own
-// speakeasy.agent namespace and says how many attributes went, exactly as
-// the log transform does for a log record: only the column enrichers write
-// there, and a producer that sends one would otherwise classify its own
-// span. The enrichers read the inbound span, so what they see is unchanged.
+// speakeasy namespace and says how many attributes went, exactly as the log
+// transform does for a log record: only the pipeline writes there, and a
+// producer that sends one would otherwise classify its own span, claim
+// another tenant, or pose as another producer's scope. The enrichers read
+// the inbound span, so what they see is unchanged.
 func dropReservedSpanAttributes(span *otelv1.Span) int {
 	attributes := span.GetAttributes()
 	kept := slices.DeleteFunc(attributes, func(kv *otelv1.Span_KeyValue) bool {
-		return enrich.IsAgentColumnKey(kv.GetKey())
+		return enrich.IsPipelineKey(kv.GetKey())
 	})
 	dropped := len(attributes) - len(kept)
 	if dropped > 0 {
