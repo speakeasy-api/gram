@@ -779,7 +779,7 @@ describe("StandardPolicyEditor scope choice", () => {
     ).toBe(false);
   });
 
-  it("reveals the server picker once Specific MCP servers is chosen", () => {
+  it("reveals the server picker once Specific MCP servers is chosen", async () => {
     renderEditor(null);
 
     fireEvent.click(screen.getByText("Specific MCP servers"));
@@ -790,6 +790,20 @@ describe("StandardPolicyEditor scope choice", () => {
         "Select at least one MCP server or apply the policy to all servers.",
       ),
     ).toBeTruthy();
+    // Continue follows scope completeness, not just the mode choice.
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(true);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Support MCP" }));
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("button", { name: "Continue" })
+          .hasAttribute("disabled"),
+      ).toBe(false);
+    });
   });
 
   it("preselects the stored scope when editing", () => {

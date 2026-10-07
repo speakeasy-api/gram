@@ -1062,7 +1062,7 @@ function PromptPolicyEditor({
         step={step}
         count={PROMPT_STEPS.length}
         onStep={handleStep}
-        continueDisabled={step === 1 && mcpScope.mode === "unset"}
+        continueDisabled={step === 1 && !policyMCPScopeComplete(mcpScope)}
       />
     </StepperShell>
   );
@@ -4243,7 +4243,7 @@ export function StandardPolicyEditor({
           step={step}
           count={STANDARD_STEPS.length}
           onStep={setStep}
-          continueDisabled={step === 1 && mcpScope.mode === "unset"}
+          continueDisabled={step === 1 && !policyMCPScopeComplete(mcpScope)}
         />
       </StepperShell>
 
