@@ -15,6 +15,16 @@ import (
 
 const (
 	meterHooksEventDuration = "hooks.event.duration"
+	// meterHooksEventFeedPublish counts the hook rows the ingest endpoint
+	// republished into the OTel pipeline, by hook source and outcome, so a
+	// publish that fails or a row the pipeline would refuse is visible
+	// rather than silently missing from agent_events.
+	meterHooksEventFeedPublish = "hooks.event_feed.publish"
+
+	eventFeedOutcomeSuccess = "success"
+	eventFeedOutcomeFailure = "failure"
+	eventFeedOutcomeInvalid = "invalid"
+	eventFeedOutcomeSkipped = "skipped"
 
 	hookMetricOutcomeAccepted        = "accepted"
 	hookMetricOutcomeFailure         = "failure"
@@ -31,7 +41,8 @@ const (
 )
 
 type metrics struct {
-	eventDuration metric.Float64Histogram
+	eventDuration    metric.Float64Histogram
+	eventFeedPublish metric.Int64Counter
 }
 
 func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metrics {
@@ -48,9 +59,31 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterHooksEventDuration), attr.SlogError(err))
 	}
 
-	return &metrics{
-		eventDuration: eventDuration,
+	eventFeedPublish, err := meter.Int64Counter(
+		meterHooksEventFeedPublish,
+		metric.WithDescription("Hook rows republished into the OTel event pipeline, by hook source and outcome"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterHooksEventFeedPublish), attr.SlogError(err))
 	}
+
+	return &metrics{
+		eventDuration:    eventDuration,
+		eventFeedPublish: eventFeedPublish,
+	}
+}
+
+// RecordEventFeedPublish counts rows the event-feed tee published, skipped,
+// refused or failed to publish for one hook source.
+func (m *metrics) RecordEventFeedPublish(ctx context.Context, hookSource string, outcome string, count int64) {
+	if m == nil || m.eventFeedPublish == nil || count <= 0 {
+		return
+	}
+
+	m.eventFeedPublish.Add(ctx, count, metric.WithAttributes(
+		attr.HookSource(hookSource),
+		attr.Outcome(outcome),
+	))
 }
 
 func (m *metrics) RecordHookEventDuration(ctx context.Context, source string, eventName string, outcome string, decision string, orgSlug string, riskScanned bool, duration time.Duration) {

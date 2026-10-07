@@ -18,6 +18,8 @@ The payload is feature-first:
 - `data`: feature payload blocks such as `prompt`, `tool_call`, `mcp`, `usage`, `message`, `skill`, and `notification`
 - `raw`: original provider payload for debugging only
 
+Every telemetry row the endpoint writes is also republished into the OTel pipeline (the `gram.otel.v1.InboundLogRecord` topic) under the instrumentation scope `github.com/speakeasy-api/gram/server/internal/hooks`, with the same attributes plus `gram.hook.adapter`, `gram.hook.raw_event_name`, `gram.hook.canonical_event_type`, `gram.hook.permission_type`, `gram.hook.turn_id`, `gram.hook.decision`, `session.id`, `user.id` and `user.email`. The `dialect.HooksLog` dialect in `server/internal/otel/dialect` classifies those records (tool hooks as `tool_call` / `tool_call_result`, prompts as `prompt`, permission requests as `tool_decision`, everything else unclassified with its raw name kept), and the column enrichers fill `agent_events` from them. The record id is derived from the idempotency key, so a device-spool replay collapses at read time; the publish ack is awaited inside the request and a failure is counted on `hooks.event_feed.publish` but never changes the hook's verdict.
+
 Provider-specific logic belongs in generated hook glue code and shared bash helpers. The backend dispatches by canonical Speakeasy feature events and data blocks, not by Claude/Cursor/Codex payload shape.
 
 The response is provider-neutral:

@@ -9,18 +9,24 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-type spanClassification struct{}
+type spanClassification struct {
+	instruments *Instruments
+}
 
 func (*spanClassification) Name() string {
 	return classificationEnricherName
 }
 
-func (*spanClassification) Enrich(_ context.Context, span *otelv1.InboundSpan) ([]attribute.KeyValue, error) {
+func (c *spanClassification) Enrich(ctx context.Context, span *otelv1.InboundSpan) ([]attribute.KeyValue, error) {
 	d := dialect.ForSpan(span)
+	eventType := stated(d.EventType(span))
+	if eventType == dialect.EventTypeUnclassified {
+		c.instruments.recordUnclassified(ctx, missingLabel(d.Surface(span)))
+	}
 	return classify(
 		inboundSpanSource(span),
 		stated(d.EventName(span)),
-		stated(d.EventType(span)),
+		eventType,
 		inboundSpanAttributeString(span, string(attr.ProviderKey)),
 		stated(d.Provider(span)),
 		stated(d.Surface(span)),

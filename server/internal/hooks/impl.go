@@ -106,6 +106,23 @@ type Service struct {
 	nowFunc func() time.Time
 }
 
+// Shutdown waits for the hook rows still being republished into the OTel
+// pipeline, bounded by ctx, so a deploy does not cut an ack short and lose a
+// row the endpoint already acknowledged to the agent.
+func (s *Service) Shutdown(ctx context.Context) error {
+	drained := make(chan struct{})
+	go func() {
+		s.otelTeeDrains.Wait()
+		close(drained)
+	}()
+	select {
+	case <-drained:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("wait for hooks event feed tees: %w", ctx.Err())
+	}
+}
+
 // now returns the current time via the injected clock, falling back to
 // time.Now when unset (e.g. a zero-value Service).
 func (s *Service) now() time.Time {
