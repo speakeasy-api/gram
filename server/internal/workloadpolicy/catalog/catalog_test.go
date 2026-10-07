@@ -128,6 +128,7 @@ func TestParseRefusesInvalidPlatforms(t *testing.T) {
 		{name: "checklist item with both", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource\n          value: token_endpoint\n          markdown: Leave empty", wantErr: "not both"},
 		{name: "checklist item with unknown value", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource\n          value: client_secret", wantErr: "not one Speakeasy derives"},
 		{name: "checklist item with an image", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource\n          markdown: \"![x](https://evil.example.com/px)\"", wantErr: "use an image block"},
+		{name: "form control setting on a platform block", from: "- type: agent_picker", to: "- type: agent_picker\n          placeholder: Pick one", wantErr: "belong to custom flows"},
 		{name: "collect after create", from: "      title: Console\n      phase: connect", to: "      title: Console\n      phase: collect", wantErr: "collect, then create, then connect"},
 	}
 	for _, tc := range tests {

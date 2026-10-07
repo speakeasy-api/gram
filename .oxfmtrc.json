@@ -15,6 +15,7 @@
     "/client/dashboard/src/lib/constants.ts",
     "/client/dashboard/src/sdk/**",
     "/client/dashboard/src/pages/workload-identities/setup/catalog.gen.json",
+    "/client/dashboard/src/pages/workload-identities/custom/custom.gen.json",
     "/hooks/sdk/**",
     "/infra/gen/**",
     "/infra/gen/**/*",
