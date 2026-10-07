@@ -526,9 +526,11 @@ trackedFiles:
   src/funcs/remoteMcpDiscoverProtectedResourceMetadata.ts: {}
   src/funcs/remoteMcpGetServer.ts: {}
   src/funcs/remoteMcpGetServerHeader.ts: {}
+  src/funcs/remoteMcpGetServerScopes.ts: {}
   src/funcs/remoteMcpListServerHeaders.ts: {}
   src/funcs/remoteMcpListServers.ts: {}
   src/funcs/remoteMcpProbeURL.ts: {}
+  src/funcs/remoteMcpSetServerScopePin.ts: {}
   src/funcs/remoteMcpUpdateServer.ts: {}
   src/funcs/remoteMcpUpdateServerHeader.ts: {}
   src/funcs/remoteMcpVerifyURL.ts: {}
@@ -1550,7 +1552,9 @@ trackedFiles:
   src/models/components/registrydiscoverymetadata.ts: {}
   src/models/components/registrydiscoverypage.ts: {}
   src/models/components/remotemcpserver.ts: {}
+  src/models/components/remotemcpserverclientscopes.ts: {}
   src/models/components/remotemcpserverheader.ts: {}
+  src/models/components/remotemcpserverscopes.ts: {}
   src/models/components/remotesession.ts: {}
   src/models/components/remotesessionclient.ts: {}
   src/models/components/remotesessionissuer.ts: {}
@@ -1690,6 +1694,7 @@ trackedFiles:
   src/models/components/setresourceaudienceform.ts: {}
   src/models/components/setrootmcpendpointrequestbody.ts: {}
   src/models/components/setscheduleenabledrequestbody.ts: {}
+  src/models/components/setserverscopepinrequestbody.ts: {}
   src/models/components/setslackidentitymappingrequestbody.ts: {}
   src/models/components/setsourceenvironmentlinkrequestbody.ts: {}
   src/models/components/setspendcaprequestbody.ts: {}
@@ -2262,6 +2267,7 @@ trackedFiles:
   src/models/operations/getpublishstatus.ts: {}
   src/models/operations/getremotemcpserver.ts: {}
   src/models/operations/getremotemcpserverheader.ts: {}
+  src/models/operations/getremotemcpserverscopes.ts: {}
   src/models/operations/getremotesessionclient.ts: {}
   src/models/operations/getremotesessionissuer.ts: {}
   src/models/operations/getremotesessionissuerduplicatepreflight.ts: {}
@@ -2621,6 +2627,7 @@ trackedFiles:
   src/models/operations/setpluginassignments.ts: {}
   src/models/operations/setproductfeature.ts: {}
   src/models/operations/setprojectlogo.ts: {}
+  src/models/operations/setremotemcpserverscopepin.ts: {}
   src/models/operations/setremotesessionautorefreshpolicy.ts: {}
   src/models/operations/setresourceaudience.ts: {}
   src/models/operations/setrootmcpendpoint.ts: {}
@@ -3085,6 +3092,8 @@ trackedFiles:
   src/react-query/getRemoteMcpServer.ts: {}
   src/react-query/getRemoteMcpServerHeader.core.ts: {}
   src/react-query/getRemoteMcpServerHeader.ts: {}
+  src/react-query/getRemoteMcpServerScopes.core.ts: {}
+  src/react-query/getRemoteMcpServerScopes.ts: {}
   src/react-query/getSourceEnvironment.core.ts: {}
   src/react-query/getSourceEnvironment.ts: {}
   src/react-query/getSpendBreakdown.core.ts: {}
@@ -3627,6 +3636,7 @@ trackedFiles:
   src/react-query/setModelProviderKeyEnabled.ts: {}
   src/react-query/setPluginAssignments.ts: {}
   src/react-query/setProjectLogo.ts: {}
+  src/react-query/setRemoteMcpServerScopePin.ts: {}
   src/react-query/setRemoteSessionAutoRefreshPolicy.ts: {}
   src/react-query/setResourceAudience.ts: {}
   src/react-query/setRootMcpEndpoint.ts: {}
@@ -7473,6 +7483,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getRemoteMcpServerScopes:
+    speakeasy-default-get-remote-mcp-server-scopes:
+      parameters:
+        query:
+          mcp_server_id: "5a149d89-78f9-4c10-afc1-8539d6721f85"
+      responses:
+        "200":
+          application/json: {"advertised_scopes_known": false, "challenge_scopes": ["<value 1>", "<value 2>", "<value 3>"], "clients": [{"client_id": "b44a5d27-6afc-4330-9d4c-2c00e586c851", "pin_would_decide": true, "requested_scopes": [], "scope_source": "resource_pin", "unadvertised_pinned_scopes": []}], "discovery_enabled": true, "pinned_scopes": ["<value 1>"], "resource_url": "https://smug-plain.org/", "shared_server_count": 335278}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getRemoteSessionClient:
     speakeasy-default-get-remote-session-client:
       parameters:
@@ -11739,6 +11761,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  setRemoteMcpServerScopePin:
+    speakeasy-default-set-remote-mcp-server-scope-pin:
+      requestBody:
+        application/json: {"mcp_server_id": "5353c293-642c-4480-be2f-b05fe48d5f98", "scopes": ["<value 1>"]}
+      responses:
+        "200":
+          application/json: {"advertised_scopes_known": false, "challenge_scopes": [], "clients": [{"client_id": "b5aff61a-32be-45f7-aa3c-f81e4904b2cf", "pin_would_decide": true, "requested_scopes": [], "scope_source": "cached_resource", "unadvertised_pinned_scopes": ["<value 1>"]}], "discovery_enabled": true, "pinned_scopes": ["<value 1>", "<value 2>"], "resource_url": "https://secondary-outrun.com", "shared_server_count": 342158}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   setRemoteSessionAutoRefreshPolicy:
     speakeasy-default-set-remote-session-auto-refresh-policy:
       requestBody:

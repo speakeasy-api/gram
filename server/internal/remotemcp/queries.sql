@@ -334,15 +334,50 @@ WHERE project_id = @project_id
     AND resource_identifier = @resource_identifier::text
     AND deleted IS FALSE;
 
--- name: SetRemoteProtectedResourceScopeOverride :execrows
--- Pins the scopes logins to this resource request; NULL or an empty array clears the pin.
-UPDATE remote_protected_resources
+-- name: AcquireRemoteProtectedResourceLock :exec
+-- Serializes writes to one resource row even before it exists, until commit or rollback.
+SELECT pg_advisory_xact_lock(hashtextextended('remote_protected_resources:' || CAST(@project_id::uuid AS text) || ':' || @resource_identifier::text, 0));
+
+-- name: GetRemoteURLForMcpServerForShare :one
+-- GetRemoteURLForMcpServer holding the remote server row, so a URL edit waits for the scope pin write.
+SELECT rms.url
+FROM mcp_servers AS m
+JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE m.id = @mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+FOR SHARE OF rms;
+
+-- name: ListMcpServerIDsByRemoteURL :many
+-- Live MCP servers in the project proxying to url, which share one protected resource.
+SELECT m.id
+FROM mcp_servers AS m
+JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE m.project_id = @project_id
+    AND rms.url = @url::text
+    AND m.deleted IS FALSE
+ORDER BY m.id;
+
+-- name: UpsertRemoteProtectedResourceScopeOverride :one
+-- Pins the scopes logins to this resource request, creating the row when the
+-- resource was never read; NULL or an empty array clears the pin.
+INSERT INTO remote_protected_resources (
+    project_id,
+    organization_id,
+    resource_identifier,
+    scope_override
+)
+VALUES (
+    @project_id,
+    @organization_id,
+    @resource_identifier::text,
+    CASE WHEN cardinality(sqlc.narg(scope_override)::text[]) > 0 THEN sqlc.narg(scope_override)::text[] END
+)
+ON CONFLICT (project_id, resource_identifier) WHERE deleted IS FALSE DO UPDATE
 SET
-    scope_override = CASE WHEN cardinality(sqlc.narg(scope_override)::text[]) > 0 THEN sqlc.narg(scope_override)::text[] END,
+    scope_override = EXCLUDED.scope_override,
     updated_at = clock_timestamp()
-WHERE project_id = @project_id
-    AND resource_identifier = @resource_identifier::text
-    AND deleted IS FALSE;
+RETURNING *;
 
 -- name: SetRemoteProtectedResourceMetadataTimestamps :execrows
 -- Test fixture: backdates when the row was last read or last failed.

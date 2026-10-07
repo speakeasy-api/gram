@@ -147,6 +147,12 @@ describe("AUDIT_ACTIONS", () => {
     ]);
   });
 
+  it("names the scope pin the way the dashboard does", () => {
+    expect(staticActionPhrase("mcp-server:update-scope-pin")).toBe(
+      "updated pinned scopes on MCP server",
+    );
+  });
+
   it("rejects actions it doesn't know", () => {
     expect(isAuditAction("risk_policy:delete")).toBe(true);
     expect(isAuditAction("not_a_resource:not_a_verb")).toBe(false);
