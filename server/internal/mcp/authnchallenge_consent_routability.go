@@ -33,7 +33,8 @@ type consentRouting struct {
 	backend  consentBackend
 	upstream string        // the single proxied server's upstream
 	issuer   uuid.NullUUID // a tunneled server's derived issuer
-	// members claiming each provider's authorization server, meta only.
+	// members claiming each client, keyed by remote_session_client_id, meta
+	// only. Several clients may share one authorization server.
 	members map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow
 	// active grants per normalized remote upstream; a remote backend refuses
 	// when more than one names it.
@@ -50,7 +51,7 @@ func (r consentRouting) unroutable(client remotesessions.Client, resource string
 		// A tunneled backend only reads the entry keyed by its own issuer.
 		return r.issuer.Valid && client.RemoteSessionIssuerID == r.issuer.UUID && !grantRoutesToUpstream(resource, r.upstream, true)
 	case consentBackendMeta:
-		members := r.members[client.RemoteSessionIssuerID]
+		members := r.members[client.ID]
 		if len(members) == 0 {
 			return false
 		}
@@ -74,7 +75,7 @@ func (r consentRouting) canValidate(client remotesessions.Client, resource strin
 			return false
 		}
 	case consentBackendMeta:
-		if len(r.members[client.RemoteSessionIssuerID]) == 0 {
+		if len(r.members[client.ID]) == 0 {
 			return false
 		}
 	case consentBackendNone:
@@ -116,11 +117,11 @@ func (s *Service) resolveConsentRouting(
 			if st, ok := statuses[c.ID]; !ok || st.Status != remotesessions.RemoteSessionActive {
 				continue
 			}
-			members, _, err := s.claimingMetaMembers(memberCtx, endpoint, c.RemoteSessionIssuerID)
+			members, _, err := s.claimingMetaMembers(memberCtx, endpoint, c)
 			if err != nil {
 				return r, fmt.Errorf("resolve consent routing: %w", err)
 			}
-			r.members[c.RemoteSessionIssuerID] = members
+			r.members[c.ID] = members
 		}
 
 	case endpoint.McpServerID.Valid:

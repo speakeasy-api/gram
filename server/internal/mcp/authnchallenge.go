@@ -967,21 +967,11 @@ func (s *Service) isWorkloadSessionBearer(token string) bool {
 	return err == nil && subject.Kind == urn.SessionSubjectKindWorkload
 }
 
+// resolveIssuerGateAccessTokens is the all-or-nothing resolution for direct
+// endpoints, whose toolset dispatch has no per-upstream routing (AIS-152).
+// Gateways resolve through applyGatewayIssuerGate instead.
 func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	endpoint := authentication.endpoint
-
-	// Meta MCP endpoints resolve partially: their member dispatch routes
-	// each credential by its recorded resource, so an unconnected provider
-	// degrades that one member while the rest of the session serves. The
-	// all-or-nothing ErrNoValidToken challenge below stays for direct
-	// endpoints, whose toolset dispatch has no per-upstream routing (AIS-152).
-	if endpoint.MetaMcpServerID.Valid {
-		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
-		}
-		return tokens, nil
-	}
 
 	// The Gram credential is valid in every rejection below; only the upstream
 	// remote session behind it is not. The specific broken upstream and the
@@ -1078,6 +1068,28 @@ func (s *Service) ApplyIssuerGate(
 	tokens, err := s.resolveIssuerGateAccessTokens(newCtx, w, authentication)
 	if err != nil {
 		return ctx, nil, nil, err
+	}
+	return newCtx, tokens, toolSelection, nil
+}
+
+// applyGatewayIssuerGate authenticates a gateway (meta MCP) request and
+// resolves every connected member credential, keyed by client. Resolution is
+// partial: member dispatch routes each credential by its recorded resource,
+// so an unconnected provider degrades that one member while the rest of the
+// session serves, and a missing grant never rejects the request here.
+func (s *Service) applyGatewayIssuerGate(
+	ctx context.Context,
+	w http.ResponseWriter,
+	authToken, baseURL string,
+	endpoint *ResolvedMcpEndpoint,
+) (context.Context, remotesessions.ClientTokens, *toolfilter.SessionSelection, error) {
+	newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, authToken, baseURL, endpoint)
+	if err != nil {
+		return ctx, nil, nil, err
+	}
+	tokens, err := s.remoteChallengeMgr.ResolveGatewayAccessTokens(newCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+	if err != nil {
+		return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(newCtx, s.logger)
 	}
 	return newCtx, tokens, toolSelection, nil
 }

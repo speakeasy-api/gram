@@ -46,7 +46,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
@@ -282,9 +281,11 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, sess remo
 	}
 
 	return UpstreamToken{
-		Token:                              tok,
-		Resource:                           conv.FromPGTextOrEmpty[string](sess.Resource),
-		RemoteSessionClientID:              clientID,
+		Token:                 tok,
+		Resource:              conv.FromPGTextOrEmpty[string](sess.Resource),
+		RemoteSessionClientID: clientID,
+		// The bulk resolvers stamp the issuer from the bound client row.
+		RemoteSessionIssuerID:              uuid.Nil,
 		RemoteSessionID:                    sess.ID,
 		RemoteSessionUpdatedAt:             sess.UpdatedAt.Time,
 		RemoteSessionResolvedFromUpdatedAt: resolvedFromUpdatedAt,
@@ -323,10 +324,8 @@ func (m *ChallengeManager) ResolveAuthorization(
 		if client.RemoteSessionIssuerID != remoteSessionIssuerID {
 			continue
 		}
-		if err := inv.Check("remotesessions.ResolveAuthorization",
-			"at most one remote_session_client per (user_session_issuer, remote_session_issuer)", clientID == uuid.Nil,
-		); err != nil {
-			return ResolvedAuthorization{}, fmt.Errorf("invariant: %w", err)
+		if clientID != uuid.Nil {
+			return ResolvedAuthorization{}, errDuplicateRemoteIssuerClients(remoteSessionIssuerID)
 		}
 		clientID = client.ClientID
 	}
@@ -367,6 +366,11 @@ type UpstreamToken struct {
 	// RemoteSessionClientID is the remote_session_client the credential
 	// belongs to.
 	RemoteSessionClientID uuid.UUID
+
+	// RemoteSessionIssuerID is the authorization server the client is
+	// registered with. Set by the bulk resolvers; several gateway clients
+	// may share it, so it never identifies a credential on its own.
+	RemoteSessionIssuerID uuid.UUID
 
 	// RemoteSessionID and RemoteSessionUpdatedAt identify the exact grant row
 	// this token came from. Callers use the pair as a CAS snapshot when
@@ -412,9 +416,10 @@ type UpstreamToken struct {
 // The cost is that one expired upstream blocks every tool on the issuer, and
 // a proxied request to a still-linked upstream, until it is re-linked.
 //
-// A runtime invariant asserts that no two bound clients target the same
-// remote_session_issuer. This is the application-level counterpart to the
-// attach-time guard in clienthandlers.go and keeps the map keys unambiguous.
+// Two bound clients targeting the same remote_session_issuer would make the
+// map keys ambiguous, so that configuration resolves to
+// ErrRemoteSessionMisconfigured. Only a gateway issuer may hold it, and
+// gateways resolve through ResolveGatewayAccessTokens instead.
 func (m *ChallengeManager) ResolveAccessTokens(
 	ctx context.Context,
 	projectID uuid.UUID,
@@ -434,14 +439,12 @@ func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, projectID uuid
 	return err
 }
 
-// ResolveAvailableAccessTokens is the partial-resolution variant the meta MCP
-// serving path calls. Per-client resolution is identical to
-// ResolveAccessTokens, but a bound client without a usable token is skipped
-// instead of failing the whole map: gateway member dispatch routes each
-// credential by its recorded resource, so a member whose provider is not
-// connected degrades member-scoped while every other member keeps serving.
-// Returns the resolvable subset — possibly empty — and errors only on
-// infrastructure failures, never on missing or expired grants.
+// ResolveAvailableAccessTokens is the partial-resolution variant of
+// ResolveAccessTokens for direct endpoints that route per upstream. Per-client
+// resolution is identical, but a bound client without a usable token is
+// skipped instead of failing the whole map. Returns the resolvable subset —
+// possibly empty — and errors only on infrastructure failures or an
+// ambiguous provider configuration, never on missing or expired grants.
 func (m *ChallengeManager) ResolveAvailableAccessTokens(
 	ctx context.Context,
 	projectID uuid.UUID,
@@ -450,6 +453,69 @@ func (m *ChallengeManager) ResolveAvailableAccessTokens(
 	subject urn.SessionSubject,
 ) (map[uuid.UUID]UpstreamToken, error) {
 	return m.resolveBoundAccessTokens(ctx, projectID, organizationID, userSessionIssuerID, subject, true)
+}
+
+// ClientTokens holds resolved upstream credentials keyed by
+// remote_session_client_id. A gateway may bind several clients registered
+// with one authorization server, one per member upstream, so its credentials
+// cannot be keyed by remote_session_issuer_id.
+type ClientTokens map[uuid.UUID]UpstreamToken
+
+// ForRemoteIssuer returns the credential resolved for remoteSessionIssuerID
+// and how many resolved clients share that issuer. Callers that select by
+// issuer identity must accept the entry only when count is exactly one.
+func (t ClientTokens) ForRemoteIssuer(remoteSessionIssuerID uuid.UUID) (entry UpstreamToken, count int) {
+	for _, candidate := range t {
+		if candidate.RemoteSessionIssuerID == remoteSessionIssuerID {
+			entry = candidate
+			count++
+		}
+	}
+	if count != 1 {
+		var none UpstreamToken
+		return none, count
+	}
+	return entry, count
+}
+
+// ResolveGatewayAccessTokens is the partial-resolution variant the gateway
+// (meta MCP) serving and consent paths call. A bound client without a usable
+// token is skipped: gateway member dispatch routes each credential by its
+// recorded resource, so a member whose provider is not connected degrades
+// member-scoped while every other member keeps serving. Unlike the
+// issuer-keyed resolvers it keeps every client, including several registered
+// with the same authorization server for different member upstreams.
+// Errors only on infrastructure failures, never on missing or expired grants.
+func (m *ChallengeManager) ResolveGatewayAccessTokens(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+) (ClientTokens, error) {
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
+	if err != nil {
+		return nil, fmt.Errorf("list remote_session_clients: %w", err)
+	}
+	if len(clients) == 0 {
+		return nil, nil
+	}
+	resolved, err := m.resolveClientTokens(ctx, projectID, organizationID, userSessionIssuerID, clients, subject, true)
+	if err != nil {
+		return nil, err
+	}
+	tokens := make(ClientTokens, len(resolved))
+	for _, token := range resolved {
+		tokens[token.RemoteSessionClientID] = token
+	}
+	return tokens, nil
+}
+
+// errDuplicateRemoteIssuerClients names a user-session issuer that binds more
+// than one client of one authorization server, which issuer-keyed resolution
+// cannot represent.
+func errDuplicateRemoteIssuerClients(remoteSessionIssuerID uuid.UUID) error {
+	return fmt.Errorf("%w: several remote_session_clients bind remote_session_issuer %s to this user_session_issuer", ErrRemoteSessionMisconfigured, remoteSessionIssuerID)
 }
 
 func (m *ChallengeManager) resolveBoundAccessTokens(
@@ -468,22 +534,48 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 		return nil, nil
 	}
 
-	// Assert the per-(user_session_issuer, remote_session_issuer) uniqueness
-	// invariant up front, before resolving any tokens. Folding this into the
-	// token loop would let an unusable first client short-circuit with
-	// ErrNoValidToken and hide a duplicate that comes later — masking the very
-	// drift this backstop exists to surface.
+	// Check provider uniqueness up front, before resolving any tokens. Folding
+	// this into the token loop would let an unusable first client
+	// short-circuit with ErrNoValidToken and hide a duplicate that comes
+	// later. Only a gateway issuer may legitimately bind several clients of
+	// one provider; issuer-keyed callers refuse it as a configuration error.
 	seen := make(map[uuid.UUID]bool, len(clients))
 	for _, c := range clients {
-		if err := inv.Check("remotesessions.ResolveAccessTokens",
-			"at most one remote_session_client per (user_session_issuer, remote_session_issuer)", !seen[c.RemoteSessionIssuerID],
-		); err != nil {
-			return nil, fmt.Errorf("invariant: %w", err)
+		if seen[c.RemoteSessionIssuerID] {
+			m.logger.WarnContext(ctx, "issuer-keyed remote session resolution refused duplicate provider clients",
+				attr.SlogUserSessionIssuerID(userSessionIssuerID.String()),
+				attr.SlogRemoteSessionIssuerID(c.RemoteSessionIssuerID.String()),
+			)
+			return nil, errDuplicateRemoteIssuerClients(c.RemoteSessionIssuerID)
 		}
 		seen[c.RemoteSessionIssuerID] = true
 	}
 
-	tokens := make(map[uuid.UUID]UpstreamToken, len(clients))
+	resolved, err := m.resolveClientTokens(ctx, projectID, organizationID, userSessionIssuerID, clients, subject, skipUnusable)
+	if err != nil {
+		return nil, err
+	}
+	tokens := make(map[uuid.UUID]UpstreamToken, len(resolved))
+	for _, token := range resolved {
+		tokens[token.RemoteSessionIssuerID] = token
+	}
+	return tokens, nil
+}
+
+// resolveClientTokens resolves one credential per bound client, in client
+// order. With skipUnusable a client without a usable token is omitted;
+// otherwise the first unusable client fails resolution with the most
+// actionable error.
+func (m *ChallengeManager) resolveClientTokens(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	clients []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow,
+	subject urn.SessionSubject,
+	skipUnusable bool,
+) ([]UpstreamToken, error) {
+	tokens := make([]UpstreamToken, 0, len(clients))
 	for i, c := range clients {
 		// The grant-time metadata (the recorded RFC 8707 resource) comes from
 		// the same row load that produced the token, so a disconnect+reconnect
@@ -516,7 +608,8 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 			}
 			return nil, ErrNoValidToken
 		default:
-			tokens[c.RemoteSessionIssuerID] = resolved
+			resolved.RemoteSessionIssuerID = c.RemoteSessionIssuerID
+			tokens = append(tokens, resolved)
 		}
 	}
 	return tokens, nil

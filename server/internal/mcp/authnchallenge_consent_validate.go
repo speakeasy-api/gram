@@ -99,11 +99,24 @@ func (s *Service) probeRemoteSession(
 	subject := *challengeState.Subject
 	logger = logger.With(attr.SlogRemoteSessionClientID(client.ID.String()))
 
-	tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+	// A gateway's credentials are keyed by client, since several of its
+	// members may use clients of one authorization server; a direct
+	// endpoint's by issuer, as its runtime routes them.
+	var tokens map[uuid.UUID]remotesessions.UpstreamToken
+	var gatewayTokens remotesessions.ClientTokens
+	var entry remotesessions.UpstreamToken
+	usable := false
+	var err error
+	if endpoint.MetaMcpServerID.Valid {
+		gatewayTokens, err = s.remoteChallengeMgr.ResolveGatewayAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		entry, usable = gatewayTokens[client.ID]
+	} else {
+		tokens, err = s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		entry, usable = tokens[client.RemoteSessionIssuerID]
+	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for validation").LogError(ctx, logger)
 	}
-	entry, usable := tokens[client.RemoteSessionIssuerID]
 	if !usable || entry.RemoteSessionClientID != client.ID {
 		return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "Connect this service before verifying it.").LogWarn(ctx, logger)
 	}
@@ -114,7 +127,7 @@ func (s *Service) probeRemoteSession(
 	}
 	// Route the complete credential set, just as serving does. The target resolver
 	// separately proves that this card is the credential selected for the target.
-	probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, challengeState, client, tokens)
+	probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, challengeState, client, tokens, gatewayTokens)
 	switch {
 	case errors.Is(err, errRemoteSessionUnroutable):
 		return oops.E(oops.CodeBadRequest, err, "This connection is not used by any server behind this endpoint, so it cannot be verified.").LogWarn(ctx, logger)
@@ -181,7 +194,9 @@ func (s *Service) probeRemoteSession(
 	return nil
 }
 
-// resolveValidationTarget finds the upstream this endpoint would hand the credential to, judged as the consent subject.
+// resolveValidationTarget finds the upstream this endpoint would hand the
+// credential to, judged as the consent subject. A gateway routes
+// gatewayTokens; a direct endpoint routes tokens.
 func (s *Service) resolveValidationTarget(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -189,6 +204,7 @@ func (s *Service) resolveValidationTarget(
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
 	tokens map[uuid.UUID]remotesessions.UpstreamToken,
+	gatewayTokens remotesessions.ClientTokens,
 ) (context.Context, validationTarget, error) {
 	var none validationTarget
 	subject := *challengeState.Subject
@@ -208,7 +224,7 @@ func (s *Service) resolveValidationTarget(
 	}
 	switch {
 	case endpoint.MetaMcpServerID.Valid:
-		return s.metaValidationTarget(ctx, logger, endpoint, client, tokens, sessionID, subject)
+		return s.metaValidationTarget(ctx, logger, endpoint, client, gatewayTokens, sessionID, subject)
 	case endpoint.McpServerID.Valid:
 		return s.standaloneValidationTarget(ctx, logger, endpoint, challengeState, client, tokens)
 	default:
@@ -222,25 +238,27 @@ func (s *Service) metaValidationTarget(
 	logger *slog.Logger,
 	endpoint *ResolvedMcpEndpoint,
 	client remotesessions.Client,
-	tokens map[uuid.UUID]remotesessions.UpstreamToken,
+	tokens remotesessions.ClientTokens,
 	sessionID string,
 	subject urn.SessionSubject,
 ) (context.Context, validationTarget, error) {
 	var none validationTarget
-	rows, claimed, err := s.claimingMetaMembers(ctx, endpoint, client.RemoteSessionIssuerID)
+	rows, claimed, err := s.claimingMetaMembers(ctx, endpoint, client)
 	if err != nil {
 		return ctx, none, fmt.Errorf("resolve claiming meta MCP members: %w", err)
 	}
 	if !claimed {
 		return ctx, none, errRemoteSessionUnroutable
 	}
-	entry := tokens[client.RemoteSessionIssuerID]
+	entry := tokens[client.ID]
 	targetID := uuid.Nil
 	for _, row := range rows {
-		// The dispatch selectors: a tunneled member takes only its own issuer's entry (tunneledIssuerToken).
+		// The dispatch selectors: a tunneled member takes only the single
+		// credential of its own issuer (tunneledMemberToken).
 		routes := grantRoutesToUpstream(entry.Resource, row.UpstreamUrl, false)
 		if row.Tunneled {
-			routes = tunneledIssuerToken(tokens, conv.ToNullUUID(client.RemoteSessionIssuerID), row.UpstreamUrl) != ""
+			own, count := tokens.ForRemoteIssuer(client.RemoteSessionIssuerID)
+			routes = count == 1 && own.RemoteSessionClientID == client.ID && grantRoutesToUpstream(own.Resource, row.UpstreamUrl, true)
 		}
 		if routes {
 			targetID = row.McpServerID
@@ -269,9 +287,7 @@ func (s *Service) metaValidationTarget(
 	}
 	name := conv.Default(member.name, member.slug)
 
-	selectedTokens := map[uuid.UUID]remotesessions.UpstreamToken{
-		client.RemoteSessionIssuerID: entry,
-	}
+	selectedTokens := remotesessions.ClientTokens{client.ID: entry}
 	// No inbound negotiation occurred; the SDK chooses the outbound revision.
 	gate := metaGateContext{
 		projectID:    endpoint.ProjectID,

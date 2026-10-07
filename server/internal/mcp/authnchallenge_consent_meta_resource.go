@@ -19,13 +19,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // resolveMetaMemberResource returns the upstream resource (remote server URL
-// or tunneled resource identifier) of the meta MCP member whose upstream
-// authenticates against remoteSessionIssuerID.
+// or tunneled resource identifier) of the meta MCP member that client
+// authenticates.
 //
-// Tri-state: ("", true) means members claimed the issuer but no single member
+// Tri-state: ("", true) means members claimed the client but no single member
 // wins, and the caller must not fall back to a weaker derivation; ("", false)
 // is a genuine no-match, the only case where the stored per-client derivation
 // may answer. A NULL remote_session_issuer_id matches nothing. The error is a
@@ -34,9 +35,9 @@ func (s *Service) resolveMetaMemberResource(
 	ctx context.Context,
 	logger *slog.Logger,
 	endpoint *ResolvedMcpEndpoint,
-	remoteSessionIssuerID uuid.UUID,
+	client remotesessions.Client,
 ) (string, bool, error) {
-	candidates, claimed, err := s.claimingMetaMembers(ctx, endpoint, remoteSessionIssuerID)
+	candidates, claimed, err := s.claimingMetaMembers(ctx, endpoint, client)
 	if err != nil || !claimed {
 		return "", false, err
 	}
@@ -61,11 +62,13 @@ func (s *Service) resolveMetaMemberResource(
 		case resource == "":
 			resource = upstream
 		default:
-			// One authorization server, two members: a grant records one resource per
-			// (subject, client), so nothing routes both.
-			logger.WarnContext(ctx, "meta MCP members share an authorization server; credential cannot be qualified to one member",
+			// One client, two member upstreams: a grant records one resource
+			// per (subject, client), so nothing routes both. Each member needs
+			// its own client.
+			logger.WarnContext(ctx, "meta MCP members share a client; credential cannot be qualified to one member",
 				attr.SlogMetaMcpServerID(endpoint.MetaMcpServerID.UUID.String()),
-				attr.SlogRemoteSessionIssuerID(remoteSessionIssuerID.String()),
+				attr.SlogRemoteSessionIssuerID(client.RemoteSessionIssuerID.String()),
+				attr.SlogRemoteSessionClientID(client.ID.String()),
 				attr.SlogMcpServerID(row.McpServerID.String()),
 			)
 			return "", true, nil
@@ -74,22 +77,25 @@ func (s *Service) resolveMetaMemberResource(
 	return resource, true, nil
 }
 
-// claimingMetaMembers lists the proxied members authenticating against
-// remoteSessionIssuerID, filtered to those the subject may reach. Claimed is
-// decided before RBAC: an invisible member still claimed the credential.
+// claimingMetaMembers lists the proxied members client authenticates,
+// filtered to those the subject may reach. Claimed is decided before RBAC and
+// client association: an invisible or differently configured member still
+// claimed the credential, so callers must not fall back to a weaker derivation.
 func (s *Service) claimingMetaMembers(
 	ctx context.Context,
 	endpoint *ResolvedMcpEndpoint,
-	remoteSessionIssuerID uuid.UUID,
+	client remotesessions.Client,
 ) ([]metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow, bool, error) {
-	if remoteSessionIssuerID == uuid.Nil {
+	if client.RemoteSessionIssuerID == uuid.Nil {
 		return nil, false, nil
 	}
 
 	rows, err := metamcprepo.New(s.db).ListMetaMCPMembersForRemoteSessionIssuer(ctx, metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerParams{
-		MetaMcpServerID:       endpoint.MetaMcpServerID.UUID,
-		ProjectID:             endpoint.ProjectID,
-		RemoteSessionIssuerID: uuid.NullUUID{UUID: remoteSessionIssuerID, Valid: true},
+		RemoteSessionClientID:      client.ID,
+		GatewayUserSessionIssuerID: uuid.NullUUID{UUID: endpoint.UserSessionIssuerID, Valid: endpoint.UserSessionIssuerID != uuid.Nil},
+		RemoteSessionIssuerID:      client.RemoteSessionIssuerID,
+		MetaMcpServerID:            endpoint.MetaMcpServerID.UUID,
+		ProjectID:                  endpoint.ProjectID,
 	})
 	if err != nil {
 		return nil, false, fmt.Errorf("list meta MCP members for remote session issuer: %w", err)
@@ -98,11 +104,30 @@ func (s *Service) claimingMetaMembers(
 		return nil, false, nil
 	}
 
-	candidates, err := s.authorizedMetaMembers(ctx, endpoint, rows)
+	candidates, err := s.authorizedMetaMembers(ctx, endpoint, associatedMetaMembers(rows))
 	if err != nil {
 		return nil, false, err
 	}
 	return candidates, true, nil
+}
+
+// associatedMetaMembers narrows the members claiming a client's authorization
+// server to those configured with that exact client. A gateway binding one
+// client per authorization server needs no narrowing, so every claiming
+// member stays a candidate. With several, a member belongs to the client its
+// own user-session issuer binds; members associated with none are dropped, so
+// a credential never qualifies to a sibling's upstream.
+func associatedMetaMembers(rows []metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow) []metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow {
+	if len(rows) == 0 || rows[0].GatewayProviderClients <= 1 {
+		return rows
+	}
+	associated := make([]metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow, 0, len(rows))
+	for _, row := range rows {
+		if row.MemberBindsClient {
+			associated = append(associated, row)
+		}
+	}
+	return associated
 }
 
 // authorizedMetaMembers drops members the subject holds no mcp:connect on,

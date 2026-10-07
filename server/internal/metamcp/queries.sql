@@ -308,11 +308,34 @@ RETURNING *;
 -- the tunneled server's recorded resource identifier (empty when a tunneled
 -- member records none — the claim still lands, minting an unqualified grant).
 -- Hosted and unproxied members have no upstream and cannot claim.
+--
+-- member_binds_client reports whether the member's own user_session_issuer
+-- binds the client being resolved, which associates the member with that
+-- exact client. A member gated by the gateway's own issuer is never
+-- associated, since that binding is what the association justifies.
+-- gateway_provider_clients counts the live clients the gateway issuer binds
+-- for this authorization server; above one, only associated members claim.
 SELECT
     s.id AS mcp_server_id,
     s.visibility AS mcp_server_visibility,
     COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url,
-    (t.id IS NOT NULL)::boolean AS tunneled
+    (t.id IS NOT NULL)::boolean AS tunneled,
+    EXISTS (
+      SELECT 1
+      FROM remote_session_client_user_session_issuers AS l
+      WHERE l.remote_session_client_id = @remote_session_client_id
+        AND l.user_session_issuer_id = s.user_session_issuer_id
+        AND s.user_session_issuer_id <> @gateway_user_session_issuer_id
+    )::boolean AS member_binds_client,
+    (
+      SELECT count(*)
+      FROM remote_session_client_user_session_issuers AS gl
+      JOIN remote_session_clients AS gc
+        ON gc.id = gl.remote_session_client_id
+       AND gc.deleted IS FALSE
+      WHERE gl.user_session_issuer_id = @gateway_user_session_issuer_id
+        AND gc.remote_session_issuer_id = @remote_session_issuer_id
+    )::integer AS gateway_provider_clients
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id

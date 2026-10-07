@@ -98,15 +98,23 @@ func seedActiveClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, pro
 	return client.ID, issuer.ID
 }
 
+// tokenCredentials projects an issuer-keyed map onto the fields tests compare.
+// An entry's issuer is dropped only when it matches its key, so a mis-stamped
+// issuer still fails the comparison.
 func tokenCredentials(tokens map[uuid.UUID]remotesessions.UpstreamToken) map[uuid.UUID]remotesessions.UpstreamToken {
 	result := make(map[uuid.UUID]remotesessions.UpstreamToken, len(tokens))
 	for issuerID, token := range tokens {
-		result[issuerID] = tokenCredential(token)
+		projected := tokenCredential(token)
+		if token.RemoteSessionIssuerID != issuerID {
+			projected.RemoteSessionIssuerID = token.RemoteSessionIssuerID
+		}
+		result[issuerID] = projected
 	}
 	return result
 }
 
 func tokenCredential(token remotesessions.UpstreamToken) remotesessions.UpstreamToken {
+	token.RemoteSessionIssuerID = uuid.Nil
 	token.RemoteSessionID = uuid.Nil
 	token.RemoteSessionUpdatedAt = time.Time{}
 	token.RemoteSessionResolvedFromUpdatedAt = time.Time{}
