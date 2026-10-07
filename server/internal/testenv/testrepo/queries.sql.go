@@ -5466,15 +5466,25 @@ const setRemoteSessionIssuerOmitScopeFallbackFixture = `-- name: SetRemoteSessio
 UPDATE remote_session_issuers
 SET omit_scope_fallback = $1
 WHERE id = $2
+  AND project_id IS NOT DISTINCT FROM $3::uuid
+  AND organization_id IS NOT DISTINCT FROM $4::text
 `
 
 type SetRemoteSessionIssuerOmitScopeFallbackFixtureParams struct {
 	OmitScopeFallback pgtype.Bool
 	ID                uuid.UUID
+	ProjectID         uuid.NullUUID
+	OrganizationID    pgtype.Text
 }
 
+// Scoped to the issuer's own tier: NULL project and organization name a global issuer.
 func (q *Queries) SetRemoteSessionIssuerOmitScopeFallbackFixture(ctx context.Context, arg SetRemoteSessionIssuerOmitScopeFallbackFixtureParams) error {
-	_, err := q.db.Exec(ctx, setRemoteSessionIssuerOmitScopeFallbackFixture, arg.OmitScopeFallback, arg.ID)
+	_, err := q.db.Exec(ctx, setRemoteSessionIssuerOmitScopeFallbackFixture,
+		arg.OmitScopeFallback,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
 	return err
 }
 

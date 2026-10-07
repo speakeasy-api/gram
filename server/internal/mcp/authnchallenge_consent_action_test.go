@@ -572,3 +572,19 @@ func TestServeConsentAction_ConnectSendsRegisteredResourceVerbatim(t *testing.T)
 		})
 	}
 }
+
+// ResourceOwners is the ownership surfaces without a challenge manager read
+// (Okta readiness): the owning sibling owns the upstream, the shared client
+// does not, matching what the connect arm sends.
+func TestResourceOwners_MatchesConnectOwnership(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, other := seedSharedUpstreamEndpoint(t, "aim431-owners")
+	owner := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim431-owner", "", []uuid.UUID{fx.shared})
+	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim431-shared", "", []uuid.UUID{fx.shared, other})
+
+	owners, err := remotesessions.ResourceOwners(ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.shared, consentUpstreamA)
+	require.NoError(t, err)
+	require.True(t, owners[owner])
+	require.False(t, owners[shared], "a sibling that derives the upstream on its own holds it")
+}

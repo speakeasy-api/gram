@@ -253,6 +253,10 @@ type snapshot struct {
 	// discoverScopes applies the resource's advertised scopes, per the rollout flag.
 	discoverScopes bool
 
+	// owners holds, per remote-backed server, which bound clients own its
+	// resource, as login decides it; only an owner's login reads the row.
+	owners map[uuid.UUID]map[uuid.UUID]bool
+
 	// now is when the snapshot was read; cached advertised scopes older than
 	// a login would still trust are dropped against it.
 	now time.Time
@@ -264,20 +268,40 @@ type resourceKey struct {
 	url       string
 }
 
-// resourceScopes is what the cached resource row for sv says about scopes.
-func (snap *snapshot) resourceScopes(sv repo.ListEligibleServersRow) remotesessions.ResourceScopes {
+// resourceScopes is what the cached resource row for sv says about scopes,
+// for each client. Behind a login issuer only a client that owns the
+// resource reads the row, as its login would; a server without one has no
+// login to match, so its resolved client reads it.
+func (snap *snapshot) resourceScopes(sv repo.ListEligibleServersRow) func(clientID uuid.UUID) remotesessions.ResourceScopes {
+	none := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: snap.discoverScopes}
+	row := snap.resourceRow(sv)
+	return func(clientID uuid.UUID) remotesessions.ResourceScopes {
+		switch {
+		case row == nil:
+			return none
+		case sv.UserSessionIssuerID.Valid && !snap.owners[sv.ID][clientID]:
+			return none
+		default:
+			return *row
+		}
+	}
+}
+
+// resourceRow is the cached resource row for sv as a login would read it;
+// nil when sv is not remote-backed, discovery is off, or no row exists.
+func (snap *snapshot) resourceRow(sv repo.ListEligibleServersRow) *remotesessions.ResourceScopes {
 	out := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: snap.discoverScopes}
-	if !sv.RemoteUrl.Valid {
-		return out
+	if !snap.discoverScopes || !sv.RemoteUrl.Valid {
+		return nil
 	}
 	row, ok := snap.resources[resourceKey{projectID: sv.ProjectID, url: sv.RemoteUrl.String}]
 	if !ok {
-		return out
+		return nil
 	}
 	// A login trusts a cached advertised list for seven days and then falls
 	// through to the issuer; the pin and challenge scopes stand regardless.
 	out.Pin, out.ChallengeScopes, out.ScopesSupported = row.ScopeOverride, row.ChallengeScopes, protectedresource.LastGoodAdvertisedScopes(row.ScopesSupported, row.MetadataFetchedAt, snap.now)
-	return out
+	return &out
 }
 
 func (snap *snapshot) agentRecorded() bool {
@@ -328,6 +352,7 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID,
 		deepLink:       deepLink(connection),
 		resources:      map[resourceKey]repo.ListRemoteProtectedResourceScopesRow{},
 		discoverScopes: remotesessions.ResourceScopeDiscoveryEnabled(ctx, logger, s.features, organizationID, organizationSlug),
+		owners:         map[uuid.UUID]map[uuid.UUID]bool{},
 		now:            time.Now(),
 	}
 	servers := make([]repo.ListEligibleServersRow, 0, len(all))
@@ -368,6 +393,21 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID,
 		}
 		for _, r := range resources {
 			snap.resources[resourceKey{projectID: r.ProjectID, url: r.ResourceIdentifier}] = r
+		}
+	}
+	if snap.discoverScopes {
+		for _, sv := range servers {
+			if !sv.RemoteUrl.Valid || !sv.UserSessionIssuerID.Valid {
+				continue
+			}
+			if _, ok := snap.resources[resourceKey{projectID: sv.ProjectID, url: sv.RemoteUrl.String}]; !ok {
+				continue
+			}
+			owners, err := remotesessions.ResourceOwners(ctx, s.db, sv.ProjectID, organizationID, sv.UserSessionIssuerID.UUID, sv.RemoteUrl.String)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "decide protected resource ownership").LogError(ctx, logger)
+			}
+			snap.owners[sv.ID] = owners
 		}
 	}
 	bindings, err := q.ListEMABindings(ctx, repo.ListEMABindingsParams{OrganizationID: organizationID, IssuerIds: issuerIDs})
@@ -428,7 +468,7 @@ func resourceIndicator(sv repo.ListEligibleServersRow) string {
 // bindings for the resource that agree on one client win; else the single
 // attached client in the server's project or the organization, preferring
 // one registered for this resource; else ambiguous or missing.
-func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []repo.ListIssuerClientsRow, bindings []repo.ListEMABindingsRow, resourceScopes remotesessions.ResourceScopes) (string, []string, string) {
+func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []repo.ListIssuerClientsRow, bindings []repo.ListEMABindingsRow, resourceScopes func(clientID uuid.UUID) remotesessions.ResourceScopes) (string, []string, string) {
 	byID := make(map[uuid.UUID]repo.ListIssuerClientsRow, len(clients))
 	for _, c := range clients {
 		byID[c.ID] = c
@@ -448,7 +488,7 @@ func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []re
 		if !ok || (c.ProjectID.Valid && c.ProjectID.UUID != sv.ProjectID) {
 			continue
 		}
-		for _, scope := range scopesOr(b.RequestedScopes, requestedScopes(c, resourceScopes)) {
+		for _, scope := range scopesOr(b.RequestedScopes, requestedScopes(c, resourceScopes(c.ID))) {
 			if !slices.Contains(boundScopes, scope) {
 				boundScopes = append(boundScopes, scope)
 			}
@@ -486,7 +526,7 @@ func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []re
 	case 0:
 		return "", nil, ClientBindingMissing
 	case 1:
-		return candidates[0].ClientID, requestedScopes(candidates[0], resourceScopes), ClientBindingSingle
+		return candidates[0].ClientID, requestedScopes(candidates[0], resourceScopes(candidates[0].ID)), ClientBindingSingle
 	default:
 		return "", nil, ClientBindingAmbiguous
 	}

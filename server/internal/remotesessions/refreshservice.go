@@ -231,7 +231,7 @@ func (s *RefreshService) FallbackResourceForClient(ctx context.Context, clientID
 // same endpoint; see claimableUpstream. Siblings are only consulted when the
 // client's own attachments leave the claim open.
 func (s *RefreshService) ResourceForClientAtUpstream(ctx context.Context, organizationID string, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (string, error) {
-	attachments, err := s.attachmentsForClients(ctx, organizationID, append([]uuid.UUID{clientID}, siblingIDs...))
+	attachments, err := attachmentsForClients(ctx, s.db, organizationID, append([]uuid.UUID{clientID}, siblingIDs...))
 	if err != nil {
 		return "", err
 	}
@@ -242,7 +242,7 @@ func (s *RefreshService) ResourceForClientAtUpstream(ctx context.Context, organi
 // client bound to one endpoint, each weighed against the others, from a
 // single load of their attachments.
 func (s *RefreshService) ResourcesForClientsAtUpstream(ctx context.Context, organizationID string, clientIDs []uuid.UUID, upstream string) (map[uuid.UUID]string, error) {
-	attachments, err := s.attachmentsForClients(ctx, organizationID, clientIDs)
+	attachments, err := attachmentsForClients(ctx, s.db, organizationID, clientIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -255,8 +255,8 @@ func (s *RefreshService) ResourcesForClientsAtUpstream(ctx context.Context, orga
 
 // attachmentsForClients loads the MCP servers attached to each client in one
 // round trip, within organizationID. A client with no attachments has no entry.
-func (s *RefreshService) attachmentsForClients(ctx context.Context, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, error) {
-	rows, err := remotesessions_repo.New(s.db).ListOrganizationMcpServersForClients(ctx, remotesessions_repo.ListOrganizationMcpServersForClientsParams{
+func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, error) {
+	rows, err := remotesessions_repo.New(db).ListOrganizationMcpServersForClients(ctx, remotesessions_repo.ListOrganizationMcpServersForClientsParams{
 		RemoteSessionClientIds: clientIDs,
 		OrganizationID:         organizationID,
 	})
