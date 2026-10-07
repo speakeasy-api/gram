@@ -2653,13 +2653,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   INSERT INTO chat_messages (id, chat_id, project_id, role, content, tool_calls, source, model, created_at, risk_analyzed_at)
   VALUES
     (demo.det_uuid('gram-demo-claude-tag-prompt'), chat_id, proj_a, 'user',
-     '<session-context nonce="demo-context">
+     '<system-reminder source="demo">Harness notes stay in the Raw view.</system-reminder>
+<session-context nonce="demo-context">
 Channel: #demo-releases (id: `DEMO_CHANNEL`)
 Workspace: `T0DEMO0001`
 ## Session notes
 Channel context stays in the Raw view.
 </session-context nonce="demo-context">
-<wake reason="channel-activity"><channel id="DEMO_CHANNEL" type="group"><message from="human" author-id="U0DEMO00001" id="demo-message-1" trigger="true">Help summarize the release</message></channel></wake>',
+<wake reason="channel-activity"><channel id="DEMO_CHANNEL" type="group"><thread ts="demo-message-1"><message from="human" author="Demo User" author-id="U0DEMO00001" id="demo-message-1" trigger="true">Help summarize the release</message></thread></channel></wake>',
      NULL, 'Claude In Slack', 'claude-sonnet-4-6', now() - interval '10 minutes', now()),
     (demo.det_uuid('gram-demo-claude-tag-reply'), chat_id, proj_a, 'assistant', '',
      '[{"id":"demo-tag-reply","type":"function","function":{"name":"mcp__slackbot__reply","arguments":"{\"text\":\"The release improves session transcripts and channel visibility.\",\"thread_ts\":\"demo-message-1\"}"}}]'::jsonb,
@@ -2671,7 +2672,8 @@ Channel context stays in the Raw view.
   INSERT INTO chat_messages (id, chat_id, project_id, role, content, source, model, created_at, risk_analyzed_at)
   VALUES
     (demo.det_uuid('gram-demo-claude-tag-owner-1'), chat_id, proj_a, 'user',
-     '<standing_owner_message sender="U0DEMO00001" ts="demo-standing-1" originating-ask="true">Check the rollout status.</standing_owner_message>',
+     '<system-reminder>Delivery notes stay in the Raw view.</system-reminder>
+<standing_owner_message sender="U0DEMO00001" ts="demo-standing-1" originating-ask="true">Check the rollout status.</standing_owner_message>',
      'claude-tag', 'claude-sonnet-4-6', now() - interval '8 minutes', now()),
     (demo.det_uuid('gram-demo-claude-tag-owner-2'), chat_id, proj_a, 'user',
      '<standing_owner_message sender="U0DEMO00003" ts="demo-standing-2" originating-ask="true">Review the rollback steps.</standing_owner_message>',
