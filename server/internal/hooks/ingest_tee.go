@@ -89,12 +89,16 @@ func (s *Service) teeCanonicalHookToEventFeed(
 	blockReason string,
 	rows []hookTelemetryRow,
 ) {
-	if s.otelLogPublisher == nil || len(rows) == 0 || authCtx == nil || authCtx.ProjectID == nil {
+	if len(rows) == 0 {
 		return
 	}
-	// Counted as in flight before anything is published, so Shutdown cannot
-	// observe zero between the publish and the ack wait and cut the row off.
-	s.otelTeeDrains.Add(1)
+	if s.otelLogPublisher == nil || authCtx == nil || authCtx.ProjectID == nil || !s.beginOTELTee() {
+		// Nothing can be published: no publisher is wired, there is no
+		// tenant to stamp, or the process is draining. Counted, so rows
+		// absent from agent_events show on the publish metric.
+		s.metrics.RecordEventFeedPublish(ctx, hookSource, eventFeedOutcomeSkipped, int64(len(rows)))
+		return
+	}
 	defer s.otelTeeDrains.Done()
 	orgID := authCtx.ActiveOrganizationID
 
@@ -163,6 +167,19 @@ func (s *Service) teeCanonicalHookToEventFeed(
 	}
 	s.metrics.RecordEventFeedPublish(ctx, hookSource, eventFeedOutcomeFailure, int64(failed))
 	s.metrics.RecordEventFeedPublish(ctx, hookSource, eventFeedOutcomeSuccess, int64(len(results)-failed))
+}
+
+// beginOTELTee counts a tee as in flight, or reports that Shutdown has
+// started draining and the tee must not start. Taking the lock is what
+// makes the Add happen before Shutdown's Wait rather than race it.
+func (s *Service) beginOTELTee() bool {
+	s.otelTeeMu.Lock()
+	defer s.otelTeeMu.Unlock()
+	if s.otelTeeDraining {
+		return false
+	}
+	s.otelTeeDrains.Add(1)
+	return true
 }
 
 // hookEventFeedFeature answers an org feature the way the telemetry writer
