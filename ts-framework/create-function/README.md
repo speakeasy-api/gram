@@ -12,6 +12,8 @@ Scaffold a new [Gram Functions](https://getgram.ai) project:
 npm create @gram-ai/function@latest
 ```
 
+New projects depend on `@speakeasy-api/functions`.
+
 The project templates live in
 [`cli/internal/functions/templates`](../../cli/internal/functions/templates)
 and are copied into this package when it is built.

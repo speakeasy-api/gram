@@ -95,3 +95,51 @@ test("missing CLI throws with install instructions", async () => {
   expect(CLI_NOT_FOUND_MESSAGE).toContain("brew install speakeasy-api/tap/cli");
   expect(CLI_NOT_FOUND_MESSAGE).toContain("npm i -g @speakeasy-api/cli");
 });
+
+test("SPEAKEASY_AI_CLI_PATH wins over GRAM_CLI_PATH", async () => {
+  const cli = await resolveCLI(
+    deps({
+      env: {
+        SPEAKEASY_AI_CLI_PATH: "/opt/new/speakeasy",
+        GRAM_CLI_PATH: "/opt/old/gram",
+      },
+    }),
+  );
+
+  expect(cli).toBe("/opt/new/speakeasy");
+});
+
+test("SPEAKEASY_AI_DEV uses the local build", async () => {
+  const cli = await resolveCLI(
+    deps({ env: { SPEAKEASY_AI_DEV: "1" }, localDevBuilt: true }),
+  );
+
+  expect(cli).toBe(localDevCLIPath);
+});
+
+test("SPEAKEASY_AI_DEV=false wins over GRAM_DEV", async () => {
+  const cli = await resolveCLI(
+    deps({
+      env: { SPEAKEASY_AI_DEV: "false", GRAM_DEV: "1" },
+      localDevBuilt: true,
+      onPath: ["gram"],
+    }),
+  );
+
+  expect(cli).toBe("gram");
+});
+
+test("plain SPEAKEASY_* names from the SDK generator are ignored", async () => {
+  const cli = await resolveCLI(
+    deps({
+      env: {
+        SPEAKEASY_CLI_PATH: "/opt/generator/speakeasy",
+        SPEAKEASY_DEV: "1",
+      },
+      localDevBuilt: true,
+      onPath: ["gram"],
+    }),
+  );
+
+  expect(cli).toBe("gram");
+});

@@ -41,11 +41,7 @@ const sharedFlags: FlagParametersForType<SharedFlags, CommandContext> = {
           ? configPath
           : undefined
         : findConfigFile(process.cwd());
-      const res = await loadConfig(hit);
-      if (!res.success) {
-        throw res.error;
-      }
-      return res.data;
+      return loadConfig(hit);
     },
   },
 };

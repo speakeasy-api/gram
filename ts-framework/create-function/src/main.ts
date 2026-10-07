@@ -168,7 +168,9 @@ async function init(argv: string[]): Promise<void> {
     title: "Setting up project",
   });
 
-  const isLocalDev = yn(process.env["GRAM_DEV"]);
+  const isLocalDev = yn(
+    process.env["SPEAKEASY_AI_DEV"] ?? process.env["GRAM_DEV"],
+  );
 
   tlog.message("Scaffolding");
   const dirname = import.meta.dirname;
@@ -196,18 +198,18 @@ async function init(argv: string[]): Promise<void> {
     },
   });
 
-  let gramFuncsVersion = pkg.devDependencies["@gram-ai/functions"];
-  if (gramFuncsVersion == null || gramFuncsVersion.startsWith("workspace:")) {
-    // This templating package and `@gram-ai/functions` are versioned in
+  let funcsVersion = pkg.devDependencies["@speakeasy-api/functions"];
+  if (funcsVersion == null || funcsVersion.startsWith("workspace:")) {
+    // This templating package and `@speakeasy-api/functions` are versioned in
     // lockstep so we can just use the matching version.
-    gramFuncsVersion = `^${pkg.version}`;
+    funcsVersion = `^${pkg.version}`;
   }
   if (isLocalDev && existsSync(resolve(dirname, "..", "..", "functions"))) {
-    // For local development, use the local version of `@gram-ai/functions`
-    // if it exists.
+    // For local development, use the local version of
+    // `@speakeasy-api/functions` if it exists.
     const localPkgPath = resolve(dirname, "..", "..", "functions");
-    gramFuncsVersion = `file:${localPkgPath}`;
-    tlog.message(`Using local @gram-ai/functions from ${localPkgPath}`);
+    funcsVersion = `file:${localPkgPath}`;
+    tlog.message(`Using local @speakeasy-api/functions from ${localPkgPath}`);
   }
 
   let mcpSDKVersion = pkg.devDependencies["@modelcontextprotocol/sdk"];
@@ -221,8 +223,8 @@ async function init(argv: string[]): Promise<void> {
   dstPkg.version = "0.0.0";
   dstPkg.name = name;
   const deps = dstPkg.dependencies;
-  if (deps?.["@gram-ai/functions"] != null) {
-    deps["@gram-ai/functions"] = gramFuncsVersion;
+  if (deps?.["@speakeasy-api/functions"] != null) {
+    deps["@speakeasy-api/functions"] = funcsVersion;
   }
   if (deps?.["@modelcontextprotocol/sdk"] != null) {
     deps["@modelcontextprotocol/sdk"] = mcpSDKVersion;

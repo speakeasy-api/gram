@@ -1,8 +1,14 @@
 import { getConfig, getLogger, type LogLevel } from "@logtape/logtape";
-import { resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
 import { findConfigFile, loadConfig, type ParsedUserConfig } from "./config.ts";
-import { buildFunctions, inferSlug, resolveArtifacts } from "./gram.ts";
+import {
+  buildFunctions,
+  inferSlug,
+  LEGACY_ZIP_NAME,
+  resolveArtifacts,
+} from "./gram.ts";
 import { configureLogger } from "./logging.ts";
 
 /**
@@ -12,7 +18,10 @@ import { configureLogger } from "./logging.ts";
 export type ProjectOptions = {
   /** The project directory. Defaults to the process working directory. */
   cwd?: string | undefined;
-  /** The config file. Defaults to the first `gram.config.*` file in `cwd`. */
+  /**
+   * The config file. Defaults to the first `speakeasy.config.*` file in
+   * `cwd`, then the first deprecated `gram.config.*` file.
+   */
   configFile?: string | undefined;
   /** Overrides the entrypoint set in the config file. */
   entrypoint?: string | undefined;
@@ -51,12 +60,7 @@ async function loadProjectConfig(
     ? resolve(cwd, opts.configFile)
     : findConfigFile(cwd);
 
-  const res = await loadConfig(configFile);
-  if (!res.success) {
-    throw res.error;
-  }
-
-  const config = res.data;
+  const config = await loadConfig(configFile, cwd);
   return {
     cwd,
     config: {
@@ -98,7 +102,15 @@ export async function resolveProject(
   opts: ProjectOptions = {},
 ): Promise<ResolvedProject> {
   const { cwd, config } = await loadProjectConfig(opts);
-  return describeProject(cwd, config);
+  const project = await describeProject(cwd, config);
+
+  // SDK releases before 0.19 wrote gram.zip. Keep deploying such a build
+  // until the project is rebuilt.
+  const legacyZip = join(project.outDir, LEGACY_ZIP_NAME);
+  if (!existsSync(project.zipFile) && existsSync(legacyZip)) {
+    project.zipFile = legacyZip;
+  }
+  return project;
 }
 
 /**
