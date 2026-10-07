@@ -1,3 +1,5 @@
+import type { GenericBlock } from "@/components/setup-steps/genericBlocks";
+
 /**
  * The shape of a catalog platform and its guided setup.
  *
@@ -67,9 +69,7 @@ export interface CatalogEntry {
 export type ComputedValueKey = "token_endpoint" | "issuer_url" | "mcp_host";
 
 export type SetupBlock =
-  | { type: "text"; markdown: string }
-  | { type: "image"; src: string; alt: string; caption?: string }
-  | { type: "link"; href: string; label: string }
+  | GenericBlock
   | { type: "field"; variable: string }
   | { type: "subject_rule" }
   | { type: "agent_picker" }

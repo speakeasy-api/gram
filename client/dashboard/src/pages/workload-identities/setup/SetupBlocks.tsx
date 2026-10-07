@@ -1,7 +1,9 @@
+import {
+  ChecklistItem,
+  type ChecklistItemDetail,
+} from "@/components/setup-steps/StepBlocks";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Checkbox } from "@/components/ui/Checkbox";
-import { CopyButton } from "@/components/ui/CopyButton";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -16,45 +18,17 @@ import {
 import { Stack } from "@/components/ui/Stack";
 import { TagInput } from "@/components/ui/TagInput";
 import { Text } from "@/components/ui/Text";
-import { Markdown } from "@/elements/components/Markdown";
 import { useState } from "react";
-import type {
-  CatalogEntry,
-  ChecklistItemBlock,
-  SetupBlock,
-} from "./definition";
-import { isRelativePath } from "./origin";
+import type { CatalogVariable, ChecklistItemBlock } from "./definition";
 import { tagsProblem } from "../tagLimits";
 import type { SetupValues } from "./setupValues";
-import { subjectRule, variableProblem, type VariableValues } from "./template";
-
-const SETUP_PROSE =
-  "text-sm [&_ul]:ml-6 [&_ul]:list-disc [&_li]:my-1 [&_strong]:font-semibold";
-
-// Structural subset of an mdast node, enough to walk the tree.
-interface MarkdownNode {
-  type: string;
-  children?: MarkdownNode[];
-}
+import { variableProblem } from "./template";
 
 /**
- * Drops every image from definition text. Images belong in an image block,
- * which loads only from the dashboard's origin; one in markdown could point
- * the operator's browser at any host.
+ * The blocks of a catalog platform's guided setup that read or change its
+ * state. The generic ones, such as text and images, are shared with any
+ * step-by-step setup.
  */
-function remarkDropImages(): (tree: unknown) => void {
-  return (tree) => dropImages(tree as MarkdownNode);
-}
-
-function dropImages(node: MarkdownNode): void {
-  if (node.children === undefined) return;
-  node.children = node.children.filter(
-    (child) => child.type !== "image" && child.type !== "imageReference",
-  );
-  node.children.forEach(dropImages);
-}
-
-const TEXT_REMARK_PLUGINS = [remarkDropImages];
 
 /** The longest agent name the server accepts. */
 const AGENT_NAME_MAX_LENGTH = 120;
@@ -64,125 +38,16 @@ export interface Option {
   name: string;
 }
 
-/** Everything a block may read or change. */
-export interface SetupBlockContext {
-  entry: CatalogEntry;
-  values: VariableValues;
-  onValueChange: (key: string, value: string) => void;
-  agents: Option[];
-  agentsUnavailable: string | null;
-  agentId: string;
-  onAgentChange: (agentId: string) => void;
-  /** Creates an agent with this name and selects it; false if that failed. */
-  onCreateAgent: (name: string) => Promise<boolean>;
-  tags: string[];
-  onTagsChange: (tags: string[]) => void;
-  /** Why the values repeat an existing access rule, or null when they don't. */
-  ruleConflict: string | null;
-  setupValues: SetupValues;
-  /** The checklist items ticked so far, by block key. */
-  checkedItems: ReadonlySet<string>;
-  onCheckedChange: (blockKey: string, checked: boolean) => void;
-}
-
-export function SetupBlockView({
-  block,
-  blockKey,
-  context,
+/** An input for one variable, with why its value cannot be used. */
+export function VariableField({
+  variable,
+  value,
+  onChange,
 }: {
-  block: SetupBlock;
-  /** Identifies the block within the definition, for state kept per block. */
-  blockKey: string;
-  context: SetupBlockContext;
-}): JSX.Element | null {
-  switch (block.type) {
-    case "text":
-      // react-markdown escapes raw HTML, so definition text cannot inject
-      // markup or script whatever its source.
-      return (
-        <Markdown
-          className={SETUP_PROSE}
-          extraRemarkPlugins={TEXT_REMARK_PLUGINS}
-        >
-          {block.markdown}
-        </Markdown>
-      );
-    case "image":
-      return (
-        <SetupImage src={block.src} alt={block.alt} caption={block.caption} />
-      );
-    case "link":
-      return (
-        <a
-          href={block.href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-foreground block w-fit text-sm underline underline-offset-4"
-        >
-          {block.label}
-        </a>
-      );
-    case "field":
-      return <VariableField variableKey={block.variable} context={context} />;
-    case "subject_rule":
-      return <SubjectRulePreview context={context} />;
-    case "agent_picker":
-      return <AgentPicker context={context} />;
-    case "tags":
-      return <TagsField context={context} />;
-    case "computed_status":
-      return <ComputedStatus setupValues={context.setupValues} />;
-    case "computed":
-      return (
-        <ComputedValue
-          label={block.label}
-          help={block.help}
-          value={context.setupValues.values?.[block.value]}
-        />
-      );
-    case "checklist_item":
-      return (
-        <ChecklistItem block={block} blockKey={blockKey} context={context} />
-      );
-  }
-}
-
-function SetupImage({
-  src,
-  alt,
-  caption,
-}: {
-  src: string;
-  alt: string;
-  caption?: string;
-}): JSX.Element | null {
-  if (!isRelativePath(src)) {
-    return null;
-  }
-  return (
-    <figure className="border-border overflow-hidden border">
-      <img src={src} alt={alt} className="w-full" />
-      {caption !== undefined && (
-        <figcaption className="border-border bg-secondary/40 text-muted-foreground border-t px-3 py-2 text-xs leading-relaxed">
-          {caption}
-        </figcaption>
-      )}
-    </figure>
-  );
-}
-
-function VariableField({
-  variableKey,
-  context,
-}: {
-  variableKey: string;
-  context: SetupBlockContext;
-}): JSX.Element | null {
-  const variable = context.entry.variables.find((v) => v.key === variableKey);
-  if (variable === undefined) {
-    return null;
-  }
-  const value = context.values[variable.key] ?? "";
+  variable: CatalogVariable;
+  value: string;
+  onChange: (value: string) => void;
+}): JSX.Element {
   // Say nothing about an untouched field; an empty value already keeps
   // Continue disabled.
   const problem =
@@ -198,7 +63,7 @@ function VariableField({
         placeholder={variable.placeholder}
         aria-invalid={problem !== null}
         aria-describedby={problem !== null ? `${id}-error` : undefined}
-        onChange={(next) => context.onValueChange(variable.key, next)}
+        onChange={onChange}
       />
       {problem !== null ? (
         <Text id={`${id}-error`} role="alert" small destructive>
@@ -215,24 +80,24 @@ function VariableField({
   );
 }
 
-function SubjectRulePreview({
-  context,
+/** The subject the access rule will match, and why it is taken if it is. */
+export function SubjectRulePreview({
+  subject,
+  conflict,
 }: {
-  context: SetupBlockContext;
-}): JSX.Element | null {
-  const rule = subjectRule(context.entry, context.values);
-  if (rule === null) {
-    return null;
-  }
+  subject: string;
+  /** Why the rule repeats an existing access rule, or null when it doesn't. */
+  conflict: string | null;
+}): JSX.Element {
   return (
     <Stack gap={2}>
       <p className="text-eyebrow">Access rule</p>
       <code className="border-border bg-card block border px-3 py-2 text-sm break-all">
-        {rule.subject}
+        {subject}
       </code>
-      {context.ruleConflict !== null && (
+      {conflict !== null && (
         <Alert variant="error" alignTop>
-          <div className="text-sm">{context.ruleConflict}</div>
+          <div className="text-sm">{conflict}</div>
         </Alert>
       )}
     </Stack>
@@ -280,10 +145,34 @@ function OptionPicker({
   );
 }
 
-function AgentPicker({ context }: { context: SetupBlockContext }): JSX.Element {
+/** Picks the agent an access rule assigns, or creates one in place. */
+export function AgentPicker({
+  agents,
+  unavailableReason,
+  agentId,
+  onAgentChange,
+  newAgentName,
+  onCreateAgent,
+}: {
+  agents: Option[];
+  /** Why there is no agent to pick, or null. */
+  unavailableReason: string | null;
+  agentId: string;
+  onAgentChange: (agentId: string) => void;
+  /** The name a new agent starts with. */
+  newAgentName: string;
+  /** Creates an agent with this name and selects it; false if that failed. */
+  onCreateAgent: (name: string) => Promise<boolean>;
+}): JSX.Element {
   const [creating, setCreating] = useState(false);
   if (creating) {
-    return <NewAgentForm context={context} onDone={() => setCreating(false)} />;
+    return (
+      <NewAgentForm
+        initialName={newAgentName}
+        onCreateAgent={onCreateAgent}
+        onDone={() => setCreating(false)}
+      />
+    );
   }
   return (
     <Stack gap={2}>
@@ -291,10 +180,10 @@ function AgentPicker({ context }: { context: SetupBlockContext }): JSX.Element {
         id="setup-agent"
         label="Agent"
         placeholder="Select an agent"
-        options={context.agents}
-        value={context.agentId}
-        onChange={context.onAgentChange}
-        hint={context.agentsUnavailable}
+        options={agents}
+        value={agentId}
+        onChange={onAgentChange}
+        hint={unavailableReason}
       />
       <div>
         <Button variant="tertiary" size="sm" onClick={() => setCreating(true)}>
@@ -306,17 +195,17 @@ function AgentPicker({ context }: { context: SetupBlockContext }): JSX.Element {
 }
 
 function NewAgentForm({
-  context,
+  initialName,
+  onCreateAgent,
   onDone,
 }: {
-  context: SetupBlockContext;
+  initialName: string;
+  onCreateAgent: (name: string) => Promise<boolean>;
   onDone: () => void;
 }): JSX.Element {
   // By code point, as the server counts the limit.
   const [name, setName] = useState(() =>
-    Array.from(context.entry.displayName)
-      .slice(0, AGENT_NAME_MAX_LENGTH)
-      .join(""),
+    Array.from(initialName).slice(0, AGENT_NAME_MAX_LENGTH).join(""),
   );
   const [saving, setSaving] = useState(false);
   const trimmed = name.trim();
@@ -324,7 +213,7 @@ function NewAgentForm({
   const create = async () => {
     if (trimmed === "" || saving) return;
     setSaving(true);
-    const created = await context.onCreateAgent(trimmed);
+    const created = await onCreateAgent(trimmed);
     setSaving(false);
     if (created) onDone();
   };
@@ -357,18 +246,25 @@ function NewAgentForm({
   );
 }
 
-function TagsField({ context }: { context: SetupBlockContext }): JSX.Element {
-  const problem = tagsProblem(context.tags);
+/** Optional labels for the access rule. */
+export function TagsField({
+  tags,
+  onChange,
+}: {
+  tags: string[];
+  onChange: (tags: string[]) => void;
+}): JSX.Element {
+  const problem = tagsProblem(tags);
   return (
     <Stack gap={2}>
       <Label htmlFor="setup-tags">Tags (optional)</Label>
       <TagInput
         id="setup-tags"
-        value={context.tags}
+        value={tags}
         placeholder="support, production"
         error={problem !== null}
         ariaDescribedBy={problem !== null ? "setup-tags-error" : undefined}
-        onChange={context.onTagsChange}
+        onChange={onChange}
       />
       {problem !== null ? (
         <Text id="setup-tags-error" role="alert" small destructive>
@@ -387,7 +283,7 @@ function TagsField({ context }: { context: SetupBlockContext }): JSX.Element {
  * Which user session issuer the computed values belong to, or why there are
  * none to show.
  */
-function ComputedStatus({
+export function ComputedStatus({
   setupValues,
 }: {
   setupValues: SetupValues;
@@ -429,97 +325,35 @@ function ComputedStatus({
   );
 }
 
-function ComputedValue({
-  label,
-  help,
-  value,
-}: {
-  label: string;
-  help?: string;
-  value: string | undefined;
-}): JSX.Element {
-  return (
-    <Stack gap={1}>
-      <p className="text-eyebrow">{label}</p>
-      <CopyableValue label={label} value={value} />
-      {help !== undefined && (
-        <Text muted small>
-          {help}
-        </Text>
-      )}
-    </Stack>
-  );
-}
-
 /**
- * One console field or control and what to do with it, with a checkbox the
- * operator ticks as they switch between the console and this sheet.
+ * A checklist item, with the value it names from the server's derivation.
+ * Changes report the item's block key, so ticks can be kept per block.
  */
-function ChecklistItem({
+export function CatalogChecklistItem({
   block,
   blockKey,
-  context,
+  computedValues,
+  checked,
+  onCheckedChange,
 }: {
   block: ChecklistItemBlock;
   blockKey: string;
-  context: SetupBlockContext;
+  computedValues: SetupValues["values"];
+  checked: boolean;
+  onCheckedChange: (blockKey: string, checked: boolean) => void;
 }): JSX.Element {
-  const id = `setup-check-${blockKey}`;
-  const checked = context.checkedItems.has(blockKey);
+  const detail: ChecklistItemDetail =
+    block.value !== undefined
+      ? { kind: "copy", value: computedValues?.[block.value] }
+      : { kind: "markdown", markdown: block.instruction };
   return (
-    <div className="border-border bg-card flex items-start gap-3 border p-3">
-      <Checkbox
-        id={id}
-        className="mt-0.5"
-        checked={checked}
-        onCheckedChange={(next) =>
-          context.onCheckedChange(blockKey, next === true)
-        }
-      />
-      <Stack gap={1} className="min-w-0 flex-1">
-        <Label
-          htmlFor={id}
-          className={checked ? "text-muted-foreground line-through" : undefined}
-        >
-          {block.label}
-        </Label>
-        {block.value !== undefined ? (
-          <CopyableValue
-            label={block.label}
-            value={context.setupValues.values?.[block.value]}
-          />
-        ) : (
-          <Markdown
-            className="text-muted-foreground text-sm [&_strong]:font-semibold"
-            extraRemarkPlugins={TEXT_REMARK_PLUGINS}
-          >
-            {block.instruction}
-          </Markdown>
-        )}
-        {block.help !== undefined && (
-          <Text muted small>
-            {block.help}
-          </Text>
-        )}
-      </Stack>
-    </div>
-  );
-}
-
-/** A value Speakeasy derives, with a button that copies it. */
-function CopyableValue({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | undefined;
-}): JSX.Element {
-  return (
-    <div className="border-border bg-card flex items-center gap-2 border px-3 py-1.5">
-      <code className="min-w-0 flex-1 text-sm break-all">{value ?? "—"}</code>
-      {value !== undefined && value !== "" && (
-        <CopyButton text={value} size="sm" tooltip={`Copy ${label}`} />
-      )}
-    </div>
+    <ChecklistItem
+      id={`setup-check-${blockKey}`}
+      label={block.label}
+      detail={detail}
+      help={block.help}
+      checked={checked}
+      onCheckedChange={(next) => onCheckedChange(blockKey, next)}
+    />
   );
 }
