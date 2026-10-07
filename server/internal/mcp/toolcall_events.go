@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/log"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
@@ -119,14 +121,14 @@ func (e *toolCallEvents) started(ctx context.Context) {
 // message the client was given. A tool that returned its own error
 // document has an error outcome and no message: the result is the record
 // of it, not a message about it.
-func (e *toolCallEvents) completed(ctx context.Context, statusCode int, failure *oops.ShareableError) {
+func (e *toolCallEvents) completed(ctx context.Context, statusCode int, resultIsError bool, failure *oops.ShareableError) {
 	end := e.now()
 	var record log.Record
 	record.SetEventName(dialect.GramToolCallCompletedEvent)
 	record.SetTimestamp(end)
 	record.SetSeverity(log.SeverityInfo)
 	record.AddAttributes(e.base...)
-	record.AddAttributes(logAttributes(toolCallCompletedAttributes(statusCode, end.Sub(e.start), failure)...)...)
+	record.AddAttributes(logAttributes(toolCallCompletedAttributes(statusCode, resultIsError, end.Sub(e.start), failure)...)...)
 	e.emit(ctx, record)
 }
 
@@ -144,9 +146,9 @@ func (e *toolCallEvents) emit(ctx context.Context, record log.Record) {
 	}
 }
 
-func toolCallCompletedAttributes(statusCode int, duration time.Duration, failure *oops.ShareableError) []attribute.KeyValue {
+func toolCallCompletedAttributes(statusCode int, resultIsError bool, duration time.Duration, failure *oops.ShareableError) []attribute.KeyValue {
 	out := []attribute.KeyValue{
-		attr.OutcomeKey.String(toolCallOutcome(statusCode)),
+		attr.OutcomeKey.String(toolCallOutcome(statusCode, resultIsError)),
 		attr.HTTPResponseStatusCodeKey.Int(statusCode),
 		attr.ToolCallDuration(duration),
 	}
@@ -159,13 +161,41 @@ func toolCallCompletedAttributes(statusCode int, duration time.Duration, failure
 }
 
 // toolCallOutcome is how the call went, in the vocabulary agent_events
-// stores: the same rule that marks the tool result isError for the client,
-// so the row and the client never disagree about whether the call failed.
-func toolCallOutcome(statusCode int) string {
-	if statusCode < 200 || statusCode >= 300 {
+// stores: the verdict the client reads as isError, so the row and the
+// client never disagree about whether the call failed. For a tool the
+// gateway formats the result of, that is its status; for a passthrough
+// result the gateway forwards untouched, it is the upstream's own isError.
+func toolCallOutcome(statusCode int, resultIsError bool) string {
+	if resultIsError || statusCode < 200 || statusCode >= 300 {
 		return dialect.OutcomeError
 	}
 	return dialect.OutcomeOK
+}
+
+// mcpResultIsError reads the isError verdict off a tool result document the
+// gateway forwards untouched. Anything that is not such a document carries
+// no verdict.
+func mcpResultIsError(body []byte) bool {
+	var result struct {
+		IsError bool `json:"isError"`
+	}
+	return json.Unmarshal(body, &result) == nil && result.IsError
+}
+
+// toolCallCaller names the Gram user behind a call only when the caller
+// belongs to the tool's organization, whose data the records join, which
+// is also as far as the telemetry row's hydration resolves a user. An
+// outside caller on a public MCP is identified by its external user id
+// alone.
+func toolCallCaller(ctx context.Context, payload *mcpInputs, toolOrganizationID, email string) (userID, userEmail string) {
+	if !payload.authenticated {
+		return "", ""
+	}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID != toolOrganizationID {
+		return "", ""
+	}
+	return payload.userID, email
 }
 
 func logAttributes(attrs ...attribute.KeyValue) []log.KeyValue {
