@@ -18,19 +18,12 @@ import (
 // time the consumer observed it, so the same record always yields the same
 // row and golden tests can pin the projection.
 //
-// Every column the transform's column enrichers fill arrives on a log
-// record as a canonical speakeasy.agent.<column> attribute, and the builder
-// copies it from there; the log path asks no dialect at all. There is no
-// dialect fallback: the transform and this writer deploy together, and a
-// record that reached the normalized topic before the enrichers ran lands
+// Every column the transform's column enrichers fill arrives on the record
+// as a canonical speakeasy.agent.<column> attribute, for logs and spans
+// alike, and the builders copy it from there; neither asks a dialect. There
+// is no dialect fallback: the transform and this writer deploy together, and
+// a record that reached the normalized topic before the enrichers ran lands
 // with those columns empty, which is accepted.
-//
-// The span path still answers the same columns from the span dialect until
-// the span transform runs the same enrichers. The dialects take the inbound
-// span type while a consumer on the normalized topic holds the outbound one;
-// the two are wire-compatible by construction (the inbound protos are kept
-// as carbon copies), so the span builder round-trips the span back to its
-// inbound shape and hands that to the dialect.
 
 // agentEventRowFromLog maps a normalized log record to its agent_events row.
 // A non-empty skipReason marks the record unprocessable; redelivery cannot
@@ -148,11 +141,6 @@ func agentEventRowFromSpan(span *otelv1.Span, observedAtUnixNano int64) (chrepo.
 		return zero, "missing_observed_time"
 	}
 
-	inbound, err := inboundSpanFromSpan(span)
-	if err != nil {
-		return zero, "convert_inbound"
-	}
-
 	attributes, err := spanEventAttributesJSON(span.GetAttributes())
 	if err != nil {
 		return zero, "encode_span_attributes"
@@ -167,13 +155,14 @@ func agentEventRowFromSpan(span *otelv1.Span, observedAtUnixNano int64) (chrepo.
 	}
 
 	var enrichment rowEnrichment
+	var columns canonicalColumns
 	for _, kv := range span.GetAttributes() {
-		enrichment.read(kv.GetKey(), spanEventAnyValue(kv.GetValue()))
+		value := spanEventAnyValue(kv.GetValue())
+		enrichment.read(kv.GetKey(), value)
+		columns.read(kv.GetKey(), value)
 	}
 
-	d := dialect.ForSpan(inbound)
 	recordID := traceID + ":" + spanID
-	columns := columnsFromSpanDialect(d, inbound, enrichment, enrich.CanonicalSource(spanEventServiceName(span)))
 	row := agentEventRow(columns, enrichment)
 	row.OrganizationID = organizationID
 	row.ProjectID = span.GetProvenance().GetProjectId()
@@ -185,16 +174,6 @@ func agentEventRowFromSpan(span *otelv1.Span, observedAtUnixNano int64) (chrepo.
 	row.ResourceAttributes = resourceAttributes
 	row.ScopeAttributes = scopeAttributes
 	return row, ""
-}
-
-// stated keeps a dialect's answer only when it stated one: an empty key or
-// a read error means absent, never a guess.
-func stated[T any](key string, value T, err error) T {
-	var zero T
-	if err != nil || key == "" {
-		return zero
-	}
-	return value
 }
 
 // agentEventRow lays down the parts of a row that come from the canonical
@@ -277,35 +256,6 @@ func mintedRecordID(record *otelv1.LogRecord) (string, error) {
 	}
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:]), nil
-}
-
-func inboundSpanFromSpan(span *otelv1.Span) (*otelv1.InboundSpan, error) {
-	encoded, err := proto.Marshal(span)
-	if err != nil {
-		return nil, fmt.Errorf("marshal span: %w", err)
-	}
-	inbound := &otelv1.InboundSpan{}
-	if err := proto.Unmarshal(encoded, inbound); err != nil {
-		return nil, fmt.Errorf("unmarshal span as gram.otel.v1.InboundSpan: %w", err)
-	}
-
-	if original := spanOriginalScopeName(span); original != "" {
-		if inbound.GetScope() == nil {
-			inbound.SetScope((&otelv1.InboundSpan_InstrumentationScope_builder{Name: &original}).Build())
-		} else {
-			inbound.GetScope().SetName(original)
-		}
-	}
-	return inbound, nil
-}
-
-func spanOriginalScopeName(span *otelv1.Span) string {
-	for _, kv := range span.GetAttributes() {
-		if kv.GetKey() == string(enrich.OriginalInstrumentationScopeNameKey) && kv.GetValue().HasStringValue() {
-			return kv.GetValue().GetStringValue()
-		}
-	}
-	return ""
 }
 
 // canonicalColumns is what the transform's column enrichers wrote onto the
@@ -405,48 +355,6 @@ func (c *canonicalColumns) read(key string, value any) {
 		c.cacheWriteTokens = enrichmentInt64(value)
 	case string(enrich.CostUSDColumnKey):
 		c.costUSD = enrichmentFloat64(value)
-	}
-}
-
-// columnsFromSpanDialect answers the canonical columns for a span the way
-// the log transform's column enrichers answer them for a log record, until
-// the span transform runs the same enrichers and the span writer reads the
-// keys instead. Pipeline-resolved attribution wins over what the dialect
-// infers for the provider, as the classification enricher decides it.
-func columnsFromSpanDialect(d dialect.SpanDialect, span *otelv1.InboundSpan, enrichment rowEnrichment, source string) canonicalColumns {
-	provider := enrichment.provider
-	if provider == "" {
-		provider = stated(d.Provider(span))
-	}
-	return canonicalColumns{
-		eventType:        stated(d.EventType(span)),
-		rawEventName:     stated(d.EventName(span)),
-		source:           source,
-		provider:         provider,
-		surface:          stated(d.Surface(span)),
-		sessionID:        stated(d.SessionID(span)),
-		turnID:           stated(d.TurnID(span)),
-		eventID:          stated(d.SubjectID(span)),
-		userEmail:        stated(d.ExternalUserEmail(span)),
-		externalUserID:   stated(d.ExternalUserID(span)),
-		externalOrgID:    stated(d.ExternalOrgID(span)),
-		model:            stated(d.Model(span)),
-		querySource:      stated(d.QuerySource(span)),
-		skillName:        stated(d.SkillName(span)),
-		agentName:        stated(d.AgentName(span)),
-		mcpServerName:    stated(d.MCPServerName(span)),
-		mcpToolName:      stated(d.MCPToolName(span)),
-		name:             stated(d.ToolName(span)),
-		toolName:         stated(d.ToolName(span)),
-		text:             stated(d.Text(span)),
-		outcome:          stated(d.Outcome(span)),
-		outcomeMessage:   stated(d.OutcomeMessage(span)),
-		durationNano:     stated(d.DurationNano(span)),
-		inputTokens:      stated(d.InputTokens(span)),
-		outputTokens:     stated(d.OutputTokens(span)),
-		cacheReadTokens:  stated(d.CacheReadTokens(span)),
-		cacheWriteTokens: stated(d.CacheWriteTokens(span)),
-		costUSD:          stated(d.CostUSD(span)),
 	}
 }
 

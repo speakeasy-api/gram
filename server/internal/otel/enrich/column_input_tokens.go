@@ -8,12 +8,11 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // cache-inclusive count into this disjoint shape. A compaction is absent on
 // purpose: its before and after counts are housekeeping, not usage, and stay
 // in the payload.
-func columnInputTokens(in *Instruments) LogEnricher {
-	return &logColumnEnricher[int64]{
-		column: InputTokensColumnKey,
+func columnInputTokens() columnDefinition {
+	return column[int64]{
+		key: InputTokensColumnKey,
 		byType: perEventType[int64]{
 			dialect.EventTypeAPIRequest: {log: dialect.LogDialect.InputTokens, span: dialect.SpanDialect.InputTokens},
 		},
-		instruments: in,
 	}
 }

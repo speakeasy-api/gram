@@ -10,15 +10,14 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // error, since a result or a compaction that succeeded has no message to
 // carry. The types whose outcome is implied or absent have no message at
 // all.
-func columnOutcomeMessage(in *Instruments) LogEnricher {
+func columnOutcomeMessage() columnDefinition {
 	message := getter[string]{log: dialect.LogDialect.OutcomeMessage, span: dialect.SpanDialect.OutcomeMessage}
-	return &logColumnEnricher[string]{
-		column: OutcomeMessageColumnKey,
+	return column[string]{
+		key: OutcomeMessageColumnKey,
 		byType: perEventType[string]{
 			dialect.EventTypeAPIError:       message,
 			dialect.EventTypeToolCallResult: conditionallyRequired(message, outcomeIsError),
 			dialect.EventTypeCompaction:     conditionallyRequired(message, outcomeIsError),
 		},
-		instruments: in,
 	}
 }

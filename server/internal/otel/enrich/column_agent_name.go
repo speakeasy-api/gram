@@ -11,16 +11,15 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // to carry the agent on. Most requests come from the main thread and most
 // tool events start no sub-agent, so the column is Recommended on all four
 // types and an absent agent is not counted.
-func columnAgentName(in *Instruments) LogEnricher {
+func columnAgentName() columnDefinition {
 	agent := recommended(getter[string]{log: dialect.LogDialect.AgentName, span: dialect.SpanDialect.AgentName})
-	return &logColumnEnricher[string]{
-		column: AgentNameColumnKey,
+	return column[string]{
+		key: AgentNameColumnKey,
 		byType: perEventType[string]{
 			dialect.EventTypeAPIRequest:     agent,
 			dialect.EventTypeToolCall:       agent,
 			dialect.EventTypeToolCallResult: agent,
 			dialect.EventTypeToolDecision:   agent,
 		},
-		instruments: in,
 	}
 }

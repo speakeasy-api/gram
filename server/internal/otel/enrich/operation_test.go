@@ -18,9 +18,9 @@ func operation(t *testing.T, in *Instruments, record *otelv1.InboundLogRecord) m
 	t.Helper()
 	columns := map[attribute.Key]attribute.Value{}
 	for _, enricher := range []LogEnricher{
-		columnModel(in), columnQuerySource(in), columnSkillName(in), columnAgentName(in),
-		columnMCPServerName(in), columnMCPToolName(in), columnName(in), columnToolName(in),
-		columnText(in), columnOutcome(in), columnOutcomeMessage(in), columnDurationNano(in),
+		columnModel().log(in), columnQuerySource().log(in), columnSkillName().log(in), columnAgentName().log(in),
+		columnMCPServerName().log(in), columnMCPToolName().log(in), columnName().log(in), columnToolName().log(in),
+		columnText().log(in), columnOutcome().log(in), columnOutcomeMessage().log(in), columnDurationNano().log(in),
 	} {
 		maps.Copy(columns, enrichedColumns(t, enricher, record))
 	}
