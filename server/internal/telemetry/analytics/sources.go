@@ -118,6 +118,7 @@ func toolCallsSource(scope Scope) squirrel.SelectBuilder {
 		"argMaxIf(tool_name, observed_at_unix_nano, tool_name != '') AS tool_name",
 		"argMaxIf(mcp_server_name, observed_at_unix_nano, mcp_server_name != '') AS mcp_server_name",
 		"argMaxIf(mcp_tool_name, observed_at_unix_nano, mcp_tool_name != '') AS mcp_tool_name",
+		"argMaxIf(skill_name, observed_at_unix_nano, skill_name != '') AS skill_name",
 		"argMaxIf(session_id, observed_at_unix_nano, session_id != '') AS session_id",
 		"argMaxIf(user_email, observed_at_unix_nano, user_email != '') AS user_email",
 		"argMaxIf(surface, observed_at_unix_nano, surface != '') AS surface",

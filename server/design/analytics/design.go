@@ -93,6 +93,7 @@ var FieldType = Type("AnalyticsField", func() {
 	Attribute("unit", String, "Unit of a measure, when it has one", func() { Example("s") })
 	Attribute("operators", ArrayOf(String), "Filter operators a dimension admits")
 	Attribute("aggregations", ArrayOf(String), "Ops a field admits: aggregations on a measure, count_distinct on a dimension")
+	Attribute("description", String, "What the field is and which producers fill it, when the catalog has something to say beyond the name")
 	Required("name", "type", "role", "default")
 })
 

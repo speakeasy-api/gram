@@ -83,6 +83,7 @@ export function QueryBuilder({
   const dimensionOptions = dimensionFields(dataset).map((field) => ({
     label: field.name,
     value: field.name,
+    description: field.description,
   }));
   const orderOptions = completeMeasures(spec.measures).map((measure) => ({
     value: measureAlias(measure),

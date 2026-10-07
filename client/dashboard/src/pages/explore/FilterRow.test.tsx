@@ -53,6 +53,14 @@ const dataset: AnalyticsDataset = {
       default: false,
       operators: ["in"],
     },
+    {
+      name: "skill",
+      type: "string",
+      role: "dimension",
+      default: false,
+      operators: ["equals", "in"],
+      description: "Reported by Claude Code; Codex reports no skills.",
+    },
   ],
 };
 
@@ -89,6 +97,11 @@ describe("FilterRow", () => {
     testState.isPending = false;
     testState.isError = false;
     testState.asks = [];
+    // Radix Select reaches for pointer-capture and scrolling that jsdom lacks.
+    HTMLElement.prototype.scrollIntoView = vi.fn<() => void>();
+    HTMLElement.prototype.hasPointerCapture = vi.fn(() => false);
+    HTMLElement.prototype.releasePointerCapture =
+      vi.fn<(pointerId: number) => void>();
   });
 
   afterEach(() => {
@@ -115,6 +128,22 @@ describe("FilterRow", () => {
     expect(screen.getByText("9")).toBeTruthy();
     expect(screen.getByText("Grep")).toBeTruthy();
     expect(screen.getByText("4")).toBeTruthy();
+  });
+
+  it("shows a field's description in the picker, when the catalog gives one", async () => {
+    render(
+      <Harness
+        initial={{ field: "tool_name", operator: "in", values: [] }}
+        onChange={() => {}}
+      />,
+    );
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Filter field" }), {
+      key: "Enter",
+    });
+    expect(await screen.findByRole("option", { name: /skill/ })).toBeTruthy();
+    expect(
+      screen.getByText("Reported by Claude Code; Codex reports no skills."),
+    ).toBeTruthy();
   });
 
   it("picks one value for equals and closes", () => {

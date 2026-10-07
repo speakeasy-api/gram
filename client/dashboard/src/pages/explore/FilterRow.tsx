@@ -58,7 +58,11 @@ export function FilterRow({
         </SelectTrigger>
         <SelectContent>
           {filterableFields(dataset).map((candidate) => (
-            <SelectItem key={candidate.name} value={candidate.name}>
+            <SelectItem
+              key={candidate.name}
+              value={candidate.name}
+              description={candidate.description}
+            >
               {candidate.name}
             </SelectItem>
           ))}

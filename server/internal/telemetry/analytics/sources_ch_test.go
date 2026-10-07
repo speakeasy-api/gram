@@ -90,6 +90,11 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 	blocked := agentEventFixture(orgID, "r9", "s1", "t1", "tc2", "tool_decision", base+3)
 	blocked.ToolName = "Write"
 	blocked.Outcome = "rejected"
+	// A skill invocation: Claude Code reports it as a tool event whose
+	// parameters name the skill, and that name is the skill dimension.
+	skillCall := agentEventFixture(orgID, "r11", "s1", "t2", "tc3", "tool_call_result", base+5)
+	skillCall.ToolName = "Skill"
+	skillCall.SkillName = "deploy"
 	// A record first filed under s2, then re-emitted with its session
 	// withdrawn. The collapse must run before the session predicate, or the
 	// withdrawn copy is filtered away first and the stale one survives.
@@ -107,6 +112,7 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		// A blocked call is a decision alone, and still a call.
 		blocked,
 		agentEventFixture(orgID, "r4", "s1", "t2", "r4", "api_request", base+3),
+		skillCall,
 		// How a real session ends: a hook or MCP event with no model on it.
 		trailingHook,
 		// A second session with a prompt and no turn id.
@@ -148,9 +154,9 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		require.Len(t, got, 2)
 		require.Equal(t, "s1", got[0].id)
 		require.Equal(t, int64(2), got[0].turns, "t1 and t2, with the redelivered record counted once")
-		require.Equal(t, int64(2), got[0].toolCalls, "two observations of tc1 are one call, and the blocked tc2 is another")
+		require.Equal(t, int64(3), got[0].toolCalls, "two observations of tc1 are one call, the blocked tc2 another, and the skill call tc3 a third")
 		require.Equal(t, base, got[0].startedAt)
-		require.Equal(t, base+4, got[0].endedAt, "the out-of-window row does not stretch the session")
+		require.Equal(t, base+5, got[0].endedAt, "the out-of-window row does not stretch the session")
 		require.Equal(t, "dev@example.com", got[0].user)
 		require.Equal(t, "claude-sonnet-4", got[0].model, "the trailing hook row, which states no model, does not blank it")
 		require.Equal(t, "s2", got[1].id)
@@ -167,22 +173,23 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		defer func() { require.NoError(t, result.Close()) }()
 
 		type call struct {
-			org, project, id, tool, mcpServer, mcpTool, session, user, surface, status string
-			durationNano, startedAt, endedAt                                           int64
+			org, project, id, tool, mcpServer, mcpTool, skill, session, user, surface, status string
+			durationNano, startedAt, endedAt                                                  int64
 		}
 		var got []call
 		for result.Next() {
 			var c call
-			require.NoError(t, result.Scan(&c.org, &c.project, &c.id, &c.tool, &c.mcpServer, &c.mcpTool, &c.session, &c.user, &c.surface, &c.status, &c.durationNano, &c.startedAt, &c.endedAt))
+			require.NoError(t, result.Scan(&c.org, &c.project, &c.id, &c.tool, &c.mcpServer, &c.mcpTool, &c.skill, &c.session, &c.user, &c.surface, &c.status, &c.durationNano, &c.startedAt, &c.endedAt))
 			got = append(got, c)
 		}
 		require.NoError(t, result.Err())
 
-		require.Len(t, got, 2)
+		require.Len(t, got, 3)
 		require.Equal(t, "tc1", got[0].id)
 		require.Equal(t, "Bash", got[0].tool)
 		require.Equal(t, "assistants-dev", got[0].mcpServer, "the terminal observation names the MCP server")
 		require.Equal(t, "whoami", got[0].mcpTool)
+		require.Empty(t, got[0].skill, "a plain tool call names no skill")
 		require.Equal(t, "s1", got[0].session)
 		require.Equal(t, "error", got[0].status, "the later observation wins")
 		require.Equal(t, int64(5_000_000), got[0].durationNano)
@@ -197,6 +204,10 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		require.Zero(t, got[1].durationNano)
 		require.Equal(t, base+3, got[1].startedAt)
 		require.Equal(t, base+3, got[1].endedAt)
+
+		require.Equal(t, "tc3", got[2].id)
+		require.Equal(t, "Skill", got[2].tool)
+		require.Equal(t, "deploy", got[2].skill, "a Skill invocation resolves to the skill it named")
 	})
 
 	t.Run("deduped keeps one copy of a re-emitted record, the latest observed", func(t *testing.T) {

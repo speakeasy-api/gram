@@ -38,6 +38,14 @@ func TestDefaultCatalog(t *testing.T) {
 	require.True(t, ok)
 	require.False(t, status.AdmitsAggregation("count_distinct"), "a dimension that does not declare it does not admit it")
 
+	skill, ok := toolCalls.Field("skill")
+	require.True(t, ok)
+	require.Equal(t, RoleDimension, skill.Role)
+	require.True(t, skill.Admits("in"))
+	require.True(t, skill.Admits("count_distinct"), "skills used is a distinct count")
+	require.Contains(t, skill.Description, "Claude Code", "the one dimension a single producer family fills says so")
+	require.Empty(t, status.Description, "most fields need no description")
+
 	duration, ok := sessions.Field("duration_seconds")
 	require.True(t, ok)
 	require.True(t, duration.AdmitsAggregation("p95"))
@@ -60,7 +68,7 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 			Description: "things",
 			TimeExpr:    "started_at",
 			Fields: []Field{
-				{Name: "thing", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id"},
+				{Name: "thing", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id", Description: ""},
 			},
 			Source: sessionsSource,
 		}
@@ -76,13 +84,13 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 		{name: "it rejects a dimension with no operators", mutate: func(d *Dataset) { d.Fields[0].Operators = nil }, want: "must declare operators"},
 		{name: "it names an aggregation a dimension declares that nothing knows", mutate: func(d *Dataset) { d.Fields[0].Aggregations = []Aggregation{"count_distinctt"} }, want: `unknown aggregation "count_distinctt"`},
 		{name: "it rejects a measure declaring count_distinct", mutate: func(d *Dataset) {
-			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{AggregationCountDistinct}, Expr: "n"}
+			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{AggregationCountDistinct}, Expr: "n", Description: ""}
 		}, want: "cannot declare count_distinct"},
 		{name: "it rejects a measure with operators", mutate: func(d *Dataset) {
-			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: equalsIn, Aggregations: []Aggregation{AggregationSum}, Expr: "n"}
+			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: equalsIn, Aggregations: []Aggregation{AggregationSum}, Expr: "n", Description: ""}
 		}, want: "must declare aggregations and no operators"},
 		{name: "it rejects a string measure", mutate: func(d *Dataset) {
-			d.Fields[0] = Field{Name: "n", Type: TypeString, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{AggregationSum}, Expr: "n"}
+			d.Fields[0] = Field{Name: "n", Type: TypeString, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{AggregationSum}, Expr: "n", Description: ""}
 		}, want: "cannot be a string"},
 		{name: "it rejects a duplicate field", mutate: func(d *Dataset) { d.Fields = append(d.Fields, d.Fields[0]) }, want: "twice"},
 		{name: "it rejects a field named like the time bucket", mutate: func(d *Dataset) { d.Fields[0].Name = timeBucketColumn }, want: "time bucket"},
@@ -98,7 +106,7 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 		{name: "it rejects an unknown field type", mutate: func(d *Dataset) { d.Fields[0].Type = "uuid" }, want: "unknown type"},
 		{name: "it rejects an unknown operator", mutate: func(d *Dataset) { d.Fields[0].Operators = []Operator{"like"} }, want: "unknown operator"},
 		{name: "it rejects an unknown aggregation", mutate: func(d *Dataset) {
-			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{"median"}, Expr: "n"}
+			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{"median"}, Expr: "n", Description: ""}
 		}, want: "unknown aggregation"},
 	}
 	for _, tc := range cases {

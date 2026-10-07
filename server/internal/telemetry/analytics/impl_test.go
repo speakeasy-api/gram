@@ -45,6 +45,15 @@ func TestDescribe(t *testing.T) {
 	toolCalls := result.Datasets[1]
 	require.Equal(t, "tool_calls", toolCalls.Name)
 	require.Equal(t, []string{"tool_name"}, defaultFields(toolCalls), "one flagged dimension opens the tool calls view")
+	toolFields := make(map[string]*gen.AnalyticsField, len(toolCalls.Fields))
+	for _, f := range toolCalls.Fields {
+		toolFields[f.Name] = f
+	}
+	require.NotNil(t, toolFields["skill"].Description, "describe carries the caveat on which producers report skills")
+	require.Contains(t, *toolFields["skill"].Description, "Claude Code")
+	require.Equal(t, []string{"count_distinct"}, toolFields["skill"].Aggregations)
+	require.Nil(t, toolFields["tool_name"].Description, "a field with nothing to add has no description")
+	require.Nil(t, byName["user"].Description)
 
 	t.Run("it requires an authenticated project", func(t *testing.T) {
 		t.Parallel()

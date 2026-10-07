@@ -100,6 +100,37 @@ func TestCompileCountDistinct(t *testing.T) {
 	require.Contains(t, plan.SQL, "ORDER BY people DESC, mcp_server ASC")
 }
 
+// TestCompileSkillDimension: skill is an ordinary dimension of tool_calls,
+// grouped, filtered and distinct-counted like any other.
+func TestCompileSkillDimension(t *testing.T) {
+	t.Parallel()
+
+	plan, err := compileTest(t, Request{
+		Dataset:    "tool_calls",
+		Grain:      "",
+		Dimensions: []string{"skill"},
+		Measures: []Measure{
+			{Op: "count", Field: "", Alias: ""},
+			{Op: "count_distinct", Field: "user", Alias: "people"},
+		},
+		Filters:   []Filter{{Field: "skill", Operator: "in", Values: []string{"deploy", "review"}}},
+		OrderBy:   nil,
+		Limit:     0,
+		Ungrouped: false,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, []Column{
+		{Name: "skill", Kind: ColumnDimension},
+		{Name: "count", Kind: ColumnMeasure},
+		{Name: "people", Kind: ColumnMeasure},
+	}, plan.Columns)
+	require.Contains(t, plan.SQL, "skill_name AS skill")
+	require.Contains(t, plan.SQL, "WHERE skill_name IN (?,?)")
+	require.Contains(t, plan.SQL, "GROUP BY skill")
+	require.Equal(t, []any{"deploy", "review"}, plan.Args[len(plan.Args)-2:], "the filter values are bound last")
+}
+
 func TestCompileUngrouped(t *testing.T) {
 	t.Parallel()
 
