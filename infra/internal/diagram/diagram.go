@@ -749,9 +749,20 @@ func writeMermaid(b *strings.Builder, topics []gcp.DesiredTopic, subs []gcp.Desi
 	}
 
 	// Subscriptions.
+	buckets := map[string]bool{}
 	for _, s := range subs {
 		id := nodeID("s_", s.Name)
-		fmt.Fprintf(b, "  %s[\"%s<br/>(sub)\"]:::sub\n", id, s.Name)
+		kind := "sub"
+		if s.Storage != nil {
+			kind = "storage sub"
+			bucket := s.Storage.Bucket
+			if !buckets[bucket] {
+				fmt.Fprintf(b, "  %s[(\"%s<br/>GCS / Parquet\")]:::topic\n", nodeID("b_", bucket), bucket)
+				buckets[bucket] = true
+			}
+			fmt.Fprintf(b, "  %s --> %s\n", id, nodeID("b_", bucket))
+		}
+		fmt.Fprintf(b, "  %s[\"%s<br/>(%s)\"]:::sub\n", id, s.Name, kind)
 		if isDeprecated(s.Labels) {
 			deprecated = append(deprecated, id)
 		}
@@ -825,7 +836,11 @@ func writeTables(b *strings.Builder, topics []gcp.DesiredTopic, subs []gcp.Desir
 		if isDeprecated(s.Labels) {
 			name += " _(deprecated)_"
 		}
-		fmt.Fprintf(b, "| %s | `%s` | %s | %s | %s |\n", name, s.Topic, orDash(humanDur(s.AckDeadline)), orDash(codeOrDash(s.DeadLetterTopic)), siteList(consumers[s.Name]))
+		consumer := siteList(consumers[s.Name])
+		if s.Storage != nil {
+			consumer = fmt.Sprintf("Go storage runner → `%s/%s/` (%s); explicit installation required", s.Storage.Bucket, s.ProtoMessage, strings.TrimPrefix(s.Storage.Partitioning.String(), "STORAGE_PARTITIONING_"))
+		}
+		fmt.Fprintf(b, "| %s | `%s` | %s | %s | %s |\n", name, s.Topic, orDash(humanDur(s.AckDeadline)), orDash(codeOrDash(s.DeadLetterTopic)), consumer)
 	}
 	b.WriteString("\n")
 }
@@ -842,6 +857,10 @@ func writeNotes(b *strings.Builder, topics []gcp.DesiredTopic, subs []gcp.Desire
 	}
 	for _, s := range subs {
 		if isDeprecated(s.Labels) {
+			continue
+		}
+		if s.Storage != nil {
+			notes = append(notes, fmt.Sprintf("Storage subscription `%s` requires an explicitly installed Go runner; generated binding call sites are not inferred by this diagram.", s.Name))
 			continue
 		}
 		if len(consumers[s.Name]) == 0 {
