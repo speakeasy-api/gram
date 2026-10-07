@@ -386,6 +386,38 @@ func BuildDuplicateDashboardPayload(dashboardsDuplicateDashboardBody string, das
 	return v, nil
 }
 
+// BuildDuplicateBuiltInDashboardPayload builds the payload for the dashboards
+// duplicateBuiltInDashboard endpoint from CLI flags.
+func BuildDuplicateBuiltInDashboardPayload(dashboardsDuplicateBuiltInDashboardBody string, dashboardsDuplicateBuiltInDashboardSessionToken string, dashboardsDuplicateBuiltInDashboardProjectSlugInput string) (*dashboards.DuplicateBuiltInDashboardPayload, error) {
+	var err error
+	var body DuplicateBuiltInDashboardRequestBody
+	{
+		err = json.Unmarshal([]byte(dashboardsDuplicateBuiltInDashboardBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"slug\": \"mcp-tools\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if dashboardsDuplicateBuiltInDashboardSessionToken != "" {
+			sessionToken = &dashboardsDuplicateBuiltInDashboardSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if dashboardsDuplicateBuiltInDashboardProjectSlugInput != "" {
+			projectSlugInput = &dashboardsDuplicateBuiltInDashboardProjectSlugInput
+		}
+	}
+	v := &dashboards.DuplicateBuiltInDashboardPayload{
+		Slug: body.Slug,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildDeleteDashboardPayload builds the payload for the dashboards
 // deleteDashboard endpoint from CLI flags.
 func BuildDeleteDashboardPayload(dashboardsDeleteDashboardID string, dashboardsDeleteDashboardSessionToken string, dashboardsDeleteDashboardProjectSlugInput string) (*dashboards.DeleteDashboardPayload, error) {

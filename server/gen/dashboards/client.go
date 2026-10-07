@@ -15,31 +15,33 @@ import (
 
 // Client is the "dashboards" service client.
 type Client struct {
-	ListDashboardsEndpoint        goa.Endpoint
-	GetDashboardEndpoint          goa.Endpoint
-	CreateDashboardEndpoint       goa.Endpoint
-	UpdateDashboardEndpoint       goa.Endpoint
-	SaveDashboardLayoutEndpoint   goa.Endpoint
-	AddDashboardWidgetEndpoint    goa.Endpoint
-	RemoveDashboardWidgetEndpoint goa.Endpoint
-	SaveDashboardFiltersEndpoint  goa.Endpoint
-	DuplicateDashboardEndpoint    goa.Endpoint
-	DeleteDashboardEndpoint       goa.Endpoint
+	ListDashboardsEndpoint            goa.Endpoint
+	GetDashboardEndpoint              goa.Endpoint
+	CreateDashboardEndpoint           goa.Endpoint
+	UpdateDashboardEndpoint           goa.Endpoint
+	SaveDashboardLayoutEndpoint       goa.Endpoint
+	AddDashboardWidgetEndpoint        goa.Endpoint
+	RemoveDashboardWidgetEndpoint     goa.Endpoint
+	SaveDashboardFiltersEndpoint      goa.Endpoint
+	DuplicateDashboardEndpoint        goa.Endpoint
+	DuplicateBuiltInDashboardEndpoint goa.Endpoint
+	DeleteDashboardEndpoint           goa.Endpoint
 }
 
 // NewClient initializes a "dashboards" service client given the endpoints.
-func NewClient(listDashboards, getDashboard, createDashboard, updateDashboard, saveDashboardLayout, addDashboardWidget, removeDashboardWidget, saveDashboardFilters, duplicateDashboard, deleteDashboard goa.Endpoint) *Client {
+func NewClient(listDashboards, getDashboard, createDashboard, updateDashboard, saveDashboardLayout, addDashboardWidget, removeDashboardWidget, saveDashboardFilters, duplicateDashboard, duplicateBuiltInDashboard, deleteDashboard goa.Endpoint) *Client {
 	return &Client{
-		ListDashboardsEndpoint:        listDashboards,
-		GetDashboardEndpoint:          getDashboard,
-		CreateDashboardEndpoint:       createDashboard,
-		UpdateDashboardEndpoint:       updateDashboard,
-		SaveDashboardLayoutEndpoint:   saveDashboardLayout,
-		AddDashboardWidgetEndpoint:    addDashboardWidget,
-		RemoveDashboardWidgetEndpoint: removeDashboardWidget,
-		SaveDashboardFiltersEndpoint:  saveDashboardFilters,
-		DuplicateDashboardEndpoint:    duplicateDashboard,
-		DeleteDashboardEndpoint:       deleteDashboard,
+		ListDashboardsEndpoint:            listDashboards,
+		GetDashboardEndpoint:              getDashboard,
+		CreateDashboardEndpoint:           createDashboard,
+		UpdateDashboardEndpoint:           updateDashboard,
+		SaveDashboardLayoutEndpoint:       saveDashboardLayout,
+		AddDashboardWidgetEndpoint:        addDashboardWidget,
+		RemoveDashboardWidgetEndpoint:     removeDashboardWidget,
+		SaveDashboardFiltersEndpoint:      saveDashboardFilters,
+		DuplicateDashboardEndpoint:        duplicateDashboard,
+		DuplicateBuiltInDashboardEndpoint: duplicateBuiltInDashboard,
+		DeleteDashboardEndpoint:           deleteDashboard,
 	}
 }
 
@@ -243,6 +245,29 @@ func (c *Client) SaveDashboardFilters(ctx context.Context, p *SaveDashboardFilte
 func (c *Client) DuplicateDashboard(ctx context.Context, p *DuplicateDashboardPayload) (res *Dashboard, err error) {
 	var ires any
 	ires, err = c.DuplicateDashboardEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*Dashboard), nil
+}
+
+// DuplicateBuiltInDashboard calls the "duplicateBuiltInDashboard" endpoint of
+// the "dashboards" service.
+// DuplicateBuiltInDashboard may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DuplicateBuiltInDashboard(ctx context.Context, p *DuplicateBuiltInDashboardPayload) (res *Dashboard, err error) {
+	var ires any
+	ires, err = c.DuplicateBuiltInDashboardEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

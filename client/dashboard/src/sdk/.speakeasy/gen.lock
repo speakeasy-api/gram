@@ -199,6 +199,7 @@ trackedFiles:
   src/funcs/dashboardsCreate.ts: {}
   src/funcs/dashboardsDelete.ts: {}
   src/funcs/dashboardsDuplicate.ts: {}
+  src/funcs/dashboardsDuplicateBuiltIn.ts: {}
   src/funcs/dashboardsGet.ts: {}
   src/funcs/dashboardsList.ts: {}
   src/funcs/dashboardsRemoveWidget.ts: {}
@@ -908,6 +909,8 @@ trackedFiles:
   src/models/components/beginresponsebody.ts: {}
   src/models/components/beginslackdirectoryconnectionrequestbody.ts: {}
   src/models/components/billingemail.ts: {}
+  src/models/components/builtincard.ts: {}
+  src/models/components/builtindashboard.ts: {}
   src/models/components/builtinexclusioncategory.ts: {}
   src/models/components/builtinexclusionentry.ts: {}
   src/models/components/businessmemory.ts: {}
@@ -1056,6 +1059,7 @@ trackedFiles:
   src/models/components/distributeskillrequestbody.ts: {}
   src/models/components/distributionplugin.ts: {}
   src/models/components/domaindnsconfig.ts: {}
+  src/models/components/duplicatebuiltindashboardrequestbody.ts: {}
   src/models/components/duplicatedashboardrequestbody.ts: {}
   src/models/components/duplicatewidgetrequestbody.ts: {}
   src/models/components/employeedataflowedge.ts: {}
@@ -2167,6 +2171,7 @@ trackedFiles:
   src/models/operations/downloadcodexinstallscript.ts: {}
   src/models/operations/downloadobservabilityplugin.ts: {}
   src/models/operations/downloadpluginpackage.ts: {}
+  src/models/operations/duplicatebuiltindashboard.ts: {}
   src/models/operations/duplicatedashboard.ts: {}
   src/models/operations/duplicatewidget.ts: {}
   src/models/operations/enableadminopenrouterkey.ts: {}
@@ -3004,6 +3009,7 @@ trackedFiles:
   src/react-query/distributionPlugin.ts: {}
   src/react-query/distributionPlugins.core.ts: {}
   src/react-query/distributionPlugins.ts: {}
+  src/react-query/duplicateBuiltInDashboard.ts: {}
   src/react-query/duplicateDashboard.ts: {}
   src/react-query/duplicateWidget.ts: {}
   src/react-query/editKillswitch.ts: {}
@@ -6263,6 +6269,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  duplicateBuiltInDashboard:
+    speakeasy-default-duplicate-built-in-dashboard:
+      requestBody:
+        application/json: {"slug": "mcp-tools"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-12-01T05:48:33.138Z", "filters": {"range": {"label": "Last Tuesday", "preset": "7d"}, "values": {"key": ["<value 1>", "<value 2>", "<value 3>"], "key1": ["<value 1>", "<value 2>"], "key2": ["<value 1>", "<value 2>", "<value 3>"]}}, "id": "3194f65a-6117-4cc0-a10a-e1127733c707", "name": "<value>", "organization_id": "<id>", "project_id": "65205706-c10b-40c9-aaf6-851bbd5cb42b", "updated_at": "2026-05-08T01:15:11.893Z", "widgets": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   duplicateDashboard:
     speakeasy-default-duplicate-dashboard:
       requestBody:
@@ -8816,7 +8833,7 @@ examples:
     speakeasy-default-list-dashboards:
       responses:
         "200":
-          application/json: {"dashboards": [{"created_at": "2026-03-17T10:11:50.520Z", "filters": {"range": {"label": "Last Tuesday", "preset": "7d"}, "values": {"key": [], "key1": ["<value 1>", "<value 2>", "<value 3>"]}}, "id": "b40d85e0-f041-4aae-8820-17acefea6255", "name": "<value>", "organization_id": "<id>", "project_id": "2522827a-8032-42cb-9cab-b572f245522d", "updated_at": "2025-11-28T06:42:40.865Z", "widgets": []}]}
+          application/json: {"built_in": [{"cards": [{"dataset": "tool_calls", "h": 676737, "name": "<value>", "query": {}, "visualization": {"key": "<value>", "key1": "<value>", "key2": "<value>"}, "w": 724626, "x": 290246, "y": 59914}], "description": "generously although telescope boohoo opposite unless championship huzzah yeast", "name": "<value>", "slug": "mcp-tools"}], "dashboards": [{"created_at": "2026-03-17T10:11:50.520Z", "filters": {"range": {"label": "Last Tuesday", "preset": "7d"}, "values": {"key": [], "key1": ["<value 1>", "<value 2>", "<value 3>"]}}, "id": "b40d85e0-f041-4aae-8820-17acefea6255", "name": "<value>", "organization_id": "<id>", "project_id": "2522827a-8032-42cb-9cab-b572f245522d", "updated_at": "2025-11-28T06:42:40.865Z", "widgets": []}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

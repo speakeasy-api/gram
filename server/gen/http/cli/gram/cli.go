@@ -133,7 +133,7 @@ func UsageCommands() []string {
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat-overview|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
-		"dashboards (list-dashboards|get-dashboard|create-dashboard|update-dashboard|save-dashboard-layout|add-dashboard-widget|remove-dashboard-widget|save-dashboard-filters|duplicate-dashboard|delete-dashboard)",
+		"dashboards (list-dashboards|get-dashboard|create-dashboard|update-dashboard|save-dashboard-layout|add-dashboard-widget|remove-dashboard-widget|save-dashboard-filters|duplicate-dashboard|duplicate-built-in-dashboard|delete-dashboard)",
 		"data-exports (list-destinations|list-for-org|create-destination|update-destination|delete-destination|list-routes|create-route|update-route|delete-route)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"device-integrations (list-providers|get-config|upsert-config|delete-config|test-connection|list-schedules|set-schedule-enabled|retry-schedule|list-managed-devices|get-coverage)",
@@ -1057,6 +1057,11 @@ func ParseEndpoint(
 		dashboardsDuplicateDashboardBodyFlag             = dashboardsDuplicateDashboardFlags.String("body", "REQUIRED", "")
 		dashboardsDuplicateDashboardSessionTokenFlag     = dashboardsDuplicateDashboardFlags.String("session-token", "", "")
 		dashboardsDuplicateDashboardProjectSlugInputFlag = dashboardsDuplicateDashboardFlags.String("project-slug-input", "", "")
+
+		dashboardsDuplicateBuiltInDashboardFlags                = flag.NewFlagSet("duplicate-built-in-dashboard", flag.ExitOnError)
+		dashboardsDuplicateBuiltInDashboardBodyFlag             = dashboardsDuplicateBuiltInDashboardFlags.String("body", "REQUIRED", "")
+		dashboardsDuplicateBuiltInDashboardSessionTokenFlag     = dashboardsDuplicateBuiltInDashboardFlags.String("session-token", "", "")
+		dashboardsDuplicateBuiltInDashboardProjectSlugInputFlag = dashboardsDuplicateBuiltInDashboardFlags.String("project-slug-input", "", "")
 
 		dashboardsDeleteDashboardFlags                = flag.NewFlagSet("delete-dashboard", flag.ExitOnError)
 		dashboardsDeleteDashboardIDFlag               = dashboardsDeleteDashboardFlags.String("id", "REQUIRED", "")
@@ -5081,6 +5086,7 @@ func ParseEndpoint(
 	dashboardsRemoveDashboardWidgetFlags.Usage = dashboardsRemoveDashboardWidgetUsage
 	dashboardsSaveDashboardFiltersFlags.Usage = dashboardsSaveDashboardFiltersUsage
 	dashboardsDuplicateDashboardFlags.Usage = dashboardsDuplicateDashboardUsage
+	dashboardsDuplicateBuiltInDashboardFlags.Usage = dashboardsDuplicateBuiltInDashboardUsage
 	dashboardsDeleteDashboardFlags.Usage = dashboardsDeleteDashboardUsage
 
 	dataExportsFlags.Usage = dataExportsUsage
@@ -6676,6 +6682,9 @@ func ParseEndpoint(
 
 			case "duplicate-dashboard":
 				epf = dashboardsDuplicateDashboardFlags
+
+			case "duplicate-built-in-dashboard":
+				epf = dashboardsDuplicateBuiltInDashboardFlags
 
 			case "delete-dashboard":
 				epf = dashboardsDeleteDashboardFlags
@@ -9652,6 +9661,9 @@ func ParseEndpoint(
 			case "duplicate-dashboard":
 				endpoint = c.DuplicateDashboard()
 				data, err = dashboardsc.BuildDuplicateDashboardPayload(*dashboardsDuplicateDashboardBodyFlag, *dashboardsDuplicateDashboardSessionTokenFlag, *dashboardsDuplicateDashboardProjectSlugInputFlag)
+			case "duplicate-built-in-dashboard":
+				endpoint = c.DuplicateBuiltInDashboard()
+				data, err = dashboardsc.BuildDuplicateBuiltInDashboardPayload(*dashboardsDuplicateBuiltInDashboardBodyFlag, *dashboardsDuplicateBuiltInDashboardSessionTokenFlag, *dashboardsDuplicateBuiltInDashboardProjectSlugInputFlag)
 			case "delete-dashboard":
 				endpoint = c.DeleteDashboard()
 				data, err = dashboardsc.BuildDeleteDashboardPayload(*dashboardsDeleteDashboardIDFlag, *dashboardsDeleteDashboardSessionTokenFlag, *dashboardsDeleteDashboardProjectSlugInputFlag)
@@ -15606,6 +15618,7 @@ func dashboardsUsage() {
 	fmt.Fprintln(os.Stderr, `    remove-dashboard-widget: Take a card off a dashboard. The widget itself stays saved.`)
 	fmt.Fprintln(os.Stderr, `    save-dashboard-filters: Store the date range and filter values a dashboard opens on, for everyone. Until saved, changes in the filter bar are the viewer's own.`)
 	fmt.Fprintln(os.Stderr, `    duplicate-dashboard: Copy a dashboard into a new one the caller owns, named "<name> (copy)". Every card's widget is copied into a new saved widget too, named the same way, so the copy is fully independent of the original. Like every widget save, each copy is validated, so a dashboard with a broken widget cannot be duplicated until the widget is fixed.`)
+	fmt.Fprintln(os.Stderr, `    duplicate-built-in-dashboard: Copy a Speakeasy-built dashboard into a new one the caller owns, named "<name> (copy)", with a new saved widget per card, named the same way. The copy is a project dashboard like any other and can be changed; the built-in stays as it is.`)
 	fmt.Fprintln(os.Stderr, `    delete-dashboard: Delete a dashboard and its cards. Its widgets stay saved. Its creator can; deleting someone else's needs project write access.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -15805,6 +15818,28 @@ func dashboardsDuplicateDashboardUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dashboards duplicate-dashboard --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dashboardsDuplicateBuiltInDashboardUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] dashboards duplicate-built-in-dashboard", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Copy a Speakeasy-built dashboard into a new one the caller owns, named "<name> (copy)", with a new saved widget per card, named the same way. The copy is a project dashboard like any other and can be changed; the built-in stays as it is.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dashboards duplicate-built-in-dashboard --body '{\n      \"slug\": \"mcp-tools\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func dashboardsDeleteDashboardUsage() {
