@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -35,8 +34,18 @@ import (
 
 const (
 	// testClaudeBudget stands in for the 5s production budget so the overrun
-	// tests finish quickly.
-	testClaudeBudget = 200 * time.Millisecond
+	// tests answer almost at once.
+	testClaudeBudget = 5 * time.Millisecond
+
+	// testClaudeInBudget is the budget for tests whose verdict must land in
+	// time. It is long enough that a slow CI run cannot turn the response into
+	// the budget fallback.
+	testClaudeInBudget = time.Hour
+
+	// testClaudeScanHold is how long a scan is held for the endpoints the
+	// budget does not cover: ten times testClaudeBudget, so the Claude budget
+	// would fire first if it applied to them.
+	testClaudeScanHold = 10 * testClaudeBudget
 
 	// testClaudeBudgetAnswerWithin is how soon an overrun request must be
 	// answered: the budget, the posture read and CI scheduling slack. The slow
@@ -75,12 +84,14 @@ func (f hooksPostureFeatures) IsFeatureEnabled(_ context.Context, _ string, feat
 	return f.failOpen, nil
 }
 
-// slowRiskScanner holds every enforcement scan until the test finishes it,
-// then returns the embedded stub's result, or panics when panics is set. It
-// stands in for a risk scan slower than the budget.
+// slowRiskScanner holds every enforcement scan until the test finishes it, or
+// for holdFor when that is set, then returns the embedded stub's result, or
+// panics when panics is set. It stands in for a risk scan slower than the
+// budget.
 type slowRiskScanner struct {
 	stubResultScanner
 	panics      bool
+	holdFor     time.Duration
 	started     chan struct{}
 	startOnce   sync.Once
 	release     chan struct{}
@@ -89,15 +100,20 @@ type slowRiskScanner struct {
 
 func (s *slowRiskScanner) ScanForEnforcement(ctx context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 	s.startOnce.Do(func() { close(s.started) })
+	var held <-chan time.Time // nil when holdFor is unset: hold until finish
+	if s.holdFor > 0 {
+		held = time.After(s.holdFor)
+	}
 	select {
 	case <-s.release:
-		if s.panics {
-			panic("held enforcement scan panicked")
-		}
-		return s.result, nil
+	case <-held:
 	case <-ctx.Done():
 		return nil, fmt.Errorf("held enforcement scan: %w", ctx.Err())
 	}
+	if s.panics {
+		panic("held enforcement scan panicked")
+	}
+	return s.result, nil
 }
 
 func (s *slowRiskScanner) finish() {
@@ -241,7 +257,7 @@ func TestClaude_DecisionBudget_ReadsPostureWhileVerdictPending(t *testing.T) {
 	ctx, ti, scanner := newBudgetedClaudeService(t, hooksPostureFeatures{failOpen: true, read: postureRead}, nil)
 	// A budget this long cannot fire during the test, so any posture read it
 	// observes overlapped the pending verdict.
-	ti.service.claudeBudget = time.Hour
+	ti.service.claudeBudget = testClaudeInBudget
 
 	responses := make(chan claudeHookVerdict, 1)
 	go func() {
@@ -324,6 +340,7 @@ func TestClaude_DecisionBudget_LateBlockStillRecordedWhenFailClosed(t *testing.T
 func TestClaude_DecisionBudget_FastBlockUnchanged(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
+	ti.service.claudeBudget = testClaudeInBudget
 	ti.service.productFeatures = hooksPostureFeatures{failOpen: true}
 	ti.service.riskScanner = &stubResultScanner{result: blockingScanResult()}
 
@@ -337,6 +354,7 @@ func TestClaude_DecisionBudget_FastBlockUnchanged(t *testing.T) {
 func TestClaude_DecisionBudget_FastAllowUnchanged(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
+	ti.service.claudeBudget = testClaudeInBudget
 	ti.service.productFeatures = hooksPostureFeatures{failOpen: false}
 	ti.service.riskScanner = &stubResultScanner{}
 
@@ -352,6 +370,7 @@ func TestClaude_DecisionBudget_FastAllowUnchanged(t *testing.T) {
 func TestClaude_DecisionBudget_FastVerdictReportsRiskScan(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
+	ti.service.claudeBudget = testClaudeInBudget
 	ti.service.riskScanner = &stubResultScanner{}
 	payload := budgetPayload("UserPromptSubmit")
 	hookEvent, err := ti.service.normalizeClaudeHookEvent(ctx, payload, time.Now())
@@ -369,7 +388,7 @@ func TestClaude_DecisionBudget_FastVerdictReportsRiskScan(t *testing.T) {
 func TestClaude_DecisionBudget_HandlerPanicFailsRequest(t *testing.T) {
 	t.Parallel()
 	ctx, ti, scanner := newBudgetedClaudeService(t, hooksPostureFeatures{failOpen: true}, nil)
-	ti.service.claudeBudget = legacyClaudeHookDecisionBudget
+	ti.service.claudeBudget = testClaudeInBudget
 	scanner.panics = true
 	scanner.finish()
 
@@ -421,7 +440,8 @@ func TestClaude_DecisionBudget_LateHandlerPanicIsLogged(t *testing.T) {
 }
 
 // The decision budget applies only to the legacy Claude endpoint: Codex,
-// Cursor and ingest wait for a slow scan and return its block.
+// Cursor and ingest wait out a scan held past it and return its block, where a
+// budget answer would be the fail-open pass-through.
 func TestDecisionBudget_OtherEndpointsWaitForVerdict(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -447,20 +467,11 @@ func TestDecisionBudget_OtherEndpointsWaitForVerdict(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti, scanner := newBudgetedClaudeService(t, hooksPostureFeatures{failOpen: true}, blockingScanResult())
+			scanner.holdFor = testClaudeScanHold
 			reader := sdkmetric.NewManualReader()
 			ti.service.metrics = newMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), testenv.NewLogger(t))
 
-			var answered atomic.Bool
-			done := make(chan error, 1)
-			go func() {
-				err := tc.call(ctx, ti.service)
-				answered.Store(true)
-				done <- err
-			}()
-			requireScanStarted(t, scanner)
-			require.Never(t, answered.Load, 2*testClaudeBudget, 10*time.Millisecond, "the endpoint must wait for the scan")
-			scanner.finish()
-			require.NoError(t, <-done)
+			require.NoError(t, tc.call(ctx, ti.service))
 
 			var rm metricdata.ResourceMetrics
 			require.NoError(t, reader.Collect(ctx, &rm))
@@ -468,7 +479,7 @@ func TestDecisionBudget_OtherEndpointsWaitForVerdict(t *testing.T) {
 			outcome, _ := point.Attributes.Value(attr.OutcomeKey)
 			require.Equal(t, hookMetricOutcomeAccepted, outcome.AsString())
 			decision, _ := point.Attributes.Value(attr.HookDecisionKey)
-			require.Equal(t, hookMetricDecisionDeny, decision.AsString(), "the scanner's block answers")
+			require.Equal(t, hookMetricDecisionDeny, decision.AsString(), "the response is the scanner's block")
 		})
 	}
 }
