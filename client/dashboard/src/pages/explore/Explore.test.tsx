@@ -985,6 +985,20 @@ describe("Explore", () => {
       chartType: "table",
     };
 
+    it("offers a stack, and asks for a field to stack by when there is none", () => {
+      renderExplore();
+
+      fireEvent.click(screen.getByRole("button", { name: "Stacked bar" }));
+      expect(urlSpec()?.chartType).toBe("stacked_bar");
+      // The first dataset opens grouped by its default dimension, so the
+      // stack has something to stack by until that is cleared.
+      expect(screen.queryByText("pick a field to stack by")).toBeNull();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Stop grouping by user" }),
+      );
+      expect(screen.getByText("pick a field to stack by")).toBeTruthy();
+    });
+
     it("carries every edit, replacing the entry while nothing has run", () => {
       renderExplore();
 

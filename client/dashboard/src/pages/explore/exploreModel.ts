@@ -11,7 +11,15 @@ import type { AnalyticsQueryResult } from "@gram/client/models/components/analyt
 // fields each has, what each field can be filtered or aggregated by. Nothing
 // here knows a dataset by name, so a new dataset ships with no client change.
 
-export type ChartType = "line" | "area" | "bar" | "ranked" | "table" | "number";
+export type ChartType =
+  | "line"
+  | "area"
+  | "bar"
+  | "stacked_bar"
+  | "stacked_area"
+  | "ranked"
+  | "table"
+  | "number";
 /**
  * A relative window: the dashboard's date-range presets, so a widget, the
  * builder and the page around them speak one vocabulary.
@@ -40,6 +48,8 @@ export const CHART_TYPE_OPTIONS: { value: ChartType; label: string }[] = [
   { value: "line", label: "Line" },
   { value: "area", label: "Area" },
   { value: "bar", label: "Bar" },
+  { value: "stacked_bar", label: "Stacked bar" },
+  { value: "stacked_area", label: "Stacked area" },
   { value: "ranked", label: "Ranked" },
   { value: "table", label: "Table" },
   { value: "number", label: "Number" },
@@ -212,7 +222,34 @@ export function specGrain(spec: Pick<ExploreSpec, "window" | "range">): Grain {
 
 /** Whether the chart type renders a bucketed timeseries. */
 function isTimeseries(chartType: ChartType): boolean {
-  return chartType === "line" || chartType === "area" || chartType === "bar";
+  return (
+    chartType === "line" ||
+    chartType === "area" ||
+    chartType === "bar" ||
+    isStacked(chartType)
+  );
+}
+
+/**
+ * Whether the chart stacks its series. A line, bar or area answers "how did
+ * each series move"; a stack answers "what made up the total", so it needs a
+ * breakdown to stack by.
+ */
+export function isStacked(chartType: ChartType): boolean {
+  return chartType === "stacked_bar" || chartType === "stacked_area";
+}
+
+/**
+ * The chart a spec is drawn with and saved as, as the server will check it.
+ * Rows draw only as a table, and a stack with no breakdown is the bar or
+ * area it is, whatever the builder's controls were last left on.
+ */
+export function drawnChart(spec: ExploreSpec): ChartType {
+  if (isRowsMode(spec)) return "table";
+  if (isStacked(spec.chartType) && queryDimensions(spec).length === 0) {
+    return spec.chartType === "stacked_bar" ? "bar" : "area";
+  }
+  return spec.chartType;
 }
 
 export function findDataset(

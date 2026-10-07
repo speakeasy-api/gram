@@ -181,6 +181,8 @@ func TestCreateWidget(t *testing.T) {
 			{name: "a ranking with nothing to rank by", query: withQuery(withQuery(validQuery(), "grain", "none"), "dimensions", []any{}), chart: widgets.ChartRanked, reason: "at least one dimension"},
 			{name: "a number over time buckets", query: withQuery(validQuery(), "dimensions", []any{}), chart: widgets.ChartNumber, reason: "no grain"},
 			{name: "a ranking over time buckets", query: validQuery(), chart: widgets.ChartRanked, reason: "no grain"},
+			{name: "a stacked bar with no grain", query: withQuery(validQuery(), "grain", "none"), chart: widgets.ChartStackedBar, reason: "timeseries"},
+			{name: "a stacked area of rows", query: rowsQuery(), chart: widgets.ChartStackedArea, reason: "timeseries"},
 		}
 		for _, tc := range cases {
 			_, err := ti.service.CreateWidget(ctx, createPayload(tc.name, tc.query, chart(tc.chart)))
@@ -195,11 +197,19 @@ func TestCreateWidget(t *testing.T) {
 		_, err := ti.service.CreateWidget(ctx, createPayload("rows", rowsQuery(), chart(widgets.ChartTable)))
 		require.NoError(t, err)
 
-		for _, chartType := range []widgets.ChartType{widgets.ChartLine, widgets.ChartArea, widgets.ChartBar, widgets.ChartNumber, widgets.ChartRanked} {
+		for _, chartType := range []widgets.ChartType{widgets.ChartLine, widgets.ChartArea, widgets.ChartBar, widgets.ChartStackedBar, widgets.ChartStackedArea, widgets.ChartNumber, widgets.ChartRanked} {
 			_, err := ti.service.CreateWidget(ctx, createPayload("rows as "+string(chartType), rowsQuery(), chart(chartType)))
 			requireOopsCode(t, err, oops.CodeBadRequest)
 			require.ErrorContains(t, err, "unsatisfiable", chartType)
 		}
+	})
+
+	t.Run("it draws a stack over a bucketed breakdown", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		created, err := ti.service.CreateWidget(ctx, createPayload("calls by server", validQuery(), chart(widgets.ChartStackedBar)))
+		require.NoError(t, err)
+		require.Equal(t, "stacked_bar", created.Visualization["type"])
 	})
 
 	t.Run("it ranks by more than one dimension", func(t *testing.T) {

@@ -193,6 +193,28 @@ describe("widgetKey and differsFromWidget", () => {
     expect(widgetKey({ ...spec, window: "30d" })).not.toBe(widgetKey(spec));
   });
 
+  it("save a stack as picked with a breakdown, and as the plain chart without one", () => {
+    const stacked: ExploreSpec = {
+      ...spec,
+      measures: [{ op: "count", field: "" }],
+      orderBy: "",
+      chartType: "stacked_area",
+    };
+    expect(widgetFromSpec(stacked).visualization).toEqual({
+      type: "stacked_area",
+      options: {},
+    });
+    expect(roundTrip(stacked)).toEqual({ ...stacked, limit: 0 });
+
+    const flat: ExploreSpec = { ...stacked, dimensions: [] };
+    expect(widgetFromSpec(flat).visualization.type).toBe("area");
+    const stored = { dataset: "sessions", ...widgetFromSpec(flat) };
+    expect(differsFromWidget(flat, stored)).toBe(false);
+    expect(differsFromWidget({ ...flat, chartType: "area" }, stored)).toBe(
+      false,
+    );
+  });
+
   it("see a rows widget as unchanged whatever chart the builder shows", () => {
     const rows: ExploreSpec = { ...spec, measures: [], orderBy: "" };
     const stored = { dataset: "sessions", ...widgetFromSpec(rows) };

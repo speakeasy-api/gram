@@ -6,8 +6,10 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import type { JSX, ReactNode } from "react";
 import {
   completeMeasures,
+  drawnChart,
   hasChartShape,
   isRowsMode,
+  isStacked,
   queryDimensions,
   specGrain,
   type ExploreSpec,
@@ -15,7 +17,7 @@ import {
 import { CHART_HEIGHT, ResultChart } from "./ResultChart";
 import { ResultNumbers } from "./ResultNumbers";
 import { ResultRanked } from "./ResultRanked";
-import { seriesFromRows, sharedUnit } from "./resultSeries";
+import { seriesFromRows, sharedUnit, type SeriesSet } from "./resultSeries";
 import { ResultTable } from "./ResultTable";
 
 export type RunQuery = UseQueryResult<AnalyticsQueryResult, Error>;
@@ -176,11 +178,24 @@ function ChartOrReason({
       />
     );
   }
+  // A stack is one measure's composition; a second measure has no place in
+  // it, and an Other band summed across measures would mean nothing.
+  if (isStacked(spec.chartType) && measures.length > 1) {
+    return (
+      <InlineEmptyState
+        icon="chart-line"
+        heading="A stacked chart stacks one measure"
+        description="Keep one measure to see what made up its total, or switch to Line."
+      />
+    );
+  }
+  const drawn = drawnChart(spec);
   const seriesSet = seriesFromRows(
     rows,
     queryDimensions(spec),
     measures,
     dataset,
+    isStacked(drawn),
   );
   return (
     <div
@@ -194,20 +209,52 @@ function ChartOrReason({
         <ResultChart
           seriesSet={seriesSet}
           unit={unit}
-          chartType={spec.chartType}
+          chartType={drawn}
           grain={specGrain(spec)}
           height={height}
           onRangeSelect={onRangeSelect}
         />
       </div>
-      {seriesSet.hidden > 0 ? (
-        <p className="text-muted-foreground text-xs">
-          Showing the {seriesSet.series.length} largest of{" "}
-          {seriesSet.series.length + seriesSet.hidden} series.
-        </p>
-      ) : null}
+      <ChartNote spec={spec} drawn={drawn} seriesSet={seriesSet} />
     </div>
   );
+}
+
+/**
+ * The line under a chart that says what the drawing left out: a stack with
+ * nothing to stack by drawn as the plain chart it is, series folded into
+ * Other, or series dropped past the cap.
+ */
+function ChartNote({
+  spec,
+  drawn,
+  seriesSet,
+}: {
+  spec: ExploreSpec;
+  drawn: ExploreSpec["chartType"];
+  seriesSet: SeriesSet;
+}): JSX.Element | null {
+  const note = chartNote(spec, drawn, seriesSet);
+  return note === "" ? null : (
+    <p className="text-muted-foreground text-xs">{note}</p>
+  );
+}
+
+function chartNote(
+  spec: ExploreSpec,
+  drawn: ExploreSpec["chartType"],
+  seriesSet: SeriesSet,
+): string {
+  if (drawn !== spec.chartType && isStacked(spec.chartType)) {
+    return `Stacking needs a Group by, so this is drawn as ${drawn === "bar" ? "a bar" : "an area"} chart.`;
+  }
+  if (seriesSet.hidden === 0) return "";
+  const shown = seriesSet.series.length;
+  if (seriesSet.series.at(-1)?.other) {
+    const named = shown - 1;
+    return `Showing the ${named} largest of ${named + seriesSet.hidden} series; the other ${seriesSet.hidden} are stacked as Other.`;
+  }
+  return `Showing the ${shown} largest of ${shown + seriesSet.hidden} series.`;
 }
 
 // The server names what it refused and where in the request it sat, so its
