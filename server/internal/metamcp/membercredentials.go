@@ -2,6 +2,7 @@ package metamcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -28,8 +30,21 @@ func lockGatewayIssuerForClientBinding(ctx context.Context, dbtx pgx.Tx, gateway
 // lockGatewayIssuersForSwitch takes the owner-binding locks of a gateway's old
 // and new issuers in ascending order, so two gateways swapping issuers cannot
 // deadlock. Advisory locks are reentrant, so later per-issuer locks are no-ops.
-func lockGatewayIssuersForSwitch(ctx context.Context, dbtx pgx.Tx, issuerIDs ...uuid.UUID) error {
-	ids := slices.Clone(issuerIDs)
+// The requested issuer must be visible to the project before anything is
+// locked, so an arbitrary id cannot hold up another tenant's issuer; the
+// caller re-validates it under the lock.
+func lockGatewayIssuersForSwitch(ctx context.Context, dbtx pgx.Tx, organizationID string, projectID, oldIssuerID, newIssuerID uuid.UUID) error {
+	if _, err := usersessionsrepo.New(dbtx).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{
+		ID:             newIssuerID,
+		ProjectID:      projectID,
+		OrganizationID: organizationID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return usersessionbindings.ErrNotFound
+		}
+		return fmt.Errorf("load requested gateway issuer: %w", err)
+	}
+	ids := []uuid.UUID{oldIssuerID, newIssuerID}
 	slices.SortFunc(ids, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
 	for _, id := range slices.Compact(ids) {
 		if err := lockGatewayIssuerForClientBinding(ctx, dbtx, id); err != nil {
@@ -46,8 +61,12 @@ func lockGatewayIssuersForSwitch(ctx context.Context, dbtx pgx.Tx, issuerIDs ...
 // caller holds the issuer's owner-binding lock, which every binding writer
 // takes first; removing bindings cannot break the remote issuer invariants,
 // so no remote issuer lock is needed.
-func releaseGatewayIssuer(ctx context.Context, txRepo *repo.Queries, issuerID uuid.UUID) (int64, error) {
-	rows, err := txRepo.DetachOrphanedGatewayMemberCredentials(ctx, issuerID)
+func releaseGatewayIssuer(ctx context.Context, txRepo *repo.Queries, organizationID string, projectID, issuerID uuid.UUID) (int64, error) {
+	rows, err := txRepo.DetachOrphanedGatewayMemberCredentials(ctx, repo.DetachOrphanedGatewayMemberCredentialsParams{
+		UserSessionIssuerID: issuerID,
+		ProjectID:           projectID,
+		OrganizationID:      organizationID,
+	})
 	if err != nil {
 		return 0, fmt.Errorf("detach orphaned gateway member credentials: %w", err)
 	}
@@ -117,9 +136,12 @@ func wireMemberClients(
 }
 
 // detachMemberClients unbinds a removed member's provider client from the
-// gateway's issuer. With gateway member credentials enabled it first removes
-// the member's own client unless a surviving consumer still needs that exact
-// client, then re-wires surviving members so none is left without a binding.
+// gateway's issuer. While the gateway owns its issuer exclusively it first
+// removes the member's own client unless a surviving member still needs that
+// exact client. That runs with gateway member credentials enabled, or after
+// they were turned off while the issuer still holds several clients of the
+// provider, so per-member clients never outlive their members. With the flag
+// on it then re-wires surviving members so none is left without a binding.
 // Either way the original provider-wide detach runs, which only fires once no
 // consumer of the remote issuer remains. The member row must already be
 // soft-deleted and the caller holds the gateway issuer's owner-binding lock.
@@ -139,8 +161,13 @@ func detachMemberClients(
 		return 0, fmt.Errorf("lock remote session issuer for client binding: %w", err)
 	}
 
+	ownClient, err := detachesMemberOwnClient(ctx, dbtx, txRepo, gatewayIssuerID, remoteIssuerID, removed, memberCredentials)
+	if err != nil {
+		return 0, err
+	}
+
 	var detached int64
-	if memberCredentials && removed.UserSessionIssuerID.Valid {
+	if ownClient {
 		rows, err := txRepo.AutoDetachMemberOwnClient(ctx, repo.AutoDetachMemberOwnClientParams{
 			GatewayIssuerID: gatewayIssuerID,
 			MemberIssuerID:  removed.UserSessionIssuerID.UUID,
@@ -181,4 +208,35 @@ func detachMemberClients(
 		}
 	}
 	return detached, nil
+}
+
+// detachesMemberOwnClient reports whether removing a member detaches its own
+// client from the gateway's issuer. Never on a shared issuer, where another
+// consumer may rely on that client as its only binding of the provider.
+func detachesMemberOwnClient(
+	ctx context.Context,
+	dbtx pgx.Tx,
+	txRepo *repo.Queries,
+	gatewayIssuerID, remoteIssuerID uuid.UUID,
+	removed repo.ListMemberProviderIdentitiesRow,
+	memberCredentials bool,
+) (bool, error) {
+	if !removed.UserSessionIssuerID.Valid {
+		return false, nil
+	}
+	exclusive, err := remotesessions.GatewayOwnsIssuerExclusively(ctx, remotesessionsrepo.New(dbtx), gatewayIssuerID)
+	if err != nil {
+		return false, fmt.Errorf("check gateway issuer ownership: %w", err)
+	}
+	if !exclusive || memberCredentials {
+		return exclusive, nil
+	}
+	clients, err := txRepo.CountGatewayIssuerProviderClients(ctx, repo.CountGatewayIssuerProviderClientsParams{
+		GatewayIssuerID: gatewayIssuerID,
+		RemoteIssuerID:  remoteIssuerID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("count gateway issuer provider clients: %w", err)
+	}
+	return clients > 1, nil
 }

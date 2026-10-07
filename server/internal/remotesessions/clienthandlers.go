@@ -76,8 +76,9 @@ func errRemoteIssuerClientConflict(ctx context.Context, logger *slog.Logger) err
 // guardExistingClientAttachment is guardSingleClientPerRemoteIssuer for
 // attaching an existing client. With gateway member credentials enabled it
 // also admits a second client of the same remote issuer when exactly one live
-// gateway, and nothing else, consumes the user session issuer, and the client
-// is the configured client of one of that gateway's members. The caller holds
+// gateway, and nothing else, consumes the user session issuer, and both the
+// client and every client of that remote issuer already bound are configured
+// clients of that gateway's members. The caller holds
 // the user session issuer's owner-binding lock, which every consumer writer
 // takes, so the ownership read cannot go stale before the binding commits.
 func (s *Service) guardExistingClientAttachment(
@@ -103,17 +104,17 @@ func (s *Service) guardExistingClientAttachment(
 	if !exclusive {
 		return oops.E(oops.CodeConflict, nil, "a remote session client is already bound to this user session issuer for the same remote session issuer; several clients are only allowed on an issuer used by one gateway and nothing else").LogError(ctx, logger)
 	}
-	memberClient, err := txRepo.IsGatewayMemberOwnClient(ctx, repo.IsGatewayMemberOwnClientParams{
+	memberClients, err := txRepo.AreGatewayMemberOwnClients(ctx, repo.AreGatewayMemberOwnClientsParams{
 		RemoteSessionClientID: clientID,
 		GatewayIssuerID:       userSessionIssuerID,
 		ProjectID:             projectID,
 		RemoteSessionIssuerID: remoteSessionIssuerID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "check gateway member client").LogError(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "check gateway member clients").LogError(ctx, logger)
 	}
-	if !memberClient {
-		return oops.E(oops.CodeConflict, nil, "a remote session client is already bound to this gateway's user session issuer for the same remote session issuer; attach only the client configured on one of the gateway's members").LogError(ctx, logger)
+	if !memberClients {
+		return oops.E(oops.CodeConflict, nil, "a remote session client is already bound to this gateway's user session issuer for the same remote session issuer; several clients are allowed only when each is the client configured on one of the gateway's members").LogError(ctx, logger)
 	}
 	return nil
 }
@@ -810,8 +811,24 @@ func (s *Service) AttachUserSessionIssuer(ctx context.Context, payload *gen.Atta
 		return nil, err
 	}
 
+	// Remote issuer migration re-points clients under the remote issuer lock,
+	// so take that lock before the client row (migration's order) and confirm
+	// the client still belongs to the issuer read above. The row lock also
+	// holds off a concurrent detach until the member-client check below runs.
+	remoteIssuerID := existing.RemoteSessionClient.RemoteSessionIssuerID
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, remoteIssuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
+	}
+	locked, err := txRepo.LockEMAClient(ctx, repo.LockEMAClientParams{ID: clientID, ProjectID: conv.ToNullUUID(*authCtx.ProjectID), OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID)})
+	if err != nil {
+		return nil, lifecycleLockError(err)
+	}
+	if locked.RemoteSessionIssuerID != remoteIssuerID {
+		return nil, oops.E(oops.CodeConflict, nil, "remote session client moved to another remote session issuer while attaching; retry").LogError(ctx, logger)
+	}
+
 	// Exclude this client so re-attaching an existing binding is a no-op.
-	if err := s.guardExistingClientAttachment(ctx, logger, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerID, existing.RemoteSessionClient.RemoteSessionIssuerID, clientID, memberCredentials); err != nil {
+	if err := s.guardExistingClientAttachment(ctx, logger, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerID, remoteIssuerID, clientID, memberCredentials); err != nil {
 		return nil, err
 	}
 

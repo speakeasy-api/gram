@@ -386,7 +386,10 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	issuerChanged := !existing.UserSessionIssuerID.Valid || existing.UserSessionIssuerID.UUID != issuerID.UUID
 	leavingIssuer := issuerChanged && existing.UserSessionIssuerID.Valid
 	if leavingIssuer {
-		if err := lockGatewayIssuersForSwitch(ctx, dbtx, existing.UserSessionIssuerID.UUID, issuerID.UUID); err != nil {
+		if err := lockGatewayIssuersForSwitch(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, existing.UserSessionIssuerID.UUID, issuerID.UUID); err != nil {
+			if errors.Is(err, usersessionbindings.ErrNotFound) {
+				return nil, oops.E(oops.CodeInvalid, err, "user_session_issuer_id does not reference a live issuer in this project").LogError(ctx, logger)
+			}
 			return nil, oops.E(oops.CodeUnexpected, err, "lock gateway issuers").LogError(ctx, logger)
 		}
 	}
@@ -437,7 +440,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		return nil, oops.E(oops.CodeUnexpected, err, "update meta mcp server").LogError(ctx, logger)
 	}
 	if leavingIssuer {
-		if _, err := releaseGatewayIssuer(ctx, txRepo, existing.UserSessionIssuerID.UUID); err != nil {
+		if _, err := releaseGatewayIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, existing.UserSessionIssuerID.UUID); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "release previous gateway issuer").LogError(ctx, logger)
 		}
 	}
@@ -720,7 +723,7 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 		if err := lockGatewayIssuerForClientBinding(ctx, dbtx, existing.UserSessionIssuerID.UUID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "lock gateway issuer").LogError(ctx, logger)
 		}
-		if _, err := releaseGatewayIssuer(ctx, txRepo, existing.UserSessionIssuerID.UUID); err != nil {
+		if _, err := releaseGatewayIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, existing.UserSessionIssuerID.UUID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "release gateway issuer").LogError(ctx, logger)
 		}
 	}

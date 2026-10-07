@@ -281,6 +281,51 @@ func TestMemberCredentials_SharedIssuerKeepsOneClientPerProvider(t *testing.T) {
 		"a shared issuer keeps one client per provider")
 }
 
+func TestMemberCredentials_RemoveOnSharedIssuerKeepsLegacyBinding(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newMemberCredentialsFixture(t, true)
+	firstMember := f.addMember(t, ctx, f.firstServer)
+	// While the issuer holds one client per provider another consumer may
+	// join it, after which the original single-client rule applies.
+	require.NoError(t, f.createGatewayOnIssuer(ctx, "sharing gateway"))
+	f.addMember(t, ctx, f.secondServer)
+	require.Equal(t, f.clients(f.firstClient), f.boundClients(t, ctx, f.gatewayIssuerID))
+
+	f.removeMember(t, ctx, firstMember)
+	require.Equal(t, f.clients(f.firstClient), f.boundClients(t, ctx, f.gatewayIssuerID),
+		"a shared issuer keeps the client its other consumers rely on")
+}
+
+func TestMemberCredentials_RemoveAfterRolloutOffDetachesOwnClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newMemberCredentialsFixture(t, true)
+	firstMember := f.addMember(t, ctx, f.firstServer)
+	f.addMember(t, ctx, f.secondServer)
+	require.Len(t, f.boundClients(t, ctx, f.gatewayIssuerID), 2)
+
+	f.setEnabled(false)
+	f.removeMember(t, ctx, firstMember)
+	require.Equal(t, f.clients(f.secondClient), f.boundClients(t, ctx, f.gatewayIssuerID),
+		"per-member clients do not outlive their members once the rollout is off")
+}
+
+func TestMemberCredentials_IssuerChangeRejectsInvisibleIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newMemberCredentialsFixture(t, true)
+	_, err := f.ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  f.meta.ID,
+		Name:                f.meta.Name,
+		UserSessionIssuerID: conv.PtrEmpty(uuid.NewString()),
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
 func TestMemberCredentials_IssuerCannotGainAnotherConsumer(t *testing.T) {
 	t.Parallel()
 

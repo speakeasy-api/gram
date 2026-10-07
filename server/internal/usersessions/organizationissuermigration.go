@@ -269,12 +269,17 @@ type userSessionMigrationPreflight struct {
 	conflictingClientIDs                                                         []string
 	principalBindingConflictCount, emaBindingConflictCount                       int32
 	platformOwned                                                                bool
-	warnings                                                                     []*orggen.UserSessionIssuerFieldMismatch
-	warningsFingerprint                                                          string
+	// multiClientProvider is set when the merged issuer would bind more than
+	// one client of the same provider: per-member gateway credentials on
+	// either side, or two single clients of one provider. The moved consumers
+	// would then resolve credentials ambiguously.
+	multiClientProvider bool
+	warnings            []*orggen.UserSessionIssuerFieldMismatch
+	warningsFingerprint string
 }
 
 func (p userSessionMigrationPreflight) canMigrate() bool {
-	return len(p.conflictingClientIDs) == 0 && p.principalBindingConflictCount == 0 && p.emaBindingConflictCount == 0 && !p.platformOwned
+	return len(p.conflictingClientIDs) == 0 && p.principalBindingConflictCount == 0 && p.emaBindingConflictCount == 0 && !p.platformOwned && !p.multiClientProvider
 }
 
 // userSessionMigrationWarnings lists the configuration differences an
@@ -360,11 +365,15 @@ func buildUserSessionMigrationPreflight(ctx context.Context, q *repo.Queries, or
 	if err != nil {
 		return userSessionMigrationPreflight{}, fmt.Errorf("check target Platform MCP ownership: %w", err)
 	}
+	multiClient, err := q.UserSessionIssuerMergeHasMultiClientProvider(ctx, repo.UserSessionIssuerMergeHasMultiClientProviderParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID})
+	if err != nil {
+		return userSessionMigrationPreflight{}, fmt.Errorf("check merged issuer clients: %w", err)
+	}
 	warnings := userSessionMigrationWarnings(source, target)
 	return userSessionMigrationPreflight{
 		clientCount: clients, sessionCount: sessions, consentCount: consents, cimdClientCount: cimdClients, remoteSessionCount: remoteSessions,
 		conflictingClientIDs: conflicts, principalBindingConflictCount: principalConflicts, emaBindingConflictCount: emaConflicts,
-		platformOwned: sourceOwned || targetOwned, warnings: warnings,
+		platformOwned: sourceOwned || targetOwned, multiClientProvider: multiClient, warnings: warnings,
 		warningsFingerprint: userSessionMigrationWarningsFingerprint(source.ID, target.ID, warnings),
 	}, nil
 }
@@ -461,17 +470,6 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	}
 	if preflight.warningsFingerprint != "" && (payload.ConfirmedWarningsFingerprint == nil || *payload.ConfirmedWarningsFingerprint != preflight.warningsFingerprint) {
 		return nil, oops.E(oops.CodeConflict, nil, "user session issuer migration warnings have not been confirmed or changed; refresh the preflight and confirm its exact warnings fingerprint").LogError(ctx, logger)
-	}
-	// The merged issuer must keep one client per remote issuer: per-member
-	// gateway credentials on either side, or two single clients of one
-	// provider, would leave the moved consumers resolving credentials
-	// ambiguously.
-	multiClient, err := q.UserSessionIssuerMergeHasMultiClientProvider(ctx, repo.UserSessionIssuerMergeHasMultiClientProviderParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "check merged user session issuer clients").LogError(ctx, logger)
-	}
-	if multiClient {
-		return nil, oops.E(oops.CodeConflict, nil, "merging these user session issuers would bind more than one client of the same provider; detach the extra clients before migrating").LogError(ctx, logger)
 	}
 
 	targetProjectID := target.ProjectID

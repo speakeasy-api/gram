@@ -210,6 +210,41 @@ func TestAttachUserSessionIssuer_GatewayRejectsUnassociatedClient(t *testing.T) 
 	require.Equal(t, 1, f.gatewayClients(t, ctx))
 }
 
+func TestAttachUserSessionIssuer_GatewayRejectsMemberClientBesideStray(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	f := newGatewayAttachFixture(t, ctx, ti, "gw-attach-beside")
+
+	// Before the rollout an administrator replaced the member's client with
+	// one no gateway member is configured with; alone, it is allowed.
+	_, err := ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{
+		ID:                  f.firstClient,
+		UserSessionIssuerID: f.gatewayIssuerID.String(),
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+	})
+	require.NoError(t, err)
+	stray, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: f.remoteIssuerID,
+		UserSessionIssuerIds:  nil,
+		ClientID:              "gw-attach-beside-stray",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	require.NoError(t, f.attach(ctx, stray.ID))
+
+	// A member's own client cannot join it: the stray would share the
+	// per-member credentials issuer without belonging to any member.
+	f.setEnabled(true)
+	requireOopsCode(t, f.attach(ctx, f.secondClient), oops.CodeConflict)
+	require.Equal(t, 1, f.gatewayClients(t, ctx))
+}
+
 func TestAttachUserSessionIssuer_GatewayRejectsSharedIssuer(t *testing.T) {
 	t.Parallel()
 

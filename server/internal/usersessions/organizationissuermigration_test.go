@@ -643,9 +643,9 @@ func TestOrganizationUserSessionIssuerMigrateRejectsMergedProviderClients(t *tes
 
 	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
 	require.NoError(t, err)
+	require.False(t, preflight.CanMigrate, "the preflight reports the merge blocker before submission")
 	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String(), ConfirmedWarningsFingerprint: &preflight.WarningsFingerprint})
 	requireOopsCode(t, err, oops.CodeConflict)
-	require.ErrorContains(t, err, "more than one client of the same provider")
 }
 
 func TestOrganizationUserSessionIssuerMigrateScopeAndRBAC(t *testing.T) {

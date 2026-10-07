@@ -552,10 +552,19 @@ WHERE l.user_session_issuer_id = @gateway_issuer_id
 -- Clears per-member gateway credentials from an issuer its gateway has left:
 -- every binding of a remote issuer for which it holds more than one live
 -- client, once no live consumer references it. A lone client per remote
--- issuer stays, as before. Callers hold the issuer's owner-binding lock.
+-- issuer stays, as before. Only an issuer the caller's project can use, its
+-- own or its organization's, is touched. Callers hold the issuer's
+-- owner-binding lock.
 DELETE FROM remote_session_client_user_session_issuers AS l
 USING remote_session_clients AS c
 WHERE l.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS i
+    WHERE i.id = @user_session_issuer_id::uuid
+      AND (i.project_id = @project_id::uuid
+           OR (i.project_id IS NULL AND i.organization_id = @organization_id::text))
+  )
   AND c.id = l.remote_session_client_id
   AND c.remote_session_issuer_id IN (
     SELECT mc.remote_session_issuer_id
@@ -583,6 +592,16 @@ WHERE l.user_session_issuer_id = @user_session_issuer_id::uuid
     SELECT 1 FROM platform_mcp_catalog_registrations AS r
     WHERE r.user_session_issuer_id = @user_session_issuer_id::uuid AND r.deleted IS FALSE
   );
+
+-- name: CountGatewayIssuerProviderClients :one
+-- How many live clients of one remote issuer a gateway's issuer binds.
+SELECT count(*)::bigint AS clients
+FROM remote_session_client_user_session_issuers AS l
+JOIN remote_session_clients AS c
+  ON c.id = l.remote_session_client_id
+ AND c.deleted IS FALSE
+WHERE l.user_session_issuer_id = @gateway_issuer_id::uuid
+  AND c.remote_session_issuer_id = @remote_issuer_id::uuid;
 
 -- name: ListMemberProviderIdentities :many
 -- Distinct provider identity pairs across a meta server's live members, for

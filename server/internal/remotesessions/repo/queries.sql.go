@@ -13,6 +13,82 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const areGatewayMemberOwnClients = `-- name: AreGatewayMemberOwnClients :one
+WITH member_clients AS (
+  SELECT ml.remote_session_client_id AS id
+  FROM meta_mcp_server_members AS m
+  JOIN meta_mcp_servers AS mm
+    ON mm.id = m.meta_mcp_server_id
+   AND mm.project_id = m.project_id
+   AND mm.deleted IS FALSE
+  JOIN mcp_servers AS s
+    ON s.id = m.mcp_server_id
+   AND s.project_id = m.project_id
+   AND s.deleted IS FALSE
+  JOIN remote_session_client_user_session_issuers AS ml
+    ON ml.user_session_issuer_id = s.user_session_issuer_id
+  JOIN remote_session_clients AS mc
+    ON mc.id = ml.remote_session_client_id
+   AND mc.deleted IS FALSE
+   AND mc.remote_session_issuer_id = $1::uuid
+  WHERE mm.user_session_issuer_id = $2::uuid
+    AND mm.project_id = $3
+    AND m.deleted IS FALSE
+    AND s.remote_session_issuer_id = $1::uuid
+    AND s.user_session_issuer_id <> $2::uuid
+    AND 1 = (
+      SELECT count(*)
+      FROM remote_session_client_user_session_issuers AS ol
+      JOIN remote_session_clients AS oc
+        ON oc.id = ol.remote_session_client_id
+       AND oc.deleted IS FALSE
+      WHERE ol.user_session_issuer_id = s.user_session_issuer_id
+        AND oc.remote_session_issuer_id = $1::uuid
+    )
+),
+candidates AS (
+  SELECT $4::uuid AS id
+  UNION
+  SELECT gl.remote_session_client_id
+  FROM remote_session_client_user_session_issuers AS gl
+  JOIN remote_session_clients AS gc
+    ON gc.id = gl.remote_session_client_id
+   AND gc.deleted IS FALSE
+  WHERE gl.user_session_issuer_id = $2::uuid
+    AND gc.remote_session_issuer_id = $1::uuid
+)
+SELECT NOT EXISTS (
+  SELECT 1
+  FROM candidates AS c
+  WHERE c.id NOT IN (SELECT id FROM member_clients)
+) AS all_member_clients
+`
+
+type AreGatewayMemberOwnClientsParams struct {
+	RemoteSessionIssuerID uuid.UUID
+	GatewayIssuerID       uuid.UUID
+	ProjectID             uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+// Whether @remote_session_client_id and every client of the same remote
+// issuer already bound to @gateway_issuer_id is the configured client of a
+// live member of the gateway that fronts that issuer: bound to the member's
+// own user session issuer, which holds exactly one live client for the
+// member's remote issuer. A member that uses the gateway's issuer as its own
+// cannot justify a binding.
+func (q *Queries) AreGatewayMemberOwnClients(ctx context.Context, arg AreGatewayMemberOwnClientsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, areGatewayMemberOwnClients,
+		arg.RemoteSessionIssuerID,
+		arg.GatewayIssuerID,
+		arg.ProjectID,
+		arg.RemoteSessionClientID,
+	)
+	var all_member_clients bool
+	err := row.Scan(&all_member_clients)
+	return all_member_clients, err
+}
+
 const attachPrincipalRemoteSessionBinding = `-- name: AttachPrincipalRemoteSessionBinding :one
 INSERT INTO principal_remote_session_bindings
 (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, grant_generation, attached_by_subject_id)
@@ -5933,61 +6009,6 @@ func (q *Queries) InsertTrustedDelegationObservationFixture(ctx context.Context,
 		arg.RefreshedAt,
 	)
 	return err
-}
-
-const isGatewayMemberOwnClient = `-- name: IsGatewayMemberOwnClient :one
-SELECT EXISTS (
-  SELECT 1
-  FROM meta_mcp_server_members AS m
-  JOIN meta_mcp_servers AS mm
-    ON mm.id = m.meta_mcp_server_id
-   AND mm.project_id = m.project_id
-   AND mm.deleted IS FALSE
-  JOIN mcp_servers AS s
-    ON s.id = m.mcp_server_id
-   AND s.project_id = m.project_id
-   AND s.deleted IS FALSE
-  JOIN remote_session_client_user_session_issuers AS ml
-    ON ml.user_session_issuer_id = s.user_session_issuer_id
-   AND ml.remote_session_client_id = $1
-  WHERE mm.user_session_issuer_id = $2::uuid
-    AND mm.project_id = $3
-    AND m.deleted IS FALSE
-    AND s.remote_session_issuer_id = $4::uuid
-    AND s.user_session_issuer_id <> $2::uuid
-    AND 1 = (
-      SELECT count(*)
-      FROM remote_session_client_user_session_issuers AS ol
-      JOIN remote_session_clients AS oc
-        ON oc.id = ol.remote_session_client_id
-       AND oc.deleted IS FALSE
-      WHERE ol.user_session_issuer_id = s.user_session_issuer_id
-        AND oc.remote_session_issuer_id = $4
-    )
-) AS is_member_client
-`
-
-type IsGatewayMemberOwnClientParams struct {
-	RemoteSessionClientID uuid.UUID
-	GatewayIssuerID       uuid.UUID
-	ProjectID             uuid.UUID
-	RemoteSessionIssuerID uuid.UUID
-}
-
-// Whether a client is the configured client of a live member of the gateway
-// that fronts @gateway_issuer_id: bound to the member's own user session
-// issuer, which holds exactly one live client for the member's remote issuer.
-// A member that uses the gateway's issuer as its own cannot justify a binding.
-func (q *Queries) IsGatewayMemberOwnClient(ctx context.Context, arg IsGatewayMemberOwnClientParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isGatewayMemberOwnClient,
-		arg.RemoteSessionClientID,
-		arg.GatewayIssuerID,
-		arg.ProjectID,
-		arg.RemoteSessionIssuerID,
-	)
-	var is_member_client bool
-	err := row.Scan(&is_member_client)
-	return is_member_client, err
 }
 
 const listConflictingClientBindingsForIssuerMigration = `-- name: ListConflictingClientBindingsForIssuerMigration :many

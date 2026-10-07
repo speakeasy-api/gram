@@ -233,6 +233,29 @@ func (q *Queries) AutoDetachMemberProviderClient(ctx context.Context, arg AutoDe
 	return result.RowsAffected(), nil
 }
 
+const countGatewayIssuerProviderClients = `-- name: CountGatewayIssuerProviderClients :one
+SELECT count(*)::bigint AS clients
+FROM remote_session_client_user_session_issuers AS l
+JOIN remote_session_clients AS c
+  ON c.id = l.remote_session_client_id
+ AND c.deleted IS FALSE
+WHERE l.user_session_issuer_id = $1::uuid
+  AND c.remote_session_issuer_id = $2::uuid
+`
+
+type CountGatewayIssuerProviderClientsParams struct {
+	GatewayIssuerID uuid.UUID
+	RemoteIssuerID  uuid.UUID
+}
+
+// How many live clients of one remote issuer a gateway's issuer binds.
+func (q *Queries) CountGatewayIssuerProviderClients(ctx context.Context, arg CountGatewayIssuerProviderClientsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countGatewayIssuerProviderClients, arg.GatewayIssuerID, arg.RemoteIssuerID)
+	var clients int64
+	err := row.Scan(&clients)
+	return clients, err
+}
+
 const countMetaMCPMembersSharingBackend = `-- name: CountMetaMCPMembersSharingBackend :one
 SELECT count(*)
 FROM meta_mcp_server_members m
@@ -570,6 +593,13 @@ const detachOrphanedGatewayMemberCredentials = `-- name: DetachOrphanedGatewayMe
 DELETE FROM remote_session_client_user_session_issuers AS l
 USING remote_session_clients AS c
 WHERE l.user_session_issuer_id = $1::uuid
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS i
+    WHERE i.id = $1::uuid
+      AND (i.project_id = $2::uuid
+           OR (i.project_id IS NULL AND i.organization_id = $3::text))
+  )
   AND c.id = l.remote_session_client_id
   AND c.remote_session_issuer_id IN (
     SELECT mc.remote_session_issuer_id
@@ -599,12 +629,20 @@ WHERE l.user_session_issuer_id = $1::uuid
   )
 `
 
+type DetachOrphanedGatewayMemberCredentialsParams struct {
+	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
+	OrganizationID      string
+}
+
 // Clears per-member gateway credentials from an issuer its gateway has left:
 // every binding of a remote issuer for which it holds more than one live
 // client, once no live consumer references it. A lone client per remote
-// issuer stays, as before. Callers hold the issuer's owner-binding lock.
-func (q *Queries) DetachOrphanedGatewayMemberCredentials(ctx context.Context, userSessionIssuerID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, detachOrphanedGatewayMemberCredentials, userSessionIssuerID)
+// issuer stays, as before. Only an issuer the caller's project can use, its
+// own or its organization's, is touched. Callers hold the issuer's
+// owner-binding lock.
+func (q *Queries) DetachOrphanedGatewayMemberCredentials(ctx context.Context, arg DetachOrphanedGatewayMemberCredentialsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, detachOrphanedGatewayMemberCredentials, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
 		return 0, err
 	}

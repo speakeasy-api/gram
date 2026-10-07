@@ -3126,13 +3126,15 @@ SELECT
       )
     )::bigint AS other_consumers;
 
--- name: IsGatewayMemberOwnClient :one
--- Whether a client is the configured client of a live member of the gateway
--- that fronts @gateway_issuer_id: bound to the member's own user session
--- issuer, which holds exactly one live client for the member's remote issuer.
--- A member that uses the gateway's issuer as its own cannot justify a binding.
-SELECT EXISTS (
-  SELECT 1
+-- name: AreGatewayMemberOwnClients :one
+-- Whether @remote_session_client_id and every client of the same remote
+-- issuer already bound to @gateway_issuer_id is the configured client of a
+-- live member of the gateway that fronts that issuer: bound to the member's
+-- own user session issuer, which holds exactly one live client for the
+-- member's remote issuer. A member that uses the gateway's issuer as its own
+-- cannot justify a binding.
+WITH member_clients AS (
+  SELECT ml.remote_session_client_id AS id
   FROM meta_mcp_server_members AS m
   JOIN meta_mcp_servers AS mm
     ON mm.id = m.meta_mcp_server_id
@@ -3144,7 +3146,10 @@ SELECT EXISTS (
    AND s.deleted IS FALSE
   JOIN remote_session_client_user_session_issuers AS ml
     ON ml.user_session_issuer_id = s.user_session_issuer_id
-   AND ml.remote_session_client_id = @remote_session_client_id
+  JOIN remote_session_clients AS mc
+    ON mc.id = ml.remote_session_client_id
+   AND mc.deleted IS FALSE
+   AND mc.remote_session_issuer_id = @remote_session_issuer_id::uuid
   WHERE mm.user_session_issuer_id = @gateway_issuer_id::uuid
     AND mm.project_id = @project_id
     AND m.deleted IS FALSE
@@ -3157,9 +3162,25 @@ SELECT EXISTS (
         ON oc.id = ol.remote_session_client_id
        AND oc.deleted IS FALSE
       WHERE ol.user_session_issuer_id = s.user_session_issuer_id
-        AND oc.remote_session_issuer_id = @remote_session_issuer_id
+        AND oc.remote_session_issuer_id = @remote_session_issuer_id::uuid
     )
-) AS is_member_client;
+),
+candidates AS (
+  SELECT @remote_session_client_id::uuid AS id
+  UNION
+  SELECT gl.remote_session_client_id
+  FROM remote_session_client_user_session_issuers AS gl
+  JOIN remote_session_clients AS gc
+    ON gc.id = gl.remote_session_client_id
+   AND gc.deleted IS FALSE
+  WHERE gl.user_session_issuer_id = @gateway_issuer_id::uuid
+    AND gc.remote_session_issuer_id = @remote_session_issuer_id::uuid
+)
+SELECT NOT EXISTS (
+  SELECT 1
+  FROM candidates AS c
+  WHERE c.id NOT IN (SELECT id FROM member_clients)
+) AS all_member_clients;
 
 -- name: GetTrustedRemoteSessionIssuerForOrganization :one
 -- A trusted issuer must be either global or organization-owned by the caller.
