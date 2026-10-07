@@ -310,7 +310,8 @@ CREATE TABLE IF NOT EXISTS shadow_mcp_inventory_urls (
     server_name_override String DEFAULT '',
     first_seen DateTime64(9, 'UTC'),
     last_seen DateTime64(9, 'UTC'),
-    updated_at DateTime64(9, 'UTC')
+    updated_at DateTime64(9, 'UTC'),
+    legacy_override UInt8 DEFAULT 1 COMMENT '1 when written before overrides moved to shadow_mcp_inventory_url_overrides, so server_name_override is meaningful. Current writers set 0.'
 ) ENGINE = ReplacingMergeTree(updated_at)
 ORDER BY (gram_project_id, canonical_server_url)
 SETTINGS index_granularity = 8192
