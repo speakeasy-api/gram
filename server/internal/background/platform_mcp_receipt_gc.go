@@ -23,6 +23,14 @@ const (
 	platformMCPReceiptGCCatchupWindow = platformMCPReceiptGCInterval - time.Second
 
 	platformMCPReceiptGCBatchSize int32 = 2000
+
+	// A run deletes at most this many batches (50,000 rows) and then
+	// continues as new, so a large backlog drains within one tick in bounded
+	// runs instead of being cut off by the run timeout.
+	platformMCPReceiptGCMaxBatchesPerRun = 25
+
+	// Covers a full run of batches with headroom for activity retries.
+	platformMCPReceiptGCRunTimeout = 15 * time.Minute
 )
 
 // PlatformMCPReceiptGCWorkflow bounds the Platform MCP operation receipt
@@ -32,8 +40,8 @@ const (
 // enforced at read time, so a late or missed tick only delays reclamation.
 //
 // Temporal actions/month ≈ 720 starts + ~720 activities ≈ 1,440 per namespace
-// (more only while a backlog drains, one activity per 2,000 rows). Fixed: one
-// fleet-wide schedule, not per tenant.
+// (more only while a backlog drains: one activity per 2,000 rows and one
+// continue-as-new per 50,000). Fixed: one fleet-wide schedule, not per tenant.
 func PlatformMCPReceiptGCWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: time.Minute,
@@ -47,11 +55,7 @@ func PlatformMCPReceiptGCWorkflow(ctx workflow.Context) error {
 
 	var a *Activities
 
-	for {
-		if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
-			return workflow.NewContinueAsNewError(ctx, PlatformMCPReceiptGCWorkflow)
-		}
-
+	for range platformMCPReceiptGCMaxBatchesPerRun {
 		var rows int64
 		if err := workflow.ExecuteActivity(ctx, a.GCExpiredPlatformMCPReceipts, platformMCPReceiptGCBatchSize).Get(ctx, &rows); err != nil {
 			return fmt.Errorf("gc expired platform mcp receipts: %w", err)
@@ -63,6 +67,7 @@ func PlatformMCPReceiptGCWorkflow(ctx workflow.Context) error {
 			return nil
 		}
 	}
+	return workflow.NewContinueAsNewError(ctx, PlatformMCPReceiptGCWorkflow)
 }
 
 // GCExpiredPlatformMCPReceipts deletes one batch of expired receipts and
@@ -86,7 +91,7 @@ func AddPlatformMCPReceiptGCSchedule(ctx context.Context, temporalEnv *tenv.Envi
 			ID:                 platformMCPReceiptGCWorkflowID,
 			Workflow:           PlatformMCPReceiptGCWorkflow,
 			TaskQueue:          string(temporalEnv.Queue()),
-			WorkflowRunTimeout: 5 * time.Minute,
+			WorkflowRunTimeout: platformMCPReceiptGCRunTimeout,
 		},
 		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
 	})

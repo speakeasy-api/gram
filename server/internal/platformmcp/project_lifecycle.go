@@ -202,7 +202,11 @@ func (s *ProjectLifecycleService) CreateProject(ctx context.Context, principal P
 	// locked re-check inside the receipt transaction still replays a request
 	// that completed concurrently; both racers are then charged, which errs
 	// on the conservative side.
-	if replay, ok := s.completedCreateReceipt(ctx, principal, key, inputHash); ok {
+	replay, ok, err := s.completedCreateReceipt(ctx, principal, key, inputHash)
+	if err != nil {
+		return ProjectMutationOutput{}, s.unexpected(ctx, err)
+	}
+	if ok {
 		stored, err := decodeProjectReceipt(replay.ResultPayload)
 		if err != nil {
 			return ProjectMutationOutput{}, s.unexpected(ctx, err)
@@ -234,18 +238,23 @@ type createdReceipt struct {
 // create has no project to key its receipt on, so it cannot go through
 // executeChargedMutationReceipt, but it judges the row the same way: its query
 // filters expiry with the database clock, and replayableReceipt reports only a
-// completed receipt whose input matches. Anything else — a miss, a different
-// input, a read failure — falls through to the receipt transaction, which
-// decides it authoritatively under the lock.
-func (s *ProjectLifecycleService) completedCreateReceipt(ctx context.Context, principal Principal, key, inputHash string) (OperationReceipt, bool) {
+// completed receipt whose input matches. A miss or a different input falls
+// through to the receipt transaction, which decides it authoritatively under
+// the lock; a read failure is returned, so the caller does not charge a
+// request that may have been a replay.
+func (s *ProjectLifecycleService) completedCreateReceipt(ctx context.Context, principal Principal, key, inputHash string) (OperationReceipt, bool, error) {
 	row, err := s.queries.GetPlatformMCPProjectCreationReceipt(ctx, platformrepo.GetPlatformMCPProjectCreationReceiptParams{
 		OrganizationID: principal.OrganizationID, UserID: conv.ToPGText(principal.UserID),
 		Operation: operationCreateProject, IdempotencyKey: key,
 	})
-	if err != nil {
-		return noReplay, false
+	if errors.Is(err, pgx.ErrNoRows) {
+		return noReplay, false, nil
 	}
-	return replayableReceipt(row, inputHash, validProjectReceiptPayload)
+	if err != nil {
+		return noReplay, false, fmt.Errorf("look up project creation receipt: %w", err)
+	}
+	replay, ok := replayableReceipt(row, inputHash, validProjectReceiptPayload)
+	return replay, ok, nil
 }
 
 // charge returns the budget charge for one create or rename, run only when no

@@ -38,7 +38,9 @@ type mutationReceiptExecution[T any] struct {
 // PostgreSQL connection or the receipt lock is held. The order is therefore:
 //
 //  1. an unlocked, read-only lookup of a completed, unexpired receipt for
-//     exactly this request, answered without charging;
+//     exactly this request, answered without charging. A failed lookup is
+//     refused as unavailable rather than charged, since it may have been a
+//     replay;
 //  2. on a miss, charge, still outside any transaction;
 //  3. executeMutationReceipt, whose locked re-check still replays a duplicate
 //     that committed concurrently. Two racing first attempts may then both be
@@ -50,7 +52,11 @@ func executeChargedMutationReceipt[T any](ctx context.Context, charge func(conte
 	if charge == nil {
 		return OperationReceipt{}, execution.Unavailable(errors.New("mutation receipt charge is missing"))
 	}
-	if replay, ok := completedMutationReceipt(ctx, execution); ok {
+	replay, ok, err := completedMutationReceipt(ctx, execution)
+	if err != nil {
+		return OperationReceipt{}, execution.Unavailable(err)
+	}
+	if ok {
 		return replay, nil
 	}
 	if err := charge(ctx); err != nil {
@@ -64,25 +70,31 @@ var noReplay OperationReceipt
 
 // completedMutationReceipt is the unlocked pre-check. Anything but a completed,
 // unexpired receipt for exactly this input — no receipt, a pending one, a
-// different input under the same key, an invalid payload, or a failed read —
-// is a miss, and executeMutationReceipt decides it under its lock.
-func completedMutationReceipt[T any](ctx context.Context, execution mutationReceiptExecution[T]) (OperationReceipt, bool) {
+// different input under the same key, or an invalid payload — is a miss, and
+// executeMutationReceipt decides it under its lock. A failed read is returned
+// as an error instead: it cannot tell a replay from a first attempt, so the
+// caller must not charge on it.
+func completedMutationReceipt[T any](ctx context.Context, execution mutationReceiptExecution[T]) (OperationReceipt, bool, error) {
 	if execution.DB == nil || execution.ValidateReplay == nil {
-		return noReplay, false
+		return noReplay, false, nil
 	}
 	// A caller the locked path would refuse as malformed gets no replay here
 	// either; it falls through to that refusal.
 	if _, _, err := principalConnection(execution.Principal); err != nil {
-		return noReplay, false
+		return noReplay, false, nil
 	}
 	row, err := platformrepo.New(execution.DB).GetUnexpiredPlatformMCPOperationReceipt(ctx, platformrepo.GetUnexpiredPlatformMCPOperationReceiptParams{
 		OrganizationID: execution.Principal.OrganizationID, ProjectID: execution.Project.ID, Operation: execution.Operation, IdempotencyKey: execution.IdempotencyKey,
 		UserID: conv.ToPGText(execution.Principal.UserID), SubjectUrn: userSubjectURN(execution.Principal.UserID),
 	})
-	if err != nil {
-		return noReplay, false
+	if errors.Is(err, pgx.ErrNoRows) {
+		return noReplay, false, nil
 	}
-	return replayableReceipt(row, execution.InputHash, execution.ValidateReplay)
+	if err != nil {
+		return noReplay, false, fmt.Errorf("look up %s receipt: %w", execution.Label, err)
+	}
+	replay, ok := replayableReceipt(row, execution.InputHash, execution.ValidateReplay)
+	return replay, ok, nil
 }
 
 // replayableReceipt reports whether a stored receipt answers this exact
