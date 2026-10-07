@@ -569,18 +569,20 @@ func (c *IdentityCommit) Register(ctx context.Context) (Registration, error) {
 func (c *IdentityCommit) register(ctx context.Context, reg Registration) (Registration, error) {
 	policy := c.plan.Client.policy
 	capabilities := c.capabilities()
-	if policy.AllowCIMD && capabilities.supportsCIMD() {
+	path, err := commitRegistrationPath(policy, capabilities)
+	if err != nil {
+		return reg, err
+	}
+	switch path {
+	case RegistrationPathCIMD:
 		reg.Method = RegistrationCIMD
 		return reg, nil
-	}
-	endpoint := strings.TrimSpace(capabilities.registrationEndpoint.String)
-	if !capabilities.registrationEndpoint.Valid || endpoint == "" {
+	case RegistrationPathManual:
 		reg.ManualSetupRequired = true
 		return reg, nil
+	case RegistrationPathDCR:
 	}
-	if !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
-		return reg, identityRefusal(ErrIdentityInvalid, nil, "registration endpoint must be an absolute https URL, or http on loopback")
-	}
+	endpoint := strings.TrimSpace(capabilities.registrationEndpoint.String)
 
 	reg.Method = RegistrationDCR
 	// Registering through a tunnel reaches a private network the project
@@ -650,6 +652,23 @@ func registeredAuthMethod(response ProxyRegisterResponse, policy RegistrationPol
 		return "", false
 	}
 	return method, true
+}
+
+// commitRegistrationPath is the registration path register takes for the
+// provider's capabilities, or a refusal of a registration endpoint it cannot
+// send to.
+func commitRegistrationPath(policy RegistrationPolicy, capabilities providerCapabilities) (RegistrationPath, error) {
+	if policy.AllowCIMD && capabilities.supportsCIMD() {
+		return RegistrationPathCIMD, nil
+	}
+	endpoint := strings.TrimSpace(capabilities.registrationEndpoint.String)
+	if !capabilities.registrationEndpoint.Valid || endpoint == "" {
+		return RegistrationPathManual, nil
+	}
+	if !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
+		return RegistrationPathManual, identityRefusal(ErrIdentityInvalid, nil, "registration endpoint must be an absolute https URL, or http on loopback")
+	}
+	return RegistrationPathDCR, nil
 }
 
 type providerCapabilities struct {
