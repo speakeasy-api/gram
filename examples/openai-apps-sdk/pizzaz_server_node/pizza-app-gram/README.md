@@ -8,7 +8,8 @@ build and deploy [Gram Functions](https://getgram.ai).
 ## Prerequisites
 
 - [Node.js](https://nodejs.org) version 22.18.0 or later
-- [Gram CLI](https://www.speakeasy.com/docs/gram/command-line/use)
+- [Speakeasy CLI](https://www.speakeasy.com/docs/gram/command-line/use)
+  (`brew install speakeasy-api/tap/cli` or `npm i -g @speakeasy-api/cli`)
 
 ## Quick start
 

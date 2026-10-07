@@ -21,10 +21,10 @@
   "scripts": {
     "dev": "npm run db:start && mcp-inspector nodemon -q --watch src --exec node ./src/server.ts",
     "lint": "tsc --noEmit",
-    "push": "gf push",
+    "push": "speakeasy functions push",
     "prebuild": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run build",
-    "build": "gf build",
+    "build": "speakeasy functions build",
     "db:start": "docker compose up -d && npm run db:wait && npm run db:seed",
     "db:stop": "docker compose down",
     "db:reset": "docker compose down && npm run db:start",
@@ -32,7 +32,7 @@
     "db:seed": "node --import tsx scripts/seed.ts"
   },
   "dependencies": {
-    "@gram-ai/functions": "^0.11.1",
+    "@speakeasy-api/functions": "^0.19.0",
     "@modelcontextprotocol/sdk": "^1.20.1",
     "@openrouter/sdk": "^0.1.27",
     "@pinecone-database/pinecone": "^6.1.3",

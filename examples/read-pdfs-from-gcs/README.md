@@ -127,13 +127,13 @@ This starts a local MCP server over stdio transport, allowing you to interactive
 ```
 pdf-reader/
 ├── src/
-│   ├── gram.ts       # Tool definitions (search_files, read_pdf)
+│   ├── functions.ts  # Tool definitions (search_files, read_pdf)
 │   ├── gcs.ts        # GCS client operations
 │   ├── pdf.ts        # PDF parsing logic
 │   └── server.ts     # MCP server setup
 ├── package.json
 ├── tsconfig.json
-└── gram.config.ts
+└── speakeasy.config.ts
 ```
 
 ## Learn More

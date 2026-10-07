@@ -1,10 +1,10 @@
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import { z } from "zod";
 import * as planetscale from "./planetscale.ts";
 
 // To learn more about Gram Functions, check out our documentation at:
 // https://www.speakeasy.com/docs/gram/gram-functions/functions-framework
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     PLANETSCALE_HOST: z
       .string()
@@ -59,4 +59,4 @@ const gram = new Gram({
   },
 });
 
-export default gram;
+export default functions;

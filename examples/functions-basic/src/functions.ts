@@ -1,9 +1,9 @@
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import { z } from "zod/mini";
 import * as spacex from "./spacex.ts";
 import * as weather from "./weather.ts";
 
-const gram = new Gram()
+const functions = new Functions()
   .tool({
     name: "get_last_n_launches",
     description: 'Get the details of the last "n" launches from SpaceX.',
@@ -75,4 +75,4 @@ const gram = new Gram()
     },
   });
 
-export default gram;
+export default functions;

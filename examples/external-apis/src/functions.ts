@@ -1,14 +1,14 @@
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import { z } from "zod";
 
 /**
  * This example shows how to use the Gram Functions framework to create a tool that calls an external API.
  * It uses the OpenWeatherMap API to get the current weather conditions for a specific city.
  *
- * After running `pnpm create @gram-ai/function@latest`, replace the contents of `src/gram.ts` with this example.
+ * After running `speakeasy functions init`, replace the contents of `src/functions.ts` with this example.
  */
 
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     OPENWEATHER_API_KEY: z.string(),
   },
@@ -136,4 +136,4 @@ const gram = new Gram({
     },
   });
 
-export default gram;
+export default functions;

@@ -1,6 +1,6 @@
 import { test, beforeAll, expect } from "vitest";
 import { createClient } from "@clickhouse/client-web";
-import gram from "./gram.ts";
+import functions from "./functions.ts";
 
 beforeAll(async () => {
   const host = process.env["CLICKHOUSE_HOST"] || "localhost";
@@ -41,7 +41,7 @@ beforeAll(async () => {
 });
 
 test("execute_query tool - simple SELECT", async () => {
-  const result = await gram.handleToolCall({
+  const result = await functions.handleToolCall({
     name: "execute_query",
     input: {
       query: "SELECT * FROM TrackPlays LIMIT 5",
@@ -63,7 +63,7 @@ test("execute_query tool - simple SELECT", async () => {
 });
 
 test("execute_query tool - parameterized query with Date", async () => {
-  const result = await gram.handleToolCall({
+  const result = await functions.handleToolCall({
     name: "execute_query",
     input: {
       query: `
@@ -91,7 +91,7 @@ test("execute_query tool - parameterized query with Date", async () => {
 });
 
 test("execute_query tool - time series aggregation", async () => {
-  const result = await gram.handleToolCall({
+  const result = await functions.handleToolCall({
     name: "execute_query",
     input: {
       query: `
@@ -127,7 +127,7 @@ test("execute_query tool - time series aggregation", async () => {
 });
 
 test("execute_query tool - JOIN with related tables", async () => {
-  const result = await gram.handleToolCall({
+  const result = await functions.handleToolCall({
     name: "execute_query",
     input: {
       query: `
@@ -172,7 +172,7 @@ test("execute_query tool - JOIN with related tables", async () => {
 
 test("execute_query tool - UUID filtering", async () => {
   // First get a sample UserId
-  const sampleResult = await gram.handleToolCall({
+  const sampleResult = await functions.handleToolCall({
     name: "execute_query",
     input: {
       query: "SELECT DISTINCT UserId FROM TrackPlays LIMIT 1",
@@ -184,7 +184,7 @@ test("execute_query tool - UUID filtering", async () => {
   expect(userId).toBeDefined();
 
   // Now filter by that UserId
-  const result = await gram.handleToolCall({
+  const result = await functions.handleToolCall({
     name: "execute_query",
     input: {
       query: `
@@ -210,7 +210,7 @@ test("execute_query tool - UUID filtering", async () => {
 });
 
 test("execute_query tool - genre popularity by month", async () => {
-  const result = await gram.handleToolCall({
+  const result = await functions.handleToolCall({
     name: "execute_query",
     input: {
       query: `
@@ -248,7 +248,7 @@ test("execute_query tool - genre popularity by month", async () => {
 });
 
 test("execute_query tool - user listening patterns", async () => {
-  const result = await gram.handleToolCall({
+  const result = await functions.handleToolCall({
     name: "execute_query",
     input: {
       query: `

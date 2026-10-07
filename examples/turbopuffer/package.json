@@ -21,16 +21,16 @@
   "scripts": {
     "dev": "mcp-inspector nodemon -q --watch src --exec node ./src/server.ts",
     "lint": "tsc --noEmit",
-    "push": "gf push",
+    "push": "speakeasy functions push",
     "prebuild": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run build",
-    "build": "gf build",
+    "build": "speakeasy functions build",
     "db:seed": "node --import tsx scripts/seed.ts",
     "db:delete": "node --import tsx scripts/delete-movies-namespace.ts",
     "test": "vitest"
   },
   "dependencies": {
-    "@gram-ai/functions": "^0.11.1",
+    "@speakeasy-api/functions": "^0.19.0",
     "@modelcontextprotocol/sdk": "^1.20.1",
     "@openrouter/sdk": "^0.1.27",
     "@turbopuffer/turbopuffer": "^1.7.0",

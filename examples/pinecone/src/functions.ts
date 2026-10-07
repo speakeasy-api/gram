@@ -1,16 +1,13 @@
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import { OpenRouter } from "@openrouter/sdk";
-import Turbopuffer from "@turbopuffer/turbopuffer";
+import { Pinecone } from "@pinecone-database/pinecone";
 import { z } from "zod";
 
 // To learn more about Gram Functions, check out our documentation at:
 // https://www.speakeasy.com/docs/gram/gram-functions/functions-framework
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
-    TURBOPUFFER_API_KEY: z
-      .string()
-      .describe("Turbopuffer API key from turbopuffer.com/dashboard"),
-    TURBOPUFFER_REGION: z.string().describe("Turbopuffer region"),
+    PINECONE_API_KEY: z.string().describe("Pinecone API key"),
     OPENROUTER_API_KEY: z
       .string()
       .describe("OpenRouter API key for generating embeddings"),
@@ -72,54 +69,43 @@ const gram = new Gram({
       );
     }
 
-    // Initialize Turbopuffer client
-    const tpuf = new Turbopuffer({
-      region: ctx.env["TURBOPUFFER_REGION"],
-      apiKey: ctx.env["TURBOPUFFER_API_KEY"],
+    // Connect to Pinecone
+    const pc = new Pinecone({
+      apiKey: ctx.env["PINECONE_API_KEY"],
     });
-    const ns = tpuf.namespace("movies");
 
     try {
+      // Get index reference (specify host for local development)
+      const index = pc.index("movies", "http://localhost:5081");
+
       // Perform vector similarity search
-      const result = await ns.query({
-        rank_by: ["vector", "ANN", queryEmbedding],
-        top_k: limit,
-        include_attributes: [
-          "release_date",
-          "title",
-          "overview",
-          "popularity",
-          "vote_count",
-          "vote_average",
-          "original_language",
-          "genre",
-          "poster_url",
-        ],
+      const queryResponse = await index.query({
+        topK: limit,
+        vector: queryEmbedding,
+        includeMetadata: true,
       });
 
-      // Turbopuffer returns a response with a rows array
       return ctx.json({
         query: input.query,
-        results:
-          result.rows?.map((row: any) => ({
-            id: row.id,
-            title: row.attributes?.title,
-            overview: row.attributes?.overview,
-            release_date: row.attributes?.release_date,
-            genre: row.attributes?.genre,
-            popularity: row.attributes?.popularity,
-            vote_count: row.attributes?.vote_count,
-            vote_average: row.attributes?.vote_average,
-            original_language: row.attributes?.original_language,
-            poster_url: row.attributes?.poster_url,
-            similarity_score: 1 - (row.dist || 0), // Convert distance to similarity score
-          })) ?? [],
-        count: result.rows?.length || 0,
+        results: queryResponse.matches.map((match) => ({
+          id: match.id,
+          title: match.metadata?.["title"],
+          overview: match.metadata?.["overview"],
+          release_date: match.metadata?.["release_date"],
+          genre: match.metadata?.["genre"],
+          popularity: match.metadata?.["popularity"],
+          vote_count: match.metadata?.["vote_count"],
+          vote_average: match.metadata?.["vote_average"],
+          original_language: match.metadata?.["original_language"],
+          poster_url: match.metadata?.["poster_url"],
+          similarity_score: match.score, // Pinecone returns similarity directly (0-1)
+        })),
+        count: queryResponse.matches.length,
       });
     } catch (error) {
       return ctx.fail(
         {
-          error: `Turbopuffer query failed: ${error instanceof Error ? error.message : String(error)}`,
+          error: `Pinecone query failed: ${error instanceof Error ? error.message : String(error)}`,
         },
         { status: 500 },
       );
@@ -127,4 +113,4 @@ const gram = new Gram({
   },
 });
 
-export default gram;
+export default functions;

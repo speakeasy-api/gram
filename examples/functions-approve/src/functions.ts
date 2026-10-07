@@ -21,7 +21,7 @@
  * =============================================================================
  */
 
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 
 // =============================================================================
@@ -195,12 +195,12 @@ function maskSensitiveValue(value: string, visibleChars: number = 4): string {
 // =============================================================================
 
 /**
- * Create Gram instance with environment schema.
+ * Create Functions instance with environment schema.
  *
  * The envSchema defines which environment variables are expected.
  * When deployed, users will be prompted to provide these values.
  */
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     [CONFIG.APPROVAL_ENV_VAR]: z.optional(z.string()),
   },
@@ -572,4 +572,4 @@ const gram = new Gram({
     },
   });
 
-export default gram;
+export default functions;

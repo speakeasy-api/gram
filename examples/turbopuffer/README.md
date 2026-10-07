@@ -160,7 +160,7 @@ Traditional keyword search only matches exact words. Vector similarity search un
 ├── scripts/
 │   └── seed.ts          # Script to load and parse movie dataset
 ├── src/
-│   ├── gram.ts          # Main Gram Function with search tool
+│   ├── functions.ts     # Main Gram Function with search tool
 │   └── server.ts        # MCP server setup
 ├── .env.example         # Environment variable template
 ├── package.json         # Dependencies and scripts
@@ -171,7 +171,7 @@ Traditional keyword search only matches exact words. Vector similarity search un
 
 ### Key Files
 
-**`src/gram.ts`**: Defines the `search` tool that:
+**`src/functions.ts`**: Defines the `search` tool that:
 
 - Generates embeddings for search queries using OpenRouter
 - Queries Turbopuffer using vector similarity search

@@ -1,10 +1,10 @@
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import { openAsBlob } from "node:fs";
 import { Ragie } from "ragie";
 import * as z from "zod/mini";
 import type { FetchResult, SearchResult } from "./types.ts";
 
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     RAGIE_API_KEY: z.string(),
   },
@@ -201,4 +201,4 @@ const gram = new Gram({
     },
   });
 
-export default gram;
+export default functions;

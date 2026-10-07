@@ -128,7 +128,7 @@ This automatically starts ClickHouse (if not running) and spins up [MCP inspecto
 
 ## Testing
 
-The test suite demonstrates how to programmatically call Gram tools using `gram.handleToolCall()` - the same interface an LLM would use when invoking your tools. This allows you to verify tool behavior and test your functions locally before deployment.
+The test suite demonstrates how to programmatically call Gram tools using `functions.handleToolCall()` - the same interface an LLM would use when invoking your tools. This allows you to verify tool behavior and test your functions locally before deployment.
 
 ### Running Tests
 

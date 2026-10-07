@@ -1,9 +1,9 @@
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import { z } from "zod";
 import * as gcs from "./gcs.ts";
 import * as pdf from "./pdf.ts";
 
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     GCS_BUCKET_NAME: z
       .string()
@@ -90,4 +90,4 @@ const gram = new Gram({
     },
   });
 
-export default gram;
+export default functions;

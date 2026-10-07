@@ -1,8 +1,8 @@
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 import { Resend } from "resend";
 
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     RESEND_API_KEY: z.string(),
   },
@@ -42,4 +42,4 @@ const gram = new Gram({
   },
 });
 
-export default gram;
+export default functions;

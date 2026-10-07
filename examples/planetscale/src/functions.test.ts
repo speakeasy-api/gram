@@ -1,6 +1,6 @@
 import ws from "ws";
 import { Pool, neonConfig } from "@neondatabase/serverless";
-import gram from "./gram.ts";
+import functions from "./functions.ts";
 import { test, beforeAll, expect } from "vitest";
 
 // Configure Neon for PlanetScale compatibility
@@ -64,7 +64,7 @@ beforeAll(async () => {
 });
 
 test("execute_query tool - simple SELECT", async () => {
-  const result = await gram.handleToolCall({
+  const result = await functions.handleToolCall({
     name: "execute_query",
     input: {
       query: "SELECT * FROM Artist LIMIT 5",
@@ -82,7 +82,7 @@ test("execute_query tool - simple SELECT", async () => {
 
 test("execute_query tool - parameterized query", async () => {
   const artistName = "AC/DC";
-  const result = await gram.handleToolCall({
+  const result = await functions.handleToolCall({
     name: "execute_query",
     input: {
       query: "SELECT * FROM Artist WHERE Name = $1 LIMIT 1",
@@ -99,7 +99,7 @@ test("execute_query tool - parameterized query", async () => {
 });
 
 test("execute_query tool - JOIN query", async () => {
-  const result = await gram.handleToolCall({
+  const result = await functions.handleToolCall({
     name: "execute_query",
     input: {
       query: `

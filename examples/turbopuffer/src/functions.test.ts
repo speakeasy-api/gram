@@ -1,5 +1,5 @@
 import Turbopuffer from "@turbopuffer/turbopuffer";
-import gram from "./gram.ts";
+import functions from "./functions.ts";
 import { test, beforeAll, expect } from "vitest";
 
 // Validate & load environment variables before running tests
@@ -40,7 +40,7 @@ beforeAll(async () => {
 test("search tool", async () => {
   const query = "Inception";
   const limit = 5;
-  const result = await gram.handleToolCall({
+  const result = await functions.handleToolCall({
     name: "search",
     input: { query, limit },
   });

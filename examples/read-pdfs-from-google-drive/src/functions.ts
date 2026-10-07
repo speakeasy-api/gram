@@ -1,9 +1,9 @@
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import { z } from "zod";
 import * as drive from "./drive.ts";
 import * as pdf from "./pdf.ts";
 
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     GOOGLE_ACCESS_TOKEN: z.string().describe("Google OAuth2 access token"),
   },
@@ -127,4 +127,4 @@ const gram = new Gram({
     },
   });
 
-export default gram;
+export default functions;

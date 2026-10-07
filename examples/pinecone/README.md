@@ -144,7 +144,7 @@ Traditional keyword search only matches exact words. Vector similarity search un
 ├── scripts/
 │   └── seed.ts          # Script to create index and load movie dataset
 ├── src/
-│   ├── gram.ts          # Main Gram Function with search tool
+│   ├── functions.ts     # Main Gram Function with search tool
 │   └── server.ts        # MCP server setup
 ├── docker-compose.yml   # Pinecone Local Docker setup
 ├── .env.example         # Environment variable template
@@ -156,7 +156,7 @@ Traditional keyword search only matches exact words. Vector similarity search un
 
 ### Key Files
 
-**`src/gram.ts`**: Defines the `search` tool that:
+**`src/functions.ts`**: Defines the `search` tool that:
 
 - Generates embeddings for search queries using OpenRouter
 - Queries Pinecone using vector similarity search
@@ -196,7 +196,7 @@ To transition from local to cloud:
    - Dimensions: 384
    - Metric: cosine
 3. Update `.env` with your real `PINECONE_API_KEY`
-4. Remove the index host parameter from `src/gram.ts` (change `pc.index("movies", "http://localhost:5081")` to `pc.index("movies")`)
+4. Remove the index host parameter from `src/functions.ts` (change `pc.index("movies", "http://localhost:5081")` to `pc.index("movies")`)
 5. Update `scripts/seed.ts` similarly to remove the host parameter
 6. Re-run the seed script to populate your cloud index
 

@@ -1,4 +1,4 @@
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import { z } from "zod/mini";
 import { HTML } from "./inlined.ts";
 
@@ -6,15 +6,15 @@ const UI_URI = "ui://mermaid";
 
 // Shim: the functions runner (gram-start.mjs) dispatches resource reads by
 // looking for a `handleResources` method on the default export, but
-// @gram-ai/functions@0.14.x's `Gram` class only exposes `handleResourceRead`.
+// the `Functions` class only exposes `handleResourceRead`.
 // Adapt the signature until the framework exposes `handleResources` natively.
-type GramWithResources<G> = G & {
+type FunctionsWithResources<G> = G & {
   handleResources(req: { uri: string; input?: unknown }): Promise<Response>;
 };
 
-function withResourceHandler<G extends Gram<any, any>>(
+function withResourceHandler<G extends Functions<any, any>>(
   g: G,
-): GramWithResources<G> {
+): FunctionsWithResources<G> {
   return Object.assign(g, {
     handleResources(req: { uri: string }) {
       return g.handleResourceRead({ uri: req.uri });
@@ -22,7 +22,7 @@ function withResourceHandler<G extends Gram<any, any>>(
   });
 }
 
-const gram = new Gram()
+const functions = new Functions()
   .experimental_uiResource({
     name: "mermaid",
     uri: UI_URI,
@@ -55,4 +55,4 @@ const gram = new Gram()
     },
   });
 
-export default withResourceHandler(gram);
+export default withResourceHandler(functions);

@@ -41,10 +41,10 @@ Extract text content from PDF files stored in Google Drive. Demonstrates:
 
 ### OAuth Configuration
 
-This example uses **OAuth2 authentication** to access user-owned Google Drive files. The key configuration is the `oauthVariable` setting in [gram.ts:11](src/gram.ts#L11):
+This example uses **OAuth2 authentication** to access user-owned Google Drive files. The key configuration is the `oauthVariable` setting in [functions.ts:11](src/functions.ts#L11):
 
 ```typescript
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     GOOGLE_ACCESS_TOKEN: z.string().describe("Google OAuth2 access token"),
   },
@@ -127,14 +127,14 @@ This starts a local MCP server over stdio transport, allowing you to interactive
 ```
 read-pdfs-from-google-drive/
 ├── src/
-│   ├── gram.ts       # Tool definitions (search_files, read_pdf)
+│   ├── functions.ts  # Tool definitions (search_files, read_pdf)
 │   ├── drive.ts      # Google Drive API client operations
 │   ├── pdf.ts        # PDF parsing logic
 │   ├── oauth.ts      # OAuth2 helper utilities
 │   └── server.ts     # MCP server setup
 ├── package.json
 ├── tsconfig.json
-└── gram.config.ts
+└── speakeasy.config.ts
 ```
 
 ## Learn More

@@ -7,7 +7,7 @@ Function. Demonstrates:
 - Bundling it into a single self-contained HTML file with
   [`vite-plugin-singlefile`](https://github.com/richardtallent/vite-plugin-singlefile)
 - Exposing that HTML as a UI resource via
-  `gram.experimental_uiResource({ content })`
+  `functions.experimental_uiResource({ content })`
 - Linking a tool to the widget via `meta: { "ui/resourceUri": "ui://mermaid" }`
 - Passing structured data to the widget with `ctx.json(...)` → `Gram.onData(cb)`
 
@@ -27,10 +27,10 @@ widget renders it with the [`mermaid`](https://mermaid.js.org) library.
 ├── scripts/
 │   └── inline-html.mjs # Reads dist-ui/index.html → src/inlined.ts
 ├── src/
-│   ├── gram.ts         # Gram Function entrypoint
+│   ├── functions.ts    # Gram Function entrypoint
 │   └── inlined.ts      # Generated — do not edit
 ├── vite.config.ts
-├── gram.config.ts
+├── speakeasy.config.ts
 ├── tsconfig.json       # For src/ (gram function)
 └── tsconfig.ui.json    # For ui/ (React app)
 ```
@@ -56,7 +56,7 @@ Runs three steps:
 1. `vite build` → `dist-ui/index.html` (one file, JS/CSS/assets inlined)
 2. `scripts/inline-html.mjs` → writes `src/inlined.ts` exporting the HTML as a
    string constant
-3. `gf build` → bundles the Gram Function
+3. `speakeasy functions build` → bundles the Gram Function
 
 ## Deploy
 

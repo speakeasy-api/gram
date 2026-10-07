@@ -1,8 +1,8 @@
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 import { Connection, Client } from "@temporalio/client";
 
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     TEMPORAL_API_KEY: z.string(),
     TEMPORAL_GRPC_ENDPOINT: z.string(),
@@ -112,4 +112,4 @@ const gram = new Gram({
     },
   });
 
-export default gram;
+export default functions;

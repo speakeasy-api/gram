@@ -415,7 +415,7 @@ description: "Proxy for YOUR_SERVICE admin tool calls...";
 
 ## 📚 Additional Resources
 
-- **Gram Functions Documentation**: [@gram-ai/functions](https://github.com/gram-ai/functions)
+- **Gram Functions Documentation**: [@speakeasy-api/functions](https://www.npmjs.com/package/@speakeasy-api/functions)
 - **MCP Protocol**: [Model Context Protocol](https://modelcontextprotocol.io)
 - **Security Patterns**: See `gram_approve_demo.ts` for commented examples
 

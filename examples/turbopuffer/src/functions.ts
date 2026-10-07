@@ -1,13 +1,16 @@
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import { OpenRouter } from "@openrouter/sdk";
-import { Client } from "pg";
+import Turbopuffer from "@turbopuffer/turbopuffer";
 import { z } from "zod";
 
 // To learn more about Gram Functions, check out our documentation at:
 // https://www.speakeasy.com/docs/gram/gram-functions/functions-framework
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
-    DATABASE_URL: z.string().describe("PostgreSQL connection string"),
+    TURBOPUFFER_API_KEY: z
+      .string()
+      .describe("Turbopuffer API key from turbopuffer.com/dashboard"),
+    TURBOPUFFER_REGION: z.string().describe("Turbopuffer region"),
     OPENROUTER_API_KEY: z
       .string()
       .describe("OpenRouter API key for generating embeddings"),
@@ -69,71 +72,59 @@ const gram = new Gram({
       );
     }
 
-    // Connect to PostgreSQL
-    const client = new Client({
-      connectionString: ctx.env["DATABASE_URL"],
+    // Initialize Turbopuffer client
+    const tpuf = new Turbopuffer({
+      region: ctx.env["TURBOPUFFER_REGION"],
+      apiKey: ctx.env["TURBOPUFFER_API_KEY"],
     });
+    const ns = tpuf.namespace("movies");
 
     try {
-      await client.connect();
-
       // Perform vector similarity search
-      // Using cosine distance operator (<->) from pgvector
-      const query = `
-          SELECT
-            id,
-            release_date,
-            title,
-            overview,
-            popularity,
-            vote_count,
-            vote_average,
-            original_language,
-            genre,
-            poster_url,
-            created_at,
-            updated_at,
-            (embedding <-> $1::vector) as distance
-          FROM movies
-          ORDER BY distance
-          LIMIT $2
-        `;
+      const result = await ns.query({
+        rank_by: ["vector", "ANN", queryEmbedding],
+        top_k: limit,
+        include_attributes: [
+          "release_date",
+          "title",
+          "overview",
+          "popularity",
+          "vote_count",
+          "vote_average",
+          "original_language",
+          "genre",
+          "poster_url",
+        ],
+      });
 
-      const result = await client.query(query, [
-        JSON.stringify(queryEmbedding),
-        limit,
-      ]);
-
+      // Turbopuffer returns a response with a rows array
       return ctx.json({
         query: input.query,
-        results: result.rows.map((row) => ({
-          id: row.id,
-          title: row.title,
-          overview: row.overview,
-          release_date: row.release_date,
-          genre: row.genre,
-          popularity: row.popularity,
-          vote_count: row.vote_count,
-          vote_average: row.vote_average,
-          original_language: row.original_language,
-          poster_url: row.poster_url,
-          created_at: row.created_at,
-          updated_at: row.updated_at,
-          similarity_score: 1 - row.distance, // Convert distance to similarity score
-        })),
-        count: result.rows.length,
+        results:
+          result.rows?.map((row: any) => ({
+            id: row.id,
+            title: row.attributes?.title,
+            overview: row.attributes?.overview,
+            release_date: row.attributes?.release_date,
+            genre: row.attributes?.genre,
+            popularity: row.attributes?.popularity,
+            vote_count: row.attributes?.vote_count,
+            vote_average: row.attributes?.vote_average,
+            original_language: row.attributes?.original_language,
+            poster_url: row.attributes?.poster_url,
+            similarity_score: 1 - (row.dist || 0), // Convert distance to similarity score
+          })) ?? [],
+        count: result.rows?.length || 0,
       });
     } catch (error) {
       return ctx.fail(
         {
-          error: `Database query failed: ${error instanceof Error ? error.message : String(error)}`,
+          error: `Turbopuffer query failed: ${error instanceof Error ? error.message : String(error)}`,
         },
         { status: 500 },
       );
-    } finally {
-      await client.end();
     }
   },
 });
 
-export default gram;
+export default functions;

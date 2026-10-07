@@ -1,8 +1,8 @@
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 import * as clickhouse from "./clickhouse.ts";
 
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     CLICKHOUSE_HOST: z.string(),
     CLICKHOUSE_PORT: z.string(),
@@ -36,4 +36,4 @@ const gram = new Gram({
   },
 });
 
-export default gram;
+export default functions;

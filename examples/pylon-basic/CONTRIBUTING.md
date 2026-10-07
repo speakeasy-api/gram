@@ -17,20 +17,20 @@
 - `lint` - Runs the TypeScript compiler in `noEmit` mode to check for type errors.
 
 <details open>
-<summary><strong>Guide: Using `@gram-ai/functions`</strong></summary>
+<summary><strong>Guide: Using `@speakeasy-api/functions`</strong></summary>
 
 ## Core Concepts
 
-### The Gram Instance
+### The Functions Instance
 
-The `Gram` class is the main entry point for defining tools. You create an
+The `Functions` class is the main entry point for defining tools. You create an
 instance and chain `.tool()` calls to register multiple tools:
 
 ```typescript
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 
-const g = new Gram()
+const g = new Functions()
   .tool({
     name: "add",
     description: "Add two numbers",
@@ -130,10 +130,10 @@ async execute(ctx, input) {
 
 #### `ctx.env`
 
-Access to parsed environment variables defined by the `Gram` instance:
+Access to parsed environment variables defined by the `Functions` instance:
 
 ```typescript
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     BASE_URL: z.string().transform((url) => new URL(url)),
   },
@@ -174,7 +174,7 @@ By default, the framework strictly validates input. You can enable lax mode to
 allow unvalidated input to pass through:
 
 ```typescript
-const g = new Gram({ lax: true });
+const g = new Functions({ lax: true });
 ```
 
 ## Environment Variables
@@ -182,12 +182,12 @@ const g = new Gram({ lax: true });
 ### Defining Variables
 
 Environment variables that are used by tools must be defined when instantiating
-the `Gram` class. This is done using a Zod v4 object schema:
+the `Functions` class. This is done using a Zod v4 object schema:
 
 ```typescript
 import * as z from "zod/mini";
 
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     API_KEY: z.string().describe("API key for external service"),
     BASE_URL: z.string().check(z.url()).describe("Base URL for API requests"),
@@ -203,11 +203,11 @@ installing the corresponding MCP servers.
 ### Runtime Environment
 
 Environment variables are read from `process.env` by default, but you can
-override them when creating the `Gram` instance. This can be useful for testing
+override them when creating the `Functions` instance. This can be useful for testing
 or local development. Example:
 
 ```typescript
-const g = new Gram({
+const g = new Functions({
   envSchema: {
     API_KEY: z.string().describe("API key for external service"),
     BASE_URL: z.string().check(z.url()).describe("Base URL for API requests"),
@@ -299,7 +299,7 @@ Errors automatically include a stack trace in the response.
 The `assert` function provides a convenient way to validate conditions and throw error responses:
 
 ```typescript
-import { assert } from "@gram-ai/functions";
+import { assert } from "@speakeasy-api/functions";
 
 async execute(ctx, input) {
   assert(input.userId, { error: "userId is required" }, { status: 400 });
@@ -326,7 +326,7 @@ Key points about `assert`:
 Generate a manifest of all registered tools:
 
 ```typescript
-const g = new Gram().tool({/* ... */}).tool({/* ... */});
+const g = new Functions().tool({/* ... */}).tool({/* ... */});
 
 const manifest = g.manifest();
 // {
@@ -348,7 +348,7 @@ const manifest = g.manifest();
 Export the `handleToolCall` method to process incoming requests:
 
 ```typescript
-const g = new Gram().tool({/* ... */}).tool({/* ... */});
+const g = new Functions().tool({/* ... */}).tool({/* ... */});
 
 export const handleToolCall = g.handleToolCall;
 ```
@@ -384,7 +384,7 @@ setTimeout(() => controller.abort(), 5000);
 The framework provides full TypeScript type inference:
 
 ```typescript
-const g = new Gram().tool({
+const g = new Functions().tool({
   name: "greet",
   inputSchema: { name: z.string() },
   async execute(ctx, input) {

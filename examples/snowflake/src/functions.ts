@@ -1,10 +1,10 @@
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import { z } from "zod";
 import * as snowflake from "./snowflake.ts";
 
 // To learn more about Gram Functions, check out our documentation at:
 // https://www.speakeasy.com/docs/gram/gram-functions/functions-framework
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     SNOWFLAKE_ACCOUNT_IDENTIFIER: z
       .string()
@@ -71,4 +71,4 @@ const gram = new Gram({
   },
 });
 
-export default gram;
+export default functions;

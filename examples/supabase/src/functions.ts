@@ -1,9 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 
-const gram = new Gram({
+const functions = new Functions({
   envSchema: { SUPABASE_URL: z.string(), SUPABASE_ANON_KEY: z.string() },
 }).tool({
   name: "top_cities_by_property_sales",
@@ -41,4 +41,4 @@ const gram = new Gram({
   },
 });
 
-export default gram;
+export default functions;

@@ -140,7 +140,7 @@ Traditional keyword search only matches exact words. Vector similarity search un
 ├── scripts/
 │   ├── seed.ts          # Script to load and parse movie dataset
 ├── src/
-│   ├── gram.ts          # Main Gram Function with search tool
+│   ├── functions.ts     # Main Gram Function with search tool
 │   └── server.ts        # MCP server setup
 ├── init.sql             # Database schema with pgvector extension
 ├── docker-compose.yml   # PostgreSQL with pgvector setup
@@ -153,7 +153,7 @@ Traditional keyword search only matches exact words. Vector similarity search un
 
 ### Key Files
 
-**`src/gram.ts`**: Defines the `search` tool that:
+**`src/functions.ts`**: Defines the `search` tool that:
 
 - Generates embeddings for search queries using OpenRouter
 - Queries PostgreSQL using pgvector's cosine distance operator (`<->`)

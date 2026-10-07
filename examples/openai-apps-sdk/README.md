@@ -16,7 +16,7 @@ pnpm build
 Next, `cd` into the `pizzaz_node_server/pizza-app-gram` directory and run:
 
 ```bash
-pnpm i @gram-ai/functions
+pnpm i @speakeasy-api/functions
 pnpm run inline:app
 ```
 

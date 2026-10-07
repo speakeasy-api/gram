@@ -1,7 +1,7 @@
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     PYLON_API_KEY: z.string(),
   },
@@ -77,4 +77,4 @@ const gram = new Gram({
     },
   });
 
-export default gram;
+export default functions;
