@@ -69,6 +69,9 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 			if errors.Is(err, usersessionbindings.ErrNotFound) {
 				return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, s.logger)
 			}
+			if errors.Is(err, usersessionbindings.ErrGatewayMemberCredentials) {
+				return nil, oops.E(oops.CodeConflict, err, "user session issuer holds per-member gateway credentials and cannot be shared").LogError(ctx, s.logger)
+			}
 			return nil, oops.E(oops.CodeUnexpected, err, "validate user session issuer").LogError(ctx, s.logger)
 		}
 	}

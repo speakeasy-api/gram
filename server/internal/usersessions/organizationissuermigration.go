@@ -462,6 +462,17 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	if preflight.warningsFingerprint != "" && (payload.ConfirmedWarningsFingerprint == nil || *payload.ConfirmedWarningsFingerprint != preflight.warningsFingerprint) {
 		return nil, oops.E(oops.CodeConflict, nil, "user session issuer migration warnings have not been confirmed or changed; refresh the preflight and confirm its exact warnings fingerprint").LogError(ctx, logger)
 	}
+	// The merged issuer must keep one client per remote issuer: per-member
+	// gateway credentials on either side, or two single clients of one
+	// provider, would leave the moved consumers resolving credentials
+	// ambiguously.
+	multiClient, err := q.UserSessionIssuerMergeHasMultiClientProvider(ctx, repo.UserSessionIssuerMergeHasMultiClientProviderParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check merged user session issuer clients").LogError(ctx, logger)
+	}
+	if multiClient {
+		return nil, oops.E(oops.CodeConflict, nil, "merging these user session issuers would bind more than one client of the same provider; detach the extra clients before migrating").LogError(ctx, logger)
+	}
 
 	targetProjectID := target.ProjectID
 	consentsMigrated, err := q.UpdateUserSessionConsentsToIssuerScope(ctx, repo.UpdateUserSessionConsentsToIssuerScopeParams{TargetProjectID: targetProjectID, TargetIssuerID: target.ID, OrganizationID: authCtx.ActiveOrganizationID, SourceIssuerID: source.ID})

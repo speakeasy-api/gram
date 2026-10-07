@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -83,6 +84,10 @@ type Service struct {
 	// which is what ties this one link to customer_managed_encryption_keys.
 	productFeatures   *productfeatures.Client
 	bindingAuthorizer func(context.Context, pgx.Tx, uuid.UUID) error
+
+	// features gates rollouts such as gateway member credentials. Nil keeps
+	// every gate off.
+	features feature.Provider
 }
 
 var (
@@ -132,7 +137,14 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		origins:               DefaultCallbackOrigins(serverURL),
 
 		productFeatures: productFeatures,
+		features:        nil,
 	}
+}
+
+// SetFeatureFlags installs the feature flag provider. Call it during wiring,
+// before the service handles requests.
+func (s *Service) SetFeatureFlags(features feature.Provider) {
+	s.features = features
 }
 
 // SetCallbackOrigins replaces the default origins, which pin every client to

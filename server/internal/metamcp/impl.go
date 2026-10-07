@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -42,10 +43,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
 )
 
 type Service struct {
@@ -60,6 +61,8 @@ type Service struct {
 	distributionAdmission    *admission.Guard
 	publisher                plugins.PluginPublishSignaler
 	publicationRequests      plugins.PublicationRequests
+	// features gates gateway member credentials. Nil keeps the gate off.
+	features feature.Provider
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -89,7 +92,19 @@ func NewService(
 		distributionAdmission:    nil,
 		publisher:                nil,
 		publicationRequests:      plugins.PublicationRequests{Enabled: false},
+		features:                 nil,
 	}
+}
+
+func (s *Service) WithFeatureFlags(features feature.Provider) *Service {
+	s.features = features
+	return s
+}
+
+// memberCredentialsEnabled evaluates the gateway member credential rollout.
+// Call it before opening a transaction so a slow lookup holds no locks.
+func (s *Service) memberCredentialsEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
+	return remotesessions.GatewayMemberCredentialsEnabled(ctx, s.logger, s.features, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug)
 }
 
 func (s *Service) WithDistributionAdmission(guard *admission.Guard) *Service {
@@ -182,7 +197,7 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 	}
 	txRepo := repo.New(dbtx)
 
-	if err := s.lockIssuerReference(ctx, txRepo, *authCtx.ProjectID, issuerID); err != nil {
+	if err := s.lockIssuerReference(ctx, dbtx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuerID, true); err != nil {
 		return nil, err
 	}
 
@@ -327,6 +342,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	if err != nil {
 		return nil, err
 	}
+	memberCredentials := s.memberCredentialsEnabled(ctx, authCtx)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -367,7 +383,14 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		}
 	}
 
-	if err := s.lockIssuerReference(ctx, txRepo, *authCtx.ProjectID, issuerID); err != nil {
+	issuerChanged := !existing.UserSessionIssuerID.Valid || existing.UserSessionIssuerID.UUID != issuerID.UUID
+	leavingIssuer := issuerChanged && existing.UserSessionIssuerID.Valid
+	if leavingIssuer {
+		if err := lockGatewayIssuersForSwitch(ctx, dbtx, existing.UserSessionIssuerID.UUID, issuerID.UUID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock gateway issuers").LogError(ctx, logger)
+		}
+	}
+	if err := s.lockIssuerReference(ctx, dbtx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuerID, issuerChanged); err != nil {
 		return nil, err
 	}
 
@@ -413,13 +436,21 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update meta mcp server").LogError(ctx, logger)
 	}
+	if leavingIssuer {
+		if _, err := releaseGatewayIssuer(ctx, txRepo, existing.UserSessionIssuerID.UUID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "release previous gateway issuer").LogError(ctx, logger)
+		}
+	}
 
 	// Consent wiring binds member provider clients to a specific issuer, so
 	// pointing the gateway at a different issuer (or gaining one) would
 	// silently orphan every members' tiles. Re-run the member attachment
 	// against the new issuer instead of leaving that to a manual ceremony.
+	// With gateway member credentials every save re-runs it, which repairs
+	// member clients an earlier rule skipped. lockIssuerReference already
+	// holds the issuer's owner-binding lock.
 	rewiredIssuer := false
-	if issuerID.Valid && (!existing.UserSessionIssuerID.Valid || existing.UserSessionIssuerID.UUID != issuerID.UUID) {
+	if issuerID.Valid && (issuerChanged || memberCredentials) {
 		identities, ierr := txRepo.ListMemberProviderIdentities(ctx, repo.ListMemberProviderIdentitiesParams{
 			MetaMcpServerID: serverID,
 			ProjectID:       *authCtx.ProjectID,
@@ -427,18 +458,8 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		if ierr != nil {
 			return nil, oops.E(oops.CodeUnexpected, ierr, "list member provider identities").LogError(ctx, logger)
 		}
-		for _, identity := range identities {
-			if lerr := remotesessionsrepo.New(dbtx).LockRemoteSessionIssuerForClientBinding(ctx, identity.RemoteSessionIssuerID.UUID); lerr != nil {
-				return nil, oops.E(oops.CodeUnexpected, lerr, "lock remote session issuer for client binding").LogError(ctx, logger)
-			}
-			if _, aerr := txRepo.AutoAttachMemberProviderClient(ctx, repo.AutoAttachMemberProviderClientParams{
-				GatewayIssuerID: issuerID.UUID,
-				ProjectID:       *authCtx.ProjectID,
-				MemberIssuerID:  identity.UserSessionIssuerID.UUID,
-				RemoteIssuerID:  identity.RemoteSessionIssuerID.UUID,
-			}); aerr != nil {
-				return nil, oops.E(oops.CodeUnexpected, aerr, "attach member provider client").LogError(ctx, logger)
-			}
+		if _, werr := wireMemberClients(ctx, dbtx, txRepo, *authCtx.ProjectID, issuerID.UUID, identities, memberCredentials); werr != nil {
+			return nil, oops.E(oops.CodeUnexpected, werr, "attach member provider clients").LogError(ctx, logger)
 		}
 		rewiredIssuer = true
 	}
@@ -695,6 +716,14 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete meta mcp server").LogError(ctx, logger)
 	}
+	if existing.UserSessionIssuerID.Valid {
+		if err := lockGatewayIssuerForClientBinding(ctx, dbtx, existing.UserSessionIssuerID.UUID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock gateway issuer").LogError(ctx, logger)
+		}
+		if _, err := releaseGatewayIssuer(ctx, txRepo, existing.UserSessionIssuerID.UUID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "release gateway issuer").LogError(ctx, logger)
+		}
+	}
 
 	if err := s.audit.LogMetaMcpServerDelete(ctx, dbtx, audit.LogMetaMcpServerDeleteEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
@@ -800,6 +829,7 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 	} else {
 		rollout, rolloutErr = s.distributionAdmission.ResolveProject(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, *authCtx.ProjectID)
 	}
+	memberCredentials := s.memberCredentialsEnabled(ctx, authCtx)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -895,17 +925,16 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 	// provider without a manual attach ceremony.
 	wiredGatewayIssuer := false
 	if meta.UserSessionIssuerID.Valid && server.RemoteSessionIssuerID.Valid && server.UserSessionIssuerID.Valid {
-		// No DB constraint enforces one client per (issuer, upstream); every
-		// client-binding writer serializes on this advisory lock instead.
-		if lerr := remotesessionsrepo.New(dbtx).LockRemoteSessionIssuerForClientBinding(ctx, server.RemoteSessionIssuerID.UUID); lerr != nil {
-			return nil, oops.E(oops.CodeUnexpected, lerr, "lock remote session issuer for client binding").LogError(ctx, logger)
+		// No DB constraint enforces which clients an issuer may bind; every
+		// client-binding writer serializes on the owner-binding and remote
+		// issuer advisory locks instead, in that order.
+		if lerr := lockGatewayIssuerForClientBinding(ctx, dbtx, meta.UserSessionIssuerID.UUID); lerr != nil {
+			return nil, oops.E(oops.CodeUnexpected, lerr, "lock gateway issuer for client binding").LogError(ctx, logger)
 		}
-		attached, aerr := txRepo.AutoAttachMemberProviderClient(ctx, repo.AutoAttachMemberProviderClientParams{
-			GatewayIssuerID: meta.UserSessionIssuerID.UUID,
-			ProjectID:       *authCtx.ProjectID,
-			MemberIssuerID:  server.UserSessionIssuerID.UUID,
-			RemoteIssuerID:  server.RemoteSessionIssuerID.UUID,
-		})
+		attached, aerr := wireMemberClients(ctx, dbtx, txRepo, *authCtx.ProjectID, meta.UserSessionIssuerID.UUID, []repo.ListMemberProviderIdentitiesRow{{
+			RemoteSessionIssuerID: server.RemoteSessionIssuerID,
+			UserSessionIssuerID:   server.UserSessionIssuerID,
+		}}, memberCredentials)
 		if aerr != nil {
 			return nil, oops.E(oops.CodeUnexpected, aerr, "attach member provider client").LogError(ctx, logger)
 		}
@@ -1072,6 +1101,7 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid membership id").LogError(ctx, logger)
 	}
+	memberCredentials := s.memberCredentialsEnabled(ctx, authCtx)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -1131,14 +1161,13 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 		case serr != nil:
 			return oops.E(oops.CodeUnexpected, serr, "load removed member server").LogError(ctx, logger)
 		case server.RemoteSessionIssuerID.Valid:
-			if lerr := remotesessionsrepo.New(dbtx).LockRemoteSessionIssuerForClientBinding(ctx, server.RemoteSessionIssuerID.UUID); lerr != nil {
-				return oops.E(oops.CodeUnexpected, lerr, "lock remote session issuer for client binding").LogError(ctx, logger)
+			if lerr := lockGatewayIssuerForClientBinding(ctx, dbtx, meta.UserSessionIssuerID.UUID); lerr != nil {
+				return oops.E(oops.CodeUnexpected, lerr, "lock gateway issuer for client binding").LogError(ctx, logger)
 			}
-			detached, derr := txRepo.AutoDetachMemberProviderClient(ctx, repo.AutoDetachMemberProviderClientParams{
-				GatewayIssuerID: meta.UserSessionIssuerID.UUID,
-				RemoteIssuerID:  server.RemoteSessionIssuerID.UUID,
-				ProjectID:       *authCtx.ProjectID,
-			})
+			detached, derr := detachMemberClients(ctx, dbtx, txRepo, *authCtx.ProjectID, meta.ID, meta.UserSessionIssuerID.UUID, repo.ListMemberProviderIdentitiesRow{
+				RemoteSessionIssuerID: server.RemoteSessionIssuerID,
+				UserSessionIssuerID:   server.UserSessionIssuerID,
+			}, memberCredentials)
 			if derr != nil {
 				return oops.E(oops.CodeUnexpected, derr, "detach member provider client").LogError(ctx, logger)
 			}
@@ -1186,9 +1215,29 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 // lockIssuerReference validates an optional user session issuer reference and
 // locks the issuer row for the duration of the transaction so a concurrent
 // issuer delete cannot race the attach. A null issuer id is a no-op.
-func (s *Service) lockIssuerReference(ctx context.Context, txRepo *repo.Queries, projectID uuid.UUID, issuerID uuid.NullUUID) error {
+//
+// The owner-binding advisory lock comes first, matching issuer deletion and
+// client attachment. When the gateway starts consuming the issuer
+// (newConsumer), an issuer holding another gateway's per-member credentials is
+// refused, since only one gateway may consume it.
+func (s *Service) lockIssuerReference(ctx context.Context, dbtx pgx.Tx, txRepo *repo.Queries, organizationID string, projectID uuid.UUID, issuerID uuid.NullUUID, newConsumer bool) error {
 	if !issuerID.Valid {
 		return nil
+	}
+
+	validate := usersessionbindings.ValidateAndLockOwnerBinding
+	if newConsumer {
+		validate = usersessionbindings.ValidateAndLock
+	}
+	if _, err := validate(ctx, dbtx, issuerID.UUID, projectID, organizationID); err != nil {
+		switch {
+		case errors.Is(err, usersessionbindings.ErrNotFound):
+			return oops.E(oops.CodeInvalid, err, "user_session_issuer_id does not reference a live issuer in this project").LogError(ctx, s.logger)
+		case errors.Is(err, usersessionbindings.ErrGatewayMemberCredentials):
+			return oops.E(oops.CodeConflict, err, "user session issuer holds another gateway's per-member credentials and cannot be shared").LogError(ctx, s.logger)
+		default:
+			return oops.E(oops.CodeUnexpected, err, "lock user session issuer for owner binding").LogError(ctx, s.logger)
+		}
 	}
 
 	if _, err := txRepo.LockUserSessionIssuerForMetaMCP(ctx, repo.LockUserSessionIssuerForMetaMCPParams{

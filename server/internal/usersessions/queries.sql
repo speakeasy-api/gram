@@ -156,6 +156,38 @@ RETURNING *;
 -- toolset. Row locks continue to serialize the MCP-server attachment paths.
 SELECT pg_advisory_xact_lock(hashtextextended((@user_session_issuer_id::uuid)::text, 1));
 
+-- name: UserSessionIssuerHasMultiClientProvider :one
+-- Whether the issuer binds more than one live client of the same remote
+-- issuer. Only a gateway that owns the issuer exclusively may hold that shape
+-- (gateway member credentials), so no other consumer may be added to it.
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_client_user_session_issuers AS l
+  JOIN remote_session_clients AS c
+    ON c.id = l.remote_session_client_id
+   AND c.deleted IS FALSE
+  WHERE l.user_session_issuer_id = @user_session_issuer_id
+  GROUP BY c.remote_session_issuer_id
+  HAVING count(*) > 1
+) AS has_multi_client_provider;
+
+-- name: UserSessionIssuerMergeHasMultiClientProvider :one
+-- Whether merging the source issuer's client bindings into the target would
+-- leave the target with more than one live client of the same remote issuer,
+-- either because one side already holds that shape or because the union
+-- creates it. Consumers moved by a migration resolve one client per remote
+-- issuer, so that merge is refused.
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_client_user_session_issuers AS l
+  JOIN remote_session_clients AS c
+    ON c.id = l.remote_session_client_id
+   AND c.deleted IS FALSE
+  WHERE l.user_session_issuer_id IN (@source_issuer_id::uuid, @target_issuer_id::uuid)
+  GROUP BY c.remote_session_issuer_id
+  HAVING count(DISTINCT l.remote_session_client_id) > 1
+) AS has_multi_client_provider;
+
 -- name: LockUserSessionIssuer :one
 -- Lock a live issuer row before checking for active owners. Attach flows
 -- that reference a pre-existing issuer (meta MCP create/update) hold this

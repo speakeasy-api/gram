@@ -5150,6 +5150,29 @@ func (q *Queries) UserSessionIssuerHasActiveOwner(ctx context.Context, arg UserS
 	return exists, err
 }
 
+const userSessionIssuerHasMultiClientProvider = `-- name: UserSessionIssuerHasMultiClientProvider :one
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_client_user_session_issuers AS l
+  JOIN remote_session_clients AS c
+    ON c.id = l.remote_session_client_id
+   AND c.deleted IS FALSE
+  WHERE l.user_session_issuer_id = $1
+  GROUP BY c.remote_session_issuer_id
+  HAVING count(*) > 1
+) AS has_multi_client_provider
+`
+
+// Whether the issuer binds more than one live client of the same remote
+// issuer. Only a gateway that owns the issuer exclusively may hold that shape
+// (gateway member credentials), so no other consumer may be added to it.
+func (q *Queries) UserSessionIssuerHasMultiClientProvider(ctx context.Context, userSessionIssuerID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, userSessionIssuerHasMultiClientProvider, userSessionIssuerID)
+	var has_multi_client_provider bool
+	err := row.Scan(&has_multi_client_provider)
+	return has_multi_client_provider, err
+}
+
 const userSessionIssuerIsPlatformOwned = `-- name: UserSessionIssuerIsPlatformOwned :one
 SELECT EXISTS (
   SELECT 1
@@ -5171,4 +5194,34 @@ func (q *Queries) UserSessionIssuerIsPlatformOwned(ctx context.Context, arg User
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const userSessionIssuerMergeHasMultiClientProvider = `-- name: UserSessionIssuerMergeHasMultiClientProvider :one
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_client_user_session_issuers AS l
+  JOIN remote_session_clients AS c
+    ON c.id = l.remote_session_client_id
+   AND c.deleted IS FALSE
+  WHERE l.user_session_issuer_id IN ($1::uuid, $2::uuid)
+  GROUP BY c.remote_session_issuer_id
+  HAVING count(DISTINCT l.remote_session_client_id) > 1
+) AS has_multi_client_provider
+`
+
+type UserSessionIssuerMergeHasMultiClientProviderParams struct {
+	SourceIssuerID uuid.UUID
+	TargetIssuerID uuid.UUID
+}
+
+// Whether merging the source issuer's client bindings into the target would
+// leave the target with more than one live client of the same remote issuer,
+// either because one side already holds that shape or because the union
+// creates it. Consumers moved by a migration resolve one client per remote
+// issuer, so that merge is refused.
+func (q *Queries) UserSessionIssuerMergeHasMultiClientProvider(ctx context.Context, arg UserSessionIssuerMergeHasMultiClientProviderParams) (bool, error) {
+	row := q.db.QueryRow(ctx, userSessionIssuerMergeHasMultiClientProvider, arg.SourceIssuerID, arg.TargetIssuerID)
+	var has_multi_client_provider bool
+	err := row.Scan(&has_multi_client_provider)
+	return has_multi_client_provider, err
 }

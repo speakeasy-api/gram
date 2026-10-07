@@ -61,6 +61,14 @@ const (
 	FlagPlatformMCPPluginAssignmentMutations Flag = "platform-mcp-plugin-assignment-mutations"
 	// FlagGatewayPluginMembership gates new gateway attachments to plugins.
 	FlagGatewayPluginMembership Flag = "gateway-plugin-membership"
+	// FlagGatewayMemberCredentials lets a gateway bind each member's own OAuth
+	// client to its issuer, so members that share one authorization server
+	// keep separate credentials. It gates gateway auto-wiring, save
+	// reconciliation, client-specific member detach and the relaxed manual
+	// attach check. Evaluated server-side only (metamcp, remotesessions);
+	// targeted by PostHog organization group (org slug). Fails closed. Enable
+	// only once every server instance runs the client-keyed gateway readers.
+	FlagGatewayMemberCredentials Flag = "gateway-member-credentials"
 	// FlagPlatformMCPAccessRoleMutations is the exact-project kill switch for
 	// creating and updating custom MCP-only access roles through Platform MCP.
 	// It is evaluated at invocation time and fails closed.

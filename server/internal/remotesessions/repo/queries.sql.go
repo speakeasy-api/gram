@@ -5818,6 +5818,50 @@ func (q *Queries) GetUserSessionIssuerForProject(ctx context.Context, arg GetUse
 	return i, err
 }
 
+const getUserSessionIssuerGatewayOwnership = `-- name: GetUserSessionIssuerGatewayOwnership :one
+SELECT
+    (
+      SELECT count(*)
+      FROM meta_mcp_servers AS mm
+      WHERE mm.user_session_issuer_id = $1::uuid
+        AND mm.deleted IS FALSE
+    )::bigint AS gateways,
+    (
+      (
+        SELECT count(*)
+        FROM mcp_servers AS s
+        WHERE s.user_session_issuer_id = $1::uuid
+          AND s.deleted IS FALSE
+      ) + (
+        SELECT count(*)
+        FROM toolsets AS t
+        WHERE t.user_session_issuer_id = $1::uuid
+          AND t.deleted IS FALSE
+      ) + (
+        SELECT count(*)
+        FROM platform_mcp_catalog_registrations AS r
+        WHERE r.user_session_issuer_id = $1::uuid
+          AND r.deleted IS FALSE
+      )
+    )::bigint AS other_consumers
+`
+
+type GetUserSessionIssuerGatewayOwnershipRow struct {
+	Gateways       int64
+	OtherConsumers int64
+}
+
+// Who consumes a user session issuer, for the gateway member credential rule:
+// the issuer may hold several clients of one remote issuer only while exactly
+// one live gateway and nothing else consumes it. Callers hold the issuer's
+// owner-binding lock, which every consumer writer takes before referencing it.
+func (q *Queries) GetUserSessionIssuerGatewayOwnership(ctx context.Context, userSessionIssuerID uuid.UUID) (GetUserSessionIssuerGatewayOwnershipRow, error) {
+	row := q.db.QueryRow(ctx, getUserSessionIssuerGatewayOwnership, userSessionIssuerID)
+	var i GetUserSessionIssuerGatewayOwnershipRow
+	err := row.Scan(&i.Gateways, &i.OtherConsumers)
+	return i, err
+}
+
 const hasLivePrincipalRemoteSessionBindingsForClientBinding = `-- name: HasLivePrincipalRemoteSessionBindingsForClientBinding :one
 SELECT EXISTS (
   SELECT 1
@@ -5889,6 +5933,61 @@ func (q *Queries) InsertTrustedDelegationObservationFixture(ctx context.Context,
 		arg.RefreshedAt,
 	)
 	return err
+}
+
+const isGatewayMemberOwnClient = `-- name: IsGatewayMemberOwnClient :one
+SELECT EXISTS (
+  SELECT 1
+  FROM meta_mcp_server_members AS m
+  JOIN meta_mcp_servers AS mm
+    ON mm.id = m.meta_mcp_server_id
+   AND mm.project_id = m.project_id
+   AND mm.deleted IS FALSE
+  JOIN mcp_servers AS s
+    ON s.id = m.mcp_server_id
+   AND s.project_id = m.project_id
+   AND s.deleted IS FALSE
+  JOIN remote_session_client_user_session_issuers AS ml
+    ON ml.user_session_issuer_id = s.user_session_issuer_id
+   AND ml.remote_session_client_id = $1
+  WHERE mm.user_session_issuer_id = $2::uuid
+    AND mm.project_id = $3
+    AND m.deleted IS FALSE
+    AND s.remote_session_issuer_id = $4::uuid
+    AND s.user_session_issuer_id <> $2::uuid
+    AND 1 = (
+      SELECT count(*)
+      FROM remote_session_client_user_session_issuers AS ol
+      JOIN remote_session_clients AS oc
+        ON oc.id = ol.remote_session_client_id
+       AND oc.deleted IS FALSE
+      WHERE ol.user_session_issuer_id = s.user_session_issuer_id
+        AND oc.remote_session_issuer_id = $4
+    )
+) AS is_member_client
+`
+
+type IsGatewayMemberOwnClientParams struct {
+	RemoteSessionClientID uuid.UUID
+	GatewayIssuerID       uuid.UUID
+	ProjectID             uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+}
+
+// Whether a client is the configured client of a live member of the gateway
+// that fronts @gateway_issuer_id: bound to the member's own user session
+// issuer, which holds exactly one live client for the member's remote issuer.
+// A member that uses the gateway's issuer as its own cannot justify a binding.
+func (q *Queries) IsGatewayMemberOwnClient(ctx context.Context, arg IsGatewayMemberOwnClientParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isGatewayMemberOwnClient,
+		arg.RemoteSessionClientID,
+		arg.GatewayIssuerID,
+		arg.ProjectID,
+		arg.RemoteSessionIssuerID,
+	)
+	var is_member_client bool
+	err := row.Scan(&is_member_client)
+	return is_member_client, err
 }
 
 const listConflictingClientBindingsForIssuerMigration = `-- name: ListConflictingClientBindingsForIssuerMigration :many

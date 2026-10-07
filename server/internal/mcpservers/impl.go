@@ -217,6 +217,9 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		if errors.Is(err, usersessionbindings.ErrNotFound) {
 			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 		}
+		if errors.Is(err, usersessionbindings.ErrGatewayMemberCredentials) {
+			return nil, oops.E(oops.CodeConflict, err, "user session issuer holds per-member gateway credentials and cannot be shared").LogError(ctx, logger)
+		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return nil, oops.E(oops.CodeConflict, err, "mcp server slug already in use").LogError(ctx, logger)
@@ -798,6 +801,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		if _, err := usersessionbindings.ValidateAndLock(ctx, dbtx, issuerID.UUID, *authCtx.ProjectID, authCtx.ActiveOrganizationID); err != nil {
 			if errors.Is(err, usersessionbindings.ErrNotFound) {
 				return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+			}
+			if errors.Is(err, usersessionbindings.ErrGatewayMemberCredentials) {
+				return nil, oops.E(oops.CodeConflict, err, "user session issuer holds per-member gateway credentials and cannot be shared").LogError(ctx, logger)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "validate user session issuer").LogError(ctx, logger)
 		}

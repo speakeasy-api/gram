@@ -12,6 +12,53 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const autoAttachMemberOwnClient = `-- name: AutoAttachMemberOwnClient :execrows
+INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+SELECT own.id, $1
+FROM (
+  SELECT c.id, count(*) OVER () AS candidates
+  FROM remote_session_clients AS c
+  JOIN remote_session_client_user_session_issuers AS l
+    ON l.remote_session_client_id = c.id
+  JOIN projects AS p
+    ON p.id = $2
+  WHERE l.user_session_issuer_id = $3
+    AND c.remote_session_issuer_id = $4
+    AND c.deleted IS FALSE
+    AND (c.project_id = $2
+         OR (c.project_id IS NULL AND c.organization_id = p.organization_id))
+) AS own
+WHERE own.candidates = 1
+  AND $3::uuid <> $1::uuid
+ON CONFLICT DO NOTHING
+`
+
+type AutoAttachMemberOwnClientParams struct {
+	GatewayIssuerID uuid.UUID
+	ProjectID       uuid.UUID
+	MemberIssuerID  uuid.UUID
+	RemoteIssuerID  uuid.UUID
+}
+
+// Gateway member credentials: bind the member's own configured client to the
+// gateway's issuer even when the gateway already holds another client of the
+// same remote issuer. The member's client is the unique live client bound to
+// the member's own user session issuer for its remote issuer; zero or several
+// candidates attach nothing. Callers only use this while the gateway owns its
+// issuer exclusively and hold the gateway issuer's owner-binding lock.
+func (q *Queries) AutoAttachMemberOwnClient(ctx context.Context, arg AutoAttachMemberOwnClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, autoAttachMemberOwnClient,
+		arg.GatewayIssuerID,
+		arg.ProjectID,
+		arg.MemberIssuerID,
+		arg.RemoteIssuerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const autoAttachMemberProviderClient = `-- name: AutoAttachMemberProviderClient :execrows
 INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
 SELECT c.id, $1
@@ -57,6 +104,73 @@ func (q *Queries) AutoAttachMemberProviderClient(ctx context.Context, arg AutoAt
 		arg.ProjectID,
 		arg.MemberIssuerID,
 		arg.RemoteIssuerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const autoDetachMemberOwnClient = `-- name: AutoDetachMemberOwnClient :execrows
+DELETE FROM remote_session_client_user_session_issuers AS l
+WHERE l.user_session_issuer_id = $1
+  AND $2::uuid <> $1::uuid
+  AND l.remote_session_client_id IN (
+    SELECT c.id
+    FROM remote_session_clients AS c
+    JOIN remote_session_client_user_session_issuers AS ml
+      ON ml.remote_session_client_id = c.id
+    WHERE ml.user_session_issuer_id = $2
+      AND c.remote_session_issuer_id = $3
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS s
+    WHERE s.deleted IS FALSE
+      AND s.project_id = $4
+      AND s.remote_session_issuer_id = $3
+      AND s.user_session_issuer_id = $1
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM meta_mcp_server_members AS m
+    JOIN meta_mcp_servers AS mm
+      ON mm.project_id = m.project_id
+     AND mm.id = m.meta_mcp_server_id
+     AND mm.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.id = m.mcp_server_id
+     AND s.project_id = m.project_id
+     AND s.deleted IS FALSE
+    JOIN remote_session_client_user_session_issuers AS sl
+      ON sl.user_session_issuer_id = s.user_session_issuer_id
+     AND sl.remote_session_client_id = l.remote_session_client_id
+    WHERE m.project_id = $4
+      AND m.deleted IS FALSE
+      AND mm.user_session_issuer_id = $1
+      AND s.remote_session_issuer_id = $3
+  )
+`
+
+type AutoDetachMemberOwnClientParams struct {
+	GatewayIssuerID uuid.UUID
+	MemberIssuerID  uuid.UUID
+	RemoteIssuerID  uuid.UUID
+	ProjectID       uuid.UUID
+}
+
+// Client-specific reverse of AutoAttachMemberOwnClient: unbind the removed
+// member's own client from the gateway issuer unless a surviving consumer
+// still needs that exact client. A direct server on the gateway issuer for
+// the same remote issuer keeps every client (legacy shared issuers); a live
+// member of any gateway on the issuer keeps the client its own issuer binds.
+// Run after the member row is soft-deleted.
+func (q *Queries) AutoDetachMemberOwnClient(ctx context.Context, arg AutoDetachMemberOwnClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, autoDetachMemberOwnClient,
+		arg.GatewayIssuerID,
+		arg.MemberIssuerID,
+		arg.RemoteIssuerID,
+		arg.ProjectID,
 	)
 	if err != nil {
 		return 0, err
@@ -450,6 +564,51 @@ func (q *Queries) DeleteMetaMCPServer(ctx context.Context, arg DeleteMetaMCPServ
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const detachOrphanedGatewayMemberCredentials = `-- name: DetachOrphanedGatewayMemberCredentials :execrows
+DELETE FROM remote_session_client_user_session_issuers AS l
+USING remote_session_clients AS c
+WHERE l.user_session_issuer_id = $1::uuid
+  AND c.id = l.remote_session_client_id
+  AND c.remote_session_issuer_id IN (
+    SELECT mc.remote_session_issuer_id
+    FROM remote_session_client_user_session_issuers AS ml
+    JOIN remote_session_clients AS mc
+      ON mc.id = ml.remote_session_client_id
+     AND mc.deleted IS FALSE
+    WHERE ml.user_session_issuer_id = $1::uuid
+    GROUP BY mc.remote_session_issuer_id
+    HAVING count(*) > 1
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM meta_mcp_servers AS mm
+    WHERE mm.user_session_issuer_id = $1::uuid AND mm.deleted IS FALSE
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM mcp_servers AS s
+    WHERE s.user_session_issuer_id = $1::uuid AND s.deleted IS FALSE
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM toolsets AS t
+    WHERE t.user_session_issuer_id = $1::uuid AND t.deleted IS FALSE
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM platform_mcp_catalog_registrations AS r
+    WHERE r.user_session_issuer_id = $1::uuid AND r.deleted IS FALSE
+  )
+`
+
+// Clears per-member gateway credentials from an issuer its gateway has left:
+// every binding of a remote issuer for which it holds more than one live
+// client, once no live consumer references it. A lone client per remote
+// issuer stays, as before. Callers hold the issuer's owner-binding lock.
+func (q *Queries) DetachOrphanedGatewayMemberCredentials(ctx context.Context, userSessionIssuerID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, detachOrphanedGatewayMemberCredentials, userSessionIssuerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const findMetaMCPSiblingSharingBackend = `-- name: FindMetaMCPSiblingSharingBackend :one
