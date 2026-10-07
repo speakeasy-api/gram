@@ -6,7 +6,10 @@ import {
   TabsContent,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
-import { useState, type JSX } from "react";
+import { useCallback, useMemo, useState, type JSX } from "react";
+import { CodeSnippet } from "@/components/ui/CodeSnippet";
+import { ConfigContext } from "@/components/ui/context/config";
+import type { Theme } from "@/components/ui/context/theme";
 import { WizardStepHeader } from "./WizardChrome";
 
 /**
@@ -18,40 +21,37 @@ import { WizardStepHeader } from "./WizardChrome";
 const KEY_ENV = "GRAM_AGENT_KEY";
 
 /**
- * The same affordance as Copyable, for a value that is several lines. The
- * snippet keeps its own formatting, so the control sits above it rather than
- * beside it.
+ * A code block, syntax highlighted and dark whatever the app theme is: these
+ * are things to paste into a terminal or a config file, and reading them as
+ * code is the point. The design system's snippet follows the app theme, so
+ * the theme it reads is overridden here rather than forked.
  */
-function CopyableBlock({
+function CodeBlock({
   value,
   label,
+  language,
 }: {
   value: string;
   label: string;
+  language: string;
 }): JSX.Element {
-  const [copied, setCopied] = useState(false);
+  const setTheme = useCallback(() => undefined, []);
+  const dark = useMemo(
+    () => ({ theme: "dark" as Theme, setTheme }),
+    [setTheme],
+  );
   return (
-    <div className="border-border border">
-      <div className="border-border flex items-center justify-between gap-2 border-b px-3 py-2">
-        <Text muted small>
-          {label}
-        </Text>
-        <Button
-          size="sm"
-          variant="secondary"
-          aria-label={`Copy ${label}`}
-          onClick={() => {
-            void navigator.clipboard
-              .writeText(value)
-              .then(() => setCopied(true));
-          }}
-        >
-          {copied ? "Copied" : "Copy"}
-        </Button>
+    <div className="space-y-2">
+      <span className="text-muted-foreground font-mono text-[10px] tracking-[0.08em] uppercase">
+        {label}
+      </span>
+      {/* Named, because highlighting splits the code into token elements and
+          the block is the only thing that still reads as one value. */}
+      <div aria-label={label}>
+        <ConfigContext.Provider value={dark}>
+          <CodeSnippet code={value} language={language} copyable wordWrap />
+        </ConfigContext.Provider>
       </div>
-      <pre className="overflow-x-auto p-3 text-xs">
-        <code>{value}</code>
-      </pre>
     </div>
   );
 }
@@ -145,7 +145,11 @@ export function StepProvision({
                 runners. Run once on the machine the agent lives on.
               </Text>
               {command ? (
-                <Copyable value={command} label="setup command" />
+                <CodeBlock
+                  value={command}
+                  label="setup command"
+                  language="bash"
+                />
               ) : (
                 <Text muted small>
                   {minting
@@ -206,26 +210,65 @@ export function StepProvision({
             className="data-[state=inactive]:hidden"
           >
             <div className="space-y-4 p-4">
+              <Text muted small>
+                For a runtime you configure by hand. Each block is the whole
+                configuration for that client — paste it, with the key in the
+                environment as <code className="text-xs">{KEY_ENV}</code>.
+              </Text>
               <div className="space-y-2">
                 <span className="text-sm font-medium">
                   API key — shown once
                 </span>
                 <Copyable value={key} label="API key" />
+                <Text muted small>
+                  Put it where that runtime reads its secrets. The blocks below
+                  name it rather than carry it, so they are safe to paste into a
+                  repository.
+                </Text>
               </div>
-              <div className="space-y-2">
-                <span className="text-sm font-medium">Header</span>
-                <Copyable
-                  value={`Authorization: Bearer $${KEY_ENV}`}
-                  label="header"
-                />
-              </div>
-              <div className="space-y-2">
-                <span className="text-sm font-medium">
-                  Gateway URL · {serverCount}{" "}
-                  {serverCount === 1 ? "server" : "servers"} behind one endpoint
-                </span>
-                <Copyable value={gatewayURL} label="gateway URL" />
-              </div>
+              <CodeBlock
+                value={[
+                  "# Claude Code",
+                  `claude mcp add --transport http gram ${gatewayURL} \\`,
+                  `  --header "Authorization: Bearer $${KEY_ENV}"`,
+                ].join("\n")}
+                label="Claude Code"
+                language="bash"
+              />
+              <CodeBlock
+                value={[
+                  "# ~/.codex/config.toml",
+                  "[mcp_servers.gram]",
+                  `url = "${gatewayURL}"`,
+                  `bearer_token_env_var = "${KEY_ENV}"`,
+                ].join("\n")}
+                label="Codex"
+                language="toml"
+              />
+              <CodeBlock
+                value={JSON.stringify(
+                  {
+                    mcpServers: {
+                      gram: {
+                        type: "http",
+                        url: gatewayURL,
+                        headers: {
+                          Authorization: `Bearer \${env:${KEY_ENV}}`,
+                        },
+                      },
+                    },
+                  },
+                  null,
+                  2,
+                )}
+                label="mcp.json — Cursor, Windsurf, and others"
+                language="json"
+              />
+              <Text muted small>
+                {serverCount} {serverCount === 1 ? "server" : "servers"} sit
+                behind that one endpoint. Changing what this agent may reach
+                changes what it finds there, without reconnecting.
+              </Text>
             </div>
           </TabsContent>
 
@@ -240,7 +283,11 @@ export function StepProvision({
                 LangGraph, CrewAI, the OpenAI Agents SDK. Read the key from your
                 secret store; never commit it.
               </Text>
-              <CopyableBlock value={code} label="connection snippet" />
+              <CodeBlock
+                value={code}
+                label="connection snippet"
+                language="typescript"
+              />
             </div>
           </TabsContent>
         </Tabs>

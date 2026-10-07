@@ -35,6 +35,7 @@ export default function NewAgentIdentity(): JSX.Element {
 
   return (
     <FormPage
+      width="full"
       title="New agent identity"
       description="Name it, choose the servers it can reach, then connect it to its runtime."
       primaryAction={

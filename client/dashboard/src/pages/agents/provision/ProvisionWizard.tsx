@@ -326,13 +326,15 @@ export function ProvisionWizard({
                   value={scope}
                   onValueChange={(value) => setChosenScope(value as Scope)}
                   disabled={existing}
+                  // The density the design system defines for a choice that
+                  // is one field of a step rather than a section of its own.
+                  size="sm"
                   className="sm:grid-cols-2"
                 >
                   {/* One line each: the choice is a scope, not a paragraph. */}
                   <RadioCard
                     value="project"
                     title="Project"
-                    className="p-3"
                     // Offered only once there is a project to bind to.
                     disabled={!project.id}
                   >
@@ -340,11 +342,7 @@ export function ProvisionWizard({
                       Servers in {project.name}.
                     </Text>
                   </RadioCard>
-                  <RadioCard
-                    value="organization"
-                    title="Organization"
-                    className="p-3"
-                  >
+                  <RadioCard value="organization" title="Organization">
                     <Text muted small>
                       Servers in every {organization.name} project.
                     </Text>

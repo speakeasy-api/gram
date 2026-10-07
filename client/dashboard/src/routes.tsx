@@ -767,7 +767,10 @@ const ROUTE_STRUCTURE = {
         url: "agents",
         icon: "bot",
         stage: "preview",
-        component: AgentsIndex,
+        // indexComponent, not component: a route with children renders its
+        // component as their layout, and the roster has no outlet, so it
+        // would render in place of every child.
+        indexComponent: AgentsIndex,
         subPages: {
           new: {
             title: "New Agent Identity",

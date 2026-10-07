@@ -187,9 +187,14 @@ describe("Provisioning a new agent", () => {
       "agent_new",
     );
 
-    expect(
-      await screen.findByText(/curl -fsSL .*\/agent-mcp\/install\/setup_code/),
-    ).toBeTruthy();
+    // The command renders in a syntax-highlighted block, so it reaches the
+    // DOM as a run of token elements rather than one string. Read the block.
+    const setupCommand = await screen.findByLabelText("setup command");
+    await waitFor(() =>
+      expect(setupCommand.textContent?.replace(/\s+/g, " ")).toMatch(
+        /curl -fsSL .*\/agent-mcp\/install\/setup_code/,
+      ),
+    );
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
   });
 
