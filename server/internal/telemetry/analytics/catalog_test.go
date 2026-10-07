@@ -41,8 +41,8 @@ func TestDefaultCatalog(t *testing.T) {
 	skill, ok := toolCalls.Field("skill")
 	require.True(t, ok)
 	require.Equal(t, RoleDimension, skill.Role)
-	require.True(t, skill.Admits("in"))
-	require.True(t, skill.Admits("count_distinct"), "skills used is a distinct count")
+	require.True(t, skill.AdmitsOperator("in"))
+	require.True(t, skill.AdmitsAggregation("count_distinct"), "skills used is a distinct count")
 	require.Contains(t, skill.Description, "Claude Code", "the one dimension a single producer family fills says so")
 	require.Empty(t, status.Description, "most fields need no description")
 
