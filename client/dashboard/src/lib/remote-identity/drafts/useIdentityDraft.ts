@@ -341,6 +341,8 @@ export type UserIdentityDraft = {
   replacesClient: boolean;
   status: UserIdentityStatus;
   canSave: boolean;
+  /** The operator changed the selection, whether or not it can be saved yet. */
+  pendingChange: boolean;
   /** Resolves true when the commit landed; failures are already on screen. */
   save: () => Promise<boolean>;
   saving: boolean;
@@ -895,6 +897,11 @@ export function useUserIdentityDraft({
     choiceComplete = !!existingClient && !sameAsConnected;
   if (choice === "manual") choiceComplete = clientId.trim() !== "";
 
+  const pendingChange =
+    touched &&
+    status.kind !== "done" &&
+    !(choice === "existing" && sameAsConnected);
+
   const canSave =
     !!selected &&
     !connected &&
@@ -969,6 +976,7 @@ export function useUserIdentityDraft({
     replacesClient,
     status,
     canSave,
+    pendingChange,
     save: async (): Promise<boolean> => {
       // Awaitable so callers can sequence work after it. onError has already
       // put the failure on screen, so the rejection is swallowed here rather

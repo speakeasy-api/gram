@@ -698,20 +698,40 @@ func (m *ChallengeManager) CachedResourceScopesForServer(ctx context.Context, pr
 		}
 		return none, "", false
 	}
-	row, err := remotemcprepo.New(m.db).GetRemoteProtectedResource(ctx, remotemcprepo.GetRemoteProtectedResourceParams{ProjectID: projectID, ResourceIdentifier: resourceURL})
+	scopes, found, err := CachedResourceScopes(ctx, m.db, projectID, resourceURL, useDiscovered)
 	if err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
-			m.logger.ErrorContext(ctx, "get remote protected resource for mcp server", attr.SlogError(err), attr.SlogProjectID(projectID.String()))
-		}
+		m.logger.ErrorContext(ctx, "get remote protected resource for mcp server", attr.SlogError(err), attr.SlogProjectID(projectID.String()))
 		return none, resourceURL, false
+	}
+	return scopes, resourceURL, found
+}
+
+// CachedResourceScopes is the protected resource row at resourceURL as it
+// stands, never probed. found is false when the resource has no row.
+func CachedResourceScopes(ctx context.Context, db remotemcprepo.DBTX, projectID uuid.UUID, resourceURL string, useDiscovered bool) (scopes ResourceScopes, found bool, err error) {
+	row, err := remotemcprepo.New(db).GetRemoteProtectedResource(ctx, remotemcprepo.GetRemoteProtectedResourceParams{ProjectID: projectID, ResourceIdentifier: resourceURL})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ResourceScopesFromRow(nil, useDiscovered), false, nil
+	}
+	if err != nil {
+		return ResourceScopesFromRow(nil, useDiscovered), false, fmt.Errorf("get remote protected resource: %w", err)
+	}
+	return ResourceScopesFromRow(&row, useDiscovered), true, nil
+}
+
+// ResourceScopesFromRow is what a login reads from a protected resource row
+// without probing; a nil row is a resource never read.
+func ResourceScopesFromRow(row *remotemcprepo.RemoteProtectedResource, useDiscovered bool) ResourceScopes {
+	if row == nil {
+		return ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: useDiscovered}
 	}
 	return ResourceScopes{
 		Pin:             row.ScopeOverride,
 		ChallengeScopes: row.ChallengeScopes,
-		ScopesSupported: protectedresource.LastGoodScopes(&row, time.Now()),
+		ScopesSupported: protectedresource.LastGoodScopes(row, time.Now()),
 		Live:            false,
 		UseDiscovered:   useDiscovered,
-	}, resourceURL, true
+	}
 }
 
 // ResourceAppliesToClient reports whether the protected resource at

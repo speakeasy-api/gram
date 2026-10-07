@@ -1293,6 +1293,50 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
+  it("holds Save while a replacement client is incomplete, even with header edits", async () => {
+    connectClient();
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("button", { name: "Clear connection" }));
+    fireEvent.click(screen.getByRole("radio", { name: /Manual/ }));
+    addCustomHeader("X-Team", "eng");
+
+    const save = screen.getByRole("button", { name: "Save" });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByText(
+        "Finish the User Identity change, or cancel it, to save.",
+      ),
+    ).toBeDefined();
+    fireEvent.click(save);
+    await Promise.resolve();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("saves header edits when a cleared client is put back unchanged", async () => {
+    connectClient();
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("button", { name: "Clear connection" }));
+    // The only existing client is the connected one, so nothing changed.
+    expect(
+      screen
+        .getByRole("radio", { name: /Existing client/ })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    addCustomHeader("X-Team", "eng");
+
+    expect(
+      screen.queryByText(
+        "Finish the User Identity change, or cancel it, to save.",
+      ),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
   it("restores the connected client on cancel", () => {
     mocks.clients.mockReturnValue({
       items: [
@@ -2075,7 +2119,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       );
     });
 
-    it("writes the saved pin into the view, then refetches it once", async () => {
+    it("writes the saved pin into the view without a refetch", async () => {
       connectClient();
       mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
 
@@ -2095,14 +2139,10 @@ describe("RemoteMcpIdentitySectionBody", () => {
         [{ mcpServerId: "mcp-server-1" }],
         serverScopes({ pinnedScopes: ["read", "write"] }),
       );
-      expect(mocks.invalidateScopes).toHaveBeenCalledOnce();
-      expect(mocks.invalidateScopes.mock.calls[0]).toHaveLength(1);
-      expect(
-        mocks.invalidateScopes.mock.invocationCallOrder[0],
-      ).toBeGreaterThan(mocks.setScopesData.mock.invocationCallOrder[0]!);
+      expect(mocks.invalidateScopes).not.toHaveBeenCalled();
     });
 
-    it("only marks the pin view stale when headers are saved", async () => {
+    it("leaves the pin view alone when headers are saved", async () => {
       connectClient();
       mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
 
@@ -2110,15 +2150,16 @@ describe("RemoteMcpIdentitySectionBody", () => {
       addCustomHeader("X-Team", "eng");
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-      await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
       await waitFor(() =>
-        expect(mocks.invalidateScopes).toHaveBeenCalledWith(expect.anything(), {
-          refetchType: "none",
-        }),
+        expect(mocks.toastSuccess).toHaveBeenCalledWith(
+          "Upstream headers updated",
+        ),
       );
+      expect(mocks.create).toHaveBeenCalledOnce();
+      expect(mocks.invalidateScopes).not.toHaveBeenCalled();
     });
 
-    it("refetches the pin view once, after both the pin and headers land", async () => {
+    it("keeps the saved pin when headers save alongside it", async () => {
       connectClient();
       mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
 
@@ -2133,19 +2174,10 @@ describe("RemoteMcpIdentitySectionBody", () => {
           "Upstream headers updated",
         ),
       );
-      const refetches = mocks.invalidateScopes.mock.calls
-        .map((call, i) => ({
-          call,
-          order: mocks.invalidateScopes.mock.invocationCallOrder[i]!,
-        }))
-        .filter(({ call }) => call.length === 1);
-      expect(refetches).toHaveLength(1);
-      expect(refetches[0]!.order).toBeGreaterThan(
-        mocks.setScopesData.mock.invocationCallOrder[0]!,
-      );
-      expect(refetches[0]!.order).toBeGreaterThan(
-        mocks.create.mock.invocationCallOrder[0]!,
-      );
+      expect(mocks.toastSuccess).toHaveBeenCalledWith("Pinned scopes updated");
+      expect(mocks.create).toHaveBeenCalledOnce();
+      expect(mocks.setScopesData).toHaveBeenCalledOnce();
+      expect(mocks.invalidateScopes).not.toHaveBeenCalled();
     });
 
     it("lets a pin-only edit through a locked identity", async () => {

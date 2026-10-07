@@ -1,5 +1,6 @@
 import type { RemoteMcpServerScopes } from "@gram/client/models/components/remotemcpserverscopes.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ResourceScopePinField } from "./ResourceScopePinField";
 import {
@@ -354,7 +355,7 @@ describe("ResourceScopePinField", () => {
     ).toBeDefined();
   });
 
-  it("explains that the MCP server and its identity provider define scopes", () => {
+  it("explains that the MCP server and its identity provider define scopes", async () => {
     render(
       <ResourceScopePinField
         pin={pin(["read", "admin"])}
@@ -372,13 +373,18 @@ describe("ResourceScopePinField", () => {
         })}
         connectedClientId="client-1"
         issuerScopes={[]}
-        serverName="eBay"
+        serverName="Linear"
         disabled={false}
       />,
     );
 
-    expect(
+    await userEvent.hover(
       screen.getByRole("button", { name: "About pinned scopes" }),
+    );
+    expect(
+      await screen.findByText(
+        /^Scopes are permissions defined by Linear and its identity provider, not by Speakeasy\./,
+      ),
     ).toBeDefined();
   });
 

@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -20,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -44,15 +42,20 @@ func (s *Service) GetServerScopes(ctx context.Context, payload *gen.GetServerSco
 	if err != nil {
 		return nil, err
 	}
-	target, err := s.loadPinnableServer(ctx, s.db, logger, *authCtx.ProjectID, mcpServerID)
+	target, err := s.loadPinnableServer(ctx, logger, *authCtx.ProjectID, mcpServerID)
 	if err != nil {
 		return nil, err
 	}
-	sharing, err := s.authorizeSharingServers(ctx, s.db, logger, authCtx, target)
+	sharing, err := s.authorizeSharingServers(ctx, logger, authCtx, target)
 	if err != nil {
 		return nil, err
 	}
-	return s.serverScopes(ctx, logger, authCtx, target, sharedServerCount(sharing, target))
+	discover := remotesessions.ResourceScopeDiscoveryEnabled(ctx, logger, s.features, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug)
+	cached, _, err := remotesessions.CachedResourceScopes(ctx, s.db, *authCtx.ProjectID, target.resourceURL, discover)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get protected resource").LogError(ctx, logger)
+	}
+	return s.serverScopes(ctx, logger, authCtx, target, sharedServerCount(sharing, target), cached)
 }
 
 func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerScopePinPayload) (*gen.RemoteMcpServerScopes, error) {
@@ -64,82 +67,124 @@ func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerS
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
 	}
+	target, err := s.loadPinnableServer(ctx, logger, *authCtx.ProjectID, mcpServerID)
+	if err != nil {
+		return nil, err
+	}
+	// Before the transaction: Require can write through the pool, which a request holding the resource lock must never wait on.
+	sharing, err := s.authorizeSharingServers(ctx, logger, authCtx, target)
+	if err != nil {
+		return nil, err
+	}
+	// After every authorization, so the refusal reveals the flag only to a caller allowed to write.
+	// Logins ignore the pin without discovery, so it may only be cleared.
+	discover := remotesessions.ResourceScopeDiscoveryEnabled(ctx, logger, s.features, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug)
+	if len(scopes) > 0 && !discover {
+		return nil, oops.E(oops.CodeBadRequest, nil, "pinned scopes are not enabled for this organization; a pin can only be cleared")
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	target, err := s.loadPinnableServer(ctx, dbtx, logger, *authCtx.ProjectID, mcpServerID)
+	if s.beforeScopePinLock != nil {
+		s.beforeScopePinLock()
+	}
+	row, err := writeScopePin(ctx, dbtx, s.audit, logger, scopePinWrite{authCtx: authCtx, target: target, authorized: sharing, scopes: scopes})
 	if err != nil {
 		return nil, err
 	}
-	q := repo.New(dbtx)
-	if err := q.AcquireRemoteProtectedResourceLock(ctx, repo.AcquireRemoteProtectedResourceLockParams{ProjectID: *authCtx.ProjectID, ResourceIdentifier: target.resourceURL}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock protected resource").LogError(ctx, logger)
-	}
-	// Authorized under the lock, so concurrent pin writes see one sharing set.
-	sharing, err := s.authorizeSharingServers(ctx, dbtx, logger, authCtx, target)
-	if err != nil {
-		return nil, err
-	}
-	// After every authorization, so the refusal reveals the flag only to a caller allowed to write.
-	// Logins ignore the pin without discovery, so it may only be cleared.
-	if len(scopes) > 0 && !remotesessions.ResourceScopeDiscoveryEnabled(ctx, logger, s.features, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "pinned scopes are not enabled for this organization; a pin can only be cleared")
-	}
-	var before []string
-	existing, err := q.GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: *authCtx.ProjectID, ResourceIdentifier: target.resourceURL})
-	switch {
-	case err == nil:
-		before = existing.ScopeOverride
-	case errors.Is(err, pgx.ErrNoRows):
-	default:
-		return nil, oops.E(oops.CodeUnexpected, err, "get protected resource").LogError(ctx, logger)
-	}
-
-	if !slices.Equal(before, scopes) {
-		row, err := q.UpsertRemoteProtectedResourceScopeOverride(ctx, repo.UpsertRemoteProtectedResourceScopeOverrideParams{
-			ProjectID:          *authCtx.ProjectID,
-			OrganizationID:     authCtx.ActiveOrganizationID,
-			ResourceIdentifier: target.resourceURL,
-			ScopeOverride:      scopes,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "pin protected resource scopes").LogError(ctx, logger)
-		}
-
-		affected := make([]string, 0, len(sharing))
-		for _, id := range sharing {
-			affected = append(affected, id.String())
-		}
-		if err := s.audit.LogMcpServerScopePinUpdate(ctx, dbtx, audit.LogMcpServerScopePinUpdateEvent{
-			OrganizationID:       authCtx.ActiveOrganizationID,
-			ProjectID:            *authCtx.ProjectID,
-			Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName:     authCtx.Email,
-			ActorSlug:            nil,
-			McpServerURN:         urn.NewMcpServer(target.server.ID),
-			McpServerName:        conv.FromPGTextOrEmpty[string](target.server.Name),
-			McpServerSlug:        conv.FromPGTextOrEmpty[string](target.server.Slug),
-			ResourceURL:          target.resourceURL,
-			AffectedMcpServerIDs: affected,
-			ScopesBefore:         before,
-			ScopesAfter:          row.ScopeOverride,
-		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "log scope pin update").LogError(ctx, logger)
-		}
-	}
-
-	// Release the resource lock and connection even for a no-op before the
-	// response queries the pool; waiting until the deferred rollback can deadlock
-	// when other requests occupy the remaining connections waiting on this lock.
+	// Commit before the response reads the pool, releasing the lock and connection even for a no-op.
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return s.serverScopes(ctx, logger, authCtx, target, sharedServerCount(sharing, target))
+	return s.serverScopes(ctx, logger, authCtx, target, sharedServerCount(sharing, target), remotesessions.ResourceScopesFromRow(row, discover))
+}
+
+type scopePinWrite struct {
+	authCtx    *contextvalues.AuthContext
+	target     pinnableServer
+	authorized []uuid.UUID
+	scopes     []string
+}
+
+// writeScopePin runs only on dbtx: a second pool connection taken while holding
+// the resource lock can starve requests queued on it. It returns the resource
+// row as committed, nil when there is none.
+func writeScopePin(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, logger *slog.Logger, w scopePinWrite) (*repo.RemoteProtectedResource, error) {
+	projectID := *w.authCtx.ProjectID
+	q := repo.New(dbtx)
+	url, err := q.GetRemoteURLForMcpServerForShare(ctx, repo.GetRemoteURLForMcpServerForShareParams{McpServerID: w.target.server.ID, ProjectID: projectID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeNotFound, err, "mcp server is not backed by a remote mcp server").LogError(ctx, logger)
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get remote url for mcp server").LogError(ctx, logger)
+	}
+	if url != w.target.resourceURL {
+		return nil, oops.E(oops.CodeConflict, nil, "the mcp server's url changed while saving; reload and try again").LogError(ctx, logger)
+	}
+	if err := q.AcquireRemoteProtectedResourceLock(ctx, repo.AcquireRemoteProtectedResourceLockParams{ProjectID: projectID, ResourceIdentifier: w.target.resourceURL}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock protected resource").LogError(ctx, logger)
+	}
+	sharing, err := q.ListMcpServerIDsByRemoteURL(ctx, repo.ListMcpServerIDsByRemoteURLParams{ProjectID: projectID, Url: w.target.resourceURL})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers sharing the protected resource").LogError(ctx, logger)
+	}
+	if !slices.Equal(sharing, w.authorized) {
+		return nil, oops.E(oops.CodeConflict, nil, "the mcp servers sharing this url changed while saving; reload and try again").LogError(ctx, logger)
+	}
+
+	var existing *repo.RemoteProtectedResource
+	row, err := q.GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: projectID, ResourceIdentifier: w.target.resourceURL})
+	switch {
+	case err == nil:
+		existing = &row
+	case errors.Is(err, pgx.ErrNoRows):
+	default:
+		return nil, oops.E(oops.CodeUnexpected, err, "get protected resource").LogError(ctx, logger)
+	}
+	var before []string
+	if existing != nil {
+		before = existing.ScopeOverride
+	}
+	if slices.Equal(before, w.scopes) {
+		return existing, nil
+	}
+
+	updated, err := q.UpsertRemoteProtectedResourceScopeOverride(ctx, repo.UpsertRemoteProtectedResourceScopeOverrideParams{
+		ProjectID:          projectID,
+		OrganizationID:     w.authCtx.ActiveOrganizationID,
+		ResourceIdentifier: w.target.resourceURL,
+		ScopeOverride:      w.scopes,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "pin protected resource scopes").LogError(ctx, logger)
+	}
+
+	affected := make([]string, 0, len(sharing))
+	for _, id := range sharing {
+		affected = append(affected, id.String())
+	}
+	if err := auditLogger.LogMcpServerScopePinUpdate(ctx, dbtx, audit.LogMcpServerScopePinUpdateEvent{
+		OrganizationID:       w.authCtx.ActiveOrganizationID,
+		ProjectID:            projectID,
+		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, w.authCtx.UserID),
+		ActorDisplayName:     w.authCtx.Email,
+		ActorSlug:            nil,
+		McpServerURN:         urn.NewMcpServer(w.target.server.ID),
+		McpServerName:        conv.FromPGTextOrEmpty[string](w.target.server.Name),
+		McpServerSlug:        conv.FromPGTextOrEmpty[string](w.target.server.Slug),
+		ResourceURL:          w.target.resourceURL,
+		AffectedMcpServerIDs: affected,
+		ScopesBefore:         before,
+		ScopesAfter:          updated.ScopeOverride,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log scope pin update").LogError(ctx, logger)
+	}
+	return &updated, nil
 }
 
 // authorizeServerScopes requires mcp:write on the server: the read reveals connection config.
@@ -161,8 +206,8 @@ func (s *Service) authorizeServerScopes(ctx context.Context, rawID string) (*con
 
 // authorizeSharingServers requires mcp:write on every live server sharing the
 // target's upstream URL: the pin is keyed by resource, so it applies to all of them.
-func (s *Service) authorizeSharingServers(ctx context.Context, db repo.DBTX, logger *slog.Logger, authCtx *contextvalues.AuthContext, target pinnableServer) ([]uuid.UUID, error) {
-	sharing, err := repo.New(db).ListMcpServerIDsByRemoteURL(ctx, repo.ListMcpServerIDsByRemoteURLParams{ProjectID: *authCtx.ProjectID, Url: target.resourceURL})
+func (s *Service) authorizeSharingServers(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, target pinnableServer) ([]uuid.UUID, error) {
+	sharing, err := repo.New(s.db).ListMcpServerIDsByRemoteURL(ctx, repo.ListMcpServerIDsByRemoteURLParams{ProjectID: *authCtx.ProjectID, Url: target.resourceURL})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers sharing the protected resource").LogError(ctx, logger)
 	}
@@ -191,15 +236,15 @@ func sharedServerCount(sharing []uuid.UUID, target pinnableServer) int {
 	return n
 }
 
-func (s *Service) loadPinnableServer(ctx context.Context, db remotesessionsrepo.DBTX, logger *slog.Logger, projectID, mcpServerID uuid.UUID) (pinnableServer, error) {
-	server, err := mcpserversrepo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpServerID, ProjectID: projectID})
+func (s *Service) loadPinnableServer(ctx context.Context, logger *slog.Logger, projectID, mcpServerID uuid.UUID) (pinnableServer, error) {
+	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpServerID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return pinnableServer{}, oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
 	}
 	if err != nil {
 		return pinnableServer{}, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
-	resourceURL, err := remotesessionsrepo.New(db).GetRemoteURLForMcpServer(ctx, remotesessionsrepo.GetRemoteURLForMcpServerParams{McpServerID: mcpServerID, ProjectID: projectID})
+	resourceURL, err := remotesessionsrepo.New(s.db).GetRemoteURLForMcpServer(ctx, remotesessionsrepo.GetRemoteURLForMcpServerParams{McpServerID: mcpServerID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return pinnableServer{}, oops.E(oops.CodeNotFound, err, "mcp server is not backed by a remote mcp server").LogError(ctx, logger)
 	}
@@ -211,26 +256,11 @@ func (s *Service) loadPinnableServer(ctx context.Context, db remotesessionsrepo.
 
 // serverScopes resolves what a login through each bound client would request
 // now from the cached resource row, as the consent card does; it never probes.
-func (s *Service) serverScopes(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, target pinnableServer, sharedServers int) (*gen.RemoteMcpServerScopes, error) {
-	projectID := *authCtx.ProjectID
-	orgID := authCtx.ActiveOrganizationID
-	discover := remotesessions.ResourceScopeDiscoveryEnabled(ctx, logger, s.features, orgID, authCtx.OrganizationSlug)
-
-	cached := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: discover}
-	row, err := repo.New(s.db).GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: projectID, ResourceIdentifier: target.resourceURL})
-	switch {
-	case err == nil:
-		cached.Pin = row.ScopeOverride
-		cached.ChallengeScopes = row.ChallengeScopes
-		cached.ScopesSupported = protectedresource.LastGoodScopes(&row, time.Now())
-	case errors.Is(err, pgx.ErrNoRows):
-	default:
-		return nil, oops.E(oops.CodeUnexpected, err, "get protected resource").LogError(ctx, logger)
-	}
-
+func (s *Service) serverScopes(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, target pinnableServer, sharedServers int, cached remotesessions.ResourceScopes) (*gen.RemoteMcpServerScopes, error) {
 	clients := []*gen.RemoteMcpServerClientScopes{}
 	if target.server.UserSessionIssuerID.Valid {
-		clients, err = s.clientScopes(ctx, projectID, orgID, target, cached, discover)
+		var err error
+		clients, err = s.clientScopes(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, target, cached)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve client scopes").LogError(ctx, logger)
 		}
@@ -242,13 +272,14 @@ func (s *Service) serverScopes(ctx context.Context, logger *slog.Logger, authCtx
 		AdvertisedScopesKnown: cached.ScopesSupported != nil,
 		AdvertisedScopes:      cached.ScopesSupported,
 		ChallengeScopes:       conv.DefaultSlice(cached.ChallengeScopes, []string{}),
-		DiscoveryEnabled:      discover,
+		DiscoveryEnabled:      cached.UseDiscovered,
 		Clients:               clients,
 		SharedServerCount:     sharedServers,
 	}, nil
 }
 
-func (s *Service) clientScopes(ctx context.Context, projectID uuid.UUID, orgID string, target pinnableServer, cached remotesessions.ResourceScopes, discover bool) ([]*gen.RemoteMcpServerClientScopes, error) {
+func (s *Service) clientScopes(ctx context.Context, projectID uuid.UUID, orgID string, target pinnableServer, cached remotesessions.ResourceScopes) ([]*gen.RemoteMcpServerClientScopes, error) {
+	discover := cached.UseDiscovered
 	issuerID := target.server.UserSessionIssuerID.UUID
 	rows, err := remotesessionsrepo.New(s.db).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
 		UserSessionIssuerID: issuerID,
@@ -260,7 +291,11 @@ func (s *Service) clientScopes(ctx context.Context, projectID uuid.UUID, orgID s
 	}
 	var owners map[uuid.UUID]bool
 	if discover && len(rows) > 0 {
-		owners, err = remotesessions.ResourceOwners(ctx, s.db, projectID, orgID, issuerID, target.resourceURL)
+		clientIDs := make([]uuid.UUID, 0, len(rows))
+		for _, r := range rows {
+			clientIDs = append(clientIDs, r.ClientID)
+		}
+		owners, err = remotesessions.ResourceOwnersAmong(ctx, s.db, orgID, clientIDs, target.resourceURL)
 		if err != nil {
 			return nil, fmt.Errorf("decide resource ownership: %w", err)
 		}

@@ -188,10 +188,9 @@ export function RemoteMcpIdentitySectionBody({
     createHeader.isPending || updateHeader.isPending || deleteHeader.isPending;
 
   const invalidateHeaders = async () => {
-    await Promise.all([
-      invalidateAllRemoteMcpServerHeaders(queryClient, { refetchType: "all" }),
-      invalidateAllGetRemoteMcpServerScopes(queryClient),
-    ]);
+    await invalidateAllRemoteMcpServerHeaders(queryClient, {
+      refetchType: "all",
+    });
     const refreshed = await headersQuery.refetch();
     return !refreshed.isError && !!refreshed.data;
   };
@@ -298,9 +297,17 @@ export function RemoteMcpIdentitySectionBody({
   // identity first would leave the server with none.
   const userSwitchBlocked =
     selectedMode === "user" && actualMode !== "user" && !userDraft.canSave;
+  // An unfinished identity edit holds the whole commit, or Save would write
+  // the rest and silently drop it.
+  const userEditIncomplete =
+    selectedMode === "user" &&
+    actualMode === "user" &&
+    userDraft.pendingChange &&
+    !userDraft.canSave;
 
   const performSave = async () => {
-    if (!canWrite || rbacLoading || userSwitchBlocked) return;
+    if (!canWrite || rbacLoading || userSwitchBlocked || userEditIncomplete)
+      return;
     setConfirmOpen(false);
     try {
       if (leavingUser) await detachUserIdentity();
@@ -333,8 +340,6 @@ export function RemoteMcpIdentitySectionBody({
       scopePinDirty ? scopePin.save() : Promise.resolve(false),
       headerDrafts.save(),
     ]);
-    // One refetch once both have landed, so neither overwrites the other.
-    void invalidateAllGetRemoteMcpServerScopes(queryClient);
     if (pinResult.status === "rejected") {
       toast.error(
         errorMessage(pinResult.reason, "Failed to save pinned scopes"),
@@ -395,6 +400,7 @@ export function RemoteMcpIdentitySectionBody({
   const canSave =
     !headersBlocked &&
     !userSwitchBlocked &&
+    !userEditIncomplete &&
     (identityCanSave || headerDrafts.isDirty || scopePinDirty);
   const savePending =
     detachIssuer.isPending ||
@@ -657,6 +663,11 @@ export function RemoteMcpIdentitySectionBody({
               // nothing is wrong.
               <Text small warning>
                 {headerDrafts.validationError}
+              </Text>
+            ) : null}
+            {userEditIncomplete ? (
+              <Text small warning>
+                Finish the User Identity change, or cancel it, to save.
               </Text>
             ) : null}
             <SettingsSection.FooterActions>

@@ -281,6 +281,29 @@ func (q *Queries) GetRemoteProtectedResource(ctx context.Context, arg GetRemoteP
 	return i, err
 }
 
+const getRemoteURLForMcpServerForShare = `-- name: GetRemoteURLForMcpServerForShare :one
+SELECT rms.url
+FROM mcp_servers AS m
+JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE m.id = $1
+  AND m.project_id = $2
+  AND m.deleted IS FALSE
+FOR SHARE OF rms
+`
+
+type GetRemoteURLForMcpServerForShareParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// GetRemoteURLForMcpServer holding the remote server row, so a URL edit waits for the scope pin write.
+func (q *Queries) GetRemoteURLForMcpServerForShare(ctx context.Context, arg GetRemoteURLForMcpServerForShareParams) (string, error) {
+	row := q.db.QueryRow(ctx, getRemoteURLForMcpServerForShare, arg.McpServerID, arg.ProjectID)
+	var url string
+	err := row.Scan(&url)
+	return url, err
+}
+
 const getServerByID = `-- name: GetServerByID :one
 SELECT id, project_id, name, slug, transport_type, url, created_at, updated_at, deleted_at, deleted
 FROM remote_mcp_servers

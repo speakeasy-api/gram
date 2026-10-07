@@ -59,6 +59,8 @@ type Service struct {
 	features              feature.Provider
 	// beforeClaim runs between the claim's list and re-read with the locked previous URL; tests only.
 	beforeClaim func(holderPID uint32, previousURL string)
+	// beforeScopePinLock runs inside the pin transaction before it locks anything; tests only.
+	beforeScopePinLock func()
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -91,6 +93,7 @@ func NewService(
 		distributionAdmission: admission.NewGuard(nil, nil),
 		features:              features,
 		beforeClaim:           nil,
+		beforeScopePinLock:    nil,
 	}
 }
 

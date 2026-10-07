@@ -338,6 +338,16 @@ WHERE project_id = @project_id
 -- Serializes writes to one resource row even before it exists, until commit or rollback.
 SELECT pg_advisory_xact_lock(hashtextextended('remote_protected_resources:' || CAST(@project_id::uuid AS text) || ':' || @resource_identifier::text, 0));
 
+-- name: GetRemoteURLForMcpServerForShare :one
+-- GetRemoteURLForMcpServer holding the remote server row, so a URL edit waits for the scope pin write.
+SELECT rms.url
+FROM mcp_servers AS m
+JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE m.id = @mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+FOR SHARE OF rms;
+
 -- name: ListMcpServerIDsByRemoteURL :many
 -- Live MCP servers in the project proxying to url, which share one protected resource.
 SELECT m.id

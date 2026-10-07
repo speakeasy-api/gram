@@ -75,19 +75,36 @@ func ResourceOwnersForServers(ctx context.Context, db remotesessions_repo.DBTX, 
 	}
 	for _, q := range queries {
 		ids := siblings[pairKey{issuer: q.UserSessionIssuerID, project: q.ProjectID}]
-		// Siblings are judged among each other only, as at login.
-		among := make(map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, len(ids))
-		for _, id := range ids {
-			if rows, ok := attachments[id]; ok {
-				among[id] = rows
-			}
-		}
-		owners := make(map[uuid.UUID]bool, len(ids))
-		for _, id := range ids {
-			resource := resourceAmongSiblings(among, id, q.Upstream)
-			owners[id] = resource != "" && sameUpstream(resource, q.Upstream)
-		}
-		out[q.ServerID] = owners
+		out[q.ServerID] = ownersAmong(attachments, ids, q.Upstream)
 	}
 	return out, nil
+}
+
+// ResourceOwnersAmong is ResourceOwners for a caller that already listed the
+// clients bound to the login's user session issuer, as clientIDs.
+func ResourceOwnersAmong(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID, upstream string) (map[uuid.UUID]bool, error) {
+	if len(clientIDs) == 0 {
+		return map[uuid.UUID]bool{}, nil
+	}
+	attachments, err := attachmentsForClients(ctx, db, organizationID, clientIDs)
+	if err != nil {
+		return nil, err
+	}
+	return ownersAmong(attachments, clientIDs, upstream), nil
+}
+
+func ownersAmong(attachments map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, ids []uuid.UUID, upstream string) map[uuid.UUID]bool {
+	// Siblings are judged among each other only, as at login.
+	among := make(map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, len(ids))
+	for _, id := range ids {
+		if rows, ok := attachments[id]; ok {
+			among[id] = rows
+		}
+	}
+	owners := make(map[uuid.UUID]bool, len(ids))
+	for _, id := range ids {
+		resource := resourceAmongSiblings(among, id, upstream)
+		owners[id] = resource != "" && sameUpstream(resource, upstream)
+	}
+	return owners
 }

@@ -665,3 +665,42 @@ func TestSetServerScopePin_FlagOffAllowsClearing(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []any{"read", "write"}, before["pinned_scopes"])
 }
+
+func TestSetServerScopePin_RefusesWhenSharingSetChangesAfterAuthorization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://pin-race-"+uuid.NewString()[:8]+".example.com/mcp")
+	ti.service.SetBeforeScopePinLock(func() { seedSiblingServer(t, ctx, ti, srv) })
+
+	_, err := setPin(ctx, ti, srv.mcpServerID, "read")
+	requireOopsCode(t, err, oops.CodeConflict)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	_, err = repo.New(ti.conn).GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: *authCtx.ProjectID, ResourceIdentifier: srv.url})
+	require.Error(t, err, "a refused pin writes nothing")
+	require.Zero(t, auditCount(t, ctx, ti))
+}
+
+func TestSetServerScopePin_RefusesWhenURLChangesAfterAuthorization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://pin-url-race-"+uuid.NewString()[:8]+".example.com/mcp")
+	moved := "https://pin-url-moved-" + uuid.NewString()[:8] + ".example.com/mcp"
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.service.SetBeforeScopePinLock(func() {
+		q := repo.New(ti.conn)
+		remote, err := q.GetServerByID(ctx, repo.GetServerByIDParams{ID: srv.remoteServerID, ProjectID: *authCtx.ProjectID})
+		require.NoError(t, err)
+		_, err = q.UpdateServer(ctx, repo.UpdateServerParams{Name: remote.Name, Slug: remote.Slug, TransportType: remote.TransportType, Url: moved, ID: remote.ID, ProjectID: remote.ProjectID})
+		require.NoError(t, err)
+	})
+
+	_, err := setPin(ctx, ti, srv.mcpServerID, "read")
+	requireOopsCode(t, err, oops.CodeConflict)
+	for _, url := range []string{srv.url, moved} {
+		_, err = repo.New(ti.conn).GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: *authCtx.ProjectID, ResourceIdentifier: url})
+		require.Error(t, err, "a refused pin writes nothing")
+	}
+	require.Zero(t, auditCount(t, ctx, ti))
+}
