@@ -48,6 +48,7 @@ var logDialects = []LogDialect{
 	ClaudeCodeLog{},
 	CodexLog{},
 	GramLog{},
+	HooksLog{},
 }
 
 func ForLog(record *otelv1.InboundLogRecord) LogDialect {

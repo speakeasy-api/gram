@@ -51,19 +51,27 @@ func classify(source, rawEventName, eventType, attributedProvider, dialectProvid
 	return out
 }
 
-// logClassification classifies log records.
-type logClassification struct{}
+// logClassification classifies log records. A record no dialect types is
+// counted, under the surface the dialect knew from the scope, so a new or
+// renamed event shows up without a query.
+type logClassification struct {
+	instruments *Instruments
+}
 
 func (*logClassification) Name() string {
 	return classificationEnricherName
 }
 
-func (*logClassification) Enrich(_ context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
+func (c *logClassification) Enrich(ctx context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
 	d := dialect.ForLog(record)
+	eventType := stated(d.EventType(record))
+	if eventType == dialect.EventTypeUnclassified {
+		c.instruments.recordUnclassified(ctx, missingLabelLog(d, record))
+	}
 	return classify(
 		inboundLogSource(record),
 		stated(d.EventName(record)),
-		stated(d.EventType(record)),
+		eventType,
 		inboundLogAttributeString(record, string(attr.ProviderKey)),
 		stated(d.Provider(record)),
 		stated(d.Surface(record)),
@@ -71,18 +79,24 @@ func (*logClassification) Enrich(_ context.Context, record *otelv1.InboundLogRec
 }
 
 // spanClassification classifies spans. A span's raw name is the span name.
-type spanClassification struct{}
+type spanClassification struct {
+	instruments *Instruments
+}
 
 func (*spanClassification) Name() string {
 	return classificationEnricherName
 }
 
-func (*spanClassification) Enrich(_ context.Context, span *otelv1.InboundSpan) ([]attribute.KeyValue, error) {
+func (c *spanClassification) Enrich(ctx context.Context, span *otelv1.InboundSpan) ([]attribute.KeyValue, error) {
 	d := dialect.ForSpan(span)
+	eventType := stated(d.EventType(span))
+	if eventType == dialect.EventTypeUnclassified {
+		c.instruments.recordUnclassified(ctx, missingLabelSpan(d, span))
+	}
 	return classify(
 		inboundSpanSource(span),
 		stated(d.EventName(span)),
-		stated(d.EventType(span)),
+		eventType,
 		inboundSpanAttributeString(span, string(attr.ProviderKey)),
 		stated(d.Provider(span)),
 		stated(d.Surface(span)),

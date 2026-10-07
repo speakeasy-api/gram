@@ -3,7 +3,10 @@ package enrich
 import (
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/agentsurface"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,6 +56,21 @@ func TestEnrichLogClassificationNamesWhatARecordIs(t *testing.T) {
 		require.NotContains(t, columns, SurfaceColumnKey, "the semantic conventions do not say which agent was behind a request")
 	})
 
+	t.Run("a hook row the hooks endpoint republished is typed by its hook event, on the hook source", func(t *testing.T) {
+		t.Parallel()
+		record := inboundTestLog(dialect.HooksLogScopeName, "codex", "PostToolUse",
+			logStringAttribute("gram.hook.source", "codex"),
+			logStringAttribute("gram.tool.name", "shell"),
+		)
+
+		columns := enrichedColumns(t, enricher, record)
+		require.Equal(t, dialect.EventTypeToolCallResult, columns[EventTypeColumnKey].AsString())
+		require.Equal(t, "PostToolUse", columns[RawEventNameColumnKey].AsString())
+		require.Equal(t, "codex", columns[SourceColumnKey].AsString())
+		require.Equal(t, "openai", columns[ProviderColumnKey].AsString())
+		require.Equal(t, "codex", columns[SurfaceColumnKey].AsString())
+	})
+
 	t.Run("an unclassified Claude Code record keeps its name and producer and gets no type", func(t *testing.T) {
 		t.Parallel()
 		record := inboundTestLog(claudeCodeScopeName, "claude-code", "hook_registered")
@@ -90,4 +108,34 @@ func TestEnrichLogClassificationNamesWhatARecordIs(t *testing.T) {
 		columns := enrichedColumns(t, enricher, record)
 		require.Equal(t, "claude-code", columns[SourceColumnKey].AsString())
 	})
+}
+
+func TestEnrichLogClassificationCountsWhatNoDialectNames(t *testing.T) {
+	t.Parallel()
+
+	reader, meterProvider := readableMeter(t)
+	enricher := &logClassification{instruments: NewInstruments(testenv.NewLogger(t), meterProvider)}
+
+	// An event the vocabulary does not name is counted on its agent surface
+	// when the dialect knew the surface from the scope, in the vocabulary's
+	// spelling (Claude Code's own export); a hook row's surface is read off
+	// the record, so it is counted under "other" whatever it says; a typed
+	// record is not counted at all.
+	columns := enrichedColumns(t, enricher, inboundTestLog(claudeCodeScopeName, "claude-code", "hook_registered"))
+	require.NotContains(t, columns, EventTypeColumnKey)
+	columns = enrichedColumns(t, enricher, inboundTestLog(dialect.HooksLogScopeName, "claude-code", "SessionStart", logStringAttribute("gram.hook.source", "claude-code")))
+	require.NotContains(t, columns, EventTypeColumnKey)
+	columns = enrichedColumns(t, enricher, inboundTestLog(dialect.HooksLogScopeName, "codex", "PostToolUse", logStringAttribute("gram.hook.source", "codex")))
+	require.Equal(t, dialect.EventTypeToolCallResult, columns[EventTypeColumnKey].AsString())
+
+	require.Equal(t, int64(1), counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface(string(agentsurface.SurfaceClaudeCode))))
+	require.Equal(t, int64(1), counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface(missingLabelOther)))
+	require.Zero(t, counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface("claude-code")), "the raw surface is never a label")
+	require.Zero(t, counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface(string(agentsurface.SurfaceCodex))))
+
+	// A free-form surface a producer controls lands under other as well.
+	columns = enrichedColumns(t, enricher, inboundTestLog(dialect.HooksLogScopeName, "x", "SessionStart", logStringAttribute("gram.hook.source", "my-custom-agent-7")))
+	require.NotContains(t, columns, EventTypeColumnKey)
+	require.Equal(t, int64(2), counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface(missingLabelOther)))
+	require.Zero(t, counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface("my-custom-agent-7")))
 }

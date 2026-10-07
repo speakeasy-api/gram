@@ -1073,7 +1073,15 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 			)
 		}
 	}
-	s.writeCanonicalTelemetry(ctx, payload, authCtx, &metadata, hookSource, timestamp, blockReason)
+	rows := s.canonicalTelemetryRows(ctx, payload, authCtx, &metadata, hookSource, timestamp, blockReason)
+	// The tee gets its own copies before the writer scrubs what it stores.
+	teeRows := cloneHookTelemetryRows(rows)
+	if s.telemetryLogger != nil {
+		for _, row := range rows {
+			s.logHookTelemetry(ctx, authCtx, &metadata, row.timestamp, row.toolName, row.attrs)
+		}
+	}
+	s.teeCanonicalHookToEventFeed(ctx, payload, authCtx, &metadata, hookSource, blockReason, teeRows)
 	promptCaptured, err := s.persistCanonicalConversationEvent(ctx, payload, authCtx, &metadata, hookSource, timestamp)
 	if err != nil {
 		event := "hooks_ingest_chat_persist_failed"
@@ -1249,10 +1257,13 @@ func (s *Service) canonicalSessionMetadata(ctx context.Context, payload *gen.Ing
 	return metadata
 }
 
-func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, timestamp time.Time, blockReason string) {
-	if s.telemetryLogger == nil {
-		return
-	}
+// canonicalTelemetryRows builds the rows recorded for one hook event, in the
+// order they are written: the event's own row and, when a skill was
+// inferred on it, the derived activation row. The telemetry writer stores
+// them and the event feed tee republishes them, so both see the same
+// attributes.
+func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, hookSource string, timestamp time.Time, blockReason string) []hookTelemetryRow {
+	rows := make([]hookTelemetryRow, 0, 2)
 
 	hookEventName := telemetryHookEventName(payload)
 	toolName := canonicalTelemetryToolName(payload)
@@ -1326,7 +1337,7 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 	// split by personal vs team account, matching the legacy per-provider paths.
 	stampAccountAttribution(attrs, *metadata)
 
-	s.logHookTelemetry(ctx, authCtx, metadata, timestamp, toolName, attrs)
+	rows = append(rows, hookTelemetryRow{timestamp: timestamp, toolName: toolName, attrs: attrs})
 
 	// A skill name on an ordinary tool/prompt event is an inferred activation
 	// (Codex has no dedicated Skill tool): the underlying event was recorded
@@ -1347,8 +1358,9 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 		attrs[attr.GenAIToolCallArgumentsKey] = jsonString(map[string]string{"skill": skill})
 		mergeSourceAttributes(attrs, authenticatedIngestOptions(ctx).SourceAttributes)
 		stampAccountAttribution(attrs, *metadata)
-		s.logHookTelemetry(ctx, authCtx, metadata, timestamp, "Skill", attrs)
+		rows = append(rows, hookTelemetryRow{timestamp: timestamp, toolName: "Skill", attrs: attrs})
 	}
+	return rows
 }
 
 func mergeSourceAttributes(base, source map[attr.Key]any) {

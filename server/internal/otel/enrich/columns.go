@@ -71,11 +71,11 @@ func usageColumns() []columnDefinition {
 // agent_events writer reads what they wrote.
 //
 // The instruments carry the missing-value counter the per-column enrichers
-// record into; the classification enricher counts nothing.
+// record into and the unclassified counter the classification records.
 func LogColumns(in *Instruments) []LogEnricher {
 	definitions := registry()
 	out := make([]LogEnricher, 0, len(definitions)+1)
-	out = append(out, &logClassification{})
+	out = append(out, &logClassification{instruments: in})
 	for _, definition := range definitions {
 		out = append(out, definition.log(in))
 	}
@@ -87,7 +87,7 @@ func LogColumns(in *Instruments) []LogEnricher {
 func SpanColumns(in *Instruments) []SpanEnricher {
 	definitions := registry()
 	out := make([]SpanEnricher, 0, len(definitions)+1)
-	out = append(out, &spanClassification{})
+	out = append(out, &spanClassification{instruments: in})
 	for _, definition := range definitions {
 		out = append(out, definition.span(in))
 	}
