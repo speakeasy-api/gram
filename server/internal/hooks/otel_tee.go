@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"math"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 )
 
 const (

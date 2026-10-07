@@ -1,10 +1,10 @@
 package otel
 
 import (
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 )
 
 type spanLike interface {

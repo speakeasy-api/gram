@@ -3,7 +3,6 @@ package otel
 import (
 	"context"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"io"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gen "github.com/speakeasy-api/gram/server/gen/otel"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 )
 
 func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload, body io.ReadCloser) error {

@@ -2,7 +2,6 @@ package otel
 
 import (
 	"bytes"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +14,7 @@ import (
 	otelserver "github.com/speakeasy-api/gram/server/gen/http/otel/server"
 	gen "github.com/speakeasy-api/gram/server/gen/otel"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
