@@ -18,7 +18,7 @@ import (
 func newUploadCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "upload",
-		Usage: "Upload an asset to Gram",
+		Usage: "Upload an asset to the Speakeasy AI Control Plane",
 		Description: `
 Example:
   speakeasy upload --type openapiv3 \

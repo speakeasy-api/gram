@@ -159,10 +159,30 @@ func deriveAuthConfig(toolset *types.Toolset) (headerName string, envVarName str
 	return headerName, envVarName
 }
 
+const (
+	// DefaultServerName names an installed MCP server when the URL gives no
+	// better name.
+	DefaultServerName = "speakeasy-mcp"
+
+	// legacyServerPrefix is the prefix CLI releases before the speakeasy
+	// rename used for DefaultServerName.
+	legacyServerPrefix = "gram-mcp"
+)
+
+// LegacyServerName returns the name earlier CLI releases used for name, so an
+// entry they installed is recognised and replaced rather than duplicated.
+func LegacyServerName(name string) (string, bool) {
+	rest, ok := strings.CutPrefix(name, DefaultServerName)
+	if !ok {
+		return "", false
+	}
+	return legacyServerPrefix + rest, true
+}
+
 func deriveServerNameFromURL(mcpURL string) string {
 	u, err := url.Parse(mcpURL)
 	if err != nil {
-		return "gram-mcp"
+		return DefaultServerName
 	}
 
 	pathParts := strings.Split(strings.Trim(u.Path, "/"), "/")
@@ -170,5 +190,5 @@ func deriveServerNameFromURL(mcpURL string) string {
 		return pathParts[len(pathParts)-1]
 	}
 
-	return "gram-mcp"
+	return DefaultServerName
 }

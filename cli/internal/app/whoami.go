@@ -227,7 +227,7 @@ func printProfile(profile ProfileInfo) {
 // missing, and returns other failures unchanged.
 func whoamiError(err error) error {
 	if errors.Is(err, ErrNotAuthenticated) {
-		return fmt.Errorf("%w. Run 'speakeasy auth' to set up a profile in $HOME/.gram/profile.json", err)
+		return fmt.Errorf("%w. Run 'speakeasy auth' to set up a profile", err)
 	}
 	return err
 }

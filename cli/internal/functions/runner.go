@@ -1,6 +1,6 @@
 // Package functions implements the project-side work behind the
 // `speakeasy functions` commands: scaffolding a project from the embedded
-// templates and driving the project's own Gram Functions SDK through Node.js.
+// templates and driving the project's own functions SDK through Node.js.
 package functions
 
 import (

@@ -201,10 +201,10 @@ func ensureConfigFileExists(configPath string) error {
 func newStageCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "stage",
-		Usage: "Stage an artifact for deployment to Gram",
+		Usage: "Stage an artifact for deployment to the Speakeasy AI Control Plane",
 		Description: `
 The stage command will gradually build a deployment config that can later be
-passed to "speakeasy push". It is used to add Gram Functions zip files and OpenAPI
+passed to "speakeasy push". It is used to add functions zip files and OpenAPI
 YAML/JSON documents.
 `[1:],
 		Flags: []cli.Flag{stageConfigFlag()},
@@ -239,13 +239,13 @@ func ensureStageConfig(cCtx *cli.Context) error {
 func newStageFunctionCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "function",
-		Usage: "Stage a Gram Functions zip file for deployment",
+		Usage: "Stage a functions zip file for deployment",
 		Flags: []cli.Flag{
 			sourceNameFlag,
 			sourceSlugFlag,
 			&cli.StringFlag{
 				Name:     "location",
-				Usage:    "Location to a zip file containing Gram Functions code. This can be a local file or a URL.",
+				Usage:    "Location to a zip file containing functions code. This can be a local file or a URL.",
 				Required: true,
 			},
 			&cli.StringFlag{

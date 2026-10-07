@@ -27,9 +27,9 @@ import (
 func newFunctionsCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "functions",
-		Usage: "Create, build and deploy Gram Functions projects",
+		Usage: "Create, build and deploy Speakeasy Functions projects",
 		Description: `
-Work with a Gram Functions project: scaffold one with "init", run it locally
+Work with a Speakeasy Functions project: scaffold one with "init", run it locally
 with "dev", and build and deploy it with "build" and "push". The build runs
 the project's own ` + functions.SDKPackage + ` (or the deprecated
 ` + functions.LegacySDKPackage + `) through Node.js ` + functions.MinNodeVersion + ` or later.
@@ -85,10 +85,10 @@ func projectOptions(c *cli.Context) (functions.ProjectOptions, error) {
 func newFunctionsInitCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "init",
-		Usage:     "Create a new Gram Functions project",
+		Usage:     "Create a new Speakeasy Functions project",
 		ArgsUsage: "[dir]",
 		Description: `
-Create a Gram Functions project from a built-in template. Missing values are
+Create a Speakeasy Functions project from a built-in template. Missing values are
 prompted for when stdin is a terminal; otherwise, or with --yes, defaults are
 used: the functions template, git init and dependency install.
 `[1:],
@@ -145,17 +145,11 @@ used: the functions template, git init and dependency install.
 }
 
 // sdkVersionOverride returns the SDK dependency to write into new projects
-// from SPEAKEASY_AI_FUNCTIONS_SDK_VERSION or the deprecated
-// GRAM_FUNCTIONS_SDK_VERSION, for example
-// "file:/path/to/gram/ts-framework/functions" to develop against a local SDK
-// checkout. It returns "" when neither is set.
+// from SPEAKEASY_AI_FUNCTIONS_SDK_VERSION, for example
+// "file:/path/to/ts-framework/functions" to develop against a local SDK
+// checkout. Execute maps the deprecated GRAM_FUNCTIONS_SDK_VERSION onto it.
 func sdkVersionOverride(r functions.Runner) string {
-	for _, name := range flags.EnvVars("FUNCTIONS_SDK_VERSION") {
-		if v := r.Getenv(name); v != "" {
-			return v
-		}
-	}
-	return ""
+	return r.Getenv(flags.EnvVar("FUNCTIONS_SDK_VERSION"))
 }
 
 // parseFlagsAfterArg parses flags that follow the directory argument, as in
@@ -374,7 +368,7 @@ func newFunctionsBuildCommand() *cli.Command {
 		Name:  "build",
 		Usage: "Build the project into a deployable zip file",
 		Description: `
-Build the Gram Functions project in the current directory with the project's
+Build the Speakeasy Functions project in the current directory with the project's
 own ` + functions.SDKPackage + `, writing manifest.json, functions.js and
 functions.zip to the output directory.
 `[1:],
@@ -416,7 +410,7 @@ package manager. Arguments after -- are passed to the script.
 func newFunctionsPushCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "push",
-		Usage: "Build the project and deploy it to Gram",
+		Usage: "Build the project and deploy it to the Speakeasy AI Control Plane",
 		Description: `
 Build the project, stage its zip file in the deployment file and push a
 deployment. The slug defaults to the config's slug, then the package.json
@@ -580,9 +574,9 @@ func pushFunction(
 func newFunctionsStageCommand() *cli.Command {
 	cmd := newStageFunctionCommand()
 	cmd.Name = "stage"
-	cmd.Usage = "Add a Gram Functions zip file to a deployment file without pushing it"
+	cmd.Usage = "Add a functions zip file to a deployment file without pushing it"
 	cmd.Description = `
-Add a Gram Functions zip file to the deployment file, the same way
+Add a functions zip file to the deployment file, the same way
 "speakeasy stage function" does. Run "speakeasy push" to deploy it.
 `[1:]
 	cmd.Flags = append([]cli.Flag{stageConfigFlag()}, cmd.Flags...)

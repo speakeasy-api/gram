@@ -190,9 +190,9 @@ func DoPush(ctx context.Context, opts PushOptions) (*PushResult, error) {
 func newPushCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "push",
-		Usage: "Push a deployment to Gram",
+		Usage: "Push a deployment to the Speakeasy AI Control Plane",
 		Description: `
-Push a deployment to Gram.
+Push a deployment to the Speakeasy AI Control Plane.
 
 Sample deployment file
 ======================
@@ -221,7 +221,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			},
 			&cli.StringFlag{
 				Name:  "method",
-				Usage: "When set to 'replace', the deployment replaces any existing deployment artifacts in Gram projects. When set to 'merge', the deployment merges with any existing deployment artifacts in Gram project.",
+				Usage: "When set to 'replace', the deployment replaces any existing deployment artifacts in the project. When set to 'merge', the deployment merges with any existing deployment artifacts in the project.",
 				Action: func(ctx *cli.Context, s string) error {
 					if s != "replace" && s != "merge" {
 						return fmt.Errorf("invalid method: %s (allowed values: replace, merge)", s)

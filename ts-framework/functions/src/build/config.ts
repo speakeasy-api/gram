@@ -80,7 +80,7 @@ function preferExisting(
 export type UserConfig = {
   /**
    * The path to the entrypoint file for the application. This must export
-   * functions that confirm to the Gram Functions interface or a single value
+   * functions that conform to the Speakeasy Functions interface or a single value
    * that provides these.
    *
    * @default "src/functions.ts", or "src/gram.ts" when only that file exists
@@ -95,29 +95,29 @@ export type UserConfig = {
    */
   cwd?: string | undefined;
   /**
-   * The Gram project to deploy to. If this is not set, then the Gram CLI will
-   * use the project that was chosen when `gram auth` was run.
+   * The project to deploy to. If this is not set, then the speakeasy CLI will
+   * use the project that was chosen when `speakeasy auth` was run.
    */
   deployProject?: string | undefined;
   /**
    * The deployment configuration file to stage the function to and submit to
-   * the Gram CLI.
+   * the speakeasy CLI.
    *
    * @default "speakeasy.deploy.json", or "gram.deploy.json" when only that
    * file exists
    */
   deployStagingFile?: string | undefined;
   /**
-   * The number of instances to run for the function when deployed to Gram.
+   * The number of instances to run for the function when deployed.
    */
   scale?: number | undefined;
   /**
-   * The memory limit in MiB of function runner machines when deployed to Gram.
+   * The memory limit in MiB of function runner machines when deployed.
    */
   memoryMiB?: number | undefined;
 
   /**
-   * The slug to use for the function when deploying to Gram. If this option is
+   * The slug to use for the function when deploying. If this option is
    * not set then the slug will be inferred from the nearest `package.json` file
    * using the `name` field.
    */

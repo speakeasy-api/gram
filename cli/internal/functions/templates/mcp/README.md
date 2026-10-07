@@ -1,11 +1,11 @@
-# Gram Function MCP Template
+# Speakeasy Functions MCP Template
 
 This template allows you to use the official [MCP TypeScript SDK][mcp-ts] to
-build and deploy [Gram Functions](https://getgram.ai).
+build and deploy [Speakeasy Functions](https://www.speakeasy.com).
 
 [mcp-ts]: https://github.com/modelcontextprotocol/typescript-sdk
 
-Use Gram Functions to build tools and resources for MCP servers. They can do
+Use Speakeasy Functions to build tools and resources for MCP servers. They can do
 arbitrary tasks such as fetching data from APIs, performing calculations, or
 interacting with hosted databases.
 
@@ -23,13 +23,13 @@ To get started, install dependencies with your package manager:
 npm install
 ```
 
-To build a zip file that can be deployed to Gram, run:
+To build a zip file that can be deployed to the Speakeasy AI Control Plane, run:
 
 ```bash
 speakeasy functions build
 ```
 
-Then deploy your function to Gram with:
+Then deploy your function with:
 
 ```bash
 speakeasy functions push

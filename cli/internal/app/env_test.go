@@ -31,7 +31,7 @@ func walkFlags(cmds []*cli.Command, fn func(cli.Flag)) {
 	}
 }
 
-func TestNewApp_EveryEnvBoundFlagReadsBothNames(t *testing.T) {
+func TestNewApp_EveryEnvBoundFlagReadsTheNewName(t *testing.T) {
 	t.Parallel()
 
 	app := newApp()
@@ -61,9 +61,16 @@ func TestNewApp_EveryEnvBoundFlagReadsBothNames(t *testing.T) {
 	}
 }
 
-// resolveFlag runs a one-flag app and returns the value the flag resolved to.
+// resolveFlag maps legacy variables the way Execute does, runs a one-flag app
+// and returns the value the flag resolved to.
 func resolveFlag(t *testing.T, flag cli.Flag) string {
 	t.Helper()
+
+	_, err := flags.ApplyLegacyEnv(os.LookupEnv, func(key, value string) error {
+		t.Setenv(key, value)
+		return nil
+	})
+	require.NoError(t, err)
 
 	var got string
 	app := &cli.App{
@@ -88,45 +95,38 @@ func resolveFlag(t *testing.T, flag cli.Flag) string {
 func unsetEnv(t *testing.T, settings ...string) {
 	t.Helper()
 	for _, setting := range settings {
-		for _, name := range flags.EnvVars(setting) {
+		for _, name := range []string{"SPEAKEASY_AI_" + setting, "GRAM_" + setting} {
 			t.Setenv(name, "")
 			require.NoError(t, os.Unsetenv(name))
 		}
 	}
 }
 
-func TestEnvPrecedence_NewNameWins(t *testing.T) {
-	unsetEnv(t, "API_KEY", "PROJECT", "ORG")
-	t.Setenv("SPEAKEASY_AI_API_KEY", "new-key")
-	t.Setenv("GRAM_API_KEY", "old-key")
-
-	require.Equal(t, "new-key", resolveFlag(t, flags.APIKey()))
-}
-
-func TestEnvPrecedence_LegacyNameStillWorks(t *testing.T) {
-	unsetEnv(t, "API_KEY", "PROJECT", "ORG")
-	t.Setenv("GRAM_PROJECT", "old-project")
-
-	require.Equal(t, "old-project", resolveFlag(t, flags.Project()))
-}
-
-func TestEnvPrecedence_NewNameAlone(t *testing.T) {
-	unsetEnv(t, "API_KEY", "PROJECT", "ORG")
-	t.Setenv("SPEAKEASY_AI_ORG", "new-org")
-
-	require.Equal(t, "new-org", resolveFlag(t, flags.Org()))
-}
-
-func TestEnvPrecedence_IgnoresSDKGeneratorNames(t *testing.T) {
-	unsetEnv(t, "API_KEY", "PROJECT", "ORG")
-	// The Speakeasy SDK generator CLI reads SPEAKEASY_API_KEY for its own key,
-	// so this CLI must never read the plain SPEAKEASY_* names.
-	t.Setenv("SPEAKEASY_API_KEY", "generator-key")
-	t.Setenv("SPEAKEASY_PROJECT", "generator-project")
-
-	require.Empty(t, resolveFlag(t, flags.APIKey()))
-	require.Empty(t, resolveFlag(t, flags.Project()))
-
-	t.Setenv("GRAM_API_KEY", "gram-key")
-	require.Equal(t, "gram-key", resolveFlag(t, flags.APIKey()))
+func TestEnvPrecedence(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+		flag cli.Flag
+		want string
+	}{
+		{name: "new name wins", env: map[string]string{"SPEAKEASY_AI_API_KEY": "new-key", "GRAM_API_KEY": "old-key"}, flag: flags.APIKey(), want: "new-key"},
+		{name: "legacy name still works", env: map[string]string{"GRAM_PROJECT": "old-project"}, flag: flags.Project(), want: "old-project"},
+		{name: "new name alone", env: map[string]string{"SPEAKEASY_AI_ORG": "new-org"}, flag: flags.Org(), want: "new-org"},
+		{name: "empty new name falls back", env: map[string]string{"SPEAKEASY_AI_ORG": "", "GRAM_ORG": "old-org"}, flag: flags.Org(), want: "old-org"},
+		// The Speakeasy SDK generator CLI reads SPEAKEASY_API_KEY for its own
+		// key, so this CLI must never read the plain SPEAKEASY_* names.
+		{name: "SDK generator key is ignored", env: map[string]string{"SPEAKEASY_API_KEY": "generator-key"}, flag: flags.APIKey(), want: ""},
+		{name: "SDK generator key does not hide the legacy one", env: map[string]string{"SPEAKEASY_API_KEY": "generator-key", "GRAM_API_KEY": "gram-key"}, flag: flags.APIKey(), want: "gram-key"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			unsetEnv(t, "API_KEY", "PROJECT", "ORG")
+			t.Setenv("SPEAKEASY_API_KEY", "")
+			require.NoError(t, os.Unsetenv("SPEAKEASY_API_KEY"))
+			for k, v := range tc.env {
+				t.Setenv(k, v)
+			}
+			require.Equal(t, tc.want, resolveFlag(t, tc.flag))
+		})
+	}
 }

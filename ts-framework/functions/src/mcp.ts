@@ -46,7 +46,7 @@ export async function withFunctions(
   server: McpServer | Server,
   options?: {
     /**
-     * Lists the environment variables that can be be passed by Gram when
+     * Lists the environment variables that can be passed by the platform when
      * calling tools and resources from the provided server. These will be
      * presented on the dashboard to be filled in by users and presented in the
      * generated MCP bundles and installation instructions.

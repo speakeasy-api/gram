@@ -33,7 +33,7 @@ type Template struct {
 var Templates = []Template{
 	{
 		Name:  "functions",
-		Label: "Gram Functions",
+		Label: "Speakeasy Functions",
 		Hint:  "Simplest path to start building your own tools - comes with batteries included",
 	},
 	{
@@ -45,7 +45,7 @@ var Templates = []Template{
 
 const (
 	// DefaultProjectName is the package name init suggests.
-	DefaultProjectName = "gram-mcp-server"
+	DefaultProjectName = "speakeasy-mcp-server"
 
 	mcpSDKPackage = "@modelcontextprotocol/sdk"
 	mcpSDKVersion = "^1.20.1"

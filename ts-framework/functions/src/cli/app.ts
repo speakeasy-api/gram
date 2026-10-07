@@ -66,7 +66,7 @@ const routes = buildRouteMap({
     }),
     push: buildCommand({
       docs: {
-        brief: "Push a new deployment using a built Gram Function",
+        brief: "Push a new deployment using a built function",
       },
       parameters: {
         flags: {
@@ -75,7 +75,7 @@ const routes = buildRouteMap({
             kind: "parsed",
             parse: String,
             optional: true,
-            brief: "The Gram project to deploy to",
+            brief: "The project to deploy to",
           },
         },
       },
@@ -83,7 +83,7 @@ const routes = buildRouteMap({
     }),
   },
   docs: {
-    brief: "Build and deploy Gram Functions",
+    brief: "Build and deploy Speakeasy Functions",
   },
 });
 

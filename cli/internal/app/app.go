@@ -142,7 +142,7 @@ const (
 	legacyCommandName = "gram"
 
 	// controlPlaneMarkerFlag is a hidden flag that prints controlPlaneMarker.
-	// Tools such as the Gram Functions SDK run it to tell this CLI apart from
+	// Tools such as the Speakeasy Functions SDK run it to tell this CLI apart from
 	// the Speakeasy SDK generator CLI, which installs a binary with the same
 	// name and rejects the flag.
 	controlPlaneMarkerFlag = "control-plane-cli"
@@ -176,11 +176,12 @@ func Execute(ctx context.Context, osArgs []string) {
 	if len(osArgs) > 0 {
 		writeLegacyCommandNotice(os.Stderr, osArgs[0])
 	}
-	if err := flags.UnsetEmptyEnv(os.LookupEnv, os.Unsetenv); err != nil {
+	notice, err := flags.ApplyLegacyEnv(os.LookupEnv, os.Setenv)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if notice := flags.LegacyEnvNotice(os.LookupEnv); notice != "" {
+	if notice != "" {
 		_, _ = fmt.Fprintln(os.Stderr, notice)
 	}
 

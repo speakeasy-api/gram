@@ -1,12 +1,12 @@
 # Project Contribution Guide
 
-- This is a Node.js project using TypeScript to build [Gram](https://gram.ai) Functions.
+- This is a Node.js project using TypeScript to build [Speakeasy Functions](https://www.speakeasy.com).
 - The codebase assumes Node.js v22 or later is in use and TypeScript v5.9 or later is required.
 - When working in this codebase prefer using the Web APIs and Node.js standard library where possible instead of third-party libraries.
 
 ## Project Structure
 
-- `src/` - Contains the source TypeScript code for the Gram Functions.
+- `src/` - Contains the source TypeScript code for the functions.
 - `dist/` - Output directory for the built code (generated after running `npm run build`).
 - `package.json` - Defines project metadata, dependencies, and scripts.
 - `tsconfig.json` - TypeScript configuration file.
@@ -14,8 +14,8 @@
 ## `package.json` scripts
 
 - `dev` - Runs the MCP Inspector playground with hot reloading enabled. `speakeasy functions dev` runs it too.
-- `build` - Runs `speakeasy functions build`, which bundles the Gram Functions code into a zip file for deployment and places it in the `dist/` directory.
-- `push` - Runs `speakeasy functions push`, which builds the project and deploys it to Gram.
+- `build` - Runs `speakeasy functions build`, which bundles the functions code into a zip file for deployment and places it in the `dist/` directory.
+- `push` - Runs `speakeasy functions push`, which builds the project and deploys it to the Speakeasy AI Control Plane.
 - `lint` - Runs the TypeScript compiler in `noEmit` mode to check for type errors.
 
 <details open>
@@ -237,7 +237,7 @@ const functions = new Functions({
 ```
 
 Whenever a tool wants to access a new environment variable, a definition must be
-added to the `envSchema` if one does not exist. When this Gram Function is
+added to the `envSchema` if one does not exist. When this function is
 deployed, end users will then be able to provide values for these variables when
 installing the corresponding MCP servers.
 
@@ -423,7 +423,7 @@ setTimeout(() => controller.abort(), 5000);
 
 ## OAuth / Authentication
 
-For tools that need to access OAuth-protected APIs, Gram Functions supports automatic OAuth token injection. Configure the `authInput` option when creating your Gram instance, and the OAuth access token will be available through `ctx.env`.
+For tools that need to access OAuth-protected APIs, Speakeasy Functions supports automatic OAuth token injection. Configure the `authInput` option when creating your `Functions` instance, and the OAuth access token will be available through `ctx.env`.
 
 For full setup instructions including configuring OAuth providers, see the [Add OAuth documentation](https://www.getgram.ai/docs/gram-functions/add-oauth).
 
@@ -458,7 +458,7 @@ const functions = new Functions({
 });
 ```
 
-When deployed to Gram, the platform handles the OAuth flow with users and automatically injects the access token into the specified environment variable before each tool execution.
+When deployed, the platform handles the OAuth flow with users and automatically injects the access token into the specified environment variable before each tool execution.
 
 ## Type Safety
 

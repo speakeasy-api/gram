@@ -400,7 +400,7 @@ export async function handleOpenBrowser(
 
   // Always prompt unless explicitly disabled
   const shouldOpen = await promptYesNo(
-    "Would you like to open the Gram dashboard to create an MCP server?",
+    "Would you like to open the dashboard to create an MCP server?",
   );
 
   if (shouldOpen) {
