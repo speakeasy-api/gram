@@ -1,4 +1,4 @@
-import { useIconConfetti } from "@/components/icon-confetti";
+import { useIconDither } from "@/components/icon-dither";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/Badge";
 
 export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
   const routes = useRoutes();
-  const { canvasRef, start, stop } = useIconConfetti();
+  const { canvasRef, start, stop } = useIconDither();
   const catalogIconMap = useCatalogIconMap();
   const { data: deploymentResult } = useLatestDeployment();
   const oauthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
