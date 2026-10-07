@@ -3,6 +3,8 @@ package hooks
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -310,6 +312,63 @@ func TestIngest_TeesToolCallIntoEventFeed(t *testing.T) {
 
 	require.Equal(t, int64(2), teeCounterValue(t, reader, meterHooksEventFeedPublish, attr.HookSource("codex"), attr.Outcome(eventFeedOutcomeSuccess)))
 	require.Zero(t, teeCounterValue(t, reader, meterHooksEventFeedPublish, attr.Outcome(eventFeedOutcomeFailure)))
+}
+
+func TestIngest_TeesEveryEventKindTheDialectClassifies(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, _, published, _ := newTeeTestService(t)
+
+	withRaw := func(adapter, eventType, raw, session, idem string) *gen.IngestPayload {
+		payload := canonicalIngestPayload(adapter, eventType, session)
+		payload.Source.RawEventName = &raw
+		payload.IdempotencyKey = &idem
+		return payload
+	}
+	toolCallID := "call-kinds-1"
+	toolName := "shell"
+	toolCall := func() *gen.HookToolCallData {
+		return &gen.HookToolCallData{ID: &toolCallID, Name: &toolName, Input: map[string]any{"command": "ls"}}
+	}
+
+	// A Cursor tool request, a source other than Codex: a tool_call.
+	cursor := withRaw("cursor", "tool.requested", "beforeMCPExecution", "cursor-kinds-session", "idem-kinds-cursor")
+	cursor.Data = &gen.HookIngestData{ToolCall: toolCall()}
+	// A Claude Code prompt: a prompt whose words go to chat, not here.
+	prompt := withRaw("claude", "prompt.submitted", "UserPromptSubmit", "claude-kinds-session", "idem-kinds-prompt")
+	prompt.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: new("list the files")}}
+	// A Codex permission request: Gram's verdict rides as a tool_decision.
+	permission := withRaw("codex", "tool.requested", "PermissionRequest", "codex-kinds-session", "idem-kinds-permission")
+	permission.Data = &gen.HookIngestData{ToolCall: toolCall()}
+	permission.Data.ToolCall.PermissionType = new("default")
+	// A Claude Code notification: nothing the vocabulary names, raw name kept.
+	notification := withRaw("claude", "notification.reported", "Notification", "claude-kinds-session", "idem-kinds-notification")
+	notification.Data = &gen.HookIngestData{Notification: &gen.HookNotificationData{Message: new("waiting for input")}}
+
+	for _, payload := range []*gen.IngestPayload{cursor, prompt, permission, notification} {
+		_, err := ti.service.Ingest(ctx, payload)
+		require.NoError(t, err)
+	}
+	ti.service.otelTeeDrains.Wait()
+
+	byName := map[string]*otelv1.InboundLogRecord{}
+	for _, record := range *published {
+		byName[record.GetEventName()] = record
+	}
+	classify := func(name string) string {
+		t.Helper()
+		record, ok := byName[name]
+		require.True(t, ok, "no record named %s among %v", name, slices.Sorted(maps.Keys(byName)))
+		_, eventType, err := dialect.ForLog(record).EventType(record)
+		require.NoError(t, err)
+		return eventType
+	}
+	require.Equal(t, dialect.EventTypeToolCall, classify("BeforeMCPExecution"))
+	require.Equal(t, "cursor", teeStringAttr(t, byName["BeforeMCPExecution"], string(attr.HookSourceKey)))
+	require.Equal(t, dialect.EventTypePrompt, classify("UserPromptSubmit"))
+	require.Equal(t, dialect.EventTypeToolDecision, classify("PermissionRequest"))
+	require.Equal(t, "allow", teeStringAttr(t, byName["PermissionRequest"], string(attr.HookDecisionKey)))
+	require.Equal(t, dialect.EventTypeUnclassified, classify("Notification"), "an event the vocabulary does not name keeps its raw name and gets no type")
 }
 
 func TestIngest_TeeSkipsADuplicateDelivery(t *testing.T) {

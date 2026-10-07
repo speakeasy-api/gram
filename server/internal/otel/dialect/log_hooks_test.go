@@ -246,6 +246,7 @@ func TestHooksLogProvider(t *testing.T) {
 		{name: "claude-code is anthropic", attrs: []*otelv1.InboundLogRecord_KeyValue{accessorTestKV("gram.hook.source", "claude-code")}, key: "gram.hook.source", provider: "anthropic"},
 		{name: "claude-code-desktop is anthropic", attrs: []*otelv1.InboundLogRecord_KeyValue{accessorTestKV("gram.hook.source", "claude-code-desktop")}, key: "gram.hook.source", provider: "anthropic"},
 		{name: "cowork is anthropic", attrs: []*otelv1.InboundLogRecord_KeyValue{accessorTestKV("gram.hook.source", "cowork")}, key: "gram.hook.source", provider: "anthropic"},
+		{name: "claude-tag is anthropic", attrs: []*otelv1.InboundLogRecord_KeyValue{accessorTestKV("gram.hook.source", "claude-tag")}, key: "gram.hook.source", provider: "anthropic"},
 		{name: "codex is openai", attrs: []*otelv1.InboundLogRecord_KeyValue{accessorTestKV("gram.hook.source", "codex")}, key: "gram.hook.source", provider: "openai"},
 		{name: "cursor states no provider", attrs: []*otelv1.InboundLogRecord_KeyValue{accessorTestKV("gram.hook.source", "cursor")}, key: "", provider: ""},
 		{name: "opencode states no provider", attrs: []*otelv1.InboundLogRecord_KeyValue{accessorTestKV("gram.hook.source", "opencode")}, key: "", provider: ""},
