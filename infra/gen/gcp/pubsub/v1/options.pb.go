@@ -22,6 +22,99 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// StorageCodec selects the analytical representation written to Cloud Storage.
+type StorageCodec int32
+
+const (
+	// Permanently resolves to PARQUET, including when the field is omitted.
+	StorageCodec_STORAGE_CODEC_UNSPECIFIED StorageCodec = 0
+	StorageCodec_STORAGE_CODEC_PARQUET     StorageCodec = 1
+)
+
+// Enum value maps for StorageCodec.
+var (
+	StorageCodec_name = map[int32]string{
+		0: "STORAGE_CODEC_UNSPECIFIED",
+		1: "STORAGE_CODEC_PARQUET",
+	}
+	StorageCodec_value = map[string]int32{
+		"STORAGE_CODEC_UNSPECIFIED": 0,
+		"STORAGE_CODEC_PARQUET":     1,
+	}
+)
+
+func (x StorageCodec) Enum() *StorageCodec {
+	p := new(StorageCodec)
+	*p = x
+	return p
+}
+
+func (x StorageCodec) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (StorageCodec) Descriptor() protoreflect.EnumDescriptor {
+	return file_gcp_pubsub_v1_options_proto_enumTypes[0].Descriptor()
+}
+
+func (StorageCodec) Type() protoreflect.EnumType {
+	return &file_gcp_pubsub_v1_options_proto_enumTypes[0]
+}
+
+func (x StorageCodec) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// StoragePartitioning selects the directories beneath the storage subscription
+// marker's fully qualified proto name. Built-in partitions use UTC receipt time.
+type StoragePartitioning int32
+
+const (
+	// Permanently resolves to HIVE_DAILY, including when the field is omitted.
+	StoragePartitioning_STORAGE_PARTITIONING_UNSPECIFIED   StoragePartitioning = 0
+	StoragePartitioning_STORAGE_PARTITIONING_HIVE_DAILY    StoragePartitioning = 1
+	StoragePartitioning_STORAGE_PARTITIONING_HIVE_HOURLY   StoragePartitioning = 2
+	StoragePartitioning_STORAGE_PARTITIONING_HIVE_EXTERNAL StoragePartitioning = 3
+)
+
+// Enum value maps for StoragePartitioning.
+var (
+	StoragePartitioning_name = map[int32]string{
+		0: "STORAGE_PARTITIONING_UNSPECIFIED",
+		1: "STORAGE_PARTITIONING_HIVE_DAILY",
+		2: "STORAGE_PARTITIONING_HIVE_HOURLY",
+		3: "STORAGE_PARTITIONING_HIVE_EXTERNAL",
+	}
+	StoragePartitioning_value = map[string]int32{
+		"STORAGE_PARTITIONING_UNSPECIFIED":   0,
+		"STORAGE_PARTITIONING_HIVE_DAILY":    1,
+		"STORAGE_PARTITIONING_HIVE_HOURLY":   2,
+		"STORAGE_PARTITIONING_HIVE_EXTERNAL": 3,
+	}
+)
+
+func (x StoragePartitioning) Enum() *StoragePartitioning {
+	p := new(StoragePartitioning)
+	*p = x
+	return p
+}
+
+func (x StoragePartitioning) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (StoragePartitioning) Descriptor() protoreflect.EnumDescriptor {
+	return file_gcp_pubsub_v1_options_proto_enumTypes[1].Descriptor()
+}
+
+func (StoragePartitioning) Type() protoreflect.EnumType {
+	return &file_gcp_pubsub_v1_options_proto_enumTypes[1]
+}
+
+func (x StoragePartitioning) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
 type TopicOptions struct {
 	state                    protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_Name          *string                `protobuf:"bytes,1,opt,name=name"`
@@ -557,6 +650,477 @@ func (b0 RetryPolicy_builder) Build() *RetryPolicy {
 	return m0
 }
 
+// StorageSubscriptionOptions declares a Go-owned analytical storage consumer.
+// The storage runner owns encoding, uploads and acknowledgment; ordinary
+// application subscriber helpers must not consume this marker.
+type StorageSubscriptionOptions struct {
+	state                          protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Name                *string                `protobuf:"bytes,1,opt,name=name"`
+	xxx_hidden_Retention           *durationpb.Duration   `protobuf:"bytes,2,opt,name=retention"`
+	xxx_hidden_RetainAckedMessages bool                   `protobuf:"varint,3,opt,name=retain_acked_messages,json=retainAckedMessages"`
+	xxx_hidden_AckDeadline         *durationpb.Duration   `protobuf:"bytes,4,opt,name=ack_deadline,json=ackDeadline"`
+	xxx_hidden_ExpirationTtl       *durationpb.Duration   `protobuf:"bytes,5,opt,name=expiration_ttl,json=expirationTtl"`
+	xxx_hidden_RetryPolicy         *RetryPolicy           `protobuf:"bytes,6,opt,name=retry_policy,json=retryPolicy"`
+	xxx_hidden_Labels              map[string]string      `protobuf:"bytes,7,rep,name=labels" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	xxx_hidden_Filter              *string                `protobuf:"bytes,8,opt,name=filter"`
+	xxx_hidden_DeadLetter          *DeadLetterPolicy      `protobuf:"bytes,9,opt,name=dead_letter,json=deadLetter"`
+	xxx_hidden_Topic               *string                `protobuf:"bytes,10,opt,name=topic"`
+	xxx_hidden_Bucket              *string                `protobuf:"bytes,11,opt,name=bucket"`
+	xxx_hidden_Codec               StorageCodec           `protobuf:"varint,12,opt,name=codec,enum=gcp.pubsub.v1.StorageCodec"`
+	xxx_hidden_Partitioning        StoragePartitioning    `protobuf:"varint,13,opt,name=partitioning,enum=gcp.pubsub.v1.StoragePartitioning"`
+	xxx_hidden_PartitionAttribute  *string                `protobuf:"bytes,14,opt,name=partition_attribute,json=partitionAttribute"`
+	xxx_hidden_PartitionKeys       []string               `protobuf:"bytes,15,rep,name=partition_keys,json=partitionKeys"`
+	XXX_raceDetectHookData         protoimpl.RaceDetectHookData
+	XXX_presence                   [1]uint32
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
+}
+
+func (x *StorageSubscriptionOptions) Reset() {
+	*x = StorageSubscriptionOptions{}
+	mi := &file_gcp_pubsub_v1_options_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StorageSubscriptionOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StorageSubscriptionOptions) ProtoMessage() {}
+
+func (x *StorageSubscriptionOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_gcp_pubsub_v1_options_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *StorageSubscriptionOptions) GetName() string {
+	if x != nil {
+		if x.xxx_hidden_Name != nil {
+			return *x.xxx_hidden_Name
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *StorageSubscriptionOptions) GetRetention() *durationpb.Duration {
+	if x != nil {
+		return x.xxx_hidden_Retention
+	}
+	return nil
+}
+
+func (x *StorageSubscriptionOptions) GetRetainAckedMessages() bool {
+	if x != nil {
+		return x.xxx_hidden_RetainAckedMessages
+	}
+	return false
+}
+
+func (x *StorageSubscriptionOptions) GetAckDeadline() *durationpb.Duration {
+	if x != nil {
+		return x.xxx_hidden_AckDeadline
+	}
+	return nil
+}
+
+func (x *StorageSubscriptionOptions) GetExpirationTtl() *durationpb.Duration {
+	if x != nil {
+		return x.xxx_hidden_ExpirationTtl
+	}
+	return nil
+}
+
+func (x *StorageSubscriptionOptions) GetRetryPolicy() *RetryPolicy {
+	if x != nil {
+		return x.xxx_hidden_RetryPolicy
+	}
+	return nil
+}
+
+func (x *StorageSubscriptionOptions) GetLabels() map[string]string {
+	if x != nil {
+		return x.xxx_hidden_Labels
+	}
+	return nil
+}
+
+func (x *StorageSubscriptionOptions) GetFilter() string {
+	if x != nil {
+		if x.xxx_hidden_Filter != nil {
+			return *x.xxx_hidden_Filter
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *StorageSubscriptionOptions) GetDeadLetter() *DeadLetterPolicy {
+	if x != nil {
+		return x.xxx_hidden_DeadLetter
+	}
+	return nil
+}
+
+func (x *StorageSubscriptionOptions) GetTopic() string {
+	if x != nil {
+		if x.xxx_hidden_Topic != nil {
+			return *x.xxx_hidden_Topic
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *StorageSubscriptionOptions) GetBucket() string {
+	if x != nil {
+		if x.xxx_hidden_Bucket != nil {
+			return *x.xxx_hidden_Bucket
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *StorageSubscriptionOptions) GetCodec() StorageCodec {
+	if x != nil {
+		if protoimpl.X.Present(&(x.XXX_presence[0]), 11) {
+			return x.xxx_hidden_Codec
+		}
+	}
+	return StorageCodec_STORAGE_CODEC_UNSPECIFIED
+}
+
+func (x *StorageSubscriptionOptions) GetPartitioning() StoragePartitioning {
+	if x != nil {
+		if protoimpl.X.Present(&(x.XXX_presence[0]), 12) {
+			return x.xxx_hidden_Partitioning
+		}
+	}
+	return StoragePartitioning_STORAGE_PARTITIONING_UNSPECIFIED
+}
+
+func (x *StorageSubscriptionOptions) GetPartitionAttribute() string {
+	if x != nil {
+		if x.xxx_hidden_PartitionAttribute != nil {
+			return *x.xxx_hidden_PartitionAttribute
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *StorageSubscriptionOptions) GetPartitionKeys() []string {
+	if x != nil {
+		return x.xxx_hidden_PartitionKeys
+	}
+	return nil
+}
+
+func (x *StorageSubscriptionOptions) SetName(v string) {
+	x.xxx_hidden_Name = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 15)
+}
+
+func (x *StorageSubscriptionOptions) SetRetention(v *durationpb.Duration) {
+	x.xxx_hidden_Retention = v
+}
+
+func (x *StorageSubscriptionOptions) SetRetainAckedMessages(v bool) {
+	x.xxx_hidden_RetainAckedMessages = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 15)
+}
+
+func (x *StorageSubscriptionOptions) SetAckDeadline(v *durationpb.Duration) {
+	x.xxx_hidden_AckDeadline = v
+}
+
+func (x *StorageSubscriptionOptions) SetExpirationTtl(v *durationpb.Duration) {
+	x.xxx_hidden_ExpirationTtl = v
+}
+
+func (x *StorageSubscriptionOptions) SetRetryPolicy(v *RetryPolicy) {
+	x.xxx_hidden_RetryPolicy = v
+}
+
+func (x *StorageSubscriptionOptions) SetLabels(v map[string]string) {
+	x.xxx_hidden_Labels = v
+}
+
+func (x *StorageSubscriptionOptions) SetFilter(v string) {
+	x.xxx_hidden_Filter = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 15)
+}
+
+func (x *StorageSubscriptionOptions) SetDeadLetter(v *DeadLetterPolicy) {
+	x.xxx_hidden_DeadLetter = v
+}
+
+func (x *StorageSubscriptionOptions) SetTopic(v string) {
+	x.xxx_hidden_Topic = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 15)
+}
+
+func (x *StorageSubscriptionOptions) SetBucket(v string) {
+	x.xxx_hidden_Bucket = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 15)
+}
+
+func (x *StorageSubscriptionOptions) SetCodec(v StorageCodec) {
+	x.xxx_hidden_Codec = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 15)
+}
+
+func (x *StorageSubscriptionOptions) SetPartitioning(v StoragePartitioning) {
+	x.xxx_hidden_Partitioning = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 15)
+}
+
+func (x *StorageSubscriptionOptions) SetPartitionAttribute(v string) {
+	x.xxx_hidden_PartitionAttribute = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 15)
+}
+
+func (x *StorageSubscriptionOptions) SetPartitionKeys(v []string) {
+	x.xxx_hidden_PartitionKeys = v
+}
+
+func (x *StorageSubscriptionOptions) HasName() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 0)
+}
+
+func (x *StorageSubscriptionOptions) HasRetention() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Retention != nil
+}
+
+func (x *StorageSubscriptionOptions) HasRetainAckedMessages() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
+}
+
+func (x *StorageSubscriptionOptions) HasAckDeadline() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_AckDeadline != nil
+}
+
+func (x *StorageSubscriptionOptions) HasExpirationTtl() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ExpirationTtl != nil
+}
+
+func (x *StorageSubscriptionOptions) HasRetryPolicy() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_RetryPolicy != nil
+}
+
+func (x *StorageSubscriptionOptions) HasFilter() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 7)
+}
+
+func (x *StorageSubscriptionOptions) HasDeadLetter() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_DeadLetter != nil
+}
+
+func (x *StorageSubscriptionOptions) HasTopic() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 9)
+}
+
+func (x *StorageSubscriptionOptions) HasBucket() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 10)
+}
+
+func (x *StorageSubscriptionOptions) HasCodec() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 11)
+}
+
+func (x *StorageSubscriptionOptions) HasPartitioning() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 12)
+}
+
+func (x *StorageSubscriptionOptions) HasPartitionAttribute() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 13)
+}
+
+func (x *StorageSubscriptionOptions) ClearName() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
+	x.xxx_hidden_Name = nil
+}
+
+func (x *StorageSubscriptionOptions) ClearRetention() {
+	x.xxx_hidden_Retention = nil
+}
+
+func (x *StorageSubscriptionOptions) ClearRetainAckedMessages() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
+	x.xxx_hidden_RetainAckedMessages = false
+}
+
+func (x *StorageSubscriptionOptions) ClearAckDeadline() {
+	x.xxx_hidden_AckDeadline = nil
+}
+
+func (x *StorageSubscriptionOptions) ClearExpirationTtl() {
+	x.xxx_hidden_ExpirationTtl = nil
+}
+
+func (x *StorageSubscriptionOptions) ClearRetryPolicy() {
+	x.xxx_hidden_RetryPolicy = nil
+}
+
+func (x *StorageSubscriptionOptions) ClearFilter() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 7)
+	x.xxx_hidden_Filter = nil
+}
+
+func (x *StorageSubscriptionOptions) ClearDeadLetter() {
+	x.xxx_hidden_DeadLetter = nil
+}
+
+func (x *StorageSubscriptionOptions) ClearTopic() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 9)
+	x.xxx_hidden_Topic = nil
+}
+
+func (x *StorageSubscriptionOptions) ClearBucket() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 10)
+	x.xxx_hidden_Bucket = nil
+}
+
+func (x *StorageSubscriptionOptions) ClearCodec() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 11)
+	x.xxx_hidden_Codec = StorageCodec_STORAGE_CODEC_UNSPECIFIED
+}
+
+func (x *StorageSubscriptionOptions) ClearPartitioning() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 12)
+	x.xxx_hidden_Partitioning = StoragePartitioning_STORAGE_PARTITIONING_UNSPECIFIED
+}
+
+func (x *StorageSubscriptionOptions) ClearPartitionAttribute() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 13)
+	x.xxx_hidden_PartitionAttribute = nil
+}
+
+type StorageSubscriptionOptions_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Defaults to the kebab-cased full name of the subscription marker.
+	Name                *string
+	Retention           *durationpb.Duration
+	RetainAckedMessages *bool
+	AckDeadline         *durationpb.Duration
+	ExpirationTtl       *durationpb.Duration
+	RetryPolicy         *RetryPolicy
+	Labels              map[string]string
+	Filter              *string
+	DeadLetter          *DeadLetterPolicy
+	// Required. Full name of a topic-declaring message with an attached schema.
+	// Its payload must be self-contained and nonrecursive.
+	Topic *string
+	// Required logical bucket name. Deployment resolves the globally unique GCS
+	// name and supplies the same mapping to Config Connector and the Go runner.
+	Bucket       *string
+	Codec        *StorageCodec
+	Partitioning *StoragePartitioning
+	// Required only for HIVE_EXTERNAL: Pub/Sub attribute containing a relative
+	// key=value/key=value suffix. Missing or malformed values are acked, discarded
+	// and counted by the runner, rather than retried or dead-lettered.
+	PartitionAttribute *string
+	// Required only for HIVE_EXTERNAL: exact ordered keys in the attribute value.
+	// Keys are preserved verbatim, without the built-in modes' part__ prefix.
+	// Changing these keys after writing data requires a new marker/storage prefix.
+	PartitionKeys []string
+}
+
+func (b0 StorageSubscriptionOptions_builder) Build() *StorageSubscriptionOptions {
+	m0 := &StorageSubscriptionOptions{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.Name != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 15)
+		x.xxx_hidden_Name = b.Name
+	}
+	x.xxx_hidden_Retention = b.Retention
+	if b.RetainAckedMessages != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 15)
+		x.xxx_hidden_RetainAckedMessages = *b.RetainAckedMessages
+	}
+	x.xxx_hidden_AckDeadline = b.AckDeadline
+	x.xxx_hidden_ExpirationTtl = b.ExpirationTtl
+	x.xxx_hidden_RetryPolicy = b.RetryPolicy
+	x.xxx_hidden_Labels = b.Labels
+	if b.Filter != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 15)
+		x.xxx_hidden_Filter = b.Filter
+	}
+	x.xxx_hidden_DeadLetter = b.DeadLetter
+	if b.Topic != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 15)
+		x.xxx_hidden_Topic = b.Topic
+	}
+	if b.Bucket != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 15)
+		x.xxx_hidden_Bucket = b.Bucket
+	}
+	if b.Codec != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 15)
+		x.xxx_hidden_Codec = *b.Codec
+	}
+	if b.Partitioning != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 15)
+		x.xxx_hidden_Partitioning = *b.Partitioning
+	}
+	if b.PartitionAttribute != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 15)
+		x.xxx_hidden_PartitionAttribute = b.PartitionAttribute
+	}
+	x.xxx_hidden_PartitionKeys = b.PartitionKeys
+	return m0
+}
+
 type DeadLetterPolicy struct {
 	state                          protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_Name                *string                `protobuf:"bytes,1,opt,name=name"`
@@ -569,7 +1133,7 @@ type DeadLetterPolicy struct {
 
 func (x *DeadLetterPolicy) Reset() {
 	*x = DeadLetterPolicy{}
-	mi := &file_gcp_pubsub_v1_options_proto_msgTypes[3]
+	mi := &file_gcp_pubsub_v1_options_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -581,7 +1145,7 @@ func (x *DeadLetterPolicy) String() string {
 func (*DeadLetterPolicy) ProtoMessage() {}
 
 func (x *DeadLetterPolicy) ProtoReflect() protoreflect.Message {
-	mi := &file_gcp_pubsub_v1_options_proto_msgTypes[3]
+	mi := &file_gcp_pubsub_v1_options_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -686,6 +1250,14 @@ var file_gcp_pubsub_v1_options_proto_extTypes = []protoimpl.ExtensionInfo{
 		Tag:           "bytes,50002,opt,name=subscription",
 		Filename:      "gcp/pubsub/v1/options.proto",
 	},
+	{
+		ExtendedType:  (*descriptorpb.MessageOptions)(nil),
+		ExtensionType: (*StorageSubscriptionOptions)(nil),
+		Field:         50003,
+		Name:          "gcp.pubsub.v1.storage_subscription",
+		Tag:           "bytes,50003,opt,name=storage_subscription",
+		Filename:      "gcp/pubsub/v1/options.proto",
+	},
 }
 
 // Extension fields to descriptorpb.MessageOptions.
@@ -694,6 +1266,8 @@ var (
 	E_Topic = &file_gcp_pubsub_v1_options_proto_extTypes[0]
 	// optional gcp.pubsub.v1.SubscriptionOptions subscription = 50002;
 	E_Subscription = &file_gcp_pubsub_v1_options_proto_extTypes[1]
+	// optional gcp.pubsub.v1.StorageSubscriptionOptions storage_subscription = 50003;
+	E_StorageSubscription = &file_gcp_pubsub_v1_options_proto_extTypes[2]
 )
 
 var File_gcp_pubsub_v1_options_proto protoreflect.FileDescriptor
@@ -726,44 +1300,89 @@ const file_gcp_pubsub_v1_options_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x95\x01\n" +
 	"\vRetryPolicy\x12B\n" +
 	"\x0fminimum_backoff\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\x0eminimumBackoff\x12B\n" +
-	"\x0fmaximum_backoff\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x0emaximumBackoff\"Z\n" +
+	"\x0fmaximum_backoff\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x0emaximumBackoff\"\xc1\x06\n" +
+	"\x1aStorageSubscriptionOptions\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x127\n" +
+	"\tretention\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\tretention\x122\n" +
+	"\x15retain_acked_messages\x18\x03 \x01(\bR\x13retainAckedMessages\x12<\n" +
+	"\fack_deadline\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\vackDeadline\x12@\n" +
+	"\x0eexpiration_ttl\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\rexpirationTtl\x12=\n" +
+	"\fretry_policy\x18\x06 \x01(\v2\x1a.gcp.pubsub.v1.RetryPolicyR\vretryPolicy\x12M\n" +
+	"\x06labels\x18\a \x03(\v25.gcp.pubsub.v1.StorageSubscriptionOptions.LabelsEntryR\x06labels\x12\x16\n" +
+	"\x06filter\x18\b \x01(\tR\x06filter\x12@\n" +
+	"\vdead_letter\x18\t \x01(\v2\x1f.gcp.pubsub.v1.DeadLetterPolicyR\n" +
+	"deadLetter\x12\x14\n" +
+	"\x05topic\x18\n" +
+	" \x01(\tR\x05topic\x12\x16\n" +
+	"\x06bucket\x18\v \x01(\tR\x06bucket\x121\n" +
+	"\x05codec\x18\f \x01(\x0e2\x1b.gcp.pubsub.v1.StorageCodecR\x05codec\x12F\n" +
+	"\fpartitioning\x18\r \x01(\x0e2\".gcp.pubsub.v1.StoragePartitioningR\fpartitioning\x12/\n" +
+	"\x13partition_attribute\x18\x0e \x01(\tR\x12partitionAttribute\x12%\n" +
+	"\x0epartition_keys\x18\x0f \x03(\tR\rpartitionKeys\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"Z\n" +
 	"\x10DeadLetterPolicy\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x122\n" +
-	"\x15max_delivery_attempts\x18\x02 \x01(\x05R\x13maxDeliveryAttempts:T\n" +
+	"\x15max_delivery_attempts\x18\x02 \x01(\x05R\x13maxDeliveryAttempts*H\n" +
+	"\fStorageCodec\x12\x1d\n" +
+	"\x19STORAGE_CODEC_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15STORAGE_CODEC_PARQUET\x10\x01*\xae\x01\n" +
+	"\x13StoragePartitioning\x12$\n" +
+	" STORAGE_PARTITIONING_UNSPECIFIED\x10\x00\x12#\n" +
+	"\x1fSTORAGE_PARTITIONING_HIVE_DAILY\x10\x01\x12$\n" +
+	" STORAGE_PARTITIONING_HIVE_HOURLY\x10\x02\x12&\n" +
+	"\"STORAGE_PARTITIONING_HIVE_EXTERNAL\x10\x03:T\n" +
 	"\x05topic\x12\x1f.google.protobuf.MessageOptions\x18ц\x03 \x01(\v2\x1b.gcp.pubsub.v1.TopicOptionsR\x05topic:i\n" +
-	"\fsubscription\x12\x1f.google.protobuf.MessageOptions\x18҆\x03 \x01(\v2\".gcp.pubsub.v1.SubscriptionOptionsR\fsubscriptionB@Z>github.com/speakeasy-api/gram/infra/gen/gcp/pubsub/v1;pubsubv1b\beditionsp\xe9\a"
+	"\fsubscription\x12\x1f.google.protobuf.MessageOptions\x18҆\x03 \x01(\v2\".gcp.pubsub.v1.SubscriptionOptionsR\fsubscription:\x7f\n" +
+	"\x14storage_subscription\x12\x1f.google.protobuf.MessageOptions\x18ӆ\x03 \x01(\v2).gcp.pubsub.v1.StorageSubscriptionOptionsR\x13storageSubscriptionB@Z>github.com/speakeasy-api/gram/infra/gen/gcp/pubsub/v1;pubsubv1b\beditionsp\xe9\a"
 
-var file_gcp_pubsub_v1_options_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_gcp_pubsub_v1_options_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_gcp_pubsub_v1_options_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_gcp_pubsub_v1_options_proto_goTypes = []any{
-	(*TopicOptions)(nil),                // 0: gcp.pubsub.v1.TopicOptions
-	(*SubscriptionOptions)(nil),         // 1: gcp.pubsub.v1.SubscriptionOptions
-	(*RetryPolicy)(nil),                 // 2: gcp.pubsub.v1.RetryPolicy
-	(*DeadLetterPolicy)(nil),            // 3: gcp.pubsub.v1.DeadLetterPolicy
-	nil,                                 // 4: gcp.pubsub.v1.TopicOptions.LabelsEntry
-	nil,                                 // 5: gcp.pubsub.v1.SubscriptionOptions.LabelsEntry
-	(*durationpb.Duration)(nil),         // 6: google.protobuf.Duration
-	(*descriptorpb.MessageOptions)(nil), // 7: google.protobuf.MessageOptions
+	(StorageCodec)(0),                   // 0: gcp.pubsub.v1.StorageCodec
+	(StoragePartitioning)(0),            // 1: gcp.pubsub.v1.StoragePartitioning
+	(*TopicOptions)(nil),                // 2: gcp.pubsub.v1.TopicOptions
+	(*SubscriptionOptions)(nil),         // 3: gcp.pubsub.v1.SubscriptionOptions
+	(*RetryPolicy)(nil),                 // 4: gcp.pubsub.v1.RetryPolicy
+	(*StorageSubscriptionOptions)(nil),  // 5: gcp.pubsub.v1.StorageSubscriptionOptions
+	(*DeadLetterPolicy)(nil),            // 6: gcp.pubsub.v1.DeadLetterPolicy
+	nil,                                 // 7: gcp.pubsub.v1.TopicOptions.LabelsEntry
+	nil,                                 // 8: gcp.pubsub.v1.SubscriptionOptions.LabelsEntry
+	nil,                                 // 9: gcp.pubsub.v1.StorageSubscriptionOptions.LabelsEntry
+	(*durationpb.Duration)(nil),         // 10: google.protobuf.Duration
+	(*descriptorpb.MessageOptions)(nil), // 11: google.protobuf.MessageOptions
 }
 var file_gcp_pubsub_v1_options_proto_depIdxs = []int32{
-	6,  // 0: gcp.pubsub.v1.TopicOptions.retention_hint:type_name -> google.protobuf.Duration
-	4,  // 1: gcp.pubsub.v1.TopicOptions.labels:type_name -> gcp.pubsub.v1.TopicOptions.LabelsEntry
-	6,  // 2: gcp.pubsub.v1.SubscriptionOptions.retention:type_name -> google.protobuf.Duration
-	6,  // 3: gcp.pubsub.v1.SubscriptionOptions.ack_deadline:type_name -> google.protobuf.Duration
-	6,  // 4: gcp.pubsub.v1.SubscriptionOptions.expiration_ttl:type_name -> google.protobuf.Duration
-	2,  // 5: gcp.pubsub.v1.SubscriptionOptions.retry_policy:type_name -> gcp.pubsub.v1.RetryPolicy
-	5,  // 6: gcp.pubsub.v1.SubscriptionOptions.labels:type_name -> gcp.pubsub.v1.SubscriptionOptions.LabelsEntry
-	3,  // 7: gcp.pubsub.v1.SubscriptionOptions.dead_letter:type_name -> gcp.pubsub.v1.DeadLetterPolicy
-	6,  // 8: gcp.pubsub.v1.RetryPolicy.minimum_backoff:type_name -> google.protobuf.Duration
-	6,  // 9: gcp.pubsub.v1.RetryPolicy.maximum_backoff:type_name -> google.protobuf.Duration
-	7,  // 10: gcp.pubsub.v1.topic:extendee -> google.protobuf.MessageOptions
-	7,  // 11: gcp.pubsub.v1.subscription:extendee -> google.protobuf.MessageOptions
-	0,  // 12: gcp.pubsub.v1.topic:type_name -> gcp.pubsub.v1.TopicOptions
-	1,  // 13: gcp.pubsub.v1.subscription:type_name -> gcp.pubsub.v1.SubscriptionOptions
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	12, // [12:14] is the sub-list for extension type_name
-	10, // [10:12] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	10, // 0: gcp.pubsub.v1.TopicOptions.retention_hint:type_name -> google.protobuf.Duration
+	7,  // 1: gcp.pubsub.v1.TopicOptions.labels:type_name -> gcp.pubsub.v1.TopicOptions.LabelsEntry
+	10, // 2: gcp.pubsub.v1.SubscriptionOptions.retention:type_name -> google.protobuf.Duration
+	10, // 3: gcp.pubsub.v1.SubscriptionOptions.ack_deadline:type_name -> google.protobuf.Duration
+	10, // 4: gcp.pubsub.v1.SubscriptionOptions.expiration_ttl:type_name -> google.protobuf.Duration
+	4,  // 5: gcp.pubsub.v1.SubscriptionOptions.retry_policy:type_name -> gcp.pubsub.v1.RetryPolicy
+	8,  // 6: gcp.pubsub.v1.SubscriptionOptions.labels:type_name -> gcp.pubsub.v1.SubscriptionOptions.LabelsEntry
+	6,  // 7: gcp.pubsub.v1.SubscriptionOptions.dead_letter:type_name -> gcp.pubsub.v1.DeadLetterPolicy
+	10, // 8: gcp.pubsub.v1.RetryPolicy.minimum_backoff:type_name -> google.protobuf.Duration
+	10, // 9: gcp.pubsub.v1.RetryPolicy.maximum_backoff:type_name -> google.protobuf.Duration
+	10, // 10: gcp.pubsub.v1.StorageSubscriptionOptions.retention:type_name -> google.protobuf.Duration
+	10, // 11: gcp.pubsub.v1.StorageSubscriptionOptions.ack_deadline:type_name -> google.protobuf.Duration
+	10, // 12: gcp.pubsub.v1.StorageSubscriptionOptions.expiration_ttl:type_name -> google.protobuf.Duration
+	4,  // 13: gcp.pubsub.v1.StorageSubscriptionOptions.retry_policy:type_name -> gcp.pubsub.v1.RetryPolicy
+	9,  // 14: gcp.pubsub.v1.StorageSubscriptionOptions.labels:type_name -> gcp.pubsub.v1.StorageSubscriptionOptions.LabelsEntry
+	6,  // 15: gcp.pubsub.v1.StorageSubscriptionOptions.dead_letter:type_name -> gcp.pubsub.v1.DeadLetterPolicy
+	0,  // 16: gcp.pubsub.v1.StorageSubscriptionOptions.codec:type_name -> gcp.pubsub.v1.StorageCodec
+	1,  // 17: gcp.pubsub.v1.StorageSubscriptionOptions.partitioning:type_name -> gcp.pubsub.v1.StoragePartitioning
+	11, // 18: gcp.pubsub.v1.topic:extendee -> google.protobuf.MessageOptions
+	11, // 19: gcp.pubsub.v1.subscription:extendee -> google.protobuf.MessageOptions
+	11, // 20: gcp.pubsub.v1.storage_subscription:extendee -> google.protobuf.MessageOptions
+	2,  // 21: gcp.pubsub.v1.topic:type_name -> gcp.pubsub.v1.TopicOptions
+	3,  // 22: gcp.pubsub.v1.subscription:type_name -> gcp.pubsub.v1.SubscriptionOptions
+	5,  // 23: gcp.pubsub.v1.storage_subscription:type_name -> gcp.pubsub.v1.StorageSubscriptionOptions
+	24, // [24:24] is the sub-list for method output_type
+	24, // [24:24] is the sub-list for method input_type
+	21, // [21:24] is the sub-list for extension type_name
+	18, // [18:21] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_gcp_pubsub_v1_options_proto_init() }
@@ -776,13 +1395,14 @@ func file_gcp_pubsub_v1_options_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gcp_pubsub_v1_options_proto_rawDesc), len(file_gcp_pubsub_v1_options_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   6,
-			NumExtensions: 2,
+			NumEnums:      2,
+			NumMessages:   8,
+			NumExtensions: 3,
 			NumServices:   0,
 		},
 		GoTypes:           file_gcp_pubsub_v1_options_proto_goTypes,
 		DependencyIndexes: file_gcp_pubsub_v1_options_proto_depIdxs,
+		EnumInfos:         file_gcp_pubsub_v1_options_proto_enumTypes,
 		MessageInfos:      file_gcp_pubsub_v1_options_proto_msgTypes,
 		ExtensionInfos:    file_gcp_pubsub_v1_options_proto_extTypes,
 	}.Build()

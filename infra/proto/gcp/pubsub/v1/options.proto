@@ -43,6 +43,55 @@ message RetryPolicy {
   google.protobuf.Duration maximum_backoff = 2;
 }
 
+// StorageCodec selects the analytical representation written to Cloud Storage.
+enum StorageCodec {
+  // Permanently resolves to PARQUET, including when the field is omitted.
+  STORAGE_CODEC_UNSPECIFIED = 0;
+  STORAGE_CODEC_PARQUET = 1;
+}
+
+// StoragePartitioning selects the directories beneath the storage subscription
+// marker's fully qualified proto name. Built-in partitions use UTC receipt time.
+enum StoragePartitioning {
+  // Permanently resolves to HIVE_DAILY, including when the field is omitted.
+  STORAGE_PARTITIONING_UNSPECIFIED = 0;
+  STORAGE_PARTITIONING_HIVE_DAILY = 1;
+  STORAGE_PARTITIONING_HIVE_HOURLY = 2;
+  STORAGE_PARTITIONING_HIVE_EXTERNAL = 3;
+}
+
+// StorageSubscriptionOptions declares a Go-owned analytical storage consumer.
+// The storage runner owns encoding, uploads and acknowledgment; ordinary
+// application subscriber helpers must not consume this marker.
+message StorageSubscriptionOptions {
+  // Defaults to the kebab-cased full name of the subscription marker.
+  string name = 1;
+  google.protobuf.Duration retention = 2;
+  bool retain_acked_messages = 3;
+  google.protobuf.Duration ack_deadline = 4;
+  google.protobuf.Duration expiration_ttl = 5;
+  RetryPolicy retry_policy = 6;
+  map<string, string> labels = 7;
+  string filter = 8;
+  DeadLetterPolicy dead_letter = 9;
+  // Required. Full name of a topic-declaring message with an attached schema.
+  // Its payload must be self-contained and nonrecursive.
+  string topic = 10;
+  // Required logical bucket name. Deployment resolves the globally unique GCS
+  // name and supplies the same mapping to Config Connector and the Go runner.
+  string bucket = 11;
+  StorageCodec codec = 12;
+  StoragePartitioning partitioning = 13;
+  // Required only for HIVE_EXTERNAL: Pub/Sub attribute containing a relative
+  // key=value/key=value suffix. Missing or malformed values are acked, discarded
+  // and counted by the runner, rather than retried or dead-lettered.
+  string partition_attribute = 14;
+  // Required only for HIVE_EXTERNAL: exact ordered keys in the attribute value.
+  // Keys are preserved verbatim, without the built-in modes' part__ prefix.
+  // Changing these keys after writing data requires a new marker/storage prefix.
+  repeated string partition_keys = 15;
+}
+
 message DeadLetterPolicy {
   // DLQ topic ID. If unset, defaults to "<subscription-name>-dlq". The DLQ
   // topic carries the same message schema as the source topic and is created
@@ -55,4 +104,5 @@ message DeadLetterPolicy {
 extend google.protobuf.MessageOptions {
   TopicOptions topic = 50001;
   SubscriptionOptions subscription = 50002;
+  StorageSubscriptionOptions storage_subscription = 50003;
 }
