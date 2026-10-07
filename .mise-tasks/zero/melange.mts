@@ -16,7 +16,7 @@ async function run() {
   }
 
   console.log(
-    "💬 Melange signing keys will be create to build Speakeasy Functions image locally.",
+    "💬 Melange signing keys will be created to build Speakeasy Functions image locally.",
   );
 
   const key_file = "./local/keys/melange-signing-key.rsa";

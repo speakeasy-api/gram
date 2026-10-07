@@ -428,7 +428,7 @@ export function useIdentityMember(identity: IdentityModel): {
 /**
  * The principal challenges and grants are recorded against, which the member
  * row states outright. The Speakeasy user id is the fallback for a subject with no
- * member row: the authz engine mints `user:<gram user id>` principals, so the
+ * member row: the authz engine mints `user:<speakeasy user id>` principals, so the
  * WorkOS id — which only role ASSIGNMENTS key on — would match no challenge.
  */
 export function useIdentityPrincipalUrn(
