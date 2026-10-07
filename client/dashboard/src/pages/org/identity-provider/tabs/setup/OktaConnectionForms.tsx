@@ -3,13 +3,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { ApiErrorAlert } from "@/components/api-error-alert";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/Field";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
+import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Input } from "@/components/ui/Input";
 import { SettingsSection } from "@/components/page-templates";
+import { Text } from "@/components/ui/Text";
 import type { OktaIdentityProviderConnection } from "@gram/client/models/components/oktaidentityproviderconnection.js";
 import { useCreateIdentityProviderConnectionMutation } from "@gram/client/react-query/createIdentityProviderConnection.js";
+import { useSetIdentityProviderConnectionSetupMethodMutation } from "@gram/client/react-query/setIdentityProviderConnectionSetupMethod.js";
 import { useRecordIdentityProviderConnectionAgentMutation } from "@gram/client/react-query/recordIdentityProviderConnectionAgent.js";
 import { useSubmitIdentityProviderConnectionClientIdMutation } from "@gram/client/react-query/submitIdentityProviderConnectionClientId.js";
 
@@ -26,12 +29,13 @@ import {
   scrollToConnectionCard,
 } from "../../tabs";
 
+type ListingMode = "custom_app" | "oin";
+
+const DEFAULT_LISTING_MODE: ListingMode = "oin";
+
 export function CreateConnectionForm(): JSX.Element {
   const queryClient = useQueryClient();
   const [orgUrl, setOrgUrl] = useState("");
-  const [listingMode, setListingMode] = useState<"custom_app" | "oin">(
-    "custom_app",
-  );
   const create = useCreateIdentityProviderConnectionMutation({
     onSuccess: () => {
       toast.success("Okta connection created");
@@ -41,6 +45,7 @@ export function CreateConnectionForm(): JSX.Element {
   });
   const trimmed = orgUrl.trim();
   const normalizedOrgUrl = normalizeOktaOrgUrl(trimmed);
+  const invalid = trimmed !== "" && normalizedOrgUrl === undefined;
 
   const createConnection = () => {
     if (create.isPending || normalizedOrgUrl === undefined) return;
@@ -50,7 +55,7 @@ export function CreateConnectionForm(): JSX.Element {
       request: {
         createIdentityProviderConnectionRequestBody: {
           orgUrl: normalizedOrgUrl,
-          listingMode,
+          listingMode: DEFAULT_LISTING_MODE,
         },
       },
     });
@@ -71,32 +76,6 @@ export function CreateConnectionForm(): JSX.Element {
       <SettingsSection.Panel>
         <SettingsSection.Body>
           <Field className="max-w-xl">
-            <FieldLabel id="okta-installation-label">
-              Installation method
-            </FieldLabel>
-            <RadioGroup
-              aria-labelledby="okta-installation-label"
-              value={listingMode}
-              onValueChange={(value) =>
-                setListingMode(value === "oin" ? "oin" : "custom_app")
-              }
-              disabled={create.isPending}
-            >
-              <div className="flex items-center gap-2">
-                <RadioGroupItem id="okta-custom-app" value="custom_app" />
-                <FieldLabel htmlFor="okta-custom-app">
-                  Custom API Services app (private key)
-                </FieldLabel>
-              </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem id="okta-oin" value="oin" />
-                <FieldLabel htmlFor="okta-oin">
-                  Okta Integration Network (client secret)
-                </FieldLabel>
-              </div>
-            </RadioGroup>
-          </Field>
-          <Field className="max-w-xl">
             <FieldLabel htmlFor="okta-org-url">
               Okta organization URL
             </FieldLabel>
@@ -106,9 +85,9 @@ export function CreateConnectionForm(): JSX.Element {
               onEnter={createConnection}
               inputMode="url"
               autoCapitalize="none"
-              aria-invalid={trimmed !== "" && normalizedOrgUrl === undefined}
+              aria-invalid={invalid}
               aria-describedby={
-                trimmed !== "" && normalizedOrgUrl === undefined
+                invalid
                   ? "okta-org-url-help okta-org-url-error"
                   : "okta-org-url-help"
               }
@@ -121,14 +100,14 @@ export function CreateConnectionForm(): JSX.Element {
               className="font-mono"
               autoComplete="off"
               spellCheck={false}
-              error={trimmed !== "" && normalizedOrgUrl === undefined}
+              error={invalid}
             />
             <FieldDescription id="okta-org-url-help">
               Use your organization’s address starting with https:// and ending
               in .okta.com, .oktapreview.com, .okta-emea.com, or .okta.mil. You
               can also paste your Okta Admin Console address.
             </FieldDescription>
-            {trimmed !== "" && normalizedOrgUrl === undefined && (
+            {invalid && (
               <p
                 id="okta-org-url-error"
                 role="alert"
@@ -151,10 +130,94 @@ export function CreateConnectionForm(): JSX.Element {
               disabled={normalizedOrgUrl === undefined || create.isPending}
               onClick={createConnection}
             >
-              {create.isPending ? "Creating..." : "Create connection"}
+              {create.isPending ? "Creating..." : "Continue"}
             </Button>
           </SettingsSection.FooterActions>
         </SettingsSection.Footer>
+      </SettingsSection.Panel>
+    </SettingsSection>
+  );
+}
+
+/** Picks how the pending connection connects to Okta; switching is allowed until the client ID is submitted. */
+export function SetupMethodChooser({
+  connection,
+}: {
+  connection: OktaIdentityProviderConnection;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  const current: ListingMode = usesClientSecret(connection)
+    ? "oin"
+    : "custom_app";
+  const setMethod = useSetIdentityProviderConnectionSetupMethodMutation({
+    onSuccess: () => void invalidateIdentityProviderQueries(queryClient),
+    onError: inlineError,
+  });
+
+  const switchTo = (next: ListingMode) => {
+    if (setMethod.isPending || next === current) return;
+    setMethod.mutate({
+      security: SESSION_SECURITY,
+      request: {
+        setIdentityProviderConnectionSetupMethodRequestBody: {
+          id: connection.id,
+          listingMode: next,
+        },
+      },
+    });
+  };
+
+  return (
+    <SettingsSection>
+      <SettingsSection.Header>
+        <SettingsSection.Title>
+          Choose how to set up the Okta app
+        </SettingsSection.Title>
+        <SettingsSection.Description>
+          The steps below follow your choice. You can switch until you enter the
+          app’s client ID.
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
+          <RadioCardGroup
+            size="sm"
+            className="max-w-xl"
+            value={current}
+            onValueChange={(value) =>
+              switchTo(value === "oin" ? "oin" : "custom_app")
+            }
+            disabled={setMethod.isPending}
+            aria-label="Installation method"
+          >
+            <RadioCard
+              value="oin"
+              title={
+                <span className="flex items-center gap-2">
+                  Okta Integration Network (client secret)
+                  <Badge variant="success" size="sm">
+                    Recommended
+                  </Badge>
+                </span>
+              }
+            >
+              <Text muted small>
+                Install the Speakeasy integration from the Okta catalog and
+                paste its client ID and client secret.
+              </Text>
+            </RadioCard>
+            <RadioCard
+              value="custom_app"
+              title="Custom API Services app (private key)"
+            >
+              <Text muted small>
+                Create an API Services app in Okta that signs in with a private
+                key Speakeasy holds.
+              </Text>
+            </RadioCard>
+          </RadioCardGroup>
+          <ApiErrorAlert error={setMethod.error} />
+        </SettingsSection.Body>
       </SettingsSection.Panel>
     </SettingsSection>
   );

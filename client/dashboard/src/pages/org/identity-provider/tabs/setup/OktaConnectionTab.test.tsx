@@ -35,6 +35,12 @@ vi.mock(
   }),
 );
 vi.mock(
+  "@gram/client/react-query/setIdentityProviderConnectionSetupMethod.js",
+  () => ({
+    useSetIdentityProviderConnectionSetupMethodMutation: idleMutation,
+  }),
+);
+vi.mock(
   "@gram/client/react-query/recordIdentityProviderConnectionAgent.js",
   () => ({
     useRecordIdentityProviderConnectionAgentMutation: idleMutation,
@@ -69,6 +75,18 @@ describe("OktaConnectionTab", () => {
       expect(screen.queryByRole("navigation")).toBeNull();
     },
   );
+
+  it("offers the method choice only until the client ID is submitted", () => {
+    renderTab(makeConnection({ status: "pending", clientIdSubmitted: false }));
+    expect(
+      screen.getByRole("radiogroup", { name: "Installation method" }),
+    ).toBeTruthy();
+    cleanup();
+    renderTab(makeConnection({ status: "pending", clientIdSubmitted: true }));
+    expect(
+      screen.queryByRole("radiogroup", { name: "Installation method" }),
+    ).toBeNull();
+  });
 
   it("describes a public-key connection by its JWKS", () => {
     renderTab(makeConnection({ status: "pending" }));

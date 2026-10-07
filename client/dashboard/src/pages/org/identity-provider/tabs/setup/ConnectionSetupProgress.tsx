@@ -26,6 +26,14 @@ export function ConnectionSetupProgress({
 }): JSX.Element | null {
   const current = CURRENT_STEP[connectionStep(connection)];
   if (current === null) return null;
+  return <SetupProgressSteps current={current} />;
+}
+
+export function SetupProgressSteps({
+  current,
+}: {
+  current: number;
+}): JSX.Element {
   return (
     <nav aria-label="Okta setup progress">
       <ol className="grid grid-cols-1 gap-2 sm:grid-cols-3">

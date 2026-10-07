@@ -20,7 +20,10 @@ import {
   ConnectionScopes,
   ReplaceClientSecretButton,
 } from "./OktaConnectionDetails";
-import { CreateConnectionForm } from "./OktaConnectionForms";
+import {
+  CreateConnectionForm,
+  SetupMethodChooser,
+} from "./OktaConnectionForms";
 import { RevokeConnectionButton } from "./RevokeConnectionButton";
 import {
   CONNECTION_STATUS,
@@ -282,6 +285,9 @@ export function OktaConnectionTab({
   return (
     <div className="flex flex-col gap-10">
       <ConnectionSetupProgress connection={connection} />
+      {connection.status === "pending" && !connection.clientIdSubmitted && (
+        <SetupMethodChooser connection={connection} />
+      )}
       <ChecklistSection connection={connection} />
       <ConnectionCard connection={connection} />
     </div>

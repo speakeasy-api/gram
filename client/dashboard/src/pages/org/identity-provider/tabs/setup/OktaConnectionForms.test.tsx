@@ -8,7 +8,11 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { ClientIdForm, CreateConnectionForm } from "./OktaConnectionForms";
+import {
+  ClientIdForm,
+  CreateConnectionForm,
+  SetupMethodChooser,
+} from "./OktaConnectionForms";
 import { makeConnection } from "./testFixtures";
 
 const mutation = vi.hoisted(() => ({
@@ -23,6 +27,12 @@ const mutation = vi.hoisted(() => ({
 vi.mock("@gram/client/react-query/createIdentityProviderConnection.js", () => ({
   useCreateIdentityProviderConnectionMutation: () => mutation,
 }));
+vi.mock(
+  "@gram/client/react-query/setIdentityProviderConnectionSetupMethod.js",
+  () => ({
+    useSetIdentityProviderConnectionSetupMethodMutation: () => mutation,
+  }),
+);
 vi.mock(
   "@gram/client/react-query/submitIdentityProviderConnectionClientId.js",
   () => ({
@@ -51,10 +61,11 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe("CreateConnectionForm", () => {
-  it("validates URL in text and guards Enter submissions", () => {
+  it("validates the URL and creates an OIN connection", () => {
     const { rerender } = render(<CreateConnectionForm />, {
       wrapper: Wrapper,
     });
+    expect(screen.queryByRole("radio")).toBeNull();
     const input = screen.getByLabelText("Okta organization URL");
     fireEvent.keyDown(input, { key: "Enter" });
     expect(mutation.mutate).not.toHaveBeenCalled();
@@ -62,44 +73,27 @@ describe("CreateConnectionForm", () => {
     expect(screen.getByRole("alert").textContent).toContain(
       "Enter an HTTPS Okta organization or Admin Console URL",
     );
-    fireEvent.keyDown(input, { key: "Enter" });
-    expect(mutation.mutate).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(true);
     fireEvent.change(input, {
-      target: { value: " https://example.okta.com/ " },
+      target: { value: " https://example-admin.okta.com/admin/home " },
     });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(mutation.mutate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        request: {
-          createIdentityProviderConnectionRequestBody: {
-            orgUrl: "https://example.okta.com",
-            listingMode: "custom_app",
-          },
-        },
-      }),
-    );
-    mutation.isPending = true;
-    rerender(<CreateConnectionForm />);
-    expect(input.hasAttribute("disabled")).toBe(true);
-    fireEvent.keyDown(input, { key: "Enter" });
-    expect(mutation.mutate).toHaveBeenCalledTimes(1);
-  });
-
-  it("creates a custom-app connection on click", () => {
-    render(<CreateConnectionForm />, { wrapper: Wrapper });
-    fireEvent.change(screen.getByLabelText("Okta organization URL"), {
-      target: { value: "https://example.okta.com/" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Create connection" }));
     expect(mutation.mutate).toHaveBeenCalledExactlyOnceWith({
       security: expect.anything(),
       request: {
         createIdentityProviderConnectionRequestBody: {
           orgUrl: "https://example.okta.com",
-          listingMode: "custom_app",
+          listingMode: "oin",
         },
       },
     });
+    mutation.isPending = true;
+    rerender(<CreateConnectionForm />);
+    expect(input.hasAttribute("disabled")).toBe(true);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(mutation.mutate).toHaveBeenCalledTimes(1);
   });
 
   it("shows the org URL for a pasted admin console URL", () => {
@@ -112,31 +106,62 @@ describe("CreateConnectionForm", () => {
     });
     fireEvent.blur(input);
     expect(input.value).toBe("https://example.okta.com");
-    fireEvent.change(input, {
-      target: { value: "https://example-admin.okta.com/admin/home" },
-    });
-    fireEvent.keyDown(input, { key: "Enter" });
-    expect(input.value).toBe("https://example.okta.com");
+  });
+});
+
+describe("SetupMethodChooser", () => {
+  const oin = makeConnection({
+    status: "pending",
+    clientIdSubmitted: false,
+    listingMode: "oin",
+    jwksUrl: undefined,
   });
 
-  it("disables the button for a non-Okta URL and while pending", () => {
-    const { rerender } = render(<CreateConnectionForm />, {
-      wrapper: Wrapper,
-    });
-    fireEvent.change(screen.getByLabelText("Okta organization URL"), {
-      target: { value: "https://unrelated.example.com" },
-    });
-    const create = screen.getByRole("button", { name: "Create connection" });
-    expect(create.hasAttribute("disabled")).toBe(true);
-    fireEvent.click(create);
-    expect(mutation.mutate).not.toHaveBeenCalled();
-    mutation.isPending = true;
-    rerender(<CreateConnectionForm />);
+  it("marks the connection's method and recommends OIN", () => {
+    render(<SetupMethodChooser connection={oin} />, { wrapper: Wrapper });
     expect(
       screen
-        .getByRole("button", { name: "Creating..." })
-        .hasAttribute("disabled"),
-    ).toBe(true);
+        .getByRole("radio", { name: /Okta Integration Network/ })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(screen.getByText("Recommended")).toBeTruthy();
+  });
+
+  it("switches the pending connection's method in place", () => {
+    render(<SetupMethodChooser connection={oin} />, { wrapper: Wrapper });
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Custom API Services app (private key)",
+      }),
+    );
+    expect(mutation.mutate).toHaveBeenCalledExactlyOnceWith({
+      security: expect.anything(),
+      request: {
+        setIdentityProviderConnectionSetupMethodRequestBody: {
+          id: oin.id,
+          listingMode: "custom_app",
+        },
+      },
+    });
+  });
+
+  it("ignores a click on the current method", () => {
+    render(<SetupMethodChooser connection={oin} />, { wrapper: Wrapper });
+    fireEvent.click(
+      screen.getByRole("radio", { name: /Okta Integration Network/ }),
+    );
+    expect(mutation.mutate).not.toHaveBeenCalled();
+  });
+
+  it("does nothing while a switch is pending", () => {
+    mutation.isPending = true;
+    render(<SetupMethodChooser connection={oin} />, { wrapper: Wrapper });
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Custom API Services app (private key)",
+      }),
+    );
+    expect(mutation.mutate).not.toHaveBeenCalled();
   });
 });
 
@@ -178,28 +203,6 @@ describe("ClientIdForm", () => {
 
 describe("OIN credentials", () => {
   const connection = makeConnection({ listingMode: "oin", jwksUrl: undefined });
-
-  it("creates an OIN connection when selected", () => {
-    render(<CreateConnectionForm />, { wrapper: Wrapper });
-    fireEvent.click(
-      screen.getByRole("radio", {
-        name: "Okta Integration Network (client secret)",
-      }),
-    );
-    const input = screen.getByLabelText("Okta organization URL");
-    fireEvent.change(input, { target: { value: "https://example.okta.com" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-    expect(mutation.mutate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        request: {
-          createIdentityProviderConnectionRequestBody: {
-            orgUrl: "https://example.okta.com",
-            listingMode: "oin",
-          },
-        },
-      }),
-    );
-  });
 
   it("requires a masked secret, submits it, and clears it after success", () => {
     const { rerender } = render(<ClientIdForm connection={connection} />, {
