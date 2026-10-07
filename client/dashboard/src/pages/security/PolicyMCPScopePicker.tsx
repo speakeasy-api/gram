@@ -44,6 +44,9 @@ type PickerServer = {
   memberCount?: number;
   tools: PickerTool[];
   toolsLoading: boolean;
+  /** The tool list failed to load, so an empty list says nothing about the
+   *  server. Stale tools from an earlier load are still shown. */
+  toolsError: boolean;
   /** Where the tool list comes from. "discovered" tools are recorded when the
    *  server's Inspect tab lists them, so an empty list means "not discovered
    *  yet". "unlisted" servers (tunneled, unproxied) never record their tools. */
@@ -161,6 +164,7 @@ export function PolicyMCPScopePicker({
         kind: "server",
         tools,
         toolsLoading: metadataQuery?.isLoading ?? false,
+        toolsError: metadataQuery?.isError ?? false,
         toolSource: toolSourceFor(server),
       };
     }),
@@ -179,6 +183,7 @@ export function PolicyMCPScopePicker({
           }))
           .sort((left, right) => left.name.localeCompare(right.name)),
         toolsLoading: false,
+        toolsError: false,
         toolSource: "toolset",
       }),
     ),
@@ -190,6 +195,7 @@ export function PolicyMCPScopePicker({
         memberCount: gateway.memberCount,
         tools: [],
         toolsLoading: false,
+        toolsError: false,
         toolSource: "unlisted",
       }),
     ),
@@ -386,16 +392,17 @@ export function PolicyMCPScopePicker({
     if (selection.kind === "rule") return total + ruleTools(server).length;
     return total;
   }, 0);
-  // These servers cover every tool, but none have been discovered, so they
-  // add nothing to toolsInScope even though their tools are all in scope.
+  // These servers cover every tool, but none have been discovered, so they add
+  // nothing to toolsInScope. An annotation rule matches nothing until discovery
+  // (a wildcard can't bypass it), and a failed load says nothing about the server.
   const undiscoveredServersInScope = pickerServers.filter((server) => {
-    if (server.toolSource !== "discovered" || server.toolsLoading) return false;
-    if (server.tools.length > 0) return false;
+    if (value.toolAnnotations.length > 0) return false;
+    if (server.toolSource !== "discovered") return false;
+    if (server.toolsLoading || server.toolsError || server.tools.length > 0) {
+      return false;
+    }
     const selection = selectionFor(server);
-    return (
-      selection.kind === "wildcard" ||
-      (selection.kind === "rule" && value.toolAnnotations.length === 0)
-    );
+    return selection.kind === "wildcard" || selection.kind === "rule";
   }).length;
   const ruleLabel =
     value.toolAnnotations.length === 0
@@ -878,12 +885,11 @@ function FocusedServerPane({
               </button>
             ) : null}
           </div>
-          {server.toolsLoading ? (
-            <Text small muted className="flex items-center gap-2 p-3">
-              <Loader2 className="size-4 animate-spin" /> Loading tools...
-            </Text>
-          ) : server.tools.length === 0 ? (
-            <NoToolsNotice server={server} toolAnnotations={toolAnnotations} />
+          {server.tools.length === 0 ? (
+            <EmptyToolListNotice
+              server={server}
+              toolAnnotations={toolAnnotations}
+            />
           ) : (
             server.tools.map((tool) => {
               const checked = selected && selectedTools.includes(tool.name);
@@ -956,7 +962,7 @@ function noToolsScopeNote(
   }
 }
 
-function NoToolsNotice({
+function EmptyToolListNotice({
   server,
   toolAnnotations,
 }: {
@@ -966,6 +972,20 @@ function NoToolsNotice({
   const routes = useRoutes();
   const discovered = server.toolSource === "discovered";
 
+  if (server.toolsLoading) {
+    return (
+      <Text small muted className="flex items-center gap-2 p-3">
+        <Loader2 className="size-4 animate-spin" /> Loading tools...
+      </Text>
+    );
+  }
+  if (server.toolsError) {
+    return (
+      <Text small className="text-destructive p-3">
+        Couldn't load tools for this server.
+      </Text>
+    );
+  }
   return (
     <div className="space-y-2 p-3">
       <Text small muted>

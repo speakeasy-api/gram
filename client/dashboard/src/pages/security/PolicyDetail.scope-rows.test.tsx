@@ -142,6 +142,14 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
           slug: "tunnel-mcp",
           tunneledMcpServerId: "tunnel-1",
         },
+        // Remote-backed, but its tool metadata query fails (see the
+        // listMcpServerToolMetadata mock below).
+        {
+          id: "66666666-6666-4666-8666-666666666666",
+          name: "Wiki MCP",
+          slug: "wiki-mcp",
+          remoteMcpServerId: "remote-2",
+        },
       ],
     },
     isLoading: false,
@@ -155,7 +163,12 @@ vi.mock("@gram/client/react-query/listMcpServerToolMetadata.js", () => ({
     request: { mcpServerId: string },
   ) => ({
     queryKey: ["listMcpServerToolMetadata", request.mcpServerId],
-    queryFn: async () => ({ tools: [] }),
+    queryFn: async () => {
+      if (request.mcpServerId === "66666666-6666-4666-8666-666666666666") {
+        throw new Error("tool metadata unavailable");
+      }
+      return { tools: [] };
+    },
   }),
 }));
 
@@ -335,13 +348,14 @@ function policy(overrides: Partial<RiskPolicy> = {}): RiskPolicy {
   };
 }
 
+function testQueryClient(): QueryClient {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+}
+
 function renderEditor(p: RiskPolicy) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
   return render(
     <MemoryRouter>
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={testQueryClient()}>
         <TooltipProvider>
           <StandardPolicyEditor policy={p} />
         </TooltipProvider>
@@ -351,7 +365,7 @@ function renderEditor(p: RiskPolicy) {
 }
 
 function ScopePickerHarness(): JSX.Element {
-  const [queryClient] = useState(() => new QueryClient());
+  const [queryClient] = useState(testQueryClient);
   const [value, setValue] = useState<PolicyMCPScopeValue>({
     mode: "mcp",
     allServers: false,
@@ -677,6 +691,41 @@ describe("StandardPolicyEditor scope rows", () => {
     expect(screen.queryByText(/^Custom ·/)).toBeNull();
   });
 
+  it("stops counting a wildcard server with no discovered tools once an annotation rule is set", async () => {
+    renderEditor(
+      policy({
+        sources: ["gitleaks"],
+        mcpScope: {
+          allServers: false,
+          toolAnnotations: [],
+          servers: [
+            {
+              mcpServerId: "44444444-4444-4444-8444-444444444444",
+              tools: ["*"],
+            },
+          ],
+        },
+      }),
+    );
+
+    fireEvent.click(screen.getByText("Selected MCP servers"));
+    expect(
+      await screen.findByText(
+        "1 servers · 0 tools in scope · all tools on 1 server with no discovered tools",
+      ),
+    ).toBeTruthy();
+
+    // The backend rejects a wildcard under an annotation rule, and the pane
+    // already says the rule matches nothing here, so the footer must agree.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Tool rule: All tools" }),
+    );
+    fireEvent.click(screen.getByText("Tools with MCP annotations"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    expect(screen.getByText("1 servers · 0 tools in scope")).toBeTruthy();
+  });
+
   it("keeps the pane on the deselected server so its tools stay pickable", async () => {
     renderEditor(policy({ sources: ["gitleaks"] }));
 
@@ -913,6 +962,21 @@ describe("PolicyMCPScopePicker all-server selection", () => {
         "The tool rule matches tools by their discovered annotations, so it matches nothing on this server until its tools are discovered.",
       ),
     ).toBeTruthy();
+    expect(screen.getByText("1 servers · 0 tools in scope")).toBeTruthy();
+  });
+
+  it("reports a failed tool load instead of claiming no tools were discovered", async () => {
+    render(<ScopePickerHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Wiki MCP/ }));
+
+    expect(
+      await screen.findByText("Couldn't load tools for this server."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/No tools discovered yet/)).toBeNull();
+    expect(screen.queryByRole("link", { name: /Discover tools/ })).toBeNull();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Wiki MCP" }));
     expect(screen.getByText("1 servers · 0 tools in scope")).toBeTruthy();
   });
 
