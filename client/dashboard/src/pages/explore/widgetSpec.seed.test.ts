@@ -36,7 +36,7 @@ describe("the demo seed's widgets", () => {
   const widgets = seededWidgets();
 
   it("are all found", () => {
-    expect(widgets).toHaveLength(5);
+    expect(widgets).toHaveLength(6);
   });
 
   it.each(widgets.map((widget, i) => [i + 1, widget] as const))(

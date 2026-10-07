@@ -26,6 +26,7 @@ import {
   dimensionFields,
   findDataset,
   hasChartShape,
+  isStacked,
   MAX_DIMENSIONS,
   MAX_LIMIT,
   measureAlias,
@@ -54,6 +55,12 @@ function removeAt<T>(list: T[], index: number): T[] {
   return list.filter((_, current) => current !== index);
 }
 
+function groupByPlaceholder(grouped: boolean, needsBreakdown: boolean): string {
+  if (!grouped) return "Not available for number charts";
+  if (needsBreakdown) return "Pick a field to stack by";
+  return "No breakdown";
+}
+
 /**
  * Compose one Explore query. Every control is generated from the catalog:
  * the dataset picked reconfigures the fields, aggregations, and operators
@@ -79,6 +86,15 @@ export function QueryBuilder({
 }): JSX.Element {
   const dataset = findDataset(datasets, spec.dataset);
   const grouped = spec.chartType !== "number";
+  // A stack with nothing to stack by is drawn as the plain chart it is; the
+  // picker says so before it is picked, and the Group by after.
+  const noBreakdown = spec.dimensions.length === 0;
+  const needsBreakdown = isStacked(spec.chartType) && noBreakdown;
+  const chartOptions = CHART_TYPE_OPTIONS.map((option) =>
+    isStacked(option.value) && noBreakdown
+      ? { ...option, tooltip: "Needs a Group by" }
+      : option,
+  );
   const timeseries = hasChartShape(spec);
   const dimensionOptions = dimensionFields(dataset).map((field) => ({
     label: field.name,
@@ -238,9 +254,7 @@ export function QueryBuilder({
           onValueChange={(dimensions) =>
             patch({ dimensions: dimensions.slice(0, MAX_DIMENSIONS) })
           }
-          placeholder={
-            grouped ? "No breakdown" : "Not available for number charts"
-          }
+          placeholder={groupByPlaceholder(grouped, needsBreakdown)}
           disabled={!grouped}
           className="max-w-3xl"
         />
@@ -251,7 +265,7 @@ export function QueryBuilder({
           <SegmentedControl<ChartType>
             value={spec.chartType}
             onChange={(chartType) => patch({ chartType })}
-            options={CHART_TYPE_OPTIONS}
+            options={chartOptions}
           />
         </BuilderField>
         <BuilderField label="Window">

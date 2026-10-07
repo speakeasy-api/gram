@@ -49,12 +49,14 @@ type QueryOrderBy struct {
 type ChartType string
 
 const (
-	ChartLine   ChartType = "line"
-	ChartArea   ChartType = "area"
-	ChartBar    ChartType = "bar"
-	ChartRanked ChartType = "ranked"
-	ChartTable  ChartType = "table"
-	ChartNumber ChartType = "number"
+	ChartLine        ChartType = "line"
+	ChartArea        ChartType = "area"
+	ChartBar         ChartType = "bar"
+	ChartStackedBar  ChartType = "stacked_bar"
+	ChartStackedArea ChartType = "stacked_area"
+	ChartRanked      ChartType = "ranked"
+	ChartTable       ChartType = "table"
+	ChartNumber      ChartType = "number"
 )
 
 // normalize returns the type lowercased, the form it is checked and stored
@@ -206,7 +208,7 @@ func validateVisualization(visualization Visualization, query Query) string {
 	// stores the type lowercased.
 	chart := visualization.Type.normalize()
 	switch chart {
-	case ChartLine, ChartArea, ChartBar:
+	case ChartLine, ChartArea, ChartBar, ChartStackedBar, ChartStackedArea:
 		if !grained || !aggregated {
 			return fmt.Sprintf("unsatisfiable: a %s chart draws a timeseries, so its query needs a grain and at least one measure", chart)
 		}

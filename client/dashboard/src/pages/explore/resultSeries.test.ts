@@ -5,6 +5,7 @@ import {
   bucketTitle,
   isSparse,
   MAX_SERIES,
+  OTHER_LABEL,
   seriesFromRows,
   sharedUnit,
   tupleLabel,
@@ -129,6 +130,74 @@ describe("seriesFromRows", () => {
     expect(set.series).toHaveLength(MAX_SERIES);
     expect(set.series[0]?.label).toBe(`user-${MAX_SERIES + 2}`);
     expect(set.hidden).toBe(3);
+  });
+
+  it("folds the series past the cap into one Other series when asked", () => {
+    const rows = Array.from({ length: MAX_SERIES + 3 }, (_, i) => [
+      { time_bucket: "t1", user: `user-${i}`, count: i + 1 },
+      { time_bucket: "t2", user: `user-${i}`, count: i + 1 },
+    ]).flat();
+    const set = seriesFromRows(
+      rows,
+      ["user"],
+      [{ op: "count", field: "" }],
+      dataset,
+      true,
+    );
+    expect(set.series).toHaveLength(MAX_SERIES);
+    expect(set.hidden).toBe(4);
+    const other = set.series.at(-1);
+    expect(other).toMatchObject({ label: OTHER_LABEL, other: true });
+    // The four smallest series are user-0 to user-3, with counts 1 to 4.
+    expect(other?.points).toEqual([10, 10]);
+    expect(set.series.slice(0, -1).every((s) => !s.other)).toBe(true);
+  });
+
+  it("folds nothing when the series fit, and leaves a bucket null that none of the folded had", () => {
+    const fitting = seriesFromRows(
+      Array.from({ length: MAX_SERIES }, (_, i) => ({
+        time_bucket: "t1",
+        user: `user-${i}`,
+        count: 1,
+      })),
+      ["user"],
+      [{ op: "count", field: "" }],
+      dataset,
+      true,
+    );
+    expect(fitting.series).toHaveLength(MAX_SERIES);
+    expect(fitting.series.some((s) => s.other)).toBe(false);
+    expect(fitting.hidden).toBe(0);
+
+    // The named series have a second bucket the folded ones never had.
+    const rows = [
+      ...Array.from({ length: MAX_SERIES + 1 }, (_, i) => ({
+        time_bucket: "t1",
+        user: `user-${i}`,
+        count: i + 1,
+      })),
+      { time_bucket: "t2", user: `user-${MAX_SERIES}`, count: 1 },
+    ];
+    const set = seriesFromRows(
+      rows,
+      ["user"],
+      [{ op: "count", field: "" }],
+      dataset,
+      true,
+    );
+    expect(set.series.at(-1)?.points).toEqual([1 + 2, null]);
+  });
+
+  it("never mistakes a dimension value called Other for the fold", () => {
+    const set = seriesFromRows(
+      [{ time_bucket: "t1", user: "Other", count: 1 }],
+      ["user"],
+      [{ op: "count", field: "" }],
+      dataset,
+      true,
+    );
+    expect(set.series[0]).toMatchObject({ label: "Other" });
+    expect(set.series[0]?.other).toBeUndefined();
   });
 
   it("labels the empty tuple as all and blanks as a dash", () => {

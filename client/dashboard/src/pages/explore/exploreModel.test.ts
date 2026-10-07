@@ -5,12 +5,15 @@ import {
   autoGrain,
   completeFilters,
   completeMeasures,
+  drawnChart,
   fieldsForOp,
   filterableFields,
   formatMeasureValue,
   hasChartShape,
   initialSpec,
+  isChartType,
   isRowsMode,
+  isStacked,
   longestWindow,
   measureAlias,
   measureLabel,
@@ -237,9 +240,27 @@ describe("the queries a spec describes", () => {
     );
   });
 
+  it("draws a stack as the plain chart it is when there is nothing to stack by", () => {
+    expect(isChartType("stacked_bar")).toBe(true);
+    expect(isChartType("stacked_area")).toBe(true);
+    expect(isStacked("stacked_area")).toBe(true);
+    expect(isStacked("area")).toBe(false);
+
+    const stacked = spec({ chartType: "stacked_bar", dimensions: ["user"] });
+    expect(drawnChart(stacked)).toBe("stacked_bar");
+    expect(drawnChart({ ...stacked, dimensions: [] })).toBe("bar");
+    expect(
+      drawnChart({ ...stacked, chartType: "stacked_area", dimensions: [] }),
+    ).toBe("area");
+    expect(drawnChart({ ...stacked, measures: [] })).toBe("table");
+    expect(drawnChart(spec({ chartType: "number" }))).toBe("number");
+  });
+
   it("draws a chart only for a timeseries over at least one measure", () => {
     expect(hasChartShape(spec({ chartType: "line" }))).toBe(true);
     expect(hasChartShape(spec({ chartType: "bar" }))).toBe(true);
+    expect(hasChartShape(spec({ chartType: "stacked_bar" }))).toBe(true);
+    expect(hasChartShape(spec({ chartType: "stacked_area" }))).toBe(true);
     expect(hasChartShape(spec({ chartType: "ranked" }))).toBe(false);
     expect(hasChartShape(spec({ chartType: "table" }))).toBe(false);
     expect(hasChartShape(spec({ chartType: "number" }))).toBe(false);
