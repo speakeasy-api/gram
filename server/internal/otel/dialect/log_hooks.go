@@ -195,11 +195,12 @@ func (HooksLog) ToolName(record *otelv1.InboundLogRecord) (string, string, error
 func (HooksLog) Outcome(record *otelv1.InboundLogRecord) (string, string, error) {
 	nameKey, name := logRawEventName(record)
 	switch name {
-	case hookEventPostToolUse:
-		return nameKey, OutcomeOK, nil
 	case hookEventPostToolUseFailure:
 		return nameKey, OutcomeError, nil
-	case hookEventAfterMCPExecution:
+	case hookEventPostToolUse, hookEventAfterMCPExecution:
+		// Cursor reports a failed tool as a PostToolUse carrying the error,
+		// where Claude Code sends PostToolUseFailure; either way the tool ran
+		// and the error says how it went.
 		if key, _ := getOneLogAttr(record, hookErrorKey); key != "" {
 			return key, OutcomeError, nil
 		}
