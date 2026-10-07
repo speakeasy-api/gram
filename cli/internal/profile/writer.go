@@ -12,6 +12,11 @@ import (
 // Save writes the profile configuration to disk. It writes a temporary file
 // and renames it over path, so a failed write never leaves a truncated file.
 func Save(config *Config, path string) error {
+	// Write through a symlinked profile, such as one managed by a dotfiles
+	// tool, instead of replacing the link with a regular file.
+	if target, err := filepath.EvalSymlinks(path); err == nil {
+		path = target
+	}
 	dir := filepath.Dir(path)
 	// #nosec G301 - directory permissions are appropriate for config directory
 	if err := os.MkdirAll(dir, 0755); err != nil {

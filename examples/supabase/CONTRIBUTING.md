@@ -329,7 +329,7 @@ Generate a manifest of all registered tools:
 ```typescript
 const g = new Functions().tool({/* ... */}).tool({/* ... */});
 
-const manifest = g.manifest();
+const manifest = functions.manifest();
 // {
 //   version: "0.0.0",
 //   tools: [
@@ -357,7 +357,7 @@ export const handleToolCall = g.handleToolCall;
 You can also call tools programmatically:
 
 ```typescript
-const response = await g.handleToolCall({
+const response = await functions.handleToolCall({
   name: "add",
   input: { a: 5, b: 3 },
 });
@@ -395,7 +395,7 @@ const g = new Functions().tool({
 });
 
 // Type-safe tool calls
-const response = await g.handleToolCall({
+const response = await functions.handleToolCall({
   name: "greet", // Only "greet" is valid
   input: { name: "World" }, // input is typed correctly
 });

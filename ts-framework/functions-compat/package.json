@@ -20,7 +20,7 @@
     "gf": "./bin/gf.js"
   },
   "scripts": {
-    "test": "tsc -p ../functions/tsconfig.json && vitest run"
+    "test": "vitest run"
   },
   "publishConfig": {
     "access": "public"

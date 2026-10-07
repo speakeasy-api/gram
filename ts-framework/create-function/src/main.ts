@@ -169,7 +169,7 @@ async function init(argv: string[]): Promise<void> {
   });
 
   const isLocalDev = yn(
-    process.env["SPEAKEASY_AI_DEV"] ?? process.env["GRAM_DEV"],
+    process.env["SPEAKEASY_AI_DEV"] || process.env["GRAM_DEV"],
   );
 
   tlog.message("Scaffolding");

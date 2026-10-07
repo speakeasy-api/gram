@@ -244,6 +244,13 @@ GRAM_LOG_PRETTY = { default = "1" }
 ## Default Gram API URL baked into the dashboard's inlined Elements code and
 ## used by the CLI to point to the correct Gram API server
 GRAM_API_URL = "{{env.GRAM_SERVER_URL}}"
+## The speakeasy CLI reads SPEAKEASY_AI_* names before the deprecated GRAM_*
+## ones and warns when only GRAM_* is set. Mirror the values it uses so local
+## runs stay quiet while the server keeps its GRAM_* names.
+SPEAKEASY_AI_API_KEY = "{{env.GRAM_API_KEY}}"
+SPEAKEASY_AI_API_URL = "{{env.GRAM_API_URL}}"
+SPEAKEASY_AI_SITE_URL = "{{env.GRAM_SITE_URL}}"
+SPEAKEASY_AI_LOG_PRETTY = "{{env.GRAM_LOG_PRETTY}}"
 VITE_DEV_HOSTNAMES = "localhost"
 ## Base URL of the CDN serving the dashboard's static assets (e.g.
 ## https://cdn.dev.getgram.ai). Not a build-time setting: the dashboard

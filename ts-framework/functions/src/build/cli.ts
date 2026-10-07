@@ -53,7 +53,7 @@ export type CLIResolverDeps = {
 };
 
 function isLocalDev(env: CLIResolverDeps["env"]): boolean {
-  const value = env[DEV_ENV] ?? env[LEGACY_DEV_ENV];
+  const value = env[DEV_ENV] || env[LEGACY_DEV_ENV];
   return value?.toLowerCase() === "true" || value === "1";
 }
 
@@ -70,7 +70,7 @@ function isLocalDev(env: CLIResolverDeps["env"]): boolean {
  */
 export async function resolveCLI(deps: CLIResolverDeps): Promise<string> {
   const override = (
-    deps.env[CLI_PATH_ENV] ?? deps.env[LEGACY_CLI_PATH_ENV]
+    deps.env[CLI_PATH_ENV]?.trim() || deps.env[LEGACY_CLI_PATH_ENV]
   )?.trim();
   if (override) {
     return override;

@@ -143,3 +143,11 @@ test("plain SPEAKEASY_* names from the SDK generator are ignored", async () => {
 
   expect(cli).toBe("gram");
 });
+
+test("an empty SPEAKEASY_AI_CLI_PATH falls back to GRAM_CLI_PATH", async () => {
+  const cli = await resolveCLI(
+    deps({ env: { SPEAKEASY_AI_CLI_PATH: "", GRAM_CLI_PATH: "/opt/gram" } }),
+  );
+
+  expect(cli).toBe("/opt/gram");
+});

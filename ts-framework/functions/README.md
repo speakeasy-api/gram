@@ -522,7 +522,7 @@ import { Functions } from "@speakeasy-api/functions";
 
 const functions = new Functions().tool({/* ... */}).tool({/* ... */});
 
-const manifest = g.manifest();
+const manifest = functions.manifest();
 // {
 //   version: "0.0.0",
 //   tools: [
@@ -652,7 +652,7 @@ const functions = new Functions().tool({
 });
 
 // Type-safe tool calls
-const response = await g.handleToolCall({
+const response = await functions.handleToolCall({
   name: "greet", // Only "greet" is valid
   input: { name: "World" }, // input is typed correctly
 });

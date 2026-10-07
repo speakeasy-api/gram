@@ -176,6 +176,10 @@ func Execute(ctx context.Context, osArgs []string) {
 	if len(osArgs) > 0 {
 		writeLegacyCommandNotice(os.Stderr, osArgs[0])
 	}
+	if err := flags.UnsetEmptyEnv(os.LookupEnv, os.Unsetenv); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if notice := flags.LegacyEnvNotice(os.LookupEnv); notice != "" {
 		_, _ = fmt.Fprintln(os.Stderr, notice)
 	}

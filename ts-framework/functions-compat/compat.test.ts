@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -18,6 +19,13 @@ const here = import.meta.dirname;
 
 async function readPackage(dir: string): Promise<PackageJSON> {
   return JSON.parse(await readFile(join(dir, "package.json"), "utf-8"));
+}
+
+// The re-exports resolve to the built primary package.
+if (!existsSync(join(here, "..", "functions", "dist", "index.js"))) {
+  throw new Error(
+    "Build @speakeasy-api/functions first: aube run --filter ./ts-framework/functions build",
+  );
 }
 
 const compat = await readPackage(here);

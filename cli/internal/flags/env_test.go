@@ -30,6 +30,11 @@ func TestLegacyEnvNotice(t *testing.T) {
 		{name: "nothing set", env: map[string]string{}, want: ""},
 		{name: "only new names", env: map[string]string{"SPEAKEASY_AI_API_KEY": "k", "SPEAKEASY_AI_ORG": "o"}, want: ""},
 		{name: "both names set", env: map[string]string{"SPEAKEASY_AI_API_KEY": "k", "GRAM_API_KEY": "old"}, want: ""},
+		{
+			name: "empty new name does not count",
+			env:  map[string]string{"SPEAKEASY_AI_API_KEY": "", "GRAM_API_KEY": "old"},
+			want: "Warning: GRAM_* environment variables are deprecated and still work for now. Rename GRAM_API_KEY to SPEAKEASY_AI_API_KEY.",
+		},
 		{name: "SDK generator variables", env: map[string]string{"SPEAKEASY_API_KEY": "k"}, want: ""},
 		{
 			name: "SDK generator variables do not replace legacy names",
@@ -54,4 +59,16 @@ func TestLegacyEnvNotice(t *testing.T) {
 			require.Equal(t, tc.want, LegacyEnvNotice(lookupIn(tc.env)))
 		})
 	}
+}
+
+func TestUnsetEmptyEnv(t *testing.T) {
+	t.Parallel()
+
+	env := map[string]string{"SPEAKEASY_AI_API_KEY": "", "SPEAKEASY_AI_ORG": "o", "GRAM_API_KEY": "", "SPEAKEASY_API_KEY": ""}
+	err := UnsetEmptyEnv(lookupIn(env), func(key string) error {
+		delete(env, key)
+		return nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"SPEAKEASY_AI_ORG": "o", "GRAM_API_KEY": "", "SPEAKEASY_API_KEY": ""}, env)
 }

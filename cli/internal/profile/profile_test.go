@@ -198,3 +198,22 @@ func TestClear_WithoutLegacyFileCreatesNone(t *testing.T) { //nolint:paralleltes
 	require.FileExists(t, path)
 	require.NoFileExists(t, filepath.Join(home, ".gram", "profile.json"))
 }
+
+func TestSave_WritesThroughSymlink(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "dotfiles", "profile.json")
+	writeConfig(t, target, EmptyConfig())
+	link := filepath.Join(dir, "profile.json")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	require.NoError(t, Save(legacyConfig(), link))
+
+	info, err := os.Lstat(link)
+	require.NoError(t, err)
+	require.NotZero(t, info.Mode()&os.ModeSymlink, "the link was replaced")
+	require.Equal(t, "legacy-secret", readConfig(t, target).Profiles["default"].Secret)
+}
