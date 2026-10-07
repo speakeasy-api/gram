@@ -31,6 +31,13 @@ type Service interface {
 	// Integration Network and re-verify it. The previous secret is kept if Okta
 	// rejects the new one. Requires org:admin.
 	ReplaceClientSecret(context.Context, *ReplaceClientSecretPayload) (res *OktaIdentityProviderConnection, err error)
+	// Switch how a pending connection connects to Okta: an install from the Okta
+	// Integration Network (client secret) or a custom API Services app (private
+	// key). Allowed until the client ID is submitted. Switching to the custom app
+	// provisions a signing key and JWKS URL once; switching away stops serving the
+	// key and switching back reuses it. A key left unused is retired when the
+	// client ID is submitted or the connection is revoked. Requires org:admin.
+	SetSetupMethod(context.Context, *SetSetupMethodPayload) (res *OktaIdentityProviderConnection, err error)
 	// Re-verify the connection against Okta: mint a token, confirm each required
 	// scope with a read, and record the outcome. Rate limited per organization.
 	// Requires org:admin.
@@ -75,7 +82,7 @@ const ServiceName = "identityProviderConnections"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"create", "submitClientId", "replaceClientSecret", "verify", "get", "recordAgent", "revoke", "syncApplications", "listApplications"}
+var MethodNames = [10]string{"create", "submitClientId", "replaceClientSecret", "setSetupMethod", "verify", "get", "recordAgent", "revoke", "syncApplications", "listApplications"}
 
 // CreatePayload is the payload type of the identityProviderConnections service
 // create method.
@@ -306,6 +313,16 @@ type RevokePayload struct {
 	SessionToken *string
 	// Connection ID.
 	ID string
+}
+
+// SetSetupMethodPayload is the payload type of the identityProviderConnections
+// service setSetupMethod method.
+type SetSetupMethodPayload struct {
+	SessionToken *string
+	// Connection ID.
+	ID string
+	// Setup method.
+	ListingMode string
 }
 
 // SubmitClientIDPayload is the payload type of the identityProviderConnections

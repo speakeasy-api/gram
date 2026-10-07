@@ -111,6 +111,39 @@ func BuildReplaceClientSecretPayload(identityProviderConnectionsReplaceClientSec
 	return v, nil
 }
 
+// BuildSetSetupMethodPayload builds the payload for the
+// identityProviderConnections setSetupMethod endpoint from CLI flags.
+func BuildSetSetupMethodPayload(identityProviderConnectionsSetSetupMethodBody string, identityProviderConnectionsSetSetupMethodSessionToken string) (*identityproviderconnections.SetSetupMethodPayload, error) {
+	var err error
+	var body SetSetupMethodRequestBody
+	{
+		err = json.Unmarshal([]byte(identityProviderConnectionsSetSetupMethodBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"listing_mode\": \"oin\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if !(body.ListingMode == "custom_app" || body.ListingMode == "oin") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.listing_mode", body.ListingMode, []any{"custom_app", "oin"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if identityProviderConnectionsSetSetupMethodSessionToken != "" {
+			sessionToken = &identityProviderConnectionsSetSetupMethodSessionToken
+		}
+	}
+	v := &identityproviderconnections.SetSetupMethodPayload{
+		ID:          body.ID,
+		ListingMode: body.ListingMode,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildVerifyPayload builds the payload for the identityProviderConnections
 // verify endpoint from CLI flags.
 func BuildVerifyPayload(identityProviderConnectionsVerifyBody string, identityProviderConnectionsVerifySessionToken string) (*identityproviderconnections.VerifyPayload, error) {

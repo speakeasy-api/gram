@@ -348,6 +348,66 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
+-- Switching methods is allowed only while the client id is still the placeholder.
+-- name: SwitchManagedClientToSecret :one
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = 'client_secret_basic',
+    json_web_key_set_id = NULL,
+    client_secret_encrypted = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id IS NULL
+  AND identity_provider_connection_id = @identity_provider_connection_id
+  AND client_id = @placeholder_client_id
+  AND token_endpoint_auth_method = 'private_key_jwt'
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: SwitchManagedClientToKeySet :one
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = 'private_key_jwt',
+    json_web_key_set_id = @json_web_key_set_id,
+    client_secret_encrypted = NULL,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id IS NULL
+  AND identity_provider_connection_id = @identity_provider_connection_id
+  AND client_id = @placeholder_client_id
+  AND token_endpoint_auth_method = 'client_secret_basic'
+  AND json_web_key_set_id IS NULL
+  AND deleted IS FALSE
+RETURNING *;
+
+-- A managed key set no live client points at: parked by a switch to the
+-- client-secret method, so a switch back reattaches it instead of minting.
+-- name: ListParkedConnectionKeySets :many
+SELECT s.*
+FROM json_web_key_sets AS s
+WHERE s.organization_id = @organization_id
+  AND s.project_id IS NULL
+  AND s.identity_provider_connection_id = @identity_provider_connection_id
+  AND s.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM remote_session_clients AS c
+    WHERE c.organization_id = s.organization_id
+      AND c.json_web_key_set_id = s.id
+      AND c.deleted IS FALSE
+  )
+ORDER BY s.created_at DESC
+FOR UPDATE OF s;
+
+-- name: SetOktaListingMode :one
+UPDATE okta_identity_provider_connections
+SET listing_mode = @listing_mode,
+    updated_at = clock_timestamp()
+WHERE identity_provider_connection_id = @identity_provider_connection_id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+RETURNING *;
+
 -- Two live registrations of one client id against one issuer would share a
 -- credential; refused in the write path since no index enforces it.
 -- name: ManagedClientIDInUse :one

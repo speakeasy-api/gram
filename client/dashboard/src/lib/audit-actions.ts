@@ -94,6 +94,7 @@ export const AUDIT_ACTIONS = [
   "identity-provider-connection:create",
   "identity-provider-connection:record-agent",
   "identity-provider-connection:replace-client-secret",
+  "identity-provider-connection:set-setup-method",
   "identity-provider-connection:revoke",
   "identity-provider-connection:submit-client-id",
   "identity-provider-connection:sync-applications",
@@ -428,6 +429,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "submitted client ID for identity provider";
     case "identity-provider-connection:replace-client-secret":
       return "replaced client secret for identity provider";
+    case "identity-provider-connection:set-setup-method":
+      return "changed setup method for identity provider";
     case "identity-provider-connection:verify":
       return "verified identity provider connection to";
     case "identity-provider-connection:record-agent":

@@ -19,6 +19,7 @@ type Endpoints struct {
 	Create              goa.Endpoint
 	SubmitClientID      goa.Endpoint
 	ReplaceClientSecret goa.Endpoint
+	SetSetupMethod      goa.Endpoint
 	Verify              goa.Endpoint
 	Get                 goa.Endpoint
 	RecordAgent         goa.Endpoint
@@ -36,6 +37,7 @@ func NewEndpoints(s Service) *Endpoints {
 		Create:              NewCreateEndpoint(s, a.APIKeyAuth),
 		SubmitClientID:      NewSubmitClientIDEndpoint(s, a.APIKeyAuth),
 		ReplaceClientSecret: NewReplaceClientSecretEndpoint(s, a.APIKeyAuth),
+		SetSetupMethod:      NewSetSetupMethodEndpoint(s, a.APIKeyAuth),
 		Verify:              NewVerifyEndpoint(s, a.APIKeyAuth),
 		Get:                 NewGetEndpoint(s, a.APIKeyAuth),
 		RecordAgent:         NewRecordAgentEndpoint(s, a.APIKeyAuth),
@@ -51,6 +53,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Create = m(e.Create)
 	e.SubmitClientID = m(e.SubmitClientID)
 	e.ReplaceClientSecret = m(e.ReplaceClientSecret)
+	e.SetSetupMethod = m(e.SetSetupMethod)
 	e.Verify = m(e.Verify)
 	e.Get = m(e.Get)
 	e.RecordAgent = m(e.RecordAgent)
@@ -125,6 +128,29 @@ func NewReplaceClientSecretEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 			return nil, err
 		}
 		return s.ReplaceClientSecret(ctx, p)
+	}
+}
+
+// NewSetSetupMethodEndpoint returns an endpoint function that calls the method
+// "setSetupMethod" of service "identityProviderConnections".
+func NewSetSetupMethodEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetSetupMethodPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetSetupMethod(ctx, p)
 	}
 }
 

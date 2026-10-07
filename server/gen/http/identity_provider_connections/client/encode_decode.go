@@ -858,6 +858,286 @@ func DecodeReplaceClientSecretResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildSetSetupMethodRequest instantiates a HTTP request object with method
+// and path set to call the "identityProviderConnections" service
+// "setSetupMethod" endpoint
+func (c *Client) BuildSetSetupMethodRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetSetupMethodIdentityProviderConnectionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identityProviderConnections", "setSetupMethod", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetSetupMethodRequest returns an encoder for requests sent to the
+// identityProviderConnections setSetupMethod server.
+func EncodeSetSetupMethodRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identityproviderconnections.SetSetupMethodPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identityProviderConnections", "setSetupMethod", "*identityproviderconnections.SetSetupMethodPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetSetupMethodRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("identityProviderConnections", "setSetupMethod", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetSetupMethodResponse returns a decoder for responses returned by the
+// identityProviderConnections setSetupMethod endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeSetSetupMethodResponse may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
+//   - "rate_limit_exceeded" (type *goa.ServiceError): http.StatusTooManyRequests
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - error: internal error
+func DecodeSetSetupMethodResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetSetupMethodResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setSetupMethod", err)
+			}
+			err = ValidateSetSetupMethodResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setSetupMethod", err)
+			}
+			res := NewSetSetupMethodOktaIdentityProviderConnectionOK(&body)
+			return res, nil
+		case http.StatusPreconditionFailed:
+			var (
+				body SetSetupMethodFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setSetupMethod", err)
+			}
+			err = ValidateSetSetupMethodFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setSetupMethod", err)
+			}
+			return nil, NewSetSetupMethodFailedPrecondition(&body)
+		case http.StatusTooManyRequests:
+			var (
+				body SetSetupMethodRateLimitExceededResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setSetupMethod", err)
+			}
+			err = ValidateSetSetupMethodRateLimitExceededResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setSetupMethod", err)
+			}
+			return nil, NewSetSetupMethodRateLimitExceeded(&body)
+		case http.StatusUnauthorized:
+			var (
+				body SetSetupMethodUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setSetupMethod", err)
+			}
+			err = ValidateSetSetupMethodUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setSetupMethod", err)
+			}
+			return nil, NewSetSetupMethodUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetSetupMethodForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setSetupMethod", err)
+			}
+			err = ValidateSetSetupMethodForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setSetupMethod", err)
+			}
+			return nil, NewSetSetupMethodForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetSetupMethodBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setSetupMethod", err)
+			}
+			err = ValidateSetSetupMethodBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setSetupMethod", err)
+			}
+			return nil, NewSetSetupMethodBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetSetupMethodNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setSetupMethod", err)
+			}
+			err = ValidateSetSetupMethodNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setSetupMethod", err)
+			}
+			return nil, NewSetSetupMethodNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetSetupMethodConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setSetupMethod", err)
+			}
+			err = ValidateSetSetupMethodConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setSetupMethod", err)
+			}
+			return nil, NewSetSetupMethodConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetSetupMethodUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setSetupMethod", err)
+			}
+			err = ValidateSetSetupMethodUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setSetupMethod", err)
+			}
+			return nil, NewSetSetupMethodUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetSetupMethodInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setSetupMethod", err)
+			}
+			err = ValidateSetSetupMethodInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setSetupMethod", err)
+			}
+			return nil, NewSetSetupMethodInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetSetupMethodInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("identityProviderConnections", "setSetupMethod", err)
+				}
+				err = ValidateSetSetupMethodInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("identityProviderConnections", "setSetupMethod", err)
+				}
+				return nil, NewSetSetupMethodInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetSetupMethodUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("identityProviderConnections", "setSetupMethod", err)
+				}
+				err = ValidateSetSetupMethodUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("identityProviderConnections", "setSetupMethod", err)
+				}
+				return nil, NewSetSetupMethodUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("identityProviderConnections", "setSetupMethod", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetSetupMethodGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setSetupMethod", err)
+			}
+			err = ValidateSetSetupMethodGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setSetupMethod", err)
+			}
+			return nil, NewSetSetupMethodGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body SetSetupMethodUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setSetupMethod", err)
+			}
+			err = ValidateSetSetupMethodUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setSetupMethod", err)
+			}
+			return nil, NewSetSetupMethodUnavailable(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("identityProviderConnections", "setSetupMethod", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildVerifyRequest instantiates a HTTP request object with method and path
 // set to call the "identityProviderConnections" service "verify" endpoint
 func (c *Client) BuildVerifyRequest(ctx context.Context, v any) (*http.Request, error) {

@@ -47,6 +47,15 @@ type ReplaceClientSecretRequestBody struct {
 	ClientSecret string `form:"client_secret" json:"client_secret" xml:"client_secret"`
 }
 
+// SetSetupMethodRequestBody is the type of the "identityProviderConnections"
+// service "setSetupMethod" endpoint HTTP request body.
+type SetSetupMethodRequestBody struct {
+	// Connection ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Setup method.
+	ListingMode string `form:"listing_mode" json:"listing_mode" xml:"listing_mode"`
+}
+
 // VerifyRequestBody is the type of the "identityProviderConnections" service
 // "verify" endpoint HTTP request body.
 type VerifyRequestBody struct {
@@ -201,6 +210,65 @@ type SubmitClientIDResponseBody struct {
 // "identityProviderConnections" service "replaceClientSecret" endpoint HTTP
 // response body.
 type ReplaceClientSecretResponseBody struct {
+	// Connection ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Organization the connection belongs to.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Identity provider; always okta.
+	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// Connection state. pending until the client ID is submitted and verified;
+	// verified when every required scope is granted over DPoP; degraded when
+	// verification found gaps (see verification_reasons); revoked once the
+	// credential was withdrawn.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Okta org URL, for example https://example.okta.com.
+	OrgURL *string `form:"org_url,omitempty" json:"org_url,omitempty" xml:"org_url,omitempty"`
+	// Discovered authorization server issuer. Equal to org_url by construction.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// Which checklist template applies: custom_app when the admin creates the API
+	// Services app by hand, oin when the Speakeasy OIN listing is added from the
+	// catalog.
+	ListingMode *string `form:"listing_mode,omitempty" json:"listing_mode,omitempty" xml:"listing_mode,omitempty"`
+	// Public JWKS URL the Okta app is configured to trust for private_key_jwt.
+	// Omitted for connections installed from the Okta Integration Network, which
+	// authenticate with a client secret.
+	JwksURL *string `form:"jwks_url,omitempty" json:"jwks_url,omitempty" xml:"jwks_url,omitempty"`
+	// Okta application client ID. Omitted until submitted.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Whether the real Okta client ID has replaced the provisioning placeholder.
+	ClientIDSubmitted *bool `form:"client_id_submitted,omitempty" json:"client_id_submitted,omitempty" xml:"client_id_submitted,omitempty"`
+	// Whether Okta issued a DPoP-bound token at the last verification.
+	DpopRequired *bool `form:"dpop_required,omitempty" json:"dpop_required,omitempty" xml:"dpop_required,omitempty"`
+	// Okta API scopes the integration needs.
+	RequiredScopes []string `form:"required_scopes,omitempty" json:"required_scopes,omitempty" xml:"required_scopes,omitempty"`
+	// Scopes Okta granted at the last verification.
+	GrantedScopes []string `form:"granted_scopes,omitempty" json:"granted_scopes,omitempty" xml:"granted_scopes,omitempty"`
+	// Required scopes Okta did not grant at the last verification.
+	MissingScopes []string `form:"missing_scopes,omitempty" json:"missing_scopes,omitempty" xml:"missing_scopes,omitempty"`
+	// Typed reasons recorded by the last verification; empty when verified or not
+	// yet verified. missing_role is reserved for a later release.
+	VerificationReasons []string `form:"verification_reasons,omitempty" json:"verification_reasons,omitempty" xml:"verification_reasons,omitempty"`
+	// ISO 8601 timestamp of the last verification that found every required scope
+	// granted. Omitted until then.
+	LastVerifiedAt *string `form:"last_verified_at,omitempty" json:"last_verified_at,omitempty" xml:"last_verified_at,omitempty"`
+	// Why the last verification did not complete: Okta rejected the credential, or
+	// could not be reached. Omitted when it completed.
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// Admin-entered Okta AI agent ID. Display only.
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Admin-entered Okta application ID the AI agent is bound to. Display only.
+	AgentAppID *string                                          `form:"agent_app_id,omitempty" json:"agent_app_id,omitempty" xml:"agent_app_id,omitempty"`
+	ActiveKey  *IdentityProviderConnectionActiveKeyResponseBody `form:"active_key,omitempty" json:"active_key,omitempty" xml:"active_key,omitempty"`
+	// Console steps for the connection's listing mode, in order.
+	Checklist        []*IdentityProviderConnectionChecklistItemResponseBody  `form:"checklist,omitempty" json:"checklist,omitempty" xml:"checklist,omitempty"`
+	ApplicationsSync *IdentityProviderConnectionApplicationsSyncResponseBody `form:"applications_sync,omitempty" json:"applications_sync,omitempty" xml:"applications_sync,omitempty"`
+	CreatedAt        *string                                                 `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt        *string                                                 `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// SetSetupMethodResponseBody is the type of the "identityProviderConnections"
+// service "setSetupMethod" endpoint HTTP response body.
+type SetSetupMethodResponseBody struct {
 	// Connection ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Organization the connection belongs to.
@@ -1235,6 +1303,253 @@ type ReplaceClientSecretGatewayErrorResponseBody struct {
 // "identityProviderConnections" service "replaceClientSecret" endpoint HTTP
 // response body for the "unavailable" error.
 type ReplaceClientSecretUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupMethodFailedPreconditionResponseBody is the type of the
+// "identityProviderConnections" service "setSetupMethod" endpoint HTTP
+// response body for the "failed_precondition" error.
+type SetSetupMethodFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupMethodRateLimitExceededResponseBody is the type of the
+// "identityProviderConnections" service "setSetupMethod" endpoint HTTP
+// response body for the "rate_limit_exceeded" error.
+type SetSetupMethodRateLimitExceededResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupMethodUnauthorizedResponseBody is the type of the
+// "identityProviderConnections" service "setSetupMethod" endpoint HTTP
+// response body for the "unauthorized" error.
+type SetSetupMethodUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupMethodForbiddenResponseBody is the type of the
+// "identityProviderConnections" service "setSetupMethod" endpoint HTTP
+// response body for the "forbidden" error.
+type SetSetupMethodForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupMethodBadRequestResponseBody is the type of the
+// "identityProviderConnections" service "setSetupMethod" endpoint HTTP
+// response body for the "bad_request" error.
+type SetSetupMethodBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupMethodNotFoundResponseBody is the type of the
+// "identityProviderConnections" service "setSetupMethod" endpoint HTTP
+// response body for the "not_found" error.
+type SetSetupMethodNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupMethodConflictResponseBody is the type of the
+// "identityProviderConnections" service "setSetupMethod" endpoint HTTP
+// response body for the "conflict" error.
+type SetSetupMethodConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupMethodUnsupportedMediaResponseBody is the type of the
+// "identityProviderConnections" service "setSetupMethod" endpoint HTTP
+// response body for the "unsupported_media" error.
+type SetSetupMethodUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupMethodInvalidResponseBody is the type of the
+// "identityProviderConnections" service "setSetupMethod" endpoint HTTP
+// response body for the "invalid" error.
+type SetSetupMethodInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupMethodInvariantViolationResponseBody is the type of the
+// "identityProviderConnections" service "setSetupMethod" endpoint HTTP
+// response body for the "invariant_violation" error.
+type SetSetupMethodInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupMethodUnexpectedResponseBody is the type of the
+// "identityProviderConnections" service "setSetupMethod" endpoint HTTP
+// response body for the "unexpected" error.
+type SetSetupMethodUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupMethodGatewayErrorResponseBody is the type of the
+// "identityProviderConnections" service "setSetupMethod" endpoint HTTP
+// response body for the "gateway_error" error.
+type SetSetupMethodGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupMethodUnavailableResponseBody is the type of the
+// "identityProviderConnections" service "setSetupMethod" endpoint HTTP
+// response body for the "unavailable" error.
+type SetSetupMethodUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2769,6 +3084,17 @@ func NewReplaceClientSecretRequestBody(p *identityproviderconnections.ReplaceCli
 	return body
 }
 
+// NewSetSetupMethodRequestBody builds the HTTP request body from the payload
+// of the "setSetupMethod" endpoint of the "identityProviderConnections"
+// service.
+func NewSetSetupMethodRequestBody(p *identityproviderconnections.SetSetupMethodPayload) *SetSetupMethodRequestBody {
+	body := &SetSetupMethodRequestBody{
+		ID:          p.ID,
+		ListingMode: p.ListingMode,
+	}
+	return body
+}
+
 // NewVerifyRequestBody builds the HTTP request body from the payload of the
 // "verify" endpoint of the "identityProviderConnections" service.
 func NewVerifyRequestBody(p *identityproviderconnections.VerifyPayload) *VerifyRequestBody {
@@ -3548,6 +3874,256 @@ func NewReplaceClientSecretGatewayError(body *ReplaceClientSecretGatewayErrorRes
 // NewReplaceClientSecretUnavailable builds a identityProviderConnections
 // service replaceClientSecret endpoint unavailable error.
 func NewReplaceClientSecretUnavailable(body *ReplaceClientSecretUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupMethodOktaIdentityProviderConnectionOK builds a
+// "identityProviderConnections" service "setSetupMethod" endpoint result from
+// a HTTP "OK" response.
+func NewSetSetupMethodOktaIdentityProviderConnectionOK(body *SetSetupMethodResponseBody) *identityproviderconnections.OktaIdentityProviderConnection {
+	v := &identityproviderconnections.OktaIdentityProviderConnection{
+		ID:                *body.ID,
+		OrganizationID:    *body.OrganizationID,
+		Provider:          *body.Provider,
+		Status:            *body.Status,
+		OrgURL:            *body.OrgURL,
+		IssuerURL:         *body.IssuerURL,
+		ListingMode:       *body.ListingMode,
+		JwksURL:           body.JwksURL,
+		ClientID:          body.ClientID,
+		ClientIDSubmitted: *body.ClientIDSubmitted,
+		DpopRequired:      *body.DpopRequired,
+		LastVerifiedAt:    body.LastVerifiedAt,
+		LastError:         body.LastError,
+		AgentID:           body.AgentID,
+		AgentAppID:        body.AgentAppID,
+		CreatedAt:         *body.CreatedAt,
+		UpdatedAt:         *body.UpdatedAt,
+	}
+	v.RequiredScopes = make([]string, len(body.RequiredScopes))
+	for i, val := range body.RequiredScopes {
+		v.RequiredScopes[i] = val
+	}
+	v.GrantedScopes = make([]string, len(body.GrantedScopes))
+	for i, val := range body.GrantedScopes {
+		v.GrantedScopes[i] = val
+	}
+	v.MissingScopes = make([]string, len(body.MissingScopes))
+	for i, val := range body.MissingScopes {
+		v.MissingScopes[i] = val
+	}
+	v.VerificationReasons = make([]string, len(body.VerificationReasons))
+	for i, val := range body.VerificationReasons {
+		v.VerificationReasons[i] = val
+	}
+	if body.ActiveKey != nil {
+		v.ActiveKey = unmarshalIdentityProviderConnectionActiveKeyResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionActiveKey(body.ActiveKey)
+	}
+	v.Checklist = make([]*identityproviderconnections.IdentityProviderConnectionChecklistItem, len(body.Checklist))
+	for i, val := range body.Checklist {
+		if val == nil {
+			v.Checklist[i] = nil
+			continue
+		}
+		v.Checklist[i] = unmarshalIdentityProviderConnectionChecklistItemResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionChecklistItem(val)
+	}
+	v.ApplicationsSync = unmarshalIdentityProviderConnectionApplicationsSyncResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionApplicationsSync(body.ApplicationsSync)
+
+	return v
+}
+
+// NewSetSetupMethodFailedPrecondition builds a identityProviderConnections
+// service setSetupMethod endpoint failed_precondition error.
+func NewSetSetupMethodFailedPrecondition(body *SetSetupMethodFailedPreconditionResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupMethodRateLimitExceeded builds a identityProviderConnections
+// service setSetupMethod endpoint rate_limit_exceeded error.
+func NewSetSetupMethodRateLimitExceeded(body *SetSetupMethodRateLimitExceededResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupMethodUnauthorized builds a identityProviderConnections service
+// setSetupMethod endpoint unauthorized error.
+func NewSetSetupMethodUnauthorized(body *SetSetupMethodUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupMethodForbidden builds a identityProviderConnections service
+// setSetupMethod endpoint forbidden error.
+func NewSetSetupMethodForbidden(body *SetSetupMethodForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupMethodBadRequest builds a identityProviderConnections service
+// setSetupMethod endpoint bad_request error.
+func NewSetSetupMethodBadRequest(body *SetSetupMethodBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupMethodNotFound builds a identityProviderConnections service
+// setSetupMethod endpoint not_found error.
+func NewSetSetupMethodNotFound(body *SetSetupMethodNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupMethodConflict builds a identityProviderConnections service
+// setSetupMethod endpoint conflict error.
+func NewSetSetupMethodConflict(body *SetSetupMethodConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupMethodUnsupportedMedia builds a identityProviderConnections
+// service setSetupMethod endpoint unsupported_media error.
+func NewSetSetupMethodUnsupportedMedia(body *SetSetupMethodUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupMethodInvalid builds a identityProviderConnections service
+// setSetupMethod endpoint invalid error.
+func NewSetSetupMethodInvalid(body *SetSetupMethodInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupMethodInvariantViolation builds a identityProviderConnections
+// service setSetupMethod endpoint invariant_violation error.
+func NewSetSetupMethodInvariantViolation(body *SetSetupMethodInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupMethodUnexpected builds a identityProviderConnections service
+// setSetupMethod endpoint unexpected error.
+func NewSetSetupMethodUnexpected(body *SetSetupMethodUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupMethodGatewayError builds a identityProviderConnections service
+// setSetupMethod endpoint gateway_error error.
+func NewSetSetupMethodGatewayError(body *SetSetupMethodGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupMethodUnavailable builds a identityProviderConnections service
+// setSetupMethod endpoint unavailable error.
+func NewSetSetupMethodUnavailable(body *SetSetupMethodUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5210,6 +5786,117 @@ func ValidateReplaceClientSecretResponseBody(body *ReplaceClientSecretResponseBo
 	return
 }
 
+// ValidateSetSetupMethodResponseBody runs the validations defined on
+// SetSetupMethodResponseBody
+func ValidateSetSetupMethodResponseBody(body *SetSetupMethodResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Provider == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.OrgURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("org_url", "body"))
+	}
+	if body.IssuerURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_url", "body"))
+	}
+	if body.ListingMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("listing_mode", "body"))
+	}
+	if body.ClientIDSubmitted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_submitted", "body"))
+	}
+	if body.DpopRequired == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dpop_required", "body"))
+	}
+	if body.RequiredScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("required_scopes", "body"))
+	}
+	if body.GrantedScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("granted_scopes", "body"))
+	}
+	if body.MissingScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("missing_scopes", "body"))
+	}
+	if body.VerificationReasons == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("verification_reasons", "body"))
+	}
+	if body.Checklist == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("checklist", "body"))
+	}
+	if body.ApplicationsSync == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("applications_sync", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Provider != nil {
+		if !(*body.Provider == "okta") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", *body.Provider, []any{"okta"}))
+		}
+	}
+	if body.Status != nil {
+		if !(*body.Status == "pending" || *body.Status == "verified" || *body.Status == "degraded" || *body.Status == "revoked") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"pending", "verified", "degraded", "revoked"}))
+		}
+	}
+	if body.ListingMode != nil {
+		if !(*body.ListingMode == "custom_app" || *body.ListingMode == "oin") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.listing_mode", *body.ListingMode, []any{"custom_app", "oin"}))
+		}
+	}
+	for _, e := range body.VerificationReasons {
+		if !(e == "missing_scope" || e == "missing_role" || e == "dpop_not_bound" || e == "key_not_fetched" || e == "secret_rejected" || e == "read_failed:okta.apps.read" || e == "read_failed:okta.users.read" || e == "read_failed:okta.groups.read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.verification_reasons[*]", e, []any{"missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "secret_rejected", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read"}))
+		}
+	}
+	if body.LastVerifiedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_verified_at", *body.LastVerifiedAt, goa.FormatDateTime))
+	}
+	if body.LastError != nil {
+		if !(*body.LastError == "credential_rejected" || *body.LastError == "okta_unreachable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.last_error", *body.LastError, []any{"credential_rejected", "okta_unreachable"}))
+		}
+	}
+	if body.ActiveKey != nil {
+		if err2 := ValidateIdentityProviderConnectionActiveKeyResponseBody(body.ActiveKey); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Checklist {
+		if e != nil {
+			if err2 := ValidateIdentityProviderConnectionChecklistItemResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.ApplicationsSync != nil {
+		if err2 := ValidateIdentityProviderConnectionApplicationsSyncResponseBody(body.ApplicationsSync); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
 // ValidateVerifyResponseBody runs the validations defined on VerifyResponseBody
 func ValidateVerifyResponseBody(body *VerifyResponseBody) (err error) {
 	if body.ID == nil {
@@ -6606,6 +7293,318 @@ func ValidateReplaceClientSecretGatewayErrorResponseBody(body *ReplaceClientSecr
 // ValidateReplaceClientSecretUnavailableResponseBody runs the validations
 // defined on replaceClientSecret_unavailable_response_body
 func ValidateReplaceClientSecretUnavailableResponseBody(body *ReplaceClientSecretUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupMethodFailedPreconditionResponseBody runs the validations
+// defined on setSetupMethod_failed_precondition_response_body
+func ValidateSetSetupMethodFailedPreconditionResponseBody(body *SetSetupMethodFailedPreconditionResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupMethodRateLimitExceededResponseBody runs the validations
+// defined on setSetupMethod_rate_limit_exceeded_response_body
+func ValidateSetSetupMethodRateLimitExceededResponseBody(body *SetSetupMethodRateLimitExceededResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupMethodUnauthorizedResponseBody runs the validations defined
+// on setSetupMethod_unauthorized_response_body
+func ValidateSetSetupMethodUnauthorizedResponseBody(body *SetSetupMethodUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupMethodForbiddenResponseBody runs the validations defined on
+// setSetupMethod_forbidden_response_body
+func ValidateSetSetupMethodForbiddenResponseBody(body *SetSetupMethodForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupMethodBadRequestResponseBody runs the validations defined on
+// setSetupMethod_bad_request_response_body
+func ValidateSetSetupMethodBadRequestResponseBody(body *SetSetupMethodBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupMethodNotFoundResponseBody runs the validations defined on
+// setSetupMethod_not_found_response_body
+func ValidateSetSetupMethodNotFoundResponseBody(body *SetSetupMethodNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupMethodConflictResponseBody runs the validations defined on
+// setSetupMethod_conflict_response_body
+func ValidateSetSetupMethodConflictResponseBody(body *SetSetupMethodConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupMethodUnsupportedMediaResponseBody runs the validations
+// defined on setSetupMethod_unsupported_media_response_body
+func ValidateSetSetupMethodUnsupportedMediaResponseBody(body *SetSetupMethodUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupMethodInvalidResponseBody runs the validations defined on
+// setSetupMethod_invalid_response_body
+func ValidateSetSetupMethodInvalidResponseBody(body *SetSetupMethodInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupMethodInvariantViolationResponseBody runs the validations
+// defined on setSetupMethod_invariant_violation_response_body
+func ValidateSetSetupMethodInvariantViolationResponseBody(body *SetSetupMethodInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupMethodUnexpectedResponseBody runs the validations defined on
+// setSetupMethod_unexpected_response_body
+func ValidateSetSetupMethodUnexpectedResponseBody(body *SetSetupMethodUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupMethodGatewayErrorResponseBody runs the validations defined
+// on setSetupMethod_gateway_error_response_body
+func ValidateSetSetupMethodGatewayErrorResponseBody(body *SetSetupMethodGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupMethodUnavailableResponseBody runs the validations defined
+// on setSetupMethod_unavailable_response_body
+func ValidateSetSetupMethodUnavailableResponseBody(body *SetSetupMethodUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

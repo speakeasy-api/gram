@@ -18,6 +18,7 @@ type Client struct {
 	CreateEndpoint              goa.Endpoint
 	SubmitClientIDEndpoint      goa.Endpoint
 	ReplaceClientSecretEndpoint goa.Endpoint
+	SetSetupMethodEndpoint      goa.Endpoint
 	VerifyEndpoint              goa.Endpoint
 	GetEndpoint                 goa.Endpoint
 	RecordAgentEndpoint         goa.Endpoint
@@ -28,11 +29,12 @@ type Client struct {
 
 // NewClient initializes a "identityProviderConnections" service client given
 // the endpoints.
-func NewClient(create, submitClientID, replaceClientSecret, verify, get, recordAgent, revoke, syncApplications, listApplications goa.Endpoint) *Client {
+func NewClient(create, submitClientID, replaceClientSecret, setSetupMethod, verify, get, recordAgent, revoke, syncApplications, listApplications goa.Endpoint) *Client {
 	return &Client{
 		CreateEndpoint:              create,
 		SubmitClientIDEndpoint:      submitClientID,
 		ReplaceClientSecretEndpoint: replaceClientSecret,
+		SetSetupMethodEndpoint:      setSetupMethod,
 		VerifyEndpoint:              verify,
 		GetEndpoint:                 get,
 		RecordAgentEndpoint:         recordAgent,
@@ -114,6 +116,32 @@ func (c *Client) SubmitClientID(ctx context.Context, p *SubmitClientIDPayload) (
 func (c *Client) ReplaceClientSecret(ctx context.Context, p *ReplaceClientSecretPayload) (res *OktaIdentityProviderConnection, err error) {
 	var ires any
 	ires, err = c.ReplaceClientSecretEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*OktaIdentityProviderConnection), nil
+}
+
+// SetSetupMethod calls the "setSetupMethod" endpoint of the
+// "identityProviderConnections" service.
+// SetSetupMethod may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
+//   - "rate_limit_exceeded" (type *goa.ServiceError): rate limit exceeded
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - error: internal error
+func (c *Client) SetSetupMethod(ctx context.Context, p *SetSetupMethodPayload) (res *OktaIdentityProviderConnection, err error) {
+	var ires any
+	ires, err = c.SetSetupMethodEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

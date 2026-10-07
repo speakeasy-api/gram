@@ -22,6 +22,7 @@ type Server struct {
 	Create              http.Handler
 	SubmitClientID      http.Handler
 	ReplaceClientSecret http.Handler
+	SetSetupMethod      http.Handler
 	Verify              http.Handler
 	Get                 http.Handler
 	RecordAgent         http.Handler
@@ -60,6 +61,7 @@ func New(
 			{"Create", "POST", "/rpc/identityProviderConnections.create"},
 			{"SubmitClientID", "POST", "/rpc/identityProviderConnections.submitClientId"},
 			{"ReplaceClientSecret", "POST", "/rpc/identityProviderConnections.replaceClientSecret"},
+			{"SetSetupMethod", "POST", "/rpc/identityProviderConnections.setSetupMethod"},
 			{"Verify", "POST", "/rpc/identityProviderConnections.verify"},
 			{"Get", "GET", "/rpc/identityProviderConnections.get"},
 			{"RecordAgent", "POST", "/rpc/identityProviderConnections.recordAgent"},
@@ -70,6 +72,7 @@ func New(
 		Create:              NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
 		SubmitClientID:      NewSubmitClientIDHandler(e.SubmitClientID, mux, decoder, encoder, errhandler, formatter),
 		ReplaceClientSecret: NewReplaceClientSecretHandler(e.ReplaceClientSecret, mux, decoder, encoder, errhandler, formatter),
+		SetSetupMethod:      NewSetSetupMethodHandler(e.SetSetupMethod, mux, decoder, encoder, errhandler, formatter),
 		Verify:              NewVerifyHandler(e.Verify, mux, decoder, encoder, errhandler, formatter),
 		Get:                 NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
 		RecordAgent:         NewRecordAgentHandler(e.RecordAgent, mux, decoder, encoder, errhandler, formatter),
@@ -87,6 +90,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Create = m(s.Create)
 	s.SubmitClientID = m(s.SubmitClientID)
 	s.ReplaceClientSecret = m(s.ReplaceClientSecret)
+	s.SetSetupMethod = m(s.SetSetupMethod)
 	s.Verify = m(s.Verify)
 	s.Get = m(s.Get)
 	s.RecordAgent = m(s.RecordAgent)
@@ -103,6 +107,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateHandler(mux, h.Create)
 	MountSubmitClientIDHandler(mux, h.SubmitClientID)
 	MountReplaceClientSecretHandler(mux, h.ReplaceClientSecret)
+	MountSetSetupMethodHandler(mux, h.SetSetupMethod)
 	MountVerifyHandler(mux, h.Verify)
 	MountGetHandler(mux, h.Get)
 	MountRecordAgentHandler(mux, h.RecordAgent)
@@ -254,6 +259,60 @@ func NewReplaceClientSecretHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "replaceClientSecret")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "identityProviderConnections")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetSetupMethodHandler configures the mux to serve the
+// "identityProviderConnections" service "setSetupMethod" endpoint.
+func MountSetSetupMethodHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/identityProviderConnections.setSetupMethod", f)
+}
+
+// NewSetSetupMethodHandler creates a HTTP handler which loads the HTTP request
+// and calls the "identityProviderConnections" service "setSetupMethod"
+// endpoint.
+func NewSetSetupMethodHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetSetupMethodRequest(mux, decoder)
+		encodeResponse = EncodeSetSetupMethodResponse(encoder)
+		encodeError    = EncodeSetSetupMethodError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setSetupMethod")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "identityProviderConnections")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -299,6 +299,7 @@ trackedFiles:
   src/funcs/identityProviderConnectionsRecordAgent.ts: {}
   src/funcs/identityProviderConnectionsReplaceClientSecret.ts: {}
   src/funcs/identityProviderConnectionsRevoke.ts: {}
+  src/funcs/identityProviderConnectionsSetSetupMethod.ts: {}
   src/funcs/identityProviderConnectionsSubmitClientId.ts: {}
   src/funcs/identityProviderConnectionsSyncApplications.ts: {}
   src/funcs/identityProviderConnectionsVerify.ts: {}
@@ -1673,6 +1674,7 @@ trackedFiles:
   src/models/components/setaitooldecisionresult.ts: {}
   src/models/components/setbillingmetadatarequestbody.ts: {}
   src/models/components/setdirectoryrolemappingform.ts: {}
+  src/models/components/setidentityproviderconnectionsetupmethodrequestbody.ts: {}
   src/models/components/setkeyenabledrequestbody.ts: {}
   src/models/components/setmcpmetadatarequestbody.ts: {}
   src/models/components/setorganizationwhitelistrequestbody.ts: {}
@@ -2597,6 +2599,7 @@ trackedFiles:
   src/models/operations/setchatpinned.ts: {}
   src/models/operations/setdeviceintegrationscheduleenabled.ts: {}
   src/models/operations/setdirectoryrolemapping.ts: {}
+  src/models/operations/setidentityproviderconnectionsetupmethod.ts: {}
   src/models/operations/setmcpmetadata.ts: {}
   src/models/operations/setmcpservertoolmetadata.ts: {}
   src/models/operations/setmcpservertoolmetadatabatch.ts: {}
@@ -3605,6 +3608,7 @@ trackedFiles:
   src/react-query/setBillingMetadata.ts: {}
   src/react-query/setDeviceIntegrationScheduleEnabled.ts: {}
   src/react-query/setDirectoryRoleMapping.ts: {}
+  src/react-query/setIdentityProviderConnectionSetupMethod.ts: {}
   src/react-query/setMcpServerToolMetadata.ts: {}
   src/react-query/setMcpServerToolMetadataBatch.ts: {}
   src/react-query/setModelProviderKeyEnabled.ts: {}
@@ -11590,6 +11594,17 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "2025-08-11T22:28:12.750Z", "id": "4c513423-169b-47f4-bc81-6ab3385821ed", "role_urn": "<value>", "source_kind": "group", "updated_at": "2026-12-16T06:37:24.346Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  setIdentityProviderConnectionSetupMethod:
+    speakeasy-default-set-identity-provider-connection-setup-method:
+      requestBody:
+        application/json: {"id": "c56ccbec-a4a7-41f0-a3d1-c5d5e099e4a5", "listing_mode": "custom_app"}
+      responses:
+        "200":
+          application/json: {"applications_sync": {}, "checklist": [{"description": "deduct oxygenate via experience fuss jovially holster", "details": ["<value 1>", "<value 2>", "<value 3>"], "group": "connect", "key": "create_api_services_app", "title": "<value>"}], "client_id_submitted": true, "created_at": "2025-03-02T12:04:43.017Z", "dpop_required": true, "granted_scopes": [], "id": "301f5ffd-e157-4175-af55-a3187f8ed4e6", "issuer_url": "https://black-and-white-bathrobe.net/", "listing_mode": "oin", "missing_scopes": [], "org_url": "https://deep-hubris.org/", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>"], "status": "pending", "updated_at": "2026-09-26T08:59:40.478Z", "verification_reasons": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

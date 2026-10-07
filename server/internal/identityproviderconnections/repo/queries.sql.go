@@ -708,6 +708,62 @@ func (q *Queries) GetPlatformGcpIamCredentialForProvisioning(ctx context.Context
 	return i, err
 }
 
+const listParkedConnectionKeySets = `-- name: ListParkedConnectionKeySets :many
+SELECT s.id, s.organization_id, s.project_id, s.external_key_id, s.name, s.identity_provider_connection_id, s.created_at, s.updated_at, s.deleted_at, s.deleted
+FROM json_web_key_sets AS s
+WHERE s.organization_id = $1
+  AND s.project_id IS NULL
+  AND s.identity_provider_connection_id = $2
+  AND s.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM remote_session_clients AS c
+    WHERE c.organization_id = s.organization_id
+      AND c.json_web_key_set_id = s.id
+      AND c.deleted IS FALSE
+  )
+ORDER BY s.created_at DESC
+FOR UPDATE OF s
+`
+
+type ListParkedConnectionKeySetsParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.NullUUID
+}
+
+// A managed key set no live client points at: parked by a switch to the
+// client-secret method, so a switch back reattaches it instead of minting.
+func (q *Queries) ListParkedConnectionKeySets(ctx context.Context, arg ListParkedConnectionKeySetsParams) ([]JsonWebKeySet, error) {
+	rows, err := q.db.Query(ctx, listParkedConnectionKeySets, arg.OrganizationID, arg.IdentityProviderConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []JsonWebKeySet
+	for rows.Next() {
+		var i JsonWebKeySet
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.ExternalKeyID,
+			&i.Name,
+			&i.IdentityProviderConnectionID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockIdentityProviderConnectionCreate = `-- name: LockIdentityProviderConnectionCreate :one
 SELECT pg_try_advisory_xact_lock(hashtextextended('identity-provider-create:' || $1::text, 0))
 `
@@ -1248,6 +1304,52 @@ func (q *Queries) SetManagedClientSecret(ctx context.Context, arg SetManagedClie
 	return i, err
 }
 
+const setOktaListingMode = `-- name: SetOktaListingMode :one
+UPDATE okta_identity_provider_connections
+SET listing_mode = $1,
+    updated_at = clock_timestamp()
+WHERE identity_provider_connection_id = $2
+  AND organization_id = $3
+  AND deleted IS FALSE
+RETURNING identity_provider_connection_id, identity_provider_connections_provider, organization_id, attachment_scope, org_url, issuer_url, issuer_url_override_reason, ownership_claimed, remote_session_issuer_id, remote_session_client_id, dpop_required, granted_scopes, observed_admin_roles, listing_mode, agent_id, agent_app_id, applications_synced_at, applications_sync_requested_at, created_at, updated_at, deleted_at, deleted
+`
+
+type SetOktaListingModeParams struct {
+	ListingMode                  string
+	IdentityProviderConnectionID uuid.UUID
+	OrganizationID               string
+}
+
+func (q *Queries) SetOktaListingMode(ctx context.Context, arg SetOktaListingModeParams) (OktaIdentityProviderConnection, error) {
+	row := q.db.QueryRow(ctx, setOktaListingMode, arg.ListingMode, arg.IdentityProviderConnectionID, arg.OrganizationID)
+	var i OktaIdentityProviderConnection
+	err := row.Scan(
+		&i.IdentityProviderConnectionID,
+		&i.IdentityProviderConnectionsProvider,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.OrgUrl,
+		&i.IssuerUrl,
+		&i.IssuerUrlOverrideReason,
+		&i.OwnershipClaimed,
+		&i.RemoteSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.DpopRequired,
+		&i.GrantedScopes,
+		&i.ObservedAdminRoles,
+		&i.ListingMode,
+		&i.AgentID,
+		&i.AgentAppID,
+		&i.ApplicationsSyncedAt,
+		&i.ApplicationsSyncRequestedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const softDeleteIdentityProviderConnection = `-- name: SoftDeleteIdentityProviderConnection :one
 UPDATE identity_provider_connections
 SET deleted_at = clock_timestamp(),
@@ -1318,6 +1420,140 @@ func (q *Queries) SoftDeleteOktaIdentityProviderConnection(ctx context.Context, 
 		&i.AgentAppID,
 		&i.ApplicationsSyncedAt,
 		&i.ApplicationsSyncRequestedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const switchManagedClientToKeySet = `-- name: SwitchManagedClientToKeySet :one
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = 'private_key_jwt',
+    json_web_key_set_id = $1,
+    client_secret_encrypted = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND project_id IS NULL
+  AND identity_provider_connection_id = $4
+  AND client_id = $5
+  AND token_endpoint_auth_method = 'client_secret_basic'
+  AND json_web_key_set_id IS NULL
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
+`
+
+type SwitchManagedClientToKeySetParams struct {
+	JsonWebKeySetID              uuid.NullUUID
+	ID                           uuid.UUID
+	OrganizationID               pgtype.Text
+	IdentityProviderConnectionID uuid.NullUUID
+	PlaceholderClientID          string
+}
+
+func (q *Queries) SwitchManagedClientToKeySet(ctx context.Context, arg SwitchManagedClientToKeySetParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, switchManagedClientToKeySet,
+		arg.JsonWebKeySetID,
+		arg.ID,
+		arg.OrganizationID,
+		arg.IdentityProviderConnectionID,
+		arg.PlaceholderClientID,
+	)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.GrantTypes,
+		&i.Audience,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.CallbackBaseUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.UpstreamRejectedAt,
+		&i.IdentityProviderConnectionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const switchManagedClientToSecret = `-- name: SwitchManagedClientToSecret :one
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = 'client_secret_basic',
+    json_web_key_set_id = NULL,
+    client_secret_encrypted = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND project_id IS NULL
+  AND identity_provider_connection_id = $3
+  AND client_id = $4
+  AND token_endpoint_auth_method = 'private_key_jwt'
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
+`
+
+type SwitchManagedClientToSecretParams struct {
+	ID                           uuid.UUID
+	OrganizationID               pgtype.Text
+	IdentityProviderConnectionID uuid.NullUUID
+	PlaceholderClientID          string
+}
+
+// Switching methods is allowed only while the client id is still the placeholder.
+func (q *Queries) SwitchManagedClientToSecret(ctx context.Context, arg SwitchManagedClientToSecretParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, switchManagedClientToSecret,
+		arg.ID,
+		arg.OrganizationID,
+		arg.IdentityProviderConnectionID,
+		arg.PlaceholderClientID,
+	)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.GrantTypes,
+		&i.Audience,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.CallbackBaseUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.UpstreamRejectedAt,
+		&i.IdentityProviderConnectionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

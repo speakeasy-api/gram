@@ -279,6 +279,44 @@ var _ = Service("identityProviderConnections", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ReplaceIdentityProviderConnectionClientSecret"}`)
 	})
 
+	Method("setSetupMethod", func() {
+		Description("Switch how a pending connection connects to Okta: an install from the Okta Integration Network (client secret) or a custom API Services app (private key). Allowed until the client ID is submitted. Switching to the custom app provisions a signing key and JWKS URL once; switching away stops serving the key and switching back reuses it. A key left unused is retired when the client ID is submitted or the connection is revoked. Requires org:admin.")
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+		Error(string(oops.CodeRateLimitExceeded), func() { Description(oops.CodeRateLimitExceeded.UserMessage()) })
+
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Meta("openapi:typename", "SetIdentityProviderConnectionSetupMethodRequestBody")
+			Attribute("id", String, "Connection ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("listing_mode", String, "Setup method.", func() {
+				Enum("custom_app", "oin")
+			})
+			Required("id", "listing_mode")
+		})
+
+		Result(Connection)
+
+		HTTP(func() {
+			POST("/rpc/identityProviderConnections.setSetupMethod")
+			security.SessionHeader()
+			Response(StatusOK)
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
+			Response(string(oops.CodeRateLimitExceeded), StatusTooManyRequests, func() {
+				ContentType("application/json")
+			})
+		})
+
+		Meta("openapi:operationId", "setIdentityProviderConnectionSetupMethod")
+		Meta("openapi:extension:x-speakeasy-name-override", "setSetupMethod")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetIdentityProviderConnectionSetupMethod"}`)
+	})
+
 	Method("verify", func() {
 		Description("Re-verify the connection against Okta: mint a token, confirm each required scope with a read, and record the outcome. Rate limited per organization. Requires org:admin.")
 		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })

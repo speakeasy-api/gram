@@ -28,6 +28,10 @@ type Client struct {
 	// replaceClientSecret endpoint.
 	ReplaceClientSecretDoer goahttp.Doer
 
+	// SetSetupMethod Doer is the HTTP client used to make requests to the
+	// setSetupMethod endpoint.
+	SetSetupMethodDoer goahttp.Doer
+
 	// Verify Doer is the HTTP client used to make requests to the verify endpoint.
 	VerifyDoer goahttp.Doer
 
@@ -73,6 +77,7 @@ func NewClient(
 		CreateDoer:              doer,
 		SubmitClientIDDoer:      doer,
 		ReplaceClientSecretDoer: doer,
+		SetSetupMethodDoer:      doer,
 		VerifyDoer:              doer,
 		GetDoer:                 doer,
 		RecordAgentDoer:         doer,
@@ -154,6 +159,30 @@ func (c *Client) ReplaceClientSecret() goa.Endpoint {
 		resp, err := c.ReplaceClientSecretDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("identityProviderConnections", "replaceClientSecret", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetSetupMethod returns an endpoint that makes HTTP requests to the
+// identityProviderConnections service setSetupMethod server.
+func (c *Client) SetSetupMethod() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetSetupMethodRequest(c.encoder)
+		decodeResponse = DecodeSetSetupMethodResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetSetupMethodRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetSetupMethodDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("identityProviderConnections", "setSetupMethod", err)
 		}
 		return decodeResponse(resp)
 	}

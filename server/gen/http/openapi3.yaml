@@ -32618,6 +32618,111 @@ paths:
             x-speakeasy-name-override: revoke
             x-speakeasy-react-hook:
                 name: RevokeIdentityProviderConnection
+    /rpc/identityProviderConnections.setSetupMethod:
+        post:
+            description: 'Switch how a pending connection connects to Okta: an install from the Okta Integration Network (client secret) or a custom API Services app (private key). Allowed until the client ID is submitted. Switching to the custom app provisions a signing key and JWKS URL once; switching away stops serving the key and switching back reuses it. A key left unused is retired when the client ID is submitted or the connection is revoked. Requires org:admin.'
+            operationId: setIdentityProviderConnectionSetupMethod
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetIdentityProviderConnectionSetupMethodRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OktaIdentityProviderConnection'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'rate_limit_exceeded: rate limit exceeded'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - session_header_Gram-Session: []
+            summary: setSetupMethod identityProviderConnections
+            tags:
+                - identityProviderConnections
+            x-speakeasy-name-override: setSetupMethod
+            x-speakeasy-react-hook:
+                name: SetIdentityProviderConnectionSetupMethod
     /rpc/identityProviderConnections.submitClientId:
         post:
             description: Record the client ID of the Okta API Services application and verify it. Connections installed from the Okta Integration Network also take the client secret. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.
@@ -108735,6 +108840,22 @@ components:
             required:
                 - source_kind
                 - role_urn
+        SetIdentityProviderConnectionSetupMethodRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Connection ID.
+                    format: uuid
+                listing_mode:
+                    type: string
+                    description: Setup method.
+                    enum:
+                        - custom_app
+                        - oin
+            required:
+                - id
+                - listing_mode
         SetInferenceKeyMonthlyLimitRequestBody:
             type: object
             properties:

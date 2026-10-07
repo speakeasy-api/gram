@@ -8,6 +8,7 @@ import { identityProviderConnectionsListApplications } from "../funcs/identityPr
 import { identityProviderConnectionsRecordAgent } from "../funcs/identityProviderConnectionsRecordAgent.js";
 import { identityProviderConnectionsReplaceClientSecret } from "../funcs/identityProviderConnectionsReplaceClientSecret.js";
 import { identityProviderConnectionsRevoke } from "../funcs/identityProviderConnectionsRevoke.js";
+import { identityProviderConnectionsSetSetupMethod } from "../funcs/identityProviderConnectionsSetSetupMethod.js";
 import { identityProviderConnectionsSubmitClientId } from "../funcs/identityProviderConnectionsSubmitClientId.js";
 import { identityProviderConnectionsSyncApplications } from "../funcs/identityProviderConnectionsSyncApplications.js";
 import { identityProviderConnectionsVerify } from "../funcs/identityProviderConnectionsVerify.js";
@@ -39,6 +40,10 @@ import {
   RevokeIdentityProviderConnectionRequest,
   RevokeIdentityProviderConnectionSecurity,
 } from "../models/operations/revokeidentityproviderconnection.js";
+import {
+  SetIdentityProviderConnectionSetupMethodRequest,
+  SetIdentityProviderConnectionSetupMethodSecurity,
+} from "../models/operations/setidentityproviderconnectionsetupmethod.js";
 import {
   SubmitIdentityProviderConnectionClientIdRequest,
   SubmitIdentityProviderConnectionClientIdSecurity,
@@ -163,6 +168,25 @@ export class IdentityProviderConnections extends ClientSDK {
     options?: RequestOptions,
   ): Promise<OktaIdentityProviderConnection> {
     return unwrapAsync(identityProviderConnectionsRevoke(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setSetupMethod identityProviderConnections
+   *
+   * @remarks
+   * Switch how a pending connection connects to Okta: an install from the Okta Integration Network (client secret) or a custom API Services app (private key). Allowed until the client ID is submitted. Switching to the custom app provisions a signing key and JWKS URL once; switching away stops serving the key and switching back reuses it. A key left unused is retired when the client ID is submitted or the connection is revoked. Requires org:admin.
+   */
+  async setSetupMethod(
+    request: SetIdentityProviderConnectionSetupMethodRequest,
+    security?: SetIdentityProviderConnectionSetupMethodSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<OktaIdentityProviderConnection> {
+    return unwrapAsync(identityProviderConnectionsSetSetupMethod(
       this,
       request,
       security,

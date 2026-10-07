@@ -79,6 +79,11 @@ const (
 	// syncRatePerMinute caps manual applications syncs per organization.
 	syncRatePerMinute = 1
 
+	// setupMethodRatePerMinute caps method switches per organization. A switch
+	// reads the org's public discovery document and mints at most one key per
+	// connection, so it allows an admin comparing both checklists.
+	setupMethodRatePerMinute = 20
+
 	// listApplicationsLimit bounds one snapshot listing.
 	listApplicationsLimit = 2000
 
@@ -123,9 +128,11 @@ type Service struct {
 	verifyLimiter *ratelimit.Limiter
 	createLimiter *ratelimit.Limiter
 	syncLimiter   *ratelimit.Limiter
-	syncTrigger   ApplicationSyncTrigger
-	createSlots   chan struct{}
-	metrics       *serviceMetrics
+
+	setupMethodLimiter *ratelimit.Limiter
+	syncTrigger        ApplicationSyncTrigger
+	createSlots        chan struct{}
+	metrics            *serviceMetrics
 }
 
 var (
@@ -193,6 +200,9 @@ func NewService(
 			ratelimit.WithMetrics(meterProvider)),
 		syncLimiter: ratelimit.New(limitStore, "identity-provider-connection-sync-applications",
 			ratelimit.PerMinute(syncRatePerMinute),
+			ratelimit.WithMetrics(meterProvider)),
+		setupMethodLimiter: ratelimit.New(limitStore, "identity-provider-connection-set-setup-method",
+			ratelimit.PerMinute(setupMethodRatePerMinute),
 			ratelimit.WithMetrics(meterProvider)),
 		syncTrigger: syncTrigger,
 		createSlots: createAdmission(db),
@@ -845,6 +855,12 @@ func (s *Service) SubmitClientID(ctx context.Context, payload *gen.SubmitClientI
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit client id submission").LogError(ctx, logger)
 	}
+	if managed.AuthMethod == remotesessions.TokenEndpointAuthMethodBasic {
+		// The method is settled; a key set parked by an earlier switch is now dead weight.
+		if _, err := s.provisioner.RetireParkedKeySets(ctx, authCtx.ActiveOrganizationID, id); err != nil {
+			logger.ErrorContext(ctx, "failed to retire parked key set; revoke it by hand", attr.SlogError(err))
+		}
+	}
 	s.metrics.recordVerify(ctx, ProviderOkta, outcome.Status)
 	return s.view(ctx, logger, s.db, *after), nil
 }
@@ -932,6 +948,71 @@ func (s *Service) ReplaceClientSecret(ctx context.Context, payload *gen.ReplaceC
 		return nil, oops.E(oops.CodeUnexpected, err, "commit client secret replacement").LogError(ctx, logger)
 	}
 	s.metrics.recordVerify(ctx, ProviderOkta, outcome.Status)
+	return s.view(ctx, logger, s.db, *after), nil
+}
+
+func (s *Service) SetSetupMethod(ctx context.Context, payload *gen.SetSetupMethodPayload) (*gen.OktaIdentityProviderConnection, error) {
+	authCtx, logger, err := s.authorize(ctx, authz.ScopeOrgAdmin, true)
+	if err != nil {
+		return nil, err
+	}
+	id, err := parseConnectionID(payload.ID)
+	if err != nil {
+		return nil, err
+	}
+	logger = logger.With(attr.SlogIdentityProviderConnectionID(id.String()))
+	listingMode := payload.ListingMode
+	if listingMode != ListingModeCustomApp && listingMode != ListingModeOIN {
+		return nil, oops.E(oops.CodeBadRequest, nil, "listing_mode must be custom_app or oin")
+	}
+	authMethod := listingAuthMethod(listingMode)
+
+	if err := s.allow(ctx, logger, s.setupMethodLimiter, authCtx.ActiveOrganizationID, "setup method changes are rate limited, try again shortly"); err != nil {
+		return nil, err
+	}
+
+	before, err := s.load(ctx, logger, authCtx.ActiveOrganizationID, conv.ToNullUUID(id))
+	if err != nil {
+		return nil, err
+	}
+	if before.clientIDSubmitted() || before.Connection.Status != StatusPending {
+		return nil, oops.E(oops.CodeConflict, nil, "the setup method can only change before the client ID is submitted")
+	}
+	if before.Okta.ListingMode == listingMode && before.authMethod() == authMethod {
+		return s.view(ctx, logger, s.db, *before), nil
+	}
+	if _, err := s.discoverOktaIssuer(ctx, logger, before.Okta.OrgUrl, authMethod); err != nil {
+		return nil, err
+	}
+
+	managed, err := s.provisioner.SwitchAuthMethod(ctx, SwitchAuthMethodParams{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ConnectionID:     id,
+		Provider:         ProviderOkta,
+		AuthMethod:       authMethod,
+		ListingMode:      listingMode,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+	})
+	switch {
+	case errors.Is(err, ErrClientIDAlreadySet):
+		return nil, oops.E(oops.CodeConflict, err, "the setup method can only change before the client ID is submitted")
+	case errors.Is(err, ErrConnectionNotFound), errors.Is(err, ErrNotProvisioned):
+		return nil, oops.E(oops.CodeNotFound, err, "connection not found")
+	case errors.Is(err, ErrSigningCredentialUnusable):
+		return nil, oops.E(oops.CodeUnavailable, err, "the signing credential for identity provider connections is unavailable").LogError(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "switch setup method").LogError(ctx, logger)
+	}
+	s.oktaClients.Forget(managed.ClientRowID)
+
+	after, err := s.load(ctx, logger, authCtx.ActiveOrganizationID, conv.ToNullUUID(id))
+	if err != nil {
+		return nil, err
+	}
+	if err := s.audit.LogIdentityProviderConnectionSetSetupMethod(ctx, s.db, s.auditEvent(authCtx, id, snapshot(*before), snapshot(*after))); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log setup method change").LogError(ctx, logger)
+	}
 	return s.view(ctx, logger, s.db, *after), nil
 }
 
