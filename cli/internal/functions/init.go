@@ -50,7 +50,11 @@ const (
 	// SDKVersionEnv overrides the SDK dependency written into new projects,
 	// for example "file:/path/to/gram/ts-framework/functions" to develop
 	// against a local SDK checkout.
-	SDKVersionEnv = "GRAM_FUNCTIONS_SDK_VERSION"
+	SDKVersionEnv = "SPEAKEASY_AI_FUNCTIONS_SDK_VERSION"
+
+	// LegacySDKVersionEnv is the deprecated name of SDKVersionEnv, read when
+	// SDKVersionEnv is unset.
+	LegacySDKVersionEnv = "GRAM_FUNCTIONS_SDK_VERSION"
 
 	mcpSDKPackage = "@modelcontextprotocol/sdk"
 	mcpSDKVersion = "^1.20.1"

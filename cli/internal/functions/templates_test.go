@@ -119,3 +119,25 @@ func TestTemplates_NotInstalled(t *testing.T) {
 		}
 	}
 }
+
+func TestTemplates_UseTheNewSDKNames(t *testing.T) {
+	t.Parallel()
+
+	for _, tmpl := range Templates {
+		root := path.Join("templates", tmpl.Name)
+		_, err := fs.Stat(templatesFS, path.Join(root, "src", "functions.ts"))
+		require.NoError(t, err, "templates/%s has no src/functions.ts entrypoint", tmpl.Name)
+
+		err = fs.WalkDir(templatesFS, root, func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			data, err := templatesFS.ReadFile(p)
+			require.NoError(t, err)
+			require.NotContains(t, string(data), LegacySDKPackage, p)
+			require.NotContains(t, string(data), "gram.config", p)
+			return nil
+		})
+		require.NoError(t, err)
+	}
+}

@@ -8,17 +8,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/Masterminds/semver/v3"
 )
 
 const (
-	// SDKPackage is the npm package that function projects build with. It is
-	// the only place the CLI names the package.
-	SDKPackage = "@gram-ai/functions"
+	// SDKPackage is the npm package that function projects build with.
+	SDKPackage = "@speakeasy-api/functions"
 
-	// SDKBuildModule is the SDK entry the CLI imports to build a project.
-	SDKBuildModule = SDKPackage + "/build"
+	// LegacySDKPackage is the deprecated name of SDKPackage. It re-exports
+	// SDKPackage, and projects that depend on it keep building.
+	LegacySDKPackage = "@gram-ai/functions"
+
+	// sdkBuildEntry is the subpath of the SDK packages the CLI imports to build
+	// a project.
+	sdkBuildEntry = "/build"
 
 	// MinSDKVersion is the first SDK release that exports the programmatic
 	// build entry. New projects depend on ^MinSDKVersion.
@@ -32,10 +37,14 @@ const (
 	resultEnv  = "SPEAKEASY_FUNCTIONS_RESULT"
 )
 
-// sdkScript runs inside the project with Node.js. It imports the SDK from the
-// project's node_modules, so the build always uses the project's SDK version,
-// calls one exported function and writes the outcome to a file for the CLI.
-// Logs from the SDK go to the inherited stdout and stderr.
+// sdkPackages are the SDK packages the CLI builds with, in the order it tries
+// them.
+var sdkPackages = []string{SDKPackage, LegacySDKPackage}
+
+// sdkScript runs inside the project with Node.js. It imports the first SDK
+// package the project has from its node_modules, so the build always uses the
+// project's SDK version, calls one exported function and writes the outcome to
+// a file for the CLI. Logs from the SDK go to the inherited stdout and stderr.
 const sdkScript = `
 import { writeFileSync } from "node:fs";
 
@@ -44,26 +53,37 @@ const done = (outcome) =>
   writeFileSync(process.env.` + resultEnv + `, JSON.stringify(outcome));
 
 let sdk;
-try {
-  sdk = await import(request.module);
-} catch (err) {
-  if (err?.code === "ERR_MODULE_NOT_FOUND" && String(err.message).includes("'" + request.package + "'")) {
-    done({ error: "missing" });
-    process.exit(0);
+let outdated;
+for (const pkg of request.packages) {
+  let mod;
+  try {
+    mod = await import(pkg + request.entry);
+  } catch (err) {
+    if (err?.code === "ERR_MODULE_NOT_FOUND" && String(err.message).includes("'" + pkg + "'")) {
+      continue;
+    }
+    // Only this script's own import counts: Node names "[eval1]" as the
+    // importer, while a failing import inside the SDK names an SDK file.
+    if (err?.code === "ERR_PACKAGE_PATH_NOT_EXPORTED" && String(err.message).includes("[eval")) {
+      outdated ??= pkg;
+      continue;
+    }
+    throw err;
   }
-  // Only this script's own import counts: Node names "[eval1]" as the
-  // importer, while a failing import inside the SDK names an SDK file.
-  if (err?.code === "ERR_PACKAGE_PATH_NOT_EXPORTED" && String(err.message).includes("[eval")) {
-    done({ error: "outdated" });
-    process.exit(0);
+  if (typeof mod[request.action] !== "function") {
+    outdated ??= pkg;
+    continue;
   }
-  throw err;
+  sdk = mod;
+  break;
 }
 
-if (typeof sdk[request.action] !== "function") {
-  done({ error: "outdated" });
-} else {
+if (sdk) {
   done({ result: (await sdk[request.action](request.options)) ?? null });
+} else if (outdated) {
+  done({ error: "outdated", package: outdated });
+} else {
+  done({ error: "missing" });
 }
 `
 
@@ -71,18 +91,34 @@ var (
 	// ErrNodeNotFound means node is not on PATH.
 	ErrNodeNotFound = errors.New("node was not found on PATH: install Node.js " + MinNodeVersion + " or later from https://nodejs.org")
 
-	// ErrSDKMissing means the project does not have the SDK installed.
+	// ErrSDKMissing means the project has neither SDK package installed.
 	ErrSDKMissing = errors.New(SDKPackage + " is not installed in this project: run your package manager's install command, or add it with 'npm install " + SDKPackage + "@^" + MinSDKVersion + "'")
 
-	// ErrSDKOutdated means the installed SDK predates the build entry.
-	ErrSDKOutdated = errors.New("the installed " + SDKPackage + " is too old for the speakeasy CLI: upgrade it with 'npm install " + SDKPackage + "@^" + MinSDKVersion + "'")
+	// ErrSDKOutdated means the installed SDK predates the build entry. The
+	// error Build returns names the outdated package and how to upgrade it.
+	ErrSDKOutdated = errors.New("the installed functions SDK is too old for the speakeasy CLI")
 )
+
+// sdkOutdatedError reports which installed SDK package is too old. It matches
+// ErrSDKOutdated.
+type sdkOutdatedError struct {
+	pkg string
+}
+
+func (e sdkOutdatedError) Error() string {
+	return "the installed " + e.pkg + " is too old for the speakeasy CLI: upgrade it with 'npm install " + e.pkg + "@^" + MinSDKVersion + "'"
+}
+
+func (e sdkOutdatedError) Is(target error) bool {
+	return target == ErrSDKOutdated
+}
 
 // ProjectOptions selects a project and overrides parts of its config.
 type ProjectOptions struct {
 	// Dir is the project directory.
 	Dir string `json:"cwd"`
-	// ConfigFile is the gram.config.* file. Empty picks the default.
+	// ConfigFile is the project config file. Empty picks the first
+	// speakeasy.config.* file, then the first deprecated gram.config.* file.
 	ConfigFile string `json:"configFile,omitempty"`
 	// Entrypoint overrides the config's entrypoint.
 	Entrypoint string `json:"entrypoint,omitempty"`
@@ -143,10 +179,10 @@ func (r Runner) callSDK(ctx context.Context, action string, opts ProjectOptions,
 	}
 
 	request, err := json.Marshal(map[string]any{
-		"package": SDKPackage,
-		"module":  SDKBuildModule,
-		"action":  action,
-		"options": opts,
+		"packages": sdkPackages,
+		"entry":    sdkBuildEntry,
+		"action":   action,
+		"options":  opts,
 	})
 	if err != nil {
 		return fmt.Errorf("encode sdk request: %w", err)
@@ -165,20 +201,21 @@ func (r Runner) callSDK(ctx context.Context, action string, opts ProjectOptions,
 	}
 	cmd.Env = append(cmd.Env, requestEnv+"="+string(request), resultEnv+"="+resultFile)
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s %s failed: %w", SDKPackage, action, err)
+		return fmt.Errorf("functions SDK %s failed: %w", action, err)
 	}
 
 	raw, err := os.ReadFile(filepath.Clean(resultFile))
 	if err != nil {
-		return fmt.Errorf("read %s %s result: %w", SDKPackage, action, err)
+		return fmt.Errorf("read functions SDK %s result: %w", action, err)
 	}
 
 	var outcome struct {
-		Error  string          `json:"error"`
-		Result json.RawMessage `json:"result"`
+		Error   string          `json:"error"`
+		Package string          `json:"package"`
+		Result  json.RawMessage `json:"result"`
 	}
 	if err := json.Unmarshal(raw, &outcome); err != nil {
-		return fmt.Errorf("decode %s %s result: %w", SDKPackage, action, err)
+		return fmt.Errorf("decode functions SDK %s result: %w", action, err)
 	}
 
 	switch outcome.Error {
@@ -186,13 +223,17 @@ func (r Runner) callSDK(ctx context.Context, action string, opts ProjectOptions,
 	case "missing":
 		return ErrSDKMissing
 	case "outdated":
-		return ErrSDKOutdated
+		pkg := outcome.Package
+		if !slices.Contains(sdkPackages, pkg) {
+			pkg = SDKPackage
+		}
+		return sdkOutdatedError{pkg: pkg}
 	default:
-		return fmt.Errorf("%s %s failed: %s", SDKPackage, action, outcome.Error)
+		return fmt.Errorf("functions SDK %s failed: %s", action, outcome.Error)
 	}
 
 	if err := json.Unmarshal(outcome.Result, out); err != nil {
-		return fmt.Errorf("decode %s %s result: %w", SDKPackage, action, err)
+		return fmt.Errorf("decode functions SDK %s result: %w", action, err)
 	}
 	return nil
 }

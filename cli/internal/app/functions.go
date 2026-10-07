@@ -2,6 +2,7 @@ package app
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"errors"
 	"flag"
@@ -31,7 +32,8 @@ func newFunctionsCommand() *cli.Command {
 		Description: `
 Work with a Gram Functions project: scaffold one with "init", run it locally
 with "dev", and build and deploy it with "build" and "push". The build runs
-the project's own ` + functions.SDKPackage + ` through Node.js ` + functions.MinNodeVersion + ` or later.
+the project's own ` + functions.SDKPackage + ` (or the deprecated
+` + functions.LegacySDKPackage + `) through Node.js ` + functions.MinNodeVersion + ` or later.
 `[1:],
 		Subcommands: []*cli.Command{
 			newFunctionsInitCommand(),
@@ -55,11 +57,11 @@ func projectFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.PathFlag{
 			Name:  "config",
-			Usage: "Path to the project config file (default: the first gram.config.{ts,mts,js,mjs} in the current directory)",
+			Usage: "Path to the project config file (default: the first speakeasy.config.{ts,mts,js,mjs} in the current directory, then the deprecated gram.config.*)",
 		},
 		&cli.PathFlag{
 			Name:  "entry",
-			Usage: "Path to the function entrypoint, overriding the config (default: src/gram.ts)",
+			Usage: "Path to the function entrypoint, overriding the config (default: src/functions.ts, or src/gram.ts when only it exists)",
 		},
 		&cli.PathFlag{
 			Name:  "out-dir",
@@ -132,7 +134,7 @@ used: the functions template, git init and dependency install.
 				Git:        optionalBool(c, "git"),
 				Install:    optionalBool(c, "install"),
 				UserAgent:  r.Getenv("npm_config_user_agent"),
-				SDKVersion: r.Getenv(functions.SDKVersionEnv),
+				SDKVersion: cmp.Or(r.Getenv(functions.SDKVersionEnv), r.Getenv(functions.LegacySDKVersionEnv)),
 			})
 			if err != nil {
 				return err
@@ -360,8 +362,8 @@ func newFunctionsBuildCommand() *cli.Command {
 		Usage: "Build the project into a deployable zip file",
 		Description: `
 Build the Gram Functions project in the current directory with the project's
-own ` + functions.SDKPackage + `, writing manifest.json, functions.js and gram.zip
-to the output directory.
+own ` + functions.SDKPackage + `, writing manifest.json, functions.js and
+functions.zip to the output directory.
 `[1:],
 		Flags: projectFlags(),
 		Action: func(c *cli.Context) error {
@@ -525,7 +527,7 @@ func pushFunction(
 		slug = resolved.Slug
 	}
 	if slug == "" {
-		return nil, errors.New("no function slug: pass --slug, set slug in gram.config.ts, or set a name in package.json")
+		return nil, errors.New("no function slug: pass --slug, set slug in speakeasy.config.ts, or set a name in package.json")
 	}
 
 	scale := resolved.Scale

@@ -1,9 +1,9 @@
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 
-// To learn more about Gram Functions, check out our documentation at:
+// To learn more about functions, check out our documentation at:
 // https://www.speakeasy.com/docs/gram/gram-functions/functions-framework
-const gram = new Gram().tool({
+const functions = new Functions().tool({
   name: "greet",
   description: "Greet someone special",
   inputSchema: { name: z.string() },
@@ -12,4 +12,4 @@ const gram = new Gram().tool({
   },
 });
 
-export default gram;
+export default functions;

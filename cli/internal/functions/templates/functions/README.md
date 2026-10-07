@@ -4,10 +4,10 @@ This project builds and deploys [Gram Functions](https://getgram.ai) using a
 tiny TypeScript framework that looks like this:
 
 ```ts
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 
-const gram = new Gram().tool({
+const functions = new Functions().tool({
   name: "greet",
   description: "Greet someone special",
   inputSchema: { name: z.string() },
@@ -16,7 +16,7 @@ const gram = new Gram().tool({
   },
 });
 
-export default gram;
+export default functions;
 ```
 
 Gram Functions are tools for LLMs and MCP servers that can do arbitrary tasks
