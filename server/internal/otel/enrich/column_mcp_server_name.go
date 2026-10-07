@@ -11,18 +11,17 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // stated half of the pair. On an api_request the server is Recommended: a
 // request names the server whose tool result it was made on behalf of,
 // which most requests were not.
-func columnMCPServerName(in *Instruments) LogEnricher {
+func columnMCPServerName() columnDefinition {
 	server := getter[string]{log: dialect.LogDialect.MCPServerName, span: dialect.SpanDialect.MCPServerName}
 	tool := getter[string]{log: dialect.LogDialect.MCPToolName, span: dialect.SpanDialect.MCPToolName}
 	onTool := conditionallyRequired(server, statedBy(tool))
-	return &logColumnEnricher[string]{
-		column: MCPServerNameColumnKey,
+	return column[string]{
+		key: MCPServerNameColumnKey,
 		byType: perEventType[string]{
 			dialect.EventTypeAPIRequest:     recommended(server),
 			dialect.EventTypeToolCall:       onTool,
 			dialect.EventTypeToolCallResult: onTool,
 			dialect.EventTypeToolDecision:   onTool,
 		},
-		instruments: in,
 	}
 }

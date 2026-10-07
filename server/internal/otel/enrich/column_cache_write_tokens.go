@@ -7,12 +7,11 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // Claude Code states it on every request; Codex reports no cache writes at
 // all, so for Codex every request counts as missing here, which is the
 // honest reading of the gap.
-func columnCacheWriteTokens(in *Instruments) LogEnricher {
-	return &logColumnEnricher[int64]{
-		column: CacheWriteTokensColumnKey,
+func columnCacheWriteTokens() columnDefinition {
+	return column[int64]{
+		key: CacheWriteTokensColumnKey,
 		byType: perEventType[int64]{
 			dialect.EventTypeAPIRequest: {log: dialect.LogDialect.CacheWriteTokens, span: dialect.SpanDialect.CacheWriteTokens},
 		},
-		instruments: in,
 	}
 }

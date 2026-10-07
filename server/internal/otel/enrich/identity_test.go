@@ -18,11 +18,8 @@ import (
 func identity(t *testing.T, m *Instruments, record *otelv1.InboundLogRecord) map[attribute.Key]attribute.Value {
 	t.Helper()
 	columns := map[attribute.Key]attribute.Value{}
-	for _, enricher := range []LogEnricher{
-		columnSessionID(m), columnTurnID(m), columnEventID(m),
-		columnUserEmail(m), columnExternalUserID(m), columnExternalOrgID(m),
-	} {
-		maps.Copy(columns, enrichedColumns(t, enricher, record))
+	for _, definition := range identityColumns() {
+		maps.Copy(columns, enrichedColumns(t, definition.log(m), record))
 	}
 	return columns
 }
@@ -156,9 +153,9 @@ func TestIdentityColumnsForSemconv(t *testing.T) {
 func TestEventIDTableNamesEveryTypeWithASubject(t *testing.T) {
 	t.Parallel()
 
-	enricher, ok := columnEventID(NewInstruments(testenv.NewLogger(t), testenv.NewMeterProvider(t))).(*logColumnEnricher[string])
+	definition, ok := columnEventID().(column[string])
 	require.True(t, ok)
-	require.Len(t, enricher.byType, 9)
-	require.NotContains(t, enricher.byType, dialect.EventTypeAPIRequestBody)
-	require.NotContains(t, enricher.byType, dialect.EventTypeCompaction)
+	require.Len(t, definition.byType, 9)
+	require.NotContains(t, definition.byType, dialect.EventTypeAPIRequestBody)
+	require.NotContains(t, definition.byType, dialect.EventTypeCompaction)
 }

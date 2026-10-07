@@ -7,10 +7,9 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // event type is asked, since the account is a property of the session rather
 // than of one kind of event. Empty, and counted, when the producer states
 // none.
-func columnExternalUserID(in *Instruments) LogEnricher {
-	return &logColumnEnricher[string]{
-		column:      ExternalUserIDColumnKey,
-		byType:      everyClassifiedType(getter[string]{log: dialect.LogDialect.ExternalUserID, span: dialect.SpanDialect.ExternalUserID}),
-		instruments: in,
+func columnExternalUserID() columnDefinition {
+	return column[string]{
+		key:    ExternalUserIDColumnKey,
+		byType: everyClassifiedType(getter[string]{log: dialect.LogDialect.ExternalUserID, span: dialect.SpanDialect.ExternalUserID}),
 	}
 }

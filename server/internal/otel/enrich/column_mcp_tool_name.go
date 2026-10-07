@@ -9,18 +9,17 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // in favour of name, which carries the tool on tool_call, tool_call_result
 // and tool_decision whether or not it is an MCP tool; it stays filled until
 // a contract migration drops it.
-func columnMCPToolName(in *Instruments) LogEnricher {
+func columnMCPToolName() columnDefinition {
 	tool := getter[string]{log: dialect.LogDialect.MCPToolName, span: dialect.SpanDialect.MCPToolName}
 	server := getter[string]{log: dialect.LogDialect.MCPServerName, span: dialect.SpanDialect.MCPServerName}
 	onTool := conditionallyRequired(tool, statedBy(server))
-	return &logColumnEnricher[string]{
-		column: MCPToolNameColumnKey,
+	return column[string]{
+		key: MCPToolNameColumnKey,
 		byType: perEventType[string]{
 			dialect.EventTypeAPIRequest:     recommended(tool),
 			dialect.EventTypeToolCall:       onTool,
 			dialect.EventTypeToolCallResult: onTool,
 			dialect.EventTypeToolDecision:   onTool,
 		},
-		instruments: in,
 	}
 }

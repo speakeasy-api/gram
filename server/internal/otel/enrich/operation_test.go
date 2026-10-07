@@ -12,17 +12,13 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-// operation runs the twelve what-happened column enrichers over one
-// record, as the transform does, and indexes what they wrote by key.
+// operation runs the what-happened column enrichers over one record, as
+// the transform does, and indexes what they wrote by key.
 func operation(t *testing.T, in *Instruments, record *otelv1.InboundLogRecord) map[attribute.Key]attribute.Value {
 	t.Helper()
 	columns := map[attribute.Key]attribute.Value{}
-	for _, enricher := range []LogEnricher{
-		columnModel(in), columnQuerySource(in), columnSkillName(in), columnAgentName(in),
-		columnMCPServerName(in), columnMCPToolName(in), columnName(in), columnToolName(in),
-		columnText(in), columnOutcome(in), columnOutcomeMessage(in), columnDurationNano(in),
-	} {
-		maps.Copy(columns, enrichedColumns(t, enricher, record))
+	for _, definition := range operationColumns() {
+		maps.Copy(columns, enrichedColumns(t, definition.log(in), record))
 	}
 	return columns
 }
@@ -356,4 +352,20 @@ func TestRequirementLevelsSayWhenAnAbsenceIsAGap(t *testing.T) {
 	// once the other half is present.
 	require.True(t, statedBy(tool).log(dialect.ForLog(named), named))
 	require.False(t, statedBy(tool).log(d, succeeded))
+}
+
+// A tool_call log record is the moment the call started and states no
+// duration; that is Recommended, not a gap, so nothing is counted.
+func TestOperationColumnsLeaveAToolCallLogWithoutADurationUncounted(t *testing.T) {
+	t.Parallel()
+
+	reader, meterProvider := readableMeter(t)
+	in := NewInstruments(testenv.NewLogger(t), meterProvider)
+	record := inboundTestLog("my-agent", "my-agent", "gen_ai.client.inference.operation.details",
+		logStringAttribute("gen_ai.operation.name", "execute_tool"),
+		logStringAttribute("gen_ai.tool.name", "search"),
+	)
+
+	require.NotContains(t, operation(t, in, record), DurationNanoColumnKey)
+	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("duration_nano")))
 }

@@ -7,10 +7,9 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // the person is a property of the session rather than of one kind of event.
 // Empty, and counted, when the producer states none; the directory enricher
 // reads the same answer to look the person up.
-func columnUserEmail(in *Instruments) LogEnricher {
-	return &logColumnEnricher[string]{
-		column:      UserEmailColumnKey,
-		byType:      everyClassifiedType(getter[string]{log: dialect.LogDialect.ExternalUserEmail, span: dialect.SpanDialect.ExternalUserEmail}),
-		instruments: in,
+func columnUserEmail() columnDefinition {
+	return column[string]{
+		key:    UserEmailColumnKey,
+		byType: everyClassifiedType(getter[string]{log: dialect.LogDialect.ExternalUserEmail, span: dialect.SpanDialect.ExternalUserEmail}),
 	}
 }

@@ -10,15 +10,14 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // so they are absent. When a skill event type and a sub-agent event type
 // exist, they join this table with the skill and the agent as the subject,
 // and the per-family skill_name and agent_name columns retire.
-func columnName(in *Instruments) LogEnricher {
+func columnName() columnDefinition {
 	tool := getter[string]{log: dialect.LogDialect.ToolName, span: dialect.SpanDialect.ToolName}
-	return &logColumnEnricher[string]{
-		column: NameColumnKey,
+	return column[string]{
+		key: NameColumnKey,
 		byType: perEventType[string]{
 			dialect.EventTypeToolCall:       tool,
 			dialect.EventTypeToolCallResult: tool,
 			dialect.EventTypeToolDecision:   tool,
 		},
-		instruments: in,
 	}
 }
