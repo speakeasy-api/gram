@@ -11,13 +11,16 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/domains"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	cdrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -37,6 +40,11 @@ func seedCanonicalHostedServer(t *testing.T, ctx context.Context, conn *pgxpool.
 		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	require.NoError(t, toolsetsrepo.New(conn).SetToolsetCustomDomain(ctx, toolsetsrepo.SetToolsetCustomDomainParams{
+		CustomDomainID: customDomainID,
+		Slug:           slug,
+		ProjectID:      projectID,
+	}))
 	_, err = mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:         toolset.ID,
 		ProjectID:  projectID,
@@ -91,6 +99,19 @@ func TestSetRootMcpEndpoint_ByServerHostedOnDomainReusesItsEndpoint(t *testing.T
 	require.Len(t, endpoints, 1, "the hosted server keeps exactly one endpoint")
 	require.Equal(t, endpoints[0].ID.String(), requireValue(t, result.RootMcpEndpointID))
 	require.True(t, endpoints[0].IsDomainRoot.Valid && endpoints[0].IsDomainRoot.Bool)
+
+	// A later hosted reconcile must still see one endpoint and keep the root marker.
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: SetHostedNetworkAccessInTransaction needs a caller-owned transaction
+	require.NoError(t, err)
+	require.NoError(t, toolsets.SetHostedNetworkAccessInTransaction(ctx, tx, audit.NewLogger(), authCtx, serverID, networkaccess.ModePublicOnly))
+	require.NoError(t, tx.Commit(ctx))
+
+	endpoints, err = mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{
+		ProjectID: *authCtx.ProjectID, McpServerID: serverID,
+	})
+	require.NoError(t, err)
+	require.Len(t, endpoints, 1)
+	require.True(t, endpoints[0].IsDomainRoot.Valid && endpoints[0].IsDomainRoot.Bool, "the root marker survives a hosted update")
 }
 
 func TestSetRootMcpEndpoint_ByServerRejectsHostedServerOnAnotherAddress(t *testing.T) {
