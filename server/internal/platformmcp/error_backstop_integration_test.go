@@ -85,7 +85,7 @@ func TestNoRegisteredToolReturnsDatabaseErrorTextWhenTheDatabaseIsDown(t *testin
 			// database — must not have put database text in its result either.
 			encoded, marshalErr := json.Marshal(output)
 			require.NoError(t, marshalErr)
-			requireNoDatabaseText(t, descriptor.Name, string(encoded))
+			requireNoneOf(t, descriptor.Name, string(encoded), driverErrorText)
 		})
 	}
 }

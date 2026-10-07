@@ -11,7 +11,6 @@ import (
 	"slices"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -515,10 +514,11 @@ func (r *Registrar) failSafe(ctx context.Context, tool string, err error) error 
 var recognisedSentinels = [...]error{ErrUnauthorized, ErrForbidden, ErrUnavailable}
 
 // recognisedToolError returns the form of err that is already safe to show a
-// caller: a tool's own refusal or authorization denial, a protocol error, or
-// one of the package's bare sentinels, whose text is fixed. A recognised error
-// wrapped in more context is returned unwrapped, because the wrapping text is
-// exactly what cannot be vouched for.
+// caller: a tool's own refusal or authorization denial, or one of the
+// package's bare sentinels, whose text is fixed. A recognised error wrapped in
+// more context is returned unwrapped, because the wrapping text is exactly
+// what cannot be vouched for. A JSON-RPC error is not recognised: a remote MCP
+// server or the SDK authors its message and data.
 func recognisedToolError(err error) (error, bool) {
 	for _, sentinel := range recognisedSentinels {
 		// Only the bare sentinel: wrapped, it carries its cause's text too.
@@ -531,9 +531,6 @@ func recognisedToolError(err error) (error, bool) {
 	}
 	if denied, ok := errors.AsType[*ExternalAuthorizationError](err); ok {
 		return denied, true
-	}
-	if protocol, ok := errors.AsType[*jsonrpc.Error](err); ok {
-		return protocol, true
 	}
 	return nil, false
 }

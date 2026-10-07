@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/google/uuid"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
@@ -24,11 +25,21 @@ import (
 // see: driver and pool messages, SQL, and relation and constraint names.
 var leakedDatabaseText = []string{"pool", "closed", "sql", "pgx", "postgres", "relation", "constraint"}
 
+// driverErrorText is the narrower set checked in a successful result, whose
+// legitimate fields can hold a word like "closed" or "sql": only what a
+// database error carries and a product value would not.
+var driverErrorText = []string{"closed pool", "pgx", "sqlstate"}
+
 func requireNoDatabaseText(t *testing.T, tool, text string) {
 	t.Helper()
+	requireNoneOf(t, tool, text, leakedDatabaseText)
+}
+
+func requireNoneOf(t *testing.T, tool, text string, leaked []string) {
+	t.Helper()
 	lowered := strings.ToLower(text)
-	for _, leaked := range leakedDatabaseText {
-		require.NotContains(t, lowered, leaked, "%s returned database error text to its caller: %s", tool, text)
+	for _, term := range leaked {
+		require.NotContains(t, lowered, term, "%s returned database error text to its caller: %s", tool, text)
 	}
 }
 
@@ -255,6 +266,22 @@ func TestBackstopWithoutALoggerStillRefuses(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, unavailableCode, refusal.Code)
 	})
+}
+
+// A JSON-RPC error is not vouched for by its type: a remote MCP server or the
+// SDK authors its message and data, so it is unclassified like any other.
+func TestBackstopDoesNotForwardAJSONRPCErrorsText(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	remote := &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: `relation "projects" does not exist`, Data: json.RawMessage(`"closed pool"`)}
+	err := invokeFailingTool(t, backstopRegistrar(slog.New(slog.NewTextHandler(&logs, nil)), fmt.Errorf("probe upstream: %w", remote)))
+
+	refusal, ok := errors.AsType[*ToolRefusalError](err)
+	require.True(t, ok, "a JSON-RPC error becomes the generic refusal: %v", err)
+	require.Equal(t, unavailableCode, refusal.Code)
+	requireNoDatabaseText(t, "fails", refusal.Payload)
+	require.Contains(t, logs.String(), "does not exist")
 }
 
 // A recognised error keeps its meaning: a tool's own refusal and an
