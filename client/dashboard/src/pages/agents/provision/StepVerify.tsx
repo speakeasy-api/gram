@@ -79,10 +79,10 @@ export function StepVerify({
                 </Text>
               </div>
             </div>
-            {/* A dot above the word, because the word alone does not say
-                whether anything is still happening: it pulses while the check
-                is outstanding and settles green once it passes. */}
-            <span className="flex shrink-0 flex-col items-center gap-1.5">
+            {/* Beside the word rather than above it, so the status reads on
+                the same line as the check it belongs to. The dot pulses while
+                the check is outstanding and settles green once it passes. */}
+            <span className="flex h-5 shrink-0 items-center gap-2">
               <span
                 aria-hidden="true"
                 className={cn(
