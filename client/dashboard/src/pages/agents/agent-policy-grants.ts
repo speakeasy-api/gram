@@ -304,14 +304,6 @@ export function isAgentPolicyGrantRepresentable(
   if (grant.selector.resourceKind !== agentPolicyResourceKind(grant.scope)) {
     return false;
   }
-  // The editor's assistant picker selects projects, not single assistants, so
-  // a grant naming one assistant is kept exactly as stored.
-  if (
-    grant.selector.resourceKind === "assistant" &&
-    grant.selector.resourceId !== ANY_RESOURCE
-  ) {
-    return false;
-  }
   const carriable = new Set(
     DRAFT_DIMENSIONS[grant.selector.resourceKind] ?? [],
   );

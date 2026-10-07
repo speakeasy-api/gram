@@ -1,12 +1,19 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
 import type { ServerGroup } from "./serverMerge";
+import type { AssistantGroup } from "./useOrgAssistants";
 
 const mocks = vi.hoisted(() => ({
   inventory: {
     groups: [] as ServerGroup[],
+    settled: false,
+    isError: false,
+    refetch: vi.fn(),
+  },
+  assistants: {
+    groups: [] as AssistantGroup[],
     settled: false,
     isError: false,
     refetch: vi.fn(),
@@ -22,6 +29,13 @@ vi.mock("./useOrgMcpServers", () => ({
   useOrgMcpServers: (enabled: boolean) =>
     enabled
       ? mocks.inventory
+      : { groups: [], settled: false, isError: false, refetch: vi.fn() },
+}));
+
+vi.mock("./useOrgAssistants", () => ({
+  useOrgAssistants: (enabled: boolean) =>
+    enabled
+      ? mocks.assistants
       : { groups: [], settled: false, isError: false, refetch: vi.fn() },
 }));
 
@@ -55,6 +69,12 @@ function setup(resourceType: "mcp" | "project" = "mcp") {
 
 beforeEach(() => {
   mocks.inventory = {
+    groups: [],
+    settled: false,
+    isError: false,
+    refetch: vi.fn(),
+  };
+  mocks.assistants = {
     groups: [],
     settled: false,
     isError: false,
@@ -129,5 +149,34 @@ describe("grant rule server list", () => {
     expect(screen.queryByText("Loading servers…")).toBeNull();
     expect(screen.queryByText("Servers unavailable")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("grant rule assistant list", () => {
+  it("names a chosen assistant by its own id", () => {
+    mocks.assistants = {
+      ...mocks.assistants,
+      settled: true,
+      groups: [
+        {
+          projectId: "project_one",
+          projectName: "Project one",
+          assistants: [{ id: "assistant_one", name: "Assistant one" }],
+        },
+      ],
+    };
+    const onChangeSelectors = vi.fn();
+    render(
+      <GrantRuleDrawerContent
+        resourceType="assistant"
+        scope="assistant:read"
+        selectors={[]}
+        onChangeSelectors={onChangeSelectors}
+      />,
+    );
+    fireEvent.click(screen.getByText("Assistant one"));
+    expect(onChangeSelectors).toHaveBeenCalledWith([
+      { resourceKind: "assistant", resourceId: "assistant_one" },
+    ]);
   });
 });
