@@ -67,9 +67,11 @@ func TestNewBatchMessageBoundsScanText(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, req.Truncated)
 	require.Equal(t, "running", req.Content)
-	// Name and id share the budget; the second call no longer fits.
-	require.Len(t, req.ToolCalls, 1)
-	require.Len(t, req.ToolCalls[0].Function.Arguments, batchScanMaxContentBytes-len("running")-len("Write")-len("1"))
+	// Calls past the text budget keep their identity with empty arguments.
+	require.Len(t, req.ToolCalls, 2)
+	require.Equal(t, "Bash", req.ToolCalls[1].Function.Name)
+	require.Len(t, req.ToolCalls[0].Function.Arguments, batchScanMaxContentBytes-len("running"))
+	require.Empty(t, req.ToolCalls[1].Function.Arguments)
 	require.Len(t, req.RawToolCalls, batchScanMaxContentBytes)
 
 	// Escapes inflate only the raw JSON; the parsed call fits, so nothing scanned was cut.
@@ -80,6 +82,17 @@ func TestNewBatchMessageBoundsScanText(t *testing.T) {
 	require.Len(t, escapedReq.RawToolCalls, batchScanMaxContentBytes)
 	require.Len(t, escapedReq.ToolCalls, 1)
 	require.False(t, escapedReq.Truncated)
+
+	longName := strings.Repeat("n", batchToolIdentityMaxBytes+1)
+	many := make([]string, 0, batchMaxToolCalls+1)
+	for i := range batchMaxToolCalls + 1 {
+		many = append(many, fmt.Sprintf(`{"id":"%d","function":{"name":%q,"arguments":""}}`, i, longName))
+	}
+	capped, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "assistant", "", []byte("["+strings.Join(many, ",")+"]"))
+	require.True(t, ok)
+	require.True(t, capped.Truncated)
+	require.Len(t, capped.ToolCalls, batchMaxToolCalls)
+	require.Len(t, capped.ToolCalls[0].Function.Name, batchToolIdentityMaxBytes)
 }
 
 func TestMessageContentsUsesScanSurface(t *testing.T) {

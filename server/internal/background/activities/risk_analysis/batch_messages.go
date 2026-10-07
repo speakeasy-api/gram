@@ -47,21 +47,27 @@ type batchMessage struct {
 	Truncated bool
 }
 
-// bound cuts Content and every tool call's name, id and arguments to one shared
-// batchScanMaxContentBytes budget, dropping calls past it. RawToolCalls is cut
-// to the same size on its own.
+const (
+	// Tool names and ids identify calls for name-based scanners, so they are
+	// capped on their own rather than cut by the text budget.
+	batchToolIdentityMaxBytes = 512
+	batchMaxToolCalls         = 512
+)
+
+// bound cuts Content and tool-call arguments to one shared
+// batchScanMaxContentBytes budget, caps each call's name and id and the number
+// of calls separately, and cuts RawToolCalls to the text budget on its own.
 func (m *batchMessage) bound() {
 	remaining := batchScanMaxContentBytes
 	m.Content = m.boundText(m.Content, &remaining)
+	if len(m.ToolCalls) > batchMaxToolCalls {
+		m.ToolCalls = m.ToolCalls[:batchMaxToolCalls]
+		m.Truncated = true
+	}
 	for i := range m.ToolCalls {
-		if remaining == 0 {
-			m.ToolCalls = m.ToolCalls[:i]
-			m.Truncated = true
-			break
-		}
 		call := &m.ToolCalls[i]
-		call.Function.Name = m.boundText(call.Function.Name, &remaining)
-		call.ID = m.boundText(call.ID, &remaining)
+		call.Function.Name = m.boundIdentity(call.Function.Name)
+		call.ID = m.boundIdentity(call.ID)
 		call.Function.Arguments = m.boundText(call.Function.Arguments, &remaining)
 	}
 	if len(m.RawToolCalls) > batchScanMaxContentBytes {
@@ -71,6 +77,14 @@ func (m *batchMessage) bound() {
 			m.Truncated = true
 		}
 	}
+}
+
+func (m *batchMessage) boundIdentity(s string) string {
+	if len(s) > batchToolIdentityMaxBytes {
+		m.Truncated = true
+		return truncateAtRuneBoundary(s, batchToolIdentityMaxBytes)
+	}
+	return s
 }
 
 func (m *batchMessage) boundText(s string, remaining *int) string {

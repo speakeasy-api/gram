@@ -765,7 +765,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesBoundedOversizedInputs(t *testing.
 	})
 	require.NoError(t, err)
 	toolID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": strings.Repeat("c", 4*bound)})
-	// Two calls survive the budget, so this publishes as structured tool calls.
+	// Several calls publish as structured tool calls; the last runs past the budget.
 	multiID := insertAssistantToolCallsWithArgs(t, conn, td, []struct {
 		name string
 		args map[string]any
@@ -847,7 +847,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesBoundedOversizedInputs(t *testing.
 		require.LessOrEqual(t, argBytes, bound)
 		if len(req.GetToolCalls()) > 0 {
 			sawToolCalls = true
-			require.Len(t, req.GetToolCalls(), 2)
+			require.Len(t, req.GetToolCalls(), 3)
 			continue
 		}
 		require.NotEmpty(t, req.GetContent()+req.GetBody())
