@@ -1,5 +1,5 @@
 import { CardContextMenu } from "@/components/card-context-menu";
-import { useIconConfetti } from "@/components/icon-confetti";
+import { useIconDither } from "@/components/icon-dither";
 import { Card } from "@/components/ui/Card";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { Text } from "@/components/ui/Text";
@@ -33,7 +33,7 @@ export function SourceCard({
   /** Set when this source caused the latest deployment to fail. */
   failedDeploymentId?: string | undefined;
 }): JSX.Element {
-  const { canvasRef, start, stop } = useIconConfetti();
+  const { canvasRef, start, stop } = useIconDither();
   const Icon = source.kind === "openapi" ? FileCode : Code;
   const selectable = onSelect != null;
   const failing = failedDeploymentId !== undefined;

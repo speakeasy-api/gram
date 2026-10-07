@@ -151,11 +151,21 @@ Browser verification: `[~]` (not yet verified); see check 18 in `verify.md`.
 That upstream client sits under the **Example Workspace Identity** provider,
 which carries a scope override (`read`), shown on its Overview and editable on its
 Settings tab; the Scope fallback row reads Every advertised scope. Its client
-sets its own scopes and is flagged as a legacy callback client. Platform admins
-see the legacy callback warning with its Migrate button on the client's pages
-and the compatibility-mode switch on its Settings tab; everyone else sees
-neither. The Settings tab also warns that the client's scopes have no effect.
-Browser verification: `[~]`.
+has no scopes of its own and is flagged as a legacy callback client. Platform admins see the legacy callback warning with its
+Migrate button on the client's pages and the compatibility-mode switch on its
+Settings tab; everyone else sees neither. Browser verification: `[~]`.
+
+Linear's protected resource (`https://mcp.linear.app/mcp`) has a PG
+`remote_protected_resources` row read two hours before the seed ran,
+advertising `read` and `write`, with a scope pin of `read`. What the server's
+Identity panel (`remoteMcp.getServerScopes`) shows depends on the
+`remote-session-live-resource-scopes` rollout flag. Off, the pin picker is
+read-only and says pins are not enabled for the organization; because a pin is
+seeded, a "Clear pinned scopes" button is shown (clearing is allowed, adding is
+not), and logins request the issuer override. On (the demo org is enrolled),
+Linear's seeded client has no scopes of its own, so the pin decides and the
+panel reads "Sign-ins request these scopes." The advertised `read` and `write`
+are offered as picker options. Browser verification: `[~]`.
 
 ### Upstream session validation outcomes
 

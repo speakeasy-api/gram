@@ -12,6 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireRemoteProtectedResourceLock = `-- name: AcquireRemoteProtectedResourceLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended('remote_protected_resources:' || CAST($1::uuid AS text) || ':' || $2::text, 0))
+`
+
+type AcquireRemoteProtectedResourceLockParams struct {
+	ProjectID          uuid.UUID
+	ResourceIdentifier string
+}
+
+// Serializes writes to one resource row even before it exists, until commit or rollback.
+func (q *Queries) AcquireRemoteProtectedResourceLock(ctx context.Context, arg AcquireRemoteProtectedResourceLockParams) error {
+	_, err := q.db.Exec(ctx, acquireRemoteProtectedResourceLock, arg.ProjectID, arg.ResourceIdentifier)
+	return err
+}
+
 const createServer = `-- name: CreateServer :one
 
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
@@ -266,6 +281,29 @@ func (q *Queries) GetRemoteProtectedResource(ctx context.Context, arg GetRemoteP
 	return i, err
 }
 
+const getRemoteURLForMcpServerForShare = `-- name: GetRemoteURLForMcpServerForShare :one
+SELECT rms.url
+FROM mcp_servers AS m
+JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE m.id = $1
+  AND m.project_id = $2
+  AND m.deleted IS FALSE
+FOR SHARE OF rms
+`
+
+type GetRemoteURLForMcpServerForShareParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// GetRemoteURLForMcpServer holding the remote server row, so a URL edit waits for the scope pin write.
+func (q *Queries) GetRemoteURLForMcpServerForShare(ctx context.Context, arg GetRemoteURLForMcpServerForShareParams) (string, error) {
+	row := q.db.QueryRow(ctx, getRemoteURLForMcpServerForShare, arg.McpServerID, arg.ProjectID)
+	var url string
+	err := row.Scan(&url)
+	return url, err
+}
+
 const getServerByID = `-- name: GetServerByID :one
 SELECT id, project_id, name, slug, transport_type, url, created_at, updated_at, deleted_at, deleted
 FROM remote_mcp_servers
@@ -436,6 +474,42 @@ func (q *Queries) ListHeadersByServerID(ctx context.Context, remoteMcpServerID u
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMcpServerIDsByRemoteURL = `-- name: ListMcpServerIDsByRemoteURL :many
+SELECT m.id
+FROM mcp_servers AS m
+JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+WHERE m.project_id = $1
+    AND rms.url = $2::text
+    AND m.deleted IS FALSE
+ORDER BY m.id
+`
+
+type ListMcpServerIDsByRemoteURLParams struct {
+	ProjectID uuid.UUID
+	Url       string
+}
+
+// Live MCP servers in the project proxying to url, which share one protected resource.
+func (q *Queries) ListMcpServerIDsByRemoteURL(ctx context.Context, arg ListMcpServerIDsByRemoteURLParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMcpServerIDsByRemoteURL, arg.ProjectID, arg.Url)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -657,31 +731,6 @@ func (q *Queries) SetRemoteProtectedResourceMetadataTimestamps(ctx context.Conte
 		arg.ProjectID,
 		arg.ResourceIdentifier,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const setRemoteProtectedResourceScopeOverride = `-- name: SetRemoteProtectedResourceScopeOverride :execrows
-UPDATE remote_protected_resources
-SET
-    scope_override = CASE WHEN cardinality($1::text[]) > 0 THEN $1::text[] END,
-    updated_at = clock_timestamp()
-WHERE project_id = $2
-    AND resource_identifier = $3::text
-    AND deleted IS FALSE
-`
-
-type SetRemoteProtectedResourceScopeOverrideParams struct {
-	ScopeOverride      []string
-	ProjectID          uuid.UUID
-	ResourceIdentifier string
-}
-
-// Pins the scopes logins to this resource request; NULL or an empty array clears the pin.
-func (q *Queries) SetRemoteProtectedResourceScopeOverride(ctx context.Context, arg SetRemoteProtectedResourceScopeOverrideParams) (int64, error) {
-	result, err := q.db.Exec(ctx, setRemoteProtectedResourceScopeOverride, arg.ScopeOverride, arg.ProjectID, arg.ResourceIdentifier)
 	if err != nil {
 		return 0, err
 	}
@@ -1043,4 +1092,72 @@ func (q *Queries) UpsertRemoteProtectedResourceIfChanged(ctx context.Context, ar
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const upsertRemoteProtectedResourceScopeOverride = `-- name: UpsertRemoteProtectedResourceScopeOverride :one
+INSERT INTO remote_protected_resources (
+    project_id,
+    organization_id,
+    resource_identifier,
+    scope_override
+)
+VALUES (
+    $1,
+    $2,
+    $3::text,
+    CASE WHEN cardinality($4::text[]) > 0 THEN $4::text[] END
+)
+ON CONFLICT (project_id, resource_identifier) WHERE deleted IS FALSE DO UPDATE
+SET
+    scope_override = EXCLUDED.scope_override,
+    updated_at = clock_timestamp()
+RETURNING id, project_id, organization_id, resource_identifier, metadata_url, authorization_servers, scopes_supported, bearer_methods_supported, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, dpop_bound_access_tokens_required, dpop_signing_alg_values_supported, tls_client_certificate_bound_access_tokens, scope_override, challenge_scopes, challenge_scopes_seen_at, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertRemoteProtectedResourceScopeOverrideParams struct {
+	ProjectID          uuid.UUID
+	OrganizationID     string
+	ResourceIdentifier string
+	ScopeOverride      []string
+}
+
+// Pins the scopes logins to this resource request, creating the row when the
+// resource was never read; NULL or an empty array clears the pin.
+func (q *Queries) UpsertRemoteProtectedResourceScopeOverride(ctx context.Context, arg UpsertRemoteProtectedResourceScopeOverrideParams) (RemoteProtectedResource, error) {
+	row := q.db.QueryRow(ctx, upsertRemoteProtectedResourceScopeOverride,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ResourceIdentifier,
+		arg.ScopeOverride,
+	)
+	var i RemoteProtectedResource
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.ResourceIdentifier,
+		&i.MetadataUrl,
+		&i.AuthorizationServers,
+		&i.ScopesSupported,
+		&i.BearerMethodsSupported,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.DpopBoundAccessTokensRequired,
+		&i.DpopSigningAlgValuesSupported,
+		&i.TlsClientCertificateBoundAccessTokens,
+		&i.ScopeOverride,
+		&i.ChallengeScopes,
+		&i.ChallengeScopesSeenAt,
+		&i.Metadata,
+		&i.MetadataFetchedAt,
+		&i.MetadataLastError,
+		&i.MetadataLastErrorAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }

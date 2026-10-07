@@ -471,6 +471,7 @@ BEGIN
   DELETE FROM remote_session_clients WHERE project_id = proj_a OR organization_id = demo_org;
   DELETE FROM remote_session_issuers WHERE project_id = proj_a OR organization_id = demo_org;
   DELETE FROM mcp_servers WHERE project_id = proj_a;
+  DELETE FROM remote_protected_resources WHERE project_id = proj_a;
   DELETE FROM meta_mcp_servers WHERE organization_id = demo_org;
   -- meta_mcp_servers RESTRICTs its issuer, so issuers clear after it.
   DELETE FROM user_session_issuers WHERE project_id = proj_a OR organization_id = demo_org;
@@ -1602,8 +1603,7 @@ BEGIN
      'https://identity.example.com/.well-known/jwks.json',
      ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
      ARRAY['code'], ARRAY['none'], ARRAY['S256'], TRUE,
-     -- A pinned scope request, so the provider's page shows its override and
-     -- its clients' scope fields show the ignored-scopes warning.
+     -- An issuer-wide scope override, shown on the provider's page.
      'Example Workspace Identity', ARRAY['read']);
 
   INSERT INTO remote_session_clients
@@ -1615,7 +1615,8 @@ BEGIN
      demo.det_uuid('gram-demo-remote-identity-provider-linear'),
      'https://clients.example.com/gram-demo-linear.json',
      'https://clients.example.com/gram-demo-linear.json', clock_timestamp(), 'none',
-     ARRAY['read', 'write']);
+     -- No scope of its own: the resource pin decides once discovery is on.
+     NULL);
 
   INSERT INTO remote_session_client_user_session_issuers
     (remote_session_client_id, user_session_issuer_id)
@@ -1635,6 +1636,24 @@ BEGIN
         demo.det_uuid('gram-demo-remote-identity-provider-linear')
   WHERE id = demo.det_uuid('gram-demo-mcpserver-linear')
     AND project_id = proj_a;
+
+  -- Linear's protected resource, read recently, with a scope pin for the server's scope panel.
+  INSERT INTO remote_protected_resources
+    (id, project_id, organization_id, resource_identifier, metadata_url,
+     authorization_servers, scopes_supported, scope_override, metadata_fetched_at)
+  VALUES
+    (demo.det_uuid('gram-demo-protected-resource-linear'), proj_a, demo_org,
+     'https://mcp.linear.app/mcp',
+     'https://mcp.linear.app/.well-known/oauth-protected-resource/mcp',
+     ARRAY['https://identity.example.com'], ARRAY['read', 'write'],
+     ARRAY['read'], now() - interval '2 hours')
+  ON CONFLICT (project_id, resource_identifier) WHERE deleted IS FALSE DO UPDATE
+  SET metadata_url = EXCLUDED.metadata_url,
+      authorization_servers = EXCLUDED.authorization_servers,
+      scopes_supported = EXCLUDED.scopes_supported,
+      scope_override = EXCLUDED.scope_override,
+      metadata_fetched_at = EXCLUDED.metadata_fetched_at,
+      updated_at = clock_timestamp();
 
   INSERT INTO remote_mcp_server_headers
     (id, remote_mcp_server_id, name, description, is_required, is_secret, value)
@@ -1765,7 +1784,8 @@ BEGIN
   VALUES (demo.det_uuid('gram-demo-attachment-client'), proj_a, demo_org,
           demo.det_uuid('gram-demo-remote-identity-provider-linear'),
           demo.det_uuid('gram-demo-attachment-client')::text, 'none',
-          ARRAY['read', 'write'], TRUE);
+          -- No scope of its own: the resource pin decides once discovery is on.
+          NULL, TRUE);
 
   INSERT INTO remote_session_client_user_session_issuers
     (remote_session_client_id, user_session_issuer_id)
@@ -3616,6 +3636,14 @@ Channel context stays in the Raw view.
         = demo.det_uuid('gram-demo-remote-identity-provider-linear');
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 1 MCP server stamped with the Remote MCP identity provider, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM remote_protected_resources
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND resource_identifier = 'https://mcp.linear.app/mcp'
+    AND scope_override = ARRAY['read'];
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected Linear''s protected resource pinned to read, found % matching rows', stray;
   END IF;
 
   SELECT count(*) INTO stray

@@ -80,9 +80,9 @@ func TestList_ReadsCachedResourceScopesWithoutProbing(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"files:read", "files:write"}, rowFor(t, list(t, ctx, si, true), serverID).Scopes)
 
-	n, err := rq.SetRemoteProtectedResourceScopeOverride(ctx, remotemcprepo.SetRemoteProtectedResourceScopeOverrideParams{ScopeOverride: []string{"legacy:all"}, ProjectID: projectID, ResourceIdentifier: upstream.URL})
+	pinned, err := rq.UpsertRemoteProtectedResourceScopeOverride(ctx, remotemcprepo.UpsertRemoteProtectedResourceScopeOverrideParams{ScopeOverride: []string{"legacy:all"}, ProjectID: projectID, OrganizationID: si.orgID, ResourceIdentifier: upstream.URL})
 	require.NoError(t, err)
-	require.EqualValues(t, 1, n)
+	require.Equal(t, []string{"legacy:all"}, pinned.ScopeOverride)
 	require.Equal(t, []string{"legacy:all"}, rowFor(t, list(t, ctx, si, true), serverID).Scopes)
 
 	// Not enrolled: the row is ignored again.
@@ -214,12 +214,12 @@ func TestList_StaleCachedScopesKeepPinAndChallenge(t *testing.T) {
 	rq := remotemcprepo.New(si.conn)
 
 	cacheAdvertisedScopes(t, ctx, si, projectID, upstreamURL, []string{"files:read", "files:write"}, 8*24*time.Hour)
-	n, err := rq.SetRemoteProtectedResourceScopeOverride(ctx, remotemcprepo.SetRemoteProtectedResourceScopeOverrideParams{ScopeOverride: []string{"legacy:all"}, ProjectID: projectID, ResourceIdentifier: upstreamURL})
+	pinned, err := rq.UpsertRemoteProtectedResourceScopeOverride(ctx, remotemcprepo.UpsertRemoteProtectedResourceScopeOverrideParams{ScopeOverride: []string{"legacy:all"}, ProjectID: projectID, OrganizationID: si.orgID, ResourceIdentifier: upstreamURL})
 	require.NoError(t, err)
-	require.EqualValues(t, 1, n)
+	require.Equal(t, []string{"legacy:all"}, pinned.ScopeOverride)
 	require.Equal(t, []string{"legacy:all"}, rowFor(t, list(t, ctx, si, true), serverID).Scopes)
 
-	n, err = rq.RecordRemoteProtectedResourceChallengeScopes(ctx, remotemcprepo.RecordRemoteProtectedResourceChallengeScopesParams{ChallengeScopes: []string{"challenge:read"}, ProjectID: projectID, ResourceIdentifier: upstreamURL})
+	n, err := rq.RecordRemoteProtectedResourceChallengeScopes(ctx, remotemcprepo.RecordRemoteProtectedResourceChallengeScopesParams{ChallengeScopes: []string{"challenge:read"}, ProjectID: projectID, ResourceIdentifier: upstreamURL})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
 	require.Equal(t, []string{"challenge:read"}, rowFor(t, list(t, ctx, si, true), serverID).Scopes)

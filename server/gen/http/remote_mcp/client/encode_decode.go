@@ -1475,6 +1475,489 @@ func DecodeDiscoverProtectedResourceMetadataResponse(decoder func(*http.Response
 	}
 }
 
+// BuildGetServerScopesRequest instantiates a HTTP request object with method
+// and path set to call the "remoteMcp" service "getServerScopes" endpoint
+func (c *Client) BuildGetServerScopesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetServerScopesRemoteMcpPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteMcp", "getServerScopes", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetServerScopesRequest returns an encoder for requests sent to the
+// remoteMcp getServerScopes server.
+func EncodeGetServerScopesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotemcp.GetServerScopesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteMcp", "getServerScopes", "*remotemcp.GetServerScopesPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("mcp_server_id", p.McpServerID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetServerScopesResponse returns a decoder for responses returned by
+// the remoteMcp getServerScopes endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetServerScopesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetServerScopesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetServerScopesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerScopes", err)
+			}
+			err = ValidateGetServerScopesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerScopes", err)
+			}
+			res := NewGetServerScopesRemoteMcpServerScopesOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetServerScopesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerScopes", err)
+			}
+			err = ValidateGetServerScopesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerScopes", err)
+			}
+			return nil, NewGetServerScopesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetServerScopesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerScopes", err)
+			}
+			err = ValidateGetServerScopesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerScopes", err)
+			}
+			return nil, NewGetServerScopesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetServerScopesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerScopes", err)
+			}
+			err = ValidateGetServerScopesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerScopes", err)
+			}
+			return nil, NewGetServerScopesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetServerScopesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerScopes", err)
+			}
+			err = ValidateGetServerScopesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerScopes", err)
+			}
+			return nil, NewGetServerScopesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetServerScopesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerScopes", err)
+			}
+			err = ValidateGetServerScopesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerScopes", err)
+			}
+			return nil, NewGetServerScopesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetServerScopesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerScopes", err)
+			}
+			err = ValidateGetServerScopesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerScopes", err)
+			}
+			return nil, NewGetServerScopesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetServerScopesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerScopes", err)
+			}
+			err = ValidateGetServerScopesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerScopes", err)
+			}
+			return nil, NewGetServerScopesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetServerScopesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "getServerScopes", err)
+				}
+				err = ValidateGetServerScopesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "getServerScopes", err)
+				}
+				return nil, NewGetServerScopesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetServerScopesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "getServerScopes", err)
+				}
+				err = ValidateGetServerScopesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "getServerScopes", err)
+				}
+				return nil, NewGetServerScopesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteMcp", "getServerScopes", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetServerScopesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "getServerScopes", err)
+			}
+			err = ValidateGetServerScopesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "getServerScopes", err)
+			}
+			return nil, NewGetServerScopesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteMcp", "getServerScopes", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetServerScopePinRequest instantiates a HTTP request object with method
+// and path set to call the "remoteMcp" service "setServerScopePin" endpoint
+func (c *Client) BuildSetServerScopePinRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetServerScopePinRemoteMcpPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteMcp", "setServerScopePin", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetServerScopePinRequest returns an encoder for requests sent to the
+// remoteMcp setServerScopePin server.
+func EncodeSetServerScopePinRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotemcp.SetServerScopePinPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteMcp", "setServerScopePin", "*remotemcp.SetServerScopePinPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSetServerScopePinRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteMcp", "setServerScopePin", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetServerScopePinResponse returns a decoder for responses returned by
+// the remoteMcp setServerScopePin endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeSetServerScopePinResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetServerScopePinResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetServerScopePinResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "setServerScopePin", err)
+			}
+			err = ValidateSetServerScopePinResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "setServerScopePin", err)
+			}
+			res := NewSetServerScopePinRemoteMcpServerScopesOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetServerScopePinUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "setServerScopePin", err)
+			}
+			err = ValidateSetServerScopePinUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "setServerScopePin", err)
+			}
+			return nil, NewSetServerScopePinUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetServerScopePinForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "setServerScopePin", err)
+			}
+			err = ValidateSetServerScopePinForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "setServerScopePin", err)
+			}
+			return nil, NewSetServerScopePinForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetServerScopePinBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "setServerScopePin", err)
+			}
+			err = ValidateSetServerScopePinBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "setServerScopePin", err)
+			}
+			return nil, NewSetServerScopePinBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetServerScopePinNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "setServerScopePin", err)
+			}
+			err = ValidateSetServerScopePinNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "setServerScopePin", err)
+			}
+			return nil, NewSetServerScopePinNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetServerScopePinConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "setServerScopePin", err)
+			}
+			err = ValidateSetServerScopePinConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "setServerScopePin", err)
+			}
+			return nil, NewSetServerScopePinConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetServerScopePinUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "setServerScopePin", err)
+			}
+			err = ValidateSetServerScopePinUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "setServerScopePin", err)
+			}
+			return nil, NewSetServerScopePinUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetServerScopePinInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "setServerScopePin", err)
+			}
+			err = ValidateSetServerScopePinInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "setServerScopePin", err)
+			}
+			return nil, NewSetServerScopePinInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetServerScopePinInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "setServerScopePin", err)
+				}
+				err = ValidateSetServerScopePinInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "setServerScopePin", err)
+				}
+				return nil, NewSetServerScopePinInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetServerScopePinUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "setServerScopePin", err)
+				}
+				err = ValidateSetServerScopePinUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "setServerScopePin", err)
+				}
+				return nil, NewSetServerScopePinUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteMcp", "setServerScopePin", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetServerScopePinGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "setServerScopePin", err)
+			}
+			err = ValidateSetServerScopePinGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "setServerScopePin", err)
+			}
+			return nil, NewSetServerScopePinGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteMcp", "setServerScopePin", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildProbeURLRequest instantiates a HTTP request object with method and path
 // set to call the "remoteMcp" service "probeURL" endpoint
 func (c *Client) BuildProbeURLRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -3472,6 +3955,27 @@ func unmarshalProtectedResourceMetadataUnavailableResponseBodyToRemotemcpProtect
 	res := &remotemcp.ProtectedResourceMetadataUnavailable{
 		Code:    *v.Code,
 		Message: *v.Message,
+	}
+
+	return res
+}
+
+// unmarshalRemoteMcpServerClientScopesResponseBodyToRemotemcpRemoteMcpServerClientScopes
+// builds a value of type *remotemcp.RemoteMcpServerClientScopes from a value
+// of type *RemoteMcpServerClientScopesResponseBody.
+func unmarshalRemoteMcpServerClientScopesResponseBodyToRemotemcpRemoteMcpServerClientScopes(v *RemoteMcpServerClientScopesResponseBody) *remotemcp.RemoteMcpServerClientScopes {
+	res := &remotemcp.RemoteMcpServerClientScopes{
+		ClientID:       *v.ClientID,
+		ScopeSource:    *v.ScopeSource,
+		PinWouldDecide: *v.PinWouldDecide,
+	}
+	res.RequestedScopes = make([]string, len(v.RequestedScopes))
+	for i, val := range v.RequestedScopes {
+		res.RequestedScopes[i] = val
+	}
+	res.UnadvertisedPinnedScopes = make([]string, len(v.UnadvertisedPinnedScopes))
+	for i, val := range v.UnadvertisedPinnedScopes {
+		res.UnadvertisedPinnedScopes[i] = val
 	}
 
 	return res
