@@ -2,8 +2,10 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"sync/atomic"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
@@ -177,16 +180,17 @@ func claudeBudgetFallback(hookEventName, noun string, failOpen bool) *gen.Claude
 
 // hooksFailOpen reports whether the organization's hooks fail-open setting is
 // known to be on. An unknown organization, a missing feature client or a failed
-// read fails closed: the organization may have chosen to block unverified
-// events, and the shadow-MCP guard can deny a tool call even when the request
-// carries no organization.
-func (s *Service) hooksFailOpen(ctx context.Context, organizationID string) bool {
+// read, including one that panics, fails closed: the organization may have
+// chosen to block unverified events, and the shadow-MCP guard can deny a tool
+// call even when the request carries no organization.
+func (s *Service) hooksFailOpen(ctx context.Context, organizationID string) (failOpen bool) {
 	if organizationID == "" || s.productFeatures == nil {
 		return false
 	}
+	defer recoverDetachedPanic(ctx, s.logger, nil)
 	lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), hooksFailOpenLookupTimeout)
 	defer cancel()
-	failOpen, err := s.productFeatures.IsFeatureEnabled(lookupCtx, organizationID, productfeatures.FeatureHooksFailOpen)
+	enabled, err := s.productFeatures.IsFeatureEnabled(lookupCtx, organizationID, productfeatures.FeatureHooksFailOpen)
 	if err != nil {
 		s.logger.WarnContext(ctx, "read hooks fail-open setting; failing closed",
 			attr.SlogEvent("claude_hook_fail_open_lookup_failed"),
@@ -195,5 +199,31 @@ func (s *Service) hooksFailOpen(ctx context.Context, organizationID string) bool
 		)
 		return false
 	}
-	return failOpen
+	return enabled
+}
+
+// recoverDetachedPanic recovers a panic in a legacy Claude goroutine, which the
+// recovery middleware cannot reach and which would otherwise crash the server.
+// It logs the panic as that middleware does and, when err is not nil, sets it
+// to the error the middleware would have answered with. Defer it directly.
+func recoverDetachedPanic(ctx context.Context, logger *slog.Logger, err *error) {
+	recValue := recover()
+	if recValue == nil {
+		return
+	}
+	panicErr := fmt.Errorf("panic: %v", recValue)
+	maybeErr, _ := recValue.(error)
+	shareable, ok := errors.AsType[*oops.ShareableError](maybeErr)
+	if !ok {
+		shareable = oops.E(oops.CodeUnexpected, oops.Permanent(panicErr), "%s", oops.CodeUnexpected.UserMessage())
+	}
+	logger.LogAttrs(ctx, slog.LevelError, "recovered from panic",
+		attr.SlogError(panicErr),
+		attr.SlogErrorKind("panic"),
+		attr.SlogErrorStack(string(debug.Stack())),
+		attr.SlogErrorID(shareable.AsGoa(ctx).ID),
+	)
+	if err != nil {
+		*err = shareable
+	}
 }

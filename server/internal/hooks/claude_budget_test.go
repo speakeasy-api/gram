@@ -1,11 +1,14 @@
 package hooks
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -14,12 +17,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -39,11 +46,13 @@ const (
 )
 
 // hooksPostureFeatures enables every product feature except hooks_fail_open,
-// which follows failOpen, or fails with err when it is set. When read is set,
-// each hooks_fail_open lookup signals it without blocking.
+// which follows failOpen, fails with err when it is set, or panics when panics
+// is set. When read is set, each hooks_fail_open lookup signals it without
+// blocking.
 type hooksPostureFeatures struct {
 	failOpen bool
 	err      error
+	panics   bool
 	read     chan struct{}
 }
 
@@ -57,6 +66,9 @@ func (f hooksPostureFeatures) IsFeatureEnabled(_ context.Context, _ string, feat
 		default:
 		}
 	}
+	if f.panics {
+		panic("hooks_fail_open read panicked")
+	}
 	if f.err != nil {
 		return false, f.err
 	}
@@ -64,10 +76,11 @@ func (f hooksPostureFeatures) IsFeatureEnabled(_ context.Context, _ string, feat
 }
 
 // slowRiskScanner holds every enforcement scan until the test finishes it,
-// then returns the embedded stub's result. It stands in for a risk scan slower
-// than the budget.
+// then returns the embedded stub's result, or panics when panics is set. It
+// stands in for a risk scan slower than the budget.
 type slowRiskScanner struct {
 	stubResultScanner
+	panics      bool
 	started     chan struct{}
 	startOnce   sync.Once
 	release     chan struct{}
@@ -78,6 +91,9 @@ func (s *slowRiskScanner) ScanForEnforcement(ctx context.Context, _ risk.Realtim
 	s.startOnce.Do(func() { close(s.started) })
 	select {
 	case <-s.release:
+		if s.panics {
+			panic("held enforcement scan panicked")
+		}
 		return s.result, nil
 	case <-ctx.Done():
 		return nil, fmt.Errorf("held enforcement scan: %w", ctx.Err())
@@ -182,6 +198,7 @@ func TestClaude_DecisionBudget_OverrunAnswersFromPosture(t *testing.T) {
 		{name: "fail-closed blocks tool call with reason", event: "PreToolUse", want: toolDenied},
 		{name: "fail-closed blocks prompt with reason", event: "UserPromptSubmit", want: &gen.ClaudeHookResult{Decision: new("block"), Reason: &promptReason}},
 		{name: "unreadable posture fails closed", posture: hooksPostureFeatures{failOpen: true, err: errors.New("feature store unavailable")}, event: "PreToolUse", want: toolDenied},
+		{name: "panicking posture read fails closed", posture: hooksPostureFeatures{failOpen: true, panics: true}, event: "PreToolUse", want: toolDenied},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -257,6 +274,7 @@ func TestHooksFailOpen_TrueOnlyForReadEnabledSetting(t *testing.T) {
 		{name: "failed read", organizationID: organizationID, features: hooksPostureFeatures{failOpen: true, err: errors.New("feature store unavailable")}, want: false},
 		{name: "unknown organization", organizationID: "", features: hooksPostureFeatures{failOpen: true}, want: false},
 		{name: "no feature client", organizationID: organizationID, features: nil, want: false},
+		{name: "panicking read", organizationID: organizationID, features: hooksPostureFeatures{failOpen: true, panics: true}, want: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -344,6 +362,115 @@ func TestClaude_DecisionBudget_FastVerdictReportsRiskScan(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, answeredFromPosture)
 	require.True(t, *scanned, "the handler's scan must reach the request's tracker")
+}
+
+// A handler that panics within the budget fails the request with the error the
+// recovery middleware answers a panic with, instead of crashing the server.
+func TestClaude_DecisionBudget_HandlerPanicFailsRequest(t *testing.T) {
+	t.Parallel()
+	ctx, ti, scanner := newBudgetedClaudeService(t, hooksPostureFeatures{failOpen: true}, nil)
+	ti.service.claudeBudget = legacyClaudeHookDecisionBudget
+	scanner.panics = true
+	scanner.finish()
+
+	result, err := ti.service.Claude(ctx, budgetPayload("PreToolUse"))
+	require.Nil(t, result)
+	shareable, ok := errors.AsType[*oops.ShareableError](err)
+	require.True(t, ok, "got %v", err)
+	goaErr := shareable.AsGoa(ctx)
+	require.Equal(t, string(oops.CodeUnexpected), goaErr.Name)
+	require.True(t, goaErr.Fault)
+	require.False(t, goaErr.Temporary)
+}
+
+// lockedBuffer collects log output written from several goroutines.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p) //nolint:wrapcheck // bytes.Buffer.Write always returns a nil error
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// A handler that panics after the budget answered is logged, and the posture
+// answer stands.
+func TestClaude_DecisionBudget_LateHandlerPanicIsLogged(t *testing.T) {
+	t.Parallel()
+	ctx, ti, scanner := newBudgetedClaudeService(t, hooksPostureFeatures{failOpen: true}, nil)
+	logs := &lockedBuffer{}
+	ti.service.logger = slog.New(slog.NewJSONHandler(logs, nil))
+	scanner.panics = true
+
+	result, err := ti.service.Claude(ctx, budgetPayload("UserPromptSubmit"))
+	require.NoError(t, err)
+	requireScanStarted(t, scanner)
+	require.Equal(t, &gen.ClaudeHookResult{}, result, "the fail-open posture answers")
+
+	scanner.finish()
+	ti.service.claudeDrains.Wait()
+	require.Contains(t, logs.String(), `"msg":"recovered from panic"`)
+}
+
+// The decision budget applies only to the legacy Claude endpoint: Codex,
+// Cursor and ingest wait for a slow scan and return its block.
+func TestDecisionBudget_OtherEndpointsWaitForVerdict(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		call func(context.Context, *Service) error
+	}{
+		{name: "codex", call: func(ctx context.Context, s *Service) error {
+			_, err := s.Codex(ctx, &gen.CodexPayload{HookEventName: "UserPromptSubmit", SessionID: new(uuid.NewString()), UserEmail: new("budget@example.com"), Prompt: new("a slow prompt")})
+			return err
+		}},
+		{name: "cursor", call: func(ctx context.Context, s *Service) error {
+			_, err := s.Cursor(ctx, &gen.CursorPayload{HookEventName: "beforeSubmitPrompt", ConversationID: new(uuid.NewString()), UserEmail: new("budget@example.com"), Prompt: new("a slow prompt")})
+			return err
+		}},
+		{name: "ingest", call: func(ctx context.Context, s *Service) error {
+			payload := canonicalIngestPayload("claude", "prompt.submitted", uuid.NewString())
+			payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: new("a slow prompt")}}
+			_, err := s.Ingest(ctx, payload)
+			return err
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti, scanner := newBudgetedClaudeService(t, hooksPostureFeatures{failOpen: true}, blockingScanResult())
+			reader := sdkmetric.NewManualReader()
+			ti.service.metrics = newMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), testenv.NewLogger(t))
+
+			var answered atomic.Bool
+			done := make(chan error, 1)
+			go func() {
+				err := tc.call(ctx, ti.service)
+				answered.Store(true)
+				done <- err
+			}()
+			requireScanStarted(t, scanner)
+			require.Never(t, answered.Load, 2*testClaudeBudget, 10*time.Millisecond, "the endpoint must wait for the scan")
+			scanner.finish()
+			require.NoError(t, <-done)
+
+			var rm metricdata.ResourceMetrics
+			require.NoError(t, reader.Collect(ctx, &rm))
+			point := findHookEventDurationPoint(t, rm)
+			outcome, _ := point.Attributes.Value(attr.OutcomeKey)
+			require.Equal(t, hookMetricOutcomeAccepted, outcome.AsString())
+			decision, _ := point.Attributes.Value(attr.HookDecisionKey)
+			require.Equal(t, hookMetricDecisionDeny, decision.AsString(), "the scanner's block answers")
+		})
+	}
 }
 
 // A block row written for an event already answered as a pass-through would

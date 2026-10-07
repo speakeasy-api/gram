@@ -331,7 +331,9 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 }
 
 // dispatchClaudeHookEvent routes a normalized Claude hook event to its handler.
-func (s *Service) dispatchClaudeHookEvent(ctx context.Context, logger *slog.Logger, hookEvent any, hookEventName string) (*gen.ClaudeHookResult, error) {
+// It runs off the request goroutine, so a handler panic becomes its error.
+func (s *Service) dispatchClaudeHookEvent(ctx context.Context, logger *slog.Logger, hookEvent any, hookEventName string) (res *gen.ClaudeHookResult, err error) {
+	defer recoverDetachedPanic(ctx, logger, &err)
 	switch ev := hookEvent.(type) {
 	case *hookevents.SessionStart:
 		return s.handleSessionStart(ctx, ev)
