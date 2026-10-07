@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"io"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
@@ -23,7 +24,7 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload, body
 		body:            body,
 		decode: func(raw []byte, tenant otlpIngestTenant) ([]*otelv1.InboundMetric, error) {
 			provenance := (&otelv1.InboundMetric_Provenance_builder{
-				Source:         new(ProvenanceSource),
+				Source:         new(gramotel.ProvenanceSource),
 				OrganizationId: &tenant.organizationID,
 				ProjectId:      &tenant.projectID,
 			}).Build()
@@ -34,8 +35,9 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload, body
 			export = request
 			return inboundMetricsFromExport(request, provenance)
 		},
-		validate:  validateInboundMetric,
-		publisher: s.metricPublisher,
+		publish: func(ctx context.Context, metrics []*otelv1.InboundMetric) error {
+			return gramotel.Publish(ctx, s.records, gramotel.SignalMetric, s.metricPublisher, validateInboundMetric, metrics)
+		},
 	})
 	if err != nil {
 		return err

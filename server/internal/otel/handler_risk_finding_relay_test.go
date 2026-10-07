@@ -1,6 +1,7 @@
 package otel
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -382,19 +383,19 @@ func TestRiskFindingRelayRightSizesExports(t *testing.T) {
 	for i := range messages {
 		finding := riskFindingRelayTestFinding(projectID)
 		finding.SetId(uuid.NewString())
-		finding.SetTags([]string{strings.Repeat("x", maxLogRelayExportBytes/2)})
+		finding.SetTags([]string{strings.Repeat("x", gramotel.MaxLogRelayExportBytes/2)})
 		message, _, ok := newRiskFindingRelayMessage(finding, nil)
 		require.True(t, ok)
 		messages[i] = message
 	}
 
-	batches, err := rightSizeProtoBatches(messages, maxLogRelayExportBytes, func(batch []riskFindingRelayMessage) (*collectorlogsv1.ExportLogsServiceRequest, error) {
+	batches, err := rightSizeProtoBatches(messages, gramotel.MaxLogRelayExportBytes, func(batch []riskFindingRelayMessage) (*collectorlogsv1.ExportLogsServiceRequest, error) {
 		return buildRiskFindingRelayExport(batch, riskFindingRelayObservedAt), nil
 	})
 	require.NoError(t, err)
 	require.Greater(t, len(batches), 1)
 	for _, batch := range batches {
-		require.LessOrEqual(t, proto.Size(batch.message), maxLogRelayExportBytes)
+		require.LessOrEqual(t, proto.Size(batch.message), gramotel.MaxLogRelayExportBytes)
 	}
 }
 

@@ -8,13 +8,12 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 )
 
 type otlpIngestTenant struct {
@@ -27,15 +26,16 @@ type otlpIngestSpec[M any] struct {
 	contentEncoding *string
 	body            io.ReadCloser
 	decode          func([]byte, otlpIngestTenant) ([]M, error)
-	validate        func(M) error
-	publisher       gcp.Publisher[M]
+	// publish hands the decoded export to gramotel's publishing core, which
+	// validates every item before publishing any and settles every publish
+	// before returning. A gramotel.ErrInvalid error is the exporter's fault.
+	publish func(context.Context, []M) error
 }
 
-// ingestOTLPExport owns the transport and durability contract shared by OTLP
-// signals. Signal-specific callers provide only tree decoding and item
-// validation; this function authenticates tenancy, bounds decompression,
-// validates the complete export before publishing any prefix, and settles every
-// queued publish before acknowledging the exporter.
+// ingestOTLPExport owns the transport contract shared by OTLP signals:
+// authenticated tenancy, bounded decompression, decoding. Validation,
+// publishing and the durability wait belong to gramotel's publishing core,
+// so the exporter is acknowledged only once the whole export is on the topic.
 func ingestOTLPExport[M any](ctx context.Context, logger *slog.Logger, spec otlpIngestSpec[M]) (err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -81,28 +81,11 @@ func ingestOTLPExport[M any](ctx context.Context, logger *slog.Logger, spec otlp
 		return oops.E(oops.CodeBadRequest, err, "invalid OTLP %s export", spec.signal).LogError(ctx, logger)
 	}
 
-	for _, item := range items {
-		if err := spec.validate(item); err != nil {
+	if err := spec.publish(ctx, items); err != nil {
+		if errors.Is(err, gramotel.ErrInvalid) {
 			return oops.E(oops.CodeBadRequest, err, "invalid OTLP %s export", spec.signal).LogError(ctx, logger)
 		}
-	}
-
-	// Enqueue the complete export before settling results so the publisher can
-	// flush it as one batch. Waiting for every result makes Pub/Sub durability a
-	// precondition of acknowledging the OTLP exporter.
-	results := make([]gcp.PublishResult, 0, len(items))
-	for _, item := range items {
-		results = append(results, spec.publisher.Publish(ctx, item))
-	}
-
-	var publishErr error
-	for _, result := range results {
-		if _, err := result.Get(ctx); err != nil {
-			publishErr = errors.Join(publishErr, err)
-		}
-	}
-	if publishErr != nil {
-		return oops.E(oops.CodeUnexpected, publishErr, "unable to accept OTLP %s export", spec.signal).LogError(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "unable to accept OTLP %s export", spec.signal).LogError(ctx, logger)
 	}
 
 	return nil

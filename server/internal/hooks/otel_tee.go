@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"math"
 	"time"
 
@@ -14,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 )
 
 const (
@@ -47,7 +47,7 @@ func (s *Service) teeOTELLogsToEventFeed(ctx context.Context, payload *gen.LogsP
 	}
 
 	provenance := (&otelv1.InboundLogRecord_Provenance_builder{
-		Source:         new(otelsvc.ProvenanceSource),
+		Source:         new(gramotel.ProvenanceSource),
 		OrganizationId: &orgID,
 		ProjectId:      &projectID,
 	}).Build()
@@ -64,7 +64,7 @@ func (s *Service) teeOTELLogsToEventFeed(ctx context.Context, payload *gen.LogsP
 
 	results := make([]gcp.PublishResult, 0, len(records))
 	for _, record := range records {
-		if err := otelsvc.ValidateInboundLogRecord(record); err != nil {
+		if err := gramotel.ValidateLogRecord(record); err != nil {
 			s.logger.WarnContext(ctx, "skipping hooks OTEL log record in event feed tee", attr.SlogError(err))
 			continue
 		}

@@ -3,6 +3,7 @@ package otel
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"io"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
@@ -19,14 +20,15 @@ func (s *Service) Traces(ctx context.Context, payload *gen.TracesPayload, body i
 		body:            body,
 		decode: func(raw []byte, tenant otlpIngestTenant) ([]*otelv1.InboundSpan, error) {
 			provenance := (&otelv1.InboundSpan_Provenance_builder{
-				Source:         new(ProvenanceSource),
+				Source:         new(gramotel.ProvenanceSource),
 				OrganizationId: &tenant.organizationID,
 				ProjectId:      &tenant.projectID,
 			}).Build()
 			return decodeOTLPTraceExport(raw, provenance)
 		},
-		validate:  func(span *otelv1.InboundSpan) error { return validateSpan(span) },
-		publisher: s.spanPublisher,
+		publish: func(ctx context.Context, spans []*otelv1.InboundSpan) error {
+			return gramotel.Publish(ctx, s.records, gramotel.SignalSpan, s.spanPublisher, func(span *otelv1.InboundSpan) error { return validateSpan(span) }, spans)
+		},
 	})
 }
 

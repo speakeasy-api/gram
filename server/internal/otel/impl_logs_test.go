@@ -2,6 +2,7 @@ package otel
 
 import (
 	"bytes"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -96,7 +97,7 @@ func TestLogsPublishesFlattenedRecordsWithAuthenticatedProvenance(t *testing.T) 
 	require.Equal(t, "resource-schema", published.GetResourceSchemaUrl())
 	require.Equal(t, "producer.scope", published.GetScope().GetName())
 	require.Equal(t, "scope-schema", published.GetScopeSchemaUrl())
-	require.Equal(t, ProvenanceSource, published.GetProvenance().GetSource())
+	require.Equal(t, gramotel.ProvenanceSource, published.GetProvenance().GetSource())
 	require.Equal(t, testLogOrganizationID, published.GetProvenance().GetOrganizationId())
 	require.Equal(t, projectID.String(), published.GetProvenance().GetProjectId())
 	_, err = uuid.Parse(published.GetRecordId())
@@ -197,7 +198,7 @@ func TestLogsRejectsRecordOverMaximumSizeBeforePublishing(t *testing.T) {
 			ScopeLogs: []*logsv1.ScopeLogs{{
 				LogRecords: []*logsv1.LogRecord{{
 					Body: &commonv1.AnyValue{
-						Value: &commonv1.AnyValue_BytesValue{BytesValue: make([]byte, maxOTLPLogRecordBytes)},
+						Value: &commonv1.AnyValue_BytesValue{BytesValue: make([]byte, gramotel.MaxLogRecordBytes)},
 					},
 				}},
 			}},
@@ -236,12 +237,12 @@ func TestValidateLogRecordAcceptsRecordBelowMaximumSize(t *testing.T) {
 	record := (&otelv1.InboundLogRecord_builder{
 		RecordId: &recordID,
 		Body: (&otelv1.InboundLogRecord_AnyValue_builder{
-			BytesValue: make([]byte, maxOTLPLogRecordBytes-1024),
+			BytesValue: make([]byte, gramotel.MaxLogRecordBytes-1024),
 		}).Build(),
 	}).Build()
 
-	require.LessOrEqual(t, proto.Size(record), maxOTLPLogRecordBytes)
-	require.NoError(t, ValidateInboundLogRecord(record))
+	require.LessOrEqual(t, proto.Size(record), gramotel.MaxLogRecordBytes)
+	require.NoError(t, gramotel.ValidateLogRecord(record))
 }
 
 func testOTELAuthContext(projectID uuid.UUID) *contextvalues.AuthContext {
