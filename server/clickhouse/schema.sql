@@ -331,6 +331,18 @@ ORDER BY (gram_project_id, canonical_server_url)
 SETTINGS index_granularity = 8192
 COMMENT 'Admin-set Shadow MCP display names, kept apart from observation rows so ingest writes cannot overwrite them';
 
+-- Transitional: copies display names written by code that predates
+-- shadow_mcp_inventory_url_overrides, so names set before the new writer ships
+-- are not lost. Drop together with legacy_override once no such writer runs.
+CREATE MATERIALIZED VIEW IF NOT EXISTS shadow_mcp_inventory_url_overrides_legacy_mv TO shadow_mcp_inventory_url_overrides AS
+SELECT
+    gram_project_id,
+    canonical_server_url,
+    server_name_override,
+    updated_at
+FROM shadow_mcp_inventory_urls
+WHERE legacy_override = 1;
+
 CREATE TABLE IF NOT EXISTS ai_detections (
     organization_id String COMMENT 'Organization the reporting device agent is enrolled in.',
     target_id LowCardinality(String) COMMENT 'Id of the detected AI tool as reported by the agent. Usually a server/internal/agent/aitargets catalog id, but stored as-is: agent binaries can ship newer target lists than the catalog knows.',
