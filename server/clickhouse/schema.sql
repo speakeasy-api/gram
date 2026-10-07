@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     -- OTel Resource Attributes (WHO/WHERE generated this log)
     resource_attributes JSON COMMENT 'Attributes describing the resource that generated this log.' CODEC(ZSTD),
 
-    -- Denormalized Speakeasy Fields (for fast filtering)
+    -- Denormalized Gram Fields (for fast filtering)
     gram_project_id UUID COMMENT 'Project ID (denormalized from resource_attributes).',
     gram_deployment_id Nullable(UUID) COMMENT 'Deployment ID (denormalized from resource_attributes).',
     gram_function_id Nullable(UUID) COMMENT 'Function ID that generated the log (null for HTTP logs).',
@@ -213,7 +213,7 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     -- setting gen_ai.tool.call.result.
     has_result SimpleAggregateFunction(max, UInt8),
     has_error SimpleAggregateFunction(max, UInt8),
-    -- Set when the Speakeasy hook denied the tool call (e.g. shadow-MCP guard).
+    -- Set when the Gram hook denied the tool call (e.g. shadow-MCP guard).
     -- Once we see a 1, it stays 1 across merges. Status is derived at query
     -- time as: has_block → blocked, has_error → failure, has_result → success,
     -- otherwise pending.
@@ -639,7 +639,7 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribu
 -- completed tool-call hook rows; Claude Chat (web/desktop) usage and cost
 -- arrive as claude_chat:usage / claude_chat:cost rows polled from the Admin
 -- Analytics API. Everything else —
--- Speakeasy-hosted chat completions, claude-code:usage metric rows (which
+-- Gram-hosted chat completions, claude-code:usage metric rows (which
 -- duplicate api_request usage), Claude hook rows, MCP hook rows — is
 -- excluded so cost attribution never mixes sources.
 -- Keep the predicates in sync with the session* constants in
@@ -917,7 +917,7 @@ WITH
         AND (toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')
     ) AS is_claude_api_request,
     -- Only Codex/Cursor usage-metric rows count. Generic gen_ai chat rows
-    -- (Speakeasy-hosted completions and other sources) are deliberately excluded so
+    -- (Gram-hosted completions and other sources) are deliberately excluded so
     -- spend-rule enforcement reconciles with the cost dashboard's agent
     -- surfaces. claude_chat:usage / claude_chat:cost rows (Claude web/desktop
     -- spend polled from the Anthropic Admin API), which
@@ -955,7 +955,7 @@ CREATE TABLE IF NOT EXISTS chat_token_summaries (
     total_tokens SimpleAggregateFunction(sum, Int64),
 
     -- Count of non-metrics rows (tool calls, hook events, chat events without
-    -- token usage) evidencing that Speakeasy stored session data for this chat.
+    -- token usage) evidencing that Gram stored session data for this chat.
     -- Chats with zero stored events across a billing window are excluded from
     -- tokens-under-management billing.
     stored_event_count SimpleAggregateFunction(sum, UInt64)
@@ -2107,7 +2107,7 @@ CREATE TABLE IF NOT EXISTS agent_events (
     user_email String COMMENT 'Producer-stated user email. Empty when not stated.' CODEC(ZSTD),
     external_user_id String COMMENT 'User id in the provider own account system. Empty when not stated.' CODEC(ZSTD),
 
-    -- Speakeasy-resolved attribution. Empty until the account-attribution path is ported into this pipeline.
+    -- Gram-resolved attribution. Empty until the account-attribution path is ported into this pipeline.
     account_type LowCardinality(String) COMMENT 'Resolved account type. Empty until attribution runs in this pipeline.',
     billing_mode LowCardinality(String) COMMENT 'Resolved billing mode. Empty until attribution runs in this pipeline.',
     external_org_id String COMMENT 'Organization id in the provider own account system. Empty when not resolved.' CODEC(ZSTD),

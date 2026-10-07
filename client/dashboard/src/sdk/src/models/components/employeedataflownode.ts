@@ -13,7 +13,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  * Server classification, present for MCP server nodes
  */
 export const ServerClass = {
-  Speakeasy: "gram",
+  Gram: "gram",
   External: "external",
   Local: "local",
 } as const;

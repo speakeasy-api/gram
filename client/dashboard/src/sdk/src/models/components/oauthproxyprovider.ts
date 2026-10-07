@@ -14,7 +14,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export const ProviderType = {
   Custom: "custom",
-  Speakeasy: "gram",
+  Gram: "gram",
 } as const;
 /**
  * The type of OAuth provider

@@ -11,7 +11,7 @@ import { ClosedEnum } from "../../types/enums.js";
  */
 export const OAuthProxyServerFormProviderType = {
   Custom: "custom",
-  Speakeasy: "gram",
+  Gram: "gram",
 } as const;
 /**
  * The type of OAuth provider
