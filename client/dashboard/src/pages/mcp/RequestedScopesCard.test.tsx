@@ -148,14 +148,23 @@ describe("RequestedScopesCard", () => {
     expect(screen.getByText(DISCLAIMER)).toBeTruthy();
   });
 
-  it("hides a client with one scope or fewer left", () => {
+  it("shows a client with a single non-identity scope", () => {
+    loaded(scopes([client({ requestedScopes: ["openid", "read"] })]));
+    renderCard();
+    const list = screen.getByRole("list", { name: "Requested scopes" });
+    expect(
+      Array.from(list.querySelectorAll("li")).map((li) => li.textContent),
+    ).toEqual(["read"]);
+  });
+
+  it("hides a client that requests only identity scopes", () => {
     loaded(
       scopes([
-        client({ requestedScopes: ["read", "openid"] }),
+        client({ requestedScopes: ["openid", "email", "profile"] }),
         client({
           clientId: "client-2",
           issuerName: "Other IdP",
-          requestedScopes: ["openid", "email"],
+          requestedScopes: ["offline_access"],
         }),
       ]),
     );
@@ -166,7 +175,7 @@ describe("RequestedScopesCard", () => {
   it("shows only the clients that qualify", () => {
     loaded(
       scopes([
-        client({ requestedScopes: ["read"] }),
+        client({ requestedScopes: ["openid"] }),
         client({ clientId: "client-2", issuerName: "Other IdP" }),
       ]),
     );
@@ -327,7 +336,7 @@ describe("RequestedScopesCard", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("explains a refusal to read a sibling server", () => {
+  it("renders nothing on a refusal", () => {
     mocks.scopes.mockReturnValue({
       data: undefined,
       error: new GramError("permission denied", {
@@ -338,11 +347,7 @@ describe("RequestedScopesCard", () => {
       isError: true,
       isLoading: false,
     });
-    renderCard();
-    expect(
-      screen.getByText(
-        "Requested scopes are shared by every MCP server that uses this URL. You need access to all of them to see them.",
-      ),
-    ).toBeTruthy();
+    const { container } = renderCard();
+    expect(container.innerHTML).toBe("");
   });
 });

@@ -1,6 +1,5 @@
 import { normalizeScopes } from "@/lib/remote-identity";
 import type { RemoteMcpServerScopes } from "@gram/client/models/components/remotemcpserverscopes.js";
-import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   invalidateAllGetRemoteMcpServerScopes,
   queryKeyGetRemoteMcpServerScopes,
@@ -14,8 +13,6 @@ import { useState } from "react";
 export type ResourceScopePin = {
   data: RemoteMcpServerScopes | undefined;
   isError: boolean;
-  /** The error is a 403: the caller cannot read every server sharing the URL. */
-  forbidden: boolean;
   /** The draft pin; the saved one until edited. Empty means no pin. */
   value: string[];
   setValue: (values: string[]) => void;
@@ -51,10 +48,6 @@ export function useResourceScopePin({
   return {
     data: enabled ? query.data : undefined,
     isError: enabled && query.isError,
-    forbidden:
-      enabled &&
-      query.error instanceof GramError &&
-      query.error.statusCode === 403,
     value,
     // Back to the saved pin drops the draft, so refetches show through.
     setValue: (values) => {

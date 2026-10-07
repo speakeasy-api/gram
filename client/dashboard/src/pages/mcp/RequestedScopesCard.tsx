@@ -4,7 +4,6 @@ import { Text } from "@/components/ui/Text";
 import { displayUrl, issuerDisplayName } from "@/lib/remote-identity";
 import type { RemoteMcpServerClientScopes } from "@gram/client/models/components/remotemcpserverclientscopes.js";
 import type { RemoteMcpServerScopes } from "@gram/client/models/components/remotemcpserverscopes.js";
-import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import type { ReactElement } from "react";
 import { Link } from "react-router";
@@ -33,9 +32,6 @@ const SOURCE_LINES: Record<
   none: null,
 };
 
-const FORBIDDEN =
-  "Requested scopes are shared by every MCP server that uses this URL. You need access to all of them to see them.";
-
 function shownScopes(client: RemoteMcpServerClientScopes): string[] {
   return client.requestedScopes.filter((scope) => !FEATURE_SCOPES.has(scope));
 }
@@ -48,9 +44,8 @@ function requestsNothing(client: RemoteMcpServerClientScopes): boolean {
   );
 }
 
-// Per AIM-430: one scope is not worth a card.
 function worthShowing(client: RemoteMcpServerClientScopes): boolean {
-  return requestsNothing(client) || shownScopes(client).length > 1;
+  return requestsNothing(client) || shownScopes(client).length > 0;
 }
 
 function issuerLabel(client: RemoteMcpServerClientScopes): string {
@@ -99,16 +94,7 @@ export function RequestedScopesCard({
     undefined,
     { throwOnError: false },
   );
-  if (error) {
-    if (!(error instanceof GramError) || error.statusCode !== 403) return null;
-    return (
-      <Card.Dashboard title="Requested scopes" className="h-auto">
-        <Text muted small className="block">
-          {FORBIDDEN}
-        </Text>
-      </Card.Dashboard>
-    );
-  }
+  if (error) return null;
   const clients = data?.clients.filter(worthShowing) ?? [];
   if (!data || clients.length === 0) return null;
   const labels = issuerLabels(clients);

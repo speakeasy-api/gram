@@ -46,7 +46,7 @@ func (s *Service) GetServerScopes(ctx context.Context, payload *gen.GetServerSco
 	if err != nil {
 		return nil, err
 	}
-	sharing, err := s.authorizeSharingServers(ctx, logger, authCtx, authz.ScopeMCPRead, target)
+	sharing, err := s.listSharingServers(ctx, logger, authCtx, target)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerS
 		return nil, err
 	}
 	// Before the transaction: Require can write through the pool, which a request holding the resource lock must never wait on.
-	sharing, err := s.authorizeSharingServers(ctx, logger, authCtx, authz.ScopeMCPWrite, target)
+	sharing, err := s.authorizeSharingServers(ctx, logger, authCtx, target)
 	if err != nil {
 		return nil, err
 	}
@@ -204,19 +204,28 @@ func (s *Service) authorizeServerScopes(ctx context.Context, scope authz.Scope, 
 	return authCtx, logger, mcpServerID, nil
 }
 
-// authorizeSharingServers requires scope on every live server sharing the
-// target's upstream URL: the pin is keyed by resource, so it applies to all of them.
-func (s *Service) authorizeSharingServers(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, scope authz.Scope, target pinnableServer) ([]uuid.UUID, error) {
+// listSharingServers lists every live server sharing the target's upstream URL, the target included.
+func (s *Service) listSharingServers(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, target pinnableServer) ([]uuid.UUID, error) {
 	sharing, err := repo.New(s.db).ListMcpServerIDsByRemoteURL(ctx, repo.ListMcpServerIDsByRemoteURLParams{ProjectID: *authCtx.ProjectID, Url: target.resourceURL})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers sharing the protected resource").LogError(ctx, logger)
+	}
+	return sharing, nil
+}
+
+// authorizeSharingServers requires mcp:write on every live server sharing the
+// target's upstream URL: the pin is keyed by resource, so it applies to all of them.
+func (s *Service) authorizeSharingServers(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, target pinnableServer) ([]uuid.UUID, error) {
+	sharing, err := s.listSharingServers(ctx, logger, authCtx, target)
+	if err != nil {
+		return nil, err
 	}
 	checks := make([]authz.Check, 0, len(sharing))
 	for _, id := range sharing {
 		if id == target.server.ID {
 			continue
 		}
-		checks = append(checks, authz.MCPCheck(scope, id.String(), authCtx.ProjectID.String()))
+		checks = append(checks, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), authCtx.ProjectID.String()))
 	}
 	if len(checks) > 0 {
 		if err := s.authz.Require(ctx, checks...); err != nil {

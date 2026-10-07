@@ -41,9 +41,8 @@ type Service interface {
 	// resource and so is shared by every server in the project with the same
 	// upstream URL, the scopes the resource advertises and last challenged with,
 	// the organization's resource scope discovery flag, and what a login through
-	// each bound client would request now. Requires read access to the server and
-	// to every server in the project with the same upstream URL. Reads cached
-	// state only; never contacts the resource.
+	// each bound client would request now. Requires read access to the server
+	// only. Reads cached state only; never contacts the resource.
 	GetServerScopes(context.Context, *GetServerScopesPayload) (res *RemoteMcpServerScopes, err error)
 	// Pin the scopes logins to a remote-backed MCP server's protected resource
 	// request, or clear the pin with an empty list. The pin belongs to the

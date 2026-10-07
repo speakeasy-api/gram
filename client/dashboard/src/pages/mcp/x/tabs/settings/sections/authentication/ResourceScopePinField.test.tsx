@@ -67,7 +67,6 @@ function pin(
   return {
     data: undefined,
     isError: false,
-    forbidden: false,
     value,
     setValue,
     dirty,

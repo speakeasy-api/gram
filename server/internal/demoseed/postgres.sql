@@ -1646,7 +1646,7 @@ BEGIN
      'https://mcp.linear.app/mcp',
      'https://mcp.linear.app/.well-known/oauth-protected-resource/mcp',
      ARRAY['https://identity.example.com'], ARRAY['read', 'write'],
-     ARRAY['read', 'write'], now() - interval '2 hours')
+     ARRAY['read'], now() - interval '2 hours')
   ON CONFLICT (project_id, resource_identifier) WHERE deleted IS FALSE DO UPDATE
   SET metadata_url = EXCLUDED.metadata_url,
       authorization_servers = EXCLUDED.authorization_servers,
@@ -3641,9 +3641,9 @@ Channel context stays in the Raw view.
   SELECT count(*) INTO stray FROM remote_protected_resources
   WHERE project_id = proj_a AND deleted IS FALSE
     AND resource_identifier = 'https://mcp.linear.app/mcp'
-    AND scope_override = ARRAY['read', 'write'];
+    AND scope_override = ARRAY['read'];
   IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected Linear''s protected resource pinned to read and write, found % matching rows', stray;
+    RAISE EXCEPTION 'demo seed postflight: expected Linear''s protected resource pinned to read, found % matching rows', stray;
   END IF;
 
   SELECT count(*) INTO stray

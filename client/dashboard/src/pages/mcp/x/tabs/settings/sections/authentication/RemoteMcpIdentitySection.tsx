@@ -599,9 +599,7 @@ export function RemoteMcpIdentitySectionBody({
                 </div>
               ) : scopePinSlot && scopePin.isError ? (
                 <Text muted small className="mt-4 block pl-[52px]">
-                  {scopePin.forbidden
-                    ? "Pinned scopes are shared by every MCP server that uses this URL. You need access to all of them to view the pin."
-                    : "Couldn't load pinned scopes."}
+                  Couldn't load pinned scopes.
                 </Text>
               ) : scopePinSlot ? (
                 <Text muted small className="mt-4 block pl-[52px]">

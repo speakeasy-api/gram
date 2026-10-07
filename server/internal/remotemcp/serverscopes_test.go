@@ -527,6 +527,7 @@ func TestGetServerScopes_CanPin(t *testing.T) {
 		"write on all":                     {[]authz.Grant{authz.NewGrant(authz.ScopeMCPWrite, srv.mcpServerID), authz.NewGrant(authz.ScopeMCPWrite, sibling)}, true},
 		"write on target, read on sibling": {[]authz.Grant{authz.NewGrant(authz.ScopeMCPWrite, srv.mcpServerID), authz.NewGrant(authz.ScopeMCPRead, sibling)}, false},
 		"read only":                        {[]authz.Grant{authz.NewGrant(authz.ScopeMCPRead, srv.mcpServerID), authz.NewGrant(authz.ScopeMCPRead, sibling)}, false},
+		"read on target only":              {[]authz.Grant{authz.NewGrant(authz.ScopeMCPRead, srv.mcpServerID)}, false},
 	} {
 		got, err := getScopes(withExactAccessGrants(t, ctx, ti.conn, tc.grants...), ti, srv.mcpServerID)
 		require.NoError(t, err, name)
@@ -561,7 +562,7 @@ func auditCount(t *testing.T, ctx context.Context, ti *testInstance) int64 {
 	return count
 }
 
-func TestServerScopes_SharedUpstreamRequiresAccessOnEveryServer(t *testing.T) {
+func TestServerScopes_SharedUpstreamPinRequiresWriteOnEveryServer(t *testing.T) {
 	t.Parallel()
 	for name, separateRemote := range map[string]bool{"same remote row": false, "separate remote row": true} {
 		t.Run(name, func(t *testing.T) {
@@ -580,21 +581,22 @@ func TestServerScopes_SharedUpstreamRequiresAccessOnEveryServer(t *testing.T) {
 			for _, ids := range [][2]string{{srv.mcpServerID, sibling}, {sibling, srv.mcpServerID}} {
 				id, hidden := ids[0], ids[1]
 				oneOnly := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, id))
-				_, err := getScopes(oneOnly, ti, id)
+				_, err := setPin(oneOnly, ti, id, "read")
 				requireOopsCode(t, err, oops.CodeForbidden)
 				require.NotContains(t, err.Error(), hidden, "the refusal does not name the unauthorized server")
-				_, err = setPin(oneOnly, ti, id, "read")
-				requireOopsCode(t, err, oops.CodeForbidden)
-			}
-			for _, id := range []string{srv.mcpServerID, sibling} {
+
 				readOne := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, id))
-				_, err := getScopes(readOne, ti, id)
+				got, err := getScopes(readOne, ti, id)
+				require.NoError(t, err, "read on the target alone is enough to view")
+				require.Equal(t, 1, got.SharedServerCount)
+				require.False(t, got.CanPin)
+
+				readOther := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, hidden))
+				_, err = getScopes(readOther, ti, id)
 				requireOopsCode(t, err, oops.CodeForbidden)
 			}
 			readBoth := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, srv.mcpServerID), authz.NewGrant(authz.ScopeMCPRead, sibling))
-			_, err := getScopes(readBoth, ti, sibling)
-			require.NoError(t, err)
-			_, err = setPin(readBoth, ti, srv.mcpServerID, "read")
+			_, err := setPin(readBoth, ti, srv.mcpServerID, "read")
 			requireOopsCode(t, err, oops.CodeForbidden)
 			require.Zero(t, auditCount(t, ctx, ti))
 

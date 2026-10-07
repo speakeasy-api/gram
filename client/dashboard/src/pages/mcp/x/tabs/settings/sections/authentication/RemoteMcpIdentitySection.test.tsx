@@ -2416,7 +2416,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       ).toBeNull();
     });
 
-    it("explains a refusal: viewing the pin needs access to every server on the URL", () => {
+    it("shows the generic load error on a refusal", () => {
       connectClient();
       mocks.scopes.mockReturnValue({
         data: undefined,
@@ -2430,12 +2430,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
       renderIdentity();
 
-      expect(
-        screen.getByText(
-          "Pinned scopes are shared by every MCP server that uses this URL. You need access to all of them to view the pin.",
-        ),
-      ).toBeDefined();
-      expect(screen.queryByText("Couldn't load pinned scopes.")).toBeNull();
+      expect(screen.getByText("Couldn't load pinned scopes.")).toBeDefined();
     });
 
     it("says the pin is loading until it arrives", () => {

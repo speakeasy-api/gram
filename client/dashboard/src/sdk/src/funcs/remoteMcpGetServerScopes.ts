@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getServerScopes remoteMcp
  *
  * @remarks
- * Report the scope state of the protected resource a remote-backed MCP server's logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization's resource scope discovery flag, and what a login through each bound client would request now. Requires read access to the server and to every server in the project with the same upstream URL. Reads cached state only; never contacts the resource.
+ * Report the scope state of the protected resource a remote-backed MCP server's logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization's resource scope discovery flag, and what a login through each bound client would request now. Requires read access to the server only. Reads cached state only; never contacts the resource.
  */
 export function remoteMcpGetServerScopes(
   client: GramCore,
