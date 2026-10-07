@@ -15,6 +15,7 @@ import { useMemo, type ReactElement } from "react";
 import { CheckAccess } from "./access/CheckAccess";
 import { ManageAccess } from "./access/ManageAccess";
 import { RoleLink } from "./access/RoleLink";
+import { RequestedScopesCard } from "./RequestedScopesCard";
 import { blockingRules } from "./access/serverAudience";
 
 /** The annotations a tool carries, in the vocabulary selectors store. */
@@ -65,6 +66,7 @@ export function MCPTeamAccessTab({
   serverName,
   tools,
   checkAccess = true,
+  requestedScopes,
 }: {
   resourceId: string;
   serverName?: string;
@@ -75,6 +77,8 @@ export function MCPTeamAccessTab({
    * access on a gateway's own id, each server it fronts is checked instead.
    */
   checkAccess?: boolean;
+  /** Remote MCP servers only: shows the scopes their sign-ins request. */
+  requestedScopes?: { editScopesHref: string };
 }): ReactElement | null {
   const {
     data: audienceData,
@@ -183,6 +187,14 @@ export function MCPTeamAccessTab({
         this server only.
       </Page.Section.Description>
       <Page.Section.Body>
+        {requestedScopes && (
+          <div className="mb-8 empty:hidden">
+            <RequestedScopesCard
+              mcpServerId={resourceId}
+              editHref={requestedScopes.editScopesHref}
+            />
+          </div>
+        )}
         {checkAccess && (
           <div className="mb-8">
             <CheckAccess

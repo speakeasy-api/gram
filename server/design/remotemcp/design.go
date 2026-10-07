@@ -173,7 +173,7 @@ var _ = Service("remoteMcp", func() {
 	})
 
 	Method("getServerScopes", func() {
-		Description("Report the scope state of the protected resource a remote-backed MCP server's logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization's resource scope discovery flag, and what a login through each bound client would request now. Reads cached state only; never contacts the resource.")
+		Description("Report the scope state of the protected resource a remote-backed MCP server's logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization's resource scope discovery flag, and what a login through each bound client would request now. Requires read access to the server and to every server in the project with the same upstream URL. Reads cached state only; never contacts the resource.")
 
 		Payload(func() {
 			Attribute("mcp_server_id", String, "The ID of the remote-backed MCP server.", func() {
@@ -669,6 +669,8 @@ var RemoteMcpServerClientScopes = Type("RemoteMcpServerClientScopes", func() {
 	Attribute("client_id", String, "The remote session client's ID.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("issuer_name", String, "The configured name of the client's authorization server; absent when it has none.")
+	Attribute("issuer_url", String, "The issuer URL of the client's authorization server.")
 	Attribute("scope_source", String, "The precedence step that decided the request.", func() {
 		Enum("resource_pin", "client_scope", "challenge_scope", "live_resource", "cached_resource", "issuer_override", "issuer_omitted", "issuer_catalogue", "none")
 	})
@@ -692,6 +694,7 @@ var RemoteMcpServerScopes = Type("RemoteMcpServerScopes", func() {
 	Attribute("discovery_enabled", Boolean, "Whether the organization's logins consult the protected resource (challenge scopes, pin, advertised list). Off, the pin is stored but not applied.")
 	Attribute("clients", ArrayOf(RemoteMcpServerClientScopes), "One entry per client bound to the server's user session issuer.")
 	Attribute("shared_server_count", Int, "How many other live MCP servers in the project share this upstream URL, and so this pin.")
+	Attribute("can_pin", Boolean, "Whether the caller may change the pin: write access to this server and every server in the project with the same upstream URL.")
 
-	Required("resource_url", "pinned_scopes", "advertised_scopes_known", "challenge_scopes", "discovery_enabled", "clients", "shared_server_count")
+	Required("resource_url", "pinned_scopes", "advertised_scopes_known", "challenge_scopes", "discovery_enabled", "clients", "shared_server_count", "can_pin")
 })

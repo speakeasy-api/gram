@@ -53,11 +53,17 @@ func seedScopeServer(t *testing.T, ctx context.Context, ti *testInstance, url st
 // seedScopeIssuer creates a project authorization server advertising scopesSupported.
 func seedScopeIssuer(t *testing.T, ctx context.Context, ti *testInstance, scopesSupported, scopeOverride []string) remotesessionsrepo.RemoteSessionIssuer {
 	t.Helper()
+	return seedNamedScopeIssuer(t, ctx, ti, "", scopesSupported, scopeOverride)
+}
+
+func seedNamedScopeIssuer(t *testing.T, ctx context.Context, ti *testInstance, name string, scopesSupported, scopeOverride []string) remotesessionsrepo.RemoteSessionIssuer {
+	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	issuer, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
 		ProjectID:                         conv.ToNullUUID(*authCtx.ProjectID),
 		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Name:                              conv.ToPGTextEmpty(name),
 		Slug:                              "as-" + uuid.NewString()[:8],
 		Issuer:                            "https://as-" + uuid.NewString()[:8] + ".example.test",
 		AuthorizationEndpoint:             conv.ToPGText("https://as.example.test/authorize"),
@@ -456,28 +462,80 @@ func TestServerScopes_CrossProjectServerIsNotFound(t *testing.T) {
 	require.Error(t, err, "nothing is written to the other project")
 }
 
-func TestServerScopes_RequiresWriteOnTheServer(t *testing.T) {
+func TestServerScopes_ReadToGetWriteToPin(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	enableDiscovery(t, ctx, ti, true)
 	srv := seedScopeServer(t, ctx, ti, "https://scopes-rbac.example.com/mcp")
 	other := seedScopeServer(t, ctx, ti, "https://scopes-rbac-other.example.com/mcp")
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
 
-	readOnly := withExactAccessGrants(t, ctx, ti.conn,
-		authz.NewGrant(authz.ScopeMCPRead, authCtx.ProjectID.String()),
-		authz.NewGrant(authz.ScopeMCPWrite, other.mcpServerID),
-	)
-	_, err := getScopes(readOnly, ti, srv.mcpServerID)
+	none := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, other.mcpServerID))
+	_, err := getScopes(none, ti, srv.mcpServerID)
 	requireOopsCode(t, err, oops.CodeForbidden)
-	_, err = setPin(readOnly, ti, srv.mcpServerID, "read")
+	_, err = setPin(none, ti, srv.mcpServerID, "read")
 	requireOopsCode(t, err, oops.CodeForbidden)
+
+	reader := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, srv.mcpServerID))
+	_, err = getScopes(reader, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	_, err = setPin(reader, ti, srv.mcpServerID, "read")
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Zero(t, auditCount(t, ctx, ti))
 
 	writer := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, srv.mcpServerID))
 	_, err = setPin(writer, ti, srv.mcpServerID, "read")
 	require.NoError(t, err)
 	_, err = getScopes(writer, ti, srv.mcpServerID)
 	require.NoError(t, err)
+}
+
+func TestGetServerScopes_Issuer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	srv := seedScopeServer(t, ctx, ti, "https://scopes-issuer-name.example.com/mcp")
+	unnamed := seedScopeIssuer(t, ctx, ti, []string{"read"}, nil)
+	unnamedClient := seedScopeClient(t, ctx, ti, unnamed, nil, srv.userSessionIssuerID)
+	blank := seedNamedScopeIssuer(t, ctx, ti, "   ", []string{"read"}, nil)
+	blankClient := seedScopeClient(t, ctx, ti, blank, nil, srv.userSessionIssuerID)
+	named := seedNamedScopeIssuer(t, ctx, ti, "  Acme SSO ", []string{"read"}, nil)
+	namedClient := seedScopeClient(t, ctx, ti, named, nil, srv.userSessionIssuerID)
+
+	got, err := getScopes(ctx, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	for _, c := range []struct {
+		id     uuid.UUID
+		issuer remotesessionsrepo.RemoteSessionIssuer
+		name   *string
+	}{{unnamedClient, unnamed, nil}, {blankClient, blank, nil}, {namedClient, named, conv.PtrEmpty("Acme SSO")}} {
+		entry := clientEntry(t, got, c.id)
+		require.Equal(t, c.name, entry.IssuerName)
+		require.Equal(t, &c.issuer.Issuer, entry.IssuerURL)
+	}
+}
+
+func TestGetServerScopes_CanPin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://can-pin-"+uuid.NewString()[:8]+".example.com/mcp")
+	sibling := seedSiblingServer(t, ctx, ti, srv)
+
+	for name, tc := range map[string]struct {
+		grants []authz.Grant
+		want   bool
+	}{
+		"write on all":                     {[]authz.Grant{authz.NewGrant(authz.ScopeMCPWrite, srv.mcpServerID), authz.NewGrant(authz.ScopeMCPWrite, sibling)}, true},
+		"write on target, read on sibling": {[]authz.Grant{authz.NewGrant(authz.ScopeMCPWrite, srv.mcpServerID), authz.NewGrant(authz.ScopeMCPRead, sibling)}, false},
+		"read only":                        {[]authz.Grant{authz.NewGrant(authz.ScopeMCPRead, srv.mcpServerID), authz.NewGrant(authz.ScopeMCPRead, sibling)}, false},
+	} {
+		got, err := getScopes(withExactAccessGrants(t, ctx, ti.conn, tc.grants...), ti, srv.mcpServerID)
+		require.NoError(t, err, name)
+		require.Equal(t, tc.want, got.CanPin, name)
+	}
+
+	got, err := setPin(withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, srv.mcpServerID), authz.NewGrant(authz.ScopeMCPWrite, sibling)), ti, srv.mcpServerID, "read")
+	require.NoError(t, err)
+	require.True(t, got.CanPin)
 }
 
 // seedSiblingServer adds a second MCP server on the same remote MCP server row.
@@ -503,7 +561,7 @@ func auditCount(t *testing.T, ctx context.Context, ti *testInstance) int64 {
 	return count
 }
 
-func TestServerScopes_SharedUpstreamRequiresWriteOnEveryServer(t *testing.T) {
+func TestServerScopes_SharedUpstreamRequiresAccessOnEveryServer(t *testing.T) {
 	t.Parallel()
 	for name, separateRemote := range map[string]bool{"same remote row": false, "separate remote row": true} {
 		t.Run(name, func(t *testing.T) {
@@ -528,6 +586,16 @@ func TestServerScopes_SharedUpstreamRequiresWriteOnEveryServer(t *testing.T) {
 				_, err = setPin(oneOnly, ti, id, "read")
 				requireOopsCode(t, err, oops.CodeForbidden)
 			}
+			for _, id := range []string{srv.mcpServerID, sibling} {
+				readOne := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, id))
+				_, err := getScopes(readOne, ti, id)
+				requireOopsCode(t, err, oops.CodeForbidden)
+			}
+			readBoth := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, srv.mcpServerID), authz.NewGrant(authz.ScopeMCPRead, sibling))
+			_, err := getScopes(readBoth, ti, sibling)
+			require.NoError(t, err)
+			_, err = setPin(readBoth, ti, srv.mcpServerID, "read")
+			requireOopsCode(t, err, oops.CodeForbidden)
 			require.Zero(t, auditCount(t, ctx, ti))
 
 			both := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, srv.mcpServerID), authz.NewGrant(authz.ScopeMCPWrite, sibling))

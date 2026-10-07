@@ -2,6 +2,8 @@ import { normalizeScopes } from "@/lib/remote-identity";
 import type { RemoteMcpServerScopes } from "@gram/client/models/components/remotemcpserverscopes.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
+  invalidateAllGetRemoteMcpServerScopes,
+  queryKeyGetRemoteMcpServerScopes,
   setGetRemoteMcpServerScopesData,
   useGetRemoteMcpServerScopes,
 } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
@@ -12,7 +14,7 @@ import { useState } from "react";
 export type ResourceScopePin = {
   data: RemoteMcpServerScopes | undefined;
   isError: boolean;
-  /** The error is a 403: the caller cannot write every server sharing the URL. */
+  /** The error is a 403: the caller cannot read every server sharing the URL. */
   forbidden: boolean;
   /** The draft pin; the saved one until edited. Empty means no pin. */
   value: string[];
@@ -67,7 +69,14 @@ export function useResourceScopePin({
           setServerScopePinRequestBody: { mcpServerId, scopes: value },
         },
       });
+      // An in-flight fetch could land after this and restore the old pin.
+      await queryClient.cancelQueries({
+        queryKey: queryKeyGetRemoteMcpServerScopes({ mcpServerId }),
+      });
       setGetRemoteMcpServerScopesData(queryClient, [{ mcpServerId }], result);
+      if (result.sharedServerCount > 0) {
+        await invalidateAllGetRemoteMcpServerScopes(queryClient);
+      }
       setDraft(null);
       return true;
     },
@@ -164,6 +173,9 @@ export function unadvertisedPinnedScopes(
   const advertised = scopes.advertisedScopes ?? [];
   return value.filter((scope) => !advertised.includes(scope));
 }
+
+export const PIN_NEEDS_WRITE_ON_ALL =
+  "Pinned scopes are shared by every MCP server that uses this URL. You need edit access to all of them to change the pin.";
 
 /** "Shared with N other MCP server(s) on the same URL." */
 export function sharedServerLine(count: number): string | null {

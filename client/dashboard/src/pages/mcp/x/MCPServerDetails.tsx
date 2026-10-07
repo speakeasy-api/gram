@@ -177,13 +177,19 @@ export default function MCPServerDetails(): JSX.Element {
               >
                 {/* mcp_servers-backed servers grant under the same `mcp:*`
                   scope kind as toolset-backed ones (see selector.go), so
-                  MCPTeamAccessTab is reused as-is with the mcp_server's
-                  id as the resource id. No `tools` prop because the
-                  Remote MCP backend doesn't expose a Gram-side tool
-                  catalog. */}
+                  MCPTeamAccessTab takes the mcp_server's id as the resource
+                  id. No `tools` prop because the Remote MCP backend doesn't
+                  expose a Gram-side tool catalog. */}
                 <MCPTeamAccessTab
                   resourceId={mcpServer.id}
                   serverName={mcpServer.name ?? undefined}
+                  requestedScopes={
+                    mcpServer.remoteMcpServerId
+                      ? {
+                          editScopesHref: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
+                        }
+                      : undefined
+                  }
                 />
               </RequireScope>
             </RequireScope>

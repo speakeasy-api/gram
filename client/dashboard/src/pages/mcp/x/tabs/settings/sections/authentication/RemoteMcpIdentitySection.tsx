@@ -218,8 +218,8 @@ export function RemoteMcpIdentitySectionBody({
     updateHeader,
   });
 
-  // The scope pin belongs to the server's protected resource, and reading it
-  // needs mcp:write, so it is only fetched for a writer with a bound client.
+  // The pin belongs to the server's protected resource; the panel shows it to
+  // writers with a bound client, and scopes.canPin says if they may change it.
   const scopePin = useResourceScopePin({
     mcpServerId: target.permissionResourceId,
     enabled: canWrite && identityResolved && actualMode === "user",
@@ -593,15 +593,14 @@ export function RemoteMcpIdentitySectionBody({
                         )
                         ?.name?.trim() ?? ""
                     }
-                    // The pin has its own lock: the server checks write
-                    // access to every server sharing the resource.
-                    disabled={!canWrite || savePending}
+                    // Changing it needs write access to every server sharing the resource.
+                    disabled={!canWrite || !scopePin.data.canPin || savePending}
                   />
                 </div>
               ) : scopePinSlot && scopePin.isError ? (
                 <Text muted small className="mt-4 block pl-[52px]">
                   {scopePin.forbidden
-                    ? "Pinned scopes are shared by every MCP server that uses this URL. You need edit access to all of them to view or change the pin."
+                    ? "Pinned scopes are shared by every MCP server that uses this URL. You need access to all of them to view the pin."
                     : "Couldn't load pinned scopes."}
                 </Text>
               ) : scopePinSlot ? (
