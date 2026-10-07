@@ -2092,10 +2092,12 @@ CREATE TABLE IF NOT EXISTS agent_events (
     session_id String COMMENT 'Agent session the record belongs to, as extracted by the dialect. Rows sharing a session_id are the same session by definition. Empty when the producer states none.' CODEC(ZSTD),
     turn_id String COMMENT 'Turn within the session, when the producer states one. Populated unevenly across producers.' CODEC(ZSTD),
 
-    -- What happened
+    -- What happened. event_id and name are the generic pair every event type
+    -- shares: which thing the event is about, and what that thing is called.
     event_id String COMMENT 'Natural identity of the subject (the message, the tool call), shared across observations of it by design. A minted id when the producer states none.' CODEC(ZSTD),
     event_type LowCardinality(String) COMMENT 'Canonical event type assigned by the dialect. Says which kind of thing event_id names. Empty for records no dialect classified.',
     raw_event_name String COMMENT 'The producer own name for the event. For a span-derived row this is the span name. Kept so an unclassified record stays reclassifiable.' CODEC(ZSTD),
+    name String COMMENT 'Name of the subject of the event, the generic pair to event_id: the tool on tool_call, tool_call_result and tool_decision (MCP or not), the skill on skill events and the agent on sub-agent events once those exist. Empty on prompt and api_* types, and when not stated. Replaces the per-family tool_name, mcp_tool_name, skill_name and agent_name columns.' CODEC(ZSTD),
 
     -- Producer, in agent vocabulary. Filled only when stated.
     source LowCardinality(String) COMMENT 'Canonicalized producer surface derived from resource service.name at write time (e.g. claude-code, litellm). Empty when not stated.',
@@ -2125,13 +2127,18 @@ CREATE TABLE IF NOT EXISTS agent_events (
     -- Request shape
     model String COMMENT 'Model named by the record. Empty when not stated.' CODEC(ZSTD),
     query_source LowCardinality(String) COMMENT 'Where the request originated inside the agent (e.g. user_prompt, tool_result). Empty when not stated.',
-    skill_name String COMMENT 'Skill invoked, when the record says so. Empty otherwise.' CODEC(ZSTD),
-    agent_name String COMMENT 'Sub-agent name, when the record says so. Empty otherwise.' CODEC(ZSTD),
-    mcp_server_name String COMMENT 'MCP server involved, when the record says so. Empty otherwise.' CODEC(ZSTD),
-    mcp_tool_name String COMMENT 'MCP tool involved, when the record says so. Empty otherwise.' CODEC(ZSTD),
 
-    -- The tool, when the record is about one: a call, its result, or a decision about it
-    tool_name String COMMENT 'Tool the record concerns, when the record says so. Empty otherwise.' CODEC(ZSTD),
+    -- Event-specific columns, grouped by family. A new column follows the same
+    -- rule: mcp_* for MCP, tool_* for tools that are not MCP, skill_* for
+    -- skills, agent_* for sub-agents. The subject's own name lives in the
+    -- generic name column; the per-family *_name columns are deprecated in its
+    -- favour and kept, unfilled or filled alike, until a later contract
+    -- migration drops them.
+    skill_name String COMMENT 'Skill family (skill_*). Skill invoked, when the record says so. Empty otherwise. Deprecated in favour of name. Still filled on api_request, where it describes the request rather than the subject, until a skill event type exists to carry name.' CODEC(ZSTD),
+    agent_name String COMMENT 'Agent family (agent_*). Sub-agent name, when the record says so. Empty otherwise. Deprecated in favour of name. Still filled on api_request, where it describes the request rather than the subject, until an agent event type exists to carry name.' CODEC(ZSTD),
+    mcp_server_name String COMMENT 'MCP family (mcp_*). MCP server involved, when the record says so. Empty otherwise.' CODEC(ZSTD),
+    mcp_tool_name String COMMENT 'MCP family (mcp_*). MCP tool involved, when the record says so. Empty otherwise. Deprecated in favour of name, which carries the tool on tool_call, tool_call_result and tool_decision whether or not it is an MCP tool.' CODEC(ZSTD),
+    tool_name String COMMENT 'Tool family (tool_*), for tools that are not MCP. Tool the record concerns, when the record says so. Empty otherwise. Deprecated in favour of name, which carries the tool on tool_call, tool_call_result and tool_decision whether or not it is an MCP tool.' CODEC(ZSTD),
 
     -- What the record said, in words
     text String COMMENT 'The record in words. Empty where the producer put everything in attributes, in which case raw_event_name is the readable headline.' CODEC(ZSTD),
@@ -2141,9 +2148,11 @@ CREATE TABLE IF NOT EXISTS agent_events (
     outcome_message String COMMENT 'Producer-stated message accompanying an error outcome. Empty otherwise.' CODEC(ZSTD),
     duration_nano Int64 COMMENT 'Duration in nanoseconds when the producer states one (span duration, tool call duration). 0 when not stated.' CODEC(Delta, ZSTD),
 
-    -- Content, normalized by the dialect so transcript reads never depend on each producer own key
-    input_content String COMMENT 'Normalized input message JSON. Empty when the record carries none.' CODEC(ZSTD),
-    output_content String COMMENT 'Normalized output message JSON. Empty when the record carries none.' CODEC(ZSTD),
+    -- Content. Deprecated with no replacement on 2026-10-07: text carries the
+    -- words and attributes carries the structure. Nothing reads these, they
+    -- are no longer filled, and a later contract migration drops them.
+    input_content String COMMENT 'Deprecated, no replacement: text carries the words and attributes the structure. No longer filled. Was the normalized input message JSON.' CODEC(ZSTD),
+    output_content String COMMENT 'Deprecated, no replacement: text carries the words and attributes the structure. No longer filled. Was the normalized output message JSON.' CODEC(ZSTD),
 
     -- Usage carried on the record itself, present when the producer log or span states it
     input_tokens Int64 COMMENT 'Input tokens stated on the record. 0 when not stated.',
