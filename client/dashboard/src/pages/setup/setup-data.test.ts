@@ -159,6 +159,30 @@ describe("getAgentPlatforms", () => {
     expect(copy).not.toContain("every install");
   });
 
+  it("tells admins to key Claude Code settings by the marketplace name", () => {
+    const platform = AGENT_PLATFORMS.find(({ id }) => id === "claude")!;
+    const managed = platform.setupSteps.find(
+      ({ title }) => title === "Update Managed settings on Claude.ai",
+    );
+    const personal = platformSteps(platform, false).find(({ code }) =>
+      code?.includes("extraKnownMarketplaces"),
+    );
+    for (const step of [managed, personal]) {
+      expect(step?.code).toContain('"{{GRAM_MARKETPLACE_NAME}}": {');
+      expect(step?.code).toContain('"autoUpdate": true');
+      expect(step?.code).toContain('"FORCE_AUTOUPDATE_PLUGINS": "1"');
+      expect(step?.code).toContain(
+        '"{{GRAM_CLAUDE_PLUGIN_NAME}}@{{GRAM_MARKETPLACE_NAME}}": true',
+      );
+      expect(JSON.stringify(step?.description)).toContain(
+        "Use this exact marketplace name.",
+      );
+    }
+    expect(managed?.helpLink?.url).toBe(
+      "https://code.claude.com/docs/en/plugins/org#require-a-marketplace-and-its-plugins",
+    );
+  });
+
   it("uses the staged Cursor installer with required hook validation", () => {
     const platform = AGENT_PLATFORMS.find(({ id }) => id === "cursor")!;
     const step = platformSteps(platform, false).find(({ code }) =>
