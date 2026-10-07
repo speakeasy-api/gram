@@ -43,7 +43,8 @@ type batchMessage struct {
 	// Source is the agent that recorded the message (Codex, Cursor, ...). The
 	// shadow-MCP scanner attributes unresolved provenance to it.
 	Source string
-	// Truncated reports that bound cut the scanned text.
+	// Truncated reports that bound cut content, arguments, raw tool-call JSON,
+	// a tool-call name or id, or the number of calls.
 	Truncated bool
 }
 
@@ -72,11 +73,20 @@ func (m *batchMessage) bound() {
 	}
 	if len(m.RawToolCalls) > batchScanMaxContentBytes {
 		m.RawToolCalls = []byte(truncateAtRuneBoundary(string(m.RawToolCalls), batchScanMaxContentBytes))
-		// Raw JSON is only scanned when no calls parsed.
-		if len(m.ToolCalls) == 0 {
+		// Raw JSON is only scanned when no call carries a name or arguments.
+		if !m.hasUsableToolCall() {
 			m.Truncated = true
 		}
 	}
+}
+
+func (m batchMessage) hasUsableToolCall() bool {
+	for _, c := range m.ToolCalls {
+		if c.Function.Name != "" || strings.TrimSpace(c.Function.Arguments) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *batchMessage) boundIdentity(s string) string {

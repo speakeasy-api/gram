@@ -84,15 +84,24 @@ func TestNewBatchMessageBoundsScanText(t *testing.T) {
 	require.False(t, escapedReq.Truncated)
 
 	longName := strings.Repeat("n", batchToolIdentityMaxBytes+1)
+	longID := strings.Repeat("i", batchToolIdentityMaxBytes+1)
 	many := make([]string, 0, batchMaxToolCalls+1)
-	for i := range batchMaxToolCalls + 1 {
-		many = append(many, fmt.Sprintf(`{"id":"%d","function":{"name":%q,"arguments":""}}`, i, longName))
+	for range batchMaxToolCalls + 1 {
+		many = append(many, fmt.Sprintf(`{"id":%q,"function":{"name":%q,"arguments":""}}`, longID, longName))
 	}
 	capped, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "assistant", "", []byte("["+strings.Join(many, ",")+"]"))
 	require.True(t, ok)
 	require.True(t, capped.Truncated)
 	require.Len(t, capped.ToolCalls, batchMaxToolCalls)
 	require.Len(t, capped.ToolCalls[0].Function.Name, batchToolIdentityMaxBytes)
+	require.Len(t, capped.ToolCalls[0].ID, batchToolIdentityMaxBytes)
+
+	// Blank calls fall back to the raw JSON, so cutting it counts.
+	blankRaw := []byte(fmt.Sprintf(`[{"id":"1","function":{"name":"","arguments":""},"pad":%q}]`, strings.Repeat("p", batchScanMaxContentBytes)))
+	blank, ok := newBatchMessage(t.Context(), testenv.NewLogger(t), uuid.New(), "assistant", "", blankRaw)
+	require.True(t, ok)
+	require.Len(t, blank.ToolCalls, 1)
+	require.True(t, blank.Truncated)
 }
 
 func TestMessageContentsUsesScanSurface(t *testing.T) {
