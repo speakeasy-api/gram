@@ -34,6 +34,7 @@ type federatedClientSnapshot struct {
 	ResourceTosUri                  pgtype.Text        `json:"ResourceTosUri"`
 	UpstreamRejectedAt              pgtype.Timestamptz `json:"UpstreamRejectedAt"`
 	IdentityProviderConnectionID    uuid.NullUUID      `json:"IdentityProviderConnectionID"`
+	CredentialOwner                 string             `json:"CredentialOwner"`
 	CreatedAt                       pgtype.Timestamptz `json:"CreatedAt"`
 	UpdatedAt                       pgtype.Timestamptz `json:"UpdatedAt"`
 	DeletedAt                       pgtype.Timestamptz `json:"DeletedAt"`
