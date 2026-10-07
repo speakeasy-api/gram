@@ -33,7 +33,7 @@ func TestHooksLogEventAccessors(t *testing.T) {
 		accessorTestKV("gram.hook.source", "codex"),
 		accessorTestKV("gen_ai.tool.call.id", "call-1"),
 		accessorTestKV("gram.tool.name", "shell"),
-		gramTestDoubleKV("gram.tool_call.duration", 0.75),
+		hooksTestDoubleKV("gram.tool_call.duration", 0.75),
 	}
 
 	cases := []struct {
@@ -314,12 +314,12 @@ func TestHooksLogDurationAndUsage(t *testing.T) {
 	t.Parallel()
 
 	record := hooksRecord("PostToolUse",
-		gramTestDoubleKV("gram.tool_call.duration", 0.75),
+		hooksTestDoubleKV("gram.tool_call.duration", 0.75),
 		accessorTestIntKV("gen_ai.usage.input_tokens", 120),
 		accessorTestIntKV("gen_ai.usage.output_tokens", 30),
 		accessorTestIntKV("gen_ai.usage.cache_read.input_tokens", 10),
 		accessorTestIntKV("gen_ai.usage.cache_creation.input_tokens", 5),
-		gramTestDoubleKV("gen_ai.usage.cost", 0.0123),
+		hooksTestDoubleKV("gen_ai.usage.cost", 0.0123),
 	)
 	selected := ForLog(record)
 
@@ -360,4 +360,11 @@ func TestHooksLogDurationAndUsage(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, key)
 	require.Zero(t, nanos)
+}
+
+func hooksTestDoubleKV(key string, value float64) *otelv1.InboundLogRecord_KeyValue {
+	return (&otelv1.InboundLogRecord_KeyValue_builder{
+		Key:   &key,
+		Value: (&otelv1.InboundLogRecord_AnyValue_builder{DoubleValue: &value}).Build(),
+	}).Build()
 }
