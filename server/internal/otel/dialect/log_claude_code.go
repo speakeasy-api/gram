@@ -108,11 +108,11 @@ const (
 // Producer knowledge: the scope name identified Claude Code, so it is the key.
 
 func (ClaudeCodeLog) Provider(*otelv1.InboundLogRecord) (string, string, error) {
-	return scopeNameKey, claudeCodeProvider, nil
+	return ScopeNameKey, claudeCodeProvider, nil
 }
 
 func (ClaudeCodeLog) Surface(*otelv1.InboundLogRecord) (string, string, error) {
-	return scopeNameKey, claudeCodeSurface, nil
+	return ScopeNameKey, claudeCodeSurface, nil
 }
 
 // claudeCodeEventName is the producer's own name for the event: the OTLP

@@ -60,11 +60,11 @@ func (e ClaudeCodeSpan) ResponseID(span *otelv1.InboundSpan) (key string, val st
 // Claude's own.
 
 func (ClaudeCodeSpan) Provider(*otelv1.InboundSpan) (string, string, error) {
-	return scopeNameKey, claudeCodeProvider, nil
+	return ScopeNameKey, claudeCodeProvider, nil
 }
 
 func (ClaudeCodeSpan) Surface(*otelv1.InboundSpan) (string, string, error) {
-	return scopeNameKey, claudeCodeSurface, nil
+	return ScopeNameKey, claudeCodeSurface, nil
 }
 
 func (ClaudeCodeSpan) EventName(span *otelv1.InboundSpan) (string, string, error) {

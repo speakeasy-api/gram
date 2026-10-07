@@ -1,6 +1,7 @@
 package enrich
 
 import (
+	"errors"
 	"testing"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
@@ -147,6 +148,23 @@ func TestLogColumnEnricherLabelsAnUnrecognisedProducerAsOther(t *testing.T) {
 		attr.AgentEventSurface(missingLabelOther),
 		attr.AgentEventColumn("turn_id"),
 	))
+}
+
+func TestMissingLabelKeepsOnlyAScopeKnownSurfaceFoldedIntoTheVocabulary(t *testing.T) {
+	t.Parallel()
+
+	// A surface the dialect knew from the producer's scope is folded into the
+	// agent surface vocabulary, so the label spelling is the vocabulary's.
+	require.Equal(t, "claude_code", missingLabel(dialect.ScopeNameKey, "claude-code", nil))
+	require.Equal(t, "codex", missingLabel(dialect.ScopeNameKey, "codex", nil))
+
+	// A scope-known surface outside the vocabulary, a surface read off the
+	// record even when it would fold, no surface at all, and an unreadable
+	// one all land under other: nothing a producer sends can add a series.
+	require.Equal(t, missingLabelOther, missingLabel(dialect.ScopeNameKey, "some-proxy-42", nil))
+	require.Equal(t, missingLabelOther, missingLabel("gram.hook.source", "claude-code", nil))
+	require.Equal(t, missingLabelOther, missingLabel("", "", nil))
+	require.Equal(t, missingLabelOther, missingLabel(dialect.ScopeNameKey, "claude-code", errors.New("unreadable")))
 }
 
 func TestLogColumnEnricherWritesAConstantTheTypeImplies(t *testing.T) {

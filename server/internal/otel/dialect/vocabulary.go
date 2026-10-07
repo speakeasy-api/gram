@@ -40,9 +40,11 @@ const (
 	OutcomeRefused  = "refused"
 )
 
-// scopeNameKey is the key a producer dialect reports for answers that come
-// from recognising the producer rather than from an attribute.
-const scopeNameKey = "scope.name"
+// ScopeNameKey is the key a producer dialect reports for answers that come
+// from recognising the producer rather than from an attribute. A consumer
+// that must not trust producer-controlled values, such as a metric label,
+// keeps only the answers reported under it.
+const ScopeNameKey = "scope.name"
 
 // tokensDisjoint clamps a producer-reported cached count into [0, input] and
 // returns the disjoint (input excluding cache reads, cache reads) pair, so bad
