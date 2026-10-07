@@ -9,12 +9,14 @@ import { useDashboards } from "@gram/client/react-query/dashboards.js";
 import { useWidgets } from "@gram/client/react-query/widgets.js";
 import type { JSX } from "react";
 import { Outlet, useParams } from "react-router";
+import { BuiltInDashboardPage } from "./BuiltInDashboardPage";
 import { DashboardList } from "./DashboardList";
 import { DashboardPage } from "./DashboardPage";
 import { RequireExplore } from "./RequireExplore";
 
-// Dashboards: the project's dashboards, each a grid of widgets under one
-// filter bar. A card's question opens in Explore, where widgets are made.
+// Dashboards: the project's dashboards and the ones Speakeasy ships, each a
+// grid of widgets under one filter bar. A card's question opens in Explore,
+// where widgets are made.
 
 /** The frame every Dashboards page sits in, behind the Explore rollout. */
 export function DashboardsRoot(): JSX.Element {
@@ -32,11 +34,12 @@ export function DashboardsRoot(): JSX.Element {
   );
 }
 
-/** The list of the project's dashboards. */
+/** The list: Speakeasy-built dashboards first, then the project's own. */
 export function DashboardsIndex(): JSX.Element {
   const gramProject = useProjectSlugForRequests();
   const list = useDashboards({ gramProject });
   const open = useOpenDashboard();
+  const routes = useRoutes();
   return (
     <>
       <div className="flex min-w-0 flex-col gap-1">
@@ -50,9 +53,11 @@ export function DashboardsIndex(): JSX.Element {
       </div>
       <DashboardList
         dashboards={list.data?.dashboards ?? []}
+        builtIn={list.data?.builtIn ?? []}
         isPending={list.isPending}
         isError={list.isError}
         onOpen={open}
+        onOpenBuiltIn={(page) => routes.dashboards.builtIn.goTo(page.slug)}
         onRetry={() => void list.refetch()}
       />
     </>
@@ -79,6 +84,21 @@ export function DashboardRoute(): JSX.Element {
       backHref={routes.dashboards.href()}
       onOpen={open}
       onDeleted={() => routes.dashboards.goTo()}
+    />
+  );
+}
+
+/** A dashboard Speakeasy ships, open, read only. */
+export function BuiltInDashboardRoute(): JSX.Element {
+  const { slug = "" } = useParams<{ slug: string }>();
+  const open = useOpenDashboard();
+  const routes = useRoutes();
+  return (
+    <BuiltInDashboardPage
+      key={slug}
+      slug={slug}
+      backHref={routes.dashboards.href()}
+      onOpen={open}
     />
   );
 }
