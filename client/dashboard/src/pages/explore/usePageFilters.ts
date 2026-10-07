@@ -205,9 +205,10 @@ export function usePageFilters(config: PageFilterConfig): {
   const optionsById = useFieldOptions(config, date);
 
   const [params] = useSearchParams();
+  // A parameter left empty says nothing, so it does not count.
   const touched =
-    DATE_RANGE_PARAMS.some((name) => params.has(name)) ||
-    config.fields.some(({ field }) => params.has(field));
+    DATE_RANGE_PARAMS.some((name) => Boolean(params.get(name))) ||
+    config.fields.some(({ field }) => Boolean(params.get(field)));
   const { setValues } = state;
   const apply = useCallback(
     (next: PageFilterValues) => {

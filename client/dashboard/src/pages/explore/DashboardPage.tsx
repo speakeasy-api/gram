@@ -278,17 +278,6 @@ function DashboardView({
             </Button>
           }
         />
-      ) : widgetsFailed ? (
-        <InlineEmptyState
-          icon="triangle-alert"
-          heading="The widgets did not load"
-          description="The cards are here, but the widgets behind them could not be fetched."
-          action={
-            <Button variant="secondary" size="sm" onClick={onRetryWidgets}>
-              Try again
-            </Button>
-          }
-        />
       ) : (
         <>
           {/* The shared filter bar every card answers within. Picking in

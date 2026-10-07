@@ -239,7 +239,8 @@ export function useFilterState<const T extends readonly FilterDimension[]>(
         (prev) => {
           const next = new URLSearchParams(prev);
           for (const dim of schema) {
-            if (!(dim.id in values)) continue;
+            // A key left out, or present but undefined, keeps its value.
+            if (values[dim.id as keyof FilterValues<T>] === undefined) continue;
             writeValue(
               next,
               dim,

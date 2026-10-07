@@ -1,6 +1,10 @@
 import type { DateRangeValue } from "@/components/filters/filter-schema";
 import type { DashboardFilters } from "@gram/client/models/components/dashboardfilters.js";
-import { windowPreset, type WindowPreset } from "./exploreModel";
+import {
+  MAX_FILTER_VALUES,
+  windowPreset,
+  type WindowPreset,
+} from "./exploreModel";
 import type { PageContext } from "./pageContext";
 import type { PageFilterField, PageFilterValues } from "./usePageFilters";
 
@@ -59,7 +63,11 @@ export function savedFromContext(
   const values: Record<string, string[]> = {};
   for (const { field } of fields) {
     const picked = page.filters?.[field];
-    if (picked && picked.length > 0) values[field] = [...picked];
+    // Capped as the cards cap what they answer with, so what is saved is
+    // what the dashboard showed.
+    if (picked && picked.length > 0) {
+      values[field] = picked.slice(0, MAX_FILTER_VALUES);
+    }
   }
   return { ...(range ? { range } : {}), values };
 }

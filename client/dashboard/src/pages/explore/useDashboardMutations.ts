@@ -63,6 +63,9 @@ export function useDashboardMutations(): {
     onError: fail("save the layout of"),
   });
   const filtersMutation = useSaveDashboardFiltersMutation({
+    // The save stays pending until the dashboard is read back, so a Reset
+    // meanwhile cannot return the bar to the filters just replaced.
+    onSuccess: () => refresh(),
     onError: fail("save the filters of"),
   });
   const addMutation = useAddDashboardWidgetMutation({
@@ -109,12 +112,7 @@ export function useDashboardMutations(): {
     saveFilters: (id, filters, then) =>
       filtersMutation.mutate(
         { request: { saveDashboardFiltersRequestBody: { id, filters } } },
-        {
-          onSuccess: () => {
-            then?.();
-            void refresh();
-          },
-        },
+        { onSuccess: () => then?.() },
       ),
     addWidget: (id, widgetId, then) =>
       addMutation.mutate(

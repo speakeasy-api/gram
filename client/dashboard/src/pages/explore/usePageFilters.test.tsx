@@ -155,6 +155,17 @@ describe("usePageFilters", () => {
     ]);
   });
 
+  it("counts a link as saying what to show only when a parameter holds a value", () => {
+    const empty = renderHook(() => usePageFilters(CONFIG), {
+      wrapper: wrapper("/page?user="),
+    });
+    expect(empty.result.current.touched).toBe(false);
+    const picked = renderHook(() => usePageFilters(CONFIG), {
+      wrapper: wrapper("/page?user=amara"),
+    });
+    expect(picked.result.current.touched).toBe(true);
+  });
+
   it("opens on the page's default range, with nothing filtered", () => {
     const { result } = renderHook(() => usePageFilters(CONFIG), {
       wrapper: wrapper("/page"),
