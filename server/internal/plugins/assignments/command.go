@@ -268,6 +268,9 @@ func resolveInstallModes(ctx context.Context, db pluginsrepo.DBTX, organizationI
 		}
 		modes[principal.URN] = mode
 	}
+	// Keys that normalize to the same principal must agree, or the stored mode
+	// would depend on map iteration order.
+	chosen := make(map[string]installmode.Mode, len(requested))
 	for raw, value := range requested {
 		principal, err := normalizePrincipal(ctx, db, organizationID, raw)
 		if err != nil {
@@ -280,6 +283,10 @@ func resolveInstallModes(ctx context.Context, db pluginsrepo.DBTX, organizationI
 		if err != nil {
 			return nil, fmt.Errorf("%w: install mode", ErrInvalid)
 		}
+		if previous, ok := chosen[principal.URN]; ok && previous != mode {
+			return nil, fmt.Errorf("%w: conflicting install modes for one principal", ErrInvalid)
+		}
+		chosen[principal.URN] = mode
 		modes[principal.URN] = mode
 	}
 	return modes, nil

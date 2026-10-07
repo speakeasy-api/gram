@@ -480,7 +480,7 @@ WHERE p.id = pa.plugin_id
 
 -- name: ListPluginAudienceForRoleDeletionAudit :many
 -- Include archived plugins: cleanup changes their audience too.
-SELECT pa.principal_urn
+SELECT pa.principal_urn, pa.install_mode
 FROM plugin_assignments pa
 JOIN plugins p ON p.id = pa.plugin_id AND p.organization_id = pa.organization_id
 WHERE pa.organization_id = @organization_id

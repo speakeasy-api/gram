@@ -81,6 +81,11 @@ func TestService_DeleteRole_PluginAssignments(t *testing.T) {
 		require.NoError(t, err)
 		require.Contains(t, metadata, "principal_urns")
 		require.ElementsMatch(t, expectedAudiences[id], metadata["principal_urns"])
+		expectedModes := map[string]any{}
+		for _, principal := range expectedAudiences[id] {
+			expectedModes[principal] = "default"
+		}
+		require.Equal(t, expectedModes, metadata["install_modes"])
 	}
 	// Repeating local deletion retains the API's not-found contract.
 	requireOopsCode(t, ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: roleID}), oops.CodeNotFound)

@@ -1432,7 +1432,7 @@ func (q *Queries) ListPluginAssignments(ctx context.Context, arg ListPluginAssig
 }
 
 const listPluginAudienceForRoleDeletionAudit = `-- name: ListPluginAudienceForRoleDeletionAudit :many
-SELECT pa.principal_urn
+SELECT pa.principal_urn, pa.install_mode
 FROM plugin_assignments pa
 JOIN plugins p ON p.id = pa.plugin_id AND p.organization_id = pa.organization_id
 WHERE pa.organization_id = $1
@@ -1447,20 +1447,25 @@ type ListPluginAudienceForRoleDeletionAuditParams struct {
 	PluginID       uuid.UUID
 }
 
+type ListPluginAudienceForRoleDeletionAuditRow struct {
+	PrincipalUrn string
+	InstallMode  string
+}
+
 // Include archived plugins: cleanup changes their audience too.
-func (q *Queries) ListPluginAudienceForRoleDeletionAudit(ctx context.Context, arg ListPluginAudienceForRoleDeletionAuditParams) ([]string, error) {
+func (q *Queries) ListPluginAudienceForRoleDeletionAudit(ctx context.Context, arg ListPluginAudienceForRoleDeletionAuditParams) ([]ListPluginAudienceForRoleDeletionAuditRow, error) {
 	rows, err := q.db.Query(ctx, listPluginAudienceForRoleDeletionAudit, arg.OrganizationID, arg.ProjectID, arg.PluginID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ListPluginAudienceForRoleDeletionAuditRow
 	for rows.Next() {
-		var principal_urn string
-		if err := rows.Scan(&principal_urn); err != nil {
+		var i ListPluginAudienceForRoleDeletionAuditRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.InstallMode); err != nil {
 			return nil, err
 		}
-		items = append(items, principal_urn)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

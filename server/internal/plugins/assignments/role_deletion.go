@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -59,17 +60,23 @@ func RemoveDeletedRole(ctx context.Context, tx pluginsrepo.DBTX, logger *audit.L
 		if removed == 0 {
 			continue
 		}
-		remaining, err := queries.ListPluginAudienceForRoleDeletionAudit(ctx, pluginsrepo.ListPluginAudienceForRoleDeletionAuditParams{
+		audience, err := queries.ListPluginAudienceForRoleDeletionAudit(ctx, pluginsrepo.ListPluginAudienceForRoleDeletionAuditParams{
 			OrganizationID: plugin.OrganizationID, ProjectID: plugin.ProjectID, PluginID: plugin.ID,
 		})
 		if err != nil {
 			return fmt.Errorf("read remaining plugin audience: %w", err)
 		}
+		remaining := make([]string, 0, len(audience))
+		modes := make(map[string]string, len(audience))
+		for _, assignment := range audience {
+			remaining = append(remaining, assignment.PrincipalUrn)
+			modes[assignment.PrincipalUrn] = string(installmode.FromStored(assignment.InstallMode))
+		}
 		if err := logger.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{
 			OrganizationID: plugin.OrganizationID, ProjectID: plugin.ProjectID,
 			Actor: input.Actor, ActorDisplayName: input.ActorDisplayName, ActorSlug: nil,
 			PluginID: plugin.ID, PluginName: plugin.Name, PluginSlug: plugin.Slug, PrincipalURNs: remaining,
-			InstallModes: nil,
+			InstallModes: modes,
 		}); err != nil {
 			return fmt.Errorf("audit deleted role plugin assignments: %w", err)
 		}

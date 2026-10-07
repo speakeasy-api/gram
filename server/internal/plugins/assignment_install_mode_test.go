@@ -135,3 +135,42 @@ func TestPluginsService_SetPluginAssignments_AuditsInstallModes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, map[string]any{"*": "required"}, meta["install_modes"])
 }
+
+func TestPluginsService_SetPluginAssignments_ConflictingModesForOnePrincipalReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Conflicting Modes"})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{"email:dev@acme.corp"},
+		InstallModes: map[string]string{
+			"email:Dev@Acme.Corp": "required",
+			"email:dev@acme.corp": "available",
+		},
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestPluginsService_SetPluginAssignments_AgreeingDuplicateModeKeysAreAccepted(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Agreeing Modes"})
+	require.NoError(t, err)
+
+	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{"email:dev@acme.corp"},
+		InstallModes: map[string]string{
+			"email:Dev@Acme.Corp": "required",
+			"email:dev@acme.corp": "required",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"email:dev@acme.corp": "required"}, assignmentModes(result.Assignments))
+}

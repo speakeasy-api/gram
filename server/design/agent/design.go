@@ -431,7 +431,7 @@ var GetPluginsResult = Type("GetPluginsResult", func() {
 	Required("etag", "marketplaces", "plugins")
 	Attribute("etag", String, "Opaque revision identifier covering the marketplace, plugin, and remote-configuration set. The agent stores this to detect changes between polls.")
 	Attribute("marketplaces", ArrayOf(AgentMarketplaceModel), "Plugin marketplaces the agent should register with the tools it manages. Sorted by name.")
-	Attribute("plugins", ArrayOf(AgentPluginModel), "Plugins the agent should enable. Each entry references one of the marketplaces above by name.")
+	Attribute("plugins", ArrayOf(AgentPluginModel), "Plugins assigned to the caller. Each entry's install_mode says whether the agent installs it (`required`, `default`) or only offers it for the user to turn on (`available`). Each entry references one of the marketplaces above by name.")
 	Attribute("configuration", DeviceAgentConfigurationModel, "Organization-wide remote configuration. Absent until an administrator saves a configuration, allowing an agent with no cached remote layer to keep using its local configuration.")
 	Attribute("principal", AgentPollingPrincipalModel, "The non-human principal the plugin set was resolved for. Present only when the caller authenticated with an agent API key.")
 })
@@ -465,11 +465,11 @@ var AgentMarketplaceModel = Type("AgentMarketplace", func() {
 
 var AgentPluginModel = Type("AgentPlugin", func() {
 	Required("slug", "marketplace_name", "install_mode")
-	Attribute("slug", String, "Plugin slug. Combined with marketplace_name, this identifies the plugin the agent enables in the managed tool.")
+	Attribute("slug", String, "Plugin slug. Combined with marketplace_name, this identifies the plugin in the managed tool.")
 	Attribute("marketplace_name", String, "Name of the marketplace this plugin lives in. Always equals the `name` of one of the marketplaces in the same response.")
 	Attribute("install_mode", String, func() {
 		Description("How the agent installs the plugin. `required`: installed, and the user can't turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on. Agents that predate this field install every listed plugin.")
-		Enum("required", "default", "available")
+		shared.InstallModeEnum()
 	})
 	Attribute("name", String, "Display name of the plugin. Absent for the synthesized observability plugin.")
 	Attribute("description", String, "Short description of the plugin, when one is set.")

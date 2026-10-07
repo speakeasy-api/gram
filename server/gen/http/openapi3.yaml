@@ -86544,7 +86544,7 @@ components:
                     description: Display name of the plugin. Absent for the synthesized observability plugin.
                 slug:
                     type: string
-                    description: Plugin slug. Combined with marketplace_name, this identifies the plugin the agent enables in the managed tool.
+                    description: Plugin slug. Combined with marketplace_name, this identifies the plugin in the managed tool.
             required:
                 - slug
                 - marketplace_name
@@ -95354,7 +95354,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/AgentPlugin'
-                    description: Plugins the agent should enable. Each entry references one of the marketplaces above by name.
+                    description: Plugins assigned to the caller. Each entry's install_mode says whether the agent installs it (`required`, `default`) or only offers it for the user to turn on (`available`). Each entry references one of the marketplaces above by name.
                 principal:
                     $ref: '#/components/schemas/AgentPollingPrincipal'
             required:

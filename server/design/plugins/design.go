@@ -545,7 +545,7 @@ var PluginAssignmentModel = Type("PluginAssignment", func() {
 	Attribute("principal_urn", String, "Principal URN (e.g. role:organization:<uuid>, user:id, or *).")
 	Attribute("install_mode", String, func() {
 		Description("How the device agent installs the plugin for this audience. `required`: installed, and the user can't turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on.")
-		Enum("required", "default", "available")
+		shared.InstallModeEnum()
 	})
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
@@ -668,7 +668,7 @@ var SetPluginAssignmentsForm = Type("SetPluginAssignmentsForm", func() {
 	Attribute("principal_urns", ArrayOf(String), "List of principal URNs to assign.")
 	Attribute("install_modes", MapOf(String, String, func() {
 		Elem(func() {
-			Enum("required", "default", "available")
+			shared.InstallModeEnum()
 		})
 	}), "Install mode per principal URN in principal_urns. A principal missing from this map keeps its current mode, or gets `default` when it is newly assigned.")
 })

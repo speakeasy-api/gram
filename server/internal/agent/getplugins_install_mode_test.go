@@ -95,6 +95,11 @@ func TestGetPlugins_StrictestMatchingModeWins(t *testing.T) {
 	assignPluginWithMode(t, ti, required, "*", installmode.Available)
 	assignPluginWithMode(t, ti, required, email, installmode.Required)
 
+	// Required must outrank default, not just available.
+	requiredOverDefault := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "required-over-default")
+	assignPluginWithMode(t, ti, requiredOverDefault, "*", installmode.Default)
+	assignPluginWithMode(t, ti, requiredOverDefault, email, installmode.Required)
+
 	defaulted := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "default-for-me")
 	assignPluginWithMode(t, ti, defaulted, "*", installmode.Available)
 	assignPluginWithMode(t, ti, defaulted, email, installmode.Default)
@@ -109,6 +114,7 @@ func TestGetPlugins_StrictestMatchingModeWins(t *testing.T) {
 
 	plugins := pluginsBySlug(res)
 	require.Equal(t, string(installmode.Required), plugins["required-for-me"].InstallMode)
+	require.Equal(t, string(installmode.Required), plugins["required-over-default"].InstallMode)
 	require.Equal(t, string(installmode.Default), plugins["default-for-me"].InstallMode)
 	require.Equal(t, string(installmode.Available), plugins["available-for-me"].InstallMode)
 }
