@@ -267,7 +267,7 @@ func (s *Service) handleMetaExecuteToolCall(
 	// so do not report the synthetic member dispatch as hosted coverage.
 	body, err := handleToolsCall(ctx, logger, s.metrics, nil, s.authz, s.guardianPolicy, s.db, s.env,
 		inputs, syntheticReq, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache,
-		s.telemLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
+		s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
 		s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
 	if err != nil {
 		// A member's execution failure must degrade that member, not the

@@ -374,6 +374,7 @@ func (s *Service) callPlatformToolsetTool(
 		headers:    make(http.Header),
 		body:       new(bytes.Buffer),
 		statusCode: http.StatusOK,
+		failure:    nil,
 	}
 
 	gramEmail := conv.PtrValOrEmpty(authCtx.Email, "")

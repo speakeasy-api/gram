@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
+	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -80,6 +81,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -167,13 +169,17 @@ type Service struct {
 	idJAGValidator *idjag.Validator
 	// aiToolBlockReads are the database reads behind the Shadow AI gateway
 	// block check, held as values so a test can make one of them fail.
-	aiToolBlockReads       aiToolBlockReads
-	toolProxy              *gateway.ToolProxy
-	oauthRepo              *oauth_repo.Queries
-	billingTracker         billing.Tracker
-	billingRepository      billing.Repository
-	toolsetCache           cache.TypedCacheObject[mv.ToolsetBaseContents]
-	telemLogger            *tm.Logger
+	aiToolBlockReads  aiToolBlockReads
+	toolProxy         *gateway.ToolProxy
+	oauthRepo         *oauth_repo.Queries
+	billingTracker    billing.Tracker
+	billingRepository billing.Repository
+	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
+	telemLogger       *tm.Logger
+	// toolCallLogger emits the started and completed records of every tool
+	// call the gateway runs into the OTel pipeline, where they become
+	// agent_events rows. It is the gramotel logger for the gateway's scope.
+	toolCallLogger         log.Logger
 	vectorToolStore        *rag.ToolsetVectorStore
 	assistantTokens        *assistanttokens.Manager
 	principalCredentials   *principalcredential.Issuer
@@ -443,6 +449,7 @@ func NewService(
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
 	telemLogger *tm.Logger,
+	toolCallLogs log.LoggerProvider,
 	telemSvc *tm.Service,
 	vectorToolStore *rag.ToolsetVectorStore,
 	triggerApp *bgtriggers.App,
@@ -541,6 +548,7 @@ func NewService(
 		billingRepository:      billingRepository,
 		toolsetCache:           cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		telemLogger:            telemLogger,
+		toolCallLogger:         toolCallLogs.Logger(dialect.GramGatewayLogScope),
 		vectorToolStore:        vectorToolStore,
 		assistantTokens:        assistantTokens,
 		principalCredentials:   principalCredentials,
@@ -1861,7 +1869,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
 	case mcpversions.MethodToolsCall:
 		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
-		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
 	case mcpversions.MethodPromptsList:
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case mcpversions.MethodPromptsGet:
@@ -2130,6 +2138,7 @@ func (s *Service) HandleToolsCall(
 		s.billingRepository,
 		&s.toolsetCache,
 		s.telemLogger,
+		s.toolCallLogger,
 		s.vectorToolStore,
 		s.mcpMetadataRepo,
 		s.auditLogger,
