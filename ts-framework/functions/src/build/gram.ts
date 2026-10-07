@@ -1,12 +1,15 @@
 import { getLogger, type Logger } from "@logtape/logtape";
 import { ZipArchive } from "archiver";
 import esbuild from "esbuild";
-import { mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { $, ProcessPromise, chalk } from "zx";
 import { defaultCLIResolverDeps, resolveCLI } from "./cli.ts";
 import { CONFIG_FILE_NAMES, isCI, type ParsedUserConfig } from "./config.ts";
+
+/** The zip file name SDK releases before 0.20 wrote. */
+export const LEGACY_ZIP_NAME = "gram.zip";
 
 type Artifacts = {
   funcFilename: string;
@@ -20,7 +23,7 @@ export async function resolveArtifacts(
   return {
     funcFilename: join(cfg.outDir, "functions.js"),
     manifestFilename: join(cfg.outDir, "manifest.json"),
-    zipFilename: join(cfg.outDir, "gram.zip"),
+    zipFilename: join(cfg.outDir, "functions.zip"),
   };
 }
 
@@ -41,7 +44,7 @@ export async function buildFunctions(logger: Logger, cfg: ParsedUserConfig) {
     );
   }
 
-  logger.info("Building Gram Function");
+  logger.info("Building function");
 
   const manifest = await manifestFunc();
 
@@ -60,11 +63,13 @@ export async function buildFunctions(logger: Logger, cfg: ParsedUserConfig) {
   });
 
   await createZipArchive(logger, artifacts);
+  // Remove a zip left by an older SDK so nothing deploys it by mistake.
+  await rm(join(cfg.outDir, LEGACY_ZIP_NAME), { force: true });
 
   const zipstats = await stat(artifacts.zipFilename);
 
   logger.info(
-    `Built Gram Function ZIP: ${artifacts.zipFilename} (${(zipstats.size / 1024).toFixed(2)} KiB)`,
+    `Built function ZIP: ${artifacts.zipFilename} (${(zipstats.size / 1024).toFixed(2)} KiB)`,
   );
 
   return {
@@ -182,7 +187,7 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
   logger.info(`Staging ${zipFilename} with slug: ${slug}`);
   await $`${gramCLI} stage ${stageArgs}`;
 
-  logger.info("Deploying function with Gram CLI");
+  logger.info("Deploying function with the speakeasy CLI");
 
   const pushcmd = $({
     stdio: ["pipe", "pipe", "pipe"],
@@ -191,7 +196,7 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
     .nothrow();
 
   // Consume stdio and show loader concurrently
-  const stdioTask = consumeStdio(pushcmd, getLogger(["gram", "cli"]));
+  const stdioTask = consumeStdio(pushcmd, getLogger(["speakeasy", "cli"]));
 
   const result = await Promise.all([stdioTask, pushcmd]).then(
     ([, result]) => result,
@@ -199,18 +204,18 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
 
   if (result.exitCode !== 0) {
     throw new Error(
-      `Gram CLI push command failed with exit code ${result.exitCode}`,
+      `speakeasy CLI push command failed with exit code ${result.exitCode}`,
     );
   }
 
-  logger.info("Gram Function deployed successfully");
+  logger.info("Function deployed successfully");
 
   await handleOpenBrowser(logger, cwd, config);
 }
 
 /**
  * Arguments for the CLI push command. The API URL is left to the CLI, which
- * resolves it from --api-url, GRAM_API_URL or the active profile.
+ * resolves it from --api-url, SPEAKEASY_AI_API_URL or the active profile.
  */
 export function pushArgs(config: ParsedUserConfig): string[] {
   const args = [
@@ -395,7 +400,7 @@ export async function handleOpenBrowser(
 
   // Always prompt unless explicitly disabled
   const shouldOpen = await promptYesNo(
-    "Would you like to open the Gram dashboard to create an MCP server?",
+    "Would you like to open the dashboard to create an MCP server?",
   );
 
   if (shouldOpen) {
@@ -461,13 +466,12 @@ async function updateConfigFile(cwd: string, shouldOpen: boolean) {
     }
   }
 
-  // No config file exists, create one
-  const newConfigPath = join(cwd, "gram.config.ts");
-  const newConfig = `import { defineConfig } from "@gram-ai/functions/build";
-
-export default defineConfig({
+  // No config file exists, create one. It imports nothing, so it works
+  // whichever SDK package name the project depends on.
+  const newConfigPath = join(cwd, "speakeasy.config.ts");
+  const newConfig = `export default {
   openBrowserAfterDeploy: ${shouldOpen},
-});
+};
 `;
   await writeFile(newConfigPath, newConfig, "utf-8");
 }

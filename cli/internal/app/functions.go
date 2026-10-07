@@ -27,12 +27,13 @@ import (
 func newFunctionsCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "functions",
-		Usage: "Create, build and deploy Gram Functions projects",
-		Description: `
-Work with a Gram Functions project: scaffold one with "init", run it locally
+		Usage: "Create, build and deploy Speakeasy Functions projects",
+		Description: (`
+Work with a Speakeasy Functions project: scaffold one with "init", run it locally
 with "dev", and build and deploy it with "build" and "push". The build runs
-the project's own ` + functions.SDKPackage + ` through Node.js ` + functions.MinNodeVersion + ` or later.
-`[1:],
+the project's own ` + functions.SDKPackage + ` (or the deprecated
+` + functions.LegacySDKPackage + `) through Node.js ` + functions.MinNodeVersion + ` or later.
+`)[1:],
 		Subcommands: []*cli.Command{
 			newFunctionsInitCommand(),
 			newFunctionsBuildCommand(),
@@ -55,11 +56,11 @@ func projectFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.PathFlag{
 			Name:  "config",
-			Usage: "Path to the project config file (default: the first gram.config.{ts,mts,js,mjs} in the current directory)",
+			Usage: "Path to the project config file (default: the first speakeasy.config.{ts,mts,js,mjs} in the current directory, then the deprecated gram.config.*)",
 		},
 		&cli.PathFlag{
 			Name:  "entry",
-			Usage: "Path to the function entrypoint, overriding the config (default: src/gram.ts)",
+			Usage: "Path to the function entrypoint, overriding the config (default: src/functions.ts, or src/gram.ts when only it exists)",
 		},
 		&cli.PathFlag{
 			Name:  "out-dir",
@@ -84,10 +85,10 @@ func projectOptions(c *cli.Context) (functions.ProjectOptions, error) {
 func newFunctionsInitCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "init",
-		Usage:     "Create a new Gram Functions project",
+		Usage:     "Create a new Speakeasy Functions project",
 		ArgsUsage: "[dir]",
 		Description: `
-Create a Gram Functions project from a built-in template. Missing values are
+Create a Speakeasy Functions project from a built-in template. Missing values are
 prompted for when stdin is a terminal; otherwise, or with --yes, defaults are
 used: the functions template, git init and dependency install.
 `[1:],
@@ -132,7 +133,7 @@ used: the functions template, git init and dependency install.
 				Git:        optionalBool(c, "git"),
 				Install:    optionalBool(c, "install"),
 				UserAgent:  r.Getenv("npm_config_user_agent"),
-				SDKVersion: r.Getenv(functions.SDKVersionEnv),
+				SDKVersion: sdkVersionOverride(r),
 			})
 			if err != nil {
 				return err
@@ -141,6 +142,14 @@ used: the functions template, git init and dependency install.
 			return r.Init(c.Context, opts)
 		},
 	}
+}
+
+// sdkVersionOverride returns the SDK dependency to write into new projects
+// from SPEAKEASY_AI_FUNCTIONS_SDK_VERSION, for example
+// "file:/path/to/ts-framework/functions" to develop against a local SDK
+// checkout. Execute maps the deprecated GRAM_FUNCTIONS_SDK_VERSION onto it.
+func sdkVersionOverride(r functions.Runner) string {
+	return r.Getenv(flags.EnvVar("FUNCTIONS_SDK_VERSION"))
 }
 
 // parseFlagsAfterArg parses flags that follow the directory argument, as in
@@ -358,11 +367,12 @@ func newFunctionsBuildCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "build",
 		Usage: "Build the project into a deployable zip file",
-		Description: `
-Build the Gram Functions project in the current directory with the project's
-own ` + functions.SDKPackage + `, writing manifest.json, functions.js and gram.zip
-to the output directory.
-`[1:],
+		Description: (`
+Build the Speakeasy Functions project in the current directory with the project's
+own ` + functions.SDKPackage + `, writing manifest.json, functions.js and
+functions.zip to the output directory. Releases of ` + functions.LegacySDKPackage + `
+before 0.20 write gram.zip instead.
+`)[1:],
 		Flags: projectFlags(),
 		Action: func(c *cli.Context) error {
 			opts, err := projectOptions(c)
@@ -401,7 +411,7 @@ package manager. Arguments after -- are passed to the script.
 func newFunctionsPushCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "push",
-		Usage: "Build the project and deploy it to Gram",
+		Usage: "Build the project and deploy it to the Speakeasy AI Control Plane",
 		Description: `
 Build the project, stage its zip file in the deployment file and push a
 deployment. The slug defaults to the config's slug, then the package.json
@@ -525,7 +535,7 @@ func pushFunction(
 		slug = resolved.Slug
 	}
 	if slug == "" {
-		return nil, errors.New("no function slug: pass --slug, set slug in gram.config.ts, or set a name in package.json")
+		return nil, errors.New("no function slug: pass --slug, set slug in the project config (speakeasy.config.ts, or the deprecated gram.config.ts), or set a name in package.json")
 	}
 
 	scale := resolved.Scale
@@ -565,9 +575,9 @@ func pushFunction(
 func newFunctionsStageCommand() *cli.Command {
 	cmd := newStageFunctionCommand()
 	cmd.Name = "stage"
-	cmd.Usage = "Add a Gram Functions zip file to a deployment file without pushing it"
+	cmd.Usage = "Add a functions zip file to a deployment file without pushing it"
 	cmd.Description = `
-Add a Gram Functions zip file to the deployment file, the same way
+Add a functions zip file to the deployment file, the same way
 "speakeasy stage function" does. Run "speakeasy push" to deploy it.
 `[1:]
 	cmd.Flags = append([]cli.Flag{stageConfigFlag()}, cmd.Flags...)

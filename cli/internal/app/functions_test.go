@@ -24,9 +24,9 @@ func TestResolveInitOptions_Defaults(t *testing.T) {
 	opts, err := resolveInitOptions(nil, initInputs{Dir: "", Template: "", Name: "", Git: nil, Install: nil, UserAgent: "", SDKVersion: ""})
 	require.NoError(t, err)
 	require.Equal(t, functions.InitOptions{
-		Dir:            "gram-mcp-server",
+		Dir:            "speakeasy-mcp-server",
 		Template:       "functions",
-		Name:           "gram-mcp-server",
+		Name:           "speakeasy-mcp-server",
 		Git:            true,
 		Install:        true,
 		PackageManager: "npm",
@@ -115,7 +115,7 @@ func TestResolveInitOptions_Prompts(t *testing.T) {
 		SDKVersion:     "",
 	}, opts)
 
-	require.Contains(t, out.String(), "1) Gram Functions")
+	require.Contains(t, out.String(), "1) Speakeasy Functions")
 	require.Contains(t, out.String(), "2) Model Context Protocol SDK")
 	require.Contains(t, out.String(), "Enter a number from 1 to 2 or a template name")
 	require.Contains(t, out.String(), `invalid project name "Not Valid"`)

@@ -6,8 +6,8 @@ Some next steps:
 
 - Build your function with `speakeasy functions build`
 
-- Deploy it to Gram with `speakeasy functions push`
+- Deploy it with `speakeasy functions push`
 
-- Create MCP servers from your tools in the Gram dashboard: https://app.getgram.ai
+- Create MCP servers from your tools in the Speakeasy dashboard: https://ai.speakeasy.com
 
 Have fun 🚀

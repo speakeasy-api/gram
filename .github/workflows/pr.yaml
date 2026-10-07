@@ -2343,11 +2343,13 @@ jobs:
       - name: Install dependencies
         run: aube install --frozen-lockfile
 
-      - name: Test TypeScript framework
-        run: aube run --filter "./ts-framework/**" --if-present test
-
+      # Build first: the @gram-ai/functions compat tests import the built
+      # @speakeasy-api/functions package.
       - name: Build TypeScript framework
         run: aube run --filter "./ts-framework/**" --if-present build
+
+      - name: Test TypeScript framework
+        run: aube run --filter "./ts-framework/**" --if-present test
 
       - name: Prune aube store
         if: success()

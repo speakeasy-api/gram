@@ -45,7 +45,7 @@ func TestInit_Templates(t *testing.T) {
 
 			require.NoError(t, r.Init(t.Context(), initOptions(dir, tmpl.Name)))
 
-			for _, f := range []string{"package.json", "tsconfig.json", "README.md", ".gitignore", "src/gram.ts", "src/server.ts"} {
+			for _, f := range []string{"package.json", "tsconfig.json", "README.md", ".gitignore", "src/functions.ts", "src/server.ts"} {
 				require.FileExists(t, filepath.Join(dir, f))
 			}
 			for _, f := range []string{"gitignore", "NEXT_STEPS.txt", "CHANGELOG.md", "node_modules", "dist"} {

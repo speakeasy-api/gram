@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 
 	"github.com/urfave/cli/v2"
@@ -35,6 +37,33 @@ var (
 
 var supportedRuntimes = map[string]struct{}{"nodejs:22": {}, "nodejs:24": {}}
 
+const (
+	// defaultDeployFile is the deployment file stage and push use when none
+	// is given.
+	defaultDeployFile = "speakeasy.deploy.json"
+
+	// legacyDeployFile is the deprecated name of defaultDeployFile. It is
+	// used when it exists and defaultDeployFile does not.
+	legacyDeployFile = "gram.deploy.json"
+)
+
+// resolveDeployFile returns path when it is set. Otherwise it returns
+// defaultDeployFile, or legacyDeployFile when only that file may exist, in
+// which case it writes a deprecation note to w. A legacy file that cannot be
+// checked is still chosen, so the error surfaces when it is opened.
+func resolveDeployFile(path string, w io.Writer) string {
+	if path != "" {
+		return path
+	}
+	if _, err := os.Stat(defaultDeployFile); errors.Is(err, fs.ErrNotExist) {
+		if _, err := os.Stat(legacyDeployFile); !errors.Is(err, fs.ErrNotExist) {
+			_, _ = fmt.Fprintf(w, "Note: %s is deprecated and still works. Rename it to %s.\n", legacyDeployFile, defaultDeployFile)
+			return legacyDeployFile
+		}
+	}
+	return defaultDeployFile
+}
+
 type StageFunctionOptions struct {
 	ConfigFile string
 	Slug       string
@@ -53,9 +82,7 @@ type StageOpenAPIOptions struct {
 }
 
 func DoStageFunction(opts StageFunctionOptions) error {
-	if opts.ConfigFile == "" {
-		opts.ConfigFile = "gram.deploy.json"
-	}
+	opts.ConfigFile = resolveDeployFile(opts.ConfigFile, os.Stderr)
 	if opts.Runtime == "" {
 		opts.Runtime = "nodejs:22"
 	}
@@ -99,9 +126,7 @@ func DoStageFunction(opts StageFunctionOptions) error {
 }
 
 func DoStageOpenAPI(opts StageOpenAPIOptions) error {
-	if opts.ConfigFile == "" {
-		opts.ConfigFile = "gram.deploy.json"
-	}
+	opts.ConfigFile = resolveDeployFile(opts.ConfigFile, os.Stderr)
 	if opts.Slug == "" {
 		return fmt.Errorf("slug is required")
 	}
@@ -177,10 +202,10 @@ func ensureConfigFileExists(configPath string) error {
 func newStageCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "stage",
-		Usage: "Stage an artifact for deployment to Gram",
+		Usage: "Stage an artifact for deployment to the Speakeasy AI Control Plane",
 		Description: `
 The stage command will gradually build a deployment config that can later be
-passed to "speakeasy push". It is used to add Gram Functions zip files and OpenAPI
+passed to "speakeasy push". It is used to add functions zip files and OpenAPI
 YAML/JSON documents.
 `[1:],
 		Flags: []cli.Flag{stageConfigFlag()},
@@ -195,31 +220,51 @@ YAML/JSON documents.
 func stageConfigFlag() *cli.PathFlag {
 	return &cli.PathFlag{
 		Name:  "config",
-		Usage: "Path to the deployment config file",
-		Value: "gram.deploy.json",
+		Usage: "Path to the deployment config file (default: " + defaultDeployFile + ", or the deprecated " + legacyDeployFile + " when only it exists)",
 	}
 }
 
-// ensureStageConfig creates the --config deployment file when it is missing
-// and validates it otherwise.
+// ensureStageConfig resolves the --config deployment file, creates it when it
+// is missing and validates it otherwise. It runs before the subcommand parses
+// its own flags, so it skips help requests: "stage function --help" must not
+// create a deployment file in the working directory.
 func ensureStageConfig(cCtx *cli.Context) error {
-	configPath := cCtx.Path("config")
+	if helpRequested(cCtx.Args().Slice()) {
+		return nil
+	}
+	configPath := resolveDeployFile(cCtx.Path("config"), cCtx.App.ErrWriter)
+	if err := cCtx.Set("config", configPath); err != nil {
+		return fmt.Errorf("set --config: %w", err)
+	}
 	if err := ensureConfigFileExists(configPath); err != nil {
 		return fmt.Errorf("invalid config file %s: %w", configPath, err)
 	}
 	return nil
 }
 
+// helpRequested reports whether args ask for help rather than an action.
+func helpRequested(args []string) bool {
+	for _, arg := range args {
+		switch arg {
+		case "--help", "-h", "help", "h":
+			return true
+		case "--":
+			return false
+		}
+	}
+	return false
+}
+
 func newStageFunctionCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "function",
-		Usage: "Stage a Gram Functions zip file for deployment",
+		Usage: "Stage a functions zip file for deployment",
 		Flags: []cli.Flag{
 			sourceNameFlag,
 			sourceSlugFlag,
 			&cli.StringFlag{
 				Name:     "location",
-				Usage:    "Location to a zip file containing Gram Functions code. This can be a local file or a URL.",
+				Usage:    "Location to a zip file containing functions code. This can be a local file or a URL.",
 				Required: true,
 			},
 			&cli.StringFlag{

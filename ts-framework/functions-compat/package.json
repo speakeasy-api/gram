@@ -1,0 +1,65 @@
+{
+  "type": "module",
+  "name": "@gram-ai/functions",
+  "version": "0.19.0",
+  "description": "Deprecated: use @speakeasy-api/functions. This package re-exports it so existing projects keep working.",
+  "deprecated": "Renamed to @speakeasy-api/functions. This package re-exports it and keeps working.",
+  "author": "Georges Haidar <georges@speakeasyapi.dev>",
+  "main": "index.js",
+  "keywords": [],
+  "license": "MIT",
+  "homepage": "https://github.com/speakeasy-api/gram",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/speakeasy-api/gram.git",
+    "directory": "ts-framework/functions-compat"
+  },
+  "bin": {
+    "gf": "./bin/gf.js"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "packageManager": "pnpm@11.19.0",
+  "files": [
+    "*.js",
+    "*.d.ts",
+    "bin"
+  ],
+  "exports": {
+    ".": {
+      "import": "./index.js",
+      "types": "./index.d.ts"
+    },
+    "./mcp": {
+      "import": "./mcp.js",
+      "types": "./mcp.d.ts"
+    },
+    "./build": {
+      "import": "./build.js",
+      "types": "./build.d.ts"
+    }
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/sdk": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@modelcontextprotocol/sdk": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@speakeasy-api/functions": "workspace:*"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "^5.0.0"
+  }
+}

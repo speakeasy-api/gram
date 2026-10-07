@@ -33,7 +33,7 @@ type Template struct {
 var Templates = []Template{
 	{
 		Name:  "functions",
-		Label: "Gram Functions",
+		Label: "Speakeasy Functions",
 		Hint:  "Simplest path to start building your own tools - comes with batteries included",
 	},
 	{
@@ -45,12 +45,7 @@ var Templates = []Template{
 
 const (
 	// DefaultProjectName is the package name init suggests.
-	DefaultProjectName = "gram-mcp-server"
-
-	// SDKVersionEnv overrides the SDK dependency written into new projects,
-	// for example "file:/path/to/gram/ts-framework/functions" to develop
-	// against a local SDK checkout.
-	SDKVersionEnv = "GRAM_FUNCTIONS_SDK_VERSION"
+	DefaultProjectName = "speakeasy-mcp-server"
 
 	mcpSDKPackage = "@modelcontextprotocol/sdk"
 	mcpSDKVersion = "^1.20.1"

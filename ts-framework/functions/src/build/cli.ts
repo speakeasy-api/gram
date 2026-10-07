@@ -6,7 +6,17 @@ import { $ } from "zx";
  * Environment variable that points at the CLI binary to deploy with. When set,
  * it wins over every other lookup.
  */
-export const CLI_PATH_ENV = "GRAM_CLI_PATH";
+export const CLI_PATH_ENV = "SPEAKEASY_AI_CLI_PATH";
+
+/** Deprecated name of {@link CLI_PATH_ENV}, read when that is unset. */
+const LEGACY_CLI_PATH_ENV = "GRAM_CLI_PATH";
+
+/**
+ * Environment variable that selects the CLI built from this repository, and
+ * its deprecated name, read when the new one is unset.
+ */
+const DEV_ENV = "SPEAKEASY_AI_DEV";
+const LEGACY_DEV_ENV = "GRAM_DEV";
 
 /**
  * Flag that makes the Speakeasy AI Control Plane CLI print
@@ -29,7 +39,7 @@ export type CLIResolverDeps = {
   /** Process environment. */
   env: Record<string, string | undefined>;
 
-  /** Path of the CLI built from this repository, used when GRAM_DEV is set. */
+  /** Path of the CLI built from this repository, used when SPEAKEASY_AI_DEV is set. */
   localDevCLIPath: string;
 
   /** Reports whether a file exists at path. */
@@ -43,22 +53,25 @@ export type CLIResolverDeps = {
 };
 
 function isLocalDev(env: CLIResolverDeps["env"]): boolean {
-  const value = env["GRAM_DEV"];
+  const value = env[DEV_ENV] || env[LEGACY_DEV_ENV];
   return value?.toLowerCase() === "true" || value === "1";
 }
 
 /**
  * Picks the CLI to deploy with, in this order:
  *
- * 1. The path in GRAM_CLI_PATH.
- * 2. The repository build at cli/bin/gram when GRAM_DEV is set and it exists.
+ * 1. The path in SPEAKEASY_AI_CLI_PATH, or the deprecated GRAM_CLI_PATH.
+ * 2. The repository build at cli/bin/gram when SPEAKEASY_AI_DEV, or the
+ *    deprecated GRAM_DEV, is set and the build exists.
  * 3. `speakeasy`, if it is the AI Control Plane CLI and not the SDK generator.
  * 4. The legacy `gram` command.
  *
  * Throws with install instructions when none is available.
  */
 export async function resolveCLI(deps: CLIResolverDeps): Promise<string> {
-  const override = deps.env[CLI_PATH_ENV]?.trim();
+  const override = (
+    deps.env[CLI_PATH_ENV]?.trim() || deps.env[LEGACY_CLI_PATH_ENV]
+  )?.trim();
   if (override) {
     return override;
   }

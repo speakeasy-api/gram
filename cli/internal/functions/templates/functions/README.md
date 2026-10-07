@@ -1,13 +1,13 @@
-# Hello from Gram Functions!
+# Hello from Speakeasy Functions!
 
-This project builds and deploys [Gram Functions](https://getgram.ai) using a
+This project builds and deploys [Speakeasy Functions](https://www.speakeasy.com) using a
 tiny TypeScript framework that looks like this:
 
 ```ts
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 
-const gram = new Gram().tool({
+const functions = new Functions().tool({
   name: "greet",
   description: "Greet someone special",
   inputSchema: { name: z.string() },
@@ -16,10 +16,10 @@ const gram = new Gram().tool({
   },
 });
 
-export default gram;
+export default functions;
 ```
 
-Gram Functions are tools for LLMs and MCP servers that can do arbitrary tasks
+Speakeasy Functions are tools for LLMs and MCP servers that can do arbitrary tasks
 such as fetching data from APIs, performing calculations, or interacting with
 hosted databases.
 
@@ -37,13 +37,13 @@ To get started, install dependencies with your package manager:
 npm install
 ```
 
-To build a zip file that can be deployed to Gram, run:
+To build a zip file that can be deployed to the Speakeasy AI Control Plane, run:
 
 ```bash
 speakeasy functions build
 ```
 
-Then deploy your function to Gram with:
+Then deploy your function with:
 
 ```bash
 speakeasy functions push

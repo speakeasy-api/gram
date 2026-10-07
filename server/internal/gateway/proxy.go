@@ -46,10 +46,14 @@ const (
 	ToolCallSourceDirect ToolCallSource = "direct"
 	ToolCallSourceMCP    ToolCallSource = "mcp"
 
-	// gramUserEmailEnvVar is the environment variable injected into function
+	// userEmailEnvVar is the environment variable injected into function
 	// payloads when authInput.gramEmail is enabled and Gram has authenticated
 	// the identity accessing the MCP server.
-	gramUserEmailEnvVar = "GRAM_USER_EMAIL"
+	userEmailEnvVar = "SPEAKEASY_AI_USER_EMAIL"
+
+	// legacyUserEmailEnvVar is the deprecated name of userEmailEnvVar. It is
+	// set to the same value so existing function code keeps working.
+	legacyUserEmailEnvVar = "GRAM_USER_EMAIL"
 )
 
 const (
@@ -421,12 +425,7 @@ func (tp *ToolProxy) doFunction(
 		}
 	}
 
-	// GRAM_USER_EMAIL is a platform-controlled variable — remove any
-	// user-supplied value and only set it from the authenticated context.
-	delete(payloadEnv, gramUserEmailEnvVar)
-	if plan.AuthInput != nil && plan.AuthInput.GramEmail && env.GramEmail != "" {
-		payloadEnv[gramUserEmailEnvVar] = env.GramEmail
-	}
+	setUserEmailEnv(payloadEnv, plan.AuthInput != nil && plan.AuthInput.GramEmail, env.GramEmail)
 
 	req, err := tp.functions.ToolCall(ctx, functions.RunnerToolCallRequest{
 		RunnerBaseRequest: functions.RunnerBaseRequest{
@@ -1304,5 +1303,17 @@ func formEncodeValue(values url.Values, key string, value any) {
 	default:
 		// Handle primitives
 		values.Set(key, fmt.Sprintf("%v", value))
+	}
+}
+
+// setUserEmailEnv sets the user email variables in payloadEnv to email when
+// enabled and email is known. They are platform-controlled, so any
+// user-supplied values are removed first.
+func setUserEmailEnv(payloadEnv map[string]string, enabled bool, email string) {
+	for _, name := range []string{userEmailEnvVar, legacyUserEmailEnvVar} {
+		delete(payloadEnv, name)
+		if enabled && email != "" {
+			payloadEnv[name] = email
+		}
 	}
 }

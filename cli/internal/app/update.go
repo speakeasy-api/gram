@@ -190,7 +190,7 @@ func fetchLatestRelease(ctx context.Context) (*githubRelease, error) {
 	}
 
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	req.Header.Set("User-Agent", "gram-cli")
+	req.Header.Set("User-Agent", "speakeasy-cli")
 
 	client := api.SharedHTTPClient()
 	resp, err := client.Do(req)

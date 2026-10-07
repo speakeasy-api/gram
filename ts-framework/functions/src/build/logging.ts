@@ -32,7 +32,7 @@ export async function configureLogger(lowestLevel: LogLevel) {
         sinks: ["console"],
       },
       {
-        category: ["gram", "cli"],
+        category: ["speakeasy", "cli"],
         lowestLevel,
         sinks: ["console"],
       },
