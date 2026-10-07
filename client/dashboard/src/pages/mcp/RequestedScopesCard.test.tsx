@@ -341,6 +341,49 @@ describe("RequestedScopesCard", () => {
     );
     renderCard();
     expect(screen.getByRole("link", { name: "Edit scopes" })).toBeTruthy();
+    cleanup();
+
+    loaded(
+      scopes([client({ scopeSource: "resource_pin", pinWouldDecide: false })], {
+        canPin: true,
+      }),
+    );
+    renderCard();
+    expect(screen.queryByRole("link", { name: "Edit scopes" })).toBeNull();
+  });
+
+  it.each(["client_scope", "challenge_scope", "resource_pin"] as const)(
+    "does not warn that %s may change on the next contact",
+    (scopeSource) => {
+      loaded(
+        scopes([client({ scopeSource })], {
+          advertisedScopesKnown: false,
+          advertisedScopes: undefined,
+        }),
+      );
+      renderCard();
+      expect(
+        screen.queryByText(/may change once the MCP server is next contacted/),
+      ).toBeNull();
+    },
+  );
+
+  it("merges the same request in a different order", () => {
+    loaded(
+      scopes([
+        client({
+          scopeSource: "client_scope",
+          requestedScopes: ["read", "write"],
+        }),
+        client({
+          clientId: "client-2",
+          scopeSource: "client_scope",
+          requestedScopes: ["write", "read", "read"],
+        }),
+      ]),
+    );
+    renderCard();
+    expect(screen.getAllByRole("list")).toHaveLength(1);
   });
 
   it("renders nothing while loading", () => {

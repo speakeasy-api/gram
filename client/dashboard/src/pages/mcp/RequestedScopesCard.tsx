@@ -32,6 +32,13 @@ const SOURCE_LINES: Record<
   none: null,
 };
 
+// Sources a live read of the MCP server can outrank at the next sign-in.
+const PROBE_CAN_CHANGE = new Set<RemoteMcpServerClientScopes["scopeSource"]>([
+  "cached_resource",
+  "issuer_override",
+  "issuer_catalogue",
+]);
+
 function shownScopes(client: RemoteMcpServerClientScopes): string[] {
   return client.requestedScopes.filter((scope) => !FEATURE_SCOPES.has(scope));
 }
@@ -58,7 +65,7 @@ function distinctRequests(
       client.issuerUrl ?? "",
       client.issuerName ?? "",
       client.scopeSource,
-      client.requestedScopes,
+      [...new Set(client.requestedScopes)].sort(),
     ]);
     const seen = byKey.get(key);
     if (!seen) byKey.set(key, client);
@@ -124,9 +131,7 @@ export function RequestedScopesCard({
       {clients.map((client) => {
         const name = labels.get(client.clientId) ?? issuerLabel(client);
         const canEdit =
-          editHref !== undefined &&
-          data.canPin &&
-          (client.scopeSource === "resource_pin" || client.pinWouldDecide);
+          editHref !== undefined && data.canPin && client.pinWouldDecide;
         return (
           <Card.Dashboard
             key={client.clientId}
@@ -163,7 +168,11 @@ function sourceLine(
   if (client.scopeSource === "resource_pin") {
     parts.push(sharedServerLine(scopes.sharedServerCount));
   }
-  if (parts[0] && scopes.discoveryEnabled && !scopes.advertisedScopesKnown) {
+  if (
+    PROBE_CAN_CHANGE.has(client.scopeSource) &&
+    scopes.discoveryEnabled &&
+    !scopes.advertisedScopesKnown
+  ) {
     parts.push("This may change once the MCP server is next contacted.");
   }
   const line = parts.filter(Boolean).join(" ");
