@@ -40,7 +40,7 @@ export function AssistantActorLink({
         {wrap(
           <IdentityLink
             identifier={{ urn: `agent:${chat.assistantAgentId}` }}
-            className="block min-w-0 truncate pb-0.5"
+            className="block min-w-0 truncate"
           >
             {name}
           </IdentityLink>,
@@ -56,7 +56,7 @@ export function AssistantActorLink({
           <Link
             to={routes.assistants.detail.href(chat.assistantId)}
             onClick={(event) => event.stopPropagation()}
-            className="decoration-foreground/30 hover:decoration-foreground block min-w-0 truncate pb-0.5 underline underline-offset-4"
+            className="decoration-foreground/30 hover:decoration-foreground block min-w-0 truncate underline underline-offset-4"
           >
             {name}
           </Link>,

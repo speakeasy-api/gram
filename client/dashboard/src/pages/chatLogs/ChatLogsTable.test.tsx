@@ -282,7 +282,7 @@ describe("ChatLogsTable", () => {
     expect(agentLink.getAttribute("href")).toContain(
       encodeURIComponent("agent:agent-1"),
     );
-    expect(screen.getByText("on behalf of")).toBeTruthy();
+    expect(screen.getByText("for")).toBeTruthy();
     const delegateLink = screen.getByRole("link", { name: "Ada Lovelace" });
     expect(delegateLink.getAttribute("href")).toContain(
       encodeURIComponent("user:gram-user-1"),
@@ -314,6 +314,6 @@ describe("ChatLogsTable", () => {
     expect(assistantLink.getAttribute("href")).toContain(
       "/assistants/assistant-1",
     );
-    expect(screen.queryByText("on behalf of")).toBeNull();
+    expect(screen.queryByText("for")).toBeNull();
   });
 });

@@ -361,7 +361,7 @@ function SessionSummary({
             {chat.assistantName ? (
               <>
                 <MetaRow label="Agent">
-                  <AssistantActorLink chat={chat} />
+                  <AssistantActorLink chat={chat} className="[&_a]:pb-0.5" />
                 </MetaRow>
                 <MetaRow label="On behalf of">{userLabel}</MetaRow>
               </>
@@ -772,7 +772,7 @@ function ChatDetailHeader({
                   <>
                     <AssistantActorLink
                       chat={chat}
-                      className="text-foreground"
+                      className="text-foreground [&_a]:pb-0.5"
                     />
                     <span>on behalf of</span>
                     <span className="text-foreground">{userLabel}</span>

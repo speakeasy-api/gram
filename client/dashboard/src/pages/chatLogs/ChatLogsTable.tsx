@@ -544,23 +544,28 @@ export function ChatLogsTable({
                         {(chat.participants?.length ?? 0) === 0 &&
                           (chat.assistantName ? (
                             (chat.userId || chat.externalUserId) && (
-                              <>
-                                <span className="text-muted-foreground/70">
-                                  on behalf of
-                                </span>
-                                <span className="pointer-events-auto max-w-[120px] truncate pb-0.5">
-                                  <ChatOwnerLabel
-                                    members={membersData?.members}
-                                    chat={chat}
-                                    currentUser={user}
+                              <SimpleTooltip tooltip="Acting on behalf of this member">
+                                <span className="pointer-events-auto inline-flex min-w-0 items-center gap-1.5">
+                                  <span className="text-muted-foreground/70">
+                                    for
+                                  </span>
+                                  <AccountTypeIcon
+                                    accountType={chat.accountType}
                                   />
+                                  <span className="max-w-[120px] truncate">
+                                    <ChatOwnerLabel
+                                      members={membersData?.members}
+                                      chat={chat}
+                                      currentUser={user}
+                                    />
+                                  </span>
                                 </span>
-                              </>
+                              </SimpleTooltip>
                             )
                           ) : (
                             <>
                               <AccountTypeIcon accountType={chat.accountType} />
-                              <span className="pointer-events-auto max-w-[120px] truncate pb-0.5">
+                              <span className="pointer-events-auto max-w-[120px] truncate">
                                 <ChatOwnerLabel
                                   members={membersData?.members}
                                   chat={chat}
