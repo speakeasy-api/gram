@@ -6,7 +6,13 @@ import { ToolUsageIdentity } from "./tool-usage-identity";
 
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
-    agents: { href: () => "/example/project/agent-management" },
+    identities: {
+      detail: {
+        overview: {
+          href: (urn: string) => `/example/project/identities/${urn}/overview`,
+        },
+      },
+    },
   }),
 }));
 vi.mock("@/components/identity-link", () => ({
@@ -35,7 +41,7 @@ describe("ToolUsageIdentity", () => {
     );
     const link = screen.getByRole("link", { name: "Research agent" });
     expect(link.getAttribute("href")).toBe(
-      "/example/project/agent-management?id=agent-1",
+      "/example/project/identities/agent%3Aagent-1/overview",
     );
     expect(link.className).toContain("decoration-dotted");
     expect(screen.getByRole("img", { name: "Agent" })).toBeTruthy();

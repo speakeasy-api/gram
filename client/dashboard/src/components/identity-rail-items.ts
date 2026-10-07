@@ -39,26 +39,26 @@ export function identityRailItems(
         active: detail.overview.active,
       },
       {
-        key: "access",
+        key: "permissions",
         title: "Permissions",
-        href: `${detail.access.href(encodedUrn)}${search}`,
-        active: detail.access.active,
+        href: `${detail.permissions.href(encodedUrn)}${search}`,
+        active: detail.permissions.active,
       },
       {
         // How the agent is stood up: the credential it authenticates with,
         // and what hands that credential to its runtime. It holds no provider
         // logins and no managed machines, so this is not "accounts & devices"
         // for an agent, and "Keys" named the artefact rather than the job.
-        key: "devices",
+        key: "provisioning",
         title: "Provisioning",
-        href: `${detail.devices.href(encodedUrn)}${search}`,
-        active: detail.devices.active,
+        href: `${detail.provisioning.href(encodedUrn)}${search}`,
+        active: detail.provisioning.active,
       },
       {
-        key: "connections",
+        key: "sessions",
         title: "Sessions",
-        href: `${detail.connections.href(encodedUrn)}${search}`,
-        active: detail.connections.active,
+        href: `${detail.sessions.href(encodedUrn)}${search}`,
+        active: detail.sessions.active,
       },
       {
         key: "activity",

@@ -1,9 +1,13 @@
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
-import { HumanizeDateTime } from "@/lib/dates";
 import { Navigate, useNavigate } from "react-router";
 import { useRoutes } from "@/routes";
 import { registeredAgentHref } from "./identityRoster";
 import { AgentAPIKeys } from "@/pages/agents/AgentAPIKeys";
+import {
+  AgentIdentityPanel,
+  AgentLifecycle,
+  RenameAgentButton,
+} from "@/pages/agents/agent-admin";
 import { AgentGatewayInstall } from "@/pages/agents/AgentGatewayInstall";
 import { ManagedAgentSessions } from "@/pages/agents/ManagedAgentSessions";
 import { AgentIdentityPermissions } from "./AgentIdentityAccess";
@@ -11,21 +15,24 @@ import {
   AgentIdentityAudit,
   AgentIdentityChallenges,
 } from "./AgentIdentityActivity";
-import { IdentityPanel, IdentityPanelRow } from "./IdentityPanel";
+import { IdentityPanel } from "./IdentityPanel";
 import { IdentitySection } from "./IdentitySection";
 
 /** Agent data is keyed by its principal, never by its human owner's identifiers. */
 export function AgentIdentityProfile({
   agent,
   section,
+  refresh,
 }: {
   agent: ManagedAgent;
   section: string;
+  /** Re-reads the agent after it is renamed or its lifecycle changes. */
+  refresh: () => void;
 }): JSX.Element {
   const navigate = useNavigate();
   const routes = useRoutes();
   switch (section) {
-    case "access":
+    case "permissions":
       return (
         <IdentitySection
           title="Permissions"
@@ -42,7 +49,7 @@ export function AgentIdentityProfile({
           <AgentIdentityAudit agent={agent} />
         </IdentitySection>
       );
-    case "connections":
+    case "sessions":
       return (
         <IdentitySection
           title="Sessions"
@@ -51,7 +58,7 @@ export function AgentIdentityProfile({
           <ManagedAgentSessions agent={agent} variant="bare" />
         </IdentitySection>
       );
-    case "devices":
+    case "provisioning":
       // An agent holds keys, not provider logins and not machines. The
       // managed-device panel that sat here could only ever say so.
       //
@@ -85,6 +92,17 @@ export function AgentIdentityProfile({
       // not offer them. A link or bookmark to one still resolved and silently
       // rendered this overview, so the address said one thing and the page
       // showed another.
+      // The sections an agent holds moved to addresses that match their
+      // tabs. Links and bookmarks to the person-shaped ones still work.
+      const renamed: Record<string, string> = {
+        access: "permissions",
+        connections: "sessions",
+        devices: "provisioning",
+      };
+      const moved = renamed[section];
+      if (moved) {
+        return <Navigate to={`../${moved}${window.location.search}`} replace />;
+      }
       if (section !== "overview") {
         return <Navigate to={`../overview${window.location.search}`} replace />;
       }
@@ -92,28 +110,21 @@ export function AgentIdentityProfile({
         <IdentitySection
           title="Overview"
           meta="What this identity is, and who answers for it"
+          action={<RenameAgentButton agent={agent} refresh={refresh} />}
         >
-          <IdentityPanel title="Agent status">
-            <IdentityPanelRow title="Status" trailing={agent.lifecycle} />
-            <IdentityPanelRow
-              title="Owner"
-              trailing={agent.ownerProfile?.displayName || agent.ownerUserId}
-            />
-            {agent.ownerReassignmentRequiredAt && (
-              <IdentityPanelRow
-                title="Owner reassignment required"
-                detail={agent.ownerReassignmentReason}
-                accent="destructive"
-              />
-            )}
-            <IdentityPanelRow
-              title="Created"
-              trailing={<HumanizeDateTime date={agent.createdAt} />}
-            />
-          </IdentityPanel>
+          {/* Name, principal, owner, scope and lifecycle — the durable
+              facts, from the one component that states them. */}
+          <AgentIdentityPanel agent={agent} />
           <AgentIdentityPermissions agent={agent} />
           <AgentIdentityChallenges agent={agent} />
           <AgentIdentityAudit agent={agent} subject />
+          {/* Ending an agent is not a section of it: it is what you do to
+              the whole thing, so it sits below them all. */}
+          <AgentLifecycle
+            agent={agent}
+            refresh={refresh}
+            onDeleted={() => void navigate(routes.identities.agents.href())}
+          />
         </IdentitySection>
       );
   }

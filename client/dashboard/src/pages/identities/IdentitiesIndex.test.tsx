@@ -11,10 +11,15 @@ const mocks = vi.hoisted(() => ({
   agents: vi.fn(),
   coverage: vi.fn(),
   roster: vi.fn(),
+  session: {
+    user: { id: "user_example" },
+    organizationOverride: false,
+    impersonatorEmail: undefined as string | undefined,
+  },
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org_example", slug: "example" }),
-  useSession: () => ({ user: { id: "user_example" } }),
+  useSession: () => mocks.session,
   useIsPlatformAdmin: () => false,
 }));
 vi.mock("@/contexts/Sdk", () => ({
@@ -32,7 +37,18 @@ vi.mock("@/components/dev-toolbar-utils", () => ({
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
-  useRoutes: () => ({ agents: { href: () => "/agents" } }),
+  useRoutes: () => ({
+    agents: { href: () => "/agents" },
+    identities: {
+      agents: {
+        href: () => "/identities/agents",
+        new: { href: () => "/identities/agents/new" },
+      },
+      detail: {
+        overview: { href: (urn: string) => `/identities/${urn}/overview` },
+      },
+    },
+  }),
 }));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
@@ -100,6 +116,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.flag = "enabled";
   mocks.orgRead = true;
+  mocks.session = {
+    user: { id: "user_example" },
+    organizationOverride: false,
+    impersonatorEmail: undefined,
+  };
   mocks.agents.mockResolvedValue({
     items: [{ id: "agent_example", name: "Registered agent" }],
   });
@@ -193,3 +214,31 @@ it.each(["unknown", "unknown,agent"])(
     expect(screen.getByTestId("filters").textContent).toContain("kind");
   },
 );
+
+// Ported from the agent-management page's tests when that page was retired.
+// A support session is reading on someone else's behalf, and an agent's
+// management API answers to the owner — so the roster does not read it at all
+// rather than reading it as the person being supported.
+it("does not read agents in an organization override session", async () => {
+  mocks.session = {
+    user: { id: "user_example" },
+    organizationOverride: true,
+    impersonatorEmail: undefined,
+  };
+  setup("", "agent");
+  await waitFor(() => expect(mocks.roster).toHaveBeenCalled());
+  expect(mocks.agents).not.toHaveBeenCalled();
+  expect(screen.queryByText("New agent identity")).toBeNull();
+});
+
+it("does not read agents while impersonating", async () => {
+  mocks.session = {
+    user: { id: "user_example" },
+    organizationOverride: false,
+    impersonatorEmail: "support@example.test",
+  };
+  setup("", "agent");
+  await waitFor(() => expect(mocks.roster).toHaveBeenCalled());
+  expect(mocks.agents).not.toHaveBeenCalled();
+  expect(screen.queryByText("New agent identity")).toBeNull();
+});

@@ -15,6 +15,9 @@ function routes(): ReturnType<typeof useRoutes> {
         overview: page("overview"),
         access: page("access"),
         usage: page("usage"),
+        permissions: page("permissions"),
+        provisioning: page("provisioning"),
+        sessions: page("sessions"),
         security: page("security"),
         cost: page("cost"),
         connections: page("connections"),
@@ -49,9 +52,9 @@ describe("identityRailItems", () => {
     // render a panel whose only content was a sentence saying it had none.
     expect(keys("agent")).toEqual([
       "overview",
-      "access",
-      "devices",
-      "connections",
+      "permissions",
+      "provisioning",
+      "sessions",
       "activity",
     ]);
   });
@@ -62,9 +65,9 @@ describe("identityRailItems", () => {
         (item) => [item.key, item.title],
       ),
     );
-    expect(titles["access"]).toBe("Permissions");
-    expect(titles["devices"]).toBe("Provisioning");
-    expect(titles["connections"]).toBe("Sessions");
+    expect(titles["permissions"]).toBe("Permissions");
+    expect(titles["provisioning"]).toBe("Provisioning");
+    expect(titles["sessions"]).toBe("Sessions");
   });
 
   it("carries the current query string onto every link", () => {

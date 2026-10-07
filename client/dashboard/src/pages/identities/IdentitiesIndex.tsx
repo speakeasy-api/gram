@@ -1007,7 +1007,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       <Page.Section.CTA>
         {kind === "agent" && agentsEnabled ? (
           <Button asChild variant="primary">
-            <Link to={`${routes.agents.href()}?create=true`}>
+            <Link to={routes.identities.agents.new.href()}>
               <Plus className="size-4" aria-hidden="true" />
               New agent identity
             </Link>

@@ -18,7 +18,7 @@ import type { ReactNode } from "react";
 import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
 import type { ScopeRule } from "@/pages/access/types";
-import AgentsPage from "./Agents";
+import { AgentPolicySection } from "./AgentPolicySection";
 
 const mocks = vi.hoisted(() => ({
   params: new URLSearchParams(),
@@ -268,9 +268,12 @@ function setup() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+  // The editor under test, rendered directly. It used to be reached by
+  // driving the agent-management page to the right query params; that page is
+  // gone, and the editor is the subject of every assertion here anyway.
   const view = render(
     <QueryClientProvider client={client}>
-      <AgentsPage />
+      <AgentPolicySection agent={mocks.agent as never} variant="bare" />
     </QueryClientProvider>,
   );
   return {
@@ -279,7 +282,7 @@ function setup() {
     rerenderPage: () => {
       view.rerender(
         <QueryClientProvider client={client}>
-          <AgentsPage />
+          <AgentPolicySection agent={mocks.agent as never} variant="bare" />
         </QueryClientProvider>,
       );
     },
