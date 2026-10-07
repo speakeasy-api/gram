@@ -63,6 +63,7 @@ func TestSessionCanonicalHooks_UnknownHarness(t *testing.T) {
 	queries := repo.New(conn)
 	for _, window := range []time.Duration{time.Hour, 72 * time.Hour} {
 		t.Run(window.String(), func(t *testing.T) {
+			t.Parallel()
 			rows, err := queries.ListSessions(ctx, repo.ListSessionsParams{
 				ProjectIDs: []string{projectID.String()}, TimeStart: now.Add(-window).UnixNano(), TimeEnd: now.Add(time.Minute).UnixNano(), SortBy: "total_tokens", Limit: 10,
 			})
@@ -73,7 +74,7 @@ func TestSessionCanonicalHooks_UnknownHarness(t *testing.T) {
 			require.EqualValues(t, 1, rows[0].MessageCount)
 			require.EqualValues(t, 100, rows[0].TotalInputTokens)
 			require.EqualValues(t, 20, rows[0].TotalOutputTokens)
-			require.Equal(t, 0.25, rows[0].TotalCost)
+			require.InDelta(t, 0.25, rows[0].TotalCost, 1e-9)
 		})
 	}
 	var tokens int64
@@ -82,7 +83,7 @@ func TestSessionCanonicalHooks_UnknownHarness(t *testing.T) {
 	require.NoError(t, conn.QueryRow(ctx, `SELECT sumIfMerge(total_input_tokens), uniqExactIfMerge(unique_tool_calls), sumIfMerge(total_cost) FROM attribute_metrics_summaries WHERE gram_project_id = ?`, projectID).Scan(&tokens, &tools, &cost))
 	require.EqualValues(t, 100, tokens)
 	require.EqualValues(t, 2, tools)
-	require.Equal(t, 0.25, cost)
+	require.InDelta(t, 0.25, cost, 1e-9)
 	var failures uint64
 	require.NoError(t, conn.QueryRow(ctx, `SELECT sum(failed_tool_call_count) FROM chat_session_summaries WHERE gram_project_id = ?`, projectID).Scan(&failures))
 	require.EqualValues(t, 1, failures)
@@ -96,6 +97,7 @@ func TestSessionCanonicalHooks_AHPKnownHarnessNames(t *testing.T) {
 	require.NoError(t, err)
 	for _, source := range []string{"claude-code", "claude", "codex", "cursor", "future-harness"} {
 		t.Run(source, func(t *testing.T) {
+			t.Parallel()
 			projectID, chatID := uuid.New(), uuid.NewString()
 			now := time.Now().UTC()
 			for _, event := range []string{"usage.reported", "assistant.responded", "tool.completed"} {

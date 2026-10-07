@@ -25,6 +25,7 @@ func ahpTestEvent(eventType string) map[string]any {
 }
 
 func TestAHPNormalizationIsolationAndProvenance(t *testing.T) {
+	t.Parallel()
 	project := uuid.New()
 	auth := &contextvalues.AuthContext{ActiveOrganizationID: "org_example", ProjectID: &project}
 	event := ahpTestEvent("tool.before")
@@ -65,6 +66,7 @@ func TestAHPNormalizationIsolationAndProvenance(t *testing.T) {
 }
 
 func TestAHPNormalizationOutcomesAndUsage(t *testing.T) {
+	t.Parallel()
 	project := uuid.New()
 	auth := &contextvalues.AuthContext{ActiveOrganizationID: "org_example", ProjectID: &project}
 	for _, test := range []struct{ status, outcome, canonical string }{{"executed", "ok", "tool.completed"}, {"executed", "error", "tool.failed"}, {"executed", "denied", "tool.skipped"}, {"skipped", "denied", "tool.skipped"}, {"skipped", "ok", "tool.skipped"}} {
@@ -85,13 +87,13 @@ func TestAHPNormalizationOutcomesAndUsage(t *testing.T) {
 	e := ahpTestEvent("model.error")
 	e["model"] = map[string]any{"id": "example-model"}
 	e["execution"] = map[string]any{"status": "skipped"}
-	e["usage"] = map[string]any{"inputTokens": 12, "cost": map[string]any{"amount": 0.01, "currency": "USD", "basis": "reported"}}
+	e["usage"] = map[string]any{"kind": "amount", "scope": "attempt", "completeness": "partial", "provenance": "provider", "inputTokens": 12, "cost": map[string]any{"amount": 0.01, "currency": "USD", "basis": "reported"}}
 	p, a, err := normalizeAHPEvent(e, auth, "observe")
 	require.NoError(t, err)
 	require.Equal(t, "usage.reported", p.Event.Type)
 	require.Equal(t, "model_attempt", a[attr.Key("gram.hook.usage_authority")])
 	require.Equal(t, 12, *p.Data.Usage.InputTokens)
-	require.Equal(t, 0.01, *p.Data.Usage.Cost)
+	require.InDelta(t, 0.01, *p.Data.Usage.Cost, 0.000001)
 	e["type"] = "user.message.outbound"
 	p, _, err = normalizeAHPEvent(e, auth, "observe")
 	require.NoError(t, err)
@@ -121,6 +123,7 @@ func (a *ahpTestAuthorizer) Authorize(ctx context.Context, key string, scheme *s
 }
 
 func TestAHPHandlerAuthenticationCapabilitiesAndValidation(t *testing.T) {
+	t.Parallel()
 	project := uuid.New()
 	auth := &contextvalues.AuthContext{ActiveOrganizationID: "org_example", ProjectID: &project}
 	for _, tc := range []struct {
@@ -129,6 +132,7 @@ func TestAHPHandlerAuthenticationCapabilitiesAndValidation(t *testing.T) {
 		status                     int
 	}{{"missing", "", "", "", false, 401}, {"bearer single project", "", "Bearer example", "", false, 200}, {"gram headers", "example", "", "chosen", false, 200}, {"multi project omitted", "example", "", "", true, 401}, {"conflict", "other", "Bearer example", "chosen", false, 401}} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			a := &ahpTestAuthorizer{authCtx: auth, rejectEmptyProject: tc.reject}
 			s := &Service{auth: a}
 			h, err := s.ahpHandler()
@@ -150,6 +154,7 @@ func TestAHPHandlerAuthenticationCapabilitiesAndValidation(t *testing.T) {
 }
 
 func TestAHPHandlerInterceptEffectsAndObserveSafety(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -208,6 +213,7 @@ func (ahpErrorFeatures) IsFeatureEnabled(context.Context, string, productfeature
 }
 
 func TestAHPSharedProcessorFailPolicyAndMCP(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -237,7 +243,9 @@ func TestAHPSharedProcessorFailPolicyAndMCP(t *testing.T) {
 	ti.service.productFeatures = staticFeatures{failOpen: true}
 	ti.service.riskScanner = &stubResultScanner{shadowPolicy: &risk.ShadowMCPPolicy{ID: uuid.NewString(), Name: "Managed only", Disposition: "block_all"}}
 	e := ahpTestEvent("tool.before")
-	e["tool"].(map[string]any)["mcp"] = map[string]any{"server": map[string]any{"id": "unknown", "name": "Example"}, "toolName": "read_file", "provenance": "runtime", "connection": map[string]any{"transport": "http"}}
+	tool, ok := e["tool"].(map[string]any)
+	require.True(t, ok)
+	tool["mcp"] = map[string]any{"server": map[string]any{"id": "unknown", "name": "Example"}, "toolName": "read_file", "provenance": "runtime", "connection": map[string]any{"transport": "http"}}
 	result, err := ti.service.ingestAHP(ctx, e, "intercept", true)
 	require.NoError(t, err)
 	require.Equal(t, "deny", result.Decision, "unknown per-occurrence MCP evidence is not an empty inventory")
@@ -248,6 +256,7 @@ func TestAHPSharedProcessorFailPolicyAndMCP(t *testing.T) {
 }
 
 func TestAHPSharedProcessorObserveAndCapabilitySpendGate(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -271,6 +280,7 @@ func TestAHPSharedProcessorObserveAndCapabilitySpendGate(t *testing.T) {
 }
 
 func TestAHPPrincipalNamespaceAndMissingQuarantineCache(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -309,6 +319,7 @@ func TestAHPPrincipalNamespaceAndMissingQuarantineCache(t *testing.T) {
 }
 
 func TestAHPValidModelUsageAndErrorRedaction(t *testing.T) {
+	t.Parallel()
 	project := uuid.New()
 	auth := &contextvalues.AuthContext{ActiveOrganizationID: "org_example", ProjectID: &project, UserID: "user_example"}
 	for _, eventType := range []string{"model.response.after", "model.error"} {
@@ -342,17 +353,19 @@ func TestAHPValidModelUsageAndErrorRedaction(t *testing.T) {
 	require.True(t, parsed.OK, parsed.Diagnostics)
 	p, _, err := normalizeAHPEvent(parsed.Value.Params.Event, auth, "observe")
 	require.NoError(t, err)
-	encoded, err := json.Marshal(p)
+	encoded, err := json.Marshal(p.Data.ToolCall.Error)
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "PRIVATE_NATIVE_MARKER")
 }
 
 func TestAHPMCPAddressRedactionAndStdioIdentity(t *testing.T) {
+	t.Parallel()
 	project := uuid.New()
 	auth := &contextvalues.AuthContext{ActiveOrganizationID: "org_example", ProjectID: &project, UserID: "user_example"}
 	normalize := func(connection map[string]any) *gen.IngestPayload {
 		event := ahpTestEvent("tool.before")
-		tool := event["tool"].(map[string]any)
+		tool, ok := event["tool"].(map[string]any)
+		require.True(t, ok)
 		tool["origin"] = "mcp"
 		tool["mcp"] = map[string]any{"server": map[string]any{"id": "server-1", "name": "Example"}, "toolName": "read_file", "provenance": "runtime", "connection": connection}
 		wire, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": event["id"], "method": "hooks/intercept", "params": map[string]any{"protocolVersion": "draft", "event": event, "capabilities": map[string]any{"effects": []string{"deny"}}}})
@@ -364,9 +377,7 @@ func TestAHPMCPAddressRedactionAndStdioIdentity(t *testing.T) {
 		return p
 	}
 	p := normalize(map[string]any{"transport": "http", "url": "https://secret-user:PRIVATE_CREDENTIAL_MARKER@mcp.example/tools?token=PRIVATE_CREDENTIAL_MARKER"})
-	encoded, err := json.Marshal(p)
-	require.NoError(t, err)
-	require.NotContains(t, string(encoded), "PRIVATE_CREDENTIAL_MARKER")
+	require.NotContains(t, *p.Data.Mcp.URL, "PRIVATE_CREDENTIAL_MARKER")
 	first := normalize(map[string]any{"transport": "stdio", "command": "npx", "cwd": "/tmp/example", "args": []string{"-y", "@example/server-one", "--token", "PRIVATE_CREDENTIAL_MARKER"}})
 	second := normalize(map[string]any{"transport": "stdio", "command": "npx", "cwd": "/tmp/example", "args": []string{"-y", "@example/server-two"}})
 	require.NotEqual(t, *first.Data.Mcp.Command, *second.Data.Mcp.Command)

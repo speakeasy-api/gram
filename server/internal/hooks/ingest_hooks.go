@@ -73,7 +73,7 @@ type AuthenticatedIngestResult struct {
 
 func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 	return AuthenticatedIngestOptions{
-		AllowWarnAcknowledgement:     true,
+		ObserveOnly: false, EvidenceUnavailable: false, CapabilitySpendGate: false, AHPPolicy: false, AllowWarnAcknowledgement: true,
 		AllowSessionIdentityFallback: true,
 		SourceAttributes:             nil,
 		OutputToolCalls:              nil,
@@ -878,8 +878,11 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 	if authenticatedIngestOptions(ctx).AHPPolicy && s.riskScanner != nil {
 		var err error
 		policy, err = s.riskScanner.LookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, actor.UserID)
-		if err != nil && !s.ahpFailOpen(ctx) {
-			return "MCP policy evaluation unavailable", "MCP policy evaluation unavailable"
+		if err != nil {
+			markAHPFailure(ctx, "mcp_policy_evaluation_unavailable")
+			if !s.ahpFailOpen(ctx) {
+				return "MCP policy evaluation unavailable", "MCP policy evaluation unavailable"
+			}
 		}
 	} else {
 		policy = s.lookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID)
@@ -1436,7 +1439,7 @@ func mergeSourceAttributes(base, source map[attr.Key]any) {
 func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, hookEventName string, hookSource string) map[attr.Key]any {
 	attrs := map[attr.Key]any{
 		attr.Key("gram.hook.schema"):          hookIngestSchemaV1,
-		attr.Key("gram.hook.canonical_event"): payload.Event.Type,
+		attr.Key("gram.hook.canonical_event"): strings.TrimSpace(payload.Event.Type),
 		attr.EventSourceKey:                   string(telemetry.EventSourceHook),
 		attr.HookEventKey:                     hookEventName,
 		attr.HookSourceKey:                    hookSource,

@@ -395,7 +395,7 @@ func (s *Service) ahpScanResult(ctx context.Context, result *risk.ScanResult, er
 		if s.ahpFailOpen(ctx) {
 			return nil
 		}
-		return &risk.ScanResult{Action: "block", PolicyName: "evaluation unavailable or acknowledgement unsupported"}
+		return &risk.ScanResult{Action: "block", PolicyName: "evaluation unavailable or acknowledgement unsupported", PolicyID: "", Source: "", MessageType: "", RuleID: "", Description: "", UserMessage: nil, MatchedValue: "", Entity: "", CallFingerprint: "", DeadLetterReason: ""}
 	}
 	return result
 }

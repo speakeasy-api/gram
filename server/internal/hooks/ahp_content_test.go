@@ -44,6 +44,7 @@ func (s *ahpContentScanner) ScanForEnforcement(_ context.Context, r risk.Realtim
 }
 
 func TestAHPRealSDKUploadsInterceptAndObserveContent(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -81,9 +82,9 @@ func TestAHPRealSDKUploadsInterceptAndObserveContent(t *testing.T) {
 	require.NoError(t, err)
 	reg := ahp.ParseRegistration(b)
 	require.True(t, reg.OK, reg.Diagnostics)
-	cap, err := ahpCapabilities()
+	capabilities, err := ahpCapabilities()
 	require.NoError(t, err)
-	b, err = json.Marshal(cap.Manifest)
+	b, err = json.Marshal(capabilities.Manifest)
 	require.NoError(t, err)
 	var manifest ahp.StaticCapabilityManifest
 	require.NoError(t, json.Unmarshal(b, &manifest))
@@ -123,6 +124,7 @@ func TestAHPRealSDKUploadsInterceptAndObserveContent(t *testing.T) {
 }
 
 func TestAHPContentFramingAndScope(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -178,6 +180,7 @@ func TestAHPContentFramingAndScope(t *testing.T) {
 }
 
 func TestAHPContentOccurrenceBudgetAndOuterDescriptor(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	raw := bytes.Repeat([]byte("a"), ahpMaxContentBytes)
 	sum := fmt.Sprintf("%x", sha256.Sum256(raw))
@@ -202,10 +205,10 @@ func TestAHPContentOccurrenceBudgetAndOuterDescriptor(t *testing.T) {
 	item["sha256"] = sum
 	items := []any{}
 	for i := range 5 {
-		copy := map[string]any{}
-		maps.Copy(copy, item)
-		copy["id"] = fmt.Sprint(i)
-		items = append(items, copy)
+		itemCopy := map[string]any{}
+		maps.Copy(itemCopy, item)
+		itemCopy["id"] = fmt.Sprint(i)
+		items = append(items, itemCopy)
 	}
 	event["items"] = items
 	r, gap = ti.service.resolveAHPContent(ctx, event)
@@ -214,9 +217,12 @@ func TestAHPContentOccurrenceBudgetAndOuterDescriptor(t *testing.T) {
 }
 
 func TestAHPContentIgnoresOpaqueSelections(t *testing.T) {
+	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	event := ahpTestEvent("tool.before")
-	event["tool"].(map[string]any)["input"] = map[string]any{"selection": "all", "nested": map[string]any{"id": "not-an-item", "selection": "body", "mediaType": "text/plain", "body": map[string]any{"ref": "https://never-fetch.example/private", "size": 1, "sha256": strings.Repeat("0", 64)}}}
+	tool, ok := event["tool"].(map[string]any)
+	require.True(t, ok)
+	tool["input"] = map[string]any{"selection": "all", "nested": map[string]any{"id": "not-an-item", "selection": "body", "mediaType": "text/plain", "body": map[string]any{"ref": "https://never-fetch.example/private", "size": 1, "sha256": strings.Repeat("0", 64)}}}
 	wire, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": event["id"], "method": "hooks/intercept", "params": map[string]any{"protocolVersion": "draft", "event": event, "capabilities": map[string]any{"effects": []string{"deny"}}}})
 	require.NoError(t, err)
 	parsed := ahp.ParseInterceptRequest(wire)

@@ -2608,7 +2608,7 @@ FROM (
       (20, 'tool.completed', 'PostToolUse', 'read_file', 'gram-demo-workshop-read'),
       (30, 'tool.failed', 'PostToolUseFailure', 'run_tests', 'gram-demo-workshop-test'),
       (60, 'assistant.responded', 'AfterAgentResponse', '', ''),
-      (61, 'usage.reported', 'model.response.after', '', '')
+      (61, 'usage.reported', 'usage.reported', '', '')
     ]) AS e
 );
 

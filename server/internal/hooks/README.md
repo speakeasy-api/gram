@@ -8,7 +8,7 @@ The hooks service supports three hook entry points:
 
 ## Unified Ingest
 
-`/rpc/hooks.ingest` is the stable backend contract for normalized hooks. Senders use `Gram-Key` and `Gram-Project` with the `hooks` key scope. Keyless requests are acknowledged without processing; invalid presented credentials are rejected. Actor attribution follows the shared hook processor, including its existing rules for source-reported developer identity.
+`/rpc/hooks.ingest` is the stable backend contract for normalized hooks. Senders use `Gram-Key` and `Gram-Project` with the `hooks` key scope. Keyless requests are acknowledged without processing; invalid presented credentials are rejected. Actor attribution follows the shared hook processor's existing source-reported developer-email rules; that attribution is not proof of authenticated user identity. The hooks key authenticates tenant/project access, not the reported developer. AHP does not populate these source-reported developer fields: its `source` remains correlation metadata, and authenticated principal scoping is separate.
 
 The payload is feature-first:
 

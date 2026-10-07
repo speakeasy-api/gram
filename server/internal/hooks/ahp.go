@@ -39,7 +39,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 		Intercept: func(ctx context.Context, req ahp.InterceptRequest) (ahp.InterceptResponseResult, error) {
 			canDeny := ahpSupportsDeny(req.Params.Capabilities)
 			result, err := s.ingestAHP(ctx, req.Params.Event, "intercept", canDeny)
-			response := ahp.InterceptResponseResult{ProtocolVersion: ptrAHP(ahp.ProtocolVersion("draft")), Effects: []*ahp.Effect{}}
+			response := ahp.InterceptResponseResult{ProtocolVersion: ptrAHP(ahp.ProtocolVersion("draft")), Effects: []*ahp.Effect{}, Extensions: ahp.Optional[*ahp.Extensions]{Value: nil, Present: false}, AdditionalProperties: nil}
 			reason := ""
 			if err != nil {
 				if !s.ahpFailOpen(ctx) && canDeny {
@@ -52,7 +52,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				var effect ahp.Effect
 				b, _ := json.Marshal(map[string]any{"type": "deny", "reason": reason})
 				if err := json.Unmarshal(b, &effect); err != nil {
-					return response, err
+					return response, fmt.Errorf("decode AHP deny effect: %w", err)
 				}
 				response.Effects = append(response.Effects, &effect)
 			}
@@ -67,7 +67,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 		},
 	}, ahpserver.Options{MaxRequestBytes: 1 << 20, MaxResponseBytes: 64 << 10})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create AHP handler: %w", err)
 	}
 	return s.ahpAuthenticate(h), nil
 }
@@ -152,7 +152,7 @@ func (s *Service) ingestAHP(ctx context.Context, event any, mode string, canDeny
 		ObserveOnly:         mode == "observe" || !canDeny,
 		AHPPolicy:           true, CapabilitySpendGate: canDeny,
 		AllowWarnAcknowledgement: false, AllowSessionIdentityFallback: false,
-		SourceAttributes: attrs,
+		SourceAttributes: attrs, OutputToolCalls: nil, OriginatingClient: "",
 	})
 }
 
@@ -180,7 +180,7 @@ func normalizeAHPEvent(event any, authCtx *contextvalues.AuthContext, mode strin
 func normalizeAHPEventWithContent(event any, authCtx *contextvalues.AuthContext, mode string, resolved map[string]string, principal string) (*gen.IngestPayload, map[attr.Key]any, error) {
 	b, err := json.Marshal(event)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("encode AHP event: %w", err)
 	}
 	var e struct {
 		ID      string `json:"id"`
@@ -257,7 +257,7 @@ func normalizeAHPEventWithContent(event any, authCtx *contextvalues.AuthContext,
 		} `json:"usage"`
 	}
 	if err = json.Unmarshal(b, &e); err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("decode AHP event: %w", err)
 	}
 	if authCtx.ProjectID == nil || *authCtx.ProjectID == uuid.Nil {
 		return nil, nil, fmt.Errorf("AHP project required")
@@ -270,7 +270,7 @@ func normalizeAHPEventWithContent(event any, authCtx *contextvalues.AuthContext,
 		session = ""
 	}
 	id := ahpIdentity("ahp-event", authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), principal, e.Source, e.ID)
-	p := &gen.IngestPayload{SchemaVersion: hookIngestSchemaV1, IdempotencyKey: &id, Source: &gen.HookIngestSource{Adapter: source, RawEventName: &e.Type}, Session: &gen.HookIngestSession{ID: &session, Cwd: e.Session.Cwd}, Event: &gen.HookIngestEvent{Type: "ahp." + e.Type, OccurredAt: &e.Time}, Data: &gen.HookIngestData{}}
+	p := &gen.IngestPayload{ApikeyToken: nil, ProjectSlugInput: nil, Replayed: nil, Raw: nil, SchemaVersion: hookIngestSchemaV1, IdempotencyKey: &id, Source: &gen.HookIngestSource{Adapter: source, RawEventName: &e.Type, AdapterVersion: nil, Hostname: nil, UserEmail: nil}, Session: &gen.HookIngestSession{ID: &session, Cwd: e.Session.Cwd, TurnID: nil, Model: nil}, Event: &gen.HookIngestEvent{Type: "ahp." + e.Type, OccurredAt: &e.Time}, Data: &gen.HookIngestData{Prompt: nil, ToolCall: nil, Mcp: nil, McpInventory: nil, McpInventoryCollected: nil, Usage: nil, Message: nil, Skill: nil, Notification: nil, McpAttribution: nil, PromptAttachments: nil}}
 	if session == "" {
 		p.Session = nil
 	}
@@ -323,14 +323,14 @@ func normalizeAHPEventWithContent(event any, authCtx *contextvalues.AuthContext,
 	case "user.message.inbound":
 		p.Event.Type = "ahp.user.message.inbound"
 		if text := ahpText(e.Message.Items, resolved); text != "" || ahpHasResolvedText(e.Message.Items, resolved) {
-			p.Data.Message = &gen.HookMessageData{Text: &text, Role: new("external")}
+			p.Data.Message = &gen.HookMessageData{Text: &text, Role: new("external"), DurationMs: nil}
 		} else {
 			attrs[attr.Key("gram.hook.evidence_gap")] = "external_message_content_unavailable"
 		}
 	case "user.message.outbound":
 		p.Event.Type = "assistant.responded"
 		if text := ahpText(e.Message.Payload, resolved); text != "" || ahpHasResolvedText(e.Message.Payload, resolved) {
-			p.Data.Message = &gen.HookMessageData{Text: &text}
+			p.Data.Message = &gen.HookMessageData{Text: &text, Role: nil, DurationMs: nil}
 		} else {
 			attrs[attr.Key("gram.hook.evidence_gap")] = "message_content_unavailable"
 		}
@@ -367,7 +367,7 @@ func normalizeAHPEventWithContent(event any, authCtx *contextvalues.AuthContext,
 		if e.Call.ID != "" {
 			callID = ahpIdentity("ahp-call", authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), principal, session, e.Source, e.Call.ID)
 		}
-		p.Data.ToolCall = &gen.HookToolCallData{ID: &callID, Name: &e.Tool.Name, Input: e.Tool.Input, Error: sanitizeAHPError(e.Error), DurationMs: e.Duration, Status: new(e.Outcome)}
+		p.Data.ToolCall = &gen.HookToolCallData{ID: &callID, Name: &e.Tool.Name, Input: e.Tool.Input, Error: sanitizeAHPError(e.Error), DurationMs: e.Duration, Status: new(e.Outcome), Output: nil, IsInterrupt: nil, PermissionType: nil}
 		if e.Type == "tool.after" && e.Execution.Status == "executed" && e.Outcome != "denied" {
 			if text := ahpText(e.Items, resolved); text != "" || ahpHasResolvedText(e.Items, resolved) {
 				p.Data.ToolCall.Output = text
@@ -381,7 +381,7 @@ func normalizeAHPEventWithContent(event any, authCtx *contextvalues.AuthContext,
 			p.Data.ToolCall.Error = nil
 		}
 		if m := e.Tool.MCP; m != nil {
-			p.Data.Mcp = &gen.HookMCPData{ServerIdentity: new(m.Server.ID), ServerName: new(m.Server.Name)}
+			p.Data.Mcp = &gen.HookMCPData{URL: nil, Command: nil, ResultJSON: nil, ServerIdentity: new(m.Server.ID), ServerName: new(m.Server.Name)}
 			if m.Connection.URL != "" {
 				if safe, ok := mcpidentity.RedactServerURL(m.Connection.URL); ok {
 					p.Data.Mcp.URL = &safe
@@ -404,14 +404,14 @@ func normalizeAHPEventWithContent(event any, authCtx *contextvalues.AuthContext,
 	// Attempt usage belongs only to model response/error. Outbound user messages
 	// contain presentation content, not a second copy of token usage. Turn totals
 	// are not emitted as usage (they would double-count model attempt deltas).
-	if e.Usage != nil && (e.Type == "model.response.after" || e.Type == "model.error") {
+	if e.Usage != nil && e.Usage.Scope == "attempt" && e.Usage.Kind == "amount" && (e.Type == "model.response.after" || e.Type == "model.error") {
 		attrs[attr.Key("gram.hook.usage_authority")] = "model_attempt"
 		u := e.Usage
 		attrs[attr.Key("gram.hook.usage_scope")] = u.Scope
 		attrs[attr.Key("gram.hook.usage_completeness")] = u.Completeness
 		attrs[attr.Key("gram.hook.usage_provenance")] = u.Provenance
 		attrs[attr.Key("gram.hook.usage_kind")] = u.Kind
-		p.Data.Usage = &gen.HookUsageData{InputTokens: u.Input, OutputTokens: u.Output, CacheReadTokens: u.CacheRead, CacheWriteTokens: u.CacheWrite}
+		p.Data.Usage = &gen.HookUsageData{Cost: nil, LoopCount: nil, Status: nil, InputTokens: u.Input, OutputTokens: u.Output, CacheReadTokens: u.CacheRead, CacheWriteTokens: u.CacheWrite}
 		if u.Cost != nil {
 			attrs[attr.Key("gram.hook.cost_currency")] = u.Cost.Currency
 			attrs[attr.Key("gram.hook.cost_basis")] = u.Cost.Basis
@@ -459,7 +459,10 @@ func ahpCapabilities() (ahp.CapabilitiesResponseResult, error) {
 	if err == nil {
 		err = json.Unmarshal(b, &result)
 	}
-	return result, err
+	if err != nil {
+		return result, fmt.Errorf("encode AHP capabilities: %w", err)
+	}
+	return result, nil
 }
 
 //go:fix inline

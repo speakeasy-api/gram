@@ -2669,7 +2669,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- No provider adapter, policy interception, or historical backfill is needed.
   chat_id := demo.det_uuid('gram-demo-workshop-chat');
   INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
-  VALUES (chat_id, proj_a, demo_org, demo_user_ids[1], demo_user_emails[1], 'Workshop agent release checklist',
+  VALUES (chat_id, proj_a, demo_org, demo_user_ids[3], demo_user_emails[3], 'Workshop agent release checklist',
           now() - interval '15 minutes', now() - interval '14 minutes');
   INSERT INTO chat_messages (id, chat_id, project_id, role, content, content_raw, tool_calls,
                              tool_call_id, source, model, created_at, risk_analyzed_at)

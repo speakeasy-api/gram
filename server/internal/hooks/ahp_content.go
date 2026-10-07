@@ -47,11 +47,11 @@ func ahpContentScope(ctx context.Context) (string, error) {
 func (s *Service) ahpUploadContent(w http.ResponseWriter, r *http.Request) {
 	scope, err := ahpContentScope(r.Context())
 	if err != nil {
-		http.Error(w, "Unauthorized", 401)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 	if s.cache == nil {
-		http.Error(w, "Content receiver unavailable", 503)
+		http.Error(w, "Content receiver unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	upload, err := ahpserver.ParseUpload(r, ahpMaxContentBytes)
@@ -66,37 +66,43 @@ func (s *Service) ahpUploadContent(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = upload.Close() }()
 	bytes, err := io.ReadAll(upload)
 	if err != nil || !upload.Verified() || !utf8.Valid(bytes) {
-		http.Error(w, "Invalid content upload", 400)
+		http.Error(w, "Invalid content upload", http.StatusBadRequest)
 		return
 	}
 	// No overwrites: each verified publication receives a random opaque handle.
 	ref, err := upload.Reference("ahp-content:" + uuid.NewString())
 	if err != nil {
-		http.Error(w, "Invalid content upload", 400)
+		http.Error(w, "Invalid content upload", http.StatusBadRequest)
 		return
 	}
 	admitted := false
+	admissionKey := ""
 	random := uuid.New()
 	start := (int(random[0])<<8 | int(random[1])) % ahpContentSlots
 	stride := (int(random[2]) << 1) | 1
 	for attempt := range 64 {
 		slot := (start + attempt*stride) % ahpContentSlots
-		added, err := s.cache.Add(r.Context(), fmt.Sprintf("ahp:content-slot:v1:%s:%d", scope, slot), ahpContentTTL)
+		key := fmt.Sprintf("ahp:content-slot:v1:%s:%d", scope, slot)
+		added, err := s.cache.Add(r.Context(), key, ahpContentTTL)
 		if err != nil {
-			http.Error(w, "Content receiver unavailable", 503)
+			http.Error(w, "Content receiver unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		if added {
 			admitted = true
+			admissionKey = key
 			break
 		}
 	}
 	if !admitted {
-		http.Error(w, "Content upload limit reached", 429)
+		http.Error(w, "Content upload limit reached", http.StatusTooManyRequests)
 		return
 	}
 	if err := s.cache.Set(r.Context(), "ahp:content:v1:"+scope+":"+ref.Ref, ahpCachedContent{Reference: ref, Bytes: bytes}, ahpContentTTL); err != nil {
-		http.Error(w, "Content receiver unavailable", 503)
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), time.Second)
+		defer cancel()
+		_ = s.cache.Delete(cleanupCtx, admissionKey)
+		http.Error(w, "Content receiver unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	_ = ahpserver.WriteUploadResponse(w, ref)
@@ -130,7 +136,7 @@ func (s *Service) resolveAHPContent(ctx context.Context, event any) (map[string]
 				}
 				media, _ := v["mediaType"].(string)
 				kind, params, parseErr := mime.ParseMediaType(media)
-				if parseErr != nil || (params["charset"] != "" && !strings.EqualFold(params["charset"], "utf-8")) || !(strings.HasPrefix(kind, "text/") || kind == "application/json") {
+				if parseErr != nil || (params["charset"] != "" && !strings.EqualFold(params["charset"], "utf-8")) || (!strings.HasPrefix(kind, "text/") && kind != "application/json") {
 					gaps = true
 					return
 				}
