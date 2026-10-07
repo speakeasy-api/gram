@@ -381,6 +381,10 @@ func TestListChats_OneRowPerChat_ReportsOnlyThisProjectsAssistant(t *testing.T) 
 	require.True(t, ok)
 	require.Nil(t, crossAssistant.AssistantID, "a thread here pointing at another project's assistant surfaces neither its id nor its name")
 	require.Nil(t, crossAssistant.AssistantName)
+	loadedCross, err := ti.service.LoadChat(ctx, &gen.LoadChatPayload{ID: crossAssistantChat.String()})
+	require.NoError(t, err)
+	require.Nil(t, loadedCross.AssistantID, "loading the chat reports the same attribution as listing it")
+	require.Nil(t, loadedCross.AssistantName)
 
 	// Narrowing to the foreign assistant admits only the chat whose thread is
 	// recorded here (the admission filter is project-scoped), and even that row

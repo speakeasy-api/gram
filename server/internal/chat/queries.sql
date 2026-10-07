@@ -1098,14 +1098,14 @@ ORDER BY source;
 -- '' for account_type/account_email when the chat has no linked account or it
 -- is unclassified.
 SELECT c.*, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
-  at.assistant_id, a.name AS assistant_name, b.original_agent_id AS assistant_agent_id,
+  a.id AS assistant_id, a.name AS assistant_name, b.original_agent_id AS assistant_agent_id,
   coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links l
     WHERE l.project_id = c.project_id AND l.child_chat_id = c.id AND l.kind = 'subagent'
       AND l.source_surface = 'claude-tag') THEN 'claude-tag' END, '')::text AS captured_surface
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
-LEFT JOIN assistant_threads at ON at.chat_id = c.id AND at.deleted IS FALSE
-LEFT JOIN assistants a ON a.id = at.assistant_id AND a.deleted IS FALSE
+LEFT JOIN assistant_threads at ON at.chat_id = c.id AND at.project_id = c.project_id AND at.deleted IS FALSE
+LEFT JOIN assistants a ON a.id = at.assistant_id AND a.project_id = c.project_id AND a.deleted IS FALSE
 LEFT JOIN assistant_agent_bindings b ON b.original_assistant_id = a.id AND b.project_id = c.project_id AND b.deleted IS FALSE
 WHERE c.id = @id AND c.project_id = @project_id AND c.deleted IS FALSE;
 
