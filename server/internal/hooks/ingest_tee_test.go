@@ -347,6 +347,33 @@ func TestIngest_TeeFailureKeepsTheVerdictAndIsCounted(t *testing.T) {
 	require.Zero(t, teeCounterValue(t, reader, meterHooksEventFeedPublish, attr.Outcome(eventFeedOutcomeSuccess)))
 }
 
+func TestIngest_TeeSkipsOnceShutdownDrainsAndCountsIt(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, _, published, reader := newTeeTestService(t)
+	require.NoError(t, ti.service.Shutdown(ctx))
+
+	result, err := ti.service.Ingest(ctx, teeToolPayload("tool.completed", "codex-drain-session", "call-drain-1", "idem-drain-1"))
+	require.NoError(t, err)
+	require.Equal(t, "allow", result.Decision, "the verdict never depends on the tee")
+
+	require.Empty(t, *published, "a tee that would start after Shutdown began draining does not start")
+	require.Equal(t, int64(1), teeCounterValue(t, reader, meterHooksEventFeedPublish, attr.HookSource("codex"), attr.Outcome(eventFeedOutcomeSkipped)))
+}
+
+func TestIngest_TeeWithoutAPublisherIsCountedAsSkipped(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, _, published, reader := newTeeTestService(t)
+	ti.service.otelLogPublisher = nil
+
+	_, err := ti.service.Ingest(ctx, teeToolPayload("tool.completed", "codex-nopub-session", "call-nopub-1", "idem-nopub-1"))
+	require.NoError(t, err)
+
+	require.Empty(t, *published)
+	require.Equal(t, int64(1), teeCounterValue(t, reader, meterHooksEventFeedPublish, attr.HookSource("codex"), attr.Outcome(eventFeedOutcomeSkipped)), "rows absent from agent_events are visible on the metric")
+}
+
 func TestIngest_TeeAppliesTheOrgGates(t *testing.T) {
 	t.Parallel()
 
