@@ -57,6 +57,33 @@ func (q *Queries) StatHTTPSecuritySchemes(ctx context.Context) ([]StatHTTPSecuri
 	return items, nil
 }
 
+const statOrganizationMembershipsCount = `-- name: StatOrganizationMembershipsCount :one
+SELECT COUNT(*) as count
+FROM organization_user_relationships
+WHERE deleted IS FALSE
+`
+
+func (q *Queries) StatOrganizationMembershipsCount(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, statOrganizationMembershipsCount)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const statOrganizationMembershipsMissingWorkosMembershipCount = `-- name: StatOrganizationMembershipsMissingWorkosMembershipCount :one
+SELECT COUNT(*) as count
+FROM organization_user_relationships
+WHERE deleted IS FALSE
+  AND workos_membership_id IS NULL
+`
+
+func (q *Queries) StatOrganizationMembershipsMissingWorkosMembershipCount(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, statOrganizationMembershipsMissingWorkosMembershipCount)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const statOrganizationsCount = `-- name: StatOrganizationsCount :one
 SELECT COUNT(*) as count
 FROM organization_metadata
