@@ -1416,7 +1416,10 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	mcpInputs := &mcpInputs{
-		projectID:                toolset.ProjectID,
+		projectID: toolset.ProjectID,
+		// Only a gateway dispatching to a member overrides this; here the
+		// handshake and the call are the same project.
+		clientInfoProjectID:      uuid.Nil,
 		organizationID:           toolset.OrganizationID,
 		toolset:                  toolset.Slug,
 		environment:              selectedEnvironment,

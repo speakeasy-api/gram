@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn(),
   refetchAgents: vi.fn(),
+  listAgents: (): Promise<unknown[]> => Promise.resolve(mocks.agents),
   onError: undefined as undefined | ((error: Error) => void),
   onSuccess: undefined as undefined | ((result: Assistant) => void),
 }));
@@ -76,7 +77,9 @@ vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ agents: { list: mocks.refetchAgents } }),
 }));
 vi.mock("@/components/sessions/collectPageItems", () => ({
-  collectPageItems: () => Promise.resolve(mocks.agents),
+  // Through a hook so a test can hold the list unresolved and watch what the
+  // form does while it waits.
+  collectPageItems: () => mocks.listAgents(),
 }));
 vi.mock("@gram/client/react-query/agent.js", () => ({
   useAgent: () => ({ data: mocks.agentData }),
@@ -118,6 +121,7 @@ beforeEach(() => {
   mocks.agents = [];
   mocks.flagStatus = "enabled";
   mocks.agentData = { name: "Example agent" };
+  mocks.listAgents = () => Promise.resolve(mocks.agents);
 });
 describe("Assistant identity management", () => {
   it("warns about a matching name without overriding server uniqueness checks", async () => {
@@ -210,6 +214,12 @@ describe("Assistant identity management", () => {
   });
 
   it("explains who an assistant without an agent identity acts as", async () => {
+    // Held open so the pending state below is a real one, not a race.
+    let release: (agents: unknown[]) => void = () => undefined;
+    mocks.listAgents = () =>
+      new Promise<unknown[]>((resolve) => {
+        release = resolve;
+      });
     setup();
     expect(
       screen.getByText(
@@ -227,6 +237,15 @@ describe("Assistant identity management", () => {
     expect(mocks.mutate).not.toHaveBeenCalled();
     expect(screen.queryByText(assistant.id)).toBeNull();
     expect(screen.queryByText(assistant.projectId)).toBeNull();
+    // Still pending: submitting now would skip the name check entirely.
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Confirm setup",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    release([]);
     // Confirm stays disabled until the fetched list says the name is free.
     await waitFor(() =>
       expect(
