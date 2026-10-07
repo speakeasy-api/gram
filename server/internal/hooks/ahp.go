@@ -148,7 +148,8 @@ func (s *Service) ingestAHP(ctx context.Context, event any, mode string, canDeny
 		attrs[attr.Key("gram.hook.enforcement_gap")] = "deny_not_supported"
 	}
 	return s.IngestAuthenticatedWithOptions(ctx, authCtx, payload, AuthenticatedIngestOptions{
-		EvidenceUnavailable: gaps,
+		// Tool enforcement uses its explicit input, not optional content views.
+		EvidenceUnavailable: gaps && payload.Event.Type == "prompt.submitted",
 		ObserveOnly:         mode == "observe" || !canDeny,
 		AHPPolicy:           true, CapabilitySpendGate: canDeny,
 		AllowWarnAcknowledgement: false, AllowSessionIdentityFallback: false,
@@ -452,7 +453,7 @@ func ahpCapabilities() (ahp.CapabilitiesResponseResult, error) {
 		events = append(events, entry)
 	}
 	b, err := json.Marshal(map[string]any{"protocolVersion": "draft", "manifest": map[string]any{
-		"events": events, "gaps": []any{map[string]string{"path": "effects", "reason": "Only deny is supported; no human acknowledgement, modify, inject or flow effects"}, map[string]string{"path": "observe", "reason": "Evidence capture only; realtime enforcement evaluation is not run"}, map[string]string{"path": "events", "reason": "Unmapped events retain metadata only; no native payload or extensions are stored"}, map[string]string{"path": "content", "reason": "Only UTF-8 textual bodies up to 64 KiB are supported; unavailable content follows organization failure policy"}, map[string]string{"path": "content.retention", "reason": "Content is retained for 10 minutes; at most 4096 uploads per authenticated scope per retention window, with bounded admission probes; materialized event content is limited to 256 KiB"}},
+		"events": events, "gaps": []any{map[string]string{"path": "effects", "reason": "Only deny is supported; no human acknowledgement, modify, inject or flow effects"}, map[string]string{"path": "observe", "reason": "Evidence capture only; realtime enforcement evaluation is not run"}, map[string]string{"path": "events", "reason": "Unmapped events retain metadata only; no native payload or extensions are stored"}, map[string]string{"path": "content", "reason": "Only UTF-8 textual bodies up to 64 KiB are supported; unavailable content follows organization failure policy"}, map[string]string{"path": "content.retention", "reason": "Content is retained for 10 minutes; at most 4096 uploads per authenticated scope per retention window, with bounded admission probes; materialized event content is limited to 256 KiB and 128 distinct references, with a one-second cache-read budget"}},
 		"transports": []string{"http"}, "authentication": []string{"bearer"}, "toolPaths": []string{}, "contentCategories": []string{"text"}, "limits": map[string]any{"maxUploadBytes": ahpMaxContentBytes}, "managedPolicy": map[string]any{"scopes": []string{"project"}, "disableable": true}, "correlationIdentityFields": []string{"source", "id", "session.id", "turn.id", "call.id"},
 	}})
 	var result ahp.CapabilitiesResponseResult

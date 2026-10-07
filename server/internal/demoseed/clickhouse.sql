@@ -2587,7 +2587,7 @@ SELECT
     ',"gram.hook.schema":"hook.ingest.v1","gram.hook.transport":"ahp","gram.hook.mode":"observe"',
     ',"gram.hook.canonical_event":"', e.2, '","gram.hook.event":"', e.3, '"',
     ',"gen_ai.conversation.id":"', chat_id, '","session.id":"', chat_id, '"',
-    ',"prompt.id":"gram-demo-workshop-turn-1","gen_ai.request.model":"claude-sonnet-4-6"',
+    ',"prompt.id":"gram-demo-workshop-turn-1","gen_ai.request.model":"claude-sonnet-4-6","gen_ai.response.model":"claude-sonnet-4-6","gram.provider":"anthropic"',
     ',"gram.project.id":"dec0de00-0000-4000-a000-000000000001"',
     ',"user.id":"user_demo_priya","user.email":"priya@demo.getgram.ai"',
     ',"gram.hook.hostname":"gram-demo-workshop-device"',

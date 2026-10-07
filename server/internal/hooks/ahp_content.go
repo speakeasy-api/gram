@@ -24,6 +24,8 @@ const (
 	ahpMaxContentBytes      = 64 << 10
 	ahpMaxEventContentBytes = 256 << 10
 	ahpContentTTL           = 10 * time.Minute
+	ahpMaxContentReferences = 128
+	ahpContentReadTimeout   = time.Second
 	ahpContentSlots         = 4096 // At most 256 MiB per authenticated scope per TTL.
 )
 
@@ -121,11 +123,22 @@ func (s *Service) resolveAHPContent(ctx context.Context, event any) (map[string]
 	}
 	total := 0
 	gaps := false
+	aborted := false
+	seen := map[string]bool{}
+	contents := map[string]ahpCachedContent{}
+	readCtx, cancel := context.WithTimeout(ctx, ahpContentReadTimeout)
+	defer cancel()
 	var walk func(any)
 	walk = func(value any) {
+		if aborted {
+			return
+		}
 		switch v := value.(type) {
 		case []any:
 			for _, child := range v {
+				if aborted {
+					break
+				}
 				walk(child)
 			}
 		case map[string]any:
@@ -159,13 +172,38 @@ func (s *Service) resolveAHPContent(ctx context.Context, event any) (map[string]
 					gaps = true
 					return
 				}
-				var content ahpCachedContent
-				if s.cache.Get(ctx, "ahp:content:v1:"+scope+":"+ref.Ref, &content) != nil {
+				size, sizeErr := ref.Size.Float64()
+				if sizeErr != nil || size < 0 || size > ahpMaxContentBytes {
 					gaps = true
 					return
 				}
+				if float64(total)+size+1 > ahpMaxEventContentBytes {
+					gaps = true
+					aborted = true
+					return
+				}
+				content, found := contents[ref.Ref]
+				if !found {
+					if seen[ref.Ref] {
+						gaps = true
+						return
+					}
+					if len(seen) >= ahpMaxContentReferences {
+						gaps = true
+						aborted = true
+						return
+					}
+					seen[ref.Ref] = true
+					if s.cache.Get(readCtx, "ahp:content:v1:"+scope+":"+ref.Ref, &content) != nil {
+						gaps = true
+						if readCtx.Err() != nil {
+							aborted = true
+						}
+						return
+					}
+					contents[ref.Ref] = content
+				}
 				digest := sha256.Sum256(content.Bytes)
-				size, sizeErr := ref.Size.Float64()
 				cachedSize, cachedSizeErr := content.Reference.Size.Float64()
 				if outerSize, ok := v["size"].(float64); ok && outerSize != size {
 					gaps = true
@@ -181,6 +219,7 @@ func (s *Service) resolveAHPContent(ctx context.Context, event any) (map[string]
 				}
 				total += len(content.Bytes) + 1
 				if total > ahpMaxEventContentBytes {
+					aborted = true
 					gaps = true
 					return
 				}
@@ -213,7 +252,7 @@ func (s *Service) resolveAHPContent(ctx context.Context, event any) (map[string]
 			}
 		}
 	}
-	if total > ahpMaxEventContentBytes {
+	if aborted {
 		return map[string]string{}, true
 	}
 	return resolved, gaps

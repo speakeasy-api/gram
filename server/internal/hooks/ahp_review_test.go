@@ -211,3 +211,104 @@ func TestAHPActualSDKRejectsInvalidUsageAndOutcome(t *testing.T) {
 		require.Equal(t, 1, calls)
 	}
 }
+
+func TestAHPOptionalMetadataDoesNotReplaceToolEvidence(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ti.service.auth = fixedHookAuthorizer{authCtx: auth}
+	ti.service.productFeatures = staticFeatures{failOpen: false}
+	scanner := &ahpContentScanner{}
+	ti.service.riskScanner = scanner
+	handler, err := ti.service.ahpHandler()
+	require.NoError(t, err)
+	metadata := map[string]any{"id": "item-1", "kind": "message", "mediaType": "text/plain", "role": "user", "selection": "metadata"}
+	event := ahpTestEvent("tool.before")
+	event["items"] = []any{metadata}
+	request := func(event map[string]any) ahp.InterceptResponseResult {
+		b, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": event["id"], "method": "hooks/intercept", "params": map[string]any{"protocolVersion": "draft", "event": event, "capabilities": map[string]any{"effects": []string{"deny"}}}})
+		require.NoError(t, err)
+		r := httptest.NewRequest("POST", "/ahp", bytes.NewReader(b))
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Authorization", "Bearer example")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		parsed := ahp.ParseInterceptResponse(w.Body.Bytes())
+		require.True(t, parsed.OK, w.Body.String())
+		return parsed.Value.Result
+	}
+	_, gaps := ti.service.resolveAHPContent(ctx, event)
+	require.True(t, gaps, "the optional metadata gap must remain observable")
+	require.Empty(t, request(event).Effects)
+	require.Equal(t, []string{`{"path":"example.txt"}`}, scanner.texts)
+	scanner.texts = nil
+	prompt := map[string]any{"id": "prompt-1", "source": event["source"], "time": event["time"], "type": "turn.start", "session": event["session"], "turn": map[string]any{"id": "turn-1"}, "trigger": "user", "items": []any{metadata}}
+	require.Len(t, request(prompt).Effects, 1)
+	require.Empty(t, scanner.texts, "missing prompt bytes must not be scanned as complete")
+	data := []byte("partial user prompt")
+	ref := ahp.ContentReference{Ref: "ahp-content:" + uuid.NewString(), Size: json.Number(fmt.Sprint(len(data))), Sha256: fmt.Sprintf("%x", sha256.Sum256(data))}
+	scope, err := ahpContentScope(ctx)
+	require.NoError(t, err)
+	require.NoError(t, ti.service.cache.Set(ctx, "ahp:content:v1:"+scope+":"+ref.Ref, ahpCachedContent{Reference: ref, Bytes: data}, ahpContentTTL))
+	prompt["id"] = "prompt-2"
+	prompt["items"] = []any{map[string]any{"id": "item-2", "kind": "message", "mediaType": "text/plain", "role": "user", "selection": "body", "body": ref}, metadata}
+	require.Len(t, request(prompt).Effects, 1)
+	require.Empty(t, scanner.texts, "partial prompt coverage still follows failure posture")
+	tool, ok := event["tool"].(map[string]any)
+	require.True(t, ok)
+	delete(tool, "input")
+	result, err := ti.service.ingestAHP(ctx, event, "intercept", true)
+	require.NoError(t, err)
+	require.Equal(t, "deny", result.Decision, "trusted seam must not fabricate absent input evidence")
+}
+
+type ahpCountingContentCache struct {
+	cache.Cache
+	reads int
+}
+
+func (c *ahpCountingContentCache) Get(ctx context.Context, key string, value any) error {
+	if strings.HasPrefix(key, "ahp:content:v1:") {
+		c.reads++
+	}
+	if err := c.Cache.Get(ctx, key, value); err != nil {
+		return fmt.Errorf("read test content: %w", err)
+	}
+	return nil
+}
+
+func TestAHPContentReadsAreMemoizedAndBounded(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	counter := &ahpCountingContentCache{Cache: ti.service.cache}
+	ti.service.cache = counter
+	scope, err := ahpContentScope(ctx)
+	require.NoError(t, err)
+	item := func(data []byte, id string) map[string]any {
+		ref := ahp.ContentReference{Ref: "ahp-content:" + uuid.NewString(), Size: json.Number(fmt.Sprint(len(data))), Sha256: fmt.Sprintf("%x", sha256.Sum256(data))}
+		require.NoError(t, counter.Set(ctx, "ahp:content:v1:"+scope+":"+ref.Ref, ahpCachedContent{Reference: ref, Bytes: data}, ahpContentTTL))
+		return map[string]any{"id": id, "kind": "message", "mediaType": "text/plain", "role": "user", "selection": "body", "body": ref}
+	}
+	repeated := item([]byte("example"), "item-1")
+	r, gap := ti.service.resolveAHPContent(ctx, map[string]any{"items": []any{repeated, repeated, repeated}})
+	require.False(t, gap)
+	require.Len(t, r, 1)
+	require.Equal(t, 1, counter.reads)
+	oversized := item(bytes.Repeat([]byte("a"), ahpMaxContentBytes), "large")
+	late := item([]byte("never read after byte cap"), "late")
+	counter.reads = 0
+	r, gap = ti.service.resolveAHPContent(ctx, map[string]any{"items": []any{oversized, oversized, oversized, oversized, oversized, late}})
+	require.True(t, gap)
+	require.Empty(t, r)
+	require.Equal(t, 1, counter.reads, "repeated bytes count against the cap but require only one read; traversal stops at overflow")
+	descriptors := []any{}
+	for i := range ahpMaxContentReferences + 2 {
+		descriptors = append(descriptors, item([]byte("x"), fmt.Sprint(i)))
+	}
+	counter.reads = 0
+	r, gap = ti.service.resolveAHPContent(ctx, map[string]any{"items": descriptors})
+	require.True(t, gap)
+	require.Empty(t, r)
+	require.Equal(t, ahpMaxContentReferences, counter.reads, "no reads after distinct-reference admission limit")
+}

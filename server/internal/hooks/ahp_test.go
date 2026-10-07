@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -148,6 +149,7 @@ func TestAHPHandlerAuthenticationCapabilitiesAndValidation(t *testing.T) {
 			if tc.status == 200 {
 				require.True(t, ahp.ParseCapabilitiesResponse(w.Body.Bytes()).OK, w.Body.String())
 				require.Equal(t, []string{"example", tc.project}, a.keys)
+				require.Equal(t, []string{constants.KeySecurityScheme, constants.ProjectSlugSecuritySchema}, a.schemes)
 			}
 		})
 	}
