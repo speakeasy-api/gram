@@ -179,6 +179,10 @@ type syntheticExpiryEnv struct {
 	// authURL is the upstream authorize redirect BuildAuthorizationUrl minted
 	// for the login, so a test can assert on its query parameters.
 	authURL string
+	// parent and client are what the login was started with, so a test can
+	// restart the same login.
+	parent remotesessions.ParentChallenge
+	client remotesessions.Client
 	// issuerMetadata and issuerMetadataReader are set by withIssuerMetadataRefresh.
 	issuerMetadata       *remotesessions.IssuerMetadataRefresher
 	issuerMetadataReader *sdkmetric.ManualReader
@@ -553,7 +557,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	// BuildAuthorizationUrl mints + stores the RemoteLoginState; the returned
 	// URL carries the opaque state id the callback exchanges against.
 	subject := urn.NewUserSubject("synthetic-subject-" + slugSuffix)
-	authURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+	parent := remotesessions.ParentChallenge{
 		ID:                  uuid.NewString(),
 		ProjectID:           *authCtx.ProjectID,
 		OrganizationID:      authCtx.ActiveOrganizationID,
@@ -562,7 +566,8 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		McpSlug:             "synthetic-mcp-" + slugSuffix,
 		FinalRedirectURI:    "",
 		Resource:            options.resource,
-	}, clients[0])
+	}
+	authURL, err := mgr.BuildAuthorizationUrl(ctx, parent, clients[0])
 	require.NoError(t, err)
 
 	parsed, err := url.Parse(authURL)
@@ -598,6 +603,8 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		subject:        subject,
 		session:        repo.RemoteSession{},
 		authURL:        authURL,
+		parent:         parent,
+		client:         clients[0],
 
 		issuerMetadata:       issuerMetadata,
 		issuerMetadataReader: issuerMetadataReader,

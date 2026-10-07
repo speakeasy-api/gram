@@ -216,6 +216,10 @@ type ChallengeManager struct {
 	refresher *RefreshService
 	serverURL *url.URL
 
+	// pendingLegs remembers each subject's last resource-bearing authorize
+	// leg, so a restart can detect an issuer that never redirected back.
+	pendingLegs cache.TypedCacheObject[pendingResourceLeg]
+
 	// origins pins the redirect_uri and client identity URLs each client was
 	// registered with, independent of serverURL.
 	origins CallbackOrigins
@@ -348,6 +352,11 @@ func NewChallengeManager(
 		tunnels: tunnels,
 		cache: cache.NewTypedObjectCache[RemoteLoginState](
 			logger.With(attr.SlogCacheNamespace("remote_login")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
+		pendingLegs: cache.NewTypedObjectCache[pendingResourceLeg](
+			logger.With(attr.SlogCacheNamespace("remote_login_pending_resource")),
 			cacheImpl,
 			cache.SuffixNone,
 		),
@@ -865,34 +874,48 @@ func (m *ChallengeManager) SetRemoteSessionAutoRefresh(ctx context.Context, subj
 // authorize URL with bound `state` + `code_challenge` query params. The
 // caller is the consent-screen connect action; this is called once per
 // connect click.
+//
+// When the subject's previous resource-bearing leg for the same client,
+// issuer, and resource was never answered, this leg is the resource-less
+// retry retryWithoutResource would have minted had the issuer redirected
+// back with invalid_target; pendingResourceLeg holds the window rules.
 func (m *ChallengeManager) BuildAuthorizationUrl(
 	ctx context.Context,
 	parent ParentChallenge,
 	client Client,
 ) (string, error) {
-	return m.mintAuthorization(ctx, parent, client, false)
+	// Counted at entry, before any validation or the Redis write, so a flow
+	// that dies on an unrelated error here still lands in the census. The
+	// invalid_target retry leg is the same login and is not counted again.
+	m.metrics.Record(ctx, client.IssuerURL, remotesessionmetrics.ClassifyPKCESupport(client.IssuerCodeChallengeMethodsSupported))
+
+	decision := m.decideStrandedLeg(ctx, parent, client)
+	if decision.fallback {
+		unsupported := false
+		client.IssuerResourceIndicatorSupported = &unsupported
+	}
+	authURL, stateID, err := m.mintAuthorization(ctx, parent, client, decision.fallback)
+	if err != nil {
+		return "", err
+	}
+	m.recordLeg(ctx, client, decision, stateID)
+	return authURL, nil
 }
 
-// mintAuthorization is BuildAuthorizationUrl; retry marks the single
-// resource-less leg minted after invalid_target.
+// mintAuthorization mints and stores one authorize leg, returning its URL and
+// state ID; retry marks the single resource-less leg minted after
+// invalid_target or an unanswered resource-bearing leg.
 func (m *ChallengeManager) mintAuthorization(
 	ctx context.Context,
 	parent ParentChallenge,
 	client Client,
 	retry bool,
-) (string, error) {
-	// Counted at entry, before any validation or the Redis write, so a flow
-	// that dies on an unrelated error here still lands in the census. A retry
-	// leg is the same login and is not counted again.
-	if !retry {
-		m.metrics.Record(ctx, client.IssuerURL, remotesessionmetrics.ClassifyPKCESupport(client.IssuerCodeChallengeMethodsSupported))
-	}
-
+) (string, string, error) {
 	if client.AuthorizationEndpoint == "" {
-		return "", fmt.Errorf("remote_session_issuer %s missing authorization_endpoint", client.IssuerSlug)
+		return "", "", fmt.Errorf("remote_session_issuer %s missing authorization_endpoint", client.IssuerSlug)
 	}
 	if client.TokenEndpoint == "" {
-		return "", fmt.Errorf("remote_session_issuer %s missing token_endpoint", client.IssuerSlug)
+		return "", "", fmt.Errorf("remote_session_issuer %s missing token_endpoint", client.IssuerSlug)
 	}
 
 	// A registration the issuer has stopped recognizing would send the user to
@@ -902,15 +925,15 @@ func (m *ChallengeManager) mintAuthorization(
 
 	stateID, err := randomToken(32)
 	if err != nil {
-		return "", fmt.Errorf("generate state: %w", err)
+		return "", "", fmt.Errorf("generate state: %w", err)
 	}
 	verifier, err := randomToken(32)
 	if err != nil {
-		return "", fmt.Errorf("generate code verifier: %w", err)
+		return "", "", fmt.Errorf("generate code verifier: %w", err)
 	}
 	nonce, err := randomToken(16)
 	if err != nil {
-		return "", fmt.Errorf("generate nonce: %w", err)
+		return "", "", fmt.Errorf("generate nonce: %w", err)
 	}
 	codeChallenge := s256Challenge(verifier)
 	origin := m.origins.ForClient(client.CallbackBaseURL)
@@ -933,7 +956,7 @@ func (m *ChallengeManager) mintAuthorization(
 	// it just expires after TTL).
 	u, err := url.Parse(client.AuthorizationEndpoint)
 	if err != nil {
-		return "", fmt.Errorf("parse authorization_endpoint: %w", err)
+		return "", "", fmt.Errorf("parse authorization_endpoint: %w", err)
 	}
 
 	scopes, widened := client.RequestedScopes()
@@ -985,7 +1008,7 @@ func (m *ChallengeManager) mintAuthorization(
 		CreatedAt:             time.Now(),
 	}
 	if err := m.cache.Store(ctx, state); err != nil {
-		return "", fmt.Errorf("store remote login state: %w", err)
+		return "", "", fmt.Errorf("store remote login state: %w", err)
 	}
 
 	q := u.Query()
@@ -1013,7 +1036,7 @@ func (m *ChallengeManager) mintAuthorization(
 		}
 	}
 	u.RawQuery = q.Encode()
-	return u.String(), nil
+	return u.String(), stateID, nil
 }
 
 // HandleRemoteLoginCallback is the GET handler for
@@ -1475,7 +1498,7 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 
 	unsupported := false
 	client.IssuerResourceIndicatorSupported = &unsupported
-	authURL, err := m.mintAuthorization(ctx, state.parent(), client, true)
+	authURL, _, err := m.mintAuthorization(ctx, state.parent(), client, true)
 	if err != nil {
 		return none, oops.E(oops.CodeUnexpected, err, "build authorization url for retry").LogError(ctx, logger)
 	}
