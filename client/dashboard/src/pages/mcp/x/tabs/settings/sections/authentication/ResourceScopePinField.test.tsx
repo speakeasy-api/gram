@@ -281,6 +281,7 @@ describe("ResourceScopePinField", () => {
         scopes={scopes()}
         connectedClientId="client-1"
         issuerScopes={[]}
+        serverName="Linear"
         disabled={false}
       />,
     );
@@ -311,13 +312,14 @@ describe("ResourceScopePinField", () => {
         })}
         connectedClientId="client-1"
         issuerScopes={[]}
+        serverName="Linear"
         disabled={false}
       />,
     );
 
     expect(
       screen.getByText(
-        "The MCP server does not advertise the following scopes: admin. They will still be requested.",
+        "Linear does not advertise the following scopes: admin. They will still be requested.",
       ),
     ).toBeDefined();
   });
@@ -329,6 +331,7 @@ describe("ResourceScopePinField", () => {
         scopes={scopes()}
         connectedClientId="client-1"
         issuerScopes={[]}
+        serverName="Linear"
         disabled={false}
       />,
     );
@@ -343,6 +346,7 @@ describe("ResourceScopePinField", () => {
         scopes={withSource("issuer_catalogue", { pinnedScopes: [] }, [], false)}
         connectedClientId="client-1"
         issuerScopes={[]}
+        serverName="Linear"
         disabled={false}
       />,
     );
@@ -360,6 +364,7 @@ describe("ResourceScopePinField", () => {
         })}
         connectedClientId="client-1"
         issuerScopes={[]}
+        serverName="Linear"
         disabled={false}
       />,
     );
@@ -373,6 +378,7 @@ describe("ResourceScopePinField", () => {
         scopes={scopes({ discoveryEnabled: false, pinnedScopes: [] })}
         connectedClientId="client-1"
         issuerScopes={[]}
+        serverName="Linear"
         disabled={false}
       />,
     );
@@ -395,6 +401,7 @@ describe("ResourceScopePinField", () => {
         scopes={scopes({ discoveryEnabled: false })}
         connectedClientId="client-1"
         issuerScopes={[]}
+        serverName="Linear"
         disabled={false}
       />,
     );
@@ -414,6 +421,7 @@ describe("ResourceScopePinField", () => {
         scopes={scopes()}
         connectedClientId="client-1"
         issuerScopes={[]}
+        serverName="Linear"
         disabled={false}
       />,
     );
@@ -430,6 +438,7 @@ describe("ResourceScopePinField", () => {
         scopes={withSource("cached_resource", { pinnedScopes: [] })}
         connectedClientId="client-1"
         issuerScopes={[]}
+        serverName="Linear"
         disabled={false}
       />,
     );
@@ -445,6 +454,7 @@ describe("ResourceScopePinField", () => {
         scopes={scopes({ sharedServerCount: 2 })}
         connectedClientId="client-1"
         issuerScopes={[]}
+        serverName="Linear"
         disabled={false}
       />,
     );
