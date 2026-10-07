@@ -1,11 +1,13 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Page } from "@/components/page-layout";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Table, type Column, type SortDescriptor } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
 import { formatRelativeTime } from "@/lib/dates";
+import type { BuiltInDashboard } from "@gram/client/models/components/builtindashboard.js";
 import type { Dashboard } from "@gram/client/models/components/dashboard.js";
 import { useState, type JSX } from "react";
 import {
@@ -21,21 +23,49 @@ import { useDashboardMutations } from "./useDashboardMutations";
 const DEFAULT_SORT: SortDescriptor = { id: "updated", direction: "desc" };
 
 /**
- * The project's dashboards, as the Dashboards tab lists them: searchable by
- * name and opened with a click. Anyone can make one; duplicating someone
- * else's makes a copy to change.
+ * One row of the list: a dashboard Speakeasy ships, or one the project
+ * made. The two share the columns; what each cell says depends on which.
+ */
+type Row =
+  | {
+      kind: "built-in";
+      key: string;
+      name: string;
+      description: string | undefined;
+      cards: number;
+      builtIn: BuiltInDashboard;
+    }
+  | {
+      kind: "project";
+      key: string;
+      name: string;
+      description: string | undefined;
+      cards: number;
+      dashboard: Dashboard;
+    };
+
+/**
+ * The project's dashboards, as the Dashboards tab lists them: the ones
+ * Speakeasy ships first, marked as such, then the project's own; searchable
+ * by name and opened with a click. Anyone can make one; duplicating a
+ * Speakeasy-built dashboard or someone else's makes a copy to change.
  */
 export function DashboardList({
   dashboards,
+  builtIn,
   isPending,
   isError,
   onOpen,
+  onOpenBuiltIn,
   onRetry,
 }: {
   dashboards: Dashboard[];
+  /** The dashboards Speakeasy ships, the same in every project. */
+  builtIn: BuiltInDashboard[];
   isPending: boolean;
   isError: boolean;
   onOpen: (dashboard: Dashboard) => void;
+  onOpenBuiltIn: (builtIn: BuiltInDashboard) => void;
   onRetry: () => void;
 }): JSX.Element {
   const creator = useCreatorName();
@@ -48,58 +78,88 @@ export function DashboardList({
   const [renaming, setRenaming] = useState<Dashboard | null>(null);
   const [deleting, setDeleting] = useState<Dashboard | null>(null);
 
-  const actionsFor = (dashboard: Dashboard): Action[] => [
-    {
-      label: "Open",
-      icon: "square-arrow-out-up-right",
-      onClick: () => onOpen(dashboard),
-    },
-    ...(canEdit(dashboard)
-      ? [
-          {
-            label: "Rename",
-            icon: "pencil" as const,
-            onClick: () => setRenaming(dashboard),
-          },
-        ]
-      : []),
-    {
-      label: "Duplicate",
-      icon: "copy",
-      disabled: mutations.pending,
-      onClick: () => mutations.duplicate(dashboard.id, onOpen),
-    },
-    ...(canEdit(dashboard)
-      ? [
-          {
-            label: "Delete",
-            icon: "trash" as const,
-            destructive: true,
-            separatorBefore: true,
-            onClick: () => setDeleting(dashboard),
-          },
-        ]
-      : []),
-  ];
+  const open = (row: Row) => {
+    if (row.kind === "built-in") onOpenBuiltIn(row.builtIn);
+    else onOpen(row.dashboard);
+  };
 
-  const columns: Column<Dashboard>[] = [
+  const actionsFor = (row: Row): Action[] => {
+    if (row.kind === "built-in") {
+      return [
+        {
+          label: "Open",
+          icon: "square-arrow-out-up-right",
+          onClick: () => onOpenBuiltIn(row.builtIn),
+        },
+        {
+          label: "Duplicate",
+          icon: "copy",
+          disabled: mutations.pending,
+          onClick: () => mutations.duplicateBuiltIn(row.builtIn.slug, onOpen),
+        },
+      ];
+    }
+    const { dashboard } = row;
+    return [
+      {
+        label: "Open",
+        icon: "square-arrow-out-up-right",
+        onClick: () => onOpen(dashboard),
+      },
+      ...(canEdit(dashboard)
+        ? [
+            {
+              label: "Rename",
+              icon: "pencil" as const,
+              onClick: () => setRenaming(dashboard),
+            },
+          ]
+        : []),
+      {
+        label: "Duplicate",
+        icon: "copy",
+        disabled: mutations.pending,
+        onClick: () => mutations.duplicate(dashboard.id, onOpen),
+      },
+      ...(canEdit(dashboard)
+        ? [
+            {
+              label: "Delete",
+              icon: "trash" as const,
+              destructive: true,
+              separatorBefore: true,
+              onClick: () => setDeleting(dashboard),
+            },
+          ]
+        : []),
+    ];
+  };
+
+  const columns: Column<Row>[] = [
     {
       key: "name",
       header: "Name",
       width: "3fr",
       sortable: true,
-      sortValue: (dashboard) => dashboard.name,
-      render: (dashboard) => (
+      sortValue: (row) => row.name,
+      render: (row) => (
         <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="truncate font-medium" title={dashboard.name}>
-            {dashboard.name}
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-medium" title={row.name}>
+              {row.name}
+            </span>
+            {row.kind === "built-in" ? (
+              <Badge variant="information" size="sm">
+                Speakeasy-built
+              </Badge>
+            ) : null}
           </span>
-          {dashboard.description ? (
+          {row.description ? (
             <span
               className="text-muted-foreground truncate text-xs"
-              title={dashboard.description}
+              title={row.description}
             >
-              {dashboard.description}
+              {row.description}
             </span>
           ) : null}
         </div>
@@ -109,16 +169,18 @@ export function DashboardList({
       key: "widgets",
       header: "Widgets",
       width: "1fr",
-      render: (dashboard) => (
-        <span className="tabular-nums">{dashboard.widgets.length}</span>
-      ),
+      render: (row) => <span className="tabular-nums">{row.cards}</span>,
     },
     {
       key: "creator",
       header: "Created by",
       width: "1.5fr",
-      render: (dashboard) => (
-        <span className="truncate">{creator(dashboard.createdByUserId)}</span>
+      render: (row) => (
+        <span className="truncate">
+          {row.kind === "built-in"
+            ? "Speakeasy"
+            : creator(row.dashboard.createdByUserId)}
+        </span>
       ),
     },
     {
@@ -127,23 +189,25 @@ export function DashboardList({
       header: "Updated",
       width: "1fr",
       sortable: true,
-      sortValue: (dashboard) => dashboard.updatedAt,
-      render: (dashboard) => (
-        <span className="text-muted-foreground">
-          {formatRelativeTime(dashboard.updatedAt)}
-        </span>
-      ),
+      sortValue: (row) =>
+        row.kind === "built-in" ? "" : row.dashboard.updatedAt,
+      render: (row) =>
+        row.kind === "built-in" ? null : (
+          <span className="text-muted-foreground">
+            {formatRelativeTime(row.dashboard.updatedAt)}
+          </span>
+        ),
     },
     {
       key: "actions",
       header: "",
       width: "64px",
-      render: (dashboard) => (
+      render: (row) => (
         // The row opens the dashboard on click, so the menu keeps its own.
         <span onClick={(event) => event.stopPropagation()}>
           <MoreActions
-            triggerAriaLabel={`Actions for ${dashboard.name}`}
-            actions={actionsFor(dashboard)}
+            triggerAriaLabel={`Actions for ${row.name}`}
+            actions={actionsFor(row)}
           />
         </span>
       ),
@@ -165,7 +229,7 @@ export function DashboardList({
         <Skeleton className="h-10 w-full" />
       </div>
     );
-  } else if (isError && dashboards.length === 0) {
+  } else if (isError && dashboards.length === 0 && builtIn.length === 0) {
     // A failed background refetch keeps the cached list on screen.
     body = (
       <InlineEmptyState
@@ -179,7 +243,7 @@ export function DashboardList({
         }
       />
     );
-  } else if (dashboards.length === 0) {
+  } else if (dashboards.length === 0 && builtIn.length === 0) {
     body = (
       <InlineEmptyState
         icon="layout-dashboard"
@@ -190,11 +254,16 @@ export function DashboardList({
     );
   } else {
     const needle = search.trim().toLowerCase();
-    const filtered = dashboards.filter(
-      (dashboard) =>
-        needle === "" || dashboard.name.toLowerCase().includes(needle),
-    );
-    const rows = sortTableData(filtered, columns, sort) as Dashboard[];
+    const matches = (row: Row) =>
+      needle === "" || row.name.toLowerCase().includes(needle);
+    // The Speakeasy-built dashboards stay first, in their own order; the
+    // sort is over the project's.
+    const shipped = builtIn.map(builtInRow).filter(matches);
+    const own = sortTableData(
+      dashboards.map(projectRow).filter(matches),
+      columns,
+      sort,
+    ) as Row[];
     body = (
       <>
         <Page.Toolbar>
@@ -209,9 +278,9 @@ export function DashboardList({
         </Page.Toolbar>
         <Table
           columns={columns}
-          data={rows}
-          rowKey={(dashboard) => dashboard.id}
-          onRowClick={onOpen}
+          data={[...shipped, ...own]}
+          rowKey={(row) => row.key}
+          onRowClick={open}
           sort={sort}
           onSortChange={setSort}
           noResultsMessage="No dashboards match this search."
@@ -266,4 +335,27 @@ export function DashboardList({
       />
     </div>
   );
+}
+
+function builtInRow(builtIn: BuiltInDashboard): Row {
+  return {
+    kind: "built-in",
+    // A slug is never a UUID, so the two kinds of key cannot collide.
+    key: `built-in:${builtIn.slug}`,
+    name: builtIn.name,
+    description: builtIn.description,
+    cards: builtIn.cards.length,
+    builtIn,
+  };
+}
+
+function projectRow(dashboard: Dashboard): Row {
+  return {
+    kind: "project",
+    key: dashboard.id,
+    name: dashboard.name,
+    description: dashboard.description,
+    cards: dashboard.widgets.length,
+    dashboard,
+  };
 }

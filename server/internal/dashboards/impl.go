@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -159,7 +161,7 @@ func (s *Service) ListDashboards(ctx context.Context, _ *gen.ListDashboardsPaylo
 		byDashboard[placement.DashboardID] = append(byDashboard[placement.DashboardID], placement)
 	}
 
-	result := &gen.ListDashboardsResult{Dashboards: make([]*gen.Dashboard, 0, len(rows))}
+	result := &gen.ListDashboardsResult{Dashboards: make([]*gen.Dashboard, 0, len(rows)), BuiltIn: builtInViews()}
 	for _, row := range rows {
 		result.Dashboards = append(result.Dashboards, mv.BuildDashboardView(row, byDashboard[row.ID]))
 	}
@@ -221,7 +223,7 @@ func (s *Service) CreateDashboard(ctx context.Context, payload *gen.CreateDashbo
 	}
 
 	view := mv.BuildDashboardView(row, nil)
-	if err := s.audit.LogDashboardCreate(ctx, dbtx, audit.LogDashboardCreateEvent{DashboardEventBase: s.auditBase(authCtx, row), Snapshot: view, DuplicatedFrom: nil}); err != nil {
+	if err := s.audit.LogDashboardCreate(ctx, dbtx, audit.LogDashboardCreateEvent{DashboardEventBase: s.auditBase(authCtx, row), Snapshot: view, DuplicatedFrom: nil, DuplicatedFromBuiltIn: ""}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit dashboard creation").LogError(ctx, s.logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
@@ -489,34 +491,166 @@ func (s *Service) DuplicateDashboard(ctx context.Context, payload *gen.Duplicate
 		return nil, oops.E(oops.CodeUnexpected, err, "load dashboard cards").LogError(ctx, s.logger)
 	}
 
-	// Each widget is copied once, however many cards show it, and the copy
-	// is the caller's. A widget the catalog has broken is refused by name,
-	// as duplicating it on its own would be.
-	now := s.now()
-	widgetQueries := widgetsrepo.New(dbtx)
-	copies := make(map[uuid.UUID]uuid.UUID, len(sourceWidgets))
+	sourceURN := urn.NewDashboard(source.ID)
+	from := copySource{
+		name:        source.Name,
+		description: source.Description,
+		filters:     source.Filters,
+		widgets:     make([]copyWidget, 0, len(sourceWidgets)),
+		placements:  make([]copyPlacement, 0, len(placements)),
+		from:        &sourceURN,
+		fromBuiltIn: "",
+	}
 	for _, widget := range sourceWidgets {
-		reason, err := widgets.Validate(s.catalog, widget.Dataset, widget.Query, widget.Visualization, now)
+		widgetURN := urn.NewWidget(widget.ID)
+		from.widgets = append(from.widgets, copyWidget{
+			key:           widget.ID.String(),
+			name:          widget.Name,
+			description:   widget.Description,
+			dataset:       widget.Dataset,
+			query:         widget.Query,
+			visualization: widget.Visualization,
+			from:          &widgetURN,
+		})
+	}
+	for _, placement := range placements {
+		from.placements = append(from.placements, copyPlacement{key: placement.WidgetID.String(), x: placement.X, y: placement.Y, w: placement.W, h: placement.H})
+	}
+
+	view, err := s.copyInto(ctx, dbtx, authCtx, from)
+	if err != nil {
+		return nil, err
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit dashboard duplication").LogError(ctx, s.logger)
+	}
+	return view, nil
+}
+
+// DuplicateBuiltInDashboard copies a built-in dashboard into a new one the
+// caller owns, with a new saved widget per card, so the copy can be changed
+// while the built-in stays as it is.
+func (s *Service) DuplicateBuiltInDashboard(ctx context.Context, payload *gen.DuplicateBuiltInDashboardPayload) (*gen.Dashboard, error) {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return nil, err
+	}
+	if authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "making a dashboard requires a user identity")
+	}
+	page, ok := builtInBySlug(payload.Slug)
+	if !ok {
+		return nil, oops.E(oops.CodeNotFound, nil, "built-in dashboard not found")
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin dashboard duplication").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	// A built-in saves no filters: the copy opens on the defaults, as a new
+	// dashboard does. Each card becomes its own widget, keyed by its place
+	// in the layout.
+	from := copySource{
+		name:        page.Name,
+		description: conv.ToPGTextEmpty(page.Description),
+		filters:     []byte("{}"),
+		widgets:     make([]copyWidget, 0, len(page.Cards)),
+		placements:  make([]copyPlacement, 0, len(page.Cards)),
+		from:        nil,
+		fromBuiltIn: page.Slug,
+	}
+	for i, card := range page.Cards {
+		key := strconv.Itoa(i)
+		from.widgets = append(from.widgets, copyWidget{
+			key:           key,
+			name:          card.Name,
+			description:   conv.ToPGTextEmpty(card.Description),
+			dataset:       card.Dataset,
+			query:         card.Query,
+			visualization: card.Visualization,
+			from:          nil,
+		})
+		from.placements = append(from.placements, copyPlacement{
+			key: key,
+			x:   int32(card.X), y: int32(card.Y), w: int32(card.W), h: int32(card.H), //nolint:gosec // bounded by the registry test
+		})
+	}
+
+	view, err := s.copyInto(ctx, dbtx, authCtx, from)
+	if err != nil {
+		return nil, err
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit dashboard duplication").LogError(ctx, s.logger)
+	}
+	return view, nil
+}
+
+// copySource is what a dashboard copy is made from: a project dashboard's
+// rows, or a built-in's cards. A placement names its widget by key, so one
+// widget shown on several cards is copied once.
+type copySource struct {
+	name        string
+	description pgtype.Text
+	filters     []byte
+	widgets     []copyWidget
+	placements  []copyPlacement
+	// Where the copy came from, for the audit trail: the dashboard, or the
+	// built-in's slug.
+	from        *urn.Dashboard
+	fromBuiltIn string
+}
+
+type copyWidget struct {
+	key           string
+	name          string
+	description   pgtype.Text
+	dataset       string
+	query         []byte
+	visualization []byte
+	// The saved widget this is a copy of, when it is one; a built-in card is
+	// not a widget.
+	from *urn.Widget
+}
+
+type copyPlacement struct {
+	key        string
+	x, y, w, h int32
+}
+
+// copyInto makes the caller's copy of a source inside the given transaction:
+// each widget copied once, however many cards show it, then the dashboard
+// and its cards, every step audited. The caller commits. A widget the
+// catalog has broken is refused by name, as duplicating it on its own would
+// be.
+func (s *Service) copyInto(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, source copySource) (*gen.Dashboard, error) {
+	queries := repo.New(dbtx)
+	widgetQueries := widgetsrepo.New(dbtx)
+	now := s.now()
+	copies := make(map[string]uuid.UUID, len(source.widgets))
+	for _, widget := range source.widgets {
+		reason, err := widgets.Validate(s.catalog, widget.dataset, widget.query, widget.visualization, now)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "validate widget").LogError(ctx, s.logger)
 		}
 		if reason != "" {
-			return nil, oops.E(oops.CodeBadRequest, nil, "widget %q cannot be copied until it is fixed: %s", widget.Name, reason)
+			return nil, oops.E(oops.CodeBadRequest, nil, "widget %q cannot be copied until it is fixed: %s", widget.name, reason)
 		}
 		copied, err := widgetQueries.CreateWidget(ctx, widgetsrepo.CreateWidgetParams{
 			ProjectID:       *authCtx.ProjectID,
 			OrganizationID:  authCtx.ActiveOrganizationID,
 			CreatedByUserID: conv.ToPGTextEmpty(authCtx.UserID),
-			Name:            copyName(widget.Name),
-			Description:     widget.Description,
-			Dataset:         widget.Dataset,
-			Query:           widget.Query,
-			Visualization:   widget.Visualization,
+			Name:            copyName(widget.name),
+			Description:     widget.description,
+			Dataset:         widget.dataset,
+			Query:           widget.query,
+			Visualization:   widget.visualization,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "copy widget").LogError(ctx, s.logger)
 		}
-		sourceURN := urn.NewWidget(widget.ID)
 		if err := s.audit.LogWidgetCreate(ctx, dbtx, audit.LogWidgetCreateEvent{
 			WidgetEventBase: audit.WidgetEventBase{
 				OrganizationID:   authCtx.ActiveOrganizationID,
@@ -527,34 +661,34 @@ func (s *Service) DuplicateDashboard(ctx context.Context, payload *gen.Duplicate
 				Name:             copied.Name,
 			},
 			Snapshot:       mv.BuildWidgetView(copied, "", nil),
-			DuplicatedFrom: &sourceURN,
+			DuplicatedFrom: widget.from,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "audit widget copy").LogError(ctx, s.logger)
 		}
-		copies[widget.ID] = copied.ID
+		copies[widget.key] = copied.ID
 	}
 
 	row, err := queries.CreateDashboard(ctx, repo.CreateDashboardParams{
 		ProjectID:       *authCtx.ProjectID,
 		OrganizationID:  authCtx.ActiveOrganizationID,
 		CreatedByUserID: conv.ToPGTextEmpty(authCtx.UserID),
-		Name:            copyName(source.Name),
-		Description:     source.Description,
-		Filters:         source.Filters,
+		Name:            copyName(source.name),
+		Description:     source.description,
+		Filters:         source.filters,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create dashboard copy").LogError(ctx, s.logger)
 	}
-	for _, placement := range placements {
+	for _, placement := range source.placements {
 		if _, err := queries.InsertPlacement(ctx, repo.InsertPlacementParams{
 			ProjectID:      *authCtx.ProjectID,
 			OrganizationID: authCtx.ActiveOrganizationID,
 			DashboardID:    row.ID,
-			WidgetID:       copies[placement.WidgetID],
-			X:              placement.X,
-			Y:              placement.Y,
-			W:              placement.W,
-			H:              placement.H,
+			WidgetID:       copies[placement.key],
+			X:              placement.x,
+			Y:              placement.y,
+			W:              placement.w,
+			H:              placement.h,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "copy dashboard card").LogError(ctx, s.logger)
 		}
@@ -564,12 +698,8 @@ func (s *Service) DuplicateDashboard(ctx context.Context, payload *gen.Duplicate
 	if err != nil {
 		return nil, err
 	}
-	sourceURN := urn.NewDashboard(source.ID)
-	if err := s.audit.LogDashboardCreate(ctx, dbtx, audit.LogDashboardCreateEvent{DashboardEventBase: s.auditBase(authCtx, row), Snapshot: view, DuplicatedFrom: &sourceURN}); err != nil {
+	if err := s.audit.LogDashboardCreate(ctx, dbtx, audit.LogDashboardCreateEvent{DashboardEventBase: s.auditBase(authCtx, row), Snapshot: view, DuplicatedFrom: source.from, DuplicatedFromBuiltIn: source.fromBuiltIn}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit dashboard copy").LogError(ctx, s.logger)
-	}
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit dashboard duplication").LogError(ctx, s.logger)
 	}
 	return view, nil
 }

@@ -42,6 +42,10 @@ type LogDashboardCreateEvent struct {
 	// DuplicatedFrom is the dashboard this one was copied from, when it was
 	// made by duplication rather than from nothing.
 	DuplicatedFrom *urn.Dashboard
+	// DuplicatedFromBuiltIn is the slug of the built-in dashboard this one
+	// was copied from, when it was. A built-in has no URN: it is code, not a
+	// row.
+	DuplicatedFromBuiltIn string
 }
 
 type LogDashboardUpdateEvent struct {
@@ -83,11 +87,14 @@ func (l *Logger) LogDashboardCreate(ctx context.Context, dbtx repo.DBTX, event L
 		return fmt.Errorf("marshal dashboard create snapshot: %w", err)
 	}
 	var metadata []byte
-	if event.DuplicatedFrom != nil {
+	switch {
+	case event.DuplicatedFrom != nil:
 		metadata, err = marshalAuditPayload(map[string]any{"duplicated_from": event.DuplicatedFrom.String()})
-		if err != nil {
-			return fmt.Errorf("marshal dashboard create metadata: %w", err)
-		}
+	case event.DuplicatedFromBuiltIn != "":
+		metadata, err = marshalAuditPayload(map[string]any{"duplicated_from_built_in": event.DuplicatedFromBuiltIn})
+	}
+	if err != nil {
+		return fmt.Errorf("marshal dashboard create metadata: %w", err)
 	}
 	return l.log(ctx, dbtx, auditEntry{Params: dashboardEntry(event.DashboardEventBase, ActionDashboardCreate, metadata, nil, after), OutboxEvent: events.DashboardV1})
 }

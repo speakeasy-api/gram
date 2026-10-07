@@ -1,8 +1,6 @@
 import { MoreActions } from "@/components/ui/MoreActions";
 import { cn } from "@/lib/utils";
-import type { Dashboard } from "@gram/client/models/components/dashboard.js";
 import type { PlacementInput } from "@gram/client/models/components/placementinput.js";
-import type { Widget } from "@gram/client/models/components/widget.js";
 import { useEffect, useMemo, useState, type JSX } from "react";
 import { GridLayout, useContainerWidth, type Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
@@ -15,6 +13,7 @@ import {
   placementsFor,
   ROW_HEIGHT,
   sameLayout,
+  type GridCard,
 } from "./dashboardLayout";
 import type { ChartType } from "./exploreModel";
 import type { PageContext } from "./pageContext";
@@ -29,12 +28,11 @@ import {
  * A dashboard's cards on its 12-column grid. Someone who may edit the
  * dashboard drags a card by its header and resizes it by its corner, and
  * each move is saved as it lands: there is no edit mode and no Save button,
- * so what one person sees is what everyone sees. Each card is the saved
- * widget drawn by WidgetView, so it answers its own question.
+ * so what one person sees is what everyone sees. Each card is a widget
+ * drawn by WidgetView, so it answers its own question.
  */
 export function DashboardGrid({
-  dashboard,
-  widgets,
+  cards,
   page,
   canEdit,
   saving,
@@ -42,9 +40,7 @@ export function DashboardGrid({
   onRemove,
   onOpen,
 }: {
-  dashboard: Dashboard;
-  /** The project's widgets, which the cards link to. */
-  widgets: Widget[];
+  cards: GridCard[];
   /** What the dashboard's filter bar holds, folded into every card. */
   page?: PageContext | undefined;
   canEdit: boolean;
@@ -56,14 +52,11 @@ export function DashboardGrid({
   onRemove: (placementId: string) => void;
   onOpen: OpenInExplore;
 }): JSX.Element {
-  const byId = useMemo(
-    () => new Map(widgets.map((widget) => [widget.id, widget])),
-    [widgets],
+  const placements = useMemo(
+    () => cards.map((card) => card.placement),
+    [cards],
   );
-  const saved = useMemo(
-    () => layoutFor(dashboard.widgets, byId),
-    [dashboard.widgets, byId],
-  );
+  const saved = useMemo(() => layoutFor(cards), [cards]);
   // What the grid shows: the saved layout, or the one just edited until its
   // save lands. Kept apart so the cards stay where they were dropped while
   // the save is in flight; whenever the saved layout changes — the save
@@ -72,8 +65,8 @@ export function DashboardGrid({
   useEffect(() => setLayout(saved), [saved]);
   const settle = (next: Layout) => {
     setLayout(next);
-    if (!sameLayout(next, dashboard.widgets)) {
-      onSave(placementsFor(next, dashboard.widgets));
+    if (!sameLayout(next, placements)) {
+      onSave(placementsFor(next, placements));
     }
   };
 
@@ -106,8 +99,7 @@ export function DashboardGrid({
           onDragStop={settle}
           onResizeStop={settle}
         >
-          {dashboard.widgets.map((placement) => {
-            const widget = byId.get(placement.widgetId);
+          {cards.map(({ placement, widget }) => {
             const chartType = chartTypeOf(widget) as ChartType;
             return (
               <div key={placement.id} className="overflow-hidden">

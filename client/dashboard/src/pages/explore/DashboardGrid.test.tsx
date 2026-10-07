@@ -1,9 +1,10 @@
-import type { Dashboard } from "@gram/client/models/components/dashboard.js";
-import type { Widget } from "@gram/client/models/components/widget.js";
+import type { DashboardPlacement } from "@gram/client/models/components/dashboardplacement.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DashboardGrid } from "./DashboardGrid";
+import type { GridCard } from "./dashboardLayout";
+import type { ViewableWidget } from "./WidgetView";
 
 // Each card's answer is WidgetView's, tested on its own; here a card only
 // has to be drawn where its placement says, with its actions.
@@ -40,35 +41,30 @@ vi.stubGlobal(
   },
 );
 
-function widget(id: string, name: string, chartType = "line"): Widget {
+function widget(id: string, name: string, chartType = "line"): ViewableWidget {
   return {
     id,
     name,
     dataset: "sessions",
     query: {},
     visualization: { type: chartType },
-    dashboards: [],
-    projectId: "project",
-    organizationId: "org",
-    createdAt: new Date(),
-    updatedAt: new Date(),
   };
 }
 
-function dashboard(widgets: Dashboard["widgets"]): Dashboard {
-  return {
-    id: "d-1",
-    name: "Agent activity",
-    projectId: "project",
-    organizationId: "org",
-    filters: { values: {} },
-    widgets,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-}
+const widgets = new Map(
+  [widget("w-1", "Sessions"), widget("w-2", "Cost", "number")].map((one) => [
+    one.id,
+    one,
+  ]),
+);
 
-const widgets = [widget("w-1", "Sessions"), widget("w-2", "Cost", "number")];
+/** Cards for placements, each linked to its widget when the list has it. */
+function cards(placements: DashboardPlacement[]): GridCard[] {
+  return placements.map((placement) => ({
+    placement,
+    widget: widgets.get(placement.widgetId),
+  }));
+}
 
 function renderGrid({
   canEdit = true,
@@ -81,8 +77,7 @@ function renderGrid({
 } = {}) {
   render(
     <DashboardGrid
-      dashboard={dashboard(placements)}
-      widgets={widgets}
+      cards={cards(placements)}
       canEdit={canEdit}
       saving={false}
       onSave={onSave}
@@ -123,10 +118,7 @@ describe("DashboardGrid", () => {
   it("holds the cards still while a save is in flight", () => {
     render(
       <DashboardGrid
-        dashboard={dashboard([
-          { id: "p-1", widgetId: "w-1", x: 0, y: 0, w: 6, h: 3 },
-        ])}
-        widgets={widgets}
+        cards={cards([{ id: "p-1", widgetId: "w-1", x: 0, y: 0, w: 6, h: 3 }])}
         canEdit
         saving
         onSave={() => {}}
@@ -153,10 +145,7 @@ describe("DashboardGrid", () => {
   it("holds a card's place until its widget has loaded", () => {
     render(
       <DashboardGrid
-        dashboard={dashboard([
-          { id: "p-1", widgetId: "w-9", x: 0, y: 0, w: 6, h: 3 },
-        ])}
-        widgets={[]}
+        cards={cards([{ id: "p-1", widgetId: "w-9", x: 0, y: 0, w: 6, h: 3 }])}
         canEdit={false}
         saving={false}
         onSave={() => {}}
@@ -167,5 +156,30 @@ describe("DashboardGrid", () => {
     expect(screen.getByTestId("placeholder")).toBeTruthy();
     expect(screen.queryByRole("region")).toBeNull();
     fireEvent.mouseDown(screen.getByTestId("placeholder"));
+  });
+
+  it("draws a card that carries its own widget, linked to no saved one", () => {
+    render(
+      <DashboardGrid
+        cards={[
+          {
+            placement: { id: "built:0", widgetId: "", x: 0, y: 0, w: 6, h: 2 },
+            widget: {
+              name: "Tool calls",
+              dataset: "tool_calls",
+              query: {},
+              visualization: { type: "number" },
+            },
+          },
+        ]}
+        canEdit={false}
+        saving={false}
+        onSave={() => {}}
+        onRemove={() => {}}
+        onOpen={() => {}}
+      />,
+    );
+    expect(screen.getByRole("region", { name: "Tool calls" })).toBeTruthy();
+    expect(screen.queryByTestId("placeholder")).toBeNull();
   });
 });

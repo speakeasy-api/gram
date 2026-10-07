@@ -52,6 +52,8 @@ const testState = vi.hoisted(() => ({
   pageApplied: [] as unknown[],
   /** The project's dashboards, as the list endpoint returns them. */
   dashboards: [] as Record<string, unknown>[],
+  /** The Speakeasy-built dashboards, as the list endpoint returns them. */
+  builtIn: [] as Record<string, unknown>[],
   /** Every dashboard write, in call order. */
   dashboardWrites: [] as { kind: string; request: Record<string, unknown> }[],
   /** Who is told when the dashboards change, as react-query would tell. */
@@ -167,6 +169,7 @@ type DashboardWrite =
   | "create"
   | "update"
   | "saveLayout"
+  | "duplicateBuiltIn"
   | "saveFilters"
   | "addWidget"
   | "removeWidget"
@@ -280,6 +283,26 @@ function applyDashboardWrite(
         createdByUserId: "member-1",
       });
     }
+    case "duplicateBuiltIn": {
+      const { slug } = request.duplicateBuiltInDashboardRequestBody as {
+        slug: string;
+      };
+      const page = testState.builtIn.find(
+        (candidate) => candidate.slug === slug,
+      )!;
+      return add({
+        id: `dashboard-${testState.dashboardWrites.length}`,
+        name: `${String(page.name)} (copy)`,
+        description: page.description,
+        projectId: "project",
+        organizationId: "org",
+        createdByUserId: "member-1",
+        filters: { values: {} },
+        widgets: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
     case "delete":
       testState.dashboards = testState.dashboards.filter(
         (dashboard) => dashboard.id !== request.id,
@@ -329,7 +352,7 @@ vi.mock("@gram/client/react-query/dashboards.js", async () => {
         data:
           testState.dashboardsPending || testState.dashboardsFailed
             ? undefined
-            : { dashboards: testState.dashboards },
+            : { dashboards: testState.dashboards, builtIn: testState.builtIn },
         refetch: () => {
           testState.dashboardsFailed = false;
           return Promise.resolve();
@@ -378,6 +401,9 @@ vi.mock("@gram/client/react-query/removeDashboardWidget.js", () => ({
 vi.mock("@gram/client/react-query/duplicateDashboard.js", () => ({
   useDuplicateDashboardMutation: mockDashboardWrite("duplicate"),
 }));
+vi.mock("@gram/client/react-query/duplicateBuiltInDashboard.js", () => ({
+  useDuplicateBuiltInDashboardMutation: mockDashboardWrite("duplicateBuiltIn"),
+}));
 vi.mock("@gram/client/react-query/deleteDashboard.js", () => ({
   useDeleteDashboardMutation: mockDashboardWrite("delete"),
 }));
@@ -385,24 +411,22 @@ vi.mock("@gram/client/react-query/deleteDashboard.js", () => ({
 // cards only have to be there, openable and removable.
 vi.mock("./DashboardGrid", async () => {
   const { specFromStoredWidget } = await import("./widgetSpec");
-  type Placement = { id: string; widgetId: string };
-  type Card = { id: string; name: string } & Parameters<
+  type Placement = { id: string };
+  type Card = { id?: string; name: string } & Parameters<
     typeof specFromStoredWidget
   >[0];
   return {
     DashboardGrid: ({
-      dashboard,
-      widgets,
+      cards,
       page,
       canEdit,
       onOpen,
       onRemove,
     }: {
-      dashboard: { widgets: Placement[] };
-      widgets: Card[];
+      cards: { placement: Placement; widget: Card | undefined }[];
       page?: unknown;
       canEdit: boolean;
-      onOpen: (spec: unknown, widgetId: string) => void;
+      onOpen: (spec: unknown, widgetId: string | undefined) => void;
       onRemove: (placementId: string) => void;
     }) => (
       <ul
@@ -410,8 +434,7 @@ vi.mock("./DashboardGrid", async () => {
         data-editable={canEdit}
         data-page={JSON.stringify(page ?? null)}
       >
-        {dashboard.widgets.map((placement) => {
-          const widget = widgets.find((card) => card.id === placement.widgetId);
+        {cards.map(({ placement, widget }) => {
           const name = widget?.name ?? "…";
           return (
             <li key={placement.id}>
@@ -727,6 +750,7 @@ describe("Explore", () => {
     testState.projectWrite = false;
     testState.pageContext = {};
     testState.dashboards = [];
+    testState.builtIn = [];
     testState.dashboardWrites = [];
     testState.pageTouched = false;
     testState.pageApplied = [];
@@ -1791,6 +1815,91 @@ describe("Explore", () => {
     function param(name: string) {
       return new URLSearchParams(nav.search).get(name);
     }
+
+    // A Speakeasy-built dashboard, as the list endpoint returns it: one
+    // number tile, in the shape a saved widget stores.
+    const toolCallsCount: ExploreSpec = {
+      dataset: "tool_calls",
+      measures: [{ op: "count", field: "" }],
+      filters: [],
+      dimensions: [],
+      orderBy: "",
+      limit: 0,
+      window: "7d",
+      chartType: "number",
+    };
+    function builtInPage() {
+      return {
+        slug: "mcp-tools",
+        name: "MCP & Tools",
+        description: "What the agents call",
+        cards: [
+          {
+            name: "Tool calls",
+            dataset: "tool_calls",
+            ...widgetFromSpec(toolCallsCount),
+            x: 0,
+            y: 0,
+            w: 6,
+            h: 2,
+          },
+        ],
+      };
+    }
+
+    it("lists the Speakeasy-built dashboards first, opens one read only, and duplicates it into a project dashboard", async () => {
+      const user = userEvent.setup();
+      testState.builtIn = [builtInPage()];
+      testState.dashboards = [dashboard("d-1", "Agent activity")];
+      renderExplore("/explore?tab=dashboards");
+
+      expect(dashboardsTab().textContent).toContain("2");
+      expect(screen.getByText("Speakeasy-built")).toBeTruthy();
+      const menus = screen.getAllByRole("button", { name: /^Actions for / });
+      expect(menus).toHaveLength(2);
+      expect(menus[0]).toBe(
+        screen.getByRole("button", { name: "Actions for MCP & Tools" }),
+      );
+      await user.click(menus[0]!);
+      expect(screen.getByRole("menuitem", { name: /Duplicate/ })).toBeTruthy();
+      expect(screen.queryByRole("menuitem", { name: /Rename/ })).toBeNull();
+      expect(screen.queryByRole("menuitem", { name: /Delete/ })).toBeNull();
+      await user.keyboard("{Escape}");
+
+      fireEvent.click(screen.getByText("MCP & Tools"));
+      expect(param("dashboard")).toBe("builtin:mcp-tools");
+      expect(screen.getByRole("heading", { name: "MCP & Tools" })).toBeTruthy();
+      const cards = screen.getByRole("list", { name: "Cards" });
+      expect(cards.getAttribute("data-editable")).toBe("false");
+      expect(within(cards).getByText("Tool calls")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Add widget" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Save filters" })).toBeNull();
+
+      await user.click(screen.getByRole("button", { name: "Duplicate" }));
+      expect(testState.dashboardWrites[0]).toEqual({
+        kind: "duplicateBuiltIn",
+        request: {
+          duplicateBuiltInDashboardRequestBody: { slug: "mcp-tools" },
+        },
+      });
+      expect(param("dashboard")).toBe("dashboard-1");
+      expect(
+        screen.getByRole("heading", { name: "MCP & Tools (copy)" }),
+      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Add widget" })).toBeTruthy();
+    });
+
+    it("opens a Speakeasy-built card's question in Explore, never as a widget", () => {
+      testState.builtIn = [builtInPage()];
+      renderExplore("/explore?tab=dashboards&dashboard=builtin:mcp-tools");
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Open Tool calls in Explore" }),
+      );
+      expect(param("tab")).toBeNull();
+      expect(param("widget")).toBeNull();
+      expect(urlSpec()?.dataset).toBe("tool_calls");
+    });
 
     it("counts the project's dashboards on the tab, lists them, and opens one into the URL", () => {
       testState.widgets = [savedWidget("w-1", "Sessions by user")];

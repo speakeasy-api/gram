@@ -21,9 +21,16 @@ import {
   queryBodyFromSpec,
   type ExploreSpec,
 } from "./exploreModel";
+import { BuiltInDashboardPage } from "./BuiltInDashboardPage";
 import { DashboardList } from "./DashboardList";
 import { DashboardPage } from "./DashboardPage";
-import { DASHBOARD_PARAM, encodeSpec, TAB_PARAM } from "./exploreUrl";
+import {
+  builtInParam,
+  builtInSlug,
+  DASHBOARD_PARAM,
+  encodeSpec,
+  TAB_PARAM,
+} from "./exploreUrl";
 import { ExploreResults } from "./ExploreResults";
 import { QueryBuilder } from "./QueryBuilder";
 import { clearPageFilterParams } from "./usePageFilters";
@@ -152,6 +159,7 @@ function ExploreWorkbench({
   const widgets = list.data?.widgets ?? [];
   const dashboardList = useDashboards();
   const dashboards = dashboardList.data?.dashboards ?? [];
+  const builtIn = dashboardList.data?.builtIn ?? [];
   const openWidget = url.widgetId
     ? widgets.find((widget) => widget.id === url.widgetId)
     : undefined;
@@ -208,6 +216,52 @@ function ExploreWorkbench({
     void result.refetch();
   };
 
+  // The Dashboards tab: the Speakeasy-built or project dashboard the URL
+  // has open, or the list of them.
+  const openQueryFromCard = (next: ExploreSpec, widgetId: string | undefined) =>
+    confirmLeave(() => openQuery(next, widgetId ?? null));
+  const dashboardsTab = (): JSX.Element => {
+    const slug = tab.dashboardId === null ? null : builtInSlug(tab.dashboardId);
+    if (slug !== null) {
+      return (
+        <BuiltInDashboardPage
+          slug={slug}
+          backHref={tab.href("dashboards")}
+          backState={tab.state}
+          onOpen={(dashboard) => tab.go("dashboards", dashboard.id)}
+          onOpenQuery={openQueryFromCard}
+        />
+      );
+    }
+    if (tab.dashboardId) {
+      return (
+        <DashboardPage
+          id={tab.dashboardId}
+          widgets={widgets}
+          widgetsLoaded={list.data !== undefined}
+          widgetsFailed={list.isError && list.data === undefined}
+          onRetryWidgets={() => void list.refetch()}
+          backHref={tab.href("dashboards")}
+          backState={tab.state}
+          onOpen={(dashboard) => tab.go("dashboards", dashboard.id)}
+          onDeleted={() => tab.go("dashboards")}
+          onOpenQuery={openQueryFromCard}
+        />
+      );
+    }
+    return (
+      <DashboardList
+        dashboards={dashboards}
+        builtIn={builtIn}
+        isPending={dashboardList.isPending}
+        isError={dashboardList.isError}
+        onOpen={(dashboard) => tab.go("dashboards", dashboard.id)}
+        onOpenBuiltIn={(page) => tab.go("dashboards", builtInParam(page.slug))}
+        onRetry={() => void dashboardList.refetch()}
+      />
+    );
+  };
+
   if (!spec) {
     return (
       <InlineEmptyState
@@ -249,7 +303,7 @@ function ExploreWorkbench({
               Dashboards
               {dashboardList.data ? (
                 <span className="text-muted-foreground tabular-nums">
-                  {dashboards.length}
+                  {dashboards.length + builtIn.length}
                 </span>
               ) : null}
             </Link>
@@ -274,32 +328,7 @@ function ExploreWorkbench({
           onRetry={() => void list.refetch()}
         />
       ) : null}
-      {tab.current === "dashboards" ? (
-        tab.dashboardId ? (
-          <DashboardPage
-            id={tab.dashboardId}
-            widgets={widgets}
-            widgetsLoaded={list.data !== undefined}
-            widgetsFailed={list.isError && list.data === undefined}
-            onRetryWidgets={() => void list.refetch()}
-            backHref={tab.href("dashboards")}
-            backState={tab.state}
-            onOpen={(dashboard) => tab.go("dashboards", dashboard.id)}
-            onDeleted={() => tab.go("dashboards")}
-            onOpenQuery={(spec, widgetId) =>
-              confirmLeave(() => openQuery(spec, widgetId ?? null))
-            }
-          />
-        ) : (
-          <DashboardList
-            dashboards={dashboards}
-            isPending={dashboardList.isPending}
-            isError={dashboardList.isError}
-            onOpen={(dashboard) => tab.go("dashboards", dashboard.id)}
-            onRetry={() => void dashboardList.refetch()}
-          />
-        )
-      ) : null}
+      {tab.current === "dashboards" ? dashboardsTab() : null}
       {/* The builder stays mounted behind the other tabs, so its last
           answer is still there on the way back. */}
       <div hidden={tab.current !== "explore"} className="flex flex-col gap-6">
