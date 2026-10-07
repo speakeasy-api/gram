@@ -426,6 +426,17 @@ describe("RadioCard", () => {
     expect(onValueChange).not.toHaveBeenCalled();
   });
 
+  it("renders a numeric zero detail", () => {
+    render(
+      <RadioCardGroup aria-label="Count">
+        <RadioCard value="zero" title="Zero" detail={0} />
+      </RadioCardGroup>,
+    );
+    expect(
+      document.querySelector("[data-slot=radio-card-detail]")?.textContent,
+    ).toBe("0");
+  });
+
   it("forwards the orientation prop to the radio group", () => {
     const { rerender } = render(<ControlledGroup />);
     const group = screen.getByRole("radiogroup", { name: "View mode" });

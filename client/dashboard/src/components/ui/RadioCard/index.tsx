@@ -207,7 +207,7 @@ export function RadioCard({
             {children}
           </div>
         ) : null}
-        {detail ? (
+        {hasLabelContent(detail) ? (
           <div
             data-slot="radio-card-detail"
             className={cn("cursor-auto", compact ? "mt-3" : "mt-4")}
