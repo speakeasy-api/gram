@@ -42,6 +42,12 @@ const PAGE_FILTER_FIELDS: readonly PageFilterField[] = [
   { field: "status", label: "Status" },
 ];
 
+// The bar shows the date range and this many fields as chips, like the
+// other observability pages; the rest wait behind "More filters" and only
+// join the row once they are set, so the row stays short enough to share
+// with the page's actions.
+const PINNED_FIELDS = 2;
+
 /**
  * The fields a page offers over the given datasets: those some of them can
  * filter by, in the usual order.
@@ -78,7 +84,9 @@ export interface PageFilterValues {
 export interface PageFilterConfig {
   /**
    * The dimensions the bar offers, in order. Only these: a page names the
-   * few its widgets are about, not every field the catalog has.
+   * few its widgets are about, not every field the catalog has. The first
+   * two are chips beside the date range; the rest live behind "More
+   * filters".
    */
   fields: readonly PageFilterField[];
   /**
@@ -159,11 +167,11 @@ export function usePageFilters(config: PageFilterConfig): {
           ? { defaultPreset: config.defaultPreset }
           : { allLabel: "Each widget's window" }),
       },
-      ...config.fields.map(({ field, label }): FilterDimension => ({
+      ...config.fields.map(({ field, label }, index): FilterDimension => ({
         id: field,
         label,
         kind: "multiselect",
-        pinned: true,
+        pinned: index < PINNED_FIELDS,
       })),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps

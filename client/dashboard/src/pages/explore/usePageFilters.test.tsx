@@ -128,6 +128,33 @@ describe("usePageFilters", () => {
     ]);
   });
 
+  it("pins the date range and the first two fields; the rest wait behind More filters", () => {
+    const { result } = renderHook(
+      () =>
+        usePageFilters({
+          fields: [
+            { field: "user", label: "User" },
+            { field: "surface", label: "Agent" },
+            { field: "model", label: "Model" },
+            { field: "status", label: "Status" },
+          ],
+        }),
+      { wrapper: wrapper("/page") },
+    );
+    expect(
+      result.current.toolbar.schema.map((dimension) => [
+        dimension.id,
+        dimension.pinned ?? false,
+      ]),
+    ).toEqual([
+      ["date", true],
+      ["user", true],
+      ["surface", true],
+      ["model", false],
+      ["status", false],
+    ]);
+  });
+
   it("opens on the page's default range, with nothing filtered", () => {
     const { result } = renderHook(() => usePageFilters(CONFIG), {
       wrapper: wrapper("/page"),
