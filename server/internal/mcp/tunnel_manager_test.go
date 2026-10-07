@@ -35,7 +35,7 @@ func TestTunnelManagerCallerAssertionScopeAndMetaDestination(t *testing.T) {
 	issuer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: public})), "https://gram.example", false)
 	require.NoError(t, err)
 	logger := testenv.NewLogger(t)
-	proxyManager := remotemcp.NewProxyManager(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	proxyManager := remotemcp.NewProxyManager(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	project, tunnel, wrapper, meta := uuid.New(), uuid.New(), uuid.New(), uuid.NewString()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_test", ProjectID: &project})
 	ctx = mcpidentity.NewValidatorBoundary().StampAgent(ctx, uuid.New())
