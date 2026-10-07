@@ -92,6 +92,10 @@ func (s *Service) teeCanonicalHookToEventFeed(
 	if s.otelLogPublisher == nil || len(rows) == 0 || authCtx == nil || authCtx.ProjectID == nil {
 		return
 	}
+	// Counted as in flight before anything is published, so Shutdown cannot
+	// observe zero between the publish and the ack wait and cut the row off.
+	s.otelTeeDrains.Add(1)
+	defer s.otelTeeDrains.Done()
 	orgID := authCtx.ActiveOrganizationID
 
 	if !s.hookEventFeedFeature(ctx, orgID, productfeatures.FeatureLogs) {
@@ -137,8 +141,6 @@ func (s *Service) teeCanonicalHookToEventFeed(
 	}
 	s.metrics.RecordEventFeedPublish(ctx, hookSource, eventFeedOutcomeInvalid, int64(invalid))
 
-	s.otelTeeDrains.Add(1)
-	defer s.otelTeeDrains.Done()
 	ackCtx, cancel := context.WithTimeout(ctx, hookIngestTeeAckTimeout)
 	defer cancel()
 
