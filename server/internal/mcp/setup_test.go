@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"errors"
 	"log"
 	"log/slog"
 	"net/url"
@@ -63,6 +64,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
@@ -494,6 +496,11 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	// Identity chaining runs as in production, so gate tests without bindings
 	// prove it leaves their behavior unchanged.
 	svc.SetIdentityChainer(identitychaining.New(logger, conn, enc, remoteChallengeMgr, remotesessions.NewDelegationService(conn, enc, remoteChallengeMgr), idTokenKeys, cacheAdapter))
+	// Connect tests use fixture hosts nobody serves; a test that needs the
+	// upstream's published resource installs its own fetcher.
+	svc.SetProtectedResourceFetcher(func(context.Context, string) (wellknown.OAuthProtectedResourceMetadata, error) {
+		return wellknown.OAuthProtectedResourceMetadata{}, errors.New("protected resource metadata is not served in tests")
+	})
 
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
 

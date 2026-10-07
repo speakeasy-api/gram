@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -510,26 +512,42 @@ func TestServeConsentAction_MultiBindingExchangePersistsPerClientResource(t *tes
 	require.Equal(t, consentUpstreamB, byClient[clientB].Resource)
 }
 
-// GRW-253: an upstream that publishes its RFC 9728 resource with a trailing
-// slash and matches the RFC 8707 resource exactly rejects a trimmed one. The
-// registered URL reaches the authorize and token legs, and the grant, exactly
-// as registered; one registered without a trailing slash never gains one.
-func TestServeConsentAction_ConnectSendsRegisteredResourceVerbatim(t *testing.T) {
+// GRW-253, GRW-256: an upstream that matches the RFC 8707 resource exactly
+// against its RFC 9728 resource rejects any other spelling. The resource the
+// upstream publishes reaches the authorize and token legs, and the grant, when
+// it differs from the registered URL only in trailing slashes; otherwise, or
+// when no metadata can be read, the registered URL does, verbatim.
+func TestServeConsentAction_ConnectSendsTheUpstreamsResourceSpelling(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name     string
-		slug     string
-		resource string
+		name       string
+		slug       string
+		registered string
+		published  string // empty: the metadata cannot be read
+		want       string
 	}{
-		{name: "trailing slash kept", slug: "grw253-slash", resource: "https://upstream-exact.example.com/"},
-		{name: "no trailing slash added", slug: "grw253-bare", resource: "https://upstream-exact.example.com"},
+		{name: "trailing slash kept", slug: "grw253-slash", registered: "https://upstream-exact.example.com/", published: "", want: "https://upstream-exact.example.com/"},
+		{name: "no trailing slash added", slug: "grw253-bare", registered: "https://upstream-exact.example.com", published: "", want: "https://upstream-exact.example.com"},
+		{name: "published trailing slash added", slug: "grw256-add", registered: "https://upstream-exact.example.com", published: "https://upstream-exact.example.com/", want: "https://upstream-exact.example.com/"},
+		{name: "published trailing slash dropped", slug: "grw256-drop", registered: "https://upstream-exact.example.com/mcp/", published: "https://upstream-exact.example.com/mcp", want: "https://upstream-exact.example.com/mcp"},
+		{name: "another upstream's resource ignored", slug: "grw256-other", registered: "https://upstream-exact.example.com", published: "https://elsewhere.example.com/", want: "https://upstream-exact.example.com"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			ctx, ti := newTestMCPService(t)
+			var probes atomic.Int64
+			if tc.published != "" {
+				ti.service.SetProtectedResourceFetcher(func(_ context.Context, resourceURL string) (wellknown.OAuthProtectedResourceMetadata, error) {
+					probes.Add(1)
+					if resourceURL != tc.registered {
+						return wellknown.OAuthProtectedResourceMetadata{}, fmt.Errorf("unexpected probe of %s", resourceURL)
+					}
+					return wellknown.OAuthProtectedResourceMetadata{Resource: tc.published}, nil
+				})
+			}
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
 			require.True(t, ok)
 			require.NotNil(t, authCtx.ProjectID)
@@ -537,7 +555,7 @@ func TestServeConsentAction_ConnectSendsRegisteredResourceVerbatim(t *testing.T)
 			orgID := authCtx.ActiveOrganizationID
 
 			shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
-			attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, shared, tc.slug+"-srv", tc.resource)
+			attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, shared, tc.slug+"-srv", tc.registered)
 
 			var posted atomic.Value
 			as := newConsentExchangeAS(t, &posted, "exchanged-"+tc.slug)
@@ -559,14 +577,44 @@ func TestServeConsentAction_ConnectSendsRegisteredResourceVerbatim(t *testing.T)
 			}
 
 			loc := postConnectAction(t, fx, clientID)
-			require.Equal(t, tc.resource, loc.Query().Get("resource"), "authorize leg")
+			require.Equal(t, tc.want, loc.Query().Get("resource"), "authorize leg")
+			if tc.published != "" {
+				require.Equal(t, int64(1), probes.Load(), "the upstream's metadata was read")
+			}
 
 			completeRemoteLogin(t, newConsentCallbackManager(t, ti), loc)
-			require.Equal(t, consentExchangeCapture{HasResource: true, Resource: tc.resource}, posted.Load(), "token leg")
+			require.Equal(t, consentExchangeCapture{HasResource: true, Resource: tc.want}, posted.Load(), "token leg")
 
 			sess, err := remotesessions_repo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID})
 			require.NoError(t, err)
-			require.Equal(t, tc.resource, sess.Resource.String, "refresh replays the recorded resource")
+			require.Equal(t, tc.want, sess.Resource.String, "refresh replays the recorded resource")
 		})
 	}
+}
+
+// GRW-256: an issuer marked as refusing the RFC 8707 parameter never receives
+// the resource, so Connect does not wait on the upstream's metadata for it.
+// The grant still records the registered URL for routing.
+func TestServeConsentAction_ConnectSkipsMetadataWhenIssuerRefusesResource(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedMultiClientConsentEndpoint(t)
+	var probes atomic.Int64
+	fx.ti.service.SetProtectedResourceFetcher(func(context.Context, string) (wellknown.OAuthProtectedResourceMetadata, error) {
+		probes.Add(1)
+		return wellknown.OAuthProtectedResourceMetadata{}, fmt.Errorf("metadata must not be read")
+	})
+
+	_, err := remotesessions_repo.New(fx.ti.conn).UpdateRemoteSessionIssuer(ctx, remotesessions_repo.UpdateRemoteSessionIssuerParams{
+		ResourceIndicatorSupported: pgtype.Bool{Bool: false, Valid: true},
+		ID:                         clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA),
+		ProjectID:                  conv.ToNullUUID(fx.projectID),
+	})
+	require.NoError(t, err)
+
+	loc := postConnectAction(t, fx, fx.clientA)
+	_, hasResource := loc.Query()["resource"]
+	require.False(t, hasResource, "the issuer refuses the parameter")
+	require.Equal(t, consentUpstreamA+"/", mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource)
+	require.Zero(t, probes.Load())
 }

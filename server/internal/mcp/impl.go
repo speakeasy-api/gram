@@ -118,14 +118,17 @@ type Service struct {
 	hostedToolsCallCheckpoint *mcptoolexecution.HostedCheckpoint
 	scanEvaluator             *mcpriskscan.Evaluator
 	guardianPolicy            *guardian.Policy
-	db                        *pgxpool.Pool
-	authRepo                  *auth_repo.Queries
-	toolsetsRepo              *toolsets_repo.Queries
-	mcpMetadataRepo           *metadata_repo.Queries
-	orgsRepo                  *organizations_repo.Queries
-	auth                      *auth.Auth
-	env                       toolconfig.EnvironmentLoader
-	serverURL                 *url.URL
+	// protectedResourceFetcher overrides the upstream metadata read on the
+	// connect leg; nil reads it through guardianPolicy.
+	protectedResourceFetcher protectedResourceFetcher
+	db                       *pgxpool.Pool
+	authRepo                 *auth_repo.Queries
+	toolsetsRepo             *toolsets_repo.Queries
+	mcpMetadataRepo          *metadata_repo.Queries
+	orgsRepo                 *organizations_repo.Queries
+	auth                     *auth.Auth
+	env                      toolconfig.EnvironmentLoader
+	serverURL                *url.URL
 	// callbackOrigins pin URLs that external systems store: the IdP callback
 	// sent to WorkOS and to federated customer IdPs, and assistants' CIMD
 	// client IDs. They stay fixed when the server URL moves. Set by
@@ -470,6 +473,7 @@ func NewService(
 		hostedToolsCallCheckpoint: hostedToolsCallCheckpoint,
 		scanEvaluator:             scanEvaluator,
 		guardianPolicy:            guardianPolicy,
+		protectedResourceFetcher:  nil,
 		db:                        db,
 		authRepo:                  auth_repo.New(db),
 		toolsetsRepo:              toolsets_repo.New(db),

@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
@@ -55,6 +56,12 @@ func (s *Service) VerifyRemoteGrantOn(ctx context.Context, endpoint *ResolvedMcp
 		return
 	}
 	s.probeRemoteGrant(ctx, s.logger, endpoint, challengeState, grant)
+}
+
+// SetProtectedResourceFetcher replaces the upstream RFC 9728 metadata read the
+// connect leg makes, so connect tests never dial their fixture hosts.
+func (s *Service) SetProtectedResourceFetcher(fetch func(ctx context.Context, resourceURL string) (wellknown.OAuthProtectedResourceMetadata, error)) {
+	s.protectedResourceFetcher = fetch
 }
 
 // RemoteChallengeManager is the manager the service registered its grant hook on.
