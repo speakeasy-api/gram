@@ -103,6 +103,25 @@ func TestToolExposureChangeConfirmedAgainstAPartialReadCannotSucceed(t *testing.
 	require.Equal(t, 3, after.ToolCount, "nothing was removed on the strength of a partial read")
 }
 
+// A caller with no cursor binding (for example a connection-less assistant
+// with no user) still gets the first page, but nothing it could confirm a
+// change against and no cursor it could never present back.
+func TestToolExposureUnboundCallerGetsAPartialPageWithoutVersionOrCursor(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_tool_exposure_unbound")
+	seedExposedTools(t, ctx, fixture)
+	fixture.service.exposurePageSize = 2
+
+	unbound := Principal{OrganizationID: fixture.principal.OrganizationID}
+	require.Empty(t, principalCursorBinding(unbound))
+	page, err := fixture.service.Exposure(ctx, unbound, fixture.project.ID, fixture.toolsetID)
+	require.NoError(t, err)
+	require.True(t, page.Truncated)
+	require.Len(t, page.ToolURNs, 2)
+	require.Empty(t, page.NextToolCursor)
+	require.Empty(t, page.ExposureVersion)
+}
+
 func TestToolExposurePageAfterTheListChangedIsRefused(t *testing.T) {
 	t.Parallel()
 	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_tool_exposure_page_moved")

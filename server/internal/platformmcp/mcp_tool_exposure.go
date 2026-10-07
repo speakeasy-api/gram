@@ -392,10 +392,11 @@ func (s *MCPToolExposureService) ExposurePage(ctx context.Context, principal Pri
 		exposure.ExposureVersion = version
 		return exposure, nil
 	}
-	// A caller with no binding could never present the cursor back, so a
-	// page it cannot continue is refused rather than handed out.
+	// A caller with no binding could never present a cursor back, so it gets
+	// the partial page with neither a cursor nor a version: it can see the
+	// list is incomplete and has nothing to confirm a change against.
 	if binding == "" {
-		return MCPToolExposure{}, ErrUnavailable
+		return exposure, nil
 	}
 	next, err := sealCursor(s.exposureCursors, toolExposureCursor{
 		OrganizationID: principal.OrganizationID, Binding: binding,
