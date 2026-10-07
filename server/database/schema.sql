@@ -9484,6 +9484,13 @@ WHERE user_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS platform_mcp_operation_receipts_expires_at_idx
 ON platform_mcp_operation_receipts (expires_at);
 
+-- Replay lookup for an operation that creates its own project: it has no
+-- project to key on yet, so it finds its receipt by user, operation and key
+-- across the organization. The unique key above leads with project_id and
+-- cannot serve that lookup without scanning the user's whole receipt range.
+CREATE INDEX IF NOT EXISTS platform_mcp_operation_receipts_user_operation_idx
+ON platform_mcp_operation_receipts (organization_id, user_id, operation, idempotency_key);
+
 CREATE INDEX IF NOT EXISTS platform_mcp_operation_receipts_organization_connection_idx
 ON platform_mcp_operation_receipts (organization_id, connection_id);
 
