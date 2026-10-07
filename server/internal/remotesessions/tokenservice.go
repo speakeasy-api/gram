@@ -1,7 +1,7 @@
 // tokenservice.go is the MCP-runtime side of the remote-session flow.
 // challenge.go drives the *login* leg (build authz URL, exchange code,
 // persist tokens). This file drives the *use* leg: given a subject the
-// MCP runtime has just authenticated via a Gram user-session JWT, find
+// MCP runtime has just authenticated via a Speakeasy user-session JWT, find
 // the upstream access token to forward on the request.
 //
 // Three entry points exposed:

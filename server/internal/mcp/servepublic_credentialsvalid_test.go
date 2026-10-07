@@ -36,7 +36,7 @@ func TestServePublicOAuth_ExternalNoSecurityDefs_ValidToken_Succeeds(t *testing.
 	})
 
 	mcpSlug := result.Toolset.McpSlug.String
-	// External OAuth flow passes the bearer token through without Gram-level
+	// External OAuth flow passes the bearer token through without Speakeasy-level
 	// validation — it's collected as-is in tokenInputs.
 	w, err := servePublicHTTP(t, context.Background(), ti, mcpSlug, makeInitializeBody(), "some-external-token", nil)
 	require.NoError(t, err)

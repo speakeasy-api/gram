@@ -88,7 +88,7 @@ export const VerificationReasons = {
 export type VerificationReasons = ClosedEnum<typeof VerificationReasons>;
 
 /**
- * An organization's Okta connection: the service application Gram authenticates to the Okta Management API with, its verification state, and the console checklist. Never carries key material or tokens.
+ * An organization's Okta connection: the service application Speakeasy authenticates to the Okta Management API with, its verification state, and the console checklist. Never carries key material or tokens.
  */
 export type OktaIdentityProviderConnection = {
   /**

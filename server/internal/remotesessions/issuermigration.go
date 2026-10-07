@@ -33,7 +33,7 @@ import (
 //     client's sessions and its user_session_issuer bindings travel with it.
 //   - Tokens are encrypted under one global key, not a per-issuer key, so the
 //     stored ciphertext stays decryptable.
-//   - client_id/client_secret belong to the upstream URL, not to Gram's issuer
+//   - client_id/client_secret belong to the upstream URL, not to Speakeasy's issuer
 //     row, so refresh tokens stay bound to an unchanged client_id.
 //
 // Ordering inside the transaction is load-bearing: re-point before

@@ -1,4 +1,4 @@
-// Package oktaseed holds the hand-curated starter set of Gram-owned catalog
+// Package oktaseed holds the hand-curated starter set of Speakeasy-owned catalog
 // entries that map Okta Integration Network applications to MCP servers, and
 // applies it idempotently. Okta exposes nothing that links an app to an MCP
 // server, so this table is the source until a staff helper replaces it.

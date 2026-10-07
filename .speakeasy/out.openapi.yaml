@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
-  title: Gram API Description
-  description: Gram is the tools platform for AI agents
+  title: Speakeasy API Description
+  description: Speakeasy is the tools platform for AI agents
   version: 0.0.1
 servers:
   - url: https://app.getgram.ai
@@ -1766,12 +1766,12 @@ paths:
       operationId: listIdentityAccess
       parameters:
         - allowEmptyValue: true
-          description: The Gram user ID to look up accessible resources for.
+          description: The Speakeasy user ID to look up accessible resources for.
           in: query
           name: user_id
           required: true
           schema:
-            description: The Gram user ID to look up accessible resources for.
+            description: The Speakeasy user ID to look up accessible resources for.
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -2857,7 +2857,7 @@ paths:
         type: mutation
   /rpc/access.setAIToolDecision:
     post:
-      description: 'Record whether a detected AI tool may reach this organization''s MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Gram can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization''s scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.'
+      description: 'Record whether a detected AI tool may reach this organization''s MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Speakeasy can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization''s scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.'
       operationId: setAIToolDecision
       parameters:
         - allowEmptyValue: true
@@ -6088,7 +6088,7 @@ paths:
         name: MigrateToGlobalRemoteSessionIssuer
   /rpc/adminRemoteSessions.refreshGlobalIssuerMetadata:
     post:
-      description: Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.
+      description: Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.
       operationId: refreshGlobalRemoteSessionIssuerMetadata
       parameters:
         - allowEmptyValue: true
@@ -6751,16 +6751,16 @@ paths:
         name: AgentPlugins
   /rpc/agent.getSessionMeta:
     get:
-      description: 'Resolve display metadata (Gram chat id, generated title, last activity) for captured agent sessions the calling user owns. Used by the device agent''s session picker to overlay server-generated titles on locally discovered transcripts; unknown or non-owned session ids are silently omitted, so the picker degrades gracefully. Requires a per-user key: the fleet-shared org install key is refused because session metadata is per-user data.'
+      description: 'Resolve display metadata (Speakeasy chat id, generated title, last activity) for captured agent sessions the calling user owns. Used by the device agent''s session picker to overlay server-generated titles on locally discovered transcripts; unknown or non-owned session ids are silently omitted, so the picker degrades gracefully. Requires a per-user key: the fleet-shared org install key is refused because session metadata is per-user data.'
       operationId: getAgentSessionMeta
       parameters:
         - allowEmptyValue: true
-          description: Native harness session identifiers (e.g. Claude Code session UUIDs, Codex rollout ids) to resolve. Gram derives its chat ids from these the same way hook ingest does.
+          description: Native harness session identifiers (e.g. Claude Code session UUIDs, Codex rollout ids) to resolve. Speakeasy derives its chat ids from these the same way hook ingest does.
           in: query
           name: session_ids
           required: true
           schema:
-            description: Native harness session identifiers (e.g. Claude Code session UUIDs, Codex rollout ids) to resolve. Gram derives its chat ids from these the same way hook ingest does.
+            description: Native harness session identifiers (e.g. Claude Code session UUIDs, Codex rollout ids) to resolve. Speakeasy derives its chat ids from these the same way hook ingest does.
             items:
               type: string
             maxItems: 50
@@ -10137,7 +10137,7 @@ paths:
         name: CreateSignedChatAttachmentURL
   /rpc/assets.fetchImageFromURL:
     post:
-      description: Fetch an image from a URL and upload it to Gram as an image asset.
+      description: Fetch an image from a URL and upload it to Speakeasy as an image asset.
       operationId: fetchImageFromURL
       parameters:
         - allowEmptyValue: true
@@ -10242,7 +10242,7 @@ paths:
         name: FetchImageFromURL
   /rpc/assets.fetchOpenAPIv3FromURL:
     post:
-      description: Fetch an OpenAPI v3 document from a URL and upload it to Gram.
+      description: Fetch an OpenAPI v3 document from a URL and upload it to Speakeasy.
       operationId: fetchOpenAPIv3FromURL
       parameters:
         - allowEmptyValue: true
@@ -10446,7 +10446,7 @@ paths:
         name: ListAssets
   /rpc/assets.serveChatAttachment:
     get:
-      description: Serve a chat attachment from Gram.
+      description: Serve a chat attachment from Speakeasy.
       operationId: serveChatAttachment
       parameters:
         - allowEmptyValue: true
@@ -10667,7 +10667,7 @@ paths:
         name: serveChatAttachmentSigned
   /rpc/assets.serveFunction:
     get:
-      description: Serve a Gram Functions asset from Gram.
+      description: Serve a Speakeasy Functions asset from Speakeasy.
       operationId: serveFunction
       parameters:
         - allowEmptyValue: true
@@ -10785,7 +10785,7 @@ paths:
         name: serveFunction
   /rpc/assets.serveImage:
     get:
-      description: Serve an image from Gram.
+      description: Serve an image from Speakeasy.
       operationId: serveImage
       parameters:
         - allowEmptyValue: true
@@ -10883,7 +10883,7 @@ paths:
         name: serveImage
   /rpc/assets.serveOpenAPIv3:
     get:
-      description: Serve an OpenAPIv3 asset from Gram.
+      description: Serve an OpenAPIv3 asset from Speakeasy.
       operationId: serveOpenAPIv3
       parameters:
         - allowEmptyValue: true
@@ -11001,7 +11001,7 @@ paths:
         name: serveOpenAPIv3
   /rpc/assets.uploadChatAttachment:
     post:
-      description: Upload a chat attachment to Gram.
+      description: Upload a chat attachment to Speakeasy.
       operationId: uploadChatAttachment
       parameters:
         - allowEmptyValue: true
@@ -11122,7 +11122,7 @@ paths:
         name: UploadChatAttachment
   /rpc/assets.uploadFunctions:
     post:
-      description: Upload functions to Gram.
+      description: Upload functions to Speakeasy.
       operationId: uploadFunctions
       parameters:
         - allowEmptyValue: true
@@ -11241,7 +11241,7 @@ paths:
               format: binary
   /rpc/assets.uploadImage:
     post:
-      description: Upload an image to Gram.
+      description: Upload an image to Speakeasy.
       operationId: uploadImage
       parameters:
         - allowEmptyValue: true
@@ -11360,7 +11360,7 @@ paths:
               format: binary
   /rpc/assets.uploadOpenAPIv3:
     post:
-      description: Upload an OpenAPI v3 document to Gram.
+      description: Upload an OpenAPI v3 document to Speakeasy.
       operationId: uploadOpenAPIv3Asset
       parameters:
         - allowEmptyValue: true
@@ -14713,11 +14713,11 @@ paths:
             description: Filter by external user ID
             type: string
         - allowEmptyValue: true
-          description: Filter by Gram user ID
+          description: Filter by Speakeasy user ID
           in: query
           name: user_id
           schema:
-            description: Filter by Gram user ID
+            description: Filter by Speakeasy user ID
             type: string
         - allowEmptyValue: true
           description: Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.
@@ -19256,11 +19256,11 @@ paths:
               - missing
             type: string
         - allowEmptyValue: true
-          description: Only devices assigned to these Gram users. Combined with user_emails as an OR, because a device only carries a resolved user id when the MDM's reported email matched a member.
+          description: Only devices assigned to these Speakeasy users. Combined with user_emails as an OR, because a device only carries a resolved user id when the MDM's reported email matched a member.
           in: query
           name: user_ids
           schema:
-            description: Only devices assigned to these Gram users. Combined with user_emails as an OR, because a device only carries a resolved user id when the MDM's reported email matched a member.
+            description: Only devices assigned to these Speakeasy users. Combined with user_emails as an OR, because a device only carries a resolved user id when the MDM's reported email matched a member.
             items:
               type: string
             type: array
@@ -22358,7 +22358,7 @@ paths:
         name: GetGcpIamCredential
   /rpc/externalCredentials.getGcpSetupInfo:
     get:
-      description: Report what the customer must grant in their own GCP project before Gram can impersonate a service account there. Readable before any credential exists, since impersonation is a precondition of creating one. Requires org:read.
+      description: Report what the customer must grant in their own GCP project before Speakeasy can impersonate a service account there. Readable before any credential exists, since impersonation is a precondition of creating one. Requires org:read.
       operationId: getGcpSetupInfo
       parameters:
         - allowEmptyValue: true
@@ -22872,7 +22872,7 @@ paths:
         name: UpdateGcpIamCredential
   /rpc/externalCredentials.verifyGcpIam:
     post:
-      description: 'Probe that Gram can impersonate the service account a GCP IAM credential names, and report the principal it resolves to. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.'
+      description: 'Probe that Speakeasy can impersonate the service account a GCP IAM credential names, and report the principal it resolves to. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.'
       operationId: verifyGcpIamCredential
       parameters:
         - allowEmptyValue: true
@@ -23757,7 +23757,7 @@ paths:
         name: ListGcpKmsKeys
   /rpc/externalKeys.updateAwsKms:
     post:
-      description: 'Update an AWS KMS external key''s name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The key ARN and algorithm are immutable: an external key identifies exactly one signable key permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.'
+      description: 'Update an AWS KMS external key''s name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The key ARN and algorithm are immutable: an external key identifies exactly one signable key permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Speakeasy signs with.'
       operationId: updateAwsKmsKey
       parameters:
         - allowEmptyValue: true
@@ -23845,7 +23845,7 @@ paths:
         name: UpdateAwsKmsKey
   /rpc/externalKeys.updateGcpKms:
     post:
-      description: 'Update a GCP KMS external key''s name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The resource name and algorithm are immutable: an external key identifies exactly one signable crypto key version permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.'
+      description: 'Update a GCP KMS external key''s name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The resource name and algorithm are immutable: an external key identifies exactly one signable crypto key version permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Speakeasy signs with.'
       operationId: updateGcpKmsKey
       parameters:
         - allowEmptyValue: true
@@ -23933,7 +23933,7 @@ paths:
         name: UpdateGcpKmsKey
   /rpc/externalKeys.verifyGcpKms:
     post:
-      description: 'Probe that Gram can reach a GCP KMS external key through its backing credential and use it to sign: read the key''s public half, confirm its algorithm matches the one recorded, sign a probe digest, and verify that signature locally against the public half. Performs a real signing operation, which is billed to the key''s owner and lands in their Cloud Audit Log. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.'
+      description: 'Probe that Speakeasy can reach a GCP KMS external key through its backing credential and use it to sign: read the key''s public half, confirm its algorithm matches the one recorded, sign a probe digest, and verify that signature locally against the public half. Performs a real signing operation, which is billed to the key''s owner and lands in their Cloud Audit Log. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.'
       operationId: verifyGcpKmsKey
       parameters:
         - allowEmptyValue: true
@@ -24052,11 +24052,11 @@ paths:
             description: Optional project slug for plugin-driven attribution.
         - name: X-Gram-Hook-Hostname
           in: header
-          description: Optional endpoint hostname supplied by the Gram hook plugin.
+          description: Optional endpoint hostname supplied by the Speakeasy hook plugin.
           allowEmptyValue: true
           schema:
             type: string
-            description: Optional endpoint hostname supplied by the Gram hook plugin.
+            description: Optional endpoint hostname supplied by the Speakeasy hook plugin.
         - name: Idempotency-Key
           in: header
           description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
@@ -24155,11 +24155,11 @@ paths:
             description: project header
         - name: X-Gram-Hook-Hostname
           in: header
-          description: Optional endpoint hostname supplied by the Gram hook plugin.
+          description: Optional endpoint hostname supplied by the Speakeasy hook plugin.
           allowEmptyValue: true
           schema:
             type: string
-            description: Optional endpoint hostname supplied by the Gram hook plugin.
+            description: Optional endpoint hostname supplied by the Speakeasy hook plugin.
         - name: Idempotency-Key
           in: header
           description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
@@ -24262,11 +24262,11 @@ paths:
             description: project header
         - name: X-Gram-Hook-Hostname
           in: header
-          description: Optional endpoint hostname supplied by the Gram hook plugin.
+          description: Optional endpoint hostname supplied by the Speakeasy hook plugin.
           allowEmptyValue: true
           schema:
             type: string
-            description: Optional endpoint hostname supplied by the Gram hook plugin.
+            description: Optional endpoint hostname supplied by the Speakeasy hook plugin.
         - name: Idempotency-Key
           in: header
           description: Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
@@ -25113,13 +25113,13 @@ paths:
       operationId: resolveIdentity
       parameters:
         - allowEmptyValue: true
-          description: The identity URN to resolve, in the form '<kind>:<id>'. Kind is one of 'user' (Gram user id), 'email', 'external' (the external user id an agent reported), 'apikey', or 'agent'. Callers pass whichever identifier they hold; every URN for the same subject resolves to the same identity.
+          description: The identity URN to resolve, in the form '<kind>:<id>'. Kind is one of 'user' (Speakeasy user id), 'email', 'external' (the external user id an agent reported), 'apikey', or 'agent'. Callers pass whichever identifier they hold; every URN for the same subject resolves to the same identity.
           example: user:user_01abc
           in: query
           name: urn
           required: true
           schema:
-            description: The identity URN to resolve, in the form '<kind>:<id>'. Kind is one of 'user' (Gram user id), 'email', 'external' (the external user id an agent reported), 'apikey', or 'agent'. Callers pass whichever identifier they hold; every URN for the same subject resolves to the same identity.
+            description: The identity URN to resolve, in the form '<kind>:<id>'. Kind is one of 'user' (Speakeasy user id), 'email', 'external' (the external user id an agent reported), 'apikey', or 'agent'. Callers pass whichever identifier they hold; every URN for the same subject resolves to the same identity.
             example: user:user_01abc
             type: string
         - allowEmptyValue: true
@@ -35762,7 +35762,7 @@ paths:
         name: CreateOrganizationRemoteSessionClient
   /rpc/organizationRemoteSessionClients.createCimd:
     post:
-      description: 'Register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing remote_session_issuer in the caller''s organization, with no user_session_issuer attachments. Gram generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported. The client is project-scoped: it inherits a project-specific issuer''s project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.'
+      description: 'Register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing remote_session_issuer in the caller''s organization, with no user_session_issuer attachments. Speakeasy generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported. The client is project-scoped: it inherits a project-specific issuer''s project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.'
       operationId: createCimdOrganizationRemoteSessionClient
       parameters:
         - allowEmptyValue: true
@@ -37863,7 +37863,7 @@ paths:
         name: MoveOrganizationRemoteSessionIssuer
   /rpc/organizationRemoteSessionIssuers.refreshMetadata:
     post:
-      description: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.
+      description: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.
       operationId: refreshOrganizationRemoteSessionIssuerMetadata
       parameters:
         - allowEmptyValue: true
@@ -40339,7 +40339,7 @@ paths:
         name: ListSetupTasks
   /rpc/organizations.listUsers:
     get:
-      description: List users in the active organization from Gram organization_user_relationships.
+      description: List users in the active organization from Speakeasy organization_user_relationships.
       operationId: listOrganizationUsers
       parameters:
         - allowEmptyValue: true
@@ -40421,16 +40421,16 @@ paths:
         name: ListOrganizationUsers
   /rpc/organizations.removeUser:
     delete:
-      description: Remove a user from the active organization in Gram and delete their WorkOS organization membership.
+      description: Remove a user from the active organization in Speakeasy and delete their WorkOS organization membership.
       operationId: removeOrganizationUser
       parameters:
         - allowEmptyValue: true
-          description: Gram user ID to remove.
+          description: Speakeasy user ID to remove.
           in: query
           name: user_id
           required: true
           schema:
-            description: Gram user ID to remove.
+            description: Speakeasy user ID to remove.
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -41033,7 +41033,7 @@ paths:
         name: UpdateSetupTask
   /rpc/organizations.verifyOnboardingHooksSetup:
     get:
-      description: Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
+      description: Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Speakeasy. Polled from the confirm-traffic step.
       operationId: verifyOnboardingHooksSetup
       parameters:
         - allowEmptyValue: true
@@ -43880,7 +43880,7 @@ paths:
       x-speakeasy-name-override: downloadCodexInstallScript
   /rpc/plugins.downloadObservabilityPlugin:
     get:
-      description: Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
+      description: Download a ZIP of the per-org observability plugin (Speakeasy hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
       operationId: downloadObservabilityPlugin
       parameters:
         - allowEmptyValue: true
@@ -48479,7 +48479,7 @@ paths:
         name: CreateRemoteSessionClient
   /rpc/remoteSessionClients.createCimd:
     post:
-      description: Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.
+      description: Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Speakeasy generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.
       operationId: createCimdRemoteSessionClient
       parameters:
         - allowEmptyValue: true
@@ -50366,7 +50366,7 @@ paths:
         name: RemoteSessionIssuers
   /rpc/remoteSessionIssuers.refreshMetadata:
     post:
-      description: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.
+      description: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.
       operationId: refreshRemoteSessionIssuerMetadata
       parameters:
         - allowEmptyValue: true
@@ -58768,11 +58768,11 @@ paths:
               type: string
             type: array
         - allowEmptyValue: true
-          description: Only return skills at least one of these Gram users is authorized to reach, through a grant on them or on a role they hold, less any blocking grant withdrawing the same scope. Plugin membership is distribution and does not widen it.
+          description: Only return skills at least one of these Speakeasy users is authorized to reach, through a grant on them or on a role they hold, less any blocking grant withdrawing the same scope. Plugin membership is distribution and does not widen it.
           in: query
           name: accessible_by
           schema:
-            description: Only return skills at least one of these Gram users is authorized to reach, through a grant on them or on a role they hold, less any blocking grant withdrawing the same scope. Plugin membership is distribution and does not widen it.
+            description: Only return skills at least one of these Speakeasy users is authorized to reach, through a grant on them or on a role they hold, less any blocking grant withdrawing the same scope. Plugin membership is distribution and does not widen it.
             items:
               type: string
             type: array
@@ -60934,16 +60934,16 @@ paths:
         name: SlackDirectoryMembers
   /rpc/slackDirectoryConnections.listPersonAccounts:
     get:
-      description: Read mapped Slack accounts for an active organization person by exact Gram user ID. Browser session only; caller must be that person or an organization administrator. Does not infer associations from email or grant permissions.
+      description: Read mapped Slack accounts for an active organization person by exact Speakeasy user ID. Browser session only; caller must be that person or an organization administrator. Does not infer associations from email or grant permissions.
       operationId: listSlackPersonAccounts
       parameters:
         - allowEmptyValue: true
-          description: Exact Gram user ID of the active organization person.
+          description: Exact Speakeasy user ID of the active organization person.
           in: query
           name: user_id
           required: true
           schema:
-            description: Exact Gram user ID of the active organization person.
+            description: Exact Speakeasy user ID of the active organization person.
             minLength: 1
             type: string
         - allowEmptyValue: true
@@ -68450,7 +68450,7 @@ paths:
         name: UpdateToolset
   /rpc/toolsets.updateExternalOAuthServer:
     post:
-      description: Change an attached external OAuth server between provider-hosted and Gram-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association
+      description: Change an attached external OAuth server between provider-hosted and Speakeasy-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association
       operationId: updateExternalOAuthServer
       parameters:
         - allowEmptyValue: true
@@ -74027,7 +74027,7 @@ paths:
         name: UserSessionIssuerCimdClients
   /rpc/userSessionIssuersCimdClients.listPresets:
     get:
-      description: List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' admit every enabled entry here automatically, with no per-issuer configuration. Presets mode is opt-in; an issuer without an explicit mode uses 'open' and evaluates this catalog only for its shadow measurement. The catalog is global and contains no tenant data.
+      description: List Speakeasy's curated CIMD preset catalog. Issuers whose admission mode is 'presets' admit every enabled entry here automatically, with no per-issuer configuration. Presets mode is opt-in; an issuer without an explicit mode uses 'open' and evaluates this catalog only for its shadow measurement. The catalog is global and contains no tenant data.
       operationId: listCimdClientPresets
       parameters:
         - allowEmptyValue: true
@@ -74126,7 +74126,7 @@ paths:
         name: CimdClientPresets
   /rpc/userSessionIssuersCimdClients.verifyURL:
     post:
-      description: 'Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Gram fetch a caller-chosen URL.'
+      description: 'Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Speakeasy fetch a caller-chosen URL.'
       operationId: verifyUserSessionIssuerCimdClientURL
       parameters:
         - allowEmptyValue: true
@@ -77494,7 +77494,7 @@ components:
           description: Display name for the server. Defaults to the backing server name when omitted.
         mcp_server_id:
           type: string
-          description: Gram MCP server ID. Provide exactly one backend ID.
+          description: Speakeasy MCP server ID. Provide exactly one backend ID.
           format: uuid
         meta_mcp_server_id:
           type: string
@@ -77515,7 +77515,7 @@ components:
           format: int32
         toolset_id:
           type: string
-          description: Gram toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id.
+          description: Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id.
           format: uuid
       required:
         - plugin_id
@@ -77577,7 +77577,7 @@ components:
           description: Whether the key is locked down (refused locally and disabled upstream).
         gram_account_type:
           type: string
-          description: The organization's Gram account type (e.g. free, pro, enterprise).
+          description: The organization's Speakeasy account type (e.g. free, pro, enterprise).
         key_type:
           type: string
           description: 'Which upstream key this row provisions: ''chat'' pays for customer-facing completions, ''internal'' pays for platform-initiated LLM usage.'
@@ -77905,7 +77905,7 @@ components:
       properties:
         chat_id:
           type: string
-          description: Gram chat id for the captured session.
+          description: Speakeasy chat id for the captured session.
           format: uuid
         session_id:
           type: string
@@ -77993,7 +77993,7 @@ components:
           items:
             type: string
             pattern: ^[a-z0-9][a-z0-9-]{0,63}$
-          description: 'Vendor keys from Gram''s CIMD client catalog. Vendor-grained: no two targets may claim the same key, or a block on either would silently cover the other.'
+          description: 'Vendor keys from Speakeasy''s CIMD client catalog. Vendor-grained: no two targets may claim the same key, or a block on either would silently cover the other.'
           maxItems: 16
         client_info_names:
           type: array
@@ -78009,7 +78009,7 @@ components:
             maxLength: 512
           description: Client ids matched literally against the caller's verified client_id, or CIMD catalog URLs — including the wildcard patterns — matched against the catalog entry that admitted it. Naming the catalog URL is how a vendor that mints one document per MCP server is still named exactly. No two targets may claim the same entry.
           maxItems: 16
-      description: 'How a target detected on a device is recognized again when the same tool calls Gram''s MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Gram verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.'
+      description: 'How a target detected on a device is recognized again when the same tool calls Speakeasy''s MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Speakeasy verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.'
       required:
         - cimd_vendor_keys
         - oauth_client_ids
@@ -78709,7 +78709,7 @@ components:
       properties:
         endpoint_slug:
           type: string
-          description: The slug of the server's Gram-hosted MCP endpoint (/mcp/{endpoint_slug}). Populated on reads; ignored on writes. Absent when the server has no Gram-hosted endpoint.
+          description: The slug of the server's Speakeasy-hosted MCP endpoint (/mcp/{endpoint_slug}). Populated on reads; ignored on writes. Absent when the server has no Speakeasy-hosted endpoint.
         environment_slug:
           type: string
           description: Optional environment slug used when connecting to the MCP server.
@@ -79118,14 +79118,14 @@ components:
       properties:
         assume_role_arn:
           type: string
-          description: The customer IAM role ARN Gram assumes.
+          description: The customer IAM role ARN Speakeasy assumes.
         created_at:
           type: string
           description: When the credential was created.
           format: date-time
         external_id:
           type: string
-          description: The Gram-generated ExternalId the customer must require in their role trust policy. Present when Gram assumes the role with an ExternalId.
+          description: The Speakeasy-generated ExternalId the customer must require in their role trust policy. Present when Speakeasy assumes the role with an ExternalId.
         id:
           type: string
           description: The ID of the external credential.
@@ -79135,7 +79135,7 @@ components:
           description: A human-readable name for the credential.
         oidc_audience:
           type: string
-          description: The OIDC audience. Present when Gram assumes the role with a web identity.
+          description: The OIDC audience. Present when Speakeasy assumes the role with a web identity.
         oidc_subject:
           type: string
           description: Optional OIDC subject pin (web-identity approach).
@@ -79178,10 +79178,10 @@ components:
           format: date-time
         customer_grant_reference:
           type: string
-          description: The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+          description: The Speakeasy identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
         external_credential_id:
           type: string
-          description: The external credential Gram uses to authenticate to the key.
+          description: The external credential Speakeasy uses to authenticate to the key.
           format: uuid
         id:
           type: string
@@ -80045,7 +80045,7 @@ components:
           description: Provider identity observed in the message envelope.
         user_id:
           type: string
-          description: Explicitly mapped Gram person at capture time; this attribution grants no permissions.
+          description: Explicitly mapped Speakeasy person at capture time; this attribution grants no permissions.
       required:
         - provider
         - provider_user_id
@@ -80208,14 +80208,14 @@ components:
           description: Human-readable client name.
         enabled:
           type: boolean
-          description: Whether presets-mode issuers currently admit this entry. Disabled entries are listed so operators can see that Gram knows about the vendor.
+          description: Whether presets-mode issuers currently admit this entry. Disabled entries are listed so operators can see that Speakeasy knows about the vendor.
         is_pattern:
           type: boolean
           description: True when client_id_metadata_uri contains a `*` wildcard, matching a whole namespace of client_ids rather than one URL. Used for vendors that mint a separate metadata document per connector or install, so their client_ids cannot be enumerated. A `*` stands for exactly one path segment and never widens the host.
         vendor_key:
           type: string
           description: Stable identifier for the publishing vendor. Not unique — a vendor may publish several client documents.
-      description: An entry in Gram's curated CIMD preset catalog.
+      description: An entry in Speakeasy's curated CIMD preset catalog.
       required:
         - vendor_key
         - display_name
@@ -80710,7 +80710,7 @@ components:
       properties:
         assume_role_arn:
           type: string
-          description: The customer IAM role ARN Gram assumes. Omit for a KMS key-policy grant.
+          description: The customer IAM role ARN Speakeasy assumes. Omit for a KMS key-policy grant.
         name:
           type: string
           description: A human-readable name for the credential.
@@ -80736,10 +80736,10 @@ components:
             - ES256
         customer_grant_reference:
           type: string
-          description: Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+          description: Optional. The Speakeasy identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
         external_credential_id:
           type: string
-          description: The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+          description: The external credential Speakeasy uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
           format: uuid
         key_arn:
           type: string
@@ -80777,7 +80777,7 @@ components:
             type: string
             format: uuid
           description: The user_session_issuers to attach this client to via the join table. Omit or pass an empty array to create a standalone client with no attachments.
-      description: Form for creating a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the row carries no secret and authenticates with token_endpoint_auth_method=none. The caller supplies no client_id or credentials.
+      description: Form for creating a remote_session_client in Client ID Metadata Document (CIMD) mode. Speakeasy generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the row carries no secret and authenticates with token_endpoint_auth_method=none. The caller supplies no client_id or credentials.
       required:
         - remote_session_issuer_id
     CreateCimdOrganizationRemoteSessionClientForm:
@@ -80803,7 +80803,7 @@ components:
             pattern: ^[!#-[\]-~]+$
             maxLength: 128
           description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
-      description: Form for an org admin to register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing issuer, with no user_session_issuer attachments. Gram generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported.
+      description: Form for an org admin to register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing issuer, with no user_session_issuer attachments. Speakeasy generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported.
       required:
         - remote_session_issuer_id
     CreateCustomDetectionRuleRequestBody:
@@ -80983,7 +80983,7 @@ components:
       properties:
         impersonate_service_account:
           type: string
-          description: The service account in your project that Gram impersonates. Grant Gram's own service account roles/iam.serviceAccountTokenCreator on it — see externalCredentials.getGcpSetupInfo.
+          description: The service account in your project that Speakeasy impersonates. Grant Speakeasy's own service account roles/iam.serviceAccountTokenCreator on it — see externalCredentials.getGcpSetupInfo.
         name:
           type: string
           description: A human-readable name for the credential.
@@ -81001,10 +81001,10 @@ components:
             - ES256
         customer_grant_reference:
           type: string
-          description: Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+          description: Optional. The Speakeasy identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
         external_credential_id:
           type: string
-          description: The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+          description: The external credential Speakeasy uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
           format: uuid
         name:
           type: string
@@ -81030,7 +81030,7 @@ components:
           description: client_id supplied by the caller.
         client_secret:
           type: string
-          description: client_secret supplied by the caller. Gram encrypts before persisting.
+          description: client_secret supplied by the caller. Speakeasy encrypts before persisting.
         remote_session_issuer_id:
           type: string
           description: The owning global remote_session_issuer id.
@@ -81313,7 +81313,7 @@ components:
           description: A human-readable display name for the server
         network_access_mode:
           type: string
-          description: The network surfaces through which a Gram-hosted MCP server may be reached.
+          description: The network surfaces through which a Speakeasy-hosted MCP server may be reached.
           enum:
             - public_only
             - dual
@@ -81363,7 +81363,7 @@ components:
           maxLength: 100
         network_access_mode:
           type: string
-          description: The network surfaces through which a Gram-hosted MCP server may be reached.
+          description: The network surfaces through which a Speakeasy-hosted MCP server may be reached.
           enum:
             - public_only
             - dual
@@ -81398,7 +81398,7 @@ components:
           format: date-time
         client_secret:
           type: string
-          description: Optional client_secret supplied by the caller. Gram encrypts before persisting; the plaintext is never returned.
+          description: Optional client_secret supplied by the caller. Speakeasy encrypts before persisting; the plaintext is never returned.
         client_secret_expires_at:
           type: string
           description: When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
@@ -81456,7 +81456,7 @@ components:
           description: Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.
         trusted_remote_session_client_id:
           type: string
-          description: Organization-level remote_session_client Gram uses with the trusted issuer. Must be supplied together with trusted_remote_session_issuer_id.
+          description: Organization-level remote_session_client Speakeasy uses with the trusted issuer. Must be supplied together with trusted_remote_session_issuer_id.
           format: uuid
         trusted_remote_session_issuer_id:
           type: string
@@ -81546,7 +81546,7 @@ components:
       properties:
         impersonate_service_account:
           type: string
-          description: The service account Gram impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
+          description: The service account Speakeasy impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
         name:
           type: string
           description: A human-readable name for the credential.
@@ -81677,7 +81677,7 @@ components:
           format: date-time
         client_secret:
           type: string
-          description: client_secret supplied by the caller. Gram encrypts before persisting.
+          description: client_secret supplied by the caller. Speakeasy encrypts before persisting.
         client_secret_expires_at:
           type: string
           description: When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
@@ -82055,7 +82055,7 @@ components:
           description: 'For allow_all policies: complete desired canonical URL block set. Omit or send empty to block nothing. Only valid when shadow_mcp_disposition is allow_all.'
         shadow_mcp_disposition:
           type: string
-          description: 'Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.'
+          description: 'Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.'
           enum:
             - block_all
             - allow_all
@@ -82165,7 +82165,7 @@ components:
           maxLength: 262144
         session_id:
           type: string
-          description: Native harness session identifier the handoff was rendered from. Gram derives its chat id from this the same way hook ingest does; a not-yet-captured session can still mint a link.
+          description: Native harness session identifier the handoff was rendered from. Speakeasy derives its chat id from this the same way hook ingest does; a not-yet-captured session can still mint a link.
           maxLength: 256
         source_surface:
           type: string
@@ -82354,7 +82354,7 @@ components:
           description: Human-readable display name for the tunneled MCP server
         resource_identifier:
           type: string
-          description: RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Gram. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>. Omit unless the identifier is already known; it is usually recorded later, once the tunnel is up.
+          description: RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Speakeasy. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>. Omit unless the identifier is already known; it is usually recorded later, once the tunnel is up.
       description: Form for creating a new tunneled MCP server source
       required:
         - name
@@ -84460,10 +84460,10 @@ components:
           format: date-time
         customer_grant_reference:
           type: string
-          description: The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+          description: The Speakeasy identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
         external_credential_id:
           type: string
-          description: The external credential Gram uses to authenticate to the key.
+          description: The external credential Speakeasy uses to authenticate to the key.
           format: uuid
         id:
           type: string
@@ -84926,7 +84926,7 @@ components:
           type: string
           description: The ID of the external OAuth server
         metadata:
-          description: The validated RFC 8414 metadata Gram hosts in compatibility mode. Exactly one of metadata and authorization_server_issuer is present.
+          description: The validated RFC 8414 metadata Speakeasy hosts in compatibility mode. Exactly one of metadata and authorization_server_issuer is present.
         project_id:
           type: string
           description: The project ID this external OAuth server belongs to
@@ -84950,12 +84950,12 @@ components:
       properties:
         authorization_server_issuer:
           type: string
-          description: Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Gram fetches and strictly verifies this issuer before persistence. Supply exactly one of authorization_server_issuer and metadata.
+          description: Exact HTTPS issuer for provider-hosted RFC 8414 discovery. Speakeasy fetches and strictly verifies this issuer before persistence. Supply exactly one of authorization_server_issuer and metadata.
           format: uri
           pattern: ^https://
           maxLength: 500
         metadata:
-          description: JSON object metadata for Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
+          description: JSON object metadata for Speakeasy-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
         slug:
           type: string
           description: A short url-friendly label that uniquely identifies a resource.
@@ -85182,7 +85182,7 @@ components:
           format: uuid
         impersonate_service_account:
           type: string
-          description: The service account Gram impersonates (impersonation approach, or the WIF hop).
+          description: The service account Speakeasy impersonates (impersonation approach, or the WIF hop).
         name:
           type: string
           description: A human-readable name for the credential.
@@ -85231,10 +85231,10 @@ components:
           format: date-time
         customer_grant_reference:
           type: string
-          description: The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+          description: The Speakeasy identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
         external_credential_id:
           type: string
-          description: The external credential Gram uses to authenticate to the key.
+          description: The external credential Speakeasy uses to authenticate to the key.
           format: uuid
         id:
           type: string
@@ -85275,11 +85275,11 @@ components:
       properties:
         required_role:
           type: string
-          description: The IAM role to grant Gram's service account on the target service account.
+          description: The IAM role to grant Speakeasy's service account on the target service account.
         service_account_email:
           type: string
-          description: Gram's own service account. Grant it roles/iam.serviceAccountTokenCreator on the service account you want Gram to impersonate. Empty when the running environment cannot report one (local development backed by a user login rather than a service-account key).
-      description: What the customer must grant in their own GCP project before Gram can impersonate a service account there.
+          description: Speakeasy's own service account. Grant it roles/iam.serviceAccountTokenCreator on the service account you want Speakeasy to impersonate. Empty when the running environment cannot report one (local development backed by a user login rather than a service-account key).
+      description: What the customer must grant in their own GCP project before Speakeasy can impersonate a service account there.
       required:
         - required_role
     GenerateTitleRequestBody:
@@ -86243,7 +86243,7 @@ components:
           type: array
           items:
             type: string
-          description: MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include
+          description: MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Speakeasy never saw an initialize handshake for) to include
         filters:
           type: array
           items:
@@ -86732,7 +86732,7 @@ components:
           format: date-time
         type:
           type: string
-          description: Canonical Gram hook event type.
+          description: Canonical Speakeasy hook event type.
           enum:
             - session.started
             - session.updated
@@ -86747,7 +86747,7 @@ components:
             - usage.reported
             - skill.activated
             - notification.reported
-      description: Canonical Gram feature event.
+      description: Canonical Speakeasy feature event.
       required:
         - type
     HookIngestSession:
@@ -86784,7 +86784,7 @@ components:
         user_email:
           type: string
           description: Self-reported email of the developer on the emitting machine (device agent or provider account), used for attribution when the API key is shared org-wide.
-      description: Metadata about the local hook adapter that translated a provider event into the Gram hook contract.
+      description: Metadata about the local hook adapter that translated a provider event into the Speakeasy hook contract.
       required:
         - adapter
     HookMCPAttributionEntry:
@@ -86979,7 +86979,7 @@ components:
           description: Event source (from materialized column)
         gram_urn:
           type: string
-          description: Gram URN associated with this hook trace
+          description: Speakeasy URN associated with this hook trace
         hook_source:
           type: string
           description: Hook source (from attributes.gram.hook.source)
@@ -87309,7 +87309,7 @@ components:
           type: array
           items:
             type: string
-          description: The Gram user ids this identity resolves to, the first being the directory owner. Empty when the subject matches no directory row. Audit logs, chats, user sessions and plugin assignments key on these.
+          description: The Speakeasy user ids this identity resolves to, the first being the directory owner. Empty when the subject matches no directory row. Audit logs, chats, user sessions and plugin assignments key on these.
         workos_user_id:
           type: string
           description: The WorkOS user id, which RBAC role assignments key on. Absent for subjects with no WorkOS link.
@@ -90328,7 +90328,7 @@ components:
           type: array
           items:
             type: string
-          description: MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include
+          description: MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Speakeasy never saw an initialize handshake for) to include
         cursor:
           type: string
           description: Cursor for pagination
@@ -90366,7 +90366,7 @@ components:
           description: 'Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself'
         query:
           type: string
-          description: Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Gram URN, conversation ID, and trigger instance ID.
+          description: Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Speakeasy URN, conversation ID, and trigger instance ID.
         shadow_server_names:
           type: array
           items:
@@ -90663,7 +90663,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrganizationUser'
-          description: Users linked to the organization in Gram.
+          description: Users linked to the organization in Speakeasy.
       required:
         - users
     ListVariationsResult:
@@ -90711,7 +90711,7 @@ components:
           $ref: '#/components/schemas/LiteLLMInstanceDiagnostics'
         failure_posture:
           type: string
-          description: How LiteLLM behaves when Gram cannot evaluate a request.
+          description: How LiteLLM behaves when Speakeasy cannot evaluate a request.
           enum:
             - fail_closed
             - fail_open
@@ -90766,7 +90766,7 @@ components:
           format: date-time
         platform_user_pct_24h:
           type: number
-          description: Percentage of model requests in the last 24 hours that resolved to a Gram user.
+          description: Percentage of model requests in the last 24 hours that resolved to a Speakeasy user.
           format: double
           minimum: 0
           maximum: 100
@@ -90913,7 +90913,7 @@ components:
       properties:
         add_server_flow:
           type: string
-          description: How the server is meant to be added in Gram, when the guide states one (e.g., 'catalog', 'custom-remote')
+          description: How the server is meant to be added in Speakeasy, when the guide states one (e.g., 'catalog', 'custom-remote')
         aliases:
           type: array
           items:
@@ -90943,7 +90943,7 @@ components:
           example: box
         speakeasy_markdown:
           type: string
-          description: Markdown instructions for the setup work that happens in Gram
+          description: Markdown instructions for the setup work that happens in Speakeasy
         summary:
           type: string
           description: One-line summary of what the guide covers
@@ -91088,7 +91088,7 @@ components:
           description: Assigned user's email exactly as the MDM reported it. Omitted when the MDM has no assignment.
         user_id:
           type: string
-          description: Resolved Gram user for the assigned email. Omitted when the email is missing or does not resolve to an org member.
+          description: Resolved Speakeasy user for the assigned email. Omitted when the email is missing or does not resolve to an org member.
       description: 'One device from a connected MDM''s inventory, annotated with its agent-coverage bucket. What that bucket attests depends on the organization''s matching mode: under device-level matching a device may be classified by its own hardware serial (this machine ran the agent) or, when no serial heartbeat exists for it, by its assigned-user email (only that user ran the agent somewhere). Under user-level matching only the latter applies.'
       required:
         - id
@@ -91399,7 +91399,7 @@ components:
           description: A human-readable display name for the server
         network_access_mode:
           type: string
-          description: The network surfaces through which a Gram-hosted MCP server may be reached.
+          description: The network surfaces through which a Speakeasy-hosted MCP server may be reached.
           enum:
             - public_only
             - dual
@@ -91429,7 +91429,7 @@ components:
           format: uuid
         unproxied_mcp_server_id:
           type: string
-          description: The ID of the unproxied MCP server used as the backend, if any. A server backed by an unproxied MCP server is never proxied by Gram.
+          description: The ID of the unproxied MCP server used as the backend, if any. A server backed by an unproxied MCP server is never proxied by Speakeasy.
           format: uuid
         updated_at:
           type: string
@@ -91577,7 +91577,7 @@ components:
           format: uuid
         instructions:
           type: string
-          description: Operator-authored server instructions returned in the gateway's MCP initialize response. Null when the gateway serves Gram's built-in instructions.
+          description: Operator-authored server instructions returned in the gateway's MCP initialize response. Null when the gateway serves Speakeasy's built-in instructions.
         member_count:
           type: integer
           description: The number of live members. Only populated by listMetaMcpServers.
@@ -91587,7 +91587,7 @@ components:
           description: The display name of the meta MCP server
         network_access_mode:
           type: string
-          description: The network surfaces through which a Gram-hosted MCP server may be reached.
+          description: The network surfaces through which a Speakeasy-hosted MCP server may be reached.
           enum:
             - public_only
             - dual
@@ -92500,7 +92500,7 @@ components:
               - read_failed:okta.users.read
               - read_failed:okta.groups.read
           description: Typed reasons recorded by the last verification; empty when verified or not yet verified. missing_role is reserved for a later release.
-      description: 'An organization''s Okta connection: the service application Gram authenticates to the Okta Management API with, its verification state, and the console checklist. Never carries key material or tokens.'
+      description: 'An organization''s Okta connection: the service application Speakeasy authenticates to the Okta Management API with, its verification state, and the console checklist. Never carries key material or tokens.'
       required:
         - id
         - organization_id
@@ -92706,7 +92706,7 @@ components:
         xaa_issuer:
           type: string
           description: Vendor Issuer URL for Cross App Access when the catalog knows it.
-      description: A Gram-owned catalog entry whose Okta mapping matches at least one active, assigned application in the organization's Okta snapshot. Suggest only; nothing is created until the administrator accepts through the remote MCP install flow.
+      description: A Speakeasy-owned catalog entry whose Okta mapping matches at least one active, assigned application in the organization's Okta snapshot. Suggest only; nothing is created until the administrator accepts through the remote MCP install flow.
       required:
         - registry_entry_id
         - server_name
@@ -92792,13 +92792,13 @@ components:
       properties:
         chat_id:
           type: string
-          description: Gram chat/session ID that owns this event, when present.
+          description: Speakeasy chat/session ID that owns this event, when present.
         event_name:
           type: string
           description: Hook event name (e.g. PreToolUse, SessionStart).
         project_slug:
           type: string
-          description: Slug of the Gram project that received the event.
+          description: Slug of the Speakeasy project that received the event.
         source:
           type: string
           description: 'Hook source: claude_code, cursor, or codex.'
@@ -93012,7 +93012,7 @@ components:
           description: WorkOS invitation ID.
         inviter_user_id:
           type: string
-          description: Gram user ID of the inviter, when known.
+          description: Speakeasy user ID of the inviter, when known.
         revoked_at:
           type: string
           description: When the invitation was revoked.
@@ -93185,7 +93185,7 @@ components:
           description: User email address.
         id:
           type: string
-          description: Gram relationship row ID.
+          description: Speakeasy relationship row ID.
         last_login:
           type: string
           description: Timestamp of the user's most recent login.
@@ -93195,7 +93195,7 @@ components:
           description: User display name.
         organization_id:
           type: string
-          description: Gram organization ID.
+          description: Speakeasy organization ID.
         photo_url:
           type: string
           description: User photo URL.
@@ -93204,7 +93204,7 @@ components:
           format: date-time
         user_id:
           type: string
-          description: Gram user ID.
+          description: Speakeasy user ID.
         workos_membership_id:
           type: string
           description: WorkOS organization membership ID when known.
@@ -94052,7 +94052,7 @@ components:
           format: uuid
         mcp_server_id:
           type: string
-          description: Gram MCP server ID. Exactly one backend ID is set.
+          description: Speakeasy MCP server ID. Exactly one backend ID is set.
           format: uuid
         meta_mcp_server_id:
           type: string
@@ -94070,7 +94070,7 @@ components:
           format: int32
         toolset_id:
           type: string
-          description: Gram toolset ID. Exactly one backend ID is set.
+          description: Speakeasy toolset ID. Exactly one backend ID is set.
           format: uuid
       required:
         - id
@@ -94380,7 +94380,7 @@ components:
           description: Whether the organization has the staff-managed private network ingress entitlement
         platform_mcp_enabled:
           type: boolean
-          description: Whether the organization can use the Gram Platform MCP capability
+          description: Whether the organization can use the Speakeasy Platform MCP capability
         remote_session_auto_refresh_enabled:
           type: boolean
           description: Whether consent screens expose automatic remote-session refresh for the organization
@@ -95666,10 +95666,10 @@ components:
           description: Scopes held by this session.
         subject_display_name:
           type: string
-          description: Resolved display name when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.
+          description: Resolved display name when the subject is a Speakeasy user. Absent for apikey/anonymous subjects or unresolved users.
         subject_email:
           type: string
-          description: Resolved email when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.
+          description: Resolved email when the subject is a Speakeasy user. Absent for apikey/anonymous subjects or unresolved users.
         subject_urn:
           type: string
           description: The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
@@ -95681,12 +95681,12 @@ components:
           description: Stored display name of the account at the upstream provider. Absent when no upstream identity interface supplied it.
         upstream_email:
           type: string
-          description: Stored email of the account at the upstream provider. Absent when no upstream identity interface supplied it; never inferred from the Gram subject.
+          description: Stored email of the account at the upstream provider. Absent when no upstream identity interface supplied it; never inferred from the Speakeasy subject.
         user_session_issuer_id:
           type: string
           description: The user_session_issuer this session is bound to.
           format: uuid
-      description: A remote_session record — Gram's upstream OAuth session for a (principal, remote_session_client) pair. access_token_encrypted and refresh_token_encrypted are never returned.
+      description: A remote_session record — Speakeasy's upstream OAuth session for a (principal, remote_session_client) pair. access_token_encrypted and refresh_token_encrypted are never returned.
       required:
         - id
         - subject_urn
@@ -95715,7 +95715,7 @@ components:
           format: date-time
         client_id_metadata_uri:
           type: string
-          description: 'When set, the client is in Client ID Metadata Document (CIMD) mode: Gram hosts its OAuth client metadata document at this URL and uses it as the client_id. Null for non-CIMD clients.'
+          description: 'When set, the client is in Client ID Metadata Document (CIMD) mode: Speakeasy hosts its OAuth client metadata document at this URL and uses it as the client_id. Null for non-CIMD clients.'
         client_secret_expires_at:
           type: string
           description: Null when the secret does not expire.
@@ -95864,7 +95864,7 @@ components:
           format: date-time
         jwks_fetched_at:
           type: string
-          description: When Gram last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.
+          description: When Speakeasy last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.
           format: date-time
         jwks_uri:
           type: string
@@ -95940,7 +95940,7 @@ components:
         userinfo_endpoint:
           type: string
           description: OpenID Connect userinfo endpoint. Null when not advertised or not yet captured by discovery.
-      description: A remote_session_issuer record — upstream Authorization Server identity that Gram speaks OAuth to.
+      description: A remote_session_issuer record — upstream Authorization Server identity that Speakeasy speaks OAuth to.
       required:
         - id
         - project_id
@@ -96250,7 +96250,7 @@ components:
           description: Email of the enrolled user. Authoritative when authenticating with an org-scoped agent install key (the MDM zero-touch path); ignored for a per-user key, whose owner is the enrolled user.
         session_id:
           type: string
-          description: Native harness session identifier of the moved session. Gram derives its chat id from this the same way hook ingest does; the move is recorded even if the session has not been captured yet.
+          description: Native harness session identifier of the moved session. Speakeasy derives its chat id from this the same way hook ingest does; the move is recorded even if the session has not been captured yet.
           maxLength: 256
         source_surface:
           type: string
@@ -96262,7 +96262,7 @@ components:
           maxLength: 64
         target_session_id:
           type: string
-          description: Native session id minted for the continuation, when the daemon knows it at launch time (claude-code targets today; Cursor mints ids server-side so moves there omit it). Lets Gram link the original session and its continuation.
+          description: Native session id minted for the continuation, when the daemon knows it at launch time (claude-code targets today; Cursor mints ids server-side so moves there omit it). Lets Speakeasy link the original session and its continuation.
           maxLength: 256
       required:
         - session_id
@@ -97348,7 +97348,7 @@ components:
           maximum: 10
         shadow_mcp_disposition:
           type: string
-          description: 'Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.'
+          description: 'Default disposition for shadow MCP blocking policies: block_all blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.'
           enum:
             - block_all
             - allow_all
@@ -98750,7 +98750,7 @@ components:
           format: date-time
         gram_urn:
           type: string
-          description: Gram URN filter (single URN, use gram_urns for multiple)
+          description: Speakeasy URN filter (single URN, use gram_urns for multiple)
         to:
           type: string
           description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -98824,12 +98824,12 @@ components:
           description: Chat ID filter
         gram_urn:
           type: string
-          description: Gram URN filter (single URN, use gram_urns for multiple)
+          description: Speakeasy URN filter (single URN, use gram_urns for multiple)
         gram_urns:
           type: array
           items:
             type: string
-          description: Gram URN filter (one or more URNs)
+          description: Speakeasy URN filter (one or more URNs)
         http_method:
           type: string
           description: HTTP method filter
@@ -98946,7 +98946,7 @@ components:
           format: uuid
         gram_urn:
           type: string
-          description: Gram URN filter (single URN, use gram_urns for multiple)
+          description: Speakeasy URN filter (single URN, use gram_urns for multiple)
         to:
           type: string
           description: End time in ISO 8601 format (e.g., '2025-12-19T11:00:00Z')
@@ -101529,7 +101529,7 @@ components:
           description: Optional observed display name.
         email:
           type: string
-          description: Observed email; never evidence of a confirmed Gram identity.
+          description: Observed email; never evidence of a confirmed Speakeasy identity.
         id:
           type: string
           description: Durable membership ID.
@@ -101914,7 +101914,7 @@ components:
           format: double
         user_id:
           type: string
-          description: Gram user ID of the actor, when linked.
+          description: Speakeasy user ID of the actor, when linked.
       required:
         - email
         - spend_usd
@@ -101964,7 +101964,7 @@ components:
           format: double
         user_id:
           type: string
-          description: Gram user ID of the actor, when linked.
+          description: Speakeasy user ID of the actor, when linked.
         window_end:
           type: string
           description: Exclusive end of the budget window; the budget resets at this instant.
@@ -102845,7 +102845,7 @@ components:
           description: Event source (from attributes.gram.event.source)
         gram_urn:
           type: string
-          description: Gram URN associated with this tool call
+          description: Speakeasy URN associated with this tool call
         http_status_code:
           type: integer
           description: HTTP status code (if applicable)
@@ -103501,7 +103501,7 @@ components:
           description: Telemetry event source
         gram_urn:
           type: string
-          description: Gram URN associated with the trace
+          description: Speakeasy URN associated with the trace
         hook_source:
           type: string
           description: Hook plugin source when the row came from hook telemetry
@@ -103934,7 +103934,7 @@ components:
           description: The name of the toolset
         network_access_mode:
           type: string
-          description: The network surfaces through which a Gram-hosted MCP server may be reached.
+          description: The network surfaces through which a Speakeasy-hosted MCP server may be reached.
           enum:
             - public_only
             - dual
@@ -104721,7 +104721,7 @@ components:
           format: int64
         resource_identifier:
           type: string
-          description: RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Gram. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>
+          description: RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Speakeasy. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>
         status:
           type: string
           description: Stored lifecycle status for a tunneled MCP server source
@@ -105094,7 +105094,7 @@ components:
       properties:
         assume_role_arn:
           type: string
-          description: The customer IAM role ARN Gram assumes. Omit for a KMS key-policy grant.
+          description: The customer IAM role ARN Speakeasy assumes. Omit for a KMS key-policy grant.
         id:
           type: string
           description: The ID of the credential to update.
@@ -105122,7 +105122,7 @@ components:
           description: Optional. The AWS principal ARN the customer granted on the key in its key policy. Not a secret.
         external_credential_id:
           type: string
-          description: The external credential Gram uses to authenticate to the key. Must be an aws_iam credential belonging to the same organization.
+          description: The external credential Speakeasy uses to authenticate to the key. Must be an aws_iam credential belonging to the same organization.
           format: uuid
         id:
           type: string
@@ -105140,7 +105140,7 @@ components:
       properties:
         config:
           type: object
-          description: Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, ai_scan_interval_seconds, and disable_ai_scan. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden, as is ai_scan, which Gram injects from the organization's scan target list when serving agents.
+          description: Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, ai_scan_interval_seconds, and disable_ai_scan. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden, as is ai_scan, which Speakeasy injects from the organization's scan target list when serving agents.
           additionalProperties: true
       required:
         - config
@@ -105256,12 +105256,12 @@ components:
       properties:
         authorization_server_issuer:
           type: string
-          description: Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly discovers and verifies it before the atomic update. Supply exactly one of authorization_server_issuer and metadata; clients may need to register or authenticate again after a mode change.
+          description: Exact HTTPS issuer to set for provider-hosted discovery. Speakeasy strictly discovers and verifies it before the atomic update. Supply exactly one of authorization_server_issuer and metadata; clients may need to register or authenticate again after a mode change.
           format: uri
           pattern: ^https://
           maxLength: 500
         metadata:
-          description: JSON object metadata to restore Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
+          description: JSON object metadata to restore Speakeasy-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.
     UpdateGcpIamCredentialRequestBody:
       type: object
       properties:
@@ -105271,7 +105271,7 @@ components:
           format: uuid
         impersonate_service_account:
           type: string
-          description: The service account in your project that Gram impersonates. Grant Gram's own service account roles/iam.serviceAccountTokenCreator on it — see externalCredentials.getGcpSetupInfo.
+          description: The service account in your project that Speakeasy impersonates. Grant Speakeasy's own service account roles/iam.serviceAccountTokenCreator on it — see externalCredentials.getGcpSetupInfo.
         name:
           type: string
           description: A human-readable name for the credential.
@@ -105288,7 +105288,7 @@ components:
           format: uuid
         impersonate_service_account:
           type: string
-          description: The service account Gram impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
+          description: The service account Speakeasy impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
         name:
           type: string
           description: A human-readable name for the credential.
@@ -105309,10 +105309,10 @@ components:
       properties:
         customer_grant_reference:
           type: string
-          description: Optional. The Gram service-account email the customer granted on the key in an IAM binding. Not a secret.
+          description: Optional. The Speakeasy service-account email the customer granted on the key in an IAM binding. Not a secret.
         external_credential_id:
           type: string
-          description: The external credential Gram uses to authenticate to the key. Must be a gcp_iam credential belonging to the same organization.
+          description: The external credential Speakeasy uses to authenticate to the key. Must be a gcp_iam credential belonging to the same organization.
           format: uuid
         id:
           type: string
@@ -105335,7 +105335,7 @@ components:
           maxLength: 512
         client_secret:
           type: string
-          description: Rotate the client secret. Gram re-encrypts before persisting.
+          description: Rotate the client secret. Speakeasy re-encrypts before persisting.
         id:
           type: string
           description: The remote_session_client id.
@@ -105463,7 +105463,7 @@ components:
           description: A human-readable display name for the server. Omit to leave the existing name unchanged; if provided, must be non-empty.
         network_access_mode:
           type: string
-          description: The network surfaces through which a Gram-hosted MCP server may be reached.
+          description: The network surfaces through which a Speakeasy-hosted MCP server may be reached.
           enum:
             - public_only
             - dual
@@ -105541,7 +105541,7 @@ components:
           format: uuid
         instructions:
           type: string
-          description: Custom server instructions replace Gram's built-in gateway instructions in MCP initialize and server/discover responses. Omit to leave them unchanged; send an empty string to restore Gram's built-in gateway instructions. Limited to 10000 Unicode characters after removing NUL characters and trimming whitespace.
+          description: Custom server instructions replace Speakeasy's built-in gateway instructions in MCP initialize and server/discover responses. Omit to leave them unchanged; send an empty string to restore Speakeasy's built-in gateway instructions. Limited to 10000 Unicode characters after removing NUL characters and trimming whitespace.
         name:
           type: string
           description: The display name of the meta MCP server
@@ -105549,7 +105549,7 @@ components:
           maxLength: 100
         network_access_mode:
           type: string
-          description: The network surfaces through which a Gram-hosted MCP server may be reached.
+          description: The network surfaces through which a Speakeasy-hosted MCP server may be reached.
           enum:
             - public_only
             - dual
@@ -105579,7 +105579,7 @@ components:
             - interactive
         client_id_metadata_admission_mode:
           type: string
-          description: Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
+          description: Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Speakeasy's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
           enum:
             - disabled
             - presets
@@ -105599,7 +105599,7 @@ components:
           description: Rename the slug.
         trusted_remote_session_client_id:
           type: string
-          description: Organization-level remote_session_client Gram uses with the trusted issuer. Omit to leave unchanged; pass an empty string to clear the link. The resulting issuer and client must either both be configured or both be absent.
+          description: Organization-level remote_session_client Speakeasy uses with the trusted issuer. Omit to leave unchanged; pass an empty string to clear the link. The resulting issuer and client must either both be configured or both be absent.
         trusted_remote_session_issuer_id:
           type: string
           description: Organization-level or global remote_session_issuer whose assertions this issuer trusts. Omit to leave unchanged; pass an empty string to clear the link.
@@ -105796,7 +105796,7 @@ components:
           maxLength: 512
         client_secret:
           type: string
-          description: Rotate the client secret. Gram re-encrypts before persisting.
+          description: Rotate the client secret. Speakeasy re-encrypts before persisting.
         id:
           type: string
           description: The remote_session_client id.
@@ -106443,7 +106443,7 @@ components:
           maximum: 100000
         resource_identifier:
           type: string
-          description: RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Gram. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>. Pass an empty string to clear. Omit to leave unchanged.
+          description: RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Speakeasy. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>. Pass an empty string to clear. Omit to leave unchanged.
       description: Form for updating a tunneled MCP server source
       required:
         - id
@@ -106458,7 +106458,7 @@ components:
             - interactive
         client_id_metadata_admission_mode:
           type: string
-          description: Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
+          description: Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Speakeasy's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
           enum:
             - disabled
             - presets
@@ -106941,7 +106941,7 @@ components:
           description: AI provider the account belongs to ('anthropic', 'openai', 'cursor')
         user_id:
           type: string
-          description: Gram user id of the directory owner of this account; the authoritative link between account-email-keyed usage and the org member
+          description: Speakeasy user id of the directory owner of this account; the authoritative link between account-email-keyed usage and the org member
       description: 'A linked AI account for a user. The identity is (provider, email): the same email registered on two providers is two distinct accounts.'
       required:
         - provider
@@ -106999,7 +106999,7 @@ components:
           description: Resolved human-readable name of the subject, if known.
         subject_photo_url:
           type: string
-          description: Avatar URL for the subject when it resolves to a Gram user with one. Null for API key and anonymous subjects, and for users who have no photo.
+          description: Avatar URL for the subject when it resolves to a Speakeasy user with one. Null for API key and anonymous subjects, and for users who have no photo.
         subject_type:
           type: string
           description: 'Subject kind: ''user'', ''apikey'', ''agent'', ''anonymous'', or ''workload''.'
@@ -107013,7 +107013,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UserSessionUpstream'
-          description: 'The upstream providers Gram holds tokens for on this session''s subject, through the same issuer. Empty when the session reaches only Gram-native tools. A session can have several: an issuer may have more than one remote_session_client attached.'
+          description: 'The upstream providers Speakeasy holds tokens for on this session''s subject, through the same issuer. Empty when the session reaches only Speakeasy-native tools. A session can have several: an issuer may have more than one remote_session_client attached.'
         user_session_client_id:
           type: string
           description: The user_session_client this session was issued through. Null for sessions with no bound client. Unlike client_name, this identifies the registration unambiguously, so it is what a per-client drill-down should match on.
@@ -107046,7 +107046,7 @@ components:
           format: int64
         client_id:
           type: string
-          description: The client_id. Minted by Gram for a DCR registration; for a CIMD client it is the metadata document URL and equals client_id_metadata_uri.
+          description: The client_id. Minted by Speakeasy for a DCR registration; for a CIMD client it is the metadata document URL and equals client_id_metadata_uri.
         client_id_issued_at:
           type: string
           format: date-time
@@ -107201,7 +107201,7 @@ components:
           description: Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.
         trusted_remote_session_client_id:
           type: string
-          description: The organization-level remote_session_client Gram uses with the trusted issuer. Absent when enterprise-managed authorization is disabled.
+          description: The organization-level remote_session_client Speakeasy uses with the trusted issuer. Absent when enterprise-managed authorization is disabled.
           format: uuid
         trusted_remote_session_issuer_id:
           type: string
@@ -107553,7 +107553,7 @@ components:
           description: Human-readable explanation, safe to display to the operator.
         document:
           type: string
-          description: The validated document rendered as JSON, set only when verified. Re-encoded from what Gram parsed rather than echoed from the wire, so it shows what the authorization server will act on.
+          description: The validated document rendered as JSON, set only when verified. Re-encoded from what Speakeasy parsed rather than echoed from the wire, so it shows what the authorization server will act on.
         http_status:
           type: integer
           description: Status the document endpoint returned; omitted when no response was received.
@@ -107589,8 +107589,8 @@ components:
           description: The principal the credential resolves to — the impersonated service account.
         verified:
           type: boolean
-          description: Whether Gram could assume the credential's identity.
-      description: Result of a live probe that Gram can assume the identity the credential names.
+          description: Whether Speakeasy could assume the credential's identity.
+      description: Result of a live probe that Speakeasy can assume the identity the credential names.
       required:
         - verified
     VerifyIdentityProviderConnectionRequestBody:
@@ -107627,7 +107627,7 @@ components:
         verified:
           type: boolean
           description: Whether the key produced a signature that validated against its own public half.
-      description: Result of a live probe that Gram can reach an external key and use it to sign.
+      description: Result of a live probe that Speakeasy can reach an external key and use it to sign.
       required:
         - verified
         - probe_outcome
@@ -108079,11 +108079,11 @@ components:
       in: header
     chat_sessions_token_header_Gram-Chat-Session:
       type: http
-      description: Gram Chat Sessions token based auth.
+      description: Speakeasy Chat Sessions token based auth.
       scheme: bearer
     function_token_header_Authorization:
       type: http
-      description: Gram Functions token based auth.
+      description: Speakeasy Functions token based auth.
       scheme: bearer
     project_slug_header_Gram-Project:
       type: apiKey
@@ -108109,7 +108109,7 @@ tags:
   - name: analytics
     description: Query agent session data by dataset and field, never by table or SQL. The catalog describe serves is the contract.
   - name: assets
-    description: Manages assets used by Gram projects.
+    description: Manages assets used by Speakeasy projects.
   - name: organizationAssets
     description: Manages organization-tier assets — files owned by an organization rather than a single project, such as remote identity provider logos.
   - name: assistantMemories
@@ -108117,7 +108117,7 @@ tags:
   - name: assistants
     description: Manage assistants and their runtime configuration.
   - name: auditlogs
-    description: Manages audit logs in Gram.
+    description: Manages audit logs in Speakeasy.
   - name: auth
     description: Managed auth for gram producers and dashboard.
   - name: businessMemories
@@ -108141,9 +108141,9 @@ tags:
   - name: environments
     description: Managing toolset environments.
   - name: externalCredentials
-    description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
+    description: Manage organization-level external credentials — how Speakeasy authenticates into a customer's AWS or GCP account.
   - name: externalKeys
-    description: Manage organization-level external keys — externally-managed AWS or GCP KMS keys Gram signs with.
+    description: Manage organization-level external keys — externally-managed AWS or GCP KMS keys Speakeasy signs with.
   - name: mcpRegistries
     description: External MCP registry operations
   - name: functions
@@ -108153,13 +108153,13 @@ tags:
   - name: hooks
     description: Receives hook events from coding assistants for tool usage observability.
   - name: identity
-    description: Resolves the identifiers Gram records activity under into a single identity.
+    description: Resolves the identifiers Speakeasy records activity under into a single identity.
   - name: identityProviderConnections
     description: 'Manage the organization''s Okta connection: provision the private_key_jwt credential, submit the Okta client ID, verify granted scopes, and revoke.'
   - name: instances
     description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations
-    description: Explore third-party tools in Gram.
+    description: Explore third-party tools in Speakeasy.
   - name: jsonWebKeySets
     description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
   - name: keys
@@ -108175,7 +108175,7 @@ tags:
   - name: mcpMetadata
     description: Manages metadata for the MCP install page shown to users.
   - name: registryDiscovery
-    description: 'Authenticated discovery-only preview. Current records only: no version history, incremental synchronization or mirror guarantees. Uses Gram credentials, not generic-client OAuth. Discovery errors use the pinned standard error envelope; authorization uses Gram security.'
+    description: 'Authenticated discovery-only preview. Current records only: no version history, incremental synchronization or mirror guarantees. Uses Speakeasy credentials, not generic-client OAuth. Discovery errors use the pinned standard error envelope; authorization uses Speakeasy security.'
   - name: mcpServers
     description: Managing MCP servers, which configure authentication, environment, and backend selection for an MCP server.
   - name: metaMcp
@@ -108193,41 +108193,41 @@ tags:
   - name: otel
     description: Receives OpenTelemetry signals from LLM providers and harnesses.
   - name: packages
-    description: Manages packages in Gram.
+    description: Manages packages in Speakeasy.
   - name: adminAssets
     description: Platform-admin management of platform-tier assets — files shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminChatAnalysis
     description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminExternalCredentials
-    description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
+    description: Platform-admin management of platform external_credentials — how Speakeasy authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: platformKillswitches
-    description: Platform break-glass access to generic killswitch lifecycle operations on the main server. Requires a current users.admin entitlement on an ordinary Gram session.
+    description: Platform break-glass access to generic killswitch lifecycle operations on the main server. Requires a current users.admin entitlement on an ordinary Speakeasy session.
   - name: adminOpenRouterKeys
     description: Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: platformMcp
-    description: Session-authenticated onboarding and lifecycle projection for the organization-level Gram Platform MCP.
+    description: Session-authenticated onboarding and lifecycle projection for the organization-level Speakeasy Platform MCP.
   - name: plugins
     description: Manage distributable plugin bundles of MCP servers and hooks.
   - name: features
     description: Manage product level feature controls.
   - name: projects
-    description: Manages projects in Gram.
+    description: Manages projects in Speakeasy.
   - name: remoteMcp
     description: Managing remote MCP servers.
   - name: organizationRemoteSessionClients
     description: Manage remote_session_client records from the organization-administrator surface — clients across every project in the caller's organization. client_secret_encrypted is never returned.
   - name: remoteSessionClients
-    description: Manage remote_session_client records — credentials Gram uses when acting as an OAuth client of a remote_session_issuer. client_secret_encrypted is never returned.
+    description: Manage remote_session_client records — credentials Speakeasy uses when acting as an OAuth client of a remote_session_issuer. client_secret_encrypted is never returned.
   - name: organizationRemoteSessionIssuers
     description: Manage organization-level remote_session_issuer records — cross-project upstream Authorization Server identity records inherited by every project in the organization.
   - name: remoteSessionIssuers
-    description: Manage remote_session_issuer records — upstream Authorization Server identity records that Gram talks to as an OAuth client.
+    description: Manage remote_session_issuer records — upstream Authorization Server identity records that Speakeasy talks to as an OAuth client.
   - name: adminRemoteSessions
     description: Platform-admin management of global remote_session_issuer / remote_session_client records — shared across every organization (project_id NULL, organization_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: organizationRemoteSessions
-    description: Organization-administrator visibility into remote_sessions Gram is holding on a principal's behalf, across every project in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned.
+    description: Organization-administrator visibility into remote_sessions Speakeasy is holding on a principal's behalf, across every project in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned.
   - name: remoteSessions
-    description: Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned. Also hosts composite dashboard operations that configure a single MCP server's identity in one atomic call.
+    description: Operator visibility into remote_sessions Speakeasy is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned. Also hosts composite dashboard operations that configure a single MCP server's identity in one atomic call.
   - name: resources
     description: Dashboard API for interacting with resources.
   - name: risk
@@ -108241,7 +108241,7 @@ tags:
   - name: spendRules
     description: Manage budget rules, view budget events, and preview actor targeting.
   - name: telemetry
-    description: Fetch telemetry data for tools in Gram.
+    description: Fetch telemetry data for tools in Speakeasy.
   - name: templates
     description: Manages re-usable prompt templates and higher-order tools for a project.
   - name: tokenExchange
@@ -108263,9 +108263,9 @@ tags:
   - name: userSessionConsents
     description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
   - name: userSessionIssuersCimdClients
-    description: 'Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Gram curates, plus per-issuer custom document URLs.'
+    description: 'Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Speakeasy curates, plus per-issuer custom document URLs.'
   - name: userSessionIssuers
-    description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
+    description: Manage user_session_issuer records — Speakeasy-side authorization-server configuration that issues user sessions for an MCP server.
   - name: organizationUserSessionIssuers
     description: Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.
   - name: userSessions

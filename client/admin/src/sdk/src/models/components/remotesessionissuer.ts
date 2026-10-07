@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * A remote_session_issuer record — upstream Authorization Server identity that Gram speaks OAuth to.
+ * A remote_session_issuer record — upstream Authorization Server identity that Speakeasy speaks OAuth to.
  */
 export type RemoteSessionIssuer = {
   /**
@@ -71,7 +71,7 @@ export type RemoteSessionIssuer = {
    */
   jwksCacheExpiresAt?: Date | undefined;
   /**
-   * When Gram last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.
+   * When Speakeasy last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.
    */
   jwksFetchedAt?: Date | undefined;
   /**

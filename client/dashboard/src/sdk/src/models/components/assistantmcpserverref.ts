@@ -10,7 +10,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type AssistantMCPServerRef = {
   /**
-   * The slug of the server's Gram-hosted MCP endpoint (/mcp/{endpoint_slug}). Populated on reads; ignored on writes. Absent when the server has no Gram-hosted endpoint.
+   * The slug of the server's Speakeasy-hosted MCP endpoint (/mcp/{endpoint_slug}). Populated on reads; ignored on writes. Absent when the server has no Speakeasy-hosted endpoint.
    */
   endpointSlug?: string | undefined;
   /**

@@ -113,7 +113,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
 
 12. **External OAuth settings** — open **MCP → Acme OAuth Discovery →
     Authentication** (`/mcp/acme-oauth-discovery/authentication`). The page
-    shows the existing Gram-hosted metadata configuration, recommends
+    shows the existing Speakeasy-hosted metadata configuration, recommends
     provider-hosted metadata, and offers **Review update**. Opening the review
     starts with the fictional `https://auth.example.com` issuer; live discovery
     does not need to succeed for this seeded-page check.
@@ -229,7 +229,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       The result shows the secret once and the selected server endpoints.
       Select individual member servers for Meta MCP: aggregate membership is
       not yet a supported agent consent/delegation target. Unproxied servers
-      cannot receive Gram credential grants.
+      cannot receive Speakeasy credential grants.
       Leaving setup must not delete connected accounts; start setup for the
       same or another eligible agent and confirm owned accounts are offered.
     - **Agent OAuth consent:** select an agent, finish required third-party

@@ -15,8 +15,8 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Operator visibility into remote_sessions Gram is holding on a principal's
-// behalf. Read + revoke; sessions are written by
+// Operator visibility into remote_sessions Speakeasy is holding on a
+// principal's behalf. Read + revoke; sessions are written by
 // /mcp/{slug}/remote_login_callback and the silent-refresh path.
 // access_token_encrypted and refresh_token_encrypted are never returned. Also
 // hosts composite dashboard operations that configure a single MCP server's

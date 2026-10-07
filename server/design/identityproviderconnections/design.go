@@ -102,7 +102,7 @@ var ListApplicationsResult = Type("ListIdentityProviderConnectionApplicationsRes
 })
 
 var Connection = Type("OktaIdentityProviderConnection", func() {
-	Description("An organization's Okta connection: the service application Gram authenticates to the Okta Management API with, its verification state, and the console checklist. Never carries key material or tokens.")
+	Description("An organization's Okta connection: the service application Speakeasy authenticates to the Okta Management API with, its verification state, and the console checklist. Never carries key material or tokens.")
 	Required("id", "organization_id", "provider", "status", "org_url", "issuer_url", "listing_mode", "jwks_url", "client_id_submitted", "dpop_required", "required_scopes", "granted_scopes", "missing_scopes", "verification_reasons", "checklist", "applications_sync", "created_at", "updated_at")
 	Attribute("id", String, "Connection ID.", func() {
 		Format(FormatUUID)

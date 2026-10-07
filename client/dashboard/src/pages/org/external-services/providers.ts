@@ -1,5 +1,5 @@
 // The external-service providers an organization admin can create today. The
-// organization API also supports AWS, but Gram has no AWS identity to assume a
+// organization API also supports AWS, but Speakeasy has no AWS identity to assume a
 // customer role from yet, so an AWS credential could be stored and never
 // verified. Until that exists the selector stays GCP-only.
 export const EXTERNAL_SERVICE_PROVIDERS = [

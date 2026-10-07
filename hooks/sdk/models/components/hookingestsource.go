@@ -2,7 +2,7 @@
 
 package components
 
-// HookIngestSource - Metadata about the local hook adapter that translated a provider event into the Gram hook contract.
+// HookIngestSource - Metadata about the local hook adapter that translated a provider event into the Speakeasy hook contract.
 type HookIngestSource struct {
 	// Stable adapter slug, e.g. claude, cursor, codex, or a customer hook name.
 	Adapter string `json:"adapter"`

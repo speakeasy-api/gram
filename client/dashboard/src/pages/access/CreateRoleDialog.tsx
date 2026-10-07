@@ -744,7 +744,7 @@ export function CreateRoleDialog({
               // Quieter than a banner: the fields it describes are right
               // above it, and already visibly disabled.
               <Text muted small>
-                Built-in role. Gram manages its name and description; its
+                Built-in role. Speakeasy manages its name and description; its
                 permissions are yours to change.
               </Text>
             )}

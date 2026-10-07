@@ -90,7 +90,7 @@ vi.mock("@gram/client/react-query/riskListMcpPlatformToolsets.js", () => ({
       toolsets: [
         {
           id: "33333333-3333-4333-8333-333333333333",
-          name: "Gram assistant tools",
+          name: "Speakeasy assistant tools",
           slug: "assistants",
           tools: [
             {
@@ -871,7 +871,7 @@ describe("PolicyMCPScopePicker all-server selection", () => {
     render(<ScopePickerHarness />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: /Gram assistant tools/ }),
+      screen.getByRole("button", { name: /Speakeasy assistant tools/ }),
     );
     fireEvent.click(screen.getByRole("checkbox", { name: "recallMemory" }));
 
@@ -896,7 +896,7 @@ describe("PolicyMCPScopePicker all-server selection", () => {
 
     expect(
       screen
-        .getByRole("checkbox", { name: "Gram assistant tools" })
+        .getByRole("checkbox", { name: "Speakeasy assistant tools" })
         .getAttribute("aria-checked"),
     ).toBe("true");
     expect(

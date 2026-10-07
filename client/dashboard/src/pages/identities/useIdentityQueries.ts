@@ -41,7 +41,7 @@ type RetryableQuery = { isError: boolean; refetch: () => unknown };
 /**
  * A retry that re-runs only the reads which actually failed.
  *
- * Several queries on these pages are held behind `enabled` — no Gram user id,
+ * Several queries on these pages are held behind `enabled` — no Speakeasy user id,
  * no chat:read, no org:admin — and `refetch()` ignores `enabled` and fires
  * anyway. A retry button that called it blindly would ask for audit logs with
  * no actor filter, or for chats the caller may not filter by user, and render
@@ -80,7 +80,7 @@ export function useIdentityProject(): { slug: string; id: string } {
 /**
  * Whether telemetry can be asked about this identity at all.
  *
- * The summary endpoint keys on a Gram user id or an agent-reported id, and an
+ * The summary endpoint keys on a Speakeasy user id or an agent-reported id, and an
  * identity carrying neither — an api-key subject, say — is not a subject it
  * can answer for. No request is made, so the tiles have nothing to show and
  * must say that rather than stand at zero.
@@ -90,7 +90,7 @@ export function hasMetricsSubject(identity: IdentityModel): boolean {
 }
 
 /**
- * Telemetry keys usage on either the Gram user id or the id an agent reported,
+ * Telemetry keys usage on either the Speakeasy user id or the id an agent reported,
  * and the endpoint takes exactly one of them, so prefer the directory user and
  * fall back to the agent identifier for subjects with no directory row.
  */
@@ -397,7 +397,7 @@ export function riskMatchedOnLabel(externalUserIds: string[]): string {
 }
 
 /**
- * The org member row for this identity, matched on the Gram user id and then
+ * The org member row for this identity, matched on the Speakeasy user id and then
  * on any address the subject is known by. It carries the canonical principal
  * URN and the role ids, neither of which the resolver returns.
  */
@@ -427,7 +427,7 @@ export function useIdentityMember(identity: IdentityModel): {
 
 /**
  * The principal challenges and grants are recorded against, which the member
- * row states outright. The Gram user id is the fallback for a subject with no
+ * row states outright. The Speakeasy user id is the fallback for a subject with no
  * member row: the authz engine mints `user:<gram user id>` principals, so the
  * WorkOS id — which only role ASSIGNMENTS key on — would match no challenge.
  */
@@ -445,9 +445,9 @@ export function useIdentityPrincipalUrn(
  * the same scope. Plugin membership decides what a resource is distributed
  * through, not who may use it, so it does not widen this.
  *
- * The endpoint takes the Gram user id — not the principal URN the panels
+ * The endpoint takes the Speakeasy user id — not the principal URN the panels
  * beside it use — and resolves that user's principals itself inside the active
- * organization. A subject with neither a member row nor a Gram user id has no
+ * organization. A subject with neither a member row nor a Speakeasy user id has no
  * id to ask about, so the read stays off rather than asking about "".
  */
 export function useIdentityAccessibleResources(
@@ -559,7 +559,7 @@ export function useIdentityPeers(
   const organization = useOrganization();
   const { slug: projectSlug } = useIdentityProject();
   // An identity known only by the id an agent reported for itself is absent
-  // from the internal roster, which groups by Gram user id — it lives under
+  // from the internal roster, which groups by Speakeasy user id — it lives under
   // external_user_id instead. Anyone with a directory row or an address is
   // found the usual way; only the pure-agent case switches, and it also puts
   // that agent among agents rather than ranking it against people.

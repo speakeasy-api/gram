@@ -1128,7 +1128,7 @@ type createdKey struct {
 	publicJWK []byte
 }
 
-// openKMSClient builds a KMS client under Gram's own identity, which creates
+// openKMSClient builds a KMS client under Speakeasy's own identity, which creates
 // keys; the signing identity only ever holds rights on keys it was granted.
 func (p *Provisioner) openKMSClient(ctx context.Context) (gcpkms.ProvisioningClient, error) {
 	ambient, err := p.gcpIdentity.TokenSource(ctx, gcpauth.Credential{

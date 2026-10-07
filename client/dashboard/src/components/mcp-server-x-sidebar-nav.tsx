@@ -417,7 +417,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     hasScope("org:read", organization.id) &&
     hasScope("mcp:read", mcpServer.id);
 
-  // Guardrails police traffic that passes through Gram, so unproxied servers
+  // Guardrails police traffic that passes through Speakeasy, so unproxied servers
   // (which never do) have none. Admin-only, like the policies it manages.
   const canViewGuardrails =
     mcpScoped &&
@@ -571,7 +571,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         ]
       : []),
     // Hidden for unproxied servers: the customer connects straight to the
-    // vendor with the vendor's own credentials, so Gram never mints a session
+    // vendor with the vendor's own credentials, so Speakeasy never mints a session
     // or registers a client for them and the tab would always be empty.
     ...(isUnproxied
       ? []

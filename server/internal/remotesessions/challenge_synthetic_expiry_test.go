@@ -1,5 +1,5 @@
 // challenge_synthetic_expiry_test.go is the regression guard for AIS-115:
-// when an upstream token response omits expires_in, Gram must store
+// when an upstream token response omits expires_in, Speakeasy must store
 // access_expires_at as NULL — "no known expiry" — rather than fabricating a
 // now+1h deadline. NULL always means "the provider did not report an access
 // expiry." The request path serves that token as-is regardless of whether a

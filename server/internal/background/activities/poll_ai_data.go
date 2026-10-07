@@ -477,7 +477,7 @@ func pollUnavailableHTTPStatus(err error) int {
 // schedule returns nil. It is durable in Postgres and shown in the dashboard,
 // the schedule owns the retry cadence, and re-running cannot change the
 // provider's answer. Failing the activity too would put one misconfigured
-// integration into activity-failure alerting, which exists for Gram's own
+// integration into activity-failure alerting, which exists for Speakeasy's own
 // unexpected errors.
 //
 // Everything else still fails: an unrecorded failure the user would otherwise

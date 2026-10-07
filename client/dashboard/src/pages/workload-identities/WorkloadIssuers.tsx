@@ -110,7 +110,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
       <ResourceListPage
         title="Access Hub"
         stage="preview"
-        description="Let agents on other platforms (CI jobs, cloud services, AI agents) sign in to Gram without a stored secret."
+        description="Let agents on other platforms (CI jobs, cloud services, AI agents) sign in to Speakeasy without a stored secret."
         primaryAction={registerButton}
       >
         <Stack
@@ -131,7 +131,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
           <Text muted small className="min-w-0 text-right">
             {view === "custom"
               ? "Added by hand, with values from the platform's own console."
-              : "Platforms Gram knows how to federate with, ready to trust without looking anything up."}
+              : "Platforms Speakeasy knows how to federate with, ready to trust without looking anything up."}
           </Text>
         </Stack>
 

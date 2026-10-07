@@ -231,7 +231,7 @@ DO UPDATE SET
 RETURNING id, billing_mode;
 
 -- name: CountEmployeesForExternalOrg :one
--- Distinct employees (resolved Gram users) ever seen under a provider org. An
+-- Distinct employees (resolved Speakeasy users) ever seen under a provider org. An
 -- enterprise org is shared by many employees; a personal org maps to exactly one.
 -- A count >= 2 marks the org as the company's enterprise org: accounts under it
 -- classify team even when their own email has not resolved, and a resolved work
@@ -407,7 +407,7 @@ VALUES (
 -- Records a durable block row at hook-time deny. The reason is captured verbatim
 -- so the block page renders from this row alone; the risk_result_id / chat
 -- foreign keys are optional enrichment set when those rows are known synchronously.
--- user_id is the Gram user whose agent was blocked (empty string when unresolved)
+-- user_id is the Speakeasy user whose agent was blocked (empty string when unresolved)
 -- and is used to authorize the block page.
 INSERT INTO tool_call_blocks (
     id

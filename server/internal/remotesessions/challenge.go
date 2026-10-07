@@ -222,7 +222,7 @@ type ChallengeManager struct {
 
 	// revoker pushes RFC 7009 revocations upstream when the consent screen
 	// disconnects a remote session, so the provider drops the tokens rather
-	// than only Gram forgetting them.
+	// than only Speakeasy forgetting them.
 	revoker *UpstreamRevoker
 
 	// authorizeInterceptors adapt the outgoing upstream authorize request to
@@ -472,7 +472,7 @@ type Client struct {
 	// IssuerRegistrationEndpoint is the RFC 7591 registration endpoint the
 	// client's issuer publishes, as discovery last refreshed it; empty when
 	// the issuer publishes none. A client whose issuer publishes no endpoint
-	// is never re-registered automatically, since Gram has nowhere to do it.
+	// is never re-registered automatically, since Speakeasy has nowhere to do it.
 	IssuerRegistrationEndpoint string
 
 	// ClientSecretExpiresAt is when the issuer said the client secret expires,
@@ -489,7 +489,7 @@ type Client struct {
 // should be replaced before sending a user to the authorize endpoint: the
 // issuer has rejected the client_id, or the secret it issued has expired. A
 // client whose issuer publishes no registration endpoint is never rotated
-// here, since Gram has nowhere to re-register it.
+// here, since Speakeasy has nowhere to re-register it.
 func (c Client) needsRegistrationRotation(now time.Time) (RotationTrigger, bool) {
 	if c.IssuerRegistrationEndpoint == "" {
 		return "", false
@@ -662,7 +662,7 @@ type RemoteSessionState struct {
 	LastValidatedAt *time.Time
 	// ValidationStatus is that probe's verdict, empty when never validated.
 	ValidationStatus ValidationOutcome
-	// ValidationReason is the Gram-authored explanation of a non-valid verdict.
+	// ValidationReason is the Speakeasy-authored explanation of a non-valid verdict.
 	ValidationReason string
 }
 
@@ -812,7 +812,7 @@ func (m *ChallengeManager) ResourceForClientAtUpstream(ctx context.Context, clie
 //
 // The user asked to disconnect a provider, so leaving a live refresh token at
 // that provider would defeat the action; the upstream revocation is what makes
-// the disconnect mean something outside Gram. It is best-effort in exactly the
+// the disconnect mean something outside Speakeasy. It is best-effort in exactly the
 // way the other revoke paths are: the soft delete has already committed by the
 // time it runs, and a provider that is unreachable or refuses is recorded
 // rather than surfaced, because the local disconnect succeeded either way.
@@ -1199,7 +1199,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
 	}
 	// The pair is live upstream from this line on, and every path out of here
-	// that does not store it strands it: unreachable through Gram, and outside
+	// that does not store it strands it: unreachable through Speakeasy, and outside
 	// the reach of every revoke path since no row points at it. So arm the
 	// revocation on the exchange rather than on the first thing done with the
 	// result — encrypting it can fail too — and disarm it once the row is
@@ -1287,7 +1287,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}
 
 	// The upstream exchange has already happened, so the token pair exists
-	// either way; this transaction decides whether Gram stores it. The
+	// either way; this transaction decides whether Speakeasy stores it. The
 	// client-row lock serializes the write against the issuer-delete orphan
 	// cascade, which locks the same row before sweeping the client's
 	// sessions: a callback that acquires the lock after that cascade

@@ -15,9 +15,9 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Manage remote_session_client records — credentials Gram uses when acting as
-// an OAuth client of a remote_session_issuer. client_secret_encrypted is never
-// returned.
+// Manage remote_session_client records — credentials Speakeasy uses when
+// acting as an OAuth client of a remote_session_issuer.
+// client_secret_encrypted is never returned.
 type Service interface {
 	// Explicit, tenant-scoped identity-chaining configuration. Mutations require
 	// project-write authorization; reads require project-read authorization. Does
@@ -38,8 +38,8 @@ type Service interface {
 	// client_secret obtained out-of-band from the upstream issuer.
 	CreateRemoteSessionClient(context.Context, *CreateRemoteSessionClientPayload) (res *types.RemoteSessionClient, err error)
 	// Register a remote_session_client in Client ID Metadata Document (CIMD) mode.
-	// Gram generates the client_id (the URL of a hosted client metadata document)
-	// and serves the document publicly; the client carries no secret and
+	// Speakeasy generates the client_id (the URL of a hosted client metadata
+	// document) and serves the document publicly; the client carries no secret and
 	// authenticates with token_endpoint_auth_method=none. The owning issuer must
 	// advertise client_id_metadata_document_supported.
 	CreateCimd(context.Context, *CreateCimdPayload) (res *types.RemoteSessionClient, err error)
@@ -155,7 +155,7 @@ type CreateRemoteSessionClientPayload struct {
 	UserSessionIssuerIds []string
 	// client_id supplied by the caller.
 	ClientID string
-	// client_secret supplied by the caller. Gram encrypts before persisting.
+	// client_secret supplied by the caller. Speakeasy encrypts before persisting.
 	ClientSecret *string
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
@@ -348,7 +348,7 @@ type UpdateRemoteSessionClientPayload struct {
 	ProjectSlugInput *string
 	// The remote_session_client id.
 	ID string
-	// Rotate the client secret. Gram re-encrypts before persisting.
+	// Rotate the client secret. Speakeasy re-encrypts before persisting.
 	ClientSecret *string
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string

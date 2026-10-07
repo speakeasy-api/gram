@@ -340,7 +340,7 @@ func TestIngest_ShadowMCPPolicyUsesCachedSessionIdentityForSharedKey(t *testing.
 	require.Equal(t, "deny", result.Decision)
 }
 
-// A shared-key event may self-report an email that matches no Gram user (a
+// A shared-key event may self-report an email that matches no Speakeasy user (a
 // personal or provider-account address). That claim cannot key user-scoped
 // policies, so enforcement must still recover the session's cached identity
 // rather than running unattributed.
@@ -390,7 +390,7 @@ func TestIngest_ShadowMCPPolicyRecoversCachedIdentityForUnresolvableSharedKeyEma
 }
 
 // A personal key already identifies the developer: a self-reported email that
-// matches no Gram user must fall back to the key owner rather than strip
+// matches no Speakeasy user must fall back to the key owner rather than strip
 // user-scoped policy checks from the event.
 func TestIngest_ShadowMCPPolicyFallsBackToOwnerForUnresolvablePersonalKeyEmail(t *testing.T) {
 	t.Parallel()
@@ -1424,7 +1424,7 @@ func testPromptSHA256(text string) string {
 // carry the cached account attribution (provider, account_type, external org
 // id) with the account's own email as the gram.account_email attribute, while
 // user.email stays the authenticated actor — dashboards and policies reading
-// telemetry see both the AI account behind the session and the Gram identity
+// telemetry see both the AI account behind the session and the Speakeasy identity
 // that sent it, without one masquerading as the other.
 func TestIngest_StampsAccountAttributionOnTelemetry(t *testing.T) {
 	t.Parallel()
@@ -2218,8 +2218,8 @@ func TestIngest_ShadowMCPGuardIgnoresMetaToolNamesFromOtherAdapters(t *testing.T
 
 // TestIngest_ShadowMCPResolvesCodexMetaToolAgainstInventory: bringing the
 // meta-tools under the guard must not blanket-deny them. The guard can only
-// reach its generic "not Gram-hosted" deny without a URL, so a meta-tool
-// reading resources from a Gram-hosted server would be blocked — traffic the
+// reach its generic "not Speakeasy-hosted" deny without a URL, so a meta-tool
+// reading resources from a Speakeasy-hosted server would be blocked — traffic the
 // legacy endpoint permits. Resolving the name against the session inventory is
 // what separates allowed from denied, and it must name the server when denying.
 func TestIngest_ShadowMCPResolvesCodexMetaToolAgainstInventory(t *testing.T) {
@@ -2273,7 +2273,7 @@ func TestIngest_ShadowMCPResolvesCodexMetaToolAgainstInventory(t *testing.T) {
 			require.NotNil(t, result)
 			if !tc.wantDenied {
 				require.NotEqual(t, "deny", result.Decision,
-					"a Gram-hosted meta-tool target must not be blocked")
+					"a Speakeasy-hosted meta-tool target must not be blocked")
 				return
 			}
 			require.Equal(t, "deny", result.Decision)
@@ -2285,7 +2285,7 @@ func TestIngest_ShadowMCPResolvesCodexMetaToolAgainstInventory(t *testing.T) {
 // server by its sanitized tool prefix as well as its configured name, and the
 // cached-entry fallback matches only on ToolPrefix. Without it a hyphenated
 // server is unresolvable on the ingest path while the legacy endpoint resolves
-// it, so a Gram-hosted target would be denied.
+// it, so a Speakeasy-hosted target would be denied.
 func TestCanonicalMCPInventoryEntriesCarryCodexToolPrefix(t *testing.T) {
 	t.Parallel()
 
@@ -2406,7 +2406,7 @@ func TestIngestPartialMCPInventoryPreservesAuthoritativeSnapshot(t *testing.T) {
 	result, err := ti.service.Ingest(ctx, call)
 	require.NoError(t, err)
 	require.NotEqual(t, "deny", result.Decision,
-		"a partial inventory must not replace the complete Gram-hosted target")
+		"a partial inventory must not replace the complete Speakeasy-hosted target")
 }
 
 func TestIngestStoresCollectedEmptyMCPInventory(t *testing.T) {
@@ -2460,7 +2460,7 @@ func TestIngestPreservesMCPInventoryForUnrelatedExplicitEmptyEvent(t *testing.T)
 // inventory only justifies a deny when the sender actually read the list. A
 // sender that could not read it — no agent binary, a failed probe — reports
 // mcp_inventory_collected false, and every relay predating the flag omits it
-// entirely. Enforcing on either would deny reads of Gram-hosted servers that
+// entirely. Enforcing on either would deny reads of Speakeasy-hosted servers that
 // work today (DNO-771).
 func TestIngest_ShadowMCPMetaToolGateDegradesWithoutAReadInventory(t *testing.T) {
 	t.Parallel()

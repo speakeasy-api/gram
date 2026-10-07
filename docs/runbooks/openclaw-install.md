@@ -32,7 +32,7 @@ customer whose models all route through the Claude CLI.
 
 ## Install (developer laptop)
 
-1. In the Gram dashboard, download the OpenClaw observability plugin ZIP
+1. In the Speakeasy dashboard, download the OpenClaw observability plugin ZIP
    (**Plugins → Observability → OpenClaw**). This mints a hooks API key and
    bakes it into the package's `speakeasy.json`. Requires `OrgAdmin`.
 
@@ -110,9 +110,9 @@ environment instead of the key baked into the download.
    to a directory baked into the image and populate it at build time; the
    bootstrap uses that instead of its per-OS cache location.
 
-   If you leave the download in place, the host to allowlist is **your own Gram
+   If you leave the download in place, the host to allowlist is **your own Speakeasy
    server** (`<GRAM_HOOKS_SERVER_URL>/hooks/releases/...`), not GitHub. The
-   binary is served by the org's Gram deployment precisely so that egress
+   binary is served by the org's Speakeasy deployment precisely so that egress
    restricted environments only ever need the one domain they already allow for
    ingest.
 
@@ -120,7 +120,7 @@ environment instead of the key baked into the download.
 
 | Variable                  | Purpose                                 |
 | ------------------------- | --------------------------------------- |
-| `GRAM_HOOKS_SERVER_URL`   | Gram server base URL                    |
+| `GRAM_HOOKS_SERVER_URL`   | Speakeasy server base URL               |
 | `GRAM_HOOKS_ORG_KEY`      | Org hooks key (mint one per deployment) |
 | `GRAM_HOOKS_PROJECT_SLUG` | Target project; defaults to `default`   |
 | `GRAM_HOOKS_ORG_ID`       | Org ID                                  |

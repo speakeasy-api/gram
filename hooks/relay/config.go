@@ -1,6 +1,6 @@
-// Package relay wires the agenthooks runtime to the Gram hooks backend. It
+// Package relay wires the agenthooks runtime to the Speakeasy hooks backend. It
 // builds an agenthooks.Runner whose handlers translate every coding-agent hook
-// event into the canonical Gram ingest contract, POST it to the authenticated
+// event into the canonical Speakeasy ingest contract, POST it to the authenticated
 // /rpc/hooks.ingest endpoint, and honor the server's allow/deny verdict. The
 // server remains the sole authority on blocking; this package only relays
 // events and enforces the returned decision.
@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-// DefaultServerURL is the production Gram endpoint used when no override is
+// DefaultServerURL is the production Speakeasy endpoint used when no override is
 // configured in the environment.
 const DefaultServerURL = "https://app.getgram.ai"
 
@@ -22,7 +22,7 @@ const DefaultServerURL = "https://app.getgram.ai"
 // project/org without recompilation, mirroring the env knobs the legacy bash
 // senders read.
 type Config struct {
-	// ServerURL is the Gram API base, e.g. https://app.getgram.ai.
+	// ServerURL is the Speakeasy API base, e.g. https://app.getgram.ai.
 	ServerURL string
 	// SiteURL is the dashboard origin the browser sign-in opens. Production
 	// serves the API and dashboard from one domain, so this stays empty and

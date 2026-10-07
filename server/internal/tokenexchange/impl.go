@@ -7,7 +7,7 @@
 // endpoint to mint. Hooks do not route through the device agent, so the minted
 // key carries no `hooks` scope (DNO-383).
 //
-// The minted key is a normal Gram API key (see internal/keys): a
+// The minted key is a normal Speakeasy API key (see internal/keys): a
 // `gram_<env>_<token>` string whose SHA-256 hash is stored in api_keys with the
 // resolved user as `created_by_user_id`, so KeyBasedAuth later resolves it back
 // to that user + org. The key is long-lived (api_keys has no TTL); its lifecycle

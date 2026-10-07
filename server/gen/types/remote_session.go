@@ -15,14 +15,14 @@ type RemoteSession struct {
 	// The session's subject URN (user:<id> | apikey:<uuid> |
 	// anonymous:<mcp-session-id>).
 	SubjectUrn string
-	// Resolved display name when the subject is a Gram user. Absent for
+	// Resolved display name when the subject is a Speakeasy user. Absent for
 	// apikey/anonymous subjects or unresolved users.
 	SubjectDisplayName *string
-	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
-	// subjects or unresolved users.
+	// Resolved email when the subject is a Speakeasy user. Absent for
+	// apikey/anonymous subjects or unresolved users.
 	SubjectEmail *string
 	// Stored email of the account at the upstream provider. Absent when no
-	// upstream identity interface supplied it; never inferred from the Gram
+	// upstream identity interface supplied it; never inferred from the Speakeasy
 	// subject.
 	UpstreamEmail *string
 	// Stored display name of the account at the upstream provider. Absent when no

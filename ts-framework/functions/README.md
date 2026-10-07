@@ -76,7 +76,7 @@ deprecated aliases and keep working, so you can migrate when it suits you:
 | `GRAM_*` CLI environment variables      | `SPEAKEASY_AI_*`                            |
 
 `@gram-ai/functions` now re-exports this package at the same version, so
-`import { Gram } from "@gram-ai/functions"` and the `gf` command work as
+`import { Speakeasy } from "@gram-ai/functions"` and the `gf` command work as
 before. When a project has both a new and an old file name, the new one wins.
 The build prints a one-line note when it uses `gram.config.*` or
 `gram.deploy.json`.

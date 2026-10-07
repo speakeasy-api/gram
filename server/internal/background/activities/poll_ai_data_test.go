@@ -403,7 +403,7 @@ func TestNewPollFailureErrorExpandsShareableCauses(t *testing.T) {
 }
 
 // A provider rejection or outage on the schedule row is the provider's
-// failure, not Gram's, so the activity succeeds and one misconfigured
+// failure, not Speakeasy's, so the activity succeeds and one misconfigured
 // integration cannot fill activity-failure alerting.
 func TestFinalizePollFailureKeepsProviderFailuresOffTheActivity(t *testing.T) {
 	t.Parallel()

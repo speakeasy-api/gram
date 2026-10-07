@@ -4,7 +4,7 @@ cwd: ../..
 
 # Plugins — Package Format
 
-This doc describes the exact files Gram generates for each supported platform when a plugin is published or downloaded as a ZIP.
+This doc describes the exact files Speakeasy generates for each supported platform when a plugin is published or downloaded as a ZIP.
 
 ## Repository layout (published to GitHub)
 
@@ -177,7 +177,7 @@ Directory: `<plugin-slug>/`
 }
 ```
 
-The `userConfig` array is populated only for public servers that require user-supplied env vars. Private servers with a Gram API key have no `userConfig` (the key is embedded directly in the MCP config headers).
+The `userConfig` array is populated only for public servers that require user-supplied env vars. Private servers with a Speakeasy API key have no `userConfig` (the key is embedded directly in the MCP config headers).
 
 ### `.mcp.json`
 
@@ -295,7 +295,7 @@ Directory: `<org-slug>-observability/`
 ```json
 {
   "name": "<org-slug>-observability",
-  "description": "Required: Gram observability hooks for Org Name.",
+  "description": "Required: Speakeasy observability hooks for Org Name.",
   "version": "1.0.0",
   "author": "Org Name"
 }
@@ -318,7 +318,7 @@ Directory: `<org-slug>-observability/`
 }
 ```
 
-**`hooks/hook.sh`** — forwards event JSON to Gram:
+**`hooks/hook.sh`** — forwards event JSON to Speakeasy:
 
 ```bash
 #!/usr/bin/env bash
@@ -410,7 +410,7 @@ The hook config ships at `hooks/hooks.json` **only**. Copilot parses both `<root
 
 **Surface support.** Hooks run in Copilot CLI only. VS Code and the Copilot app load the plugin — MCP servers and skills work there — but never fire its hooks. Copilot's cloud agent reads hooks from `.github/hooks/*.json` in the repository and is not targeted by this package.
 
-**Hook chain ordering.** Copilot short-circuits the hook chain on the first deny, so a customer hook that denies before Gram's entry suppresses Gram's telemetry for that call.
+**Hook chain ordering.** Copilot short-circuits the hook chain on the first deny, so a customer hook that denies before Speakeasy's entry suppresses Speakeasy's telemetry for that call.
 
 ### OpenClaw observability
 
@@ -484,7 +484,7 @@ Copilot will not install a plugin that is absent from the manifest, even if its 
 
 ### MCP servers and skills on Copilot
 
-MCP servers and skills reach Copilot through the platform-neutral Agent Plugins 1.0 package under `agent-plugins/<plugin-slug>/`, not through a Copilot-specific package. That package carries `plugin.json`, `mcp.json` and `skills/`, is credential-free, and installs with `copilot plugin install OWNER/REPO:agent-plugins/<plugin-slug>` or from an extracted ZIP via `copilot --plugin-dir`. Plugins that fail the portability gate (a server needing a Gram credential, environment-backed headers, or a non-HTTPS off-loopback URL) are omitted from that directory and are therefore not installable on Copilot.
+MCP servers and skills reach Copilot through the platform-neutral Agent Plugins 1.0 package under `agent-plugins/<plugin-slug>/`, not through a Copilot-specific package. That package carries `plugin.json`, `mcp.json` and `skills/`, is credential-free, and installs with `copilot plugin install OWNER/REPO:agent-plugins/<plugin-slug>` or from an extracted ZIP via `copilot --plugin-dir`. Plugins that fail the portability gate (a server needing a Speakeasy credential, environment-backed headers, or a non-HTTPS off-loopback URL) are omitted from that directory and are therefore not installable on Copilot.
 
 ## README
 
@@ -493,7 +493,7 @@ The auto-generated `README.md` contains:
 - Per-platform installation instructions (Claude, Cursor, Codex)
 - A table of all plugins with server counts and descriptions
 - A note that the observability plugin must be installed alongside MCP plugins
-- A notice that the repo is auto-managed by Gram and that collaborators added through Gram hold admin on it (collaborators added before admin became the default keep their original permission until they are re-added)
+- A notice that the repo is auto-managed by Speakeasy and that collaborators added through Speakeasy hold admin on it (collaborators added before admin became the default keep their original permission until they are re-added)
 
 ## Single-plugin ZIP download
 

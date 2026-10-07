@@ -37,7 +37,7 @@ var AdminMcpServerHealthTrustedRemoteSession = Type("AdminMcpServerHealthTrusted
 	Required("issuer_id", "client_id")
 
 	Attribute("issuer_id", String, "The trusted remote session issuer ID.")
-	Attribute("client_id", String, "The remote session client ID Gram uses with the trusted issuer.")
+	Attribute("client_id", String, "The remote session client ID Speakeasy uses with the trusted issuer.")
 })
 
 var AdminMcpServerHealthServerRef = Type("AdminMcpServerHealthServerRef", func() {
@@ -68,7 +68,7 @@ var AdminMcpServerHealthRemoteSessionIssuer = Type("AdminMcpServerHealthRemoteSe
 	Attribute("name", String, "Display name of the issuer.")
 	Attribute("issuer", String, "The upstream issuer URL.")
 	Attribute("attachment_scope", String, "Where the row is attached. global is platform-wide.", attachmentScopeEnum)
-	Attribute("networking", String, "Whether Gram reaches the issuer over the public internet or a tunnel.", func() {
+	Attribute("networking", String, "Whether Speakeasy reaches the issuer over the public internet or a tunnel.", func() {
 		Enum("public", "tunneled")
 	})
 	Attribute("oidc", Boolean, "Whether the issuer is treated as an OpenID Connect provider.")
@@ -161,7 +161,7 @@ var AdminMcpServerToolCallBucket = Type("AdminMcpServerToolCallBucket", func() {
 })
 
 var AdminMcpServerToolCalls = Type("AdminMcpServerToolCalls", func() {
-	Description("One MCP server's tool calls over a window, discriminated on type. logging:disabled carries nothing else: the organization's logs are off, so calls were never recorded. logging:enabled carries every other field. Outcomes also count hook-observed calls; the daily series counts only calls that reached Gram directly.")
+	Description("One MCP server's tool calls over a window, discriminated on type. logging:disabled carries nothing else: the organization's logs are off, so calls were never recorded. logging:enabled carries every other field. Outcomes also count hook-observed calls; the daily series counts only calls that reached Speakeasy directly.")
 	Required("type")
 
 	Attribute("type", String, func() {

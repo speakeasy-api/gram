@@ -23,7 +23,7 @@ through.
 
 | Variable                            | Purpose                                                                                                                   |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `GRAM_HOOKS_SERVER_URL`             | Gram API base the events are posted to. Defaults to `https://app.getgram.ai`.                                             |
+| `GRAM_HOOKS_SERVER_URL`             | Speakeasy API base the events are posted to. Defaults to `https://app.getgram.ai`.                                        |
 | `GRAM_HOOKS_SITE_URL`               | Dashboard origin browser sign-in opens, for deployments that serve the dashboard off the API domain (local dev).          |
 | `GRAM_HOOKS_PROJECT_SLUG`           | Project the events route to.                                                                                              |
 | `GRAM_HOOKS_ORG_ID`                 | Organization the cached credential is scoped to.                                                                          |

@@ -1138,7 +1138,7 @@ func TestAnalyzeBatch_ShadowMCPPublishesFindingsToTopic(t *testing.T) {
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 
-	// An MCP-shaped tool call with no Gram toolset marker and no recorded
+	// An MCP-shaped tool call with no Speakeasy toolset marker and no recorded
 	// provenance is shadow MCP by signature validation.
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "mcp__rogue__exfiltrate", map[string]any{"target": "data"})
 
@@ -1627,7 +1627,7 @@ func TestAnalyzeBatch_CustomDetectionRuleToolServer(t *testing.T) {
 }
 
 // insertAssistantToolCallWithArgs is a sibling of insertAssistantToolCall for
-// CLI scenarios where the recorded arguments don't carry a Gram toolset id -
+// CLI scenarios where the recorded arguments don't carry a Speakeasy toolset id -
 // the cli_destructive scanner is content-driven, so the args field is the
 // thing under test.
 func insertAssistantToolCallWithArgs(t *testing.T, conn *pgxpool.Pool, td testData, callName string, argsMap map[string]any) uuid.UUID {

@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS organizations (
   account_type TEXT NOT NULL DEFAULT 'enterprise',
   workos_id TEXT,
   -- The caller's own identifier for this organization, echoed back on every
-  -- organization response. Gram writes its organization id here and then reads
+  -- organization response. Speakeasy writes its organization id here and then reads
   -- it back through the WorkOS event sync.
   external_id TEXT,
   domains TEXT NOT NULL DEFAULT '[]',
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS current_users (
 --
 -- `rotate_refresh_tokens` defaults on (OAuth 2.1 recommends rotation). Clients
 -- register with it off to emulate upstreams that reuse refresh tokens, which
--- Gram has to tolerate in the wild.
+-- Speakeasy has to tolerate in the wild.
 CREATE TABLE IF NOT EXISTS oauth_clients (
   client_id TEXT NOT NULL PRIMARY KEY,
   client_secret TEXT NOT NULL,

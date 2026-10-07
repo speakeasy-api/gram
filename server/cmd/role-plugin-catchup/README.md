@@ -17,7 +17,7 @@ Requires separate production authorization. A human runs this **locally**, using
 the existing connection task in the adjacent `gram-infra` checkout. Nothing is
 installed in the production server or registered as a new CLI command.
 
-From `gram-infra`, substitute the absolute path to this Gram checkout:
+From `gram-infra`, substitute the absolute path to this Speakeasy checkout:
 
 ```sh
 # Preview only; use existing read access and answer n to the grant prompt.

@@ -40,7 +40,7 @@ func agentEventRowFromLog(record *otelv1.LogRecord, observedAtUnixNano int64) (c
 		return zero, "missing_organization_id"
 	}
 
-	// Observation time is when Gram received the record. The ingest edge
+	// Observation time is when Speakeasy received the record. The ingest edge
 	// stamps it on log records; the consumer's clock stands in only when it
 	// did not. Event time falls back to observation time, and a record with
 	// neither has no usable time at all.
@@ -142,7 +142,7 @@ func agentEventRowFromSpan(span *otelv1.Span, observedAtUnixNano int64) (chrepo.
 		return zero, "missing_timestamp"
 	}
 	// Spans carry no observation time of their own; the consumer's clock is
-	// the closest honest reading of when Gram received it.
+	// the closest honest reading of when Speakeasy received it.
 	observedNano := observedAtUnixNano
 	if observedNano == 0 {
 		return zero, "missing_observed_time"
@@ -392,7 +392,7 @@ func inboundLogFromRecord(record *otelv1.LogRecord) (*otelv1.InboundLogRecord, e
 		return nil, fmt.Errorf("unmarshal log record as gram.otel.v1.InboundLogRecord: %w", err)
 	}
 
-	// The transform rewrote the instrumentation scope to Gram's own and kept
+	// The transform rewrote the instrumentation scope to Speakeasy's own and kept
 	// the producer's under an attribute. Dialects recognise a producer by its
 	// scope name, so put the original back before asking them anything.
 	if original := logOriginalScopeName(record); original != "" {

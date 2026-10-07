@@ -1320,7 +1320,7 @@ CREATE TABLE IF NOT EXISTS ai_scan_targets (
   oauth_client_ids TEXT[] NOT NULL DEFAULT '{}',
   client_info_names TEXT[] NOT NULL DEFAULT '{}',
 
-  -- Whether the tool may reach Gram's MCP gateway: unreviewed, approved or
+  -- Whether the tool may reach Speakeasy's MCP gateway: unreviewed, approved or
   -- blocked. Who set it and when is the audit log's job, not a column here.
   --
   -- The only per-organization state there is. Two kinds of row share this
@@ -1767,7 +1767,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_organization_id_id_key
 ON custom_domains (organization_id, id);
 
 -- Organization-scoped desired and observed state for one private-network ingress.
--- The Tailscale Kubernetes operator owns node state; Gram persists only stable
+-- The Tailscale Kubernetes operator owns node state; Speakeasy persists only stable
 -- resource identities needed to reconcile and clean up provider resources.
 CREATE TABLE IF NOT EXISTS network_ingresses (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -2197,7 +2197,7 @@ ON json_web_keys (organization_id, json_web_key_set_id);
 CREATE INDEX IF NOT EXISTS json_web_keys_external_key_tenant_idx
 ON json_web_keys (organization_id, external_key_id);
 
--- Customer-hosted MCP servers connected through outbound tunnels. Gram stores
+-- Customer-hosted MCP servers connected through outbound tunnels. Speakeasy stores
 -- the durable management/source record; live connection routing is cached in
 -- Redis by the tunnel gateway.
 CREATE TABLE IF NOT EXISTS tunneled_mcp_servers (
@@ -2225,7 +2225,7 @@ CREATE TABLE IF NOT EXISTS tunneled_mcp_servers (
   -- value an authorization server co-hosted with it recognizes as its
   -- audience. Recorded as the RFC 8707 resource on grants and used only for
   -- exact-match credential routing. Names a host inside the customer's
-  -- private network — this value must NEVER be dialed by Gram.
+  -- private network — this value must NEVER be dialed by Speakeasy.
   resource_identifier TEXT CHECK (resource_identifier IS NULL OR resource_identifier <> ''),
   -- Anonymous public MCP request rate limit, requests per second. NULL: deployment default.
   public_request_rate_per_second integer CHECK (public_request_rate_per_second IS NULL OR (public_request_rate_per_second > 0 AND public_request_rate_per_second <= 100000)),
@@ -2275,7 +2275,7 @@ COMMENT ON COLUMN tunneled_mcp_servers.deleted_at IS 'Soft-delete timestamp for 
 COMMENT ON COLUMN tunneled_mcp_servers.deleted IS 'Generated soft-delete flag derived from deleted_at and used by partial indexes.';
 
 -- Remote Session Issuers are references to external authorization servers
--- that will mint tokens that can be passed on behalf of a Gram session to an
+-- that will mint tokens that can be passed on behalf of a Speakeasy session to an
 -- MCP backend
 CREATE TABLE IF NOT EXISTS remote_session_issuers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -2339,11 +2339,11 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   -- Unlike the fields above, this comes from the OAuth CIMD draft
   -- (draft-ietf-oauth-client-id-metadata-document), not base RFC 8414. It
   -- marks whether the issuer accepts a Client ID Metadata Document URL as
-  -- client_id, which Gram uses to pre-flight whether outbound CIMD is viable.
+  -- client_id, which Speakeasy uses to pre-flight whether outbound CIMD is viable.
   client_id_metadata_document_supported BOOLEAN NOT NULL DEFAULT FALSE,
 
   -- OpenID Connect Discovery, RFC 7662, RFC 9207, and OpenID Back-Channel
-  -- Logout fields that tell Gram which session-enrichment interfaces an
+  -- Logout fields that tell Speakeasy which session-enrichment interfaces an
   -- issuer offers. All nullable with no default: NULL means discovery has
   -- not captured the field for this row yet, which stays distinct from an
   -- empty array or FALSE written by a refresh ("captured; the upstream
@@ -2371,7 +2371,7 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   oidc BOOLEAN NOT NULL DEFAULT FALSE,
   passthrough BOOLEAN NOT NULL DEFAULT FALSE,
 
-  -- When set, every call Gram makes to this issuer's endpoints (metadata
+  -- When set, every call Speakeasy makes to this issuer's endpoints (metadata
   -- discovery, code exchange, refresh, revocation, and registration) rides
   -- this tunnel instead of dialing directly from cloud egress.
   tunneled_mcp_server_id uuid,
@@ -2384,7 +2384,7 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   client_setup_documentation_url TEXT,
 
   -- The last discovery document captured for this issuer, verbatim. The typed
-  -- columns above model only what Gram acts on, so re-serving from them would
+  -- columns above model only what Speakeasy acts on, so re-serving from them would
   -- drop the OIDC fields they omit.
   metadata JSONB,
 
@@ -2450,7 +2450,7 @@ ON remote_session_issuers (organization_id, id);
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_attachment_scope_key
 ON remote_session_issuers (id, issuer, attachment_scope);
 
--- Remote Session Clients are records of Gram's client registrations with
+-- Remote Session Clients are records of Speakeasy's client registrations with
 -- upstream authorization servers
 CREATE TABLE IF NOT EXISTS remote_session_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -2479,9 +2479,9 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- The signed assertion uses token_endpoint_auth_audience_format instead.
   audience TEXT,
 
-  -- Which of the issuer's identifiers Gram places in the `aud` claim of an
+  -- Which of the issuer's identifiers Speakeasy places in the `aud` claim of an
   -- outbound JWT client assertion (RFC 7523 private_key_jwt). Distinct from the
-  -- `audience` column above, which carries the audience parameter Gram sends on
+  -- `audience` column above, which carries the audience parameter Speakeasy sends on
   -- the authorize and token requests; this one only selects the form of a claim
   -- inside the signed assertion.
   --
@@ -2507,7 +2507,7 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- issuer is consolidated.
   token_endpoint_auth_audience_format TEXT,
 
-  -- CIMD: when non-null, Gram publishes its OAuth Client ID Metadata
+  -- CIMD: when non-null, Speakeasy publishes its OAuth Client ID Metadata
   -- Document at this HTTPS URL and uses the URL as the client_id on every
   -- outbound /authorize, /token, and refresh call. Per
   -- draft-ietf-oauth-client-id-metadata-document the client_id MUST equal
@@ -2782,7 +2782,7 @@ CREATE TABLE IF NOT EXISTS okta_application_reconcile_runs (
 CREATE INDEX IF NOT EXISTS okta_application_reconcile_runs_connection_started_at_idx
 ON okta_application_reconcile_runs (organization_id, identity_provider_connection_id, started_at DESC);
 
--- User Session Issuers house configuration for when Gram acts as an Authorization Server for MCP Clients
+-- User Session Issuers house configuration for when Speakeasy acts as an Authorization Server for MCP Clients
 -- See: https://datatracker.ietf.org/doc/html/rfc8414
 CREATE TABLE IF NOT EXISTS user_session_issuers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -2798,14 +2798,14 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   authn_challenge_mode TEXT NOT NULL, -- One of ('chain', 'interactive'). chain exists for backwards compatibility and should be phased out. interactive will be the main mode going forward
   session_duration INTERVAL NOT NULL,
-  classification TEXT NOT NULL DEFAULT 'custom' CHECK (classification IN ('custom', 'project_default_idp')), -- 'project_default_idp' is the auto-provisioned implicit Gram issuer for private servers; 'custom' is user-configured
+  classification TEXT NOT NULL DEFAULT 'custom' CHECK (classification IN ('custom', 'project_default_idp')), -- 'project_default_idp' is the auto-provisioned implicit Speakeasy issuer for private servers; 'custom' is user-configured
 
   -- Chooses which CIMD clients this issuer permits.
   client_id_metadata_admission_mode TEXT,
   -- External authorization server whose assertions this issuer trusts.
   -- NULL preserves the standard interactive or chained authentication flow.
   trusted_remote_session_issuer_id uuid,
-  -- Gram's upstream IdP registration, not a downstream-client attachment.
+  -- Speakeasy's upstream IdP registration, not a downstream-client attachment.
   -- Must be a live, same-organization client of the trusted issuer.
   trusted_remote_session_client_id uuid,
   -- Announces the deployment's authentication host, rather than the MCP host,
@@ -2863,7 +2863,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_default_key
 ON user_session_issuers (project_id)
 WHERE classification = 'project_default_idp' AND deleted IS FALSE;
 
--- User Session Clients are MCP Clients that have registered themselves with Gram
+-- User Session Clients are MCP Clients that have registered themselves with Speakeasy
 -- See: https://datatracker.ietf.org/doc/html/rfc6749#section-1.1
 CREATE TABLE IF NOT EXISTS user_session_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -3031,7 +3031,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_session_consents_subject_client_set_key
 ON user_session_consents (subject_urn, user_session_client_id, remote_set_hash)
 WHERE deleted IS FALSE;
 
--- User Sessions are records representing active Gram sessions for a given Subject
+-- User Sessions are records representing active Speakeasy sessions for a given Subject
 -- They contain token grant information to allow for validating and exchanging tokens
 CREATE TABLE IF NOT EXISTS user_sessions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -3103,8 +3103,8 @@ ON user_sessions (user_session_issuer_id, jti)
 WHERE deleted IS FALSE;
 
 -- Workload Issuers are external platforms whose signed identity tokens
--- Gram accepts as proof of a machine's identity: a CI provider, a Kubernetes
--- cluster, a cloud project. Gram is the verifier here and never the client: a
+-- Speakeasy accepts as proof of a machine's identity: a CI provider, a Kubernetes
+-- cluster, a cloud project. Speakeasy is the verifier here and never the client: a
 -- workload issuer signs and publishes keys, and that is all, so there are no
 -- endpoints to call and nothing to register.
 --
@@ -3171,7 +3171,7 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   allow_wildcard_admission boolean NOT NULL DEFAULT true,
 
   -- The last discovery document captured for this issuer, verbatim. The typed
-  -- columns above model only what Gram acts on; the rest of a document is kept
+  -- columns above model only what Speakeasy acts on; the rest of a document is kept
   -- because a platform preset needs claims_supported to tell an operator what
   -- their tokens actually carry.
   metadata JSONB,
@@ -3388,7 +3388,7 @@ CREATE TABLE IF NOT EXISTS trusted_issuer_sessions (
   organization_id TEXT,
   project_id uuid,
 
-  -- Provisioned Gram human subject, not an external identifier.
+  -- Provisioned Speakeasy human subject, not an external identifier.
   subject_urn TEXT NOT NULL,
   -- Validated OIDC ID token and verified expiry.
   identity_assertion_encrypted TEXT,
@@ -3408,7 +3408,7 @@ CREATE TABLE IF NOT EXISTS trusted_issuer_sessions (
   -- Refresh attempt ownership, not a lease.
   -- Claims never expire: an ambiguous rotating POST cannot be replayed.
   refresh_claim_id uuid,
-  -- Verified upstream OIDC sub, distinct from the canonical Gram subject.
+  -- Verified upstream OIDC sub, distinct from the canonical Speakeasy subject.
   upstream_subject_encrypted TEXT,
   -- Original login nonce for the retained refresh family; refreshed ID token nonce, if present, must match (OIDC Core §12.2).
   nonce_encrypted TEXT,
@@ -3461,7 +3461,7 @@ ON trusted_issuer_sessions (remote_session_client_id, subject_urn)
 WHERE deleted IS FALSE;
 
 -- Remote sessions represent credentials for an external resource that have
--- been granted to a single Gram subject
+-- been granted to a single Speakeasy subject
 CREATE TABLE IF NOT EXISTS remote_sessions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   -- Changes on fresh OAuth authorization, never on token refresh.
@@ -3498,7 +3498,7 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
   -- Who the upstream token belongs to at the provider, as learned from a
   -- session-enrichment interface (an ID token, userinfo, introspection, a
   -- verified JWT access token, or the token response itself). All nullable:
-  -- NULL means no interface has told Gram yet. identity_source names the
+  -- NULL means no interface has told Speakeasy yet. identity_source names the
   -- interface the identity came from; when several interfaces answer, the
   -- typed columns hold the highest-ranked source's answer and precedence is
   -- decided in application code. The email and display name are end-user
@@ -4607,8 +4607,8 @@ CREATE INDEX IF NOT EXISTS users_email_lower_idx
 ON users (lower(email));
 
 -- user_accounts is the registry of external AI provider accounts (Claude today;
--- other providers in the future) observed for a Gram organization, each linked to
--- the employee (Gram user) who owns it. It is the entity behind personal-account
+-- other providers in the future) observed for a Speakeasy organization, each linked to
+-- the employee (Speakeasy user) who owns it. It is the entity behind personal-account
 -- tracking: the per-employee account selector, the enrollment page's personal-vs-
 -- enterprise plan breakdown, and the org dashboard's list of personal accounts all
 -- read from here. An account is linked to its employee either directly (a team
@@ -5246,7 +5246,7 @@ WHERE state = 'pending';
 -- organization_role_assignments stores which roles each WorkOS user has within an org.
 -- role_urn encodes both the role type and ID: "role:global:<uuid>" or "role:organization:<uuid>".
 -- No FK on role_urn — role deletions are handled in app logic.
--- user_id is nullable: if the Gram user doesn't exist yet, the assignment is stored by workos_user_id
+-- user_id is nullable: if the Speakeasy user doesn't exist yet, the assignment is stored by workos_user_id
 -- and user_id is filled in later (e.g., on first login or backfill).
 CREATE TABLE IF NOT EXISTS organization_role_assignments (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
@@ -5510,7 +5510,7 @@ CREATE TABLE IF NOT EXISTS trigger_workload_bindings (
   -- Captured incarnation, checked live by the service rather than constrained
   -- by an FK that would prevent revoking the assistant binding independently.
   assistant_binding_generation BIGINT NOT NULL,
-  -- Tenant-scoped trust record for the shared Gram issuer URL and real JWKS.
+  -- Tenant-scoped trust record for the shared Speakeasy issuer URL and real JWKS.
   -- Admissions and assignments refer to this record, not directly to a URL.
   original_workload_issuer_id uuid NOT NULL,
   workload_issuer_ref_organization_id TEXT,
@@ -5987,7 +5987,7 @@ ON project_allowed_origins (project_id, origin)
 WHERE deleted IS FALSE;
 
 -- Organization-level OAuth client registrations from Dynamic Client Registration (DCR)
--- When Gram acts as an OAuth client to external MCP servers using MCP OAuth 2.1,
+-- When Speakeasy acts as an OAuth client to external MCP servers using MCP OAuth 2.1,
 -- it needs to register itself via DCR and store the resulting client credentials.
 -- These credentials are shared by all users in the organization.
 CREATE TABLE IF NOT EXISTS external_oauth_client_registrations (
@@ -6368,7 +6368,7 @@ ON audit_logs (organization_id, subject_type, subject_id, action, seq DESC);
 CREATE INDEX IF NOT EXISTS audit_logs_organization_subject_seq_idx
 ON audit_logs (organization_id, subject_id, seq DESC);
 
--- Remote MCP servers are upstream MCP endpoints that Gram proxies requests to.
+-- Remote MCP servers are upstream MCP endpoints that Speakeasy proxies requests to.
 -- See https://modelcontextprotocol.io/registry/remote-servers
 CREATE TABLE IF NOT EXISTS remote_mcp_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -6530,8 +6530,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS tunneled_mcp_server_headers_tunneled_mcp_serve
 ON tunneled_mcp_server_headers (tunneled_mcp_server_id, name)
 WHERE deleted IS FALSE;
 
--- Unproxied MCP servers are vendor MCP servers that Gram never proxies.
--- The url is displayed to admins/customers only; Gram does not fetch it or
+-- Unproxied MCP servers are vendor MCP servers that Speakeasy never proxies.
+-- The url is displayed to admins/customers only; Speakeasy does not fetch it or
 -- manage OAuth for it. Intended for staff-added entries that sidestep
 -- per-vendor OAuth callback allowlisting.
 CREATE TABLE IF NOT EXISTS unproxied_mcp_servers (
@@ -6572,7 +6572,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   environment_id uuid,
   user_session_issuer_id uuid,
   -- The authorization server the upstream authenticates against. Coexists with
-  -- user_session_issuer_id: Gram fronting an upstream does not change which AS
+  -- user_session_issuer_id: Speakeasy fronting an upstream does not change which AS
   -- issued the upstream's credential.
   -- The FK cannot qualify tenancy; writers must use the tenant-scoped lookup.
   remote_session_issuer_id uuid,
@@ -6659,7 +6659,7 @@ CREATE TABLE IF NOT EXISTS meta_mcp_servers (
 
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
   -- Operator-authored server instructions answered by the gateway's initialize
-  -- and server/discover responses. NULL serves Gram's built-in gateway
+  -- and server/discover responses. NULL serves Speakeasy's built-in gateway
   -- instructions instead, so an unset row keeps the drill-down guidance every
   -- gateway needs. Length is validated in application code.
   instructions TEXT,
@@ -6798,7 +6798,7 @@ CREATE TABLE IF NOT EXISTS mcp_environment_configs (
 );
 
 -- MCP Endpoints: addressable slugs for an MCP or Meta MCP server. A NULL custom_domain_id
--- represents a Gram-hosted endpoint (resolved by slug alone); a non-NULL
+-- represents a Speakeasy-hosted endpoint (resolved by slug alone); a non-NULL
 -- custom_domain_id represents a custom-domain endpoint (resolved by the
 -- composite (custom_domain_id, slug)).
 CREATE TABLE IF NOT EXISTS mcp_endpoints (
@@ -6900,7 +6900,7 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_oauth_clients (
   client_id TEXT,
   client_secret_encrypted TEXT,
   client_secret_expires_at timestamptz,
-  -- CIMD: when non-null, Gram publishes a Client ID Metadata Document at
+  -- CIMD: when non-null, Speakeasy publishes a Client ID Metadata Document at
   -- this URL and sends the URL as client_id. Public clients carry no secret.
   -- draft-ietf-oauth-client-id-metadata-document requires client_id equal
   -- this URL; the CHECK below enforces that.
@@ -7217,7 +7217,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   action TEXT NOT NULL DEFAULT 'flag',
   audience_type TEXT NOT NULL DEFAULT 'everyone',
   -- Default disposition for shadow MCP blocking policies (action = 'block'
-  -- with the 'shadow_mcp' source): 'block_all' blocks every non-Gram-hosted
+  -- with the 'shadow_mcp' source): 'block_all' blocks every non-Speakeasy-hosted
   -- server unless allowed, 'allow_all' permits every server unless blocked.
   -- Both exception lists live in RBAC grants (allow list = risk_policy:bypass,
   -- block list = risk_policy:block), not on this row. NULL means 'block_all'
@@ -8106,7 +8106,7 @@ CREATE TABLE IF NOT EXISTS tool_call_blocks (
   chat_id uuid,
   chat_message_id uuid,
 
-  -- The Gram user whose agent triggered the block, captured at deny time.
+  -- The Speakeasy user whose agent triggered the block, captured at deny time.
   -- Used to authorize the durable block page (the owner may view their own
   -- block). Stored directly rather than derived via chat_id so it is available
   -- even when session capture is disabled and no chat row was persisted. Empty
@@ -8430,7 +8430,7 @@ CREATE TABLE IF NOT EXISTS spend_rule_events (
   event_type TEXT NOT NULL,
 
   -- Actor identity as known at evaluation time. user_id is NULL when the
-  -- directory user has not been linked to a Gram user.
+  -- directory user has not been linked to a Speakeasy user.
   user_id TEXT,
   email TEXT NOT NULL,
   display_name TEXT,
@@ -10049,7 +10049,7 @@ CREATE INDEX IF NOT EXISTS okta_resource_connections_remote_session_issuer_idx
 ON okta_resource_connections (remote_session_issuer_id);
 
 -- An organization administrator dismissed the suggestion to add the MCP server
--- a Gram-owned catalog entry describes, made because a synced Okta application
+-- a Speakeasy-owned catalog entry describes, made because a synced Okta application
 -- maps to that entry. One row per organization x entry; restore deletes it, so
 -- created_at is when it was dismissed. Dismissals outlive the Okta connection:
 -- the decision was about the server, not the connection. Who dismissed or
@@ -10122,7 +10122,7 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
   remote_session_client_id uuid,
   -- Canonical RFC 9728 resource; preserve its trailing slash.
   resource TEXT NOT NULL,
-  -- Provisioned Gram human (user:<id>), never an agent, workload or external sub.
+  -- Provisioned Speakeasy human (user:<id>), never an agent, workload or external sub.
   subject_urn TEXT NOT NULL,
   -- binding or implicit, validated by the application.
   client_selection TEXT NOT NULL,

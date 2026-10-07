@@ -7,7 +7,7 @@ This document consolidates the project's coding conventions and review rules so 
 - `server/` — Go backend (Goa HTTP-RPC API, Temporal workflows)
 - `client/dashboard/` — React frontend (TypeScript, Tailwind, Moonshine design system)
 - `functions/` — Serverless function runner
-- `cli/` — CLI for Gram
+- `cli/` — CLI for Speakeasy
 - `server/database/schema.sql` — DDL-only schema definition
 - `server/migrations/` — Atlas-generated migration files (never hand-edit)
 - `server/design/` — Goa API design files

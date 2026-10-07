@@ -57,7 +57,7 @@ export type RemoteSessionClient = {
   clientId: string;
   clientIdIssuedAt?: Date | undefined;
   /**
-   * When set, the client is in Client ID Metadata Document (CIMD) mode: Gram hosts its OAuth client metadata document at this URL and uses it as the client_id. Null for non-CIMD clients.
+   * When set, the client is in Client ID Metadata Document (CIMD) mode: Speakeasy hosts its OAuth client metadata document at this URL and uses it as the client_id. Null for non-CIMD clients.
    */
   clientIdMetadataUri?: string | undefined;
   /**

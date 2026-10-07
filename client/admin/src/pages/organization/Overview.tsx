@@ -504,7 +504,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
               <p className="text-muted-foreground mt-0.5 text-sm">
                 {org.disabled_at
                   ? `Disabled ${fmtDateShort(org.disabled_at)}. Re-enabling restores organization access for every member and takes effect at once. Model provider keys with admin, billing, or unknown disable causes remain disabled.`
-                  : "Every member loses access to Gram until the organization is re-enabled. Sessions end immediately; nothing is deleted."}
+                  : "Every member loses access to Speakeasy until the organization is re-enabled. Sessions end immediately; nothing is deleted."}
               </p>
             </div>
             <OrganizationActions

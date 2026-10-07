@@ -53,7 +53,7 @@ export function buildCloudSetupCommand(input: CloudSetupCommandInput): string {
   return `#!/usr/bin/env bash
 set -euo pipefail
 
-# Values from the Gram dashboard.
+# Values from the Speakeasy dashboard.
 VERSION=${shellQuote(input.version)}
 SHA256=${shellQuote(input.sha256)}
 EMAIL=${shellQuote(email)}

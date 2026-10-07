@@ -14,7 +14,7 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Platform-admin management of platform external_credentials — how Gram
+// Platform-admin management of platform external_credentials — how Speakeasy
 // authenticates into a cloud provider to reach a platform KMS key. Shared
 // across every organization (organization_id NULL, project_id NULL).
 // Speakeasy-staff only; every method requires the platform-admin flag.
@@ -67,8 +67,8 @@ type CreateGcpIamPlatformCredentialPayload struct {
 	SessionToken *string
 	// A human-readable name for the credential.
 	Name string
-	// The service account Gram impersonates. Set alone for direct impersonation,
-	// or as the hop alongside the wif_* fields.
+	// The service account Speakeasy impersonates. Set alone for direct
+	// impersonation, or as the hop alongside the wif_* fields.
 	ImpersonateServiceAccount *string
 	// Workload Identity Federation pool ID. Set together with the other wif_*
 	// fields.
@@ -108,8 +108,8 @@ type ExternalCredentialSummary struct {
 // GcpIamCredential is the result type of the adminExternalCredentials service
 // createGcpIamPlatformCredential method.
 type GcpIamCredential struct {
-	// The service account Gram impersonates (impersonation approach, or the WIF
-	// hop).
+	// The service account Speakeasy impersonates (impersonation approach, or the
+	// WIF hop).
 	ImpersonateServiceAccount *string
 	// Workload Identity Federation pool ID.
 	WifPoolID *string
@@ -162,8 +162,8 @@ type UpdateGcpIamPlatformCredentialPayload struct {
 	SessionToken *string
 	// A human-readable name for the credential.
 	Name string
-	// The service account Gram impersonates. Set alone for direct impersonation,
-	// or as the hop alongside the wif_* fields.
+	// The service account Speakeasy impersonates. Set alone for direct
+	// impersonation, or as the hop alongside the wif_* fields.
 	ImpersonateServiceAccount *string
 	// Workload Identity Federation pool ID. Set together with the other wif_*
 	// fields.

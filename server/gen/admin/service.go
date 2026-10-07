@@ -80,11 +80,11 @@ type Service interface {
 	// Only a running trial can be extended: one that has converted, has been
 	// demoted, or has already expired is rejected rather than re-armed.
 	ExtendTrial(context.Context, *ExtendTrialPayload) (res *AdminOrganization, err error)
-	// Creates an organization in WorkOS and in Gram, so an operator does not have
-	// to leave the admin app for the WorkOS dashboard. The organization starts
-	// with no members, is not whitelisted, and gets no trial. Idempotent against
-	// the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID,
-	// so both writers converge on one row.
+	// Creates an organization in WorkOS and in Speakeasy, so an operator does not
+	// have to leave the admin app for the WorkOS dashboard. The organization
+	// starts with no members, is not whitelisted, and gets no trial. Idempotent
+	// against the WorkOS organization webhook: the Speakeasy ID is derived from
+	// the WorkOS ID, so both writers converge on one row.
 	CreateOrganization(context.Context, *CreateOrganizationPayload) (res *AdminOrganization, err error)
 	// Puts a demoted enterprise trial back on: restores the organization's account
 	// type and whitelist flag, revives its model provider keys, and gives the
@@ -156,7 +156,7 @@ type Service interface {
 	// Re-fetch an existing global remote_session_issuer's RFC 8414 metadata
 	// document and persist the discovered values. Keyed by issuer id. Only RFC
 	// 8414-derived columns are written — endpoints, the *_supported arrays,
-	// client_id_metadata_document_supported, and the documentation URLs. Gram
+	// client_id_metadata_document_supported, and the documentation URLs. Speakeasy
 	// behavior and display fields (oidc, passthrough, name, slug, logo, client
 	// setup documentation) are left alone. Requires platform admin.
 	RefreshGlobalIssuerMetadata(context.Context, *RefreshGlobalIssuerMetadataPayload) (res *types.RemoteSessionIssuerRefresh, err error)
@@ -515,7 +515,7 @@ type AdminMcpServerHealthRemoteSessionIssuer struct {
 	Issuer string
 	// Where the row is attached. global is platform-wide.
 	AttachmentScope string
-	// Whether Gram reaches the issuer over the public internet or a tunnel.
+	// Whether Speakeasy reaches the issuer over the public internet or a tunnel.
 	Networking string
 	// Whether the issuer is treated as an OpenID Connect provider.
 	Oidc bool
@@ -575,7 +575,7 @@ type AdminMcpServerHealthServerRef struct {
 type AdminMcpServerHealthTrustedRemoteSession struct {
 	// The trusted remote session issuer ID.
 	IssuerID string
-	// The remote session client ID Gram uses with the trusted issuer.
+	// The remote session client ID Speakeasy uses with the trusted issuer.
 	ClientID string
 }
 
@@ -832,7 +832,7 @@ type AdminOrganization struct {
 	Name string
 	// The slug of the organization
 	Slug string
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string
 	// WorkOS organization ID, if linked.
 	WorkosID *string
@@ -2058,7 +2058,7 @@ type ProductFeatures struct {
 	SkillCaptureMetadataOnly bool
 	// Whether the organization can provision push integrations for AI platforms
 	AiPlatformPushIntegrationsEnabled bool
-	// Whether the organization can use the Gram Platform MCP capability
+	// Whether the organization can use the Speakeasy Platform MCP capability
 	PlatformMcpEnabled bool
 	// Whether the organization can manage the external credentials and cloud KMS
 	// keys backing customer-managed encryption
@@ -2471,7 +2471,7 @@ type UpdateSupportMatrixPayload struct {
 // UploadImageResult is the result type of the admin service
 // uploadPlatformImage method.
 type UploadImageResult struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *Asset
 }
 
