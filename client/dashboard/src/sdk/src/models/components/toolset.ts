@@ -175,6 +175,10 @@ export type Toolset = {
    * A short url-friendly label that uniquely identifies a resource.
    */
   userSessionIssuerSlug?: string | undefined;
+  /**
+   * Opaque token identifying the exact tool list this read describes, derived from toolset_version and tool_urns. Send it back as expected_version_token on toolsets.update to have the update refused with a conflict if the tool list changed in between.
+   */
+  versionToken: string;
 };
 
 /** @internal */
@@ -227,6 +231,7 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
     ),
     user_session_issuer_id: z.optional(z.string()),
     user_session_issuer_slug: z.optional(z.string()),
+    version_token: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -255,6 +260,7 @@ export const Toolset$inboundSchema: z.ZodMiniType<Toolset, unknown> = z.pipe(
       "updated_at": "updatedAt",
       "user_session_issuer_id": "userSessionIssuerId",
       "user_session_issuer_slug": "userSessionIssuerSlug",
+      "version_token": "versionToken",
     });
   }),
 );

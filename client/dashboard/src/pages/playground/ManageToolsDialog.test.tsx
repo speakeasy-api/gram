@@ -71,6 +71,7 @@ const toolset = {
   toolUrns: [],
   tools: [],
   toolsetVersion: 1,
+  versionToken: "test-version-token",
   updatedAt: new Date("2026-01-01T00:00:00Z"),
 } satisfies Toolset;
 

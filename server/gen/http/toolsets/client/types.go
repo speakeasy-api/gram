@@ -60,6 +60,10 @@ type UpdateToolsetRequestBody struct {
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The mode to use for tool selection
 	ToolSelectionMode *string `form:"tool_selection_mode,omitempty" json:"tool_selection_mode,omitempty" xml:"tool_selection_mode,omitempty"`
+	// The version_token from the toolset read this update was based on. When set,
+	// the update is refused with a conflict if the toolset's tool list has changed
+	// since that read. Omit it to apply the update unconditionally.
+	ExpectedVersionToken *string `form:"expected_version_token,omitempty" json:"expected_version_token,omitempty" xml:"expected_version_token,omitempty"`
 }
 
 // AddExternalOAuthServerRequestBody is the type of the "toolsets" service
@@ -131,6 +135,11 @@ type CreateToolsetResponseBody struct {
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion *int64 `form:"toolset_version,omitempty" json:"toolset_version,omitempty" xml:"toolset_version,omitempty"`
+	// Opaque token identifying the exact tool list this read describes, derived
+	// from toolset_version and tool_urns. Send it back as expected_version_token
+	// on toolsets.update to have the update refused with a conflict if the tool
+	// list changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 	// The resource URNs in this toolset
@@ -219,6 +228,11 @@ type UpdateToolsetResponseBody struct {
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion *int64 `form:"toolset_version,omitempty" json:"toolset_version,omitempty" xml:"toolset_version,omitempty"`
+	// Opaque token identifying the exact tool list this read describes, derived
+	// from toolset_version and tool_urns. Send it back as expected_version_token
+	// on toolsets.update to have the update refused with a conflict if the tool
+	// list changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 	// The resource URNs in this toolset
@@ -293,6 +307,11 @@ type GetToolsetResponseBody struct {
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion *int64 `form:"toolset_version,omitempty" json:"toolset_version,omitempty" xml:"toolset_version,omitempty"`
+	// Opaque token identifying the exact tool list this read describes, derived
+	// from toolset_version and tool_urns. Send it back as expected_version_token
+	// on toolsets.update to have the update refused with a conflict if the tool
+	// list changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 	// The resource URNs in this toolset
@@ -395,6 +414,11 @@ type CloneToolsetResponseBody struct {
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion *int64 `form:"toolset_version,omitempty" json:"toolset_version,omitempty" xml:"toolset_version,omitempty"`
+	// Opaque token identifying the exact tool list this read describes, derived
+	// from toolset_version and tool_urns. Send it back as expected_version_token
+	// on toolsets.update to have the update refused with a conflict if the tool
+	// list changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 	// The resource URNs in this toolset
@@ -469,6 +493,11 @@ type AddExternalOAuthServerResponseBody struct {
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion *int64 `form:"toolset_version,omitempty" json:"toolset_version,omitempty" xml:"toolset_version,omitempty"`
+	// Opaque token identifying the exact tool list this read describes, derived
+	// from toolset_version and tool_urns. Send it back as expected_version_token
+	// on toolsets.update to have the update refused with a conflict if the tool
+	// list changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 	// The resource URNs in this toolset
@@ -543,6 +572,11 @@ type UpdateExternalOAuthServerResponseBody struct {
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion *int64 `form:"toolset_version,omitempty" json:"toolset_version,omitempty" xml:"toolset_version,omitempty"`
+	// Opaque token identifying the exact tool list this read describes, derived
+	// from toolset_version and tool_urns. Send it back as expected_version_token
+	// on toolsets.update to have the update refused with a conflict if the tool
+	// list changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 	// The resource URNs in this toolset
@@ -617,6 +651,11 @@ type RemoveOAuthServerResponseBody struct {
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion *int64 `form:"toolset_version,omitempty" json:"toolset_version,omitempty" xml:"toolset_version,omitempty"`
+	// Opaque token identifying the exact tool list this read describes, derived
+	// from toolset_version and tool_urns. Send it back as expected_version_token
+	// on toolsets.update to have the update refused with a conflict if the tool
+	// list changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 	// The resource URNs in this toolset
@@ -691,6 +730,11 @@ type SetUserSessionIssuerResponseBody struct {
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion *int64 `form:"toolset_version,omitempty" json:"toolset_version,omitempty" xml:"toolset_version,omitempty"`
+	// Opaque token identifying the exact tool list this read describes, derived
+	// from toolset_version and tool_urns. Send it back as expected_version_token
+	// on toolsets.update to have the update refused with a conflict if the tool
+	// list changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 	// The resource URNs in this toolset
@@ -765,6 +809,11 @@ type SetToolVariationsGroupResponseBody struct {
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
 	// The version of the toolset (will be 0 if none exists)
 	ToolsetVersion *int64 `form:"toolset_version,omitempty" json:"toolset_version,omitempty" xml:"toolset_version,omitempty"`
+	// Opaque token identifying the exact tool list this read describes, derived
+	// from toolset_version and tool_urns. Send it back as expected_version_token
+	// on toolsets.update to have the update refused with a conflict if the tool
+	// list changed in between.
+	VersionToken *string `form:"version_token,omitempty" json:"version_token,omitempty" xml:"version_token,omitempty"`
 	// The resources in this toolset
 	Resources []*ResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
 	// The resource URNs in this toolset
@@ -4320,12 +4369,13 @@ func NewCreateToolsetRequestBody(p *toolsets.CreateToolsetPayload) *CreateToolse
 // the "updateToolset" endpoint of the "toolsets" service.
 func NewUpdateToolsetRequestBody(p *toolsets.UpdateToolsetPayload) *UpdateToolsetRequestBody {
 	body := &UpdateToolsetRequestBody{
-		Name:              p.Name,
-		Description:       p.Description,
-		McpEnabled:        p.McpEnabled,
-		McpIsPublic:       p.McpIsPublic,
-		CustomDomainID:    p.CustomDomainID,
-		ToolSelectionMode: p.ToolSelectionMode,
+		Name:                 p.Name,
+		Description:          p.Description,
+		McpEnabled:           p.McpEnabled,
+		McpIsPublic:          p.McpIsPublic,
+		CustomDomainID:       p.CustomDomainID,
+		ToolSelectionMode:    p.ToolSelectionMode,
+		ExpectedVersionToken: p.ExpectedVersionToken,
 	}
 	if p.DefaultEnvironmentSlug != nil {
 		defaultEnvironmentSlug := string(*p.DefaultEnvironmentSlug)
@@ -4411,6 +4461,7 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *types.Toolset {
 		Slug:                  types.Slug(*body.Slug),
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
+		VersionToken:          *body.VersionToken,
 		McpIsPublic:           body.McpIsPublic,
 		McpEnabled:            body.McpEnabled,
 		ToolSelectionMode:     *body.ToolSelectionMode,
@@ -5013,6 +5064,7 @@ func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *types.Toolset {
 		Slug:                  types.Slug(*body.Slug),
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
+		VersionToken:          *body.VersionToken,
 		McpIsPublic:           body.McpIsPublic,
 		McpEnabled:            body.McpEnabled,
 		ToolSelectionMode:     *body.ToolSelectionMode,
@@ -5433,6 +5485,7 @@ func NewGetToolsetToolsetOK(body *GetToolsetResponseBody) *types.Toolset {
 		Slug:                  types.Slug(*body.Slug),
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
+		VersionToken:          *body.VersionToken,
 		McpIsPublic:           body.McpIsPublic,
 		McpEnabled:            body.McpEnabled,
 		ToolSelectionMode:     *body.ToolSelectionMode,
@@ -6197,6 +6250,7 @@ func NewCloneToolsetToolsetOK(body *CloneToolsetResponseBody) *types.Toolset {
 		Slug:                  types.Slug(*body.Slug),
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
+		VersionToken:          *body.VersionToken,
 		McpIsPublic:           body.McpIsPublic,
 		McpEnabled:            body.McpEnabled,
 		ToolSelectionMode:     *body.ToolSelectionMode,
@@ -6467,6 +6521,7 @@ func NewAddExternalOAuthServerToolsetOK(body *AddExternalOAuthServerResponseBody
 		Slug:                  types.Slug(*body.Slug),
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
+		VersionToken:          *body.VersionToken,
 		McpIsPublic:           body.McpIsPublic,
 		McpEnabled:            body.McpEnabled,
 		ToolSelectionMode:     *body.ToolSelectionMode,
@@ -6737,6 +6792,7 @@ func NewUpdateExternalOAuthServerToolsetOK(body *UpdateExternalOAuthServerRespon
 		Slug:                  types.Slug(*body.Slug),
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
+		VersionToken:          *body.VersionToken,
 		McpIsPublic:           body.McpIsPublic,
 		McpEnabled:            body.McpEnabled,
 		ToolSelectionMode:     *body.ToolSelectionMode,
@@ -7007,6 +7063,7 @@ func NewRemoveOAuthServerToolsetOK(body *RemoveOAuthServerResponseBody) *types.T
 		Slug:                  types.Slug(*body.Slug),
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
+		VersionToken:          *body.VersionToken,
 		McpIsPublic:           body.McpIsPublic,
 		McpEnabled:            body.McpEnabled,
 		ToolSelectionMode:     *body.ToolSelectionMode,
@@ -7277,6 +7334,7 @@ func NewSetUserSessionIssuerToolsetOK(body *SetUserSessionIssuerResponseBody) *t
 		Slug:                  types.Slug(*body.Slug),
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
+		VersionToken:          *body.VersionToken,
 		McpIsPublic:           body.McpIsPublic,
 		McpEnabled:            body.McpEnabled,
 		ToolSelectionMode:     *body.ToolSelectionMode,
@@ -7547,6 +7605,7 @@ func NewSetToolVariationsGroupToolsetOK(body *SetToolVariationsGroupResponseBody
 		Slug:                  types.Slug(*body.Slug),
 		Description:           body.Description,
 		ToolsetVersion:        *body.ToolsetVersion,
+		VersionToken:          *body.VersionToken,
 		McpIsPublic:           body.McpIsPublic,
 		McpEnabled:            body.McpEnabled,
 		ToolSelectionMode:     *body.ToolSelectionMode,
@@ -7835,6 +7894,9 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
 	}
+	if body.VersionToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version_token", "body"))
+	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
 	}
@@ -8028,6 +8090,9 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
 	}
+	if body.VersionToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version_token", "body"))
+	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
 	}
@@ -8188,6 +8253,9 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
+	}
+	if body.VersionToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version_token", "body"))
 	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
@@ -8398,6 +8466,9 @@ func ValidateCloneToolsetResponseBody(body *CloneToolsetResponseBody) (err error
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
 	}
+	if body.VersionToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version_token", "body"))
+	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
 	}
@@ -8558,6 +8629,9 @@ func ValidateAddExternalOAuthServerResponseBody(body *AddExternalOAuthServerResp
 	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
+	}
+	if body.VersionToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version_token", "body"))
 	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
@@ -8720,6 +8794,9 @@ func ValidateUpdateExternalOAuthServerResponseBody(body *UpdateExternalOAuthServ
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
 	}
+	if body.VersionToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version_token", "body"))
+	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
 	}
@@ -8880,6 +8957,9 @@ func ValidateRemoveOAuthServerResponseBody(body *RemoveOAuthServerResponseBody) 
 	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
+	}
+	if body.VersionToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version_token", "body"))
 	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
@@ -9042,6 +9122,9 @@ func ValidateSetUserSessionIssuerResponseBody(body *SetUserSessionIssuerResponse
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
 	}
+	if body.VersionToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version_token", "body"))
+	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
 	}
@@ -9202,6 +9285,9 @@ func ValidateSetToolVariationsGroupResponseBody(body *SetToolVariationsGroupResp
 	}
 	if body.ToolsetVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_version", "body"))
+	}
+	if body.VersionToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version_token", "body"))
 	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))

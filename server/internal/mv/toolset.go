@@ -807,6 +807,7 @@ func DescribeToolset(
 		Description:                  conv.FromPGText[string](toolset.Description),
 		Tools:                        toolsetTools.Tools,
 		ToolsetVersion:               toolsetVersion,
+		VersionToken:                 ToolsetVersionToken(toolset.ProjectID, toolset.ID, toolsetVersion, toolUrns),
 		Resources:                    toolsetTools.Resources,
 		PromptTemplates:              promptTemplates,
 		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),

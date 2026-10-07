@@ -82,6 +82,7 @@ var Toolset = Type("Toolset", func() {
 	Attribute("tools", ArrayOf(Tool), "The tools in this toolset")
 	Attribute("tool_urns", ArrayOf(String), "The tool URNs in this toolset")
 	Attribute("toolset_version", Int64, "The version of the toolset (will be 0 if none exists)")
+	Attribute("version_token", String, "Opaque token identifying the exact tool list this read describes, derived from toolset_version and tool_urns. Send it back as expected_version_token on toolsets.update to have the update refused with a conflict if the tool list changed in between.")
 	Attribute("resources", ArrayOf(Resource), "The resources in this toolset")
 	Attribute("resource_urns", ArrayOf(String), "The resource URNs in this toolset")
 
@@ -105,7 +106,7 @@ var Toolset = Type("Toolset", func() {
 		Description("When the toolset was last updated.")
 		Format(FormatDateTime)
 	})
-	Required("id", "project_id", "organization_id", "account_type", "name", "slug", "tools", "tool_selection_mode", "toolset_version", "prompt_templates", "tool_urns", "resources", "resource_urns", "oauth_enablement_metadata", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "account_type", "name", "slug", "tools", "tool_selection_mode", "toolset_version", "version_token", "prompt_templates", "tool_urns", "resources", "resource_urns", "oauth_enablement_metadata", "created_at", "updated_at")
 })
 
 var ToolsetEntry = Type("ToolsetEntry", func() {

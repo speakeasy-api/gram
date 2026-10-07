@@ -104005,6 +104005,9 @@ components:
           description: A short url-friendly label that uniquely identifies a resource.
           pattern: ^[a-z0-9_-]{1,128}$
           maxLength: 40
+        version_token:
+          type: string
+          description: Opaque token identifying the exact tool list this read describes, derived from toolset_version and tool_urns. Send it back as expected_version_token on toolsets.update to have the update refused with a conflict if the tool list changed in between.
       required:
         - id
         - project_id
@@ -104015,6 +104018,7 @@ components:
         - tools
         - tool_selection_mode
         - toolset_version
+        - version_token
         - prompt_templates
         - tool_urns
         - resources
@@ -106333,6 +106337,9 @@ components:
         description:
           type: string
           description: The new description of the toolset
+        expected_version_token:
+          type: string
+          description: The version_token from the toolset read this update was based on. When set, the update is refused with a conflict if the toolset's tool list has changed since that read. Omit it to apply the update unconditionally.
         mcp_enabled:
           type: boolean
           description: Whether the toolset is enabled for MCP

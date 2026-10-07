@@ -39,6 +39,11 @@ import { useProductTier } from "@/hooks/useProductTier";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { DEFAULT_MODEL } from "@/lib/models";
 import { isNotFoundError } from "@/lib/route-errors";
+import {
+  TOOLSET_CHANGED_MESSAGE,
+  isToolsetVersionConflict,
+  toolsetSaveErrorMessage,
+} from "@/lib/toolset-save-error";
 import { Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import { PromptsTabContent } from "@/pages/toolsets/PromptsTab";
@@ -972,6 +977,23 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
     },
   });
 
+  // A tool-list save writes the whole array, computed from the list this page
+  // loaded. Sending the version_token of that read makes the server refuse the
+  // save if someone else changed the list in between, instead of silently
+  // overwriting their edit.
+  const showToolsetSaveError = useCallback(
+    (error: unknown, fallback: string) => {
+      if (isToolsetVersionConflict(error)) {
+        toast.error(TOOLSET_CHANGED_MESSAGE, {
+          action: { label: "Reload", onClick: () => void refetch() },
+        });
+        return;
+      }
+      toast.error(toolsetSaveErrorMessage(error, fallback));
+    },
+    [refetch],
+  );
+
   const handleToolsRemove = useCallback(
     (removedUrns: string[]) => {
       const currentUrns = fullToolset?.toolUrns || [];
@@ -985,6 +1007,7 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
             slug: toolset.slug,
             updateToolsetRequestBody: {
               toolUrns: updatedUrns,
+              expectedVersionToken: fullToolset?.versionToken,
             },
           },
         },
@@ -998,10 +1021,19 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
               `Removed ${removedUrns.length} tool${removedUrns.length !== 1 ? "s" : ""}`,
             );
           },
+          onError: (error) =>
+            showToolsetSaveError(error, "Failed to remove tools"),
         },
       );
     },
-    [fullToolset?.toolUrns, toolset.slug, updateToolsetMutation, telemetry],
+    [
+      fullToolset?.toolUrns,
+      fullToolset?.versionToken,
+      toolset.slug,
+      updateToolsetMutation,
+      telemetry,
+      showToolsetSaveError,
+    ],
   );
 
   const handleTestInPlayground = useCallback(() => {
@@ -1160,12 +1192,18 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
               const currentUrns = fullToolset.toolUrns || [];
               const newUrns = [...new Set([...currentUrns, ...toolUrns])];
 
-              await client.toolsets.updateBySlug({
-                slug: toolset.slug,
-                updateToolsetRequestBody: {
-                  toolUrns: newUrns,
-                },
-              });
+              try {
+                await client.toolsets.updateBySlug({
+                  slug: toolset.slug,
+                  updateToolsetRequestBody: {
+                    toolUrns: newUrns,
+                    expectedVersionToken: fullToolset.versionToken,
+                  },
+                });
+              } catch (error) {
+                showToolsetSaveError(error, "Failed to add tools");
+                return;
+              }
 
               toast.success(
                 `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""} to ${toolset.name}`,
