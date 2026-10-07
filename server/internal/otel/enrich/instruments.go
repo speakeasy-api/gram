@@ -1,4 +1,4 @@
-package otel
+package enrich
 
 import (
 	"context"
@@ -9,13 +9,13 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-type metrics struct {
+type Instruments struct {
 	logEnricherDuration    metric.Float64Histogram
 	metricEnricherDuration metric.Float64Histogram
 	spanEnricherDuration   metric.Float64Histogram
 }
 
-func newMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) *metrics {
+func NewInstruments(logger *slog.Logger, meterProvider metric.MeterProvider) *Instruments {
 	ctx := context.Background()
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/otel")
 
@@ -49,14 +49,14 @@ func newMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) *metric
 		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterSpanEnricherDuration), attr.SlogError(err))
 	}
 
-	return &metrics{
+	return &Instruments{
 		logEnricherDuration:    logEnricherDuration,
 		metricEnricherDuration: metricEnricherDuration,
 		spanEnricherDuration:   spanEnricherDuration,
 	}
 }
 
-func (m *metrics) recordLogEnricherDuration(ctx context.Context, enricherName string, duration float64, outcome o11y.Outcome) {
+func (m *Instruments) recordLogEnricherDuration(ctx context.Context, enricherName string, duration float64, outcome o11y.Outcome) {
 	if m.logEnricherDuration == nil {
 		return
 	}
@@ -71,7 +71,7 @@ func (m *metrics) recordLogEnricherDuration(ctx context.Context, enricherName st
 	)
 }
 
-func (m *metrics) recordMetricEnricherDuration(ctx context.Context, enricherName string, duration float64, outcome o11y.Outcome) {
+func (m *Instruments) recordMetricEnricherDuration(ctx context.Context, enricherName string, duration float64, outcome o11y.Outcome) {
 	if m.metricEnricherDuration == nil {
 		return
 	}
@@ -86,7 +86,7 @@ func (m *metrics) recordMetricEnricherDuration(ctx context.Context, enricherName
 	)
 }
 
-func (m *metrics) recordEnricherDuration(ctx context.Context, enricherName string, duration float64, outcome o11y.Outcome) {
+func (m *Instruments) recordSpanEnricherDuration(ctx context.Context, enricherName string, duration float64, outcome o11y.Outcome) {
 	if m.spanEnricherDuration == nil {
 		return
 	}
