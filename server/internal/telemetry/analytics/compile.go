@@ -189,7 +189,7 @@ func Compile(catalog *Catalog, organizationID, projectID string, req Request) (*
 		if !ok || field.Role != RoleDimension {
 			return nil, newError(ErrUnknownField, name, position+".field", filter.Field, fmt.Sprintf("dataset %s has no dimension %s", name, filter.Field))
 		}
-		if !field.Admits(filter.Operator) {
+		if !field.AdmitsOperator(filter.Operator) {
 			return nil, newError(ErrUnsupportedOperator, name, position+".operator", filter.Operator, fmt.Sprintf("%s does not admit %s", filter.Field, filter.Operator))
 		}
 		if len(filter.Values) == 0 {
@@ -338,7 +338,10 @@ func measureExpr(ds *Dataset, measure Measure, position string) (string, string,
 	// distinct values of it the matching rows carry. It is exact, since the
 	// rows are already collapsed to the dataset's grain inside a bounded
 	// window and the cardinalities are tools, servers and people, not
-	// events. uniqExact yields UInt64, which the runner narrows on the wire.
+	// events. A collapsed row whose observations never carried the value
+	// holds the empty string, which is no value, so it is not counted, the
+	// same guard the sources put on their own identity counts. uniqExactIf
+	// yields UInt64, which the runner narrows on the wire.
 	if op == string(AggregationCountDistinct) {
 		if ok && field.Role == RoleMeasure {
 			return "", "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s counts a dimension, and %s is a measure", op, field.Name))
@@ -346,7 +349,7 @@ func measureExpr(ds *Dataset, measure Measure, position string) (string, string,
 		if !ok || field.Role != RoleDimension {
 			return "", "", newError(ErrUnknownField, ds.Name, position+".field", measure.Field, fmt.Sprintf("dataset %s has no dimension %s", ds.Name, measure.Field))
 		}
-		if !field.Admits(op) {
+		if !field.AdmitsAggregation(op) {
 			return "", "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s does not admit %s", field.Name, op))
 		}
 		if alias == "" {
@@ -355,13 +358,13 @@ func measureExpr(ds *Dataset, measure Measure, position string) (string, string,
 		if err := checkAlias(ds, alias, position); err != nil {
 			return "", "", err
 		}
-		return fmt.Sprintf("uniqExact(%s)", field.Expr), alias, nil
+		return fmt.Sprintf("uniqExactIf(%s, %s != '')", field.Expr, field.Expr), alias, nil
 	}
 
 	if !ok || field.Role != RoleMeasure {
 		return "", "", newError(ErrUnknownField, ds.Name, position+".field", measure.Field, fmt.Sprintf("dataset %s has no measure %s", ds.Name, measure.Field))
 	}
-	if !field.Admits(op) {
+	if !field.AdmitsAggregation(op) {
 		return "", "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s does not admit %s", field.Name, op))
 	}
 	if alias == "" {

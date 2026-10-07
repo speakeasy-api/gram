@@ -95,8 +95,8 @@ func TestCompileCountDistinct(t *testing.T) {
 		{Name: "count_distinct_tool_name", Kind: ColumnMeasure},
 		{Name: "people", Kind: ColumnMeasure},
 	}, plan.Columns)
-	require.Contains(t, plan.SQL, "uniqExact(tool_name) AS count_distinct_tool_name")
-	require.Contains(t, plan.SQL, "uniqExact(user_email) AS people")
+	require.Contains(t, plan.SQL, "uniqExactIf(tool_name, tool_name != '') AS count_distinct_tool_name", "a collapsed row with no value is not a distinct value")
+	require.Contains(t, plan.SQL, "uniqExactIf(user_email, user_email != '') AS people")
 	require.Contains(t, plan.SQL, "ORDER BY people DESC, mcp_server ASC")
 }
 
@@ -155,6 +155,7 @@ func TestCompileRejects(t *testing.T) {
 		{name: "duplicate alias", req: Request{Dataset: "sessions", Measures: []Measure{{Op: "count", Field: "", Alias: "n"}, {Op: "sum", Field: "turn_count", Alias: "n"}}}, code: ErrUnsatisfiable, field: "measures[1].alias"},
 		{name: "grouped without measures", req: Request{Dataset: "sessions"}, code: ErrUnsatisfiable, field: "measures"},
 		{name: "operator the dimension does not admit", req: Request{Dataset: "sessions", Measures: count, Filters: []Filter{{Field: "user", Operator: "contains", Values: []string{"a"}}}}, code: ErrUnsupportedOperator, field: "filters[0].operator"},
+		{name: "an aggregation offered as a filter operator", req: Request{Dataset: "sessions", Measures: count, Filters: []Filter{{Field: "user", Operator: "count_distinct", Values: []string{"a"}}}}, code: ErrUnsupportedOperator, field: "filters[0].operator"},
 		{name: "filter on a measure", req: Request{Dataset: "sessions", Measures: count, Filters: []Filter{{Field: "turn_count", Operator: "equals", Values: []string{"1"}}}}, code: ErrUnknownField, field: "filters[0].field"},
 		{name: "equals with two values", req: Request{Dataset: "sessions", Measures: count, Filters: []Filter{{Field: "user", Operator: "equals", Values: []string{"a", "b"}}}}, code: ErrUnsatisfiable, field: "filters[0].values"},
 		{name: "too many filter values", req: Request{Dataset: "sessions", Measures: count, Filters: []Filter{{Field: "user", Operator: "in", Values: make([]string, MaxFilterValues+1)}}}, code: ErrLimitExceeded, field: "filters[0].values"},

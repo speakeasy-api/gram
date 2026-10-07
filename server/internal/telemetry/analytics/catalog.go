@@ -165,17 +165,19 @@ func (d *Dataset) Field(name string) (*Field, bool) {
 	return nil, false
 }
 
-// Admits says whether a field admits an operator or aggregation. A
-// dimension admits its filter operators and, when it declares it, the one
-// aggregation over its values; a measure admits its aggregations.
-func (f *Field) Admits(op string) bool {
-	switch f.Role {
-	case RoleDimension:
-		return slices.Contains(f.Operators, Operator(op)) || slices.Contains(f.Aggregations, Aggregation(op))
-	case RoleMeasure:
-		return slices.Contains(f.Aggregations, Aggregation(op))
-	}
-	return false
+// AdmitsOperator says whether a filter may compare the field with op: a
+// dimension admits the operators it declares, a measure none.
+func (f *Field) AdmitsOperator(op string) bool {
+	return f.Role == RoleDimension && slices.Contains(f.Operators, Operator(op))
+}
+
+// AdmitsAggregation says whether a measure may aggregate the field with
+// agg: a measure admits the aggregations it declares, a dimension the one
+// over its own values when it declares it. A filter and a measure are
+// different questions, so they are asked separately: an aggregation
+// offered as a filter operator is refused, not silently dropped.
+func (f *Field) AdmitsAggregation(agg string) bool {
+	return slices.Contains(f.Aggregations, Aggregation(agg))
 }
 
 // Catalog is the declaration of every dataset and field: the contract the
@@ -277,8 +279,12 @@ func (d *Dataset) validate() error {
 			// The one aggregation a dimension can carry is over its own
 			// values; a sum or a percentile of a string means nothing.
 			for _, agg := range f.Aggregations {
-				if agg != AggregationCountDistinct {
+				switch agg {
+				case AggregationCountDistinct:
+				case AggregationSum, AggregationAvg, AggregationMin, AggregationMax, AggregationP50, AggregationP95, AggregationP99:
 					return fmt.Errorf("catalog: dataset %q dimension %q may declare count_distinct and no other aggregation", d.Name, f.Name)
+				default:
+					return fmt.Errorf("catalog: dataset %q dimension %q has unknown aggregation %q", d.Name, f.Name, agg)
 				}
 			}
 			// Filters and value pickers compare a dimension as a string; a
