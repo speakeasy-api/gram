@@ -17,7 +17,7 @@ import { WizardStepHeader } from "./WizardChrome";
 
 const KEY_ENV = "GRAM_AGENT_KEY";
 
-function Copyable({
+export function Copyable({
   value,
   label,
   mono = true,

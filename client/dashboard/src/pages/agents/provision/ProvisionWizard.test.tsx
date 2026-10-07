@@ -11,6 +11,9 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@/components/ui/Tooltip";
+import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
+import type { AgentPurpose } from "./device-agent";
 import { ProvisionWizard } from "./ProvisionWizard";
 
 const mocks = vi.hoisted(() => ({
@@ -18,10 +21,24 @@ const mocks = vi.hoisted(() => ({
   createKey: vi.fn(),
   listKeys: vi.fn(),
   listDelegableGrants: vi.fn(),
+  listPolicyGrants: vi.fn(),
   mcpServers: vi.fn(),
   toolsets: vi.fn(),
   fetch: vi.fn(),
   projectId: "project_one",
+  isOrgAdmin: true,
+  deviceAgentEnabled: true,
+}));
+
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: (scope: string) => scope === "org:admin" && mocks.isOrgAdmin,
+  }),
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({
+    status: mocks.deviceAgentEnabled ? "enabled" : "disabled",
+  }),
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -45,6 +62,7 @@ vi.mock("@/contexts/Sdk", () => ({
     agents: {
       create: mocks.createAgent,
       listDelegableGrants: mocks.listDelegableGrants,
+      listPolicyGrants: mocks.listPolicyGrants,
     },
     keys: { create: mocks.createKey, list: mocks.listKeys },
   }),
@@ -65,6 +83,11 @@ vi.mock("@gram/client/react-query/listToolsetsForOrg.js", () => ({
       ...options,
     }),
 }));
+// A deployment serves the gateway over HTTPS; jsdom's origin is plain HTTP.
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  getServerURL: () => "https://gram.example.test",
+}));
 vi.mock("../agent-policy-grants", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../agent-policy-grants")>()),
   invalidateAgentPolicy: vi.fn(),
@@ -80,18 +103,22 @@ const grant = {
   },
 };
 
-function setup() {
+function setup(initialPurpose?: AgentPurpose, agent?: ManagedAgent) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   const onDone = vi.fn();
   const view = render(
     <QueryClientProvider client={client}>
-      <ProvisionWizard
-        onDone={(id) => {
-          onDone(id);
-        }}
-      />
+      <TooltipProvider>
+        <ProvisionWizard
+          initialPurpose={initialPurpose}
+          agent={agent}
+          onDone={(id) => {
+            onDone(id);
+          }}
+        />
+      </TooltipProvider>
     </QueryClientProvider>,
   );
   return { ...view, onDone };
@@ -112,6 +139,8 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.projectId = "project_one";
+  mocks.isOrgAdmin = true;
+  mocks.deviceAgentEnabled = true;
   vi.stubGlobal("fetch", mocks.fetch);
   mocks.mcpServers.mockResolvedValue({
     mcpServers: [
@@ -292,5 +321,188 @@ describe("Agent scope", () => {
         .getByRole("radio", { name: /Organization/ })
         .getAttribute("data-state"),
     ).toBe("checked");
+  });
+});
+
+const deviceAgentGrants = [
+  {
+    effect: "allow",
+    scope: "org:device_agent_sync",
+    selector: { resourceKind: "org", resourceId: "*" },
+  },
+  {
+    effect: "allow",
+    scope: "org:hooks_ingest",
+    selector: { resourceKind: "org", resourceId: "*" },
+  },
+  {
+    effect: "allow",
+    scope: "project:read",
+    selector: { resourceKind: "project", resourceId: "project_one" },
+  },
+];
+
+async function reachDeviceAgentCredentialStep() {
+  setup("device-agent");
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "CI host" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  await screen.findByRole("heading", { name: "Project" });
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  return screen.findByRole("button", { name: "Create agent" });
+}
+
+/** The install-code request bodies the wizard sent, in order. */
+function installRequests(): unknown[] {
+  return mocks.fetch.mock.calls.map(([, init]) =>
+    JSON.parse((init as RequestInit).body as string),
+  );
+}
+
+describe("Provisioning a device agent", () => {
+  beforeEach(() => {
+    mocks.listDelegableGrants.mockResolvedValue(deviceAgentGrants);
+  });
+
+  it("creates an organization-wide agent with only the device agent grants", async () => {
+    fireEvent.click(await reachDeviceAgentCredentialStep());
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    const form = mocks.createAgent.mock.calls[0]![0].createAgentForm;
+    expect(form.policyGrants).toEqual(deviceAgentGrants);
+    expect("projectId" in form).toBe(false);
+    // The key carries exactly those grants, never mcp:connect.
+    expect(
+      mocks.createKey.mock.calls[0]![0].createKeyForm.requestedGrants,
+    ).toEqual(deviceAgentGrants);
+    expect(installRequests()).toEqual([
+      { flavor: "device_agent", mode: "ephemeral" },
+    ]);
+    expect(
+      await screen.findByText(
+        /^curl -fsSL .*\/agent-mcp\/install\/setup_code \| sh$/,
+      ),
+    ).toBeTruthy();
+    // The review-first form spends the same code without piping it to a shell.
+    expect(
+      screen.getByText(
+        /setup_code' -o "\$f"; then echo "Saved to \$f"; else rc=\$\?; rm -f "\$f"; \(exit "\$rc"\); fi$/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("mints a new code when the run mode changes", async () => {
+    fireEvent.click(await reachDeviceAgentCredentialStep());
+    await screen.findByText(/install\/setup_code \| sh$/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Persistent" }));
+
+    await waitFor(() =>
+      expect(installRequests()).toEqual([
+        { flavor: "device_agent", mode: "ephemeral" },
+        { flavor: "device_agent", mode: "service" },
+      ]),
+    );
+  });
+
+  it("says which scope cannot be delegated instead of issuing a narrower key", async () => {
+    mocks.listDelegableGrants.mockResolvedValue([deviceAgentGrants[2]]);
+    fireEvent.click(await reachDeviceAgentCredentialStep());
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "org:admin",
+    );
+    expect(mocks.createKey).not.toHaveBeenCalled();
+  });
+
+  it("is not offered without org:admin", () => {
+    mocks.isOrgAdmin = false;
+    setup("device-agent");
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "CI host" },
+    });
+
+    expect(
+      screen
+        .getByRole("radio", { name: /Device agent/ })
+        .getAttribute("data-disabled"),
+    ).not.toBeNull();
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
+  it("is not offered where the device agent is disabled", () => {
+    mocks.deviceAgentEnabled = false;
+    setup();
+
+    expect(
+      screen
+        .getByRole("radio", { name: /Device agent/ })
+        .getAttribute("data-disabled"),
+    ).not.toBeNull();
+  });
+});
+
+const existingAgent = {
+  id: "agent_existing",
+  name: "CI host",
+  lifecycle: "active",
+  permissions: { read: true, write: true, authorize: true },
+} as unknown as ManagedAgent;
+
+describe("Issuing a key to an existing device agent", () => {
+  beforeEach(() => {
+    mocks.listDelegableGrants.mockResolvedValue(deviceAgentGrants);
+    mocks.listPolicyGrants.mockResolvedValue(
+      deviceAgentGrants.map((g, i) => ({ id: `grant_${i}`, ...g })),
+    );
+  });
+
+  it("reads the purpose from the agent's policy and locks it", async () => {
+    setup(undefined, existingAgent);
+
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole("radio", { name: /Device agent/ })
+          .getAttribute("data-state"),
+      ).toBe("checked"),
+    );
+    expect(
+      screen
+        .getByRole("radio", { name: /MCP servers/ })
+        .getAttribute("data-disabled"),
+    ).not.toBeNull();
+  });
+
+  it("still requires org:admin, as creating one does", async () => {
+    mocks.isOrgAdmin = false;
+    setup(undefined, existingAgent);
+
+    expect(
+      await screen.findByText(
+        "Provisioning a device agent requires org:admin.",
+      ),
+    ).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
+  it("says when the agent's permissions cannot be read, and retries", async () => {
+    mocks.listPolicyGrants.mockRejectedValueOnce(new Error("unavailable"));
+    setup(undefined, existingAgent);
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Could not read this agent's permissions.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(mocks.listPolicyGrants).toHaveBeenCalledTimes(2);
   });
 });

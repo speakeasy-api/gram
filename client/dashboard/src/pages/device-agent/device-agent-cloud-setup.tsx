@@ -8,7 +8,8 @@ import { Link as ExternalLink } from "@/components/ui/Link";
 import { Text } from "@/components/ui/Text";
 import { useAgentToken } from "@/hooks/useAgentToken";
 import { agentEgressHosts } from "@/lib/utils";
-import { useOrgRoutes } from "@/routes";
+import { useOrganization } from "@/contexts/Auth";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import { useQuery } from "@tanstack/react-query";
 import React, { useId, useState } from "react";
 import { Link } from "react-router";
@@ -136,6 +137,15 @@ function CloudSetupScript({
   sha256: string;
 }) {
   const apiKeysHref = useOrgRoutes().apiKeys.href();
+  const organization = useOrganization();
+  // Agents live under a project, so link via the first one, if any.
+  const firstProjectSlug = organization.projects[0]?.slug;
+  const agentsHref = useRoutes({
+    projectSlug: firstProjectSlug ?? "",
+  }).agents.href();
+  const deviceAgentIdentityHref = firstProjectSlug
+    ? `${agentsHref}?create=true&purpose=device-agent`
+    : null;
   const identityEmailId = useId();
   const [identityEmail, setIdentityEmail] = useState("");
 
@@ -192,6 +202,17 @@ function CloudSetupScript({
           shared VM cannot, so this flow uses managed enrollment: an admin
           provides the shared reporting identity and an agent-scoped{" "}
           <code>org_token</code>.
+          {deviceAgentIdentityHref && (
+            <>
+              {" "}
+              To run the device agent on your own Linux host as a dedicated
+              agent instead of a shared email,{" "}
+              <Link to={deviceAgentIdentityHref} className={LINK_CLASS}>
+                provision a device agent identity
+              </Link>
+              .
+            </>
+          )}
         </AlertDescription>
       </Alert>
       <Text small muted>

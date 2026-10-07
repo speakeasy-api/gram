@@ -1,5 +1,7 @@
 import { getServerURL } from "@/lib/utils";
 
+import type { DeviceAgentRunMode } from "./device-agent";
+
 /**
  * The address an agent's runtime dials, and the rules for handing it a key.
  * Shared so the wizard and the agent page cannot drift into quoting different
@@ -34,6 +36,24 @@ export function isCredentialSafe(raw: string): boolean {
   );
 }
 
+/** The script an install code renders. The server checks the key fits it. */
+export type InstallRequest =
+  | { flavor: "mcp" }
+  | { flavor: "device_agent"; mode: DeviceAgentRunMode };
+
+/** The server's message when it sent one, since the user can act on it. */
+async function installCodeError(response: Response): Promise<string> {
+  const fallback = `Could not prepare a setup command (${response.status})`;
+  try {
+    const body = (await response.json()) as { message?: unknown };
+    return typeof body.message === "string" && body.message
+      ? body.message
+      : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 /**
  * Exchanges a live key for a single-use install code and returns the one-line
  * setup command. The key never goes into the command that way: a one-liner
@@ -43,13 +63,18 @@ export function isCredentialSafe(raw: string): boolean {
 export async function mintInstallCommand(
   gatewayURL: string,
   secret: string,
+  request: InstallRequest = { flavor: "mcp" },
 ): Promise<string> {
   const response = await fetch(`${gatewayURL}/install-code`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${secret}` },
+    headers: {
+      Authorization: `Bearer ${secret}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(request),
   });
   if (!response.ok) {
-    throw new Error(`Could not prepare a setup command (${response.status})`);
+    throw new Error(await installCodeError(response));
   }
   const { code } = (await response.json()) as { code: string };
   // This value is pasted into a shell. It is minted by our own server, but a

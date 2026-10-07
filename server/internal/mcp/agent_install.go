@@ -10,19 +10,29 @@
 package mcp
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
 // AgentInstallCodeRoute mints a code; AgentInstallScriptRoute spends it.
@@ -35,13 +45,50 @@ const (
 // person who just created the key, in the command they were shown.
 const agentInstallCodeTTL = 15 * time.Minute
 
+// maxAgentInstallRequestBytes bounds the install-code body, which holds two
+// short enum values.
+const maxAgentInstallRequestBytes = 1 << 10 // 1 KiB
+
+// agentInstallFlavor selects the script an install code renders.
+type agentInstallFlavor string
+
+const (
+	// agentInstallFlavorMCP configures local MCP clients. It is the default.
+	agentInstallFlavorMCP agentInstallFlavor = "mcp"
+
+	// agentInstallFlavorDeviceAgent installs and enrolls the device agent.
+	agentInstallFlavorDeviceAgent agentInstallFlavor = "device_agent"
+)
+
+// agentInstallRequest is the optional JSON body of an install-code request.
+type agentInstallRequest struct {
+	// Flavor picks the script; empty means agentInstallFlavorMCP.
+	Flavor agentInstallFlavor `json:"flavor"`
+
+	// Mode is the device agent's run mode; valid only for that flavor.
+	Mode deviceAgentRunMode `json:"mode"`
+}
+
 // agentInstallCode is the exchange record. It holds the credential, so it
 // lives only in the cache, only for its TTL, and is deleted on first read.
 type agentInstallCode struct {
-	Code    string `json:"code"`
+	// Code is the single-use value the install command carries.
+	Code string `json:"code"`
+
+	// AgentID is the agent the key belongs to.
 	AgentID string `json:"agent_id"`
-	Key     string `json:"key"`
-	URL     string `json:"url"`
+
+	// Key is the live agent key the script inlines.
+	Key string `json:"key"`
+
+	// URL is the agent gateway (MCP) or the control plane (device agent).
+	URL string `json:"url"`
+
+	// Flavor is the script to render; empty means MCP.
+	Flavor agentInstallFlavor `json:"flavor,omitempty"`
+
+	// Mode is the device agent's run mode; empty for the MCP flavor.
+	Mode deviceAgentRunMode `json:"mode,omitempty"`
 }
 
 var _ cache.CacheableObject[agentInstallCode] = (*agentInstallCode)(nil)
@@ -69,9 +116,26 @@ func (s *Service) HandleAgentInstallCode(w http.ResponseWriter, r *http.Request)
 	if err != nil || agentID == uuid.Nil {
 		return oops.C(oops.CodeNotFound)
 	}
-	keyCtx, _, err := s.authenticateAgentGatewayKey(ctx, r, agentID)
+	keyCtx, authCtx, err := s.authenticateAgentGatewayKey(ctx, r, agentID)
 	if err != nil {
 		return err
+	}
+
+	request, err := decodeAgentInstallRequest(r)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid install request").LogWarn(ctx, s.logger)
+	}
+
+	target := s.BaseURLForRequest(r) + "/agent-mcp/" + agentID.String()
+	switch request.Flavor {
+	case agentInstallFlavorMCP:
+	case agentInstallFlavorDeviceAgent:
+		target, err = s.deviceAgentInstallTarget(keyCtx, authCtx, request.Mode)
+		if err != nil {
+			return err
+		}
+	default:
+		return oops.E(oops.CodeBadRequest, nil, "unknown install flavor %q", request.Flavor).LogWarn(ctx, s.logger)
 	}
 
 	code, err := newInstallCode()
@@ -82,7 +146,9 @@ func (s *Service) HandleAgentInstallCode(w http.ResponseWriter, r *http.Request)
 		Code:    code,
 		AgentID: agentID.String(),
 		Key:     httpheaders.AuthorizationBearerToken(r),
-		URL:     s.BaseURLForRequest(r) + "/agent-mcp/" + agentID.String(),
+		URL:     target,
+		Flavor:  request.Flavor,
+		Mode:    request.Mode,
 	}
 	if err := s.agentInstallCache.Store(keyCtx, record); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "store install command").LogError(ctx, s.logger)
@@ -109,7 +175,7 @@ func (s *Service) HandleAgentInstallScript(w http.ResponseWriter, r *http.Reques
 	// GetAndDelete, not Get: a code that has been read is spent, whether or not
 	// the script that follows reaches its target.
 	// Only the key matters for the lookup; the rest comes back from the cache.
-	lookup := agentInstallCode{Code: code, AgentID: "", Key: "", URL: ""}
+	lookup := agentInstallCode{Code: code, AgentID: "", Key: "", URL: "", Flavor: "", Mode: ""}
 	record, err := s.agentInstallCache.GetAndDelete(ctx, lookup.CacheKey())
 	if err != nil || record.Key == "" {
 		// An expired, unknown or already-spent code are the same thing to the
@@ -117,13 +183,86 @@ func (s *Service) HandleAgentInstallScript(w http.ResponseWriter, r *http.Reques
 		return oops.C(oops.CodeNotFound)
 	}
 
+	var script string
+	switch record.Flavor {
+	case agentInstallFlavorDeviceAgent:
+		script, err = deviceAgentInstallScript(record.URL, record.Key, record.Mode)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "render install script").LogError(ctx, s.logger)
+		}
+	case agentInstallFlavorMCP, "":
+		script = agentInstallScript(record.URL, record.Key)
+	default:
+		return oops.C(oops.CodeNotFound)
+	}
+
 	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
 	// The body is a credential. Nothing may keep a copy.
 	w.Header().Set("Cache-Control", "no-store")
-	if _, err := w.Write([]byte(agentInstallScript(record.URL, record.Key))); err != nil {
+	if _, err := w.Write([]byte(script)); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "write install script").LogError(ctx, s.logger)
 	}
 	return nil
+}
+
+// decodeAgentInstallRequest reads the optional body; no body means MCP.
+func decodeAgentInstallRequest(r *http.Request) (agentInstallRequest, error) {
+	request := agentInstallRequest{Flavor: agentInstallFlavorMCP, Mode: ""}
+	if r.Body == nil {
+		return request, nil
+	}
+	decoder := json.NewDecoder(io.LimitReader(r.Body, maxAgentInstallRequestBytes))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil && !errors.Is(err, io.EOF) {
+		return request, fmt.Errorf("decode install request: %w", err)
+	}
+	// Reject anything after the first JSON value.
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return request, errors.New("install request has trailing data")
+	}
+	if request.Flavor == "" {
+		request.Flavor = agentInstallFlavorMCP
+	}
+	if request.Flavor != agentInstallFlavorDeviceAgent && request.Mode != "" {
+		return request, fmt.Errorf("mode applies only to the %s flavor", agentInstallFlavorDeviceAgent)
+	}
+	return request, nil
+}
+
+// deviceAgentInstallTarget returns the control plane for a device agent
+// install. The key must be able to sync and must not reach MCP servers: it is
+// written to disk on the host, so it must not double as a gateway credential.
+func (s *Service) deviceAgentInstallTarget(ctx context.Context, authCtx *contextvalues.AuthContext, mode deviceAgentRunMode) (string, error) {
+	if !slices.Contains(deviceAgentRunModes, mode) {
+		return "", oops.E(oops.CodeBadRequest, nil, "mode must be %q or %q", deviceAgentRunModeEphemeral, deviceAgentRunModeService).LogWarn(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return "", fmt.Errorf("authorize device agent install: %w", err)
+	}
+
+	credential, ok := contextvalues.PrincipalCredentialAuthorization(ctx)
+	if !ok {
+		return "", oops.C(oops.CodeUnauthorized)
+	}
+	policy, err := runtimepolicy.DecodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion(credential.DelegatedGrantsVersion), credential.DelegatedGrants)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "read key policy").LogError(ctx, s.logger)
+	}
+	for _, grant := range policy.RuntimeGrants() {
+		if grant.Scope == authz.ScopeMCPConnect {
+			return "", oops.E(oops.CodeForbidden, nil, "This key can connect to MCP servers, so it cannot install the device agent. Use a key from an agent provisioned for the device agent.").LogWarn(ctx, s.logger)
+		}
+	}
+
+	// Only platform hosts serve the sync and hooks APIs.
+	controlPlane := requestorigin.PlatformHostBaseURL(ctx, s.serverURL.String(), s.serverURL.String())
+	parsed, err := url.Parse(controlPlane)
+	// No loopback exception: localhost on the agent's host is not this server.
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return "", oops.E(oops.CodeFailedPrecondition, err, "This deployment is not served over HTTPS, so the device agent's key would be sent unencrypted.").LogWarn(ctx, s.logger)
+	}
+	return strings.TrimRight(controlPlane, "/"), nil
 }
 
 // shellSingleQuote renders a value as a POSIX single-quoted word. Both the URL

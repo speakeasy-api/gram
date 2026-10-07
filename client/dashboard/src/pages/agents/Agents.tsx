@@ -40,6 +40,7 @@ import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AgentAPIKeys } from "./AgentAPIKeys";
 import { agentIssuanceBlocked } from "./agent-issuance";
+import type { AgentPurpose } from "./provision/device-agent";
 import { ProvisionWizard } from "./provision/ProvisionWizard";
 import { AgentReview } from "./provision/AgentReview";
 import { AgentPolicySection } from "./AgentPolicySection";
@@ -105,6 +106,11 @@ function AgentManagementPage(): JSX.Element {
         // Switching any of these would otherwise carry a name, a server
         // selection and a credential chosen in a different context.
         key={`${organization.id}:${session.user.id}`}
+        initialPurpose={
+          searchParams.get("purpose") === "device-agent"
+            ? "device-agent"
+            : undefined
+        }
         onDone={(id) => setSearchParams(id ? { id } : {})}
       />
     );
@@ -144,12 +150,18 @@ function AgentManagementPage(): JSX.Element {
  * identity only matters once some runtime elsewhere is holding its key, so the
  * flow does not stop at "created".
  */
-function NewAgentPage({ onDone }: { onDone: (id?: string) => void }) {
+function NewAgentPage({
+  initialPurpose,
+  onDone,
+}: {
+  initialPurpose?: AgentPurpose;
+  onDone: (id?: string) => void;
+}) {
   const [busy, setBusy] = useState(false);
   return (
     <FormPage
       title="New agent identity"
-      description="Name it, choose the servers it can reach, then connect it to its runtime."
+      description="Name it, choose what it runs and what it can reach, then connect it to its runtime."
       width="wide"
       primaryAction={
         <Button variant="secondary" disabled={busy} onClick={() => onDone()}>
@@ -160,7 +172,11 @@ function NewAgentPage({ onDone }: { onDone: (id?: string) => void }) {
         </Button>
       }
     >
-      <ProvisionWizard onDone={onDone} onBusy={setBusy} />
+      <ProvisionWizard
+        initialPurpose={initialPurpose}
+        onDone={onDone}
+        onBusy={setBusy}
+      />
     </FormPage>
   );
 }

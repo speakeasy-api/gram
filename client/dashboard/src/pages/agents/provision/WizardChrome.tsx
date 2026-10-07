@@ -105,7 +105,8 @@ export function WizardSummary({
   stepCount: number;
   name: string;
   rows: { label: string; value: ReactNode }[];
-  servers: { id: string; name: string; detail: string }[];
+  /** Omitted for an agent that reaches no servers, such as a device agent. */
+  servers?: { id: string; name: string; detail: string }[];
 }): JSX.Element {
   return (
     <aside className="border-border bg-card sticky top-4 border shadow-sm">
@@ -147,35 +148,37 @@ export function WizardSummary({
           ))}
         </dl>
       </div>
-      <div className="border-border border-t">
-        <div className="flex items-center justify-between px-4 py-2">
-          <span className="text-muted-foreground font-mono text-[10px] tracking-[0.08em] uppercase">
-            Servers
-          </span>
-          <span className="text-muted-foreground font-mono text-xs">
-            {servers.length}
-          </span>
+      {servers && (
+        <div className="border-border border-t">
+          <div className="flex items-center justify-between px-4 py-2">
+            <span className="text-muted-foreground font-mono text-[10px] tracking-[0.08em] uppercase">
+              Servers
+            </span>
+            <span className="text-muted-foreground font-mono text-xs">
+              {servers.length}
+            </span>
+          </div>
+          {servers.length === 0 ? (
+            <Text muted small className="px-4 pb-3">
+              None selected
+            </Text>
+          ) : (
+            <ul className="divide-border border-border divide-y border-t">
+              {servers.map((server) => (
+                <li
+                  key={server.id}
+                  className="flex items-center justify-between gap-3 px-4 py-2 text-sm"
+                >
+                  <span className="min-w-0 truncate">{server.name}</span>
+                  <span className="text-muted-foreground shrink-0 font-mono text-xs">
+                    {server.detail}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-        {servers.length === 0 ? (
-          <Text muted small className="px-4 pb-3">
-            None selected
-          </Text>
-        ) : (
-          <ul className="divide-border border-border divide-y border-t">
-            {servers.map((server) => (
-              <li
-                key={server.id}
-                className="flex items-center justify-between gap-3 px-4 py-2 text-sm"
-              >
-                <span className="min-w-0 truncate">{server.name}</span>
-                <span className="text-muted-foreground shrink-0 font-mono text-xs">
-                  {server.detail}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      )}
     </aside>
   );
 }
