@@ -1,6 +1,7 @@
 package otel
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"strings"
 	"testing"
 
@@ -54,7 +55,7 @@ func agentEventTestLog(originalScope, eventName string, attributes ...*otelv1.Lo
 	record := logEventTestRecord("record-1", "org-1", "claude-code")
 	record.SetEventName(eventName)
 	if originalScope != "" {
-		attributes = append(attributes, logEventTestKV(string(OriginalInstrumentationScopeNameKey), originalScope))
+		attributes = append(attributes, logEventTestKV(string(enrich.OriginalInstrumentationScopeNameKey), originalScope))
 	}
 	record.SetAttributes(attributes)
 	return record
@@ -82,8 +83,8 @@ func TestAgentEventRowFromLog(t *testing.T) {
 			logEventTestKV("query_source", "user_prompt"),
 			logEventTestKV("skill.name", "deploy"),
 			logEventTestKV(string(directoryDepartmentNameKey), "Platform"),
-			agentEventTestArrayKV(string(GramUserRolesKey), "admin", "member"),
-			agentEventTestArrayKV(string(DirectoryGroupNamesKey), "eng"),
+			agentEventTestArrayKV(string(enrich.GramUserRolesKey), "admin", "member"),
+			agentEventTestArrayKV(string(enrich.DirectoryGroupNamesKey), "eng"),
 		)
 
 		row, skip := agentEventRowFromLog(record, testObservedAt)
@@ -380,7 +381,7 @@ func TestAgentEventRowFromSpan(t *testing.T) {
 		span := spanEventTestSpan("org-1", "litellm")
 		span.SetName("chat gpt-4o")
 		span.SetAttributes([]*otelv1.Span_KeyValue{
-			spanEventTestKV(string(OriginalInstrumentationScopeNameKey), "litellm"),
+			spanEventTestKV(string(enrich.OriginalInstrumentationScopeNameKey), "litellm"),
 			spanEventTestKV("gen_ai.operation.name", "chat"),
 			spanEventTestKV("gen_ai.provider.name", "openai"),
 			spanEventTestKV("gen_ai.response.model", "gpt-4o-2024-08-06"),

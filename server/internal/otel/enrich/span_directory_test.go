@@ -1,4 +1,4 @@
-package otel
+package enrich
 
 import (
 	"testing"
@@ -13,7 +13,7 @@ func TestEnrichDirectoryReturnsNoAttributesWithoutMatchingUser(t *testing.T) {
 	t.Parallel()
 
 	db := newTestDatabase(t)
-	enricher := NewEnrichDirectory(testenv.NewLogger(t), db, cache.NoopCache)
+	enricher := NewSpanDirectory(testenv.NewLogger(t), db, cache.NoopCache)
 
 	got, err := enricher.Enrich(t.Context(), directoryEnrichmentTestSpan("organization-id", " User@Example.Invalid "))
 
@@ -26,7 +26,7 @@ func TestEnrichDirectoryResolvesSubaddress(t *testing.T) {
 
 	db := newTestDatabase(t)
 	seed := seedUserEnrichment(t, db)
-	enricher := NewEnrichDirectory(testenv.NewLogger(t), db, cache.NoopCache)
+	enricher := NewSpanDirectory(testenv.NewLogger(t), db, cache.NoopCache)
 
 	got, err := enricher.Enrich(t.Context(), directoryEnrichmentTestSpan(seed.organizationID, "user+span@example.invalid"))
 
@@ -39,7 +39,7 @@ func TestEnrichDirectoryIncludesDirectoryAndRoleAttributes(t *testing.T) {
 
 	db := newTestDatabase(t)
 	seed := seedUserEnrichment(t, db)
-	enricher := NewEnrichDirectory(testenv.NewLogger(t), db, cache.NoopCache)
+	enricher := NewSpanDirectory(testenv.NewLogger(t), db, cache.NoopCache)
 
 	got, err := enricher.Enrich(t.Context(), directoryEnrichmentTestSpan(seed.organizationID, seed.email))
 
@@ -52,7 +52,7 @@ func TestEnrichDirectoryLookupFailureDoesNotFailSpan(t *testing.T) {
 
 	db := newTestDatabase(t)
 	db.Close()
-	enricher := NewEnrichDirectory(testenv.NewLogger(t), db, cache.NoopCache)
+	enricher := NewSpanDirectory(testenv.NewLogger(t), db, cache.NoopCache)
 
 	got, err := enricher.Enrich(t.Context(), directoryEnrichmentTestSpan("organization-id", "user@example.invalid"))
 
@@ -63,7 +63,7 @@ func TestEnrichDirectoryLookupFailureDoesNotFailSpan(t *testing.T) {
 func TestEnrichDirectoryRequiresTrustedOrganizationScope(t *testing.T) {
 	t.Parallel()
 
-	enricher := NewEnrichDirectory(testenv.NewLogger(t), newTestDatabase(t), cache.NoopCache)
+	enricher := NewSpanDirectory(testenv.NewLogger(t), newTestDatabase(t), cache.NoopCache)
 
 	got, err := enricher.Enrich(t.Context(), directoryEnrichmentTestSpan("", "user@example.invalid"))
 

@@ -3,6 +3,7 @@ package otel
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"log/slog"
 	"slices"
 
@@ -22,9 +23,9 @@ const normalizedInstrumentationScopeName = "com.speakeasy.ai.tracing"
 
 type SpanTransformHandler struct {
 	logger        *slog.Logger
-	metrics       *metrics
+	instruments   *enrich.Instruments
 	spanPublisher gcp.Publisher[*otelv1.Span]
-	enrichers     []SpanEnricher
+	enrichers     []enrich.SpanEnricher
 }
 
 func NewSpanTransformHandler(
@@ -38,12 +39,12 @@ func NewSpanTransformHandler(
 
 	return &SpanTransformHandler{
 		logger:        logger,
-		metrics:       newMetrics(logger, meterProvider),
+		instruments:   enrich.NewInstruments(logger, meterProvider),
 		spanPublisher: spanPublisher,
-		enrichers: []SpanEnricher{
-			&enrichTenancy{},
-			NewEnrichSpeakeasyTokens(),
-			NewEnrichDirectory(logger, replicaDB, cacheImpl),
+		enrichers: []enrich.SpanEnricher{
+			enrich.NewSpanTenancy(),
+			enrich.NewSpanTokens(),
+			enrich.NewSpanDirectory(logger, replicaDB, cacheImpl),
 		},
 	}
 }
@@ -57,7 +58,7 @@ func (h *SpanTransformHandler) Handle(ctx context.Context, m *otelv1.InboundSpan
 		return fmt.Errorf("rewrite instrumentation scope: %w", err)
 	}
 
-	enrichments, err := enrichSpan(ctx, h.metrics, m, h.enrichers)
+	enrichments, err := enrich.Span(ctx, h.instruments, m, h.enrichers)
 	if err != nil {
 		return fmt.Errorf("enrich span: %w", o11y.LogError(ctx, h.logger, err, "failed to enrich span"))
 	}
@@ -92,7 +93,7 @@ func rewriteInstrumentationScope(span *otelv1.Span) error {
 	}
 
 	return applySpanEnrichments(span, []otelattr.KeyValue{
-		OriginalInstrumentationScopeName(originalName),
+		enrich.OriginalInstrumentationScopeName(originalName),
 	})
 }
 

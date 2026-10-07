@@ -1,6 +1,7 @@
 package otel
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"strings"
 	"testing"
 
@@ -55,11 +56,11 @@ func TestLogTransformHandlerNormalizesEnrichesAndPublishes(t *testing.T) {
 	for _, item := range published.GetAttributes() {
 		attributes[item.GetKey()] = item.GetValue()
 	}
-	require.Equal(t, "producer.scope", attributes[string(OriginalInstrumentationScopeNameKey)].GetStringValue())
-	require.Equal(t, testLogOrganizationID, attributes[string(OrganizationIDKey)].GetStringValue())
-	require.Equal(t, testLogProjectID, attributes[string(ProjectIDKey)].GetStringValue())
-	require.Positive(t, attributes[string(TokensCountKey)].GetIntValue())
-	require.NotEmpty(t, attributes[string(TokensCodecKey)].GetStringValue())
+	require.Equal(t, "producer.scope", attributes[string(enrich.OriginalInstrumentationScopeNameKey)].GetStringValue())
+	require.Equal(t, testLogOrganizationID, attributes[string(enrich.OrganizationIDKey)].GetStringValue())
+	require.Equal(t, testLogProjectID, attributes[string(enrich.ProjectIDKey)].GetStringValue())
+	require.Positive(t, attributes[string(enrich.TokensCountKey)].GetIntValue())
+	require.NotEmpty(t, attributes[string(enrich.TokensCodecKey)].GetStringValue())
 	require.Contains(t, attributes, "gen_ai.input.messages")
 }
 
@@ -151,11 +152,11 @@ func TestMaxSizeLogRecordFitsRelayExportAfterFullEnrichment(t *testing.T) {
 	for _, item := range published.GetAttributes() {
 		attributes[item.GetKey()] = item.GetValue()
 	}
-	require.Equal(t, originalScopeName, attributes[string(OriginalInstrumentationScopeNameKey)].GetStringValue())
-	require.Equal(t, testLogOrganizationID, attributes[string(OrganizationIDKey)].GetStringValue())
-	require.Equal(t, testLogProjectID, attributes[string(ProjectIDKey)].GetStringValue())
-	require.Positive(t, attributes[string(TokensCountKey)].GetIntValue())
-	require.NotEmpty(t, attributes[string(TokensCodecKey)].GetStringValue())
+	require.Equal(t, originalScopeName, attributes[string(enrich.OriginalInstrumentationScopeNameKey)].GetStringValue())
+	require.Equal(t, testLogOrganizationID, attributes[string(enrich.OrganizationIDKey)].GetStringValue())
+	require.Equal(t, testLogProjectID, attributes[string(enrich.ProjectIDKey)].GetStringValue())
+	require.Positive(t, attributes[string(enrich.TokensCountKey)].GetIntValue())
+	require.NotEmpty(t, attributes[string(enrich.TokensCodecKey)].GetStringValue())
 
 	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{published}, true)
 	require.NoError(t, err)

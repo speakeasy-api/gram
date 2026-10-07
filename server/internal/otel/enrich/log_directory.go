@@ -1,29 +1,28 @@
-package otel
+package enrich
 
 import (
 	"context"
 	"log/slog"
-
-	"go.opentelemetry.io/otel/attribute"
-	"golang.org/x/sync/singleflight"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"go.opentelemetry.io/otel/attribute"
+	"golang.org/x/sync/singleflight"
 )
 
-type enrichDirectory struct {
+type logDirectory struct {
 	logger    *slog.Logger
 	replicaDB database.DBTX
 	cache     cache.TypedCacheObject[cachedUserEnrichment]
 	loads     singleflight.Group
 }
 
-func NewEnrichDirectory(logger *slog.Logger, replicaDB database.DBTX, cacheImpl cache.Cache) *enrichDirectory {
-	logger = logger.With(attr.SlogComponent("enrich-directory"))
-	return &enrichDirectory{
+func NewLogDirectory(logger *slog.Logger, replicaDB database.DBTX, cacheImpl cache.Cache) *logDirectory {
+	logger = logger.With(attr.SlogComponent("enrich-log-directory"))
+	return &logDirectory{
 		logger:    logger,
 		replicaDB: replicaDB,
 		cache: cache.NewTypedObjectCache[cachedUserEnrichment](
@@ -35,15 +34,15 @@ func NewEnrichDirectory(logger *slog.Logger, replicaDB database.DBTX, cacheImpl 
 	}
 }
 
-func (e *enrichDirectory) Name() string {
+func (*logDirectory) Name() string {
 	return "enrich-directory"
 }
 
-func (e *enrichDirectory) Enrich(ctx context.Context, span *otelv1.InboundSpan) ([]attribute.KeyValue, error) {
-	organizationID := span.GetProvenance().GetOrganizationId()
-	_, email, err := dialect.ForSpan(span).ExternalUserEmail(span)
+func (e *logDirectory) Enrich(ctx context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
+	organizationID := record.GetProvenance().GetOrganizationId()
+	_, email, err := dialect.ForLog(record).ExternalUserEmail(record)
 	if err != nil {
-		e.logger.WarnContext(ctx, "failed to read user email for directory span enrichment", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		e.logger.WarnContext(ctx, "failed to read user email for directory log enrichment", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
 		return nil, nil
 	}
 	resolved, err := fetchUserEnrichment(ctx, e.replicaDB, &e.cache, &e.loads, organizationID, email)

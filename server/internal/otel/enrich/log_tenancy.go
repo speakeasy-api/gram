@@ -1,4 +1,4 @@
-package otel
+package enrich
 
 import (
 	"context"
@@ -8,13 +8,17 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-type enrichLogTenancy struct{}
+type logTenancy struct{}
 
-func (*enrichLogTenancy) Name() string {
+func NewLogTenancy() *logTenancy {
+	return &logTenancy{}
+}
+
+func (*logTenancy) Name() string {
 	return "enrich-tenancy"
 }
 
-func (*enrichLogTenancy) Enrich(_ context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
+func (*logTenancy) Enrich(_ context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
 	provenance := record.GetProvenance()
 	organizationID := provenance.GetOrganizationId()
 	projectID := provenance.GetProjectId()
