@@ -1,4 +1,8 @@
 -- name: CreateMCPServer :one
+-- A toolset-backed server must front a toolset in its own project. The
+-- toolsets FK enforces only existence, so the guard lives in the statement
+-- every writer shares: a cross-project toolset_id inserts nothing and the
+-- caller sees no rows.
 INSERT INTO mcp_servers (
     id,
     project_id,
@@ -14,21 +18,27 @@ INSERT INTO mcp_servers (
     visibility,
     network_access_mode
 )
-VALUES (
-    @id,
-    @project_id,
-    @name,
-    @slug,
-    @environment_id,
-    @user_session_issuer_id,
-    @remote_mcp_server_id,
-    @tunneled_mcp_server_id,
-    @toolset_id,
-    @unproxied_mcp_server_id,
-    @tool_variations_group_id,
-    @visibility,
-    sqlc.narg('network_access_mode')
-)
+SELECT
+    @id::uuid,
+    @project_id::uuid,
+    sqlc.narg('name')::text,
+    sqlc.narg('slug')::text,
+    sqlc.narg('environment_id')::uuid,
+    sqlc.narg('user_session_issuer_id')::uuid,
+    sqlc.narg('remote_mcp_server_id')::uuid,
+    sqlc.narg('tunneled_mcp_server_id')::uuid,
+    sqlc.narg('toolset_id')::uuid,
+    sqlc.narg('unproxied_mcp_server_id')::uuid,
+    sqlc.narg('tool_variations_group_id')::uuid,
+    @visibility::text,
+    sqlc.narg('network_access_mode')::text
+WHERE sqlc.narg('toolset_id')::uuid IS NULL
+   OR EXISTS (
+       SELECT 1
+       FROM toolsets
+       WHERE toolsets.id = sqlc.narg('toolset_id')::uuid
+         AND toolsets.project_id = @project_id::uuid
+   )
 RETURNING *;
 
 -- name: GetMCPServerByIDAndProjectID :one
@@ -199,7 +209,7 @@ SET
     user_session_issuer_id = COALESCE(sqlc.narg('user_session_issuer_id'), user_session_issuer_id),
     remote_mcp_server_id = @remote_mcp_server_id,
     tunneled_mcp_server_id = @tunneled_mcp_server_id,
-    toolset_id = @toolset_id,
+    toolset_id = sqlc.narg('toolset_id')::uuid,
     unproxied_mcp_server_id = @unproxied_mcp_server_id,
     tool_variations_group_id = @tool_variations_group_id,
     visibility = @visibility,
@@ -208,7 +218,20 @@ SET
         ELSE network_access_mode
     END,
     updated_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+WHERE mcp_servers.id = @id
+  AND mcp_servers.project_id = @project_id
+  AND mcp_servers.deleted IS FALSE
+  -- Same-project toolset guard as CreateMCPServer: a cross-project
+  -- toolset_id updates nothing.
+  AND (
+      sqlc.narg('toolset_id')::uuid IS NULL
+      OR EXISTS (
+          SELECT 1
+          FROM toolsets
+          WHERE toolsets.id = sqlc.narg('toolset_id')::uuid
+            AND toolsets.project_id = mcp_servers.project_id
+      )
+  )
 RETURNING *;
 
 -- name: DeleteMCPServer :one

@@ -101,21 +101,27 @@ INSERT INTO mcp_servers (
     visibility,
     network_access_mode
 )
-VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6,
-    $7,
-    $8,
-    $9,
-    $10,
-    $11,
-    $12,
-    $13
-)
+SELECT
+    $1::uuid,
+    $2::uuid,
+    $3::text,
+    $4::text,
+    $5::uuid,
+    $6::uuid,
+    $7::uuid,
+    $8::uuid,
+    $9::uuid,
+    $10::uuid,
+    $11::uuid,
+    $12::text,
+    $13::text
+WHERE $9::uuid IS NULL
+   OR EXISTS (
+       SELECT 1
+       FROM toolsets
+       WHERE toolsets.id = $9::uuid
+         AND toolsets.project_id = $2::uuid
+   )
 RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 `
 
@@ -135,6 +141,10 @@ type CreateMCPServerParams struct {
 	NetworkAccessMode     pgtype.Text
 }
 
+// A toolset-backed server must front a toolset in its own project. The
+// toolsets FK enforces only existence, so the guard lives in the statement
+// every writer shares: a cross-project toolset_id inserts nothing and the
+// caller sees no rows.
 func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams) (McpServer, error) {
 	row := q.db.QueryRow(ctx, createMCPServer,
 		arg.ID,
@@ -1651,7 +1661,7 @@ SET
     user_session_issuer_id = COALESCE($4, user_session_issuer_id),
     remote_mcp_server_id = $5,
     tunneled_mcp_server_id = $6,
-    toolset_id = $7,
+    toolset_id = $7::uuid,
     unproxied_mcp_server_id = $8,
     tool_variations_group_id = $9,
     visibility = $10,
@@ -1660,7 +1670,20 @@ SET
         ELSE network_access_mode
     END,
     updated_at = clock_timestamp()
-WHERE id = $13 AND project_id = $14 AND deleted IS FALSE
+WHERE mcp_servers.id = $13
+  AND mcp_servers.project_id = $14
+  AND mcp_servers.deleted IS FALSE
+  -- Same-project toolset guard as CreateMCPServer: a cross-project
+  -- toolset_id updates nothing.
+  AND (
+      $7::uuid IS NULL
+      OR EXISTS (
+          SELECT 1
+          FROM toolsets
+          WHERE toolsets.id = $7::uuid
+            AND toolsets.project_id = mcp_servers.project_id
+      )
+  )
 RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 `
 
