@@ -131,7 +131,7 @@ func TestAgentEventSpanCHWriter(t *testing.T) {
 		writer := NewAgentEventSpanCHWriter(testenv.NewLogger(t), testenv.NewMeterProvider(t), inserter)
 		writer.now = func() time.Time { return fixedNow }
 
-		good := spanEventTestSpan("org-1", "litellm")
+		good := agentEventTestTransformedSpan(t, spanEventTestSpan("org-1", "litellm"))
 		poison := spanEventTestSpan("org-1", "litellm")
 		poison.SetSpanId(nil)
 

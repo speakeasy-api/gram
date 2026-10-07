@@ -9,10 +9,10 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // filtered by model; counting requests still excludes them because they are
 // their own types. A prompt, a tool event and a compaction are about the
 // session or a tool, not a model, so they are absent.
-func columnModel(in *Instruments) LogEnricher {
+func columnModel() columnDefinition {
 	model := question[string]{log: dialect.LogDialect.Model, span: dialect.SpanDialect.Model}
-	return &logColumnEnricher[string]{
-		column: ModelColumnKey,
+	return column[string]{
+		key: ModelColumnKey,
 		byType: columnTable[string]{
 			dialect.EventTypeAPIRequest:      model,
 			dialect.EventTypeAPIResponse:     model,
@@ -21,6 +21,5 @@ func columnModel(in *Instruments) LogEnricher {
 			dialect.EventTypeAPIRequestBody:  optional(model),
 			dialect.EventTypeAPIResponseBody: optional(model),
 		},
-		instruments: in,
 	}
 }

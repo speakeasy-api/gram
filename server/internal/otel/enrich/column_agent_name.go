@@ -11,16 +11,15 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // to carry the agent on. Most requests come from the main thread and most
 // tool events start no sub-agent, so an absent agent is not counted as
 // missing.
-func columnAgentName(in *Instruments) LogEnricher {
+func columnAgentName() columnDefinition {
 	agent := optional(question[string]{log: dialect.LogDialect.AgentName, span: dialect.SpanDialect.AgentName})
-	return &logColumnEnricher[string]{
-		column: AgentNameColumnKey,
+	return column[string]{
+		key: AgentNameColumnKey,
 		byType: columnTable[string]{
 			dialect.EventTypeAPIRequest:     agent,
 			dialect.EventTypeToolCall:       agent,
 			dialect.EventTypeToolCallResult: agent,
 			dialect.EventTypeToolDecision:   agent,
 		},
-		instruments: in,
 	}
 }

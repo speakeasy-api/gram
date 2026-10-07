@@ -7,15 +7,14 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // in favour of name and stays filled, from the same question on the same
 // types, until a contract migration drops it, so nothing that reads it
 // today goes quiet.
-func columnToolName(in *Instruments) LogEnricher {
+func columnToolName() columnDefinition {
 	tool := question[string]{log: dialect.LogDialect.ToolName, span: dialect.SpanDialect.ToolName}
-	return &logColumnEnricher[string]{
-		column: ToolNameColumnKey,
+	return column[string]{
+		key: ToolNameColumnKey,
 		byType: columnTable[string]{
 			dialect.EventTypeToolCall:       tool,
 			dialect.EventTypeToolCallResult: tool,
 			dialect.EventTypeToolDecision:   tool,
 		},
-		instruments: in,
 	}
 }

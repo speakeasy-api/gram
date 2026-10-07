@@ -8,10 +8,9 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // rather than of one kind of event. Only Claude Code states one today, so
 // for Codex and semconv producers every classified record counts as
 // missing here, which is the honest reading of the gap.
-func columnExternalOrgID(in *Instruments) LogEnricher {
-	return &logColumnEnricher[string]{
-		column:      ExternalOrgIDColumnKey,
-		byType:      everyClassifiedType(question[string]{log: dialect.LogDialect.ExternalOrgID, span: dialect.SpanDialect.ExternalOrgID}),
-		instruments: in,
+func columnExternalOrgID() columnDefinition {
+	return column[string]{
+		key:    ExternalOrgIDColumnKey,
+		byType: everyClassifiedType(question[string]{log: dialect.LogDialect.ExternalOrgID, span: dialect.SpanDialect.ExternalOrgID}),
 	}
 }

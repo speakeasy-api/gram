@@ -7,12 +7,11 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // it in dollars or in micros, which the dialect already reconciles; Codex
 // reports no cost at all, so for Codex every request counts as missing
 // here, which is the honest reading of the gap.
-func columnCostUSD(in *Instruments) LogEnricher {
-	return &logColumnEnricher[float64]{
-		column: CostUSDColumnKey,
+func columnCostUSD() columnDefinition {
+	return column[float64]{
+		key: CostUSDColumnKey,
 		byType: columnTable[float64]{
 			dialect.EventTypeAPIRequest: {log: dialect.LogDialect.CostUSD, span: dialect.SpanDialect.CostUSD},
 		},
-		instruments: in,
 	}
 }

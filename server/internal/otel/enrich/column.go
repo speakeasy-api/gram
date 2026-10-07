@@ -19,6 +19,10 @@ import (
 // agent_events writer copies it from there. The file that declares a
 // column's table is the documentation of that column.
 //
+// A column is declared once and serves both signals: every question has a
+// log leg and a span leg, and a column definition yields a log enricher and
+// a span enricher from the same table, so the two cannot drift.
+//
 // The rules every table follows:
 //
 //   - An event type absent from the table means the column is never set for
@@ -27,6 +31,9 @@ import (
 //   - A type in the table whose provider stated nothing writes nothing and is
 //     counted by source, event type and column. Absent is never an error, and
 //     never a guess.
+//   - A question may answer that the record has no such value by its own
+//     content (a built-in tool has no MCP server). Nothing is written and
+//     nothing is counted, since nothing is missing.
 //   - An unclassified record matches no table, so no column enricher applies
 //     to it. It still lands with its payload.
 
@@ -38,8 +45,7 @@ type columnValue interface {
 
 // question is how one column's value is read for one event type. It has a
 // leg per signal, since the log and span dialects answer the same questions
-// over different record types, so one table serves both. The span leg is
-// declared here and wired when the span transform gets the enrichers.
+// over different record types, so one table serves both.
 type question[V columnValue] struct {
 	log  func(dialect.LogDialect, *otelv1.InboundLogRecord) (key string, value V, err error)
 	span func(dialect.SpanDialect, *otelv1.InboundSpan) (key string, value V, err error)
@@ -125,26 +131,88 @@ func everyClassifiedType[V columnValue](q question[V]) columnTable[V] {
 	return table
 }
 
+// columnDefinition is one agent_events column as declared in its file: the
+// key it is written under and, per event type, how it is read. It yields
+// the enricher for each signal, so a column declared once serves both.
+type columnDefinition interface {
+	name() string
+	log(in *Instruments) LogEnricher
+	span(in *Instruments) SpanEnricher
+}
+
+// column is the one columnDefinition, generic over the value it writes.
+type column[V columnValue] struct {
+	key    attribute.Key
+	byType columnTable[V]
+}
+
+func (c column[V]) name() string { return columnOf(c.key) }
+
+func (c column[V]) log(in *Instruments) LogEnricher {
+	return &logColumnEnricher[V]{column: c, instruments: in}
+}
+
+func (c column[V]) span(in *Instruments) SpanEnricher {
+	return &spanColumnEnricher[V]{column: c, instruments: in}
+}
+
 // logColumnEnricher fills one agent_events column for log records.
 type logColumnEnricher[V columnValue] struct {
-	column      attribute.Key
-	byType      columnTable[V]
+	column      column[V]
 	instruments *Instruments
 }
 
 func (e *logColumnEnricher[V]) Name() string {
-	return "enrich-column-" + columnOf(e.column)
+	return "enrich-column-" + e.column.name()
 }
 
 func (e *logColumnEnricher[V]) Enrich(ctx context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
 	d := dialect.ForLog(record)
-	eventType := stated(d.EventType(record))
-	ask, applies := e.byType[eventType]
+	return answerColumn(ctx, e.instruments, e.column, stated(d.EventType(record)), func() string {
+		return counterSurfaceLog(d, record)
+	}, func(ask question[V]) (string, V, error) {
+		return ask.log(d, record)
+	})
+}
+
+// spanColumnEnricher fills one agent_events column for spans, from the same
+// table as the log enricher for that column.
+type spanColumnEnricher[V columnValue] struct {
+	column      column[V]
+	instruments *Instruments
+}
+
+func (e *spanColumnEnricher[V]) Name() string {
+	return "enrich-column-" + e.column.name()
+}
+
+func (e *spanColumnEnricher[V]) Enrich(ctx context.Context, span *otelv1.InboundSpan) ([]attribute.KeyValue, error) {
+	d := dialect.ForSpan(span)
+	return answerColumn(ctx, e.instruments, e.column, stated(d.EventType(span)), func() string {
+		return counterSurfaceSpan(d, span)
+	}, func(ask question[V]) (string, V, error) {
+		return ask.span(d, span)
+	})
+}
+
+// answerColumn is the one decision behind both signals: look the event type
+// up in the column's table, ask the question the table names, and write the
+// answer or count its absence. The surface label is read lazily, since it
+// is only needed to count a missing value.
+func answerColumn[V columnValue](
+	ctx context.Context,
+	in *Instruments,
+	c column[V],
+	eventType string,
+	surface func() string,
+	answer func(question[V]) (string, V, error),
+) ([]attribute.KeyValue, error) {
+	ask, applies := c.byType[eventType]
 	if !applies {
 		return nil, nil
 	}
 
-	key, value, err := ask.log(d, record)
+	key, value, err := answer(ask)
 	if errors.Is(err, errNotApplicable) {
 		return nil, nil
 	}
@@ -152,11 +220,11 @@ func (e *logColumnEnricher[V]) Enrich(ctx context.Context, record *otelv1.Inboun
 		// The provider did not say, or said something unreadable. Either way
 		// the column stays empty: absent, never a guess, and counted so a
 		// producer renaming an attribute is visible the same day.
-		e.instruments.recordColumnValueMissing(ctx, counterSurface(d, record), eventType, columnOf(e.column))
+		in.recordColumnValueMissing(ctx, surface(), eventType, c.name())
 		return nil, nil
 	}
 
-	kv, err := columnKeyValue(e.column, value)
+	kv, err := columnKeyValue(c.key, value)
 	if err != nil {
 		return nil, err
 	}
@@ -167,13 +235,21 @@ func (e *logColumnEnricher[V]) Enrich(ctx context.Context, record *otelv1.Inboun
 // producer the dialects do not recognise.
 const counterSurfaceOther = "other"
 
-// counterSurface is the surface label of the missing-value counter: the
-// agent surface the dialect recognised, which is a small fixed set, or
-// "other". The producer's service.name is not used as a label because it is
-// free-form, and a label a producer controls would make the counter's
-// series unbounded.
-func counterSurface(d dialect.LogDialect, record *otelv1.InboundLogRecord) string {
+// counterSurfaceLog is the surface label of the missing-value counter for a
+// log record: the agent surface the dialect recognised, which is a small
+// fixed set, or "other". The producer's service.name is not used as a label
+// because it is free-form, and a label a producer controls would make the
+// counter's series unbounded.
+func counterSurfaceLog(d dialect.LogDialect, record *otelv1.InboundLogRecord) string {
 	if surface := stated(d.Surface(record)); surface != "" {
+		return surface
+	}
+	return counterSurfaceOther
+}
+
+// counterSurfaceSpan is counterSurfaceLog for a span.
+func counterSurfaceSpan(d dialect.SpanDialect, span *otelv1.InboundSpan) string {
+	if surface := stated(d.Surface(span)); surface != "" {
 		return surface
 	}
 	return counterSurfaceOther
@@ -207,6 +283,11 @@ func inboundLogSource(record *otelv1.InboundLogRecord) string {
 	return CanonicalSource(inboundLogResourceString(record, ServiceNameAttribute))
 }
 
+// inboundSpanSource is inboundLogSource for a span.
+func inboundSpanSource(span *otelv1.InboundSpan) string {
+	return CanonicalSource(inboundSpanResourceString(span, ServiceNameAttribute))
+}
+
 // inboundLogResourceString reads one string attribute off an inbound log
 // record's resource, or "" when the resource does not state it.
 func inboundLogResourceString(record *otelv1.InboundLogRecord, key string) string {
@@ -218,10 +299,28 @@ func inboundLogResourceString(record *otelv1.InboundLogRecord, key string) strin
 	return ""
 }
 
+func inboundSpanResourceString(span *otelv1.InboundSpan, key string) string {
+	for _, kv := range span.GetResource().GetAttributes() {
+		if kv.GetKey() == key && kv.GetValue().HasStringValue() {
+			return kv.GetValue().GetStringValue()
+		}
+	}
+	return ""
+}
+
 // inboundLogAttributeString reads one string attribute off an inbound log
 // record, or "" when the record does not carry it as a non-empty string.
 func inboundLogAttributeString(record *otelv1.InboundLogRecord, key string) string {
 	for _, kv := range record.GetAttributes() {
+		if kv.GetKey() == key && kv.GetValue().HasStringValue() {
+			return kv.GetValue().GetStringValue()
+		}
+	}
+	return ""
+}
+
+func inboundSpanAttributeString(span *otelv1.InboundSpan, key string) string {
+	for _, kv := range span.GetAttributes() {
 		if kv.GetKey() == key && kv.GetValue().HasStringValue() {
 			return kv.GetValue().GetStringValue()
 		}

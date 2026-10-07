@@ -9,10 +9,9 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // each event, Codex states no turn at all, so for Codex every classified
 // record counts as missing here. That count is the honest reading of the
 // gap, not noise.
-func columnTurnID(in *Instruments) LogEnricher {
-	return &logColumnEnricher[string]{
-		column:      TurnIDColumnKey,
-		byType:      everyClassifiedType(question[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}),
-		instruments: in,
+func columnTurnID() columnDefinition {
+	return column[string]{
+		key:    TurnIDColumnKey,
+		byType: everyClassifiedType(question[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}),
 	}
 }

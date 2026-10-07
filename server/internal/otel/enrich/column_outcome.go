@@ -17,10 +17,10 @@ import (
 // made, not how it went, and must never be given an outcome. A tool_call is
 // absent for the same reason, a payload capture belongs to the request it
 // captures, and a prompt has no outcome of its own.
-func columnOutcome(in *Instruments) LogEnricher {
+func columnOutcome() columnDefinition {
 	outcome := question[string]{log: dialect.LogDialect.Outcome, span: dialect.SpanDialect.Outcome}
-	return &logColumnEnricher[string]{
-		column: OutcomeColumnKey,
+	return column[string]{
+		key: OutcomeColumnKey,
 		byType: columnTable[string]{
 			dialect.EventTypeAPIResponse:    constant(dialect.OutcomeOK),
 			dialect.EventTypeAPIError:       constant(dialect.OutcomeError),
@@ -29,7 +29,6 @@ func columnOutcome(in *Instruments) LogEnricher {
 			dialect.EventTypeToolDecision:   optional(outcome),
 			dialect.EventTypeCompaction:     outcome,
 		},
-		instruments: in,
 	}
 }
 

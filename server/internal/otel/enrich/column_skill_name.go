@@ -12,16 +12,15 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 // one does, this table empties and name takes over. Most requests and most
 // tool events involve no skill, so an absent skill is not counted as
 // missing.
-func columnSkillName(in *Instruments) LogEnricher {
+func columnSkillName() columnDefinition {
 	skill := optional(question[string]{log: dialect.LogDialect.SkillName, span: dialect.SpanDialect.SkillName})
-	return &logColumnEnricher[string]{
-		column: SkillNameColumnKey,
+	return column[string]{
+		key: SkillNameColumnKey,
 		byType: columnTable[string]{
 			dialect.EventTypeAPIRequest:     skill,
 			dialect.EventTypeToolCall:       skill,
 			dialect.EventTypeToolCallResult: skill,
 			dialect.EventTypeToolDecision:   skill,
 		},
-		instruments: in,
 	}
 }

@@ -1,8 +1,13 @@
 package otel
 
 import (
-	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"testing"
+
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/stretchr/testify/mock"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/stretchr/testify/require"
@@ -227,4 +232,67 @@ func TestRewriteInstrumentationScopeLeavesNormalizedScopeUnchanged(t *testing.T)
 
 	require.Equal(t, normalizedInstrumentationScopeName, span.GetScope().GetName())
 	require.Empty(t, span.GetAttributes())
+}
+
+func TestSpanTransformHandlerClassifiesAndPublishes(t *testing.T) {
+	t.Parallel()
+
+	inbound := (&otelv1.InboundSpan_builder{
+		TraceId:           []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+		SpanId:            []byte{1, 2, 3, 4, 5, 6, 7, 8},
+		Name:              new("chat gpt-4o"),
+		StartTimeUnixNano: new(uint64(1_724_500_000_000_000_001)),
+		EndTimeUnixNano:   new(uint64(1_724_500_000_000_000_501)),
+		Scope:             (&otelv1.InboundSpan_InstrumentationScope_builder{Name: new("litellm")}).Build(),
+		Resource: (&otelv1.InboundSpan_Resource_builder{
+			Attributes: []*otelv1.InboundSpan_KeyValue{spanTestStringAttribute("service.name", "LiteLLM")},
+		}).Build(),
+		Provenance: (&otelv1.InboundSpan_Provenance_builder{
+			Source:         new("speakeasy"),
+			OrganizationId: new(testLogOrganizationID),
+			ProjectId:      new(testLogProjectID),
+		}).Build(),
+		Attributes: []*otelv1.InboundSpan_KeyValue{
+			spanTestStringAttribute("gen_ai.operation.name", "chat"),
+			spanTestStringAttribute("gen_ai.provider.name", "openai"),
+			spanTestStringAttribute("gen_ai.conversation.id", "session-9"),
+		},
+	}).Build()
+
+	var published *otelv1.Span
+	publisher := gcp.NewMockPublisher[*otelv1.Span]()
+	publisher.On("Publish", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		span, ok := args.Get(1).(*otelv1.Span)
+		require.True(t, ok)
+		published = span
+	}).Return(gcp.NewSuccessPublishResult()).Once()
+	handler := NewSpanTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, newTestDatabase(t), cache.NoopCache)
+
+	require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
+	publisher.AssertExpectations(t)
+	require.NotNil(t, published)
+
+	attributes := make(map[string]*otelv1.Span_AnyValue, len(published.GetAttributes()))
+	for _, item := range published.GetAttributes() {
+		attributes[item.GetKey()] = item.GetValue()
+	}
+	require.Equal(t, normalizedInstrumentationScopeName, published.GetScope().GetName())
+	require.Equal(t, "litellm", attributes[string(enrich.OriginalInstrumentationScopeNameKey)].GetStringValue())
+	require.Equal(t, testLogOrganizationID, attributes[string(enrich.OrganizationIDKey)].GetStringValue())
+
+	// The column enrichers classified the span on the way through and
+	// filled the columns its tables name.
+	require.Equal(t, "api_request", attributes[string(enrich.EventTypeColumnKey)].GetStringValue())
+	require.Equal(t, "chat gpt-4o", attributes[string(enrich.RawEventNameColumnKey)].GetStringValue())
+	require.Equal(t, "litellm", attributes[string(enrich.SourceColumnKey)].GetStringValue())
+	require.Equal(t, "openai", attributes[string(enrich.ProviderColumnKey)].GetStringValue())
+	require.Equal(t, "session-9", attributes[string(enrich.SessionIDColumnKey)].GetStringValue())
+	require.Equal(t, int64(500), attributes[string(enrich.DurationNanoColumnKey)].GetIntValue())
+}
+
+func spanTestStringAttribute(key, value string) *otelv1.InboundSpan_KeyValue {
+	return (&otelv1.InboundSpan_KeyValue_builder{
+		Key:   &key,
+		Value: (&otelv1.InboundSpan_AnyValue_builder{StringValue: &value}).Build(),
+	}).Build()
 }

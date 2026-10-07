@@ -10,7 +10,7 @@ import (
 // mcp_server_name. The column is deprecated in favour of name, which carries
 // the tool on tool_call, tool_call_result and tool_decision whether or not
 // it is an MCP tool; it stays filled until a contract migration drops it.
-func columnMCPToolName(in *Instruments) LogEnricher {
+func columnMCPToolName() columnDefinition {
 	tool := question[string]{log: dialect.LogDialect.MCPToolName, span: dialect.SpanDialect.MCPToolName}
 	onTool := question[string]{
 		log: func(d dialect.LogDialect, r *otelv1.InboundLogRecord) (string, string, error) {
@@ -20,14 +20,13 @@ func columnMCPToolName(in *Instruments) LogEnricher {
 			return mcpPairSpan(s, d.MCPToolName, d.MCPServerName)
 		},
 	}
-	return &logColumnEnricher[string]{
-		column: MCPToolNameColumnKey,
+	return column[string]{
+		key: MCPToolNameColumnKey,
 		byType: columnTable[string]{
 			dialect.EventTypeAPIRequest:     optional(tool),
 			dialect.EventTypeToolCall:       onTool,
 			dialect.EventTypeToolCallResult: onTool,
 			dialect.EventTypeToolDecision:   onTool,
 		},
-		instruments: in,
 	}
 }

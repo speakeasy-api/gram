@@ -36,16 +36,20 @@ func NewSpanTransformHandler(
 	cacheImpl cache.Cache,
 ) *SpanTransformHandler {
 	logger = logger.With(attr.SlogComponent("span-transform-handler"))
+	in := enrich.NewInstruments(logger, meterProvider)
+
+	enrichers := []enrich.SpanEnricher{
+		enrich.NewSpanTenancy(),
+		enrich.NewSpanTokens(),
+		enrich.NewSpanDirectory(logger, replicaDB, cacheImpl),
+	}
+	enrichers = append(enrichers, enrich.SpanColumns(in)...)
 
 	return &SpanTransformHandler{
 		logger:        logger,
-		instruments:   enrich.NewInstruments(logger, meterProvider),
+		instruments:   in,
 		spanPublisher: spanPublisher,
-		enrichers: []enrich.SpanEnricher{
-			enrich.NewSpanTenancy(),
-			enrich.NewSpanTokens(),
-			enrich.NewSpanDirectory(logger, replicaDB, cacheImpl),
-		},
+		enrichers:     enrichers,
 	}
 }
 

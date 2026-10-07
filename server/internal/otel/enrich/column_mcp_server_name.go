@@ -14,7 +14,7 @@ import (
 // On a tool event the two MCP names come as a pair. A built-in tool has
 // neither, and that is not a gap; a record that names the tool but not the
 // server is, since the producer stated half of the pair.
-func columnMCPServerName(in *Instruments) LogEnricher {
+func columnMCPServerName() columnDefinition {
 	server := question[string]{log: dialect.LogDialect.MCPServerName, span: dialect.SpanDialect.MCPServerName}
 	onTool := question[string]{
 		log: func(d dialect.LogDialect, r *otelv1.InboundLogRecord) (string, string, error) {
@@ -24,15 +24,14 @@ func columnMCPServerName(in *Instruments) LogEnricher {
 			return mcpPairSpan(s, d.MCPServerName, d.MCPToolName)
 		},
 	}
-	return &logColumnEnricher[string]{
-		column: MCPServerNameColumnKey,
+	return column[string]{
+		key: MCPServerNameColumnKey,
 		byType: columnTable[string]{
 			dialect.EventTypeAPIRequest:     optional(server),
 			dialect.EventTypeToolCall:       onTool,
 			dialect.EventTypeToolCallResult: onTool,
 			dialect.EventTypeToolDecision:   onTool,
 		},
-		instruments: in,
 	}
 }
 
