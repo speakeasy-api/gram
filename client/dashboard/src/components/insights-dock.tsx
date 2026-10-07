@@ -958,8 +958,14 @@ export function InsightsProvider({
     getSkillIds: getSelectedSkillIds,
     onSkillIdsSent: handleSkillIdsSent,
   });
-  const hideTrigger =
-    !INSIGHTS_DOCK_ENABLED || pageHidesTrigger || !assistantAllowed;
+  const hideTrigger = pageHidesTrigger || !assistantAllowed;
+  // Page opt-outs exist to keep the resting composer off busy pages. While the
+  // dock is turned off there is no resting composer, so a panel the user opens
+  // on purpose (sidebar button, Cmd+/) works everywhere but the chat route,
+  // where the page already shows the chat.
+  const panelBlocked = INSIGHTS_DOCK_ENABLED
+    ? hideTrigger
+    : !assistantAllowed || onChatRoute;
 
   const skillsQuery = useSkillsInfinite(
     { limit: 200, gramProject: mcpConfig.projectSlug },
@@ -1362,7 +1368,7 @@ export function InsightsProvider({
   // contentEditable region — letting Cmd+/ still work in plain inputs since
   // the Cmd/Ctrl modifier means it never inserts text.
   useEffect(() => {
-    if (hideTrigger) return;
+    if (panelBlocked) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!e.metaKey && !e.ctrlKey) return;
       if (e.altKey) return;
@@ -1374,13 +1380,16 @@ export function InsightsProvider({
       e.preventDefault();
       if (isExpanded) {
         setIsExpanded(false);
-      } else {
+      } else if (INSIGHTS_DOCK_ENABLED) {
         setFocusComposerKey((k) => k + 1);
+      } else {
+        // No resting composer to focus while the dock is off — open the panel.
+        setIsExpanded(true);
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [hideTrigger, isExpanded]);
+  }, [panelBlocked, isExpanded]);
 
   const contextValue = useMemo(
     () => ({
@@ -1592,23 +1601,26 @@ export function InsightsProvider({
       {/* Permanently docked "Ask anything" composer — the entry point to
             the Project Assistant. Expands in place into the chat panel.
             Hidden on pages that opt out via hideTrigger, and while dismissed
-            to the sidebar resume button. */}
-      {!hideTrigger && !dockDismissed && (
-        <div className="pointer-events-none sticky bottom-0 z-30 h-0 shrink-0">
-          <InsightsDock
-            suggestions={suggestions}
-            open={isExpanded}
-            focusKey={focusComposerKey}
-            onSubmitPrompt={handleDockSubmit}
-            onContinue={handleReopenChat}
-            continueMode={continueMode}
-            onDismiss={handleDockDismiss}
-            onOpenHistory={handleOpenHistory}
-            panel={panelContent}
-            runtimeReady={runtimeMounted}
-          />
-        </div>
-      )}
+            to the sidebar resume button. While the dock is turned off it
+            mounts only with the panel open (opened from the sidebar button or
+            Cmd+/), so the resting composer never shows. */}
+      {!panelBlocked &&
+        (INSIGHTS_DOCK_ENABLED ? !dockDismissed : isExpanded) && (
+          <div className="pointer-events-none sticky bottom-0 z-30 h-0 shrink-0">
+            <InsightsDock
+              suggestions={suggestions}
+              open={isExpanded}
+              focusKey={focusComposerKey}
+              onSubmitPrompt={handleDockSubmit}
+              onContinue={handleReopenChat}
+              continueMode={continueMode}
+              onDismiss={handleDockDismiss}
+              onOpenHistory={handleOpenHistory}
+              panel={panelContent}
+              runtimeReady={runtimeMounted}
+            />
+          </div>
+        )}
     </div>
   );
 
