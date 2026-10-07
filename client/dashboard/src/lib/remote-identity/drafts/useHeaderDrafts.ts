@@ -1,4 +1,5 @@
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
+import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
 import {
   invalidateAllRemoteMcpServerHeaders,
@@ -249,9 +250,10 @@ export function useHeaderDrafts({
       deleteHeader.reset();
     }
 
-    await invalidateAllRemoteMcpServerHeaders(queryClient, {
-      refetchType: "all",
-    });
+    await Promise.all([
+      invalidateAllRemoteMcpServerHeaders(queryClient, { refetchType: "all" }),
+      invalidateAllGetRemoteMcpServerScopes(queryClient),
+    ]);
     // Adopt the canonical server state so the rows pick up server-assigned ids
     // and secret redaction. The sync effect preserves unsaved edits, so this
     // reset has to be explicit.

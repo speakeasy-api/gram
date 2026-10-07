@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -55,6 +56,7 @@ type Service struct {
 	audit                 *audit.Logger
 	provisioning          *RemoteMCPProvisioningService
 	distributionAdmission *admission.Guard
+	features              feature.Provider
 	// beforeClaim runs between the claim's list and re-read with the locked previous URL; tests only.
 	beforeClaim func(holderPID uint32, previousURL string)
 }
@@ -72,6 +74,7 @@ func NewService(
 	policy *guardian.Policy,
 	auditLogger *audit.Logger,
 	iconSetter mcpservers.DefaultServerIconSetter,
+	features feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 
@@ -86,6 +89,7 @@ func NewService(
 		audit:                 auditLogger,
 		provisioning:          NewRemoteMCPProvisioningService(db, policy, auditLogger, iconSetter),
 		distributionAdmission: admission.NewGuard(nil, nil),
+		features:              features,
 		beforeClaim:           nil,
 	}
 }

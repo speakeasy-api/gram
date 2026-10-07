@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	remotemcp "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	goa "goa.design/goa/v3/pkg"
@@ -273,6 +274,107 @@ func BuildDiscoverProtectedResourceMetadataPayload(remoteMcpDiscoverProtectedRes
 	}
 	v := &remotemcp.DiscoverProtectedResourceMetadataPayload{
 		RemoteMcpServerID: body.RemoteMcpServerID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetServerScopesPayload builds the payload for the remoteMcp
+// getServerScopes endpoint from CLI flags.
+func BuildGetServerScopesPayload(remoteMcpGetServerScopesMcpServerID string, remoteMcpGetServerScopesSessionToken string, remoteMcpGetServerScopesApikeyToken string, remoteMcpGetServerScopesProjectSlugInput string) (*remotemcp.GetServerScopesPayload, error) {
+	var err error
+	var mcpServerID string
+	{
+		mcpServerID = remoteMcpGetServerScopesMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteMcpGetServerScopesSessionToken != "" {
+			sessionToken = &remoteMcpGetServerScopesSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteMcpGetServerScopesApikeyToken != "" {
+			apikeyToken = &remoteMcpGetServerScopesApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteMcpGetServerScopesProjectSlugInput != "" {
+			projectSlugInput = &remoteMcpGetServerScopesProjectSlugInput
+		}
+	}
+	v := &remotemcp.GetServerScopesPayload{}
+	v.McpServerID = mcpServerID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSetServerScopePinPayload builds the payload for the remoteMcp
+// setServerScopePin endpoint from CLI flags.
+func BuildSetServerScopePinPayload(remoteMcpSetServerScopePinBody string, remoteMcpSetServerScopePinSessionToken string, remoteMcpSetServerScopePinApikeyToken string, remoteMcpSetServerScopePinProjectSlugInput string) (*remotemcp.SetServerScopePinPayload, error) {
+	var err error
+	var body SetServerScopePinRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteMcpSetServerScopePinBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scopes\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ]\n   }'")
+		}
+		if body.Scopes == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if len(body.Scopes) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scopes", body.Scopes, len(body.Scopes), 100, false))
+		}
+		for _, e := range body.Scopes {
+			if utf8.RuneCountInString(e) > 256 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.scopes[*]", e, utf8.RuneCountInString(e), 256, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteMcpSetServerScopePinSessionToken != "" {
+			sessionToken = &remoteMcpSetServerScopePinSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteMcpSetServerScopePinApikeyToken != "" {
+			apikeyToken = &remoteMcpSetServerScopePinApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteMcpSetServerScopePinProjectSlugInput != "" {
+			projectSlugInput = &remoteMcpSetServerScopePinProjectSlugInput
+		}
+	}
+	v := &remotemcp.SetServerScopePinPayload{
+		McpServerID: body.McpServerID,
+	}
+	if body.Scopes != nil {
+		v.Scopes = make([]string, len(body.Scopes))
+		for i, val := range body.Scopes {
+			v.Scopes[i] = val
+		}
+	} else {
+		v.Scopes = []string{}
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

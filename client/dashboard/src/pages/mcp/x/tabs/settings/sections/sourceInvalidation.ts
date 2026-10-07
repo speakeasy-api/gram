@@ -1,4 +1,5 @@
 import { invalidateAllGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
+import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import { invalidateAllGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
 import { invalidateAllRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
@@ -25,8 +26,8 @@ export async function invalidateTunneledMcpSourceViews(
   ]);
 }
 
-// Also drops the RFC 9728 probe: Authentication reads it for the upstream
-// URL, which is one of the fields edited through here.
+// Also drops the RFC 9728 probe and the scope pin's view: Authentication
+// reads both for the upstream URL, which is one of the fields edited here.
 export async function invalidateRemoteMcpSourceViews(
   queryClient: QueryClient,
 ): Promise<void> {
@@ -34,6 +35,7 @@ export async function invalidateRemoteMcpSourceViews(
     invalidateAllGetRemoteMcpServer(queryClient, { refetchType: "all" }),
     invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
     resetAllProtectedResourceMetadata(queryClient),
+    invalidateAllGetRemoteMcpServerScopes(queryClient),
   ]);
 }
 

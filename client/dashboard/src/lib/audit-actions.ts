@@ -118,6 +118,7 @@ export const AUDIT_ACTIONS = [
   "mcp-server:create",
   "mcp-server:delete",
   "mcp-server:update",
+  "mcp-server:update-scope-pin",
   "mcp-server:update-tool-metadata",
   "mcp_approval_request:approve",
   "mcp_approval_request:create",
@@ -584,6 +585,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated MCP server";
     case "mcp-server:delete":
       return "deleted MCP server";
+    case "mcp-server:update-scope-pin":
+      return "updated requested scopes on MCP server";
     case "mcp-server:update-tool-metadata":
       return "updated tool metadata on MCP server";
 

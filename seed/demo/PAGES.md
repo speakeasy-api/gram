@@ -156,6 +156,16 @@ on the client's pages and the compatibility-mode switch on its Settings tab;
 everyone else sees neither. The Settings tab also warns that the client's scopes
 have no effect. Browser verification: `[~]`.
 
+Linear's protected resource (`https://mcp.linear.app/mcp`) has a PG
+`remote_protected_resources` row read two hours before the seed ran,
+advertising `read` and `write`, with a scope pin of `read`. What the server's
+Identity panel (`remoteMcp.getServerScopes`) shows depends on the
+`remote-session-live-resource-scopes` rollout flag. Off, the pin field is
+read-only and says pins are not enabled for the organization. On, Linear's
+seeded client sets its own scopes, so the pin reads "Not used: this
+connection requests its own scopes". The advertised `read` and `write` are
+offered as picker options. Browser verification: `[~]`.
+
 ### Upstream session validation outcomes
 
 PG `remote_sessions` ×6 on Linear's CIMD remote session client, one per demo

@@ -175,7 +175,7 @@ func UsageCommands() []string {
 		"plugins (list-distribution-plugins|get-distribution-plugin|list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|list-audiences|download-plugin-package|rotate-observability-credential|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|update-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
-		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|probe-url|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
+		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|get-server-scopes|set-server-scope-pin|probe-url|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delegation-status|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|attach-client-key-set|detach-client-key-set|rotate-client|delete-client|remove-client-from-mcp-server)",
 		"remote-session-clients (prepare-ema|read-ema|unlink-ema|create-remote-session-client|create-cimd|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|attach-key-set|detach-key-set|list-remote-session-clients|get-new-client-callback-url|get-remote-session-client|delete-remote-session-client)",
 		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|get-issuer-duplicate-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
@@ -2518,6 +2518,18 @@ func ParseEndpoint(
 		remoteMcpDiscoverProtectedResourceMetadataSessionTokenFlag     = remoteMcpDiscoverProtectedResourceMetadataFlags.String("session-token", "", "")
 		remoteMcpDiscoverProtectedResourceMetadataApikeyTokenFlag      = remoteMcpDiscoverProtectedResourceMetadataFlags.String("apikey-token", "", "")
 		remoteMcpDiscoverProtectedResourceMetadataProjectSlugInputFlag = remoteMcpDiscoverProtectedResourceMetadataFlags.String("project-slug-input", "", "")
+
+		remoteMcpGetServerScopesFlags                = flag.NewFlagSet("get-server-scopes", flag.ExitOnError)
+		remoteMcpGetServerScopesMcpServerIDFlag      = remoteMcpGetServerScopesFlags.String("mcp-server-id", "REQUIRED", "")
+		remoteMcpGetServerScopesSessionTokenFlag     = remoteMcpGetServerScopesFlags.String("session-token", "", "")
+		remoteMcpGetServerScopesApikeyTokenFlag      = remoteMcpGetServerScopesFlags.String("apikey-token", "", "")
+		remoteMcpGetServerScopesProjectSlugInputFlag = remoteMcpGetServerScopesFlags.String("project-slug-input", "", "")
+
+		remoteMcpSetServerScopePinFlags                = flag.NewFlagSet("set-server-scope-pin", flag.ExitOnError)
+		remoteMcpSetServerScopePinBodyFlag             = remoteMcpSetServerScopePinFlags.String("body", "REQUIRED", "")
+		remoteMcpSetServerScopePinSessionTokenFlag     = remoteMcpSetServerScopePinFlags.String("session-token", "", "")
+		remoteMcpSetServerScopePinApikeyTokenFlag      = remoteMcpSetServerScopePinFlags.String("apikey-token", "", "")
+		remoteMcpSetServerScopePinProjectSlugInputFlag = remoteMcpSetServerScopePinFlags.String("project-slug-input", "", "")
 
 		remoteMcpProbeURLFlags                = flag.NewFlagSet("probe-url", flag.ExitOnError)
 		remoteMcpProbeURLBodyFlag             = remoteMcpProbeURLFlags.String("body", "REQUIRED", "")
@@ -5413,6 +5425,8 @@ func ParseEndpoint(
 	remoteMcpGetServerFlags.Usage = remoteMcpGetServerUsage
 	remoteMcpUpdateServerFlags.Usage = remoteMcpUpdateServerUsage
 	remoteMcpDiscoverProtectedResourceMetadataFlags.Usage = remoteMcpDiscoverProtectedResourceMetadataUsage
+	remoteMcpGetServerScopesFlags.Usage = remoteMcpGetServerScopesUsage
+	remoteMcpSetServerScopePinFlags.Usage = remoteMcpSetServerScopePinUsage
 	remoteMcpProbeURLFlags.Usage = remoteMcpProbeURLUsage
 	remoteMcpVerifyURLFlags.Usage = remoteMcpVerifyURLUsage
 	remoteMcpDeleteServerFlags.Usage = remoteMcpDeleteServerUsage
@@ -7649,6 +7663,12 @@ func ParseEndpoint(
 
 			case "discover-protected-resource-metadata":
 				epf = remoteMcpDiscoverProtectedResourceMetadataFlags
+
+			case "get-server-scopes":
+				epf = remoteMcpGetServerScopesFlags
+
+			case "set-server-scope-pin":
+				epf = remoteMcpSetServerScopePinFlags
 
 			case "probe-url":
 				epf = remoteMcpProbeURLFlags
@@ -10616,6 +10636,12 @@ func ParseEndpoint(
 			case "discover-protected-resource-metadata":
 				endpoint = c.DiscoverProtectedResourceMetadata()
 				data, err = remotemcpc.BuildDiscoverProtectedResourceMetadataPayload(*remoteMcpDiscoverProtectedResourceMetadataBodyFlag, *remoteMcpDiscoverProtectedResourceMetadataSessionTokenFlag, *remoteMcpDiscoverProtectedResourceMetadataApikeyTokenFlag, *remoteMcpDiscoverProtectedResourceMetadataProjectSlugInputFlag)
+			case "get-server-scopes":
+				endpoint = c.GetServerScopes()
+				data, err = remotemcpc.BuildGetServerScopesPayload(*remoteMcpGetServerScopesMcpServerIDFlag, *remoteMcpGetServerScopesSessionTokenFlag, *remoteMcpGetServerScopesApikeyTokenFlag, *remoteMcpGetServerScopesProjectSlugInputFlag)
+			case "set-server-scope-pin":
+				endpoint = c.SetServerScopePin()
+				data, err = remotemcpc.BuildSetServerScopePinPayload(*remoteMcpSetServerScopePinBodyFlag, *remoteMcpSetServerScopePinSessionTokenFlag, *remoteMcpSetServerScopePinApikeyTokenFlag, *remoteMcpSetServerScopePinProjectSlugInputFlag)
 			case "probe-url":
 				endpoint = c.ProbeURL()
 				data, err = remotemcpc.BuildProbeURLPayload(*remoteMcpProbeURLBodyFlag, *remoteMcpProbeURLSessionTokenFlag, *remoteMcpProbeURLApikeyTokenFlag, *remoteMcpProbeURLProjectSlugInputFlag)
@@ -22403,6 +22429,8 @@ func remoteMcpUsage() {
 	fmt.Fprintln(os.Stderr, `    get-server: Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.`)
 	fmt.Fprintln(os.Stderr, `    update-server: Update a remote MCP server`)
 	fmt.Fprintln(os.Stderr, `    discover-protected-resource-metadata: Probe the remote MCP server's origin for an RFC 9728 .well-known/oauth-protected-resource document and return either the parsed metadata or a typed unavailability reason. Runs server-side under guardian.Policy so production resource servers without CORS can still be inspected.`)
+	fmt.Fprintln(os.Stderr, `    get-server-scopes: Report the scope state of the protected resource a remote-backed MCP server's logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization's resource scope discovery flag, and what a login through each bound client would request now. Reads cached state only; never contacts the resource.`)
+	fmt.Fprintln(os.Stderr, `    set-server-scope-pin: Pin the scopes logins to a remote-backed MCP server's protected resource request, or clear the pin with an empty list. The pin belongs to the protected resource, so it applies to every server in the project with the same upstream URL, and the caller needs write access to all of them. Returns the scope state re-read after the write.`)
 	fmt.Fprintln(os.Stderr, `    probe-url: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting whether MCP is available, authentication is required, the response is invalid, or the server is unreachable.`)
 	fmt.Fprintln(os.Stderr, `    verify-url: Probe a candidate remote MCP server URL and return the legacy boolean verification result.
 	
@@ -22559,6 +22587,54 @@ func remoteMcpDiscoverProtectedResourceMetadataUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp discover-protected-resource-metadata --body '{\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteMcpGetServerScopesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-mcp get-server-scopes", os.Args[0])
+	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Report the scope state of the protected resource a remote-backed MCP server's logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization's resource scope discovery flag, and what a login through each bound client would request now. Reads cached state only; never contacts the resource.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp get-server-scopes --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteMcpSetServerScopePinUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-mcp set-server-scope-pin", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Pin the scopes logins to a remote-backed MCP server's protected resource request, or clear the pin with an empty list. The pin belongs to the protected resource, so it applies to every server in the project with the same upstream URL, and the caller needs write access to all of them. Returns the scope state re-read after the write.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-mcp set-server-scope-pin --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scopes\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteMcpProbeURLUsage() {

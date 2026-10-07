@@ -172,6 +172,68 @@ var _ = Service("remoteMcp", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DiscoverRemoteMcpProtectedResourceMetadata"}`)
 	})
 
+	Method("getServerScopes", func() {
+		Description("Report the scope state of the protected resource a remote-backed MCP server's logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization's resource scope discovery flag, and what a login through each bound client would request now. Reads cached state only; never contacts the resource.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The ID of the remote-backed MCP server.", func() {
+				Format(FormatUUID)
+			})
+			Required("mcp_server_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RemoteMcpServerScopes)
+
+		HTTP(func() {
+			GET("/rpc/remoteMcp.getServerScopes")
+			Param("mcp_server_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRemoteMcpServerScopes")
+		Meta("openapi:extension:x-speakeasy-name-override", "getServerScopes")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetRemoteMcpServerScopes"}`)
+	})
+
+	Method("setServerScopePin", func() {
+		Description("Pin the scopes logins to a remote-backed MCP server's protected resource request, or clear the pin with an empty list. The pin belongs to the protected resource, so it applies to every server in the project with the same upstream URL, and the caller needs write access to all of them. Returns the scope state re-read after the write.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The ID of the remote-backed MCP server.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("scopes", ArrayOf(String, func() {
+				MaxLength(256)
+			}), "Scopes to pin on the server's protected resource, shared by servers with the same upstream URL, in request order. Whitespace is trimmed, blanks and duplicates are dropped; an empty list clears the pin.", func() {
+				MaxLength(100)
+			})
+			Required("mcp_server_id", "scopes")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RemoteMcpServerScopes)
+
+		HTTP(func() {
+			POST("/rpc/remoteMcp.setServerScopePin")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setRemoteMcpServerScopePin")
+		Meta("openapi:extension:x-speakeasy-name-override", "setServerScopePin")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetRemoteMcpServerScopePin"}`)
+	})
+
 	Method("probeURL", func() {
 		Description("Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting whether MCP is available, authentication is required, the response is invalid, or the server is unreachable.")
 
@@ -599,4 +661,34 @@ var ListServerHeadersResult = Type("ListServerHeadersResult", func() {
 
 	Attribute("headers", ArrayOf(RemoteMcpServerHeader))
 	Required("headers")
+})
+
+var RemoteMcpServerClientScopes = Type("RemoteMcpServerClientScopes", func() {
+	Description("What a login through one client bound to the MCP server would request now, resolved from cached state.")
+
+	Attribute("client_id", String, "The remote session client's ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("scope_source", String, "The precedence step that decided the request.", func() {
+		Enum("resource_pin", "client_scope", "challenge_scope", "live_resource", "cached_resource", "issuer_override", "issuer_omitted", "issuer_catalogue", "none")
+	})
+	Attribute("requested_scopes", ArrayOf(String), "The scope parameter the login would send; empty sends none.")
+	Attribute("unadvertised_pinned_scopes", ArrayOf(String), "Pinned scopes the resource does not advertise; sent regardless. Empty when the pin does not decide or the resource's list is unknown.")
+
+	Required("client_id", "scope_source", "requested_scopes", "unadvertised_pinned_scopes")
+})
+
+var RemoteMcpServerScopes = Type("RemoteMcpServerScopes", func() {
+	Description("Scope state of the protected resource a remote-backed MCP server's logins are for.")
+
+	Attribute("resource_url", String, "The protected resource: the server's upstream URL.")
+	Attribute("pinned_scopes", ArrayOf(String), "The operator's scope pin on the protected resource, shared by servers with the same upstream URL; empty when unset.")
+	Attribute("advertised_scopes_known", Boolean, "Whether a read of the resource's metadata within the last good window captured an advertised list.")
+	Attribute("advertised_scopes", ArrayOf(String), "The resource's advertised scopes_supported from that read. Absent when unknown or empty; see advertised_scopes_known.")
+	Attribute("challenge_scopes", ArrayOf(String), "The scope parameter of the resource's last WWW-Authenticate challenge; empty when none was seen.")
+	Attribute("discovery_enabled", Boolean, "Whether the organization's logins consult the protected resource (challenge scopes, pin, advertised list). Off, the pin is stored but not applied.")
+	Attribute("clients", ArrayOf(RemoteMcpServerClientScopes), "One entry per client bound to the server's user session issuer.")
+	Attribute("shared_server_count", Int, "How many other live MCP servers in the project share this upstream URL, and so this pin.")
+
+	Required("resource_url", "pinned_scopes", "advertised_scopes_known", "challenge_scopes", "discovery_enabled", "clients", "shared_server_count")
 })

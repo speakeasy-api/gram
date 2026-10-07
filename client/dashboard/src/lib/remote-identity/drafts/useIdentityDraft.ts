@@ -9,6 +9,7 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 import type { ServerIdentityClientConfiguration } from "@gram/client/models/components/serveridentityclientconfiguration.js";
+import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { queryKeyRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
 import {
@@ -862,6 +863,7 @@ export function useUserIdentityDraft({
         invalidateAllRemoteSessionClients(queryClient),
         invalidateAllRemoteSessionIssuers(queryClient),
         invalidateAllRemoteSessionsCount(queryClient),
+        invalidateAllGetRemoteMcpServerScopes(queryClient),
       ]);
     },
     onError: (error: unknown) => {
