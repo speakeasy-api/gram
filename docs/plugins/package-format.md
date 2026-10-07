@@ -96,11 +96,13 @@ native Cursor or Codex marketplace entries.
 
 Each platform has a top-level `marketplace.json` that lists all plugins in the repo.
 
+`<marketplace-name>` is the project's marketplace settings override when set, otherwise `<org-slug>-speakeasy` for the organization's default project and `<org-slug>-<project-slug>-speakeasy` for any other project (`naming.MarketplaceName`). It is not the GitHub repository name (`<org-slug>-<project-slug>-plugins`). Clients register the marketplace under this name, so Claude Code's `extraKnownMarketplaces` key and the `<plugin>@<marketplace-name>` suffix in `enabledPlugins` must use it exactly, or Claude Code ignores the entry's `autoUpdate` or never installs the plugin.
+
 **Claude** (`.claude-plugin/marketplace.json`):
 
 ```json
 {
-  "name": "<org-slug>-gram",
+  "name": "<marketplace-name>",
   "owner": { "name": "Org Name", "email": "" },
   "plugins": [
     {
@@ -117,7 +119,7 @@ declared via `metadata.pluginRoot`; `source` values are bare names relative to t
 
 ```json
 {
-  "name": "<org-slug>-gram",
+  "name": "<marketplace-name>",
   "owner": { "name": "Org Name", "email": "" },
   "metadata": { "pluginRoot": "cursor-plugins" },
   "plugins": [
@@ -134,7 +136,7 @@ declared via `metadata.pluginRoot`; `source` values are bare names relative to t
 
 ```json
 {
-  "name": "<org-slug>-gram",
+  "name": "<marketplace-name>",
   "interface": {
     "displayName": "Org Name Plugins",
     "shortDescription": ""

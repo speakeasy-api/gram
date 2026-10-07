@@ -281,6 +281,7 @@ trackedFiles:
   src/funcs/featuresGet.ts: {}
   src/funcs/featuresSet.ts: {}
   src/funcs/featuresSetRemoteSessionAutoRefreshPolicy.ts: {}
+  src/funcs/hooksGetStatus.ts: {}
   src/funcs/hooksHooksNumberClaude.ts: {}
   src/funcs/hooksHooksNumberCodex.ts: {}
   src/funcs/hooksHooksNumberCursor.ts: {}
@@ -1173,6 +1174,7 @@ trackedFiles:
   src/models/components/hookskilldata.ts: {}
   src/models/components/hooksourceusage.ts: {}
   src/models/components/hooksserversummary.ts: {}
+  src/models/components/hooksstatus.ts: {}
   src/models/components/hookstimeseriespoint.ts: {}
   src/models/components/hooksusersummary.ts: {}
   src/models/components/hooktoolcalldata.ts: {}
@@ -2196,6 +2198,7 @@ trackedFiles:
   src/models/operations/getglobalremotesessionissuer.ts: {}
   src/models/operations/getglobalremotesessionissuerduplicatepreflight.ts: {}
   src/models/operations/getglobalremotesessionissuermigratepreflight.ts: {}
+  src/models/operations/gethooksstatus.ts: {}
   src/models/operations/gethookssummary.ts: {}
   src/models/operations/getidentityproviderconnection.ts: {}
   src/models/operations/getinferencespendcaps.ts: {}
@@ -3021,6 +3024,8 @@ trackedFiles:
   src/react-query/getGcpIamPlatformCredential.ts: {}
   src/react-query/getGcpKmsKey.core.ts: {}
   src/react-query/getGcpKmsKey.ts: {}
+  src/react-query/getHooksStatus.core.ts: {}
+  src/react-query/getHooksStatus.ts: {}
   src/react-query/getHooksSummary.core.ts: {}
   src/react-query/getHooksSummary.ts: {}
   src/react-query/getInferenceSpendCaps.core.ts: {}
@@ -6875,6 +6880,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getHooksStatus:
+    speakeasy-default-get-hooks-status:
+      responses:
+        "200":
+          application/json: {"agent_hooks_key": false, "anthropic_inference_hooks": false, "configured": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getHooksSummary:
     speakeasy-default-get-hooks-summary:
       requestBody:

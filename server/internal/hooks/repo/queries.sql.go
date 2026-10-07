@@ -179,6 +179,49 @@ func (q *Queries) GetDeviceOwner(ctx context.Context, arg GetDeviceOwnerParams) 
 	return i, err
 }
 
+const getHooksConfiguration = `-- name: GetHooksConfiguration :one
+SELECT
+  EXISTS (
+    SELECT 1
+    FROM api_keys
+    WHERE organization_id = $1::text
+      AND (project_id IS NULL OR project_id = $2::uuid)
+      AND deleted IS FALSE
+      AND scopes @> ARRAY['hooks']::text[]
+      AND (expires_at IS NULL OR expires_at > clock_timestamp())
+  )::boolean AS agent_hooks_key,
+  EXISTS (
+    SELECT 1
+    FROM ai_integration_configs
+    WHERE organization_id = $1::text
+      AND project_id = $2::uuid
+      AND provider = 'anthropic_inference'
+      AND enabled IS TRUE
+      AND deleted IS FALSE
+  )::boolean AS anthropic_inference_hooks
+`
+
+type GetHooksConfigurationParams struct {
+	OrgID     string
+	ProjectID uuid.UUID
+}
+
+type GetHooksConfigurationRow struct {
+	AgentHooksKey           bool
+	AnthropicInferenceHooks bool
+}
+
+// Whether the project has any hook telemetry source set up: an active
+// hooks-scoped API key usable by the project (bound to it, or organization
+// wide) or a connected Anthropic inference hooks integration for the project.
+// Keys and integrations bound to another project feed only that project.
+func (q *Queries) GetHooksConfiguration(ctx context.Context, arg GetHooksConfigurationParams) (GetHooksConfigurationRow, error) {
+	row := q.db.QueryRow(ctx, getHooksConfiguration, arg.OrgID, arg.ProjectID)
+	var i GetHooksConfigurationRow
+	err := row.Scan(&i.AgentHooksKey, &i.AnthropicInferenceHooks)
+	return i, err
+}
+
 const getProviderOrgBillingMode = `-- name: GetProviderOrgBillingMode :one
 SELECT billing_mode
 FROM ai_integration_configs

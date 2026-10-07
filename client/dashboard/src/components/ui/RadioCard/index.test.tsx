@@ -402,6 +402,41 @@ describe("RadioCard", () => {
     );
   });
 
+  it("keeps detail out of the description and the selection", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn<(value: string) => void>();
+    render(
+      <RadioCardGroup aria-label="Scope" onValueChange={onValueChange}>
+        <RadioCard
+          value="org"
+          title="Organization"
+          detail={<pre data-testid="detail">snippet</pre>}
+        >
+          Everyone
+        </RadioCard>
+      </RadioCardGroup>,
+    );
+
+    const radio = screen.getByRole("radio", { name: "Organization" });
+    const descriptionId = radio.getAttribute("aria-describedby") ?? "";
+    expect(document.getElementById(descriptionId)?.textContent).toBe(
+      "Everyone",
+    );
+    await user.click(screen.getByTestId("detail"));
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it("renders a numeric zero detail", () => {
+    render(
+      <RadioCardGroup aria-label="Count">
+        <RadioCard value="zero" title="Zero" detail={0} />
+      </RadioCardGroup>,
+    );
+    expect(
+      document.querySelector("[data-slot=radio-card-detail]")?.textContent,
+    ).toBe("0");
+  });
+
   it("forwards the orientation prop to the radio group", () => {
     const { rerender } = render(<ControlledGroup />);
     const group = screen.getByRole("radiogroup", { name: "View mode" });

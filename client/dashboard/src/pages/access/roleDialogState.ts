@@ -142,6 +142,7 @@ export function computeRuleLabel(
   projects: ProjectRef[],
 ): string {
   if (selectors === null) {
+    if (isProjectFilteredResourceType(resourceType)) return "All assistants";
     return isProjectScopedResourceType(resourceType)
       ? "All projects"
       : "All servers";
