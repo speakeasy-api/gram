@@ -24,6 +24,9 @@ import {
 import type { CustomerPlan } from "./customerUsageSearch";
 import {
   PLAN_LABELS,
+  formatChangePercent,
+  formatSignedUsd,
+  pinButtonID,
   type CustomerChange,
   type CustomerUsageSummary,
 } from "./customerUsageUtils";
@@ -39,17 +42,6 @@ const cycleDate = new Intl.DateTimeFormat("en-US", {
 function formatCycle(from: Date, to: Date): string {
   const end = new Date(`${inclusiveEnd(to)}T00:00:00Z`);
   return `${cycleDate.format(from)} – ${cycleDate.format(end)} UTC`;
-}
-
-function formatPercent(percent: number): string {
-  const rounded = Math.round(percent);
-  return `${rounded > 0 ? "+" : ""}${rounded}%`;
-}
-
-function signedUsd(value: string): string {
-  const formatted = formatSpendUsd(value.replace(/^-/, ""));
-  if (value.startsWith("-")) return `−${formatted}`;
-  return Number(value) === 0 ? formatted : `+${formatted}`;
 }
 
 function ChangeIndicator({ change }: { change: CustomerChange }): JSX.Element {
@@ -75,9 +67,9 @@ function ChangeIndicator({ change }: { change: CustomerChange }): JSX.Element {
       )}
     >
       {(up || down) && <Icon aria-hidden="true" className="size-4" />}
-      {signedUsd(change.changeUsd)}
+      {formatSignedUsd(change.changeUsd)}
       <span className="font-normal">
-        {change.kind === "new" ? "New" : formatPercent(change.percent)}
+        {change.kind === "new" ? "New" : formatChangePercent(change.percent)}
       </span>
     </span>
   );
@@ -159,6 +151,7 @@ export function CustomerUsageCard({
             <Button
               variant={pinned ? "secondary" : "ghost"}
               size="icon-sm"
+              id={pinButtonID(customer.organizationId)}
               aria-pressed={pinned}
               aria-label={
                 pinned

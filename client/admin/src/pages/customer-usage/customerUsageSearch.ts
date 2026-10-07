@@ -27,7 +27,14 @@ export type CustomerUsageInterval = "daily" | "weekly" | "monthly";
 const searchSchema = z.object({
   q: z.string().optional().catch(undefined),
   // The selected plans. Absent means every plan.
-  plans: z.array(z.enum(CUSTOMER_PLANS)).optional().catch(undefined),
+  // A hand-written `?plans=pro` arrives as a bare string; read it as one plan.
+  plans: z
+    .preprocess(
+      (value) => (typeof value === "string" ? [value] : value),
+      z.array(z.enum(CUSTOMER_PLANS)),
+    )
+    .optional()
+    .catch(undefined),
   sort: z.enum(CUSTOMER_USAGE_SORTS).optional().catch(undefined),
   // The selected products. Absent means all of them; an empty list means none.
   products: z

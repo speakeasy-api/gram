@@ -5,6 +5,8 @@ import { ALL_PRODUCT_IDS, type CustomerPlan } from "./customerUsageSearch";
 import {
   compareCustomers,
   customerUsageView,
+  formatChangePercent,
+  formatSignedUsd,
   planFilterLabel,
   summarizeCustomer,
   type CustomerUsage,
@@ -320,6 +322,18 @@ describe("pinned customers", () => {
     expect(view.idle).toEqual([]);
   });
 
+  it("leaves out a pinned customer that does not match the search", () => {
+    const view = customerUsageView(
+      customers,
+      { ...controls, q: "high" },
+      new Set(["org_Low", "org_High"]),
+    );
+    expect(view.pinned.map((summary) => summary.customer.name)).toEqual([
+      "High",
+    ]);
+    expect(view.active).toEqual([]);
+  });
+
   it("still applies search and plan filters to pinned customers", () => {
     const view = customerUsageView(
       customers,
@@ -327,5 +341,23 @@ describe("pinned customers", () => {
       new Set(["org_Idle"]),
     );
     expect(view.pinned).toEqual([]);
+  });
+});
+
+describe("change formatting", () => {
+  it("signs dollar changes and keeps the sub-cent markers' direction", () => {
+    expect(formatSignedUsd("12.5")).toBe("+$12.50");
+    expect(formatSignedUsd("-12.5")).toBe("−$12.50");
+    expect(formatSignedUsd("0")).toBe("$0.00");
+    expect(formatSignedUsd("0.001")).toBe("+<$0.01");
+    expect(formatSignedUsd("-0.001")).toBe(">-$0.01");
+  });
+
+  it("never labels a real change as 0%", () => {
+    expect(formatChangePercent(27.4)).toBe("+27%");
+    expect(formatChangePercent(-22.6)).toBe("−23%");
+    expect(formatChangePercent(0)).toBe("0%");
+    expect(formatChangePercent(0.3)).toBe("+<0.5%");
+    expect(formatChangePercent(-0.3)).toBe("−<0.5%");
   });
 });

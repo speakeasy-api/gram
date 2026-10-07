@@ -120,6 +120,7 @@ func TestListCustomerUsageMapsUsageAndPerOrganizationErrors(t *testing.T) {
 	require.Equal(t, customerUsageMixedMeasurementMessage, *mixed.Error)
 	require.Empty(t, mixed.Products)
 	require.Nil(t, mixed.PreviousPeriod)
+	require.Equal(t, mixed.CurrentCycle, mixed.Window, "an unreadable customer charts its current cycle, not a zero range")
 
 	broken := result.Customers[2]
 	require.NotNil(t, broken.Error)

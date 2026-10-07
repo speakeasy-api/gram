@@ -155,7 +155,7 @@ func (s *Service) GetCustomerUsage(ctx context.Context, organizations []Customer
 			report.Customers = append(report.Customers, CustomerUsage{
 				OrganizationID:      plan.organization.ID,
 				CurrentCycle:        plan.current,
-				Window:              BillingCyclePeriod{Start: time.Time{}, End: time.Time{}},
+				Window:              plan.current,
 				Products:            nil,
 				PreviousPeriod:      nil,
 				PreviousPeriodCosts: nil,

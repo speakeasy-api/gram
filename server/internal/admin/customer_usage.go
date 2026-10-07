@@ -61,13 +61,15 @@ func (s *Service) ListCustomerUsage(ctx context.Context, payload *gen.ListCustom
 
 func customerUsageView(row repo.AdminListCustomerUsageOrganizationsRow, customer usage.CustomerUsage) *gen.AdminCustomerUsage {
 	view := &gen.AdminCustomerUsage{
-		OrganizationID:      row.ID,
-		Name:                row.Name,
-		Slug:                row.Slug,
-		AccountType:         row.AccountType,
-		TrialState:          row.TrialState,
-		CurrentCycle:        meterUsageWindowView(customer.CurrentCycle),
-		Window:              meterUsageWindowView(customer.Window),
+		OrganizationID: row.ID,
+		Name:           row.Name,
+		Slug:           row.Slug,
+		AccountType:    row.AccountType,
+		TrialState:     row.TrialState,
+		CurrentCycle:   meterUsageWindowView(customer.CurrentCycle),
+		// A customer whose usage could not be read has no chart buckets, so its
+		// window is the current cycle rather than a zero-valued range.
+		Window:              meterUsageWindowView(customer.CurrentCycle),
 		Products:            []*gen.SpendProduct{},
 		PreviousPeriod:      nil,
 		PreviousPeriodCosts: []*gen.AdminCustomerUsageProductCost{},
@@ -82,6 +84,7 @@ func customerUsageView(row repo.AdminListCustomerUsageOrganizationsRow, customer
 		return view
 	}
 
+	view.Window = meterUsageWindowView(customer.Window)
 	for _, product := range customer.Products {
 		buckets := make([]*gen.SpendBucket, len(product.Buckets))
 		for index, bucket := range product.Buckets {

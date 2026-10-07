@@ -16,8 +16,8 @@ import {
 } from "./spendBreakdownUtils";
 
 // Product, usage, list rate and estimated cost for each product. `compact`
-// drops the list-rate column for narrow cards and moves the rate into the cost
-// cell's tooltip, so the figure is still one hover away.
+// drops the list-rate column for narrow cards and shows the rate as a small
+// second line under the cost instead, so it stays readable without hovering.
 export function SpendProductsTable({
   products,
   compact = false,
@@ -64,15 +64,13 @@ export function SpendProductsTable({
                     {formatSpendRate(product)}
                   </TableCell>
                 )}
-                <TableCell
-                  className="text-right tabular-nums"
-                  title={
-                    compact
-                      ? `Current list rate: ${formatSpendRate(product)}`
-                      : undefined
-                  }
-                >
+                <TableCell className="text-right tabular-nums">
                   {formatSpendUsd(product.costUsd)}
+                  {compact && (
+                    <span className="text-muted-foreground block text-xs">
+                      {formatSpendRate(product)}
+                    </span>
+                  )}
                 </TableCell>
               </TableRow>
             ))

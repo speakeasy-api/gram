@@ -1,6 +1,7 @@
 import type { AdminCustomerUsage } from "@gram/admin-client/models/components/admincustomerusage";
 
 import {
+  formatSpendUsd,
   spendCostIsZero,
   sumSpendCosts,
   type SpendProductID,
@@ -32,6 +33,34 @@ export const PLAN_LABELS: Record<CustomerPlan, string> = {
 
 // The order the "Plan type" sort walks.
 const PLAN_ORDER: Record<string, number> = { enterprise: 0, pro: 1, payg: 2 };
+
+// A signed dollar change. A sub-cent decrease keeps formatSpendUsd's ">-$0.01"
+// marker; other decreases use a minus sign.
+export function formatSignedUsd(value: string): string {
+  const formatted = formatSpendUsd(value);
+  if (value.trim().startsWith("-")) {
+    return formatted.startsWith("-") ? `−${formatted.slice(1)}` : formatted;
+  }
+  return spendCostIsZero(value) ? formatted : `+${formatted}`;
+}
+
+// A whole-number percent change. A real change that rounds to zero reads as
+// "<0.5%" with its direction, so it is never labeled the same as no change.
+export function formatChangePercent(percent: number): string {
+  if (percent !== 0 && Math.abs(percent) < 0.5) {
+    return percent > 0 ? "+<0.5%" : "−<0.5%";
+  }
+  const rounded = Math.round(percent);
+  if (rounded > 0) return `+${rounded}%`;
+  if (rounded < 0) return `−${Math.abs(rounded)}%`;
+  return "0%";
+}
+
+// The pin button's element id, so the page can return focus to it after the
+// card moves between the Pinned and Other customers grids.
+export function pinButtonID(organizationID: string): string {
+  return `customer-usage-pin-${organizationID}`;
+}
 
 export type CustomerChange =
   // No previous cycle to compare with: the organization is newer than that.

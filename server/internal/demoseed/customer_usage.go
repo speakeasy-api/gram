@@ -124,22 +124,34 @@ func RunCustomerUsageSeed(ctx context.Context, environment, databaseURL, clickho
 		return fmt.Errorf("connect customer usage seed clickhouse: %w", err)
 	}
 
+	// A session-level lock on one dedicated connection holds across both the
+	// Postgres transaction and the ClickHouse replacement, so two concurrent
+	// seeds cannot both clear the old readings and then both insert.
+	lockConn, err := db.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire customer usage seed lock connection: %w", err)
+	}
+	defer lockConn.Release()
+	if _, err := lockConn.Exec(ctx, "SELECT pg_advisory_lock($1)", customerUsageSeedLockID); err != nil {
+		return fmt.Errorf("serialize customer usage seed: %w", err)
+	}
+	defer func() {
+		_, _ = lockConn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", customerUsageSeedLockID)
+	}()
+
 	now := time.Now().UTC()
-	if err := seedCustomerUsageOrganizations(ctx, db, now); err != nil {
+	if err := seedCustomerUsageOrganizations(ctx, lockConn, now); err != nil {
 		return err
 	}
 	return seedCustomerUsageReadings(ctx, conn)
 }
 
-func seedCustomerUsageOrganizations(ctx context.Context, db *pgxpool.Pool, now time.Time) error {
-	tx, err := db.Begin(ctx)
+func seedCustomerUsageOrganizations(ctx context.Context, conn *pgxpool.Conn, now time.Time) error {
+	tx, err := conn.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin customer usage seed: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", customerUsageSeedLockID); err != nil {
-		return fmt.Errorf("serialize customer usage seed: %w", err)
-	}
 
 	fixtures := customerUsageSeedFixtures()
 	ids := customerUsageSeedIDs()

@@ -72,6 +72,10 @@ describe("customer usage search", () => {
     ]);
   });
 
+  it("reads a single hand-written plan as a one-plan list", () => {
+    expect(customerUsageSearch({ plans: "pro" }).plans).toEqual(["pro"]);
+  });
+
   it("drops an unknown plan list", () => {
     expect(customerUsageSearch({ plans: ["gold"] }).plans).toBeUndefined();
   });

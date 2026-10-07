@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { errorMessage } from "@/lib/gramAdminApi";
+import { adminSessionQuery } from "@/lib/adminQueries";
 import { customerUsageQuery } from "@/lib/gramAdminClient";
 import {
   SPEND_PRODUCT_COLOR,
@@ -47,6 +48,7 @@ import {
 import {
   PLAN_LABELS,
   customerUsageView,
+  pinButtonID,
   planFilterLabel,
   type CustomerUsageSummary,
 } from "./customerUsageUtils";
@@ -77,7 +79,16 @@ export function CustomerUsage(): JSX.Element {
   const search = route.useSearch();
   const navigate = route.useNavigate();
   const controls = useMemo(() => customerUsageControls(search), [search]);
-  const { pinned, togglePinned } = usePinnedCustomers();
+  const session = useQuery(adminSessionQuery);
+  const { pinned, togglePinned } = usePinnedCustomers(session.data?.email);
+  // Moving a card between grids remounts it, so return focus to its pin
+  // button once it has moved.
+  const togglePinnedKeepingFocus = (organizationID: string): void => {
+    togglePinned(organizationID);
+    requestAnimationFrame(() =>
+      document.getElementById(pinButtonID(organizationID))?.focus(),
+    );
+  };
   const query = useQuery({
     ...customerUsageQuery({ interval: controls.interval }),
     placeholderData: keepPreviousData,
@@ -126,11 +137,15 @@ export function CustomerUsage(): JSX.Element {
         summary={summary}
         queriedAt={query.data.queriedAt}
         selectedProducts={controls.products}
-        interval={controls.interval}
+        // The data's own interval, so a placeholder from the previous interval
+        // is never captioned with the new one while it loads.
+        interval={query.data.interval}
         cumulative={controls.cumulative}
         collapsible={collapsible}
         pinned={pinned.has(summary.customer.organizationId)}
-        onTogglePinned={() => togglePinned(summary.customer.organizationId)}
+        onTogglePinned={() =>
+          togglePinnedKeepingFocus(summary.customer.organizationId)
+        }
         onRetry={() => void query.refetch()}
         isRetrying={query.isFetching}
       />
@@ -377,7 +392,9 @@ export function CustomerUsage(): JSX.Element {
               view.pinned.length > 0 ? "text-lg font-semibold" : "sr-only"
             }
           >
-            Other customers
+            {view.pinned.length > 0
+              ? "Other customers"
+              : "Customers with usage this cycle"}
           </h2>
           <div className={GRID_CLASSES}>
             {view.active.map((summary) => renderCard(summary, false))}
