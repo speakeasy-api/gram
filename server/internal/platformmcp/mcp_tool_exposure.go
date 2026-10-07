@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -1040,31 +1039,25 @@ type toolInventoryCursor struct {
 }
 
 type toolInventoryCursorCodec struct {
-	key []byte
+	key signedCursorKey
 }
 
 func newToolInventoryCursorCodec(keyMaterial string) (*toolInventoryCursorCodec, error) {
 	if keyMaterial == "" {
 		return nil, ErrToolInventoryCursor
 	}
-	key := sha256.Sum256([]byte("platform-mcp-tool-inventory-cursor:" + keyMaterial))
-	return &toolInventoryCursorCodec{key: key[:]}, nil
+	return &toolInventoryCursorCodec{key: newSignedCursorKey("platform-mcp-tool-inventory-cursor", keyMaterial)}, nil
 }
 
 func (c *toolInventoryCursorCodec) Encode(cursor toolInventoryCursor) (string, error) {
 	if c == nil || len(c.key) == 0 || cursor.OrganizationID == "" || cursor.Binding == "" || cursor.ProjectID == "" || cursor.AfterToolURN == "" {
 		return "", ErrToolInventoryCursor
 	}
-	payload, err := json.Marshal(cursor)
+	token, err := sealCursor(c.key, cursor)
 	if err != nil {
 		return "", fmt.Errorf("encode platform MCP tool inventory cursor: %w", err)
 	}
-	mac := hmac.New(sha256.New, c.key)
-	_, _ = mac.Write(payload)
-	token := make([]byte, 0, len(payload)+sha256.Size)
-	token = append(token, payload...)
-	token = append(token, mac.Sum(nil)...)
-	return base64.RawURLEncoding.EncodeToString(token), nil
+	return token, nil
 }
 
 func (c *toolInventoryCursorCodec) Decode(value string, principal Principal, projectID uuid.UUID, query, sourceKind string) (string, error) {
@@ -1072,18 +1065,8 @@ func (c *toolInventoryCursorCodec) Decode(value string, principal Principal, pro
 	if c == nil || len(c.key) == 0 || value == "" || principal.OrganizationID == "" || binding == "" || projectID == uuid.Nil {
 		return "", ErrToolInventoryCursor
 	}
-	token, err := base64.RawURLEncoding.DecodeString(value)
-	if err != nil || len(token) <= sha256.Size {
-		return "", ErrToolInventoryCursor
-	}
-	payload, signature := token[:len(token)-sha256.Size], token[len(token)-sha256.Size:]
-	mac := hmac.New(sha256.New, c.key)
-	_, _ = mac.Write(payload)
-	if !hmac.Equal(signature, mac.Sum(nil)) {
-		return "", ErrToolInventoryCursor
-	}
-	var cursor toolInventoryCursor
-	if err := json.Unmarshal(payload, &cursor); err != nil ||
+	cursor, ok := openCursor[toolInventoryCursor](c.key, value)
+	if !ok ||
 		cursor.OrganizationID != principal.OrganizationID || cursor.Binding != binding ||
 		cursor.ProjectID != projectID.String() || cursor.Query != query || cursor.SourceKind != sourceKind || cursor.AfterToolURN == "" {
 		return "", ErrToolInventoryCursor
