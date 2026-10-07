@@ -1,4 +1,5 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
+import { InlineEmptyState } from "@/components/inline-empty-state";
 import { InsightsToolsContent } from "@/components/observe/InsightsTools";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
@@ -50,7 +51,27 @@ export function McpToolsDashboard(): JSX.Element {
   let body: JSX.Element;
   if (features.isPending) {
     body = <PageSkeleton />;
-  } else if (features.data?.logsEnabled === false) {
+  } else if (features.data === undefined) {
+    // Without the setting the page cannot tell an organization with
+    // logging off from one with nothing to show yet, so it says so rather
+    // than drawing a grid of empty cards.
+    body = (
+      <InlineEmptyState
+        icon="triangle-alert"
+        heading="This page did not load"
+        description="Whether logging is on for this organization could not be read."
+        action={
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void features.refetch()}
+          >
+            Try again
+          </Button>
+        }
+      />
+    );
+  } else if (!features.data.logsEnabled) {
     body = (
       <EnableLoggingOverlay
         onEnabled={() => void features.refetch()}
