@@ -44,11 +44,18 @@ const (
 type Service struct {
 	logger          *slog.Logger
 	tracer          trace.Tracer
-	db              *pgxpool.Pool
+	db              database
 	auth            *auth.Auth
 	authz           *authz.Engine
 	audit           *audit.Logger
 	productFeatures *productfeatures.Client
+}
+
+// database permits composing existing audited mutations inside an outer
+// transaction. pgx transactions implement Begin with nested savepoints.
+type database interface {
+	repo.DBTX
+	Begin(context.Context) (pgx.Tx, error)
 }
 
 var _ gen.Service = (*Service)(nil)
