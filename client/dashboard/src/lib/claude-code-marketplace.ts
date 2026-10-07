@@ -5,10 +5,6 @@
 export const CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL =
   "https://code.claude.com/docs/en/plugins/org#require-a-marketplace-and-its-plugins";
 
-/** Where managed settings live: the admin console, MDM, or a policy file. */
-export const CLAUDE_CODE_MANAGED_SETTINGS_DOCS_URL =
-  "https://code.claude.com/docs/en/settings#settings-files";
-
 /**
  * Claude Code applies autoUpdate only from the extraKnownMarketplaces entry
  * keyed by the marketplace.json name, and installs enabledPlugins entries only
