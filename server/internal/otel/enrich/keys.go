@@ -1,6 +1,10 @@
 package enrich
 
-import "go.opentelemetry.io/otel/attribute"
+import (
+	"strings"
+
+	"go.opentelemetry.io/otel/attribute"
+)
 
 const (
 	OrganizationIDKey                   = attribute.Key("speakeasy.organization.id")
@@ -108,3 +112,11 @@ const (
 	CacheWriteTokensColumnKey = attribute.Key(eventColumnKeyPrefix + "cache_write_tokens")
 	CostUSDColumnKey          = attribute.Key(eventColumnKeyPrefix + "cost_usd")
 )
+
+// IsEventColumnKey reports whether an attribute key is in the reserved
+// speakeasy.event namespace. Only the column enrichers write there: a
+// producer that sends such a key is trying to classify its own record, and
+// the transform drops it before the enrichers write theirs.
+func IsEventColumnKey(key string) bool {
+	return strings.HasPrefix(key, eventColumnKeyPrefix)
+}

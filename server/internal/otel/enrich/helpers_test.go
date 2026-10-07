@@ -34,9 +34,11 @@ func readableMeter(t *testing.T) (*sdkmetric.ManualReader, *sdkmetric.MeterProvi
 	return reader, provider
 }
 
-// counterValue reads one counter's data point carrying the given attribute,
-// or zero when none was recorded.
-func counterValue(t *testing.T, reader *sdkmetric.ManualReader, metricName string, key attribute.Key, value string) int64 {
+// counterValue reads the one data point of a counter that carries every
+// given attribute, or zero when none was recorded. Asking for several
+// attributes at once proves they were recorded on the same point rather
+// than scattered across points that each carry one.
+func counterValue(t *testing.T, reader *sdkmetric.ManualReader, metricName string, want ...attribute.KeyValue) int64 {
 	t.Helper()
 	var resourceMetrics metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(t.Context(), &resourceMetrics))
@@ -47,10 +49,14 @@ func counterValue(t *testing.T, reader *sdkmetric.ManualReader, metricName strin
 			}
 			sum, ok := candidate.Data.(metricdata.Sum[int64])
 			require.True(t, ok)
+		points:
 			for _, point := range sum.DataPoints {
-				if got, ok := point.Attributes.Value(key); ok && got.AsString() == value {
-					return point.Value
+				for _, kv := range want {
+					if got, ok := point.Attributes.Value(kv.Key); !ok || got != kv.Value {
+						continue points
+					}
 				}
+				return point.Value
 			}
 		}
 	}

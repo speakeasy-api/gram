@@ -78,7 +78,7 @@ func TestLogColumnEnricherWritesTheColumnWhenTheTableNamesTheTypeAndTheProviderS
 	columns := enrichedColumns(t, enricher, record)
 	require.Len(t, columns, 1)
 	require.Equal(t, "turn-1", columns[TurnIDColumnKey].AsString())
-	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "turn_id"))
+	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("turn_id")))
 }
 
 func TestLogColumnEnricherWritesNothingForATypeOutsideTheTable(t *testing.T) {
@@ -100,7 +100,7 @@ func TestLogColumnEnricherWritesNothingForATypeOutsideTheTable(t *testing.T) {
 	unclassified := inboundTestLog(claudeCodeScopeName, "claude-code", "hook_registered", logStringAttribute("prompt.id", "turn-1"))
 	require.Empty(t, enrichedColumns(t, enricher, unclassified))
 
-	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "turn_id"))
+	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("turn_id")))
 }
 
 func TestLogColumnEnricherCountsATypeInTheTableWhoseProviderSaidNothing(t *testing.T) {
@@ -114,14 +114,39 @@ func TestLogColumnEnricherCountsATypeInTheTableWhoseProviderSaidNothing(t *testi
 	}
 
 	// Codex never states a turn id, so its api_request is in the table and
-	// yet writes nothing: absent, not an error, and counted by source, type
-	// and column so the gap is visible.
+	// yet writes nothing: absent, not an error, and counted by surface, type
+	// and column on one data point so the gap is visible.
 	record := inboundTestLog(codexScopeName, "codex", "codex.sse_event", logStringAttribute("event.kind", "response.completed"))
 
 	require.Empty(t, enrichedColumns(t, enricher, record))
-	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "turn_id"))
-	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventTypeKey, dialect.EventTypeAPIRequest))
-	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.EventSourceKey, "codex"))
+	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing,
+		attr.AgentEventSurface("codex"),
+		attr.AgentEventType(dialect.EventTypeAPIRequest),
+		attr.AgentEventColumn("turn_id"),
+	))
+	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventSurface(missingLabelOther)))
+}
+
+func TestLogColumnEnricherLabelsAnUnrecognisedProducerAsOther(t *testing.T) {
+	t.Parallel()
+
+	reader, meterProvider := readableMeter(t)
+	enricher := &logColumnEnricher[string]{
+		column:      TurnIDColumnKey,
+		byType:      perEventType[string]{dialect.EventTypeAPIRequest: getter[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}},
+		instruments: NewInstruments(testenv.NewLogger(t), meterProvider),
+	}
+
+	// A semconv producer is classified but recognised as no surface, so its
+	// gap is counted under "other" rather than under its free-form service
+	// name, which would make the counter's series unbounded.
+	record := inboundTestLog("litellm", "some-proxy-42", "gen_ai.client.inference.operation.details", logStringAttribute("gen_ai.operation.name", "chat"))
+
+	require.Empty(t, enrichedColumns(t, enricher, record))
+	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing,
+		attr.AgentEventSurface(missingLabelOther),
+		attr.AgentEventColumn("turn_id"),
+	))
 }
 
 func TestLogColumnEnricherWritesAConstantTheTypeImplies(t *testing.T) {
