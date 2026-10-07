@@ -1,4 +1,4 @@
-package otel
+package enrich
 
 import (
 	"context"
@@ -10,27 +10,27 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-type enrichLogSpeakeasyTokens struct {
+type spanTokens struct {
 	codec *stokens.Codec
 }
 
-func newEnrichLogSpeakeasyTokens() *enrichLogSpeakeasyTokens {
-	return &enrichLogSpeakeasyTokens{codec: stokens.NewCodec()}
+func NewSpanTokens() *spanTokens {
+	return &spanTokens{codec: stokens.NewCodec()}
 }
 
-func (*enrichLogSpeakeasyTokens) Name() string {
+func (e *spanTokens) Name() string {
 	return "enrich-speakeasy-tokens"
 }
 
-func (e *enrichLogSpeakeasyTokens) Enrich(ctx context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
-	recordDialect := dialect.ForLog(record)
-	_, input, err := recordDialect.InputContent(record)
+func (e *spanTokens) Enrich(ctx context.Context, span *otelv1.InboundSpan) ([]attribute.KeyValue, error) {
+	ex := dialect.ForSpan(span)
+	_, input, err := ex.InputContent(span)
 	if err != nil {
-		return nil, fmt.Errorf("get input content from log: %w", err)
+		return nil, fmt.Errorf("get input content from span: %w", err)
 	}
-	_, output, err := recordDialect.OutputContent(record)
+	_, output, err := ex.OutputContent(span)
 	if err != nil {
-		return nil, fmt.Errorf("get output content from log: %w", err)
+		return nil, fmt.Errorf("get output content from span: %w", err)
 	}
 
 	if len(input) == 0 && len(output) == 0 {
@@ -45,9 +45,10 @@ func (e *enrichLogSpeakeasyTokens) Enrich(ctx context.Context, record *otelv1.In
 	if err != nil {
 		return nil, fmt.Errorf("count output speakeasy tokens: %w", err)
 	}
+	count := inputCount + outputCount
 
 	return []attribute.KeyValue{
-		TokensCount(inputCount + outputCount),
+		TokensCount(count),
 		TokensCodec(e.codec.Name()),
 	}, nil
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -96,7 +97,7 @@ func agentEventRowFromLog(record *otelv1.LogRecord, observedAtUnixNano int64) (c
 	row.ObservedAtUnixNano = observedNano
 	row.RecordID = recordID
 	row.EventID = subjectOrRecordID(row.EventID, recordID)
-	row.Source = canonicalEventSource(logEventServiceName(record))
+	row.Source = enrich.CanonicalSource(logEventServiceName(record))
 	row.InputContent = contentJSON(d.InputContent(inbound))
 	row.OutputContent = contentJSON(d.OutputContent(inbound))
 	row.Attributes = attributes
@@ -180,7 +181,7 @@ func agentEventRowFromSpan(span *otelv1.Span, observedAtUnixNano int64) (chrepo.
 	row.ObservedAtUnixNano = observedNano
 	row.RecordID = recordID
 	row.EventID = subjectOrRecordID(row.EventID, recordID)
-	row.Source = canonicalEventSource(spanEventServiceName(span))
+	row.Source = enrich.CanonicalSource(spanEventServiceName(span))
 	row.InputContent = contentJSON(d.InputContent(inbound))
 	row.OutputContent = contentJSON(d.OutputContent(inbound))
 	row.Attributes = attributes
@@ -407,7 +408,7 @@ func inboundLogFromRecord(record *otelv1.LogRecord) (*otelv1.InboundLogRecord, e
 
 func logOriginalScopeName(record *otelv1.LogRecord) string {
 	for _, kv := range record.GetAttributes() {
-		if kv.GetKey() == string(OriginalInstrumentationScopeNameKey) && kv.GetValue().HasStringValue() {
+		if kv.GetKey() == string(enrich.OriginalInstrumentationScopeNameKey) && kv.GetValue().HasStringValue() {
 			return kv.GetValue().GetStringValue()
 		}
 	}
@@ -436,7 +437,7 @@ func inboundSpanFromSpan(span *otelv1.Span) (*otelv1.InboundSpan, error) {
 
 func spanOriginalScopeName(span *otelv1.Span) string {
 	for _, kv := range span.GetAttributes() {
-		if kv.GetKey() == string(OriginalInstrumentationScopeNameKey) && kv.GetValue().HasStringValue() {
+		if kv.GetKey() == string(enrich.OriginalInstrumentationScopeNameKey) && kv.GetValue().HasStringValue() {
 			return kv.GetValue().GetStringValue()
 		}
 	}
@@ -477,11 +478,11 @@ type rowEnrichment struct {
 }
 
 var (
-	directoryDepartmentNameKey = DirectoryAttribute("department_name")
-	directoryDivisionNameKey   = DirectoryAttribute("division_name")
-	directoryJobTitleKey       = DirectoryAttribute("job_title")
-	directoryEmployeeTypeKey   = DirectoryAttribute("employee_type")
-	directoryCostCenterNameKey = DirectoryAttribute("cost_center_name")
+	directoryDepartmentNameKey = enrich.DirectoryAttribute("department_name")
+	directoryDivisionNameKey   = enrich.DirectoryAttribute("division_name")
+	directoryJobTitleKey       = enrich.DirectoryAttribute("job_title")
+	directoryEmployeeTypeKey   = enrich.DirectoryAttribute("employee_type")
+	directoryCostCenterNameKey = enrich.DirectoryAttribute("cost_center_name")
 )
 
 func (e *rowEnrichment) absorb(key string, value any) {
@@ -506,9 +507,9 @@ func (e *rowEnrichment) absorb(key string, value any) {
 		e.employeeType = enrichmentString(value)
 	case string(directoryCostCenterNameKey):
 		e.costCenterName = enrichmentString(value)
-	case string(GramUserRolesKey):
+	case string(enrich.GramUserRolesKey):
 		e.roles = enrichmentStrings(value)
-	case string(DirectoryGroupNamesKey):
+	case string(enrich.DirectoryGroupNamesKey):
 		e.groups = enrichmentStrings(value)
 	}
 }

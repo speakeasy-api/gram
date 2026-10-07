@@ -1,8 +1,6 @@
-package otel
+package enrich
 
 import "go.opentelemetry.io/otel/attribute"
-
-type Key = attribute.Key
 
 const (
 	OrganizationIDKey                   = attribute.Key("speakeasy.organization.id")

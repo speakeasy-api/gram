@@ -1,4 +1,4 @@
-package otel
+package enrich
 
 import (
 	"testing"
@@ -16,7 +16,7 @@ func TestEnrichTenancyRequiresOrganizationID(t *testing.T) {
 		Provenance: (&otelv1.InboundSpan_Provenance_builder{ProjectId: &projectID}).Build(),
 	}).Build()
 
-	attrs, err := (&enrichTenancy{}).Enrich(t.Context(), span)
+	attrs, err := (&spanTenancy{}).Enrich(t.Context(), span)
 
 	require.EqualError(t, err, "missing organization ID in span provenance")
 	require.Nil(t, attrs)
@@ -30,7 +30,7 @@ func TestEnrichTenancyRequiresProjectID(t *testing.T) {
 		Provenance: (&otelv1.InboundSpan_Provenance_builder{OrganizationId: &organizationID}).Build(),
 	}).Build()
 
-	attrs, err := (&enrichTenancy{}).Enrich(t.Context(), span)
+	attrs, err := (&spanTenancy{}).Enrich(t.Context(), span)
 
 	require.EqualError(t, err, "missing project ID in span provenance")
 	require.Nil(t, attrs)
@@ -56,7 +56,7 @@ func TestEnrichTenancyIncludesAvailableProvenance(t *testing.T) {
 		}).Build(),
 	}).Build()
 
-	attrs, err := (&enrichTenancy{}).Enrich(t.Context(), span)
+	attrs, err := (&spanTenancy{}).Enrich(t.Context(), span)
 
 	require.NoError(t, err)
 	require.Equal(t, []attribute.KeyValue{

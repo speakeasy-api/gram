@@ -1,4 +1,4 @@
-package otel
+package enrich
 
 import (
 	"testing"
@@ -10,20 +10,20 @@ import (
 func TestRecordEnricherDurationIgnoresUnavailableInstrument(t *testing.T) {
 	t.Parallel()
 
-	m := &metrics{
+	m := &Instruments{
 		logEnricherDuration:    nil,
 		metricEnricherDuration: nil,
 		spanEnricherDuration:   nil,
 	}
 	require.NotPanics(t, func() {
-		m.recordEnricherDuration(t.Context(), "test-enricher", 0.25, o11y.OutcomeSuccess)
+		m.recordSpanEnricherDuration(t.Context(), "test-enricher", 0.25, o11y.OutcomeSuccess)
 	})
 }
 
 func TestRecordLogEnricherDurationIgnoresUnavailableInstrument(t *testing.T) {
 	t.Parallel()
 
-	m := &metrics{
+	m := &Instruments{
 		logEnricherDuration:    nil,
 		metricEnricherDuration: nil,
 		spanEnricherDuration:   nil,
@@ -36,7 +36,7 @@ func TestRecordLogEnricherDurationIgnoresUnavailableInstrument(t *testing.T) {
 func TestRecordMetricEnricherDurationIgnoresUnavailableInstrument(t *testing.T) {
 	t.Parallel()
 
-	m := &metrics{
+	m := &Instruments{
 		logEnricherDuration:    nil,
 		metricEnricherDuration: nil,
 		spanEnricherDuration:   nil,

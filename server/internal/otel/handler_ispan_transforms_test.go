@@ -1,6 +1,7 @@
 package otel
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"testing"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
@@ -199,7 +200,7 @@ func TestRewriteInstrumentationScopePreservesOriginalName(t *testing.T) {
 	require.Len(t, span.GetAttributes(), 2)
 	require.Equal(t, existingKey, span.GetAttributes()[0].GetKey())
 	require.Equal(t, existingValue, span.GetAttributes()[0].GetValue().GetStringValue())
-	require.Equal(t, string(OriginalInstrumentationScopeNameKey), span.GetAttributes()[1].GetKey())
+	require.Equal(t, string(enrich.OriginalInstrumentationScopeNameKey), span.GetAttributes()[1].GetKey())
 	require.Equal(t, originalName, span.GetAttributes()[1].GetValue().GetStringValue())
 }
 

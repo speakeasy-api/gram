@@ -3,6 +3,7 @@ package otel
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"log/slog"
 	"slices"
 
@@ -22,9 +23,9 @@ const normalizedLogInstrumentationScopeName = "com.speakeasy.ai.logging"
 
 type LogTransformHandler struct {
 	logger       *slog.Logger
-	metrics      *metrics
+	instruments  *enrich.Instruments
 	logPublisher gcp.Publisher[*otelv1.LogRecord]
-	enrichers    []LogEnricher
+	enrichers    []enrich.LogEnricher
 }
 
 func NewLogTransformHandler(
@@ -38,12 +39,12 @@ func NewLogTransformHandler(
 
 	return &LogTransformHandler{
 		logger:       logger,
-		metrics:      newMetrics(logger, meterProvider),
+		instruments:  enrich.NewInstruments(logger, meterProvider),
 		logPublisher: logPublisher,
-		enrichers: []LogEnricher{
-			&enrichLogTenancy{},
-			newEnrichLogSpeakeasyTokens(),
-			newEnrichLogDirectory(logger, replicaDB, cacheImpl),
+		enrichers: []enrich.LogEnricher{
+			enrich.NewLogTenancy(),
+			enrich.NewLogTokens(),
+			enrich.NewLogDirectory(logger, replicaDB, cacheImpl),
 		},
 	}
 }
@@ -57,7 +58,7 @@ func (h *LogTransformHandler) Handle(ctx context.Context, record *otelv1.Inbound
 		return fmt.Errorf("rewrite instrumentation scope: %w", err)
 	}
 
-	enrichments, err := enrichLog(ctx, h.metrics, record, h.enrichers)
+	enrichments, err := enrich.Log(ctx, h.instruments, record, h.enrichers)
 	if err != nil {
 		return fmt.Errorf("enrich log record: %w", o11y.LogError(ctx, h.logger, err, "failed to enrich log record"))
 	}
@@ -91,7 +92,7 @@ func rewriteLogInstrumentationScope(record *otelv1.LogRecord) error {
 	}
 
 	return applyLogEnrichments(record, []otelattr.KeyValue{
-		OriginalInstrumentationScopeName(originalName),
+		enrich.OriginalInstrumentationScopeName(originalName),
 	})
 }
 
