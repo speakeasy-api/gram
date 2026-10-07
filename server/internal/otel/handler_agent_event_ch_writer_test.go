@@ -73,10 +73,10 @@ func TestAgentEventLogCHWriter(t *testing.T) {
 		writer := NewAgentEventLogCHWriter(testenv.NewLogger(t), meterProvider, inserter)
 		writer.now = func() time.Time { return fixedNow }
 
-		good := agentEventTestLog(claudeCodeScopeName, "api_request", logEventTestKV("session.id", "s-1"))
-		poison := agentEventTestLog(claudeCodeScopeName, "api_request")
+		good := agentEventTestLog(t, claudeCodeScopeName, "api_request", logEventTestKV("session.id", "s-1"))
+		poison := agentEventTestLog(t, claudeCodeScopeName, "api_request")
 		poison.GetProvenance().SetOrganizationId("")
-		noObserved := agentEventTestLog(claudeCodeScopeName, "user_prompt")
+		noObserved := agentEventTestLog(t, claudeCodeScopeName, "user_prompt")
 		noObserved.SetObservedTimeUnixNano(0)
 
 		err := writer.HandleBatch(t.Context(), []*otelv1.LogRecord{good, poison, nil, noObserved}, nil)
@@ -111,7 +111,7 @@ func TestAgentEventLogCHWriter(t *testing.T) {
 		reader, meterProvider := readableMeter(t)
 		writer := NewAgentEventLogCHWriter(testenv.NewLogger(t), meterProvider, inserter)
 
-		err := writer.HandleBatch(t.Context(), []*otelv1.LogRecord{agentEventTestLog(claudeCodeScopeName, "api_request")}, nil)
+		err := writer.HandleBatch(t.Context(), []*otelv1.LogRecord{agentEventTestLog(t, claudeCodeScopeName, "api_request")}, nil)
 		require.ErrorContains(t, err, "clickhouse down")
 
 		// The attempt is still counted, under the failure outcome, so a

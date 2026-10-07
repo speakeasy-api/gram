@@ -37,15 +37,20 @@ func NewLogTransformHandler(
 ) *LogTransformHandler {
 	logger = logger.With(attr.SlogComponent("log-transform-handler"))
 
+	in := enrich.NewInstruments(logger, meterProvider)
+
+	enrichers := []enrich.LogEnricher{
+		enrich.NewLogTenancy(),
+		enrich.NewLogTokens(),
+		enrich.NewLogDirectory(logger, replicaDB, cacheImpl),
+	}
+	enrichers = append(enrichers, enrich.LogColumns(in)...)
+
 	return &LogTransformHandler{
 		logger:       logger,
-		instruments:  enrich.NewInstruments(logger, meterProvider),
+		instruments:  in,
 		logPublisher: logPublisher,
-		enrichers: []enrich.LogEnricher{
-			enrich.NewLogTenancy(),
-			enrich.NewLogTokens(),
-			enrich.NewLogDirectory(logger, replicaDB, cacheImpl),
-		},
+		enrichers:    enrichers,
 	}
 }
 

@@ -19,6 +19,14 @@ import (
 // time the consumer observed it, so the same record always yields the same
 // row and golden tests can pin the projection.
 //
+// A column the transform's column enrichers fill arrives on the record as a
+// canonical speakeasy.event.<column> attribute, and the builder copies it
+// from there without asking a dialect. There is no dialect fallback for such
+// a column: the transform and this writer deploy together, and a record that
+// reached the normalized topic before the enricher ran lands with that column
+// empty, which is accepted. The columns not yet moved into the transform are
+// still read from the dialect here.
+//
 // The dialects that know each producer's vocabulary take the inbound record
 // types, while a consumer on the normalized topics holds the outbound ones.
 // The two are wire-compatible by construction (the inbound protos are kept as
@@ -85,19 +93,21 @@ func agentEventRowFromLog(record *otelv1.LogRecord, observedAtUnixNano int64) (c
 	}
 
 	var enrichment rowEnrichment
+	var columns canonicalColumns
 	for _, kv := range record.GetAttributes() {
-		enrichment.absorb(kv.GetKey(), logEventAnyValue(kv.GetValue()))
+		value := logEventAnyValue(kv.GetValue())
+		enrichment.absorb(kv.GetKey(), value)
+		columns.absorb(kv.GetKey(), value)
 	}
 
 	d := dialect.ForLog(inbound)
-	row := agentEventRow(logAnswers{d: d, record: inbound}, enrichment)
+	row := agentEventRow(columns, logAnswers{d: d, record: inbound}, enrichment)
 	row.OrganizationID = organizationID
 	row.ProjectID = record.GetProvenance().GetProjectId()
 	row.OccurredAtUnixNano = occurredNano
 	row.ObservedAtUnixNano = observedNano
 	row.RecordID = recordID
 	row.EventID = subjectOrRecordID(row.EventID, recordID)
-	row.Source = enrich.CanonicalSource(logEventServiceName(record))
 	row.InputContent = contentJSON(d.InputContent(inbound))
 	row.OutputContent = contentJSON(d.OutputContent(inbound))
 	row.Attributes = attributes
@@ -174,14 +184,14 @@ func agentEventRowFromSpan(span *otelv1.Span, observedAtUnixNano int64) (chrepo.
 
 	d := dialect.ForSpan(inbound)
 	recordID := traceID + ":" + spanID
-	row := agentEventRow(spanAnswers{d: d, span: inbound}, enrichment)
+	columns := columnsFromSpanDialect(d, inbound, enrichment, enrich.CanonicalSource(spanEventServiceName(span)))
+	row := agentEventRow(columns, spanAnswers{d: d, span: inbound}, enrichment)
 	row.OrganizationID = organizationID
 	row.ProjectID = span.GetProvenance().GetProjectId()
 	row.OccurredAtUnixNano = startNano
 	row.ObservedAtUnixNano = observedNano
 	row.RecordID = recordID
 	row.EventID = subjectOrRecordID(row.EventID, recordID)
-	row.Source = enrich.CanonicalSource(spanEventServiceName(span))
 	row.InputContent = contentJSON(d.InputContent(inbound))
 	row.OutputContent = contentJSON(d.OutputContent(inbound))
 	row.Attributes = attributes
@@ -190,19 +200,16 @@ func agentEventRowFromSpan(span *otelv1.Span, observedAtUnixNano int64) (chrepo.
 	return row, ""
 }
 
-// answers is what a dialect says about one record, one question at a time.
-// A dialect answers (key, value, err), where the key names the attribute the
-// answer was read from. The row keeps only values the producer stated: an
-// empty key or a read error is absent, never a guess, so the adapters below
-// reduce every answer to its value or the zero value.
+// answers is what a dialect says about one record, one question at a time,
+// for the columns the transform does not fill yet. A dialect answers (key,
+// value, err), where the key names the attribute the answer was read from.
+// The row keeps only values the producer stated: an empty key or a read
+// error is absent, never a guess, so the adapters below reduce every answer
+// to its value or the zero value.
 type answers interface {
 	SessionID() string
 	ExternalUserEmail() string
 	ExternalUserID() string
-	Provider() string
-	Surface() string
-	EventName() string
-	EventType() string
 	SubjectID() string
 	TurnID() string
 	Model() string
@@ -232,10 +239,6 @@ type logAnswers struct {
 func (a logAnswers) SessionID() string         { return stated(a.d.SessionID(a.record)) }
 func (a logAnswers) ExternalUserEmail() string { return stated(a.d.ExternalUserEmail(a.record)) }
 func (a logAnswers) ExternalUserID() string    { return stated(a.d.ExternalUserID(a.record)) }
-func (a logAnswers) Provider() string          { return stated(a.d.Provider(a.record)) }
-func (a logAnswers) Surface() string           { return stated(a.d.Surface(a.record)) }
-func (a logAnswers) EventName() string         { return stated(a.d.EventName(a.record)) }
-func (a logAnswers) EventType() string         { return stated(a.d.EventType(a.record)) }
 func (a logAnswers) SubjectID() string         { return stated(a.d.SubjectID(a.record)) }
 func (a logAnswers) TurnID() string            { return stated(a.d.TurnID(a.record)) }
 func (a logAnswers) Model() string             { return stated(a.d.Model(a.record)) }
@@ -264,10 +267,6 @@ type spanAnswers struct {
 func (a spanAnswers) SessionID() string         { return stated(a.d.SessionID(a.span)) }
 func (a spanAnswers) ExternalUserEmail() string { return stated(a.d.ExternalUserEmail(a.span)) }
 func (a spanAnswers) ExternalUserID() string    { return stated(a.d.ExternalUserID(a.span)) }
-func (a spanAnswers) Provider() string          { return stated(a.d.Provider(a.span)) }
-func (a spanAnswers) Surface() string           { return stated(a.d.Surface(a.span)) }
-func (a spanAnswers) EventName() string         { return stated(a.d.EventName(a.span)) }
-func (a spanAnswers) EventType() string         { return stated(a.d.EventType(a.span)) }
 func (a spanAnswers) SubjectID() string         { return stated(a.d.SubjectID(a.span)) }
 func (a spanAnswers) TurnID() string            { return stated(a.d.TurnID(a.span)) }
 func (a spanAnswers) Model() string             { return stated(a.d.Model(a.span)) }
@@ -298,16 +297,11 @@ func stated[T any](key string, value T, err error) T {
 	return value
 }
 
-// agentEventRow lays down the parts of a row that come from what the
-// dialect said and what the pipeline stamped, leaving tenancy, timing and
-// delivery identity to the caller. Pipeline-resolved attribution wins over
-// what the dialect infers.
-func agentEventRow(a answers, enrichment rowEnrichment) chrepo.AgentEventRow {
-	provider := enrichment.provider
-	if provider == "" {
-		provider = a.Provider()
-	}
-
+// agentEventRow lays down the parts of a row that come from the canonical
+// columns the transform wrote, what the dialect said about the columns not
+// moved there yet, and what the pipeline stamped, leaving tenancy, timing
+// and delivery identity to the caller. Each column has exactly one source.
+func agentEventRow(columns canonicalColumns, a answers, enrichment rowEnrichment) chrepo.AgentEventRow {
 	return chrepo.AgentEventRow{
 		OrganizationID:     "",
 		ProjectID:          "",
@@ -317,11 +311,11 @@ func agentEventRow(a answers, enrichment rowEnrichment) chrepo.AgentEventRow {
 		SessionID:          a.SessionID(),
 		TurnID:             a.TurnID(),
 		EventID:            a.SubjectID(),
-		EventType:          a.EventType(),
-		RawEventName:       a.EventName(),
-		Source:             "",
-		Provider:           provider,
-		Surface:            a.Surface(),
+		EventType:          columns.eventType,
+		RawEventName:       columns.rawEventName,
+		Source:             columns.source,
+		Provider:           columns.provider,
+		Surface:            columns.surface,
 		UserID:             enrichment.userID,
 		UserEmail:          a.ExternalUserEmail(),
 		ExternalUserID:     a.ExternalUserID(),
@@ -455,6 +449,53 @@ func contentJSON[E any, M ~[]E](_ string, messages M, err error) string {
 		return ""
 	}
 	return string(encoded)
+}
+
+// canonicalColumns is what the transform's column enrichers wrote onto the
+// record: one value per agent_events column they fill, read back from the
+// speakeasy.event.* keys. A key the transform did not write reads as the
+// zero value, which the row stores as "not stated"; there is no dialect
+// fallback.
+type canonicalColumns struct {
+	eventType    string
+	rawEventName string
+	source       string
+	provider     string
+	surface      string
+}
+
+func (c *canonicalColumns) absorb(key string, value any) {
+	switch key {
+	case string(enrich.EventTypeColumnKey):
+		c.eventType = enrichmentString(value)
+	case string(enrich.RawEventNameColumnKey):
+		c.rawEventName = enrichmentString(value)
+	case string(enrich.SourceColumnKey):
+		c.source = enrichmentString(value)
+	case string(enrich.ProviderColumnKey):
+		c.provider = enrichmentString(value)
+	case string(enrich.SurfaceColumnKey):
+		c.surface = enrichmentString(value)
+	}
+}
+
+// columnsFromSpanDialect answers the canonical columns for a span the way
+// the log transform's column enrichers answer them for a log record, until
+// the span transform runs the same enrichers and the span writer reads the
+// keys instead. Pipeline-resolved attribution wins over what the dialect
+// infers for the provider, as the classification enricher decides it.
+func columnsFromSpanDialect(d dialect.SpanDialect, span *otelv1.InboundSpan, enrichment rowEnrichment, source string) canonicalColumns {
+	provider := enrichment.provider
+	if provider == "" {
+		provider = stated(d.Provider(span))
+	}
+	return canonicalColumns{
+		eventType:    stated(d.EventType(span)),
+		rawEventName: stated(d.EventName(span)),
+		source:       source,
+		provider:     provider,
+		surface:      stated(d.Surface(span)),
+	}
 }
 
 // rowEnrichment is what the transform pipeline stamped onto the record

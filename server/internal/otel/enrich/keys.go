@@ -54,3 +54,57 @@ func DirectoryGroupNames(v []string) attribute.KeyValue {
 }
 
 func GramUserRoles(v []string) attribute.KeyValue { return GramUserRolesKey.StringSlice(v) }
+
+// eventColumnKeyPrefix is the namespace of the canonical agent_events
+// columns on a normalized record: one key per column, named after it.
+const eventColumnKeyPrefix = "speakeasy.event."
+
+// EventColumnKey is the attribute key that carries one agent_events column
+// on a normalized record. The column enrichers in the transform write these
+// keys next to the producer's original attributes, which stay as they were,
+// and the agent_events writer copies them into the row without asking a
+// dialect. The set below is the contract between the transform and every
+// consumer on the normalized topics: a column that is not listed is filled
+// by the pipeline some other way (tenancy, timing, the directory enricher)
+// or not at all.
+func EventColumnKey(column string) attribute.Key {
+	return attribute.Key(eventColumnKeyPrefix + column)
+}
+
+const (
+	// What the record is.
+	EventTypeColumnKey    = attribute.Key(eventColumnKeyPrefix + "event_type")
+	RawEventNameColumnKey = attribute.Key(eventColumnKeyPrefix + "raw_event_name")
+	SourceColumnKey       = attribute.Key(eventColumnKeyPrefix + "source")
+	ProviderColumnKey     = attribute.Key(eventColumnKeyPrefix + "provider")
+	SurfaceColumnKey      = attribute.Key(eventColumnKeyPrefix + "surface")
+
+	// Who and where.
+	SessionIDColumnKey      = attribute.Key(eventColumnKeyPrefix + "session_id")
+	TurnIDColumnKey         = attribute.Key(eventColumnKeyPrefix + "turn_id")
+	EventIDColumnKey        = attribute.Key(eventColumnKeyPrefix + "event_id")
+	UserEmailColumnKey      = attribute.Key(eventColumnKeyPrefix + "user_email")
+	ExternalUserIDColumnKey = attribute.Key(eventColumnKeyPrefix + "external_user_id")
+	ExternalOrgIDColumnKey  = attribute.Key(eventColumnKeyPrefix + "external_org_id")
+
+	// What happened.
+	ModelColumnKey          = attribute.Key(eventColumnKeyPrefix + "model")
+	QuerySourceColumnKey    = attribute.Key(eventColumnKeyPrefix + "query_source")
+	SkillNameColumnKey      = attribute.Key(eventColumnKeyPrefix + "skill_name")
+	AgentNameColumnKey      = attribute.Key(eventColumnKeyPrefix + "agent_name")
+	MCPServerNameColumnKey  = attribute.Key(eventColumnKeyPrefix + "mcp_server_name")
+	MCPToolNameColumnKey    = attribute.Key(eventColumnKeyPrefix + "mcp_tool_name")
+	NameColumnKey           = attribute.Key(eventColumnKeyPrefix + "name")
+	ToolNameColumnKey       = attribute.Key(eventColumnKeyPrefix + "tool_name")
+	TextColumnKey           = attribute.Key(eventColumnKeyPrefix + "text")
+	OutcomeColumnKey        = attribute.Key(eventColumnKeyPrefix + "outcome")
+	OutcomeMessageColumnKey = attribute.Key(eventColumnKeyPrefix + "outcome_message")
+	DurationNanoColumnKey   = attribute.Key(eventColumnKeyPrefix + "duration_nano")
+
+	// Usage, carried by api_request only.
+	InputTokensColumnKey      = attribute.Key(eventColumnKeyPrefix + "input_tokens")
+	OutputTokensColumnKey     = attribute.Key(eventColumnKeyPrefix + "output_tokens")
+	CacheReadTokensColumnKey  = attribute.Key(eventColumnKeyPrefix + "cache_read_tokens")
+	CacheWriteTokensColumnKey = attribute.Key(eventColumnKeyPrefix + "cache_write_tokens")
+	CostUSDColumnKey          = attribute.Key(eventColumnKeyPrefix + "cost_usd")
+)
