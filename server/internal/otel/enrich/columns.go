@@ -2,18 +2,33 @@ package enrich
 
 // columns is every agent_events column a column enricher fills, in column
 // order, declared once and served to both signals. One file per column
-// holds its table and is the documentation of that column.
+// holds its table and is the documentation of that column. The three groups
+// are the three column tickets; tests cover each group through its own
+// function so a column added to a group is covered with it.
 func columns() []columnDefinition {
+	out := make([]columnDefinition, 0, 23)
+	out = append(out, whoAndWhereColumns()...)
+	out = append(out, whatHappenedColumns()...)
+	out = append(out, usageColumns()...)
+	return out
+}
+
+// whoAndWhereColumns says which session, turn, subject, person and account
+// an event belongs to.
+func whoAndWhereColumns() []columnDefinition {
 	return []columnDefinition{
-		// Who and where.
 		columnSessionID(),
 		columnTurnID(),
 		columnEventID(),
 		columnUserEmail(),
 		columnExternalUserID(),
 		columnExternalOrgID(),
+	}
+}
 
-		// What happened.
+// whatHappenedColumns says what an event was about and how it went.
+func whatHappenedColumns() []columnDefinition {
+	return []columnDefinition{
 		columnModel(),
 		columnQuerySource(),
 		columnSkillName(),
@@ -26,8 +41,12 @@ func columns() []columnDefinition {
 		columnOutcome(),
 		columnOutcomeMessage(),
 		columnDurationNano(),
+	}
+}
 
-		// Usage, which only a request carries.
+// usageColumns carries what a request used, which only a request carries.
+func usageColumns() []columnDefinition {
+	return []columnDefinition{
 		columnInputTokens(),
 		columnOutputTokens(),
 		columnCacheReadTokens(),

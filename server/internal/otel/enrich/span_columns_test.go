@@ -186,3 +186,21 @@ func TestSpanColumnsAnswerFromTheSameTablesAsLogs(t *testing.T) {
 		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventSurface(counterSurfaceOther)))
 	})
 }
+
+// A tool_call that is a span is the whole call, so its duration is the
+// span's own timing; the same type as a log record is only the call's start
+// and carries none, which the table treats as Recommended rather than a gap.
+func TestSpanColumnsGiveAToolCallSpanItsDuration(t *testing.T) {
+	t.Parallel()
+
+	reader, meterProvider := readableMeter(t)
+	in := NewInstruments(testenv.NewLogger(t), meterProvider)
+	span := inboundTestSpan("my-agent", "my-agent", "execute_tool search", otelv1.InboundSpan_STATUS_CODE_OK,
+		spanStringAttribute("gen_ai.operation.name", "execute_tool"),
+		spanStringAttribute("gen_ai.tool.name", "search"),
+	)
+
+	columns := enrichedSpanColumns(t, in, span)
+	require.Equal(t, int64(500), columns[DurationNanoColumnKey].AsInt64())
+	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("duration_nano")))
+}
