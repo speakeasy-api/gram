@@ -3,15 +3,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { ApiErrorAlert } from "@/components/api-error-alert";
+import { describeApiError } from "@/lib/api-error";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/Field";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
+import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Input } from "@/components/ui/Input";
 import { SettingsSection } from "@/components/page-templates";
+import { Text } from "@/components/ui/Text";
 import type { OktaIdentityProviderConnection } from "@gram/client/models/components/oktaidentityproviderconnection.js";
 import { useCreateIdentityProviderConnectionMutation } from "@gram/client/react-query/createIdentityProviderConnection.js";
+import { useSetIdentityProviderConnectionSetupMethodMutation } from "@gram/client/react-query/setIdentityProviderConnectionSetupMethod.js";
 import { useRecordIdentityProviderConnectionAgentMutation } from "@gram/client/react-query/recordIdentityProviderConnectionAgent.js";
-import { useReplaceIdentityProviderConnectionClientSecretMutation } from "@gram/client/react-query/replaceIdentityProviderConnectionClientSecret.js";
 import { useSubmitIdentityProviderConnectionClientIdMutation } from "@gram/client/react-query/submitIdentityProviderConnectionClientId.js";
 
 import { usesClientSecret } from "../../connectionView";
@@ -27,12 +30,23 @@ import {
   scrollToConnectionCard,
 } from "../../tabs";
 
+type ListingMode = "custom_app" | "oin";
+
+const DEFAULT_LISTING_MODE: ListingMode = "oin";
+
+/** The one create failure a custom API Services app resolves: discovery found no client-secret authentication. */
+function clientSecretUnsupported(error: unknown): boolean {
+  return (
+    error != null &&
+    describeApiError(error).message.includes(
+      "does not advertise client_secret_basic",
+    )
+  );
+}
+
 export function CreateConnectionForm(): JSX.Element {
   const queryClient = useQueryClient();
   const [orgUrl, setOrgUrl] = useState("");
-  const [listingMode, setListingMode] = useState<"custom_app" | "oin">(
-    "custom_app",
-  );
   const create = useCreateIdentityProviderConnectionMutation({
     onSuccess: () => {
       toast.success("Okta connection created");
@@ -42,8 +56,11 @@ export function CreateConnectionForm(): JSX.Element {
   });
   const trimmed = orgUrl.trim();
   const normalizedOrgUrl = normalizeOktaOrgUrl(trimmed);
+  const invalid = trimmed !== "" && normalizedOrgUrl === undefined;
 
-  const createConnection = () => {
+  const createConnection = (
+    listingMode: ListingMode = DEFAULT_LISTING_MODE,
+  ) => {
     if (create.isPending || normalizedOrgUrl === undefined) return;
     setOrgUrl(normalizedOrgUrl);
     create.mutate({
@@ -72,44 +89,18 @@ export function CreateConnectionForm(): JSX.Element {
       <SettingsSection.Panel>
         <SettingsSection.Body>
           <Field className="max-w-xl">
-            <FieldLabel id="okta-installation-label">
-              Installation method
-            </FieldLabel>
-            <RadioGroup
-              aria-labelledby="okta-installation-label"
-              value={listingMode}
-              onValueChange={(value) =>
-                setListingMode(value === "oin" ? "oin" : "custom_app")
-              }
-              disabled={create.isPending}
-            >
-              <div className="flex items-center gap-2">
-                <RadioGroupItem id="okta-custom-app" value="custom_app" />
-                <FieldLabel htmlFor="okta-custom-app">
-                  Custom API Services app (private key)
-                </FieldLabel>
-              </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem id="okta-oin" value="oin" />
-                <FieldLabel htmlFor="okta-oin">
-                  Okta Integration Network (client secret)
-                </FieldLabel>
-              </div>
-            </RadioGroup>
-          </Field>
-          <Field className="max-w-xl">
             <FieldLabel htmlFor="okta-org-url">
               Okta organization URL
             </FieldLabel>
             <Input
               id="okta-org-url"
               disabled={create.isPending}
-              onEnter={createConnection}
+              onEnter={() => createConnection()}
               inputMode="url"
               autoCapitalize="none"
-              aria-invalid={trimmed !== "" && normalizedOrgUrl === undefined}
+              aria-invalid={invalid}
               aria-describedby={
-                trimmed !== "" && normalizedOrgUrl === undefined
+                invalid
                   ? "okta-org-url-help okta-org-url-error"
                   : "okta-org-url-help"
               }
@@ -122,14 +113,14 @@ export function CreateConnectionForm(): JSX.Element {
               className="font-mono"
               autoComplete="off"
               spellCheck={false}
-              error={trimmed !== "" && normalizedOrgUrl === undefined}
+              error={invalid}
             />
             <FieldDescription id="okta-org-url-help">
               Use your organization’s address starting with https:// and ending
               in .okta.com, .oktapreview.com, .okta-emea.com, or .okta.mil. You
               can also paste your Okta Admin Console address.
             </FieldDescription>
-            {trimmed !== "" && normalizedOrgUrl === undefined && (
+            {invalid && (
               <p
                 id="okta-org-url-error"
                 role="alert"
@@ -141,18 +132,34 @@ export function CreateConnectionForm(): JSX.Element {
             )}
           </Field>
           <ApiErrorAlert error={create.error} />
+          {clientSecretUnsupported(create.error) && (
+            <div className="flex flex-col items-start gap-2">
+              <Text muted small>
+                This Okta organization does not offer client-secret
+                authentication, so the Okta Integration Network install cannot
+                connect. Use a custom API Services app instead.
+              </Text>
+              <Button
+                variant="secondary"
+                disabled={normalizedOrgUrl === undefined || create.isPending}
+                onClick={() => createConnection("custom_app")}
+              >
+                Continue with a custom API Services app
+              </Button>
+            </div>
+          )}
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>
             You’ll need Okta admin access to create the app and grant the
-            required permissions (called scopes in Okta).
+            required scopes in Okta.
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <Button
               disabled={normalizedOrgUrl === undefined || create.isPending}
-              onClick={createConnection}
+              onClick={() => createConnection()}
             >
-              {create.isPending ? "Creating..." : "Create connection"}
+              {create.isPending ? "Creating..." : "Continue"}
             </Button>
           </SettingsSection.FooterActions>
         </SettingsSection.Footer>
@@ -161,13 +168,100 @@ export function CreateConnectionForm(): JSX.Element {
   );
 }
 
-function ClientSecretField({
+/** Picks how the pending connection connects to Okta; switching is allowed until the client ID is submitted. */
+export function SetupMethodChooser({
+  connection,
+}: {
+  connection: OktaIdentityProviderConnection;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  const current: ListingMode = usesClientSecret(connection)
+    ? "oin"
+    : "custom_app";
+  const setMethod = useSetIdentityProviderConnectionSetupMethodMutation({
+    onSuccess: () => void invalidateIdentityProviderQueries(queryClient),
+    onError: inlineError,
+  });
+
+  const switchTo = (next: ListingMode) => {
+    if (setMethod.isPending || next === current) return;
+    setMethod.mutate({
+      security: SESSION_SECURITY,
+      request: {
+        setIdentityProviderConnectionSetupMethodRequestBody: {
+          id: connection.id,
+          listingMode: next,
+        },
+      },
+    });
+  };
+
+  return (
+    <SettingsSection>
+      <SettingsSection.Header>
+        <SettingsSection.Title>
+          Choose how to set up the Okta app
+        </SettingsSection.Title>
+        <SettingsSection.Description>
+          The steps below follow your choice. You can switch until you enter the
+          app’s client ID.
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
+          <RadioCardGroup
+            size="sm"
+            className="max-w-xl"
+            value={current}
+            onValueChange={(value) =>
+              switchTo(value === "oin" ? "oin" : "custom_app")
+            }
+            disabled={setMethod.isPending}
+            aria-label="Installation method"
+          >
+            <RadioCard
+              value="oin"
+              title={
+                <span className="flex items-center gap-2">
+                  Okta Integration Network (client secret)
+                  <Badge variant="success" size="sm">
+                    Recommended
+                  </Badge>
+                </span>
+              }
+            >
+              <Text muted small>
+                Install the Speakeasy integration from the Okta catalog and
+                paste its client ID and client secret.
+              </Text>
+            </RadioCard>
+            <RadioCard
+              value="custom_app"
+              title="Custom API Services app (private key)"
+            >
+              <Text muted small>
+                Create an API Services app in Okta that signs in with a private
+                key Speakeasy holds.
+              </Text>
+            </RadioCard>
+          </RadioCardGroup>
+          <ApiErrorAlert error={setMethod.error} />
+        </SettingsSection.Body>
+      </SettingsSection.Panel>
+    </SettingsSection>
+  );
+}
+
+/** Write-only: the saved secret is never read back, so the field always starts empty. */
+export function ClientSecretField({
+  id = "okta-client-secret",
   value,
   onChange,
   disabled,
   onEnter,
   replacement = false,
 }: {
+  id?: string;
   value: string;
   onChange: (value: string) => void;
   disabled: boolean;
@@ -176,11 +270,11 @@ function ClientSecretField({
 }): JSX.Element {
   return (
     <Field className="max-w-xl">
-      <FieldLabel htmlFor="okta-client-secret">
+      <FieldLabel htmlFor={id}>
         {replacement ? "New client secret" : "Client secret"}
       </FieldLabel>
       <Input
-        id="okta-client-secret"
+        id={id}
         type="password"
         value={value}
         onChange={onChange}
@@ -188,9 +282,9 @@ function ClientSecretField({
         onEnter={onEnter}
         autoComplete="new-password"
         spellCheck={false}
-        aria-describedby="okta-client-secret-help"
+        aria-describedby={`${id}-help`}
       />
-      <FieldDescription id="okta-client-secret-help">
+      <FieldDescription id={`${id}-help`}>
         Copy the client secret from the Speakeasy integration in Okta. It is
         encrypted when saved and never displayed again.
       </FieldDescription>
@@ -208,8 +302,10 @@ export function ClientIdForm({
   const [clientSecret, setClientSecret] = useState("");
   const secretMode = usesClientSecret(connection);
   const submit = useSubmitIdentityProviderConnectionClientIdMutation({
+    // The request variables can carry the plaintext secret; reset clears them.
     gcTime: 0,
     onSuccess: (updated) => {
+      submit.reset();
       setClientSecret("");
       if (updated.status === "verified") {
         toast.success("Connection verified");
@@ -309,78 +405,6 @@ export function ClientIdForm({
           onClick={submitClientId}
         >
           {submit.isPending ? "Verifying..." : "Submit and verify"}
-        </Button>
-      </div>
-    </section>
-  );
-}
-
-export function ReplaceClientSecretForm({
-  connection,
-}: {
-  connection: OktaIdentityProviderConnection;
-}): JSX.Element | null {
-  const queryClient = useQueryClient();
-  const [clientSecret, setClientSecret] = useState("");
-  const replace = useReplaceIdentityProviderConnectionClientSecretMutation({
-    gcTime: 0,
-    onSuccess: (updated) => {
-      setClientSecret("");
-      if (updated.status === "verified") {
-        toast.success("Client secret replaced and connection verified");
-      } else {
-        toast.warning(
-          "Client secret replaced. Review the verification results.",
-        );
-      }
-      void invalidateIdentityProviderQueries(queryClient);
-    },
-    onError: inlineError,
-  });
-  if (
-    !usesClientSecret(connection) ||
-    !connection.clientIdSubmitted ||
-    connection.status === "revoked"
-  )
-    return null;
-  const replaceSecret = () => {
-    if (!clientSecret.trim() || replace.isPending) return;
-    replace.mutate({
-      security: SESSION_SECURITY,
-      request: {
-        replaceIdentityProviderConnectionClientSecretRequestBody: {
-          id: connection.id,
-          clientSecret,
-        },
-      },
-    });
-  };
-  return (
-    <section
-      aria-label="Replace Okta client secret"
-      className="flex max-w-3xl flex-col gap-4"
-    >
-      <ClientSecretField
-        replacement
-        value={clientSecret}
-        onChange={setClientSecret}
-        disabled={replace.isPending}
-        onEnter={replaceSecret}
-      />
-      {replace.error && (
-        <p role="alert" className="text-destructive text-sm">
-          Unable to replace the client secret. Check the Okta app settings and
-          try again.
-        </p>
-      )}
-      <div>
-        <Button
-          disabled={!clientSecret.trim() || replace.isPending}
-          onClick={replaceSecret}
-        >
-          {replace.isPending
-            ? "Verifying..."
-            : "Replace client secret and verify"}
         </Button>
       </div>
     </section>
