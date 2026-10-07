@@ -1,5 +1,6 @@
 import {
   INSIGHTS_DOCK_CONTENT_VT_CLASS,
+  INSIGHTS_DOCK_ENABLED,
   INSIGHTS_DOCK_VT_CLASS,
   useInsightsDockCta,
 } from "@/hooks/useInsightsDockCta";
@@ -17,7 +18,7 @@ import { SidebarFooterAction } from "./sidebar-footer-action";
 export function InsightsDockResumeButton(): JSX.Element | null {
   const { dismissed, resume } = useInsightsDockCta();
 
-  if (!dismissed) return null;
+  if (!INSIGHTS_DOCK_ENABLED || !dismissed) return null;
 
   return (
     <SidebarFooterAction

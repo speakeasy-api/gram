@@ -150,6 +150,7 @@ vi.mock("@/lib/assistantEntityLinks", () => ({
 }));
 vi.mock("@/hooks/useInsightsDockCta", () => ({
   INSIGHTS_DOCK_CONTENT_VT_CLASS: "",
+  INSIGHTS_DOCK_ENABLED: true,
   INSIGHTS_DOCK_VT_CLASS: "",
   useInsightsDockCta: () => ({ dismissed: false, dismiss: vi.fn() }),
 }));

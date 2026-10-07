@@ -27,6 +27,7 @@ import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
 import { emailsMatch, resolveChatOwner } from "@/lib/chat-owner";
 import {
   INSIGHTS_DOCK_CONTENT_VT_CLASS,
+  INSIGHTS_DOCK_ENABLED,
   INSIGHTS_DOCK_VT_CLASS,
   useInsightsDockCta,
 } from "@/hooks/useInsightsDockCta";
@@ -957,7 +958,8 @@ export function InsightsProvider({
     getSkillIds: getSelectedSkillIds,
     onSkillIdsSent: handleSkillIdsSent,
   });
-  const hideTrigger = pageHidesTrigger || !assistantAllowed;
+  const hideTrigger =
+    !INSIGHTS_DOCK_ENABLED || pageHidesTrigger || !assistantAllowed;
 
   const skillsQuery = useSkillsInfinite(
     { limit: 200, gramProject: mcpConfig.projectSlug },
