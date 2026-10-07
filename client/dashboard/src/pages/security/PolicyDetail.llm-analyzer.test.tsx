@@ -21,6 +21,18 @@ vi.mock("@/hooks/useFeatureFlagVariant", () => ({
   useFeatureFlagVariant: () => mocks.flagResult() as FeatureFlagVariantResult,
 }));
 
+vi.mock("@gram/client/react-query/getHooksStatus.js", () => ({
+  useGetHooksStatus: () => ({
+    data: {
+      configured: true,
+      agentHooksKey: true,
+      anthropicInferenceHooks: false,
+    },
+    isPending: false,
+    isError: false,
+  }),
+}));
+
 const LLM_VARIANT: FeatureFlagVariantResult = {
   status: "resolved",
   variant: "llm",
@@ -70,6 +82,7 @@ vi.mock("@/components/require-scope", () => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: vi.fn(),
+  useProjectSlugForRequests: () => "test-project",
 }));
 
 vi.mock("@/routes", () => ({

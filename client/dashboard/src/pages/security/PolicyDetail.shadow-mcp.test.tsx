@@ -46,6 +46,19 @@ vi.mock("@/components/require-scope", () => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: vi.fn(),
+  useProjectSlugForRequests: () => "test-project",
+}));
+
+vi.mock("@gram/client/react-query/getHooksStatus.js", () => ({
+  useGetHooksStatus: () => ({
+    data: {
+      configured: true,
+      agentHooksKey: true,
+      anthropicInferenceHooks: false,
+    },
+    isPending: false,
+    isError: false,
+  }),
 }));
 
 vi.mock("@/routes", () => ({

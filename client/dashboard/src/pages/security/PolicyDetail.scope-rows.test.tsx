@@ -26,12 +26,36 @@ import {
 
 const mocks = vi.hoisted(() => ({
   flagResult: vi.fn(),
+  hooksStatus: vi.fn(),
   step: "scope",
 }));
 
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => mocks.flagResult() as FeatureFlagResult,
 }));
+
+vi.mock("@gram/client/react-query/getHooksStatus.js", () => ({
+  useGetHooksStatus: () => mocks.hooksStatus(),
+}));
+
+const HOOKS_CONFIGURED = {
+  data: {
+    configured: true,
+    agentHooksKey: true,
+    anthropicInferenceHooks: false,
+  },
+  isPending: false,
+  isError: false,
+};
+const HOOKS_UNCONFIGURED = {
+  data: {
+    configured: false,
+    agentHooksKey: false,
+    anthropicInferenceHooks: false,
+  },
+  isPending: false,
+  isError: false,
+};
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -346,6 +370,7 @@ describe("StandardPolicyEditor scope rows", () => {
 
   beforeEach(() => {
     mocks.flagResult.mockReturnValue({ status: "enabled" });
+    mocks.hooksStatus.mockReturnValue(HOOKS_CONFIGURED);
     mocks.step = "scope";
     vi.mocked(useSdkClient).mockReturnValue({
       access: { listShadowMCPInventory: vi.fn() },
@@ -742,6 +767,7 @@ describe("StandardPolicyEditor scope choice", () => {
 
   beforeEach(() => {
     mocks.flagResult.mockReturnValue({ status: "enabled" });
+    mocks.hooksStatus.mockReturnValue(HOOKS_CONFIGURED);
     mocks.step = "scope";
     vi.mocked(useSdkClient).mockReturnValue({
       access: { listShadowMCPInventory: vi.fn() },
@@ -830,6 +856,92 @@ describe("StandardPolicyEditor scope choice", () => {
           .getAttribute("aria-checked"),
       ).toBe("true");
     });
+  });
+});
+
+describe("StandardPolicyEditor hooks availability", () => {
+  afterEach(cleanup);
+
+  beforeEach(() => {
+    mocks.flagResult.mockReturnValue({ status: "enabled" });
+    mocks.hooksStatus.mockReturnValue(HOOKS_UNCONFIGURED);
+    mocks.step = "scope";
+    vi.mocked(useSdkClient).mockReturnValue({
+      access: { listShadowMCPInventory: vi.fn() },
+    } as unknown as ReturnType<typeof useSdkClient>);
+  });
+
+  it("hides Client sessions and goes straight to MCP scope when hooks are not configured", async () => {
+    renderEditor(null);
+
+    expect(screen.queryByRole("radio", { name: "Client sessions" })).toBeNull();
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("radio", { name: "Specific MCP servers" })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+    });
+    expect(screen.getByText("Servers")).toBeTruthy();
+    expect(
+      screen.getByText(/Client sessions become available once/),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Set up hooks" })).toBeTruthy();
+  });
+
+  it("re-scopes a stored Client sessions policy to MCP when hooks are not configured", async () => {
+    renderEditor(policy());
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("radio", { name: "Specific MCP servers" })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+    });
+    expect(screen.queryByRole("radio", { name: "Client sessions" })).toBeNull();
+  });
+
+  it("shows an empty state when neither hooks nor MCP scoping are available", () => {
+    mocks.flagResult.mockReturnValue({ status: "disabled" });
+
+    renderEditor(null);
+
+    expect(screen.getByText("Nothing to apply this policy to")).toBeTruthy();
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(
+      screen.queryByText("Choose where this policy applies to continue."),
+    ).toBeNull();
+  });
+
+  it("offers no cards until the hooks status has loaded", () => {
+    mocks.hooksStatus.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+    });
+
+    renderEditor(null);
+
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(
+      screen.queryByText("Choose where this policy applies to continue."),
+    ).toBeNull();
+  });
+
+  it("offers both cards when the hooks status cannot be read", () => {
+    mocks.hooksStatus.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+    });
+
+    renderEditor(null);
+
+    expect(screen.getByRole("radio", { name: "Client sessions" })).toBeTruthy();
+    expect(
+      screen.getByRole("radio", { name: "Specific MCP servers" }),
+    ).toBeTruthy();
   });
 });
 

@@ -24443,6 +24443,105 @@ paths:
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
+  /rpc/hooks.getStatus:
+    get:
+      description: Report whether the organization has any hook telemetry source configured. Reads configuration only; it does not query hook traffic.
+      operationId: getHooksStatus
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HooksStatus'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getStatus hooks
+      tags:
+        - hooks
+      x-speakeasy-name-override: getStatus
+      x-speakeasy-react-hook:
+        name: GetHooksStatus
   /rpc/hooks.ingest:
     post:
       description: Feature-first unified endpoint for hook events from supported coding assistants.
@@ -87110,6 +87209,23 @@ components:
         - success_count
         - failure_count
         - failure_rate
+    HooksStatus:
+      type: object
+      properties:
+        agent_hooks_key:
+          type: boolean
+          description: An active hooks-scoped API key exists, as minted by the hooks setup dialog, the plugin download or the setup wizard.
+        anthropic_inference_hooks:
+          type: boolean
+          description: An enabled Anthropic inference hooks integration is connected.
+        configured:
+          type: boolean
+          description: True when at least one hook source is configured for the organization.
+      description: Whether the organization has hook telemetry configured. True when any source is set up; it says nothing about whether traffic has arrived.
+      required:
+        - configured
+        - agent_hooks_key
+        - anthropic_inference_hooks
     HooksTimeSeriesPoint:
       type: object
       properties:

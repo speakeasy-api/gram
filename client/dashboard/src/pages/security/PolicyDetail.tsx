@@ -100,13 +100,17 @@ import {
 import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
 import { PolicyMCPScopePicker } from "./PolicyMCPScopePicker";
 import { PolicyScopeModeCards } from "./PolicyScopeModeCards";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import {
   initialPolicyMCPScopeValue,
   policyMCPScopeComplete,
   policyMCPScopePayload,
   policyScopeSummary,
   type PolicyMCPScopeValue,
+  type PolicyScopeChoice,
 } from "./policy-mcp-scope";
+import { useGetHooksStatus } from "@gram/client/react-query/getHooksStatus.js";
 
 import {
   DETECTION_RULES,
@@ -1193,32 +1197,47 @@ function ScopeStep({
   hasStoredMcpScope: boolean;
 }): JSX.Element {
   const mcpScopeFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
+  const gramProject = useProjectSlugForRequests();
+  // Configuration only (hooks-scoped keys, inference hooks), never traffic,
+  // so it is cheap enough to read on every policy edit.
+  const hooksStatus = useGetHooksStatus({ gramProject }, undefined, {
+    throwOnError: false,
+    staleTime: 5 * 60 * 1000,
+  });
   const mcpScoped = mcpScope.mode === "mcp";
   const chosen = mcpScope.mode !== "unset";
+  // Fail open on a status error so a transient failure never blocks authoring.
+  const sessionsAvailable =
+    hooksStatus.isError || (hooksStatus.data?.configured ?? false);
   // Fail closed while the flag loads or is unavailable. A stored scope or an
   // in-progress MCP draft keeps the MCP option so the form never strands the
   // user in MCP mode without the control to change it.
   const mcpAvailable =
     mcpScopeFlag.status === "enabled" || hasStoredMcpScope || mcpScoped;
-  // With MCP scoping unavailable the session card is the only choice, so a new
-  // policy takes it without a click. "loading" is excluded: the flag may still
-  // resolve to enabled, and then the choice must stay with the author.
-  const flagOff =
-    mcpScopeFlag.status !== "enabled" && mcpScopeFlag.status !== "loading";
+  const settled = !hooksStatus.isPending && mcpScopeFlag.status !== "loading";
+  // A single available option is taken without a click: an org without hooks
+  // goes straight to MCP scope, an org without the MCP flag to client
+  // sessions. Waits for both signals so a value still loading never pre-empts
+  // the author's choice.
   useEffect(() => {
-    if (!chosen && !mcpAvailable && flagOff) {
-      setMcpScope({ ...mcpScope, mode: "everywhere" });
-    }
-  }, [chosen, mcpAvailable, flagOff, mcpScope, setMcpScope]);
+    if (!settled || sessionsAvailable === mcpAvailable) return;
+    const only: PolicyScopeChoice = mcpAvailable ? "mcp" : "everywhere";
+    if (mcpScope.mode !== only) setMcpScope({ ...mcpScope, mode: only });
+  }, [settled, sessionsAvailable, mcpAvailable, mcpScope, setMcpScope]);
   return (
     <Card>
       <Stack gap={6}>
-        <PolicyScopeModeCards
-          value={mcpScope.mode}
-          mcpAvailable={mcpAvailable}
-          onChange={(mode) => setMcpScope({ ...mcpScope, mode })}
-        />
-        {!chosen ? (
+        {settled ? (
+          <PolicyScopeModeCards
+            value={mcpScope.mode}
+            sessionsAvailable={sessionsAvailable}
+            mcpAvailable={mcpAvailable}
+            onChange={(mode) => setMcpScope({ ...mcpScope, mode })}
+          />
+        ) : (
+          <Skeleton className="h-28 w-full" />
+        )}
+        {settled && !chosen && (sessionsAvailable || mcpAvailable) ? (
           <Text small muted>
             Choose where this policy applies to continue.
           </Text>

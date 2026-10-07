@@ -547,6 +547,42 @@ var _ = Service("hooks", func() {
 			Response(StatusAccepted)
 		})
 	})
+
+	Method("getStatus", func() {
+		Description("Report whether the organization has any hook telemetry source configured. Reads configuration only; it does not query hook traffic.")
+
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(HooksStatus)
+
+		HTTP(func() {
+			GET("/rpc/hooks.getStatus")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "getHooksStatus")
+		Meta("openapi:extension:x-speakeasy-name-override", "getStatus")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetHooksStatus"}`)
+	})
+})
+
+var HooksStatus = Type("HooksStatus", func() {
+	Description("Whether the organization has hook telemetry configured. True when any source is set up; it says nothing about whether traffic has arrived.")
+	Required("configured", "agent_hooks_key", "anthropic_inference_hooks")
+	Attribute("configured", Boolean, "True when at least one hook source is configured for the organization.")
+	Attribute("agent_hooks_key", Boolean, "An active hooks-scoped API key exists, as minted by the hooks setup dialog, the plugin download or the setup wizard.")
+	Attribute("anthropic_inference_hooks", Boolean, "An enabled Anthropic inference hooks integration is connected.")
 })
 
 var _ = Service("hooksServerNames", func() {
