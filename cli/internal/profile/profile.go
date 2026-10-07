@@ -1,5 +1,5 @@
-// Package profile provides profile-based configuration management for the Gram
-// CLI.
+// Package profile provides profile-based configuration management for the
+// speakeasy CLI.
 package profile
 
 import (
@@ -49,13 +49,75 @@ func EmptyConfig() *Config {
 	}
 }
 
-// DefaultProfilePath returns the default path to the profile configuration file.
+// DefaultProfilePath returns the default path to the profile configuration
+// file: $XDG_CONFIG_HOME/speakeasy-ai/profile.json, or
+// ~/.config/speakeasy-ai/profile.json when XDG_CONFIG_HOME is unset. Profiles
+// are always written here.
+//
+// Until that file exists, reads of it fall back to LegacyProfilePath. The
+// first save writes the loaded profiles to the new path and leaves the legacy
+// file in place, so older CLI releases keep working.
 func DefaultProfilePath() (string, error) {
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if !filepath.IsAbs(configHome) {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to get user home directory: %w", err)
+		}
+		configHome = filepath.Join(homeDir, ".config")
+	}
+	return filepath.Join(configHome, "speakeasy-ai", "profile.json"), nil
+}
+
+// LegacyProfilePath returns where CLI releases before the speakeasy rename
+// kept profiles: ~/.gram/profile.json.
+func LegacyProfilePath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get user home directory: %w", err)
 	}
 	return filepath.Join(homeDir, ".gram", "profile.json"), nil
+}
+
+// legacyPathFor returns the legacy profile path when path is the default
+// profile path.
+func legacyPathFor(path string) (string, bool) {
+	defaultPath, err := DefaultProfilePath()
+	if err != nil || filepath.Clean(path) != filepath.Clean(defaultPath) {
+		return "", false
+	}
+	legacyPath, err := LegacyProfilePath()
+	if err != nil {
+		return "", false
+	}
+	return legacyPath, true
+}
+
+// readProfileFile reads the profile file at path. When path is the default
+// profile path and that file does not exist yet, it reads the legacy file
+// instead. It returns (nil, nil) when neither exists.
+func readProfileFile(path string) ([]byte, error) {
+	data, err := os.ReadFile(filepath.Clean(path))
+	if err == nil {
+		return data, nil
+	}
+	if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("failed to read profile file: %w", err)
+	}
+
+	legacyPath, ok := legacyPathFor(path)
+	if !ok {
+		return nil, nil
+	}
+
+	data, err = os.ReadFile(filepath.Clean(legacyPath))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to read profile file: %w", err)
+	}
+	return data, nil
 }
 
 // Load reads the profile configuration from the specified path, or from
@@ -76,12 +138,9 @@ func Load(path string) (*Profile, error) {
 		profilePath = defaultPath
 	}
 
-	data, err := os.ReadFile(filepath.Clean(profilePath))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to read profile file: %w", err)
+	data, err := readProfileFile(profilePath)
+	if err != nil || data == nil {
+		return nil, err
 	}
 
 	var config Config
@@ -139,12 +198,9 @@ func LoadByName(path string, profileName string) (*Profile, error) {
 		profilePath = defaultPath
 	}
 
-	data, err := os.ReadFile(filepath.Clean(profilePath))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to read profile file: %w", err)
+	data, err := readProfileFile(profilePath)
+	if err != nil || data == nil {
+		return nil, err
 	}
 
 	var config Config
