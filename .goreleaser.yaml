@@ -3,7 +3,9 @@
 version: 2
 
 builds:
-  - dir: ./cli
+  - id: speakeasy
+    binary: speakeasy
+    dir: ./cli
     env:
       - CGO_ENABLED=0
     goos:
@@ -14,9 +16,39 @@ builds:
       - -trimpath
     ldflags:
       - "-s -w -X github.com/speakeasy-api/gram/cli/internal/app.GitSHA={{.Commit}} -X github.com/speakeasy-api/gram/cli/internal/app.Version={{.Version}}"
+
+  # The same program built under the legacy gram name. Its archives keep the
+  # gram_<os>_<arch>.zip names that `gram update`, install scripts, and the
+  # aqua registry download from older releases. The binary prints a
+  # deprecation notice when run as gram. Remove once the gram name is retired.
+  - id: gram
+    binary: gram
+    dir: ./cli
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    flags:
+      - -trimpath
+    ldflags:
+      - "-s -w -X github.com/speakeasy-api/gram/cli/internal/app.GitSHA={{.Commit}} -X github.com/speakeasy-api/gram/cli/internal/app.Version={{.Version}}"
+
 archives:
-  - name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
-    format: zip
+  - id: speakeasy
+    ids:
+      - speakeasy
+    name_template: "speakeasy_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    formats:
+      - zip
+
+  - id: gram
+    ids:
+      - gram
+    name_template: "gram_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    formats:
+      - zip
 checksum:
   name_template: "checksums.txt"
 
@@ -43,25 +75,82 @@ monorepo:
   tag_prefix: "cli@"
 
 brews:
-  - name: gram
+  - name: cli
+    ids:
+      - speakeasy
     repository:
       owner: speakeasy-api
       name: homebrew-tap
-    homepage: https://app.getgram.ai
-    description: The Gram CLI for interacting with the Gram Platform
-    license: Apache-2.0
+    homepage: https://ai.speakeasy.com
+    description: Speakeasy AI Control Plane CLI
+    license: AGPL-3.0-only
+    # The Speakeasy SDK generator formula (speakeasy-api/tap/speakeasy) also
+    # installs a binary named speakeasy.
+    conflicts:
+      - speakeasy
+    install: |
+      bin.install "speakeasy"
+    test: |
+      system "#{bin}/speakeasy --version"
+
+  # Legacy formulas: install the speakeasy binary under the gram name so
+  # existing installs and scripts keep working. They are deprecated in
+  # Homebrew, which warns on install and upgrade but keeps them installable.
+  # Homebrew prints "<name> has been deprecated because it <because>!".
+  # deprecate! leaves out replacement_formula: older Homebrew versions don't
+  # know that keyword and would fail to load the formula.
+  - name: gram
+    ids:
+      - speakeasy
+    repository:
+      owner: speakeasy-api
+      name: homebrew-tap
+    homepage: https://ai.speakeasy.com
+    description: Speakeasy AI Control Plane CLI (deprecated gram command; use the cli formula)
+    license: AGPL-3.0-only
+    custom_block: |
+      deprecate! date: "2026-10-06", because: "has been renamed to speakeasy (brew install speakeasy-api/tap/cli)"
+    install: |
+      bin.install "speakeasy" => "gram"
     test: |
       system "#{bin}/gram --version"
 
   - name: gram@{{ .Major }}.{{ .Minor }}.{{ .Patch }}
+    ids:
+      - speakeasy
     repository:
       owner: speakeasy-api
       name: homebrew-tap
-    homepage: https://app.getgram.ai
-    description: The Gram CLI for interacting with the Gram Platform
-    license: Apache-2.0
+    homepage: https://ai.speakeasy.com
+    description: Speakeasy AI Control Plane CLI (deprecated gram command; use the cli formula)
+    license: AGPL-3.0-only
+    custom_block: |
+      deprecate! date: "2026-10-06", because: "has been renamed to speakeasy (brew install speakeasy-api/tap/cli)"
+    install: |
+      bin.install "speakeasy" => "gram"
     test: |
       system "#{bin}/gram --version"
+
+npms:
+  - name: "@speakeasy-api/cli"
+    ids:
+      - speakeasy
+    description: Speakeasy AI Control Plane CLI
+    homepage: https://ai.speakeasy.com
+    keywords:
+      - speakeasy
+      - mcp
+      - cli
+    license: AGPL-3.0-only
+    author: Speakeasy, Inc
+    repository: https://github.com/speakeasy-api/gram
+    bugs: https://github.com/speakeasy-api/gram/issues
+    access: public
+    format: zip
+    files:
+      - glob: ./cli/README.md
+        name_template: README.md
+      - glob: ./LICENSE
 
 # TODO: Implement Chocolateys release. Some transient 504 Gateway Timeouts can
 # cause the entire release to fail and must be handled.

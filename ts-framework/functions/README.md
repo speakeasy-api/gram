@@ -1,17 +1,17 @@
-# Gram Functions for TypeScript
+# Speakeasy Functions for TypeScript
 
-Gram Functions are small pieces of code that represent LLM tools. They are
-deployed to [Gram](https://getgram.ai) and are then exposed to LLMs via MCP
+Speakeasy Functions are small pieces of code that represent LLM tools. They are
+deployed to the [Speakeasy AI Control Plane](https://www.speakeasy.com/docs/ai-control-plane/mcp-gateway/building-servers/functions) and are then exposed to LLMs via MCP
 servers.
 
-This library provides a small framework for authoring Gram Functions in
+This library provides a small framework for authoring Speakeasy Functions in
 TypeScript. The "Hello, World!" example is:
 
 ```typescript
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 
-const gram = new Gram().tool({
+const functions = new Functions().tool({
   name: "greet",
   description: "Greet someone special",
   inputSchema: { name: z.string() },
@@ -20,44 +20,78 @@ const gram = new Gram().tool({
   },
 });
 
-export default gram;
+export default functions;
 ```
 
 ## Quickstart
 
-You can use one of the following command to scaffold a new Gram Function project quickly:
+Install the Speakeasy AI Control Plane CLI with
+`brew install speakeasy-api/tap/cli` or `npm i -g @speakeasy-api/cli`, then
+scaffold, build and deploy a project:
 
 ```
-pnpm create @gram-ai/function@latest --template gram
-
-## Or one of the following:
-# bun create @gram-ai/function@latest --template gram
-# npm create @gram-ai/function@latest -- --template gram
+speakeasy functions init my-tools
+cd my-tools
+speakeasy functions build
+speakeasy functions push
 ```
+
+`speakeasy functions dev` runs the project's `dev` script, which starts a local
+MCP server with the MCP Inspector. `speakeasy functions build` runs this
+package from the project's `node_modules`, so the build always matches the SDK
+version the project depends on.
+
+`npm create @gram-ai/function` and the `gf build` and `gf push` commands still
+work but are deprecated in favour of the `speakeasy functions` commands.
 
 ## Installation
 
 Use one of the following commands to add the package to your project:
 
 ```
-pnpm add @gram-ai/functions
+pnpm add @speakeasy-api/functions
 
 ## Or one of the following:
-# bun add @gram-ai/functions
-# npm add @gram-ai/functions
+# bun add @speakeasy-api/functions
+# npm add @speakeasy-api/functions
 ```
+
+## Migrating from `@gram-ai/functions`
+
+This package was published as `@gram-ai/functions`. The old names are
+deprecated aliases and keep working, so you can migrate when it suits you:
+
+| Old name                                | New name                                    |
+| --------------------------------------- | ------------------------------------------- |
+| `@gram-ai/functions` (and its subpaths) | `@speakeasy-api/functions`                  |
+| `Gram`                                  | `Functions`                                 |
+| `fromGram` (`/mcp`)                     | `fromFunctions`                             |
+| `withGram` (`/mcp`)                     | `withFunctions`                             |
+| `gram.config.{ts,mts,js,mjs}`           | `speakeasy.config.{ts,mts,js,mjs}`          |
+| `src/gram.ts` (default entrypoint)      | `src/functions.ts`                          |
+| `gram.deploy.json`                      | `speakeasy.deploy.json`                     |
+| `dist/gram.zip`                         | `dist/functions.zip`                        |
+| `GRAM_USER_EMAIL`                       | `SPEAKEASY_AI_USER_EMAIL` (both are set)    |
+| `GRAM_CLI_PATH`, `GRAM_DEV`             | `SPEAKEASY_AI_CLI_PATH`, `SPEAKEASY_AI_DEV` |
+| `GRAM_*` CLI environment variables      | `SPEAKEASY_AI_*`                            |
+
+`@gram-ai/functions` now re-exports this package at the same version, so
+`import { Gram } from "@gram-ai/functions"` and the `gf` command work as
+before. When a project has both a new and an old file name, the new one wins.
+The build prints a one-line note when it uses `gram.config.*` or
+`gram.deploy.json`.
 
 ## Core Concepts
 
-### The Gram Instance
+### The Functions Instance
 
-The `Gram` class is the main entry point for defining tools. You create an instance and chain `.tool()` calls to register multiple tools:
+The `Functions` class is the main entry point for defining tools. You create an instance and chain `.tool()` calls to register multiple tools:
 
 ```typescript
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 
-const gram = new Gram()
+const functions = new Functions()
   .tool({
     name: "add",
     description: "Add two numbers",
@@ -75,21 +109,21 @@ const gram = new Gram()
     },
   });
 
-export default gram;
+export default functions;
 ```
 
-### Composing Gram Instances
+### Composing Functions Instances
 
-You can compose multiple Gram instances together using the `extend()` method,
+You can compose multiple `Functions` instances together using the `extend()` method,
 similar to Hono's route groups pattern. This is useful for organizing tools by
 domain or functionality:
 
 ```typescript
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 
 // Math tools
-const mathTools = new Gram()
+const mathTools = new Functions()
   .tool({
     name: "add",
     description: "Add two numbers",
@@ -108,7 +142,7 @@ const mathTools = new Gram()
   });
 
 // String tools
-const stringTools = new Gram().tool({
+const stringTools = new Functions().tool({
   name: "uppercase",
   description: "Convert string to uppercase",
   inputSchema: { text: z.string() },
@@ -118,9 +152,9 @@ const stringTools = new Gram().tool({
 });
 
 // Combine both
-const gram = mathTools.extend(stringTools);
+const functions = mathTools.extend(stringTools);
 
-export default gram;
+export default functions;
 ```
 
 The `extend()` method:
@@ -128,7 +162,7 @@ The `extend()` method:
 - **Merges tools**: All tools from both instances are combined
 - **Override behavior**: If tool names collide, the extended instance's tools
   override the original's
-- **Preserves context**: Each tool maintains its original Gram instance's
+- **Preserves context**: Each tool maintains its original `Functions` instance's
   execution context (environment variables and lax validation settings)
 - **Mutates original**: Modifies and returns the original instance (not a copy)
 
@@ -211,10 +245,10 @@ async execute(ctx, input) {
 
 #### `ctx.env`
 
-Access to parsed environment variables defined by the `Gram` instance:
+Access to parsed environment variables defined by the `Functions` instance:
 
 ```typescript
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     BASE_URL: z.string().transform((url) => new URL(url)),
   },
@@ -233,10 +267,10 @@ const gram = new Gram({
 Input schemas are defined using [Zod](https://zod.dev/):
 
 ```typescript
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 
-const gram = new Gram().tool({
+const functions = new Functions().tool({
   name: "create_user",
   inputSchema: {
     email: z.string().check(z.email()),
@@ -255,7 +289,7 @@ const gram = new Gram().tool({
 By default, the framework strictly validates input. You can enable lax mode to allow unvalidated input to pass through:
 
 ```typescript
-const gram = new Gram({ lax: true });
+const functions = new Functions({ lax: true });
 ```
 
 ## Environment Variables
@@ -263,13 +297,13 @@ const gram = new Gram({ lax: true });
 ### Defining Variables
 
 Environment variables that are used by tools must be defined when instantiating
-the `Gram` class. This is done using a Zod v4 object schema:
+the `Functions` class. This is done using a Zod v4 object schema:
 
 ```typescript
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     API_KEY: z.string().describe("API key for external service"),
     BASE_URL: z.string().check(z.url()).describe("Base URL for API requests"),
@@ -278,21 +312,21 @@ const gram = new Gram({
 ```
 
 Whenever a tool wants to access a new environment variable, a definition must be
-added to the `envSchema` if one does not exist. When this Gram Function is
+added to the `envSchema` if one does not exist. When this function is
 deployed, end users will then be able to provide values for these variables when
 installing the corresponding MCP servers.
 
 ### Runtime Environment
 
 Environment variables are read from `process.env` by default, but you can
-override them when creating the `Gram` instance. This can be useful for testing
+override them when creating the `Functions` instance. This can be useful for testing
 or local development. Example:
 
 ```typescript
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 
-const gram = new Gram({
+const functions = new Functions({
   env: {
     API_KEY: "secret-key",
     BASE_URL: "https://api.example.com",
@@ -311,11 +345,11 @@ If not provided, the framework falls back to `process.env`.
 ### OAuth Tokens
 
 If your function needs to access external APIs on behalf of the user, you can
-declare an OAuth variable in `authInput`. Gram will handle the OAuth flow and
+declare an OAuth variable in `authInput`. Speakeasy will handle the OAuth flow and
 inject the acquired token into the specified environment variable:
 
 ```typescript
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     OAUTH_TOKEN: z.optional(z.string()),
   },
@@ -327,15 +361,17 @@ const gram = new Gram({
 
 ### User Identity
 
-When an authenticated Gram user invokes a tool, you can opt in to receiving
+When an authenticated user invokes a tool, you can opt in to receiving
 their email address by setting `gramEmail: true` in `authInput`. The email will
-be available as the `GRAM_USER_EMAIL` environment variable:
+be available as the `SPEAKEASY_AI_USER_EMAIL` environment variable. The deprecated
+`GRAM_USER_EMAIL` variable carries the same value, so existing code keeps
+working:
 
 ```typescript
-const gram = new Gram({
+const functions = new Functions({
   envSchema: {
     OAUTH_TOKEN: z.optional(z.string()),
-    GRAM_USER_EMAIL: z.optional(z.string()),
+    SPEAKEASY_AI_USER_EMAIL: z.optional(z.string()),
   },
   authInput: {
     oauthVariable: "OAUTH_TOKEN",
@@ -346,7 +382,7 @@ const gram = new Gram({
   description: "Returns the current user's email",
   inputSchema: {},
   async execute(ctx) {
-    const email = ctx.env.GRAM_USER_EMAIL;
+    const email = ctx.env.SPEAKEASY_AI_USER_EMAIL;
     if (!email) {
       return ctx.json({ authenticated: false });
     }
@@ -355,7 +391,7 @@ const gram = new Gram({
 });
 ```
 
-`GRAM_USER_EMAIL` will be empty when the request is unauthenticated.
+`SPEAKEASY_AI_USER_EMAIL` will be empty when the request is unauthenticated.
 
 ## Response Types
 
@@ -455,7 +491,7 @@ structured `issues` from Zod.
 The `assert` function provides a convenient way to validate conditions and throw error responses:
 
 ```typescript
-import { assert } from "@gram-ai/functions";
+import { assert } from "@speakeasy-api/functions";
 
 async execute(ctx, input) {
   assert(input.userId, { error: "userId is required" }, { status: 400 });
@@ -482,11 +518,11 @@ Key points about `assert`:
 Generate a manifest of all registered tools:
 
 ```typescript
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 
-const gram = new Gram().tool({/* ... */}).tool({/* ... */});
+const functions = new Functions().tool({/* ... */}).tool({/* ... */});
 
-const manifest = g.manifest();
+const manifest = functions.manifest();
 // {
 //   version: "0.0.0",
 //   tools: [
@@ -501,23 +537,84 @@ const manifest = g.manifest();
 // }
 ```
 
-## Handling Tool Calls
+## Deploying
 
-Exporting the Gram instance from your module as the default export will allow
-Gram to handle tool calls automatically when deployed:
+Deploy with `speakeasy functions push`. It builds the project, adds the zip
+file to the deployment file (`speakeasy.deploy.json` by default, or
+`gram.deploy.json` when only that file exists) and pushes a deployment. The
+target project is `--project` (or `SPEAKEASY_AI_PROJECT`), then `deployProject`
+in `speakeasy.config.ts`, then the project you chose with `speakeasy auth`.
+The slug comes from `--slug`, then `slug` in `speakeasy.config.ts`, then the
+package.json `name` without its scope. Pass `--no-build` to deploy the
+existing build output.
+
+### Project config
+
+The build reads the first `speakeasy.config.{ts,mts,js,mjs}` file in the
+project directory:
 
 ```typescript
-import { Gram } from "@gram-ai/functions";
+import { defineConfig } from "@speakeasy-api/functions/build";
 
-const gram = new Gram().tool({/* ... */}).tool({/* ... */});
+export default defineConfig({
+  entrypoint: "src/functions.ts",
+  slug: "my-tools",
+});
+```
 
-export default gram;
+Without an `entrypoint`, the build uses `src/functions.ts`, or `src/gram.ts`
+when only that file exists. The build writes `dist/functions.zip`.
+
+### Building programmatically
+
+`@speakeasy-api/functions/build` exports the build that
+`speakeasy functions build` runs:
+
+```typescript
+import { build, resolveProject } from "@speakeasy-api/functions/build";
+
+// Builds dist/functions.zip and returns the resolved project settings.
+const { project, files } = await build({ cwd: "./my-tools" });
+
+// Resolves the same settings without building.
+const settings = await resolveProject({ cwd: "./my-tools", outDir: "out" });
+```
+
+Both accept `cwd`, `configFile`, `entrypoint` and `outDir`; the last three
+override `speakeasy.config.ts`.
+
+### Deploying with gf
+
+The deprecated `gf build` and `gf push` commands ship with
+`@gram-ai/functions`. `gf push` runs the Speakeasy AI Control Plane CLI. It
+picks the CLI in this order:
+
+1. The path in the `SPEAKEASY_AI_CLI_PATH` (or deprecated `GRAM_CLI_PATH`)
+   environment variable.
+2. `cli/bin/gram` from this repository, when `SPEAKEASY_AI_DEV` (or deprecated
+   `GRAM_DEV`) is `1` or `true`.
+3. `speakeasy` on your `PATH`, if `speakeasy --control-plane-cli` confirms it
+   is the AI Control Plane CLI. The Speakeasy SDK generator CLI also installs
+   a `speakeasy` binary, and the SDK skips it.
+4. The legacy `gram` command.
+
+## Handling Tool Calls
+
+Exporting the `Functions` instance from your module as the default export will allow
+Speakeasy to handle tool calls automatically when deployed:
+
+```typescript
+import { Functions } from "@speakeasy-api/functions";
+
+const functions = new Functions().tool({/* ... */}).tool({/* ... */});
+
+export default functions;
 ```
 
 You can also call tools programmatically:
 
 ```typescript
-const response = await gram.handleToolCall({
+const response = await functions.handleToolCall({
   name: "add",
   input: { a: 5, b: 3 },
 });
@@ -531,7 +628,7 @@ With abort signal support:
 ```typescript
 const signal = AbortSignal.timeout(5000);
 
-const response = await gram.handleToolCall(
+const response = await functions.handleToolCall(
   { name: "longRunning", input: {} },
   { signal },
 );
@@ -542,10 +639,10 @@ const response = await gram.handleToolCall(
 The framework provides full TypeScript type inference:
 
 ```typescript
-import { Gram } from "@gram-ai/functions";
+import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 
-const gram = new Gram().tool({
+const functions = new Functions().tool({
   name: "greet",
   inputSchema: { name: z.string() },
   async execute(ctx, input) {
@@ -555,7 +652,7 @@ const gram = new Gram().tool({
 });
 
 // Type-safe tool calls
-const response = await g.handleToolCall({
+const response = await functions.handleToolCall({
   name: "greet", // Only "greet" is valid
   input: { name: "World" }, // input is typed correctly
 });

@@ -9,7 +9,9 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Text } from "@/components/ui/Text";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
+import { mcpServerRouteParam } from "@/lib/sources";
 import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import type { RiskMCPServerScope } from "@gram/client/models/components/riskmcpserverscope.js";
 import {
   ALL_TOOLS_WILDCARD,
@@ -25,6 +27,7 @@ import { useRiskListMcpPlatformToolsets } from "@gram/client/react-query/riskLis
 import { useQueries } from "@tanstack/react-query";
 import { ChevronDown, Info, Loader2, Network, Server, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 
 type AnnotationFields = Partial<Record<ToolAnnotation, boolean>>;
 
@@ -41,7 +44,23 @@ type PickerServer = {
   memberCount?: number;
   tools: PickerTool[];
   toolsLoading: boolean;
+  /** The tool list failed to load, so an empty list says nothing about the
+   *  server. Stale tools from an earlier load are still shown. */
+  toolsError: boolean;
+  /** Where the tool list comes from. "discovered" tools are recorded when the
+   *  server's Inspect tab lists them, so an empty list means "not discovered
+   *  yet". "unlisted" servers (tunneled, unproxied) never record their tools. */
+  toolSource: "toolset" | "discovered" | "unlisted";
 };
+
+function toolSourceFor(server: {
+  toolsetId?: string;
+  remoteMcpServerId?: string;
+}): PickerServer["toolSource"] {
+  if (server.toolsetId) return "toolset";
+  if (server.remoteMcpServerId) return "discovered";
+  return "unlisted";
+}
 
 type ServerSelection =
   | { kind: "off" }
@@ -145,6 +164,8 @@ export function PolicyMCPScopePicker({
         kind: "server",
         tools,
         toolsLoading: metadataQuery?.isLoading ?? false,
+        toolsError: metadataQuery?.isError ?? false,
+        toolSource: toolSourceFor(server),
       };
     }),
     ...(platformToolsetsQuery.data?.toolsets ?? []).map(
@@ -162,6 +183,8 @@ export function PolicyMCPScopePicker({
           }))
           .sort((left, right) => left.name.localeCompare(right.name)),
         toolsLoading: false,
+        toolsError: false,
+        toolSource: "toolset",
       }),
     ),
     ...(gatewaysQuery.data?.metaMcpServers ?? []).map(
@@ -172,6 +195,8 @@ export function PolicyMCPScopePicker({
         memberCount: gateway.memberCount,
         tools: [],
         toolsLoading: false,
+        toolsError: false,
+        toolSource: "unlisted",
       }),
     ),
   ];
@@ -367,6 +392,18 @@ export function PolicyMCPScopePicker({
     if (selection.kind === "rule") return total + ruleTools(server).length;
     return total;
   }, 0);
+  // These servers cover every tool, but none have been discovered, so they add
+  // nothing to toolsInScope. An annotation rule matches nothing until discovery
+  // (a wildcard can't bypass it), and a failed load says nothing about the server.
+  const undiscoveredServersInScope = pickerServers.filter((server) => {
+    if (value.toolAnnotations.length > 0) return false;
+    if (server.toolSource !== "discovered") return false;
+    if (server.toolsLoading || server.toolsError || server.tools.length > 0) {
+      return false;
+    }
+    const selection = selectionFor(server);
+    return selection.kind === "wildcard" || selection.kind === "rule";
+  }).length;
   const ruleLabel =
     value.toolAnnotations.length === 0
       ? "All tools"
@@ -664,6 +701,9 @@ export function PolicyMCPScopePicker({
             <div className="bg-muted/30 border-border flex min-h-10 items-center gap-4 border-t px-4 py-2.5">
               <span className="font-mono text-xs">
                 {explicitCount} servers · {toolsInScope} tools in scope
+                {undiscoveredServersInScope > 0
+                  ? ` · all tools on ${undiscoveredServersInScope} ${undiscoveredServersInScope === 1 ? "server" : "servers"} with no discovered tools`
+                  : null}
               </span>
               {action === "block" ? (
                 <span className="text-muted-foreground ml-auto flex items-center gap-1.5 text-xs">
@@ -818,14 +858,11 @@ function FocusedServerPane({
               </button>
             ) : null}
           </div>
-          {server.toolsLoading ? (
-            <Text small muted className="flex items-center gap-2 p-3">
-              <Loader2 className="size-4 animate-spin" /> Loading tools...
-            </Text>
-          ) : server.tools.length === 0 ? (
-            <Text small muted className="p-3">
-              No tools are available for this server.
-            </Text>
+          {server.tools.length === 0 ? (
+            <EmptyToolListNotice
+              server={server}
+              toolAnnotations={toolAnnotations}
+            />
           ) : (
             server.tools.map((tool) => {
               const checked = selected && selectedTools.includes(tool.name);
@@ -864,6 +901,82 @@ function FocusedServerPane({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function noToolsMessage(source: PickerServer["toolSource"]): string {
+  switch (source) {
+    case "discovered":
+      return "No tools discovered yet. MCP tools need to be discovered before you can pick them individually. They are discovered when someone who can edit this server opens its Inspect tab and the server's tools load.";
+    case "unlisted":
+      return "Tools on this server can't be listed, so they can't be picked individually.";
+    case "toolset":
+      return "This server has no tools yet.";
+  }
+}
+
+function noToolsScopeNote(
+  source: PickerServer["toolSource"],
+  toolAnnotations: ToolAnnotation[],
+): string {
+  if (toolAnnotations.length === 0) {
+    return source === "discovered"
+      ? "Selecting no tools puts every tool on this server in policy scope, including tools discovered later."
+      : "Selecting no tools puts every tool on this server in policy scope, including tools added later.";
+  }
+  switch (source) {
+    case "discovered":
+      return "The tool rule matches tools by their discovered annotations, so it matches nothing on this server until its tools are discovered.";
+    case "unlisted":
+      return "The tool rule matches tools by their annotations, so it matches nothing on this server.";
+    case "toolset":
+      return "The tool rule matches nothing on this server until it has tools with matching annotations.";
+  }
+}
+
+function EmptyToolListNotice({
+  server,
+  toolAnnotations,
+}: {
+  server: PickerServer;
+  toolAnnotations: ToolAnnotation[];
+}): JSX.Element {
+  const routes = useRoutes();
+  const discovered = server.toolSource === "discovered";
+
+  if (server.toolsLoading) {
+    return (
+      <Text small muted className="flex items-center gap-2 p-3">
+        <Loader2 className="size-4 animate-spin" /> Loading tools...
+      </Text>
+    );
+  }
+  if (server.toolsError) {
+    return (
+      <Text small className="text-destructive p-3">
+        Couldn't load tools for this server.
+      </Text>
+    );
+  }
+  return (
+    <div className="space-y-2 p-3">
+      <Text small muted>
+        {noToolsMessage(server.toolSource)}
+      </Text>
+      <Text small muted>
+        {noToolsScopeNote(server.toolSource, toolAnnotations)}
+      </Text>
+      {discovered ? (
+        <Link
+          to={routes.mcp.x.inspect.href(mcpServerRouteParam(server))}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-muted-foreground hover:text-foreground inline-block text-xs underline"
+        >
+          Discover tools on {server.name}
+        </Link>
+      ) : null}
     </div>
   );
 }

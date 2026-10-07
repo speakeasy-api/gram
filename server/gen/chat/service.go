@@ -172,6 +172,9 @@ type Chat struct {
 	AssistantID *string
 	// The name of the assistant that produced this chat, if any
 	AssistantName *string
+	// The ID of the agent the assistant acts as, when the assistant has a
+	// dedicated agent identity
+	AssistantAgentID *string
 	// The number of messages in the chat
 	NumMessages int
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -298,6 +301,9 @@ type ChatOverview struct {
 	AssistantID *string
 	// The name of the assistant that produced this chat, if any
 	AssistantName *string
+	// The ID of the agent the assistant acts as, when the assistant has a
+	// dedicated agent identity
+	AssistantAgentID *string
 	// The number of messages in the chat
 	NumMessages int
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
