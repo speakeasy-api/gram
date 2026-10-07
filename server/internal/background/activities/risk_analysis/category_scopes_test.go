@@ -98,7 +98,6 @@ func mergeOne(masks CategoryScopeMasks, findings [][]scanners.Finding) [][]scann
 		shadowMCPFindings:       make([][]scanners.Finding, len(findings)),
 		destructiveToolFindings: make([][]scanners.Finding, len(findings)),
 		cliDestructiveFindings:  make([][]scanners.Finding, len(findings)),
-		promptInjectionFindings: make([][]scanners.Finding, len(findings)),
 		customFindings:          make([][]scanners.Finding, len(findings)),
 	}, nil)
 }
@@ -351,7 +350,6 @@ func TestCategoryScopesDoesNotAffectCustomRegistryScope(t *testing.T) {
 		shadowMCPFindings:       make([][]scanners.Finding, 1),
 		destructiveToolFindings: make([][]scanners.Finding, 1),
 		cliDestructiveFindings:  make([][]scanners.Finding, 1),
-		promptInjectionFindings: make([][]scanners.Finding, 1),
 		customFindings:          [][]scanners.Finding{{custom}},
 	}, nil)
 	require.Len(t, out[0], 1)
