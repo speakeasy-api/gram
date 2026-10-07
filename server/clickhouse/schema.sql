@@ -320,6 +320,16 @@ CREATE INDEX IF NOT EXISTS idx_shadow_mcp_inventory_urls_slug_hash
 ON shadow_mcp_inventory_urls (substring(lower(hex(SHA256(canonical_server_url))), 1, 8))
 TYPE bloom_filter(0.01) GRANULARITY 1;
 
+CREATE TABLE IF NOT EXISTS shadow_mcp_inventory_url_overrides (
+    gram_project_id UUID,
+    canonical_server_url String,
+    server_name_override String COMMENT 'Admin-set display name. Empty means the override was cleared.',
+    updated_at DateTime64(9, 'UTC')
+) ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (gram_project_id, canonical_server_url)
+SETTINGS index_granularity = 8192
+COMMENT 'Admin-set Shadow MCP display names, kept apart from observation rows so ingest writes cannot overwrite them';
+
 CREATE TABLE IF NOT EXISTS ai_detections (
     organization_id String COMMENT 'Organization the reporting device agent is enrolled in.',
     target_id LowCardinality(String) COMMENT 'Id of the detected AI tool as reported by the agent. Usually a server/internal/agent/aitargets catalog id, but stored as-is: agent binaries can ship newer target lists than the catalog knows.',
