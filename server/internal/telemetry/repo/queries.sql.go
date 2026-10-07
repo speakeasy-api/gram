@@ -886,7 +886,8 @@ func (q *Queries) UpsertShadowMCPInventoryURLs(ctx context.Context, args []Upser
 
 // insertShadowMCPInventoryURLRows writes inventory rows synchronously
 // (async_insert=0): the upsert merge reads back the rows written here.
-// server_name_override is left to its column default. Timestamps are sent as
+// legacy_override=0 keeps these rows out of the view that mirrors names from
+// older writers into the override table. Timestamps are sent as
 // fromUnixTimestamp64Nano expressions because clickhouse-go's positional
 // binder truncates time.Time arguments to whole seconds, which collapses
 // distinct updated_at versions written within the same second and makes the
@@ -905,6 +906,7 @@ func (q *Queries) insertShadowMCPInventoryURLRows(ctx context.Context, rows []*s
 			"first_seen",
 			"last_seen",
 			"updated_at",
+			"legacy_override",
 		)
 
 	for _, row := range rows {
@@ -916,6 +918,7 @@ func (q *Queries) insertShadowMCPInventoryURLRows(ctx context.Context, rows []*s
 			squirrel.Expr("fromUnixTimestamp64Nano(?)", row.FirstSeen.UTC().UnixNano()),
 			squirrel.Expr("fromUnixTimestamp64Nano(?)", row.LastSeen.UTC().UnixNano()),
 			squirrel.Expr("fromUnixTimestamp64Nano(?)", row.UpdatedAt.UTC().UnixNano()),
+			0,
 		)
 	}
 
@@ -996,8 +999,9 @@ func (q *Queries) UpdateShadowMCPInventoryURLNameOverride(
 	if updatedAt.IsZero() {
 		updatedAt = time.Now()
 	}
-	// The new override must dominate the previous one even if the clock
-	// regressed. Only override writes touch this table, so ingest can't race it.
+	// The new override must dominate the previous one, including names
+	// mirrored from older writers, even if the clock regressed. Ingest never
+	// writes this table, so it can't race it.
 	if !updatedAt.After(latestOverrideAt) {
 		updatedAt = latestOverrideAt.Add(time.Nanosecond)
 	}
