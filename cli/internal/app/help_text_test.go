@@ -40,6 +40,9 @@ func checkCommands(t *testing.T, path string, cmds []*cli.Command) {
 		requireUnbranded(t, where, cmd.Usage)
 		requireUnbranded(t, where, cmd.UsageText)
 		requireUnbranded(t, where, cmd.Description)
+		// A [1:] after a concatenated description slices only its last
+		// literal, leaving a leading newline and eating a character.
+		require.False(t, strings.HasPrefix(cmd.Description, "\n"), "%s description starts with a newline", where)
 		requireUnbranded(t, where, cmd.ArgsUsage)
 		checkFlags(t, where, cmd.Flags)
 		checkCommands(t, where, cmd.Subcommands)

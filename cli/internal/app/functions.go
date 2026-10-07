@@ -28,12 +28,12 @@ func newFunctionsCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "functions",
 		Usage: "Create, build and deploy Speakeasy Functions projects",
-		Description: `
+		Description: (`
 Work with a Speakeasy Functions project: scaffold one with "init", run it locally
 with "dev", and build and deploy it with "build" and "push". The build runs
 the project's own ` + functions.SDKPackage + ` (or the deprecated
 ` + functions.LegacySDKPackage + `) through Node.js ` + functions.MinNodeVersion + ` or later.
-`[1:],
+`)[1:],
 		Subcommands: []*cli.Command{
 			newFunctionsInitCommand(),
 			newFunctionsBuildCommand(),
@@ -367,11 +367,12 @@ func newFunctionsBuildCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "build",
 		Usage: "Build the project into a deployable zip file",
-		Description: `
+		Description: (`
 Build the Speakeasy Functions project in the current directory with the project's
 own ` + functions.SDKPackage + `, writing manifest.json, functions.js and
-functions.zip to the output directory.
-`[1:],
+functions.zip to the output directory. Releases of ` + functions.LegacySDKPackage + `
+before 0.20 write gram.zip instead.
+`)[1:],
 		Flags: projectFlags(),
 		Action: func(c *cli.Context) error {
 			opts, err := projectOptions(c)
@@ -534,7 +535,7 @@ func pushFunction(
 		slug = resolved.Slug
 	}
 	if slug == "" {
-		return nil, errors.New("no function slug: pass --slug, set slug in speakeasy.config.ts, or set a name in package.json")
+		return nil, errors.New("no function slug: pass --slug, set slug in the project config (speakeasy.config.ts, or the deprecated gram.config.ts), or set a name in package.json")
 	}
 
 	scale := resolved.Scale

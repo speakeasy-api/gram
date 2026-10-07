@@ -2,7 +2,9 @@ package profile
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -14,9 +16,7 @@ import (
 func Save(config *Config, path string) error {
 	// Write through a symlinked profile, such as one managed by a dotfiles
 	// tool, instead of replacing the link with a regular file.
-	if target, err := filepath.EvalSymlinks(path); err == nil {
-		path = target
-	}
+	path = resolveLink(path)
 	dir := filepath.Dir(path)
 	// #nosec G301 - directory permissions are appropriate for config directory
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -194,10 +194,32 @@ func Clear(path string) error {
 		return err
 	}
 
-	if legacyPath, ok := legacyPathFor(path); ok {
-		if _, err := os.Stat(legacyPath); err == nil {
-			return Save(EmptyConfig(), legacyPath)
-		}
+	legacyPath, ok := legacyPathFor(path)
+	if !ok {
+		return nil
 	}
-	return nil
+	switch _, err := os.Stat(legacyPath); {
+	case err == nil:
+		return Save(EmptyConfig(), legacyPath)
+	case errors.Is(err, fs.ErrNotExist):
+		return nil
+	default:
+		return fmt.Errorf("check legacy profile file: %w", err)
+	}
+}
+
+// resolveLink returns the file path refers to when path is a symlink, even
+// one whose target does not exist yet, and path otherwise.
+func resolveLink(path string) string {
+	if target, err := filepath.EvalSymlinks(path); err == nil {
+		return target
+	}
+	target, err := os.Readlink(path)
+	if err != nil {
+		return path
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(filepath.Dir(path), target)
+	}
+	return resolveLink(target)
 }

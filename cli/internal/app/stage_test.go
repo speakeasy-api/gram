@@ -110,3 +110,17 @@ func TestPush_ConfigDefaultsToTheDeployFile(t *testing.T) { //nolint:paralleltes
 	_, err := runAppIn(t, dir, "push", "--api-key", "key", "--org", "org", "--project", "proj")
 	require.ErrorContains(t, err, "speakeasy.deploy.json")
 }
+
+func TestResolveDeployFile_UncheckableLegacyFileIsChosen(t *testing.T) { //nolint:paralleltest // changes the working directory
+	dir := t.TempDir()
+	// A symlink loop makes stat fail with an error other than "not exist".
+	if err := os.Symlink("gram.deploy.json", filepath.Join(dir, "gram.deploy.json")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	t.Chdir(dir)
+
+	// The legacy file is still chosen, so opening it reports the real error.
+	var note bytes.Buffer
+	require.Equal(t, "gram.deploy.json", resolveDeployFile("", &note))
+	require.Equal(t, legacyNote, note.String())
+}

@@ -66,8 +66,15 @@ for (const pkg of request.packages) {
       continue;
     }
     // Only this script's own import counts: Node names "[eval1]" as the
-    // importer, while a failing import inside the SDK names an SDK file.
-    if (err?.code === "ERR_PACKAGE_PATH_NOT_EXPORTED" && String(err.message).includes("[eval")) {
+    // importer, while a failing import inside the SDK names an SDK file. A
+    // package without the build entry fails either way, depending on whether
+    // it has an exports map.
+    const message = String(err?.message).replaceAll("\\", "/");
+    const ownImport = message.includes("[eval");
+    const entryMissing =
+      err?.code === "ERR_PACKAGE_PATH_NOT_EXPORTED" ||
+      (err?.code === "ERR_MODULE_NOT_FOUND" && message.includes("/node_modules/" + pkg + "/"));
+    if (ownImport && entryMissing) {
       outdated ??= pkg;
       continue;
     }

@@ -275,6 +275,22 @@ func TestBuild_RealNode(t *testing.T) {
 		require.ErrorIs(t, err, ErrSDKOutdated)
 	})
 
+	t.Run("package without an exports map or build entry is outdated", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		sdkDir := filepath.Join(dir, "node_modules", filepath.FromSlash(SDKPackage))
+		writeFile(t, filepath.Join(sdkDir, "package.json"), `{"name":"`+SDKPackage+`","type":"module"}`)
+		writeFile(t, filepath.Join(sdkDir, "index.js"), "export {};\n")
+
+		_, err := newRunner().Build(t.Context(), ProjectOptions{Dir: dir, ConfigFile: "", Entrypoint: "", OutDir: ""})
+		require.ErrorIs(t, err, ErrSDKOutdated)
+
+		installPackage(t, dir, LegacySDKPackage, buildAs("legacy"))
+		result, err := newRunner().Build(t.Context(), ProjectOptions{Dir: dir, ConfigFile: "", Entrypoint: "", OutDir: ""})
+		require.NoError(t, err)
+		require.Equal(t, "legacy", result.Project.Slug)
+	})
+
 	t.Run("dependency export error is not an outdated sdk", func(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()

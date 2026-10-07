@@ -16,7 +16,7 @@ const functions = new Functions().tool({
   },
 });
 
-export default gram;
+export default functions;
 ```
 
 Gram Functions are tools for LLMs and MCP servers that can do arbitrary tasks

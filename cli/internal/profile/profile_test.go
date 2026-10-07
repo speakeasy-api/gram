@@ -217,3 +217,36 @@ func TestSave_WritesThroughSymlink(t *testing.T) {
 	require.NotZero(t, info.Mode()&os.ModeSymlink, "the link was replaced")
 	require.Equal(t, "legacy-secret", readConfig(t, target).Profiles["default"].Secret)
 }
+
+func TestSave_WritesThroughDanglingSymlink(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "dotfiles"), 0o700))
+	link := filepath.Join(dir, "profile.json")
+	if err := os.Symlink(filepath.Join("dotfiles", "profile.json"), link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	require.NoError(t, Save(legacyConfig(), link))
+
+	info, err := os.Lstat(link)
+	require.NoError(t, err)
+	require.NotZero(t, info.Mode()&os.ModeSymlink, "the link was replaced")
+	require.Equal(t, "legacy-secret", readConfig(t, filepath.Join(dir, "dotfiles", "profile.json")).Profiles["default"].Secret)
+}
+
+func TestClear_ReportsUnreadableLegacyFile(t *testing.T) { //nolint:paralleltest // sets HOME and XDG_CONFIG_HOME
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	home := setHome(t)
+	legacyDir := filepath.Join(home, ".gram")
+	writeConfig(t, filepath.Join(legacyDir, "profile.json"), legacyConfig())
+	require.NoError(t, os.Chmod(legacyDir, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(legacyDir, 0o700) }) // #nosec G302 -- restores a test directory.
+
+	path, err := DefaultProfilePath()
+	require.NoError(t, err)
+	require.ErrorContains(t, Clear(path), "check legacy profile file")
+}

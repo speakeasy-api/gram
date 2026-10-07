@@ -32,7 +32,7 @@ instance and chain `.tool()` calls to register multiple tools:
 import { Functions } from "@speakeasy-api/functions";
 import * as z from "zod/mini";
 
-const g = new Functions()
+const functions = new Functions()
   .tool({
     name: "add",
     description: "Add two numbers",
@@ -50,7 +50,7 @@ const g = new Functions()
     },
   });
 
-export const handleToolCall = g.handleToolCall;
+export const handleToolCall = functions.handleToolCall;
 ```
 
 ### Tool Definition
@@ -215,7 +215,7 @@ By default, the framework strictly validates input. You can enable lax mode to
 allow unvalidated input to pass through:
 
 ```typescript
-const g = new Functions({ lax: true });
+const functions = new Functions({ lax: true });
 ```
 
 ## Environment Variables
@@ -248,7 +248,7 @@ override them when creating the `Functions` instance. This can be useful for tes
 or local development. Example:
 
 ```typescript
-const g = new Functions({
+const functions = new Functions({
   envSchema: {
     API_KEY: z.string().describe("API key for external service"),
     BASE_URL: z.string().check(z.url()).describe("Base URL for API requests"),
@@ -367,7 +367,7 @@ Key points about `assert`:
 Generate a manifest of all registered tools:
 
 ```typescript
-const g = new Functions().tool({/* ... */}).tool({/* ... */});
+const functions = new Functions().tool({/* ... */}).tool({/* ... */});
 
 const manifest = functions.manifest();
 // {
@@ -390,9 +390,9 @@ const manifest = functions.manifest();
 Export the `handleToolCall` method to process incoming requests:
 
 ```typescript
-const g = new Functions().tool({/* ... */}).tool({/* ... */});
+const functions = new Functions().tool({/* ... */}).tool({/* ... */});
 
-export const handleToolCall = g.handleToolCall;
+export const handleToolCall = functions.handleToolCall;
 ```
 
 You can also call tools programmatically:
@@ -412,7 +412,7 @@ With abort signal support:
 ```typescript
 const controller = new AbortController();
 
-const responsePromise = g.handleToolCall(
+const responsePromise = functions.handleToolCall(
   { name: "longRunning", input: {} },
   { signal: controller.signal },
 );
@@ -465,7 +465,7 @@ When deployed, the platform handles the OAuth flow with users and automatically 
 The framework provides full TypeScript type inference:
 
 ```typescript
-const g = new Functions().tool({
+const functions = new Functions().tool({
   name: "greet",
   inputSchema: { name: z.string() },
   async execute(ctx, input) {

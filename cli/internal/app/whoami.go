@@ -96,7 +96,7 @@ func newWhoAmICommand() *cli.Command {
 		Description: `
 Display information about the profile currently in use.
 
-If no profile is configured, the command will indicate that no profile is set up.`,
+If no profile is configured, the command will indicate that no profile is set up.`[1:],
 		Flags: []cli.Flag{
 			flags.APIEndpoint(),
 			flags.APIKey(),
