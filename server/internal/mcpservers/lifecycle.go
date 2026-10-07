@@ -237,6 +237,11 @@ func UpdateMCPServerLifecycleInTransaction(ctx context.Context, tx pgx.Tx, audit
 		ID:                    existing.ID,
 		ProjectID:             input.ProjectID,
 	})
+	// The caller holds the server's row lock, so a toolset-backed update that
+	// returns no row was filtered by the statement's same-project toolset guard.
+	if errors.Is(err, pgx.ErrNoRows) && input.ToolsetID.Valid {
+		return repo.McpServer{}, fmt.Errorf("%w: toolset_id does not reference a resource in this project", ErrServerReferenceOutsideProject)
+	}
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("update MCP server lifecycle: %w", err)
 	}
