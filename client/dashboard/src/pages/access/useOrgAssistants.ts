@@ -35,7 +35,12 @@ export function useOrgAssistants(enabled: boolean): OrgAssistants {
 
   const reads = useQueries({
     queries: projects.map((project) => ({
-      queryKey: queryKeyAssistantsList({ gramProject: project.slug }),
+      // Project slugs repeat across organizations, so the slug alone would
+      // let one organization's cached listing answer for another's.
+      queryKey: [
+        ...queryKeyAssistantsList({ gramProject: project.slug }),
+        organization.id,
+      ],
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         sdk.assistants.list({ gramProject: project.slug }, undefined, {
           signal,

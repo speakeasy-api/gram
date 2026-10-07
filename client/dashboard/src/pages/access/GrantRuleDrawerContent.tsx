@@ -489,6 +489,7 @@ export function GrantRuleDrawerContent({
         {resourceSearch && (
           <button
             type="button"
+            aria-label="Clear search"
             onClick={() => setResourceSearch("")}
             className="text-muted-foreground hover:text-foreground shrink-0"
           >
@@ -603,6 +604,7 @@ export function GrantRuleDrawerContent({
         {resourceSearch && (
           <button
             type="button"
+            aria-label="Clear assistant search"
             onClick={() => setResourceSearch("")}
             className="text-muted-foreground hover:text-foreground shrink-0"
           >
@@ -682,6 +684,7 @@ export function GrantRuleDrawerContent({
         {resourceSearch && (
           <button
             type="button"
+            aria-label="Clear project search"
             onClick={() => setResourceSearch("")}
             className="text-muted-foreground hover:text-foreground shrink-0"
           >
