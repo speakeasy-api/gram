@@ -77,12 +77,20 @@ export function rowInstallMode(
 export function summarizeInstallModes(
   rows: { label: string; mode: InstallMode | undefined }[],
 ): string {
-  return INSTALL_MODES.map((option) => {
-    const labels = rows
-      .filter((row) => row.mode === option.value)
-      .map((row) => row.label);
-    return labels.length > 0 ? `${option.label}: ${labels.join(", ")}` : null;
-  })
+  const groups = [
+    ...INSTALL_MODES.map((option) => ({
+      label: option.label,
+      mode: option.value as InstallMode | undefined,
+    })),
+    { label: "Mixed", mode: undefined },
+  ];
+  return groups
+    .map((group) => {
+      const labels = rows
+        .filter((row) => row.mode === group.mode)
+        .map((row) => row.label);
+      return labels.length > 0 ? `${group.label}: ${labels.join(", ")}` : null;
+    })
     .filter((part) => part !== null)
     .join(" · ");
 }

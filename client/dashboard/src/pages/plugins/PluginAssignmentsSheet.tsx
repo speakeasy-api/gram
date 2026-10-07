@@ -209,8 +209,7 @@ function AssignmentsEditor({
   );
   const memberByUrn = useMemo(() => memberMapByUrn(members), [members]);
 
-  // Preserve existing assignments exactly as stored. Exclusivity is only
-  // applied after the user changes the selection in this editor.
+  // Seed the draft from the stored assignments.
   const initialUrns = useMemo(
     () => assignments.map((a) => a.principalUrn),
     [assignments],

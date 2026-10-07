@@ -68,12 +68,18 @@ describe("summarizeInstallModes", () => {
     );
   });
 
-  it("leaves out rows with mixed modes", () => {
+  it("lists rows with mixed modes last", () => {
     expect(
       summarizeInstallModes([
-        { label: "SRE", mode: "required" },
         { label: "12 members", mode: undefined },
+        { label: "SRE", mode: "required" },
       ]),
-    ).toBe("Required: SRE");
+    ).toBe("Required: SRE · Mixed: 12 members");
+  });
+
+  it("is never empty when only mixed rows are selected", () => {
+    expect(
+      summarizeInstallModes([{ label: "12 members", mode: undefined }]),
+    ).toBe("Mixed: 12 members");
   });
 });

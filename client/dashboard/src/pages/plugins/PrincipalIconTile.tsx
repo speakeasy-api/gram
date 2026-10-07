@@ -8,7 +8,10 @@ export function PrincipalIconTile({
   icon: ComponentType<{ className?: string }>;
 }): JSX.Element {
   return (
-    <div className="bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center">
+    <div
+      aria-hidden="true"
+      className="bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center"
+    >
       <IconComponent className="h-4 w-4" />
     </div>
   );
