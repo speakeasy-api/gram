@@ -337,18 +337,20 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 		userID = conv.PtrValOr(payload.Filter.UserID, "")
 		externalUserID = conv.PtrValOr(payload.Filter.ExternalUserID, "")
 	}
+	cursorChatID, cursorStart := decodeChatSearchCursor(params.cursor)
 
 	items, err := s.chRepo.ListChats(ctx, repo.ListChatsParams{
-		GramProjectID:    params.projectID,
-		TimeStart:        params.timeStart,
-		TimeEnd:          params.timeEnd,
-		GramDeploymentID: deploymentID,
-		GramURN:          gramURN,
-		UserID:           userID,
-		ExternalUserID:   externalUserID,
-		SortOrder:        params.sortOrder,
-		Cursor:           params.cursor,
-		Limit:            params.limit + 1,
+		GramProjectID:           params.projectID,
+		TimeStart:               params.timeStart,
+		TimeEnd:                 params.timeEnd,
+		GramDeploymentID:        deploymentID,
+		GramURN:                 gramURN,
+		UserID:                  userID,
+		ExternalUserID:          externalUserID,
+		SortOrder:               params.sortOrder,
+		Cursor:                  cursorChatID,
+		CursorStartTimeUnixNano: cursorStart,
+		Limit:                   params.limit + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing chats")
@@ -356,7 +358,8 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 
 	var nextCursor *string
 	if len(items) > params.limit {
-		nextCursor = &items[params.limit-1].GramChatID
+		last := items[params.limit-1]
+		nextCursor = new(encodeChatSearchCursor(last.StartTimeUnixNano, last.GramChatID))
 		items = items[:params.limit]
 	}
 
@@ -383,6 +386,39 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 		Chats:      chats,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// chatSearchCursorPrefix marks a chat search cursor that carries the
+// start_time boundary its page was cut at alongside the chat id.
+//
+// The boundary has to travel in the cursor. Re-deriving it from the chat id
+// alone looks the chat's earliest activity up again without this search's
+// time window or row filters (deployment, tool URN, user, external user), so
+// an excluded row earlier than the chat's first qualifying one deflates the
+// boundary and, in ascending order, the chat is returned again on every
+// following page.
+const chatSearchCursorPrefix = "st1:"
+
+// encodeChatSearchCursor seals the last row's start time and chat id.
+func encodeChatSearchCursor(startTimeUnixNano int64, chatID string) string {
+	return chatSearchCursorPrefix + encodeToolUsageTraceCursor(startTimeUnixNano, chatID)
+}
+
+// decodeChatSearchCursor returns the chat id and sealed start time a cursor
+// carries. Anything else is a bare chat id with a zero start time, the shape
+// cursors had before the boundary was sealed: a caller holding one
+// mid-traversal gets its next page on the re-derived boundary rather than an
+// error, and the cursor that page returns is sealed.
+func decodeChatSearchCursor(cursor string) (chatID string, startTimeUnixNano int64) {
+	encoded, ok := strings.CutPrefix(cursor, chatSearchCursorPrefix)
+	if !ok {
+		return cursor, 0
+	}
+	start, id, err := decodeToolUsageTraceCursor(encoded)
+	if err != nil || start <= 0 {
+		return cursor, 0
+	}
+	return id, start
 }
 
 // SearchUsers retrieves user usage summaries grouped by user_id or external_user_id.
