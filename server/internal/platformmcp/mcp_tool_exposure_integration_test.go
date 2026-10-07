@@ -140,11 +140,11 @@ func seedToolExposureFixture(t *testing.T, ctx context.Context, name string) (co
 	service.WithIndexing(func(ctx context.Context, indexedProject, indexedToolset uuid.UUID) error {
 		require.Equal(t, project.ID, indexedProject)
 		*indexed = append(*indexed, indexedToolset)
-		// Answer as the real trigger does for this toolset's state: one that
-		// is not MCP-enabled is reported as needing no index.
-		target, err := toolsetsrepo.New(conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: indexedToolset, ProjectID: indexedProject})
+		// Answer as the real trigger does for this toolset's state, through
+		// the same query: one that nothing serves needs no index.
+		served, err := toolsetsrepo.New(conn).ToolsetIsServed(ctx, toolsetsrepo.ToolsetIsServedParams{ToolsetID: indexedToolset, ProjectID: indexedProject})
 		require.NoError(t, err)
-		if !target.McpEnabled {
+		if !served {
 			return toolsets.ErrToolsetIndexNotRequired
 		}
 		return nil

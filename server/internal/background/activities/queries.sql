@@ -1022,7 +1022,8 @@ ORDER BY organization_id, id;
 
 -- name: ListProjectsForToolsetIndexing :many
 -- Choose a rotating, bounded project page before evaluating deployment and
--- embedding state for individual toolsets.
+-- embedding state for individual toolsets. The served-toolset predicate is
+-- ToolsetIsServed's from the toolsets queries and must stay identical to it.
 SELECT t.project_id
 FROM toolsets t
 JOIN projects p ON p.id = t.project_id
@@ -1030,7 +1031,18 @@ JOIN projects p ON p.id = t.project_id
     AND p.deleted IS FALSE
 JOIN organization_metadata om ON om.id = p.organization_id
 WHERE t.deleted IS FALSE
-  AND t.mcp_enabled IS TRUE
+  AND (
+      t.mcp_enabled IS TRUE
+      OR EXISTS (
+          SELECT 1
+          FROM mcp_servers ms
+          WHERE ms.toolset_id = t.id
+            AND ms.project_id = t.project_id
+            AND ms.id <> t.id
+            AND ms.deleted IS FALSE
+            AND ms.visibility <> 'disabled'
+      )
+  )
   AND NOT EXISTS (
       SELECT 1
       FROM openrouter_api_keys k
@@ -1052,8 +1064,11 @@ ORDER BY hashtextextended(t.project_id::text, @rotation_seed), t.project_id
 LIMIT @project_limit;
 
 -- name: ListToolsetsForIndexing :many
--- MCP requests can opt any enabled toolset into dynamic mode through the
--- Gram-Mode header, regardless of its stored selection mode.
+-- MCP requests can opt any served toolset into dynamic mode through the
+-- Gram-Mode header, regardless of its stored selection mode. A toolset is
+-- served when it is MCP-enabled or when a live, non-disabled mcp_servers row
+-- other than its own hosted address fronts it; this predicate is ToolsetIsServed's from the
+-- toolsets queries and must stay identical to it.
 -- Toolsets without a currently resolvable tool need no embeddings. Toolsets
 -- containing proxy tools are excluded because those tools cannot be embedded
 -- by the current RAG indexer.
@@ -1078,7 +1093,18 @@ WITH latest_toolsets AS (
         LIMIT 1
     ) tv ON TRUE
     WHERE t.deleted IS FALSE
-      AND t.mcp_enabled IS TRUE
+      AND (
+          t.mcp_enabled IS TRUE
+          OR EXISTS (
+              SELECT 1
+              FROM mcp_servers ms
+              WHERE ms.toolset_id = t.id
+                AND ms.project_id = t.project_id
+                AND ms.id <> t.id
+                AND ms.deleted IS FALSE
+                AND ms.visibility <> 'disabled'
+          )
+      )
       AND NOT EXISTS (
           SELECT 1
           FROM openrouter_api_keys k

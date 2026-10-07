@@ -10,10 +10,12 @@ import (
 	pgvector "github.com/pgvector/pgvector-go"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	packagesrepo "github.com/speakeasy-api/gram/server/internal/packages/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -52,7 +54,7 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 	validToolURN := urn.NewTool(urn.ToolKindHTTP, "test-api", "valid-tool")
 	createHTTPToolDefinition(t, db, project.ID, deploymentID, validToolURN)
 
-	validToolset := createMCPToolset(t, db, organizationID, project.ID, "valid", []urn.Tool{validToolURN})
+	validToolset := createMCPToolset(t, db, organizationID, project.ID, "valid", []urn.Tool{validToolURN}, true)
 	packageProject, err := projectsrepo.New(db).CreateProject(ctx, projectsrepo.CreateProjectParams{
 		Name:           "Package Project",
 		Slug:           "package-project-" + uuid.NewString()[:8],
@@ -92,11 +94,11 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 		VersionID:    packageVersion.ID,
 	})
 	require.NoError(t, err)
-	packageToolset := createMCPToolset(t, db, organizationID, project.ID, "package", []urn.Tool{packageToolURN})
+	packageToolset := createMCPToolset(t, db, organizationID, project.ID, "package", []urn.Tool{packageToolURN}, true)
 	createMCPToolset(t, db, organizationID, project.ID, "dangling", []urn.Tool{
 		urn.NewTool(urn.ToolKindHTTP, "test-api", "deleted-tool"),
-	})
-	createMCPToolset(t, db, organizationID, project.ID, "empty", []urn.Tool{})
+	}, true)
+	createMCPToolset(t, db, organizationID, project.ID, "empty", []urn.Tool{}, true)
 
 	externalMCPAttachment, err := externalmcprepo.New(db).CreateExternalMCPAttachment(ctx, externalmcprepo.CreateExternalMCPAttachmentParams{
 		DeploymentID:            deploymentID,
@@ -133,8 +135,8 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 	require.NoError(t, err)
 	require.Equal(t, proxyToolURN.String(), proxyDefinition.ToolUrn)
 	require.Equal(t, "proxy", proxyDefinition.Type)
-	createMCPToolset(t, db, organizationID, project.ID, "proxy-only", []urn.Tool{proxyToolURN})
-	mixedToolset := createMCPToolset(t, db, organizationID, project.ID, "mixed-proxy", []urn.Tool{validToolURN, proxyToolURN})
+	createMCPToolset(t, db, organizationID, project.ID, "proxy-only", []urn.Tool{proxyToolURN}, true)
+	mixedToolset := createMCPToolset(t, db, organizationID, project.ID, "mixed-proxy", []urn.Tool{validToolURN, proxyToolURN}, true)
 	mixedVersion, err := toolsetsrepo.New(db).GetLatestToolsetVersion(ctx, mixedToolset.ID)
 	require.NoError(t, err)
 	require.Equal(t, []urn.Tool{validToolURN, proxyToolURN}, mixedVersion.ToolUrns)
@@ -252,7 +254,7 @@ func TestListToolsetsForIndexingSkipsBlockedOrganizations(t *testing.T) {
 	deploymentID := createCompletedDeployment(t, db, organizationID, project.ID)
 	toolURN := urn.NewTool(urn.ToolKindHTTP, "test-api", "valid-tool")
 	createHTTPToolDefinition(t, db, project.ID, deploymentID, toolURN)
-	toolset := createMCPToolset(t, db, organizationID, project.ID, "valid", []urn.Tool{toolURN})
+	toolset := createMCPToolset(t, db, organizationID, project.ID, "valid", []urn.Tool{toolURN}, true)
 
 	orphanOrganizationID := "missing-" + uuid.NewString()[:8]
 	orphanProject, err := projectsrepo.New(db).CreateProject(ctx, projectsrepo.CreateProjectParams{
@@ -263,7 +265,7 @@ func TestListToolsetsForIndexingSkipsBlockedOrganizations(t *testing.T) {
 	require.NoError(t, err)
 	orphanDeploymentID := createCompletedDeployment(t, db, orphanOrganizationID, orphanProject.ID)
 	createHTTPToolDefinition(t, db, orphanProject.ID, orphanDeploymentID, toolURN)
-	createMCPToolset(t, db, orphanOrganizationID, orphanProject.ID, "orphan", []urn.Tool{toolURN})
+	createMCPToolset(t, db, orphanOrganizationID, orphanProject.ID, "orphan", []urn.Tool{toolURN}, true)
 
 	activity := activities.NewListToolsetsForIndexing(db)
 	assertEligible := func(want bool) {
@@ -357,6 +359,134 @@ func TestListToolsetsForIndexingSkipsBlockedOrganizations(t *testing.T) {
 	assertEligible(false)
 }
 
+// A toolset that is not MCP-enabled is still served, and so needs a search
+// index, while a live, non-disabled server other than its own hosted address
+// fronts it.
+func TestListToolsetsForIndexingIncludesToolsetsServedThroughMCPServers(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	db, err := infra.CloneTestDatabase(t, "list_served_toolsets_for_indexing")
+	require.NoError(t, err)
+
+	organizationID, project := createIndexingProject(t, db)
+	deploymentID := createCompletedDeployment(t, db, organizationID, project.ID)
+	toolURN := urn.NewTool(urn.ToolKindHTTP, "test-api", "valid-tool")
+	createHTTPToolDefinition(t, db, project.ID, deploymentID, toolURN)
+
+	enabled := createMCPToolset(t, db, organizationID, project.ID, "enabled", []urn.Tool{toolURN}, true)
+
+	fronted := createMCPToolset(t, db, organizationID, project.ID, "fronted", []urn.Tool{toolURN}, false)
+	frontingServer := createToolsetMCPServer(t, db, project.ID, uuid.New(), fronted.ID, "private")
+
+	ownAddressOnly := createMCPToolset(t, db, organizationID, project.ID, "own-address-only", []urn.Tool{toolURN}, false)
+	createToolsetMCPServer(t, db, project.ID, ownAddressOnly.ID, ownAddressOnly.ID, "private")
+
+	deletedServer := createMCPToolset(t, db, organizationID, project.ID, "deleted-server", []urn.Tool{toolURN}, false)
+	deleted := createToolsetMCPServer(t, db, project.ID, uuid.New(), deletedServer.ID, "private")
+	_, err = mcpserversrepo.New(db).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: deleted.ID, ProjectID: project.ID})
+	require.NoError(t, err)
+
+	disabledServer := createMCPToolset(t, db, organizationID, project.ID, "disabled-server", []urn.Tool{toolURN}, false)
+	createToolsetMCPServer(t, db, project.ID, uuid.New(), disabledServer.ID, "disabled")
+
+	target := func(toolset toolsetsrepo.Toolset) activities.ToolsetIndexTarget {
+		return activities.ToolsetIndexTarget{
+			ProjectID:      project.ID,
+			ToolsetID:      toolset.ID,
+			ToolsetSlug:    types.Slug(toolset.Slug),
+			ToolsetVersion: 1,
+			DeploymentID:   deploymentID,
+		}
+	}
+
+	activity := activities.NewListToolsetsForIndexing(db)
+	targets, err := activity.Do(ctx, activities.ListToolsetsForIndexingInput{RotationSeed: 1, ScanLimit: 100, ProjectIDs: []uuid.UUID{project.ID}})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []activities.ToolsetIndexTarget{target(enabled), target(fronted)}, targets)
+
+	// Once the fronting server is deleted nothing serves the toolset, so it
+	// drops out while the MCP-enabled one stays.
+	_, err = mcpserversrepo.New(db).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: frontingServer.ID, ProjectID: project.ID})
+	require.NoError(t, err)
+	targets, err = activity.Do(ctx, activities.ListToolsetsForIndexingInput{RotationSeed: 2, ScanLimit: 100, ProjectIDs: []uuid.UUID{project.ID}})
+	require.NoError(t, err)
+	require.Equal(t, []activities.ToolsetIndexTarget{target(enabled)}, targets)
+}
+
+// Project discovery applies the same served-toolset predicate, so a project
+// whose only served toolset sits behind an mcp_servers row is still swept.
+func TestListProjectsForToolsetIndexingIncludesProjectsServedThroughMCPServers(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	db, err := infra.CloneTestDatabase(t, "list_served_projects_for_indexing")
+	require.NoError(t, err)
+
+	organizationID, project := createIndexingProject(t, db)
+	toolURN := urn.NewTool(urn.ToolKindHTTP, "test-api", "valid-tool")
+	fronted := createMCPToolset(t, db, organizationID, project.ID, "fronted", []urn.Tool{toolURN}, false)
+	server := createToolsetMCPServer(t, db, project.ID, uuid.New(), fronted.ID, "private")
+
+	activity := activities.NewListToolsetsForIndexing(db)
+	projectIDs, err := activity.ListProjects(ctx, activities.ListProjectsForToolsetIndexingInput{RotationSeed: 1, ProjectLimit: 100})
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{project.ID}, projectIDs)
+
+	_, err = mcpserversrepo.New(db).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: server.ID, ProjectID: project.ID})
+	require.NoError(t, err)
+	projectIDs, err = activity.ListProjects(ctx, activities.ListProjectsForToolsetIndexingInput{RotationSeed: 2, ProjectLimit: 100})
+	require.NoError(t, err)
+	require.Empty(t, projectIDs)
+}
+
+// createIndexingProject creates an organization and a project in it.
+func createIndexingProject(t *testing.T, db *pgxpool.Pool) (string, projectsrepo.Project) {
+	t.Helper()
+
+	organizationID := "org-" + uuid.NewString()[:8]
+	_, err := orgrepo.New(db).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        "Test Org",
+		Slug:        organizationID,
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	project, err := projectsrepo.New(db).CreateProject(t.Context(), projectsrepo.CreateProjectParams{
+		Name:           "Test Project",
+		Slug:           "project-" + uuid.NewString()[:8],
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	return organizationID, project
+}
+
+// createToolsetMCPServer creates a live mcp_servers row with the given id and
+// visibility fronting a toolset. Passing the toolset's own id creates its hosted address.
+func createToolsetMCPServer(t *testing.T, db *pgxpool.Pool, projectID, serverID, toolsetID uuid.UUID, visibility string) mcpserversrepo.McpServer {
+	t.Helper()
+
+	server, err := mcpserversrepo.New(db).CreateMCPServer(t.Context(), mcpserversrepo.CreateMCPServerParams{
+		ID:                    serverID,
+		ProjectID:             projectID,
+		Name:                  pgtype.Text{},
+		Slug:                  pgtype.Text{String: "server-" + uuid.NewString()[:8], Valid: true},
+		EnvironmentID:         uuid.NullUUID{},
+		UserSessionIssuerID:   uuid.NullUUID{},
+		RemoteMcpServerID:     uuid.NullUUID{},
+		TunneledMcpServerID:   uuid.NullUUID{},
+		ToolsetID:             uuid.NullUUID{UUID: toolsetID, Valid: true},
+		UnproxiedMcpServerID:  uuid.NullUUID{},
+		ToolVariationsGroupID: uuid.NullUUID{},
+		Visibility:            visibility,
+		NetworkAccessMode:     pgtype.Text{},
+	})
+	require.NoError(t, err)
+	return server
+}
+
 func createHTTPToolDefinition(
 	t *testing.T,
 	db *pgxpool.Pool,
@@ -410,6 +540,7 @@ func createMCPToolset(
 	projectID uuid.UUID,
 	slug string,
 	toolURNs []urn.Tool,
+	mcpEnabled bool,
 ) toolsetsrepo.Toolset {
 	t.Helper()
 
@@ -421,7 +552,7 @@ func createMCPToolset(
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
 		McpSlug:                pgtype.Text{},
-		McpEnabled:             true,
+		McpEnabled:             mcpEnabled,
 	})
 	require.NoError(t, err)
 

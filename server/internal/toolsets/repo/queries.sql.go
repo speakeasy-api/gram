@@ -1511,6 +1511,48 @@ func (q *Queries) ToolsetHasExternalMCPProxy(ctx context.Context, arg ToolsetHas
 	return exists, err
 }
 
+const toolsetIsServed = `-- name: ToolsetIsServed :one
+SELECT EXISTS (
+  SELECT 1
+  FROM toolsets t
+  WHERE t.id = $1
+    AND t.project_id = $2
+    AND t.deleted IS FALSE
+    AND (
+      t.mcp_enabled IS TRUE
+      OR EXISTS (
+        SELECT 1
+        FROM mcp_servers ms
+        WHERE ms.toolset_id = t.id
+          AND ms.project_id = t.project_id
+          AND ms.id <> t.id
+          AND ms.deleted IS FALSE
+          AND ms.visibility <> 'disabled'
+      )
+    )
+)
+`
+
+type ToolsetIsServedParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Reports whether anything serves the toolset over MCP, and so whether dynamic
+// mode on it needs a search index. A toolset is served when it is MCP-enabled
+// or when a live, non-disabled mcp_servers row other than its own hosted
+// address fronts it. The serving path gates only the hosted address (the row
+// whose id equals the toolset id) on mcp_enabled; any other such row serves
+// the toolset whatever the flag says. ListProjectsForToolsetIndexing and
+// ListToolsetsForIndexing in the background activities repeat this predicate
+// and must stay identical to it.
+func (q *Queries) ToolsetIsServed(ctx context.Context, arg ToolsetIsServedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, toolsetIsServed, arg.ToolsetID, arg.ProjectID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const updateToolset = `-- name: UpdateToolset :one
 UPDATE toolsets
 SET

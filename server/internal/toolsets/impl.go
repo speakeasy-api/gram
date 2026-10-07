@@ -272,14 +272,9 @@ func TriggerToolsetIndex(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	// place sends that agent chasing a failure that did not happen.
 	//
 	// A version with no tools needs no index, and dynamic mode serves it
-	// without one — see ErrToolsetIndexNotRequired. Same for a toolset that is
-	// not MCP-enabled: nothing serves it.
-	if !conv.PtrValOr(toolset.McpEnabled, false) || len(toolset.Tools) == 0 {
+	// without one — see ErrToolsetIndexNotRequired.
+	if len(toolset.Tools) == 0 {
 		return ErrToolsetIndexNotRequired
-	}
-	if temporalEnv == nil {
-		logger.ErrorContext(ctx, "no temporal environment to schedule toolset indexing; a dynamic-mode server cannot list its tools until the periodic sweep reaches it")
-		return ErrToolsetIndexUnavailable
 	}
 
 	projectID, err := uuid.Parse(toolset.ProjectID)
@@ -291,6 +286,25 @@ func TriggerToolsetIndex(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to parse toolset id for indexing", attr.SlogError(err))
 		return fmt.Errorf("parse toolset id for indexing: %w", err)
+	}
+
+	// Nor does a toolset that nothing serves. Being MCP-enabled is not the
+	// test: an MCP server fronting the toolset serves it either way.
+	served, err := repo.New(db).ToolsetIsServed(ctx, repo.ToolsetIsServedParams{
+		ToolsetID: toolsetID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to check whether the toolset is served before indexing", attr.SlogError(err))
+		return fmt.Errorf("check whether toolset is served before indexing: %w", err)
+	}
+	if !served {
+		return ErrToolsetIndexNotRequired
+	}
+
+	if temporalEnv == nil {
+		logger.ErrorContext(ctx, "no temporal environment to schedule toolset indexing; a dynamic-mode server cannot list its tools until the periodic sweep reaches it")
+		return ErrToolsetIndexUnavailable
 	}
 	deploymentID, err := deploymentsRepo.New(db).GetActiveDeploymentID(ctx, projectID)
 	if errors.Is(err, pgx.ErrNoRows) {
