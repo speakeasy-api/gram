@@ -321,6 +321,102 @@ func TestEmployeeDetail_CanonicalFold_AllIdentifiersConverge(t *testing.T) {
 	}
 }
 
+func TestEmployeeDetail_CanonicalFold_UnmappedEmailKeepsActivity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
+
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+
+	// A directory member with no identity_map entry yet: the fold resolves
+	// their email to no owner id, so its id-keyed arm matches none of the rows
+	// that carry their user id.
+	employeeID, employeeEmail := seedConnectedOrgUser(t, ctx, ti, "fold-unmapped")
+	otherID, _ := seedConnectedOrgUser(t, ctx, ti, "fold-unmapped-other")
+
+	now := time.Now().UTC()
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), employeeID, employeeEmail, 700, 300, 42)
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), employeeID, "", 110, 40, 3.25)
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), strings.ToUpper(employeeEmail), 60, 20, 1.5)
+	// DNO-509 trap: the employee's email on another person's row, plus that
+	// person's own row. Neither is the employee's activity.
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-6*time.Minute), otherID, employeeEmail, 9000, 9000, 999)
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-5*time.Minute), otherID, "", 5000, 5000, 555)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	for _, identifier := range []string{employeeEmail, employeeID} {
+		m := userMetrics(t, ctx, ti, identifier)
+		require.Equal(t, int64(870), m.TotalInputTokens, "identifier %s", identifier)
+		require.InDelta(t, 46.75, m.TotalCost, 0.001, "identifier %s", identifier)
+	}
+}
+
+func TestEmployeeDetail_CanonicalFold_UnknownEmailStaysOwnRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
+
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+
+	// Neither the directory nor the identity_map knows this email, so no user
+	// id is attributable to it: the lookup must stay on the email's own
+	// email-only rows and never adopt a user id it merely co-occurs with.
+	unknownEmail := "fold-unknown-" + uuid.NewString()[:8] + "@example.com"
+	otherID, _ := seedConnectedOrgUser(t, ctx, ti, "fold-unknown-other")
+
+	now := time.Now().UTC()
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), unknownEmail, 33, 11, 0.75)
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), otherID, unknownEmail, 9000, 9000, 999)
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-7*time.Minute), otherID, "", 5000, 5000, 555)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	m := userMetrics(t, ctx, ti, unknownEmail)
+	require.Equal(t, int64(33), m.TotalInputTokens)
+	require.InDelta(t, 0.75, m.TotalCost, 0.001)
+}
+
+func TestEmployeeDetail_CanonicalFold_LinkedEmailOwnedByAnotherMemberStaysTheirs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	orgID := authCtx.ActiveOrganizationID
+	ti.featureFlags.SetFlag(feature.FlagCanonicalIdentityFold, orgID, true)
+
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.NewString()
+
+	employeeID, employeeEmail := seedConnectedOrgUser(t, ctx, ti, "fold-linker")
+	ownerID, ownerEmail := seedConnectedOrgUser(t, ctx, ti, "fold-owner")
+	employeeLower := strings.ToLower(employeeEmail)
+	ownerLower := strings.ToLower(ownerEmail)
+	seedIdentityMapEntry(t, ctx, ti, orgID, employeeLower, employeeID, employeeLower)
+	seedIdentityMapEntry(t, ctx, ti, orgID, ownerLower, ownerID, ownerLower)
+	// The employee linked a provider account under another member's directory
+	// email. The map keeps that address with its directory owner, so its
+	// email-only rows are the owner's activity, not the employee's.
+	linkUserAccount(t, ctx, ti, employeeID, ownerEmail, "personal")
+
+	now := time.Now().UTC()
+	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-9*time.Minute), employeeID, "", 420, 80, 7.25)
+	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), ownerEmail, 9000, 9000, 999)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	for _, identifier := range []string{employeeID, employeeEmail} {
+		m := userMetrics(t, ctx, ti, identifier)
+		require.Equal(t, int64(420), m.TotalInputTokens, "identifier %s", identifier)
+		require.InDelta(t, 7.25, m.TotalCost, 0.001, "identifier %s", identifier)
+	}
+}
+
 func TestEmployeeDetail_CanonicalFold_UnfoldableOrgFallsBackToLegacyScope(t *testing.T) {
 	t.Parallel()
 
@@ -367,9 +463,9 @@ func TestGetObservabilityOverview_CanonicalFold_SummaryScopesToUser(t *testing.T
 	insertPollingLogWithUserAndEmail(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), strangerID, "", 9000, 9000, 999)
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
-	// In fold mode the legacy User set stays empty, and with no other filters
-	// the summary used to fall through to the unfiltered MV path and count
-	// every user's rows while the rest of the overview stayed scoped.
+	// With no other filters the summary can be served from the unfiltered MV,
+	// which would count every user's rows while the rest of the overview
+	// stayed scoped; a user scope must force it onto the filtered path.
 	res, err := ti.service.GetObservabilityOverview(ctx, &gen.GetObservabilityOverviewPayload{
 		From:   now.Add(-time.Hour).Format(time.RFC3339),
 		To:     now.Add(time.Hour).Format(time.RFC3339),

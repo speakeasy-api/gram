@@ -92,8 +92,8 @@ func (u UserIdentity) IsEmpty() bool {
 // grouped search still finds, because the search's group key falls back to the
 // recorded email (canonicalEmailExpr) while this filter had no such fallback.
 // ORing the two is what makes the per-person read agree with the grouped
-// search that offered the person. Callers populating only one (the telemetry
-// service's resolveUserScope, every literal-mode caller) are unaffected.
+// search that offered the person. Literal-mode callers populate only the
+// literal set and get just that side.
 func withUserIdentityFilter(sb squirrel.SelectBuilder, identity UserIdentity, canonical CanonicalUserIdentity) squirrel.SelectBuilder {
 	match := literalUserIdentityMatch(identity)
 	if canonical.Enabled() {
@@ -2771,8 +2771,8 @@ type GetOverviewSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	// A canonical user scope is a user filter even though arg.User stays empty
-	// in fold mode, so it must force the raw path off the unfiltered MV.
+	// A canonical user scope is a user filter on its own, even when arg.User is
+	// empty, so it must force the raw path off the unfiltered MV.
 	hasFilters := !arg.User.IsEmpty() || arg.CanonicalUser.Enabled() || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.MetaMCPServerID != "" || arg.EventSource != "" || arg.HookSource != "" || arg.AccountType != "" || arg.ExternalOrgID != "" || len(arg.ExcludedHookSources) > 0
 
 	var sb squirrel.SelectBuilder
