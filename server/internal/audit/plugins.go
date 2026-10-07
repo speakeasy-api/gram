@@ -355,6 +355,10 @@ type LogPluginAssignmentsSetEvent struct {
 	PluginSlug string
 
 	PrincipalURNs []string
+
+	// InstallModes maps each principal URN in PrincipalURNs to its install
+	// mode. Nil when the change could not alter install modes.
+	InstallModes map[string]string
 }
 
 func (l *Logger) LogPluginAssignmentsSet(ctx context.Context, dbtx repo.DBTX, event LogPluginAssignmentsSetEvent) error {
@@ -362,6 +366,7 @@ func (l *Logger) LogPluginAssignmentsSet(ctx context.Context, dbtx repo.DBTX, ev
 
 	metadata, err := marshalAuditPayload(map[string]any{
 		"principal_urns": event.PrincipalURNs,
+		"install_modes":  event.InstallModes,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)

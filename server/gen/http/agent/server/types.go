@@ -2254,6 +2254,15 @@ type AgentPluginResponseBody struct {
 	// Name of the marketplace this plugin lives in. Always equals the `name` of
 	// one of the marketplaces in the same response.
 	MarketplaceName string `form:"marketplace_name" json:"marketplace_name" xml:"marketplace_name"`
+	// How the agent installs the plugin. `required`: installed, and the user can't
+	// turn it off. `default`: installed, and the user can turn it off.
+	// `available`: not installed until the user turns it on. Agents that predate
+	// this field install every listed plugin.
+	InstallMode string `form:"install_mode" json:"install_mode" xml:"install_mode"`
+	// Display name of the plugin. Absent for the synthesized observability plugin.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Short description of the plugin, when one is set.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 }
 
 // DeviceAgentConfigurationResponseBody is used to define fields on response

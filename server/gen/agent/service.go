@@ -161,6 +161,15 @@ type AgentPlugin struct {
 	// Name of the marketplace this plugin lives in. Always equals the `name` of
 	// one of the marketplaces in the same response.
 	MarketplaceName string
+	// How the agent installs the plugin. `required`: installed, and the user can't
+	// turn it off. `default`: installed, and the user can turn it off.
+	// `available`: not installed until the user turns it on. Agents that predate
+	// this field install every listed plugin.
+	InstallMode string
+	// Display name of the plugin. Absent for the synthesized observability plugin.
+	Name *string
+	// Short description of the plugin, when one is set.
+	Description *string
 }
 
 type AgentPollingPrincipal struct {

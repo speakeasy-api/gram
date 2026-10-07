@@ -69,6 +69,7 @@ func RemoveDeletedRole(ctx context.Context, tx pluginsrepo.DBTX, logger *audit.L
 			OrganizationID: plugin.OrganizationID, ProjectID: plugin.ProjectID,
 			Actor: input.Actor, ActorDisplayName: input.ActorDisplayName, ActorSlug: nil,
 			PluginID: plugin.ID, PluginName: plugin.Name, PluginSlug: plugin.Slug, PrincipalURNs: remaining,
+			InstallModes: nil,
 		}); err != nil {
 			return fmt.Errorf("audit deleted role plugin assignments: %w", err)
 		}

@@ -464,9 +464,15 @@ var AgentMarketplaceModel = Type("AgentMarketplace", func() {
 })
 
 var AgentPluginModel = Type("AgentPlugin", func() {
-	Required("slug", "marketplace_name")
+	Required("slug", "marketplace_name", "install_mode")
 	Attribute("slug", String, "Plugin slug. Combined with marketplace_name, this identifies the plugin the agent enables in the managed tool.")
 	Attribute("marketplace_name", String, "Name of the marketplace this plugin lives in. Always equals the `name` of one of the marketplaces in the same response.")
+	Attribute("install_mode", String, func() {
+		Description("How the agent installs the plugin. `required`: installed, and the user can't turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on. Agents that predate this field install every listed plugin.")
+		Enum("required", "default", "available")
+	})
+	Attribute("name", String, "Display name of the plugin. Absent for the synthesized observability plugin.")
+	Attribute("description", String, "Short description of the plugin, when one is set.")
 })
 
 var SyncedAgentUserModel = Type("SyncedAgentUser", func() {
