@@ -2120,6 +2120,18 @@ type SetStripeSubscriptionResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// ListCustomerUsageResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body.
+type ListCustomerUsageResponseBody struct {
+	Interval     *string `form:"interval,omitempty" json:"interval,omitempty" xml:"interval,omitempty"`
+	Currency     *string `form:"currency,omitempty" json:"currency,omitempty" xml:"currency,omitempty"`
+	PricingBasis *string `form:"pricing_basis,omitempty" json:"pricing_basis,omitempty" xml:"pricing_basis,omitempty"`
+	// Retrieval timestamp used to distinguish current and future buckets
+	QueriedAt *string `form:"queried_at,omitempty" json:"queried_at,omitempty" xml:"queried_at,omitempty"`
+	// Every qualifying organization, ordered by name
+	Customers []*AdminCustomerUsageResponseBody `form:"customers,omitempty" json:"customers,omitempty" xml:"customers,omitempty"`
+}
+
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
 // endpoint HTTP response body for the "unauthorized" error.
 type LoginUnauthorizedResponseBody struct {
@@ -18028,6 +18040,207 @@ type SetStripeSubscriptionGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListCustomerUsageUnavailableResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "unavailable" error.
+type ListCustomerUsageUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListCustomerUsageUnauthorizedResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "unauthorized" error.
+type ListCustomerUsageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListCustomerUsageForbiddenResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "forbidden" error.
+type ListCustomerUsageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListCustomerUsageBadRequestResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "bad_request" error.
+type ListCustomerUsageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListCustomerUsageNotFoundResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "not_found" error.
+type ListCustomerUsageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListCustomerUsageConflictResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "conflict" error.
+type ListCustomerUsageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListCustomerUsageUnsupportedMediaResponseBody is the type of the "admin"
+// service "listCustomerUsage" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListCustomerUsageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListCustomerUsageInvalidResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "invalid" error.
+type ListCustomerUsageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListCustomerUsageInvariantViolationResponseBody is the type of the "admin"
+// service "listCustomerUsage" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListCustomerUsageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListCustomerUsageUnexpectedResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "unexpected" error.
+type ListCustomerUsageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListCustomerUsageGatewayErrorResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "gateway_error"
+// error.
+type ListCustomerUsageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -18905,6 +19118,41 @@ type AdminOnboardingStepApplicabilityResponseBody struct {
 	Applies *bool `form:"applies,omitempty" json:"applies,omitempty" xml:"applies,omitempty"`
 	// Why not, when it does not.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
+// AdminCustomerUsageResponseBody is used to define fields on response body
+// types.
+type AdminCustomerUsageResponseBody struct {
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	Name           *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Slug           *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	AccountType    *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	TrialState     *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The billing cycle containing queried_at
+	CurrentCycle *MeterUsageWindowResponseBody `form:"current_cycle,omitempty" json:"current_cycle,omitempty" xml:"current_cycle,omitempty"`
+	// From the first chart bucket's start to the last bucket's end
+	Window *MeterUsageWindowResponseBody `form:"window,omitempty" json:"window,omitempty" xml:"window,omitempty"`
+	// The three metered products in stable display order. quantity and cost_usd
+	// cover the current cycle to date. buckets are the chart buckets for the
+	// requested interval: billing cycles for monthly, days or Monday-start weeks
+	// of the current cycle otherwise.
+	Products []*SpendProductResponseBody `form:"products,omitempty" json:"products,omitempty" xml:"products,omitempty"`
+	// The start of the previous billing cycle, cut to the same number of elapsed
+	// days as the current one. Absent when the organization did not exist before
+	// the current cycle.
+	PreviousPeriod *MeterUsageWindowResponseBody `form:"previous_period,omitempty" json:"previous_period,omitempty" xml:"previous_period,omitempty"`
+	// Per-product costs over previous_period. Empty when previous_period is absent.
+	PreviousPeriodCosts []*AdminCustomerUsageProductCostResponseBody `form:"previous_period_costs,omitempty" json:"previous_period_costs,omitempty" xml:"previous_period_costs,omitempty"`
+	// Why this organization's usage could not be read. products is empty when set.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+}
+
+// AdminCustomerUsageProductCostResponseBody is used to define fields on
+// response body types.
+type AdminCustomerUsageProductCostResponseBody struct {
+	ProductID *string `form:"product_id,omitempty" json:"product_id,omitempty" xml:"product_id,omitempty"`
+	// Exact estimated cost at current PAYG list prices
+	CostUsd *string `form:"cost_usd,omitempty" json:"cost_usd,omitempty" xml:"cost_usd,omitempty"`
 }
 
 // NewSetOrganizationFeatureRequestBody builds the HTTP request body from the
@@ -34131,6 +34379,192 @@ func NewSetStripeSubscriptionGatewayError(body *SetStripeSubscriptionGatewayErro
 	return v
 }
 
+// NewListCustomerUsageAdminCustomerUsageResponseOK builds a "admin" service
+// "listCustomerUsage" endpoint result from a HTTP "OK" response.
+func NewListCustomerUsageAdminCustomerUsageResponseOK(body *ListCustomerUsageResponseBody) *admin.AdminCustomerUsageResponse {
+	v := &admin.AdminCustomerUsageResponse{
+		Interval:     *body.Interval,
+		Currency:     *body.Currency,
+		PricingBasis: *body.PricingBasis,
+		QueriedAt:    *body.QueriedAt,
+	}
+	v.Customers = make([]*admin.AdminCustomerUsage, len(body.Customers))
+	for i, val := range body.Customers {
+		if val == nil {
+			v.Customers[i] = nil
+			continue
+		}
+		v.Customers[i] = unmarshalAdminCustomerUsageResponseBodyToAdminAdminCustomerUsage(val)
+	}
+
+	return v
+}
+
+// NewListCustomerUsageUnavailable builds a admin service listCustomerUsage
+// endpoint unavailable error.
+func NewListCustomerUsageUnavailable(body *ListCustomerUsageUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListCustomerUsageUnauthorized builds a admin service listCustomerUsage
+// endpoint unauthorized error.
+func NewListCustomerUsageUnauthorized(body *ListCustomerUsageUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListCustomerUsageForbidden builds a admin service listCustomerUsage
+// endpoint forbidden error.
+func NewListCustomerUsageForbidden(body *ListCustomerUsageForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListCustomerUsageBadRequest builds a admin service listCustomerUsage
+// endpoint bad_request error.
+func NewListCustomerUsageBadRequest(body *ListCustomerUsageBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListCustomerUsageNotFound builds a admin service listCustomerUsage
+// endpoint not_found error.
+func NewListCustomerUsageNotFound(body *ListCustomerUsageNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListCustomerUsageConflict builds a admin service listCustomerUsage
+// endpoint conflict error.
+func NewListCustomerUsageConflict(body *ListCustomerUsageConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListCustomerUsageUnsupportedMedia builds a admin service
+// listCustomerUsage endpoint unsupported_media error.
+func NewListCustomerUsageUnsupportedMedia(body *ListCustomerUsageUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListCustomerUsageInvalid builds a admin service listCustomerUsage
+// endpoint invalid error.
+func NewListCustomerUsageInvalid(body *ListCustomerUsageInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListCustomerUsageInvariantViolation builds a admin service
+// listCustomerUsage endpoint invariant_violation error.
+func NewListCustomerUsageInvariantViolation(body *ListCustomerUsageInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListCustomerUsageUnexpected builds a admin service listCustomerUsage
+// endpoint unexpected error.
+func NewListCustomerUsageUnexpected(body *ListCustomerUsageUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListCustomerUsageGatewayError builds a admin service listCustomerUsage
+// endpoint gateway_error error.
+func NewListCustomerUsageGatewayError(body *ListCustomerUsageGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetSessionResponseBody runs the validations defined on
 // GetSessionResponseBody
 func ValidateGetSessionResponseBody(body *GetSessionResponseBody) (err error) {
@@ -36357,6 +36791,52 @@ func ValidateSetStripeSubscriptionResponseBody(body *SetStripeSubscriptionRespon
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListCustomerUsageResponseBody runs the validations defined on
+// ListCustomerUsageResponseBody
+func ValidateListCustomerUsageResponseBody(body *ListCustomerUsageResponseBody) (err error) {
+	if body.Interval == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("interval", "body"))
+	}
+	if body.Currency == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("currency", "body"))
+	}
+	if body.PricingBasis == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pricing_basis", "body"))
+	}
+	if body.QueriedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("queried_at", "body"))
+	}
+	if body.Customers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("customers", "body"))
+	}
+	if body.Interval != nil {
+		if !(*body.Interval == "daily" || *body.Interval == "weekly" || *body.Interval == "monthly") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.interval", *body.Interval, []any{"daily", "weekly", "monthly"}))
+		}
+	}
+	if body.Currency != nil {
+		if !(*body.Currency == "USD") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.currency", *body.Currency, []any{"USD"}))
+		}
+	}
+	if body.PricingBasis != nil {
+		if !(*body.PricingBasis == "current_payg_list_price") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.pricing_basis", *body.PricingBasis, []any{"current_payg_list_price"}))
+		}
+	}
+	if body.QueriedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.queried_at", *body.QueriedAt, goa.FormatDateTime))
+	}
+	for _, e := range body.Customers {
+		if e != nil {
+			if err2 := ValidateAdminCustomerUsageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -56996,6 +57476,270 @@ func ValidateSetStripeSubscriptionGatewayErrorResponseBody(body *SetStripeSubscr
 	return
 }
 
+// ValidateListCustomerUsageUnavailableResponseBody runs the validations
+// defined on listCustomerUsage_unavailable_response_body
+func ValidateListCustomerUsageUnavailableResponseBody(body *ListCustomerUsageUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListCustomerUsageUnauthorizedResponseBody runs the validations
+// defined on listCustomerUsage_unauthorized_response_body
+func ValidateListCustomerUsageUnauthorizedResponseBody(body *ListCustomerUsageUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListCustomerUsageForbiddenResponseBody runs the validations defined
+// on listCustomerUsage_forbidden_response_body
+func ValidateListCustomerUsageForbiddenResponseBody(body *ListCustomerUsageForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListCustomerUsageBadRequestResponseBody runs the validations defined
+// on listCustomerUsage_bad_request_response_body
+func ValidateListCustomerUsageBadRequestResponseBody(body *ListCustomerUsageBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListCustomerUsageNotFoundResponseBody runs the validations defined
+// on listCustomerUsage_not_found_response_body
+func ValidateListCustomerUsageNotFoundResponseBody(body *ListCustomerUsageNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListCustomerUsageConflictResponseBody runs the validations defined
+// on listCustomerUsage_conflict_response_body
+func ValidateListCustomerUsageConflictResponseBody(body *ListCustomerUsageConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListCustomerUsageUnsupportedMediaResponseBody runs the validations
+// defined on listCustomerUsage_unsupported_media_response_body
+func ValidateListCustomerUsageUnsupportedMediaResponseBody(body *ListCustomerUsageUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListCustomerUsageInvalidResponseBody runs the validations defined on
+// listCustomerUsage_invalid_response_body
+func ValidateListCustomerUsageInvalidResponseBody(body *ListCustomerUsageInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListCustomerUsageInvariantViolationResponseBody runs the validations
+// defined on listCustomerUsage_invariant_violation_response_body
+func ValidateListCustomerUsageInvariantViolationResponseBody(body *ListCustomerUsageInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListCustomerUsageUnexpectedResponseBody runs the validations defined
+// on listCustomerUsage_unexpected_response_body
+func ValidateListCustomerUsageUnexpectedResponseBody(body *ListCustomerUsageUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListCustomerUsageGatewayErrorResponseBody runs the validations
+// defined on listCustomerUsage_gateway_error_response_body
+func ValidateListCustomerUsageGatewayErrorResponseBody(body *ListCustomerUsageGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateAdminOrganizationMemberResponseBody runs the validations defined on
 // AdminOrganizationMemberResponseBody
 func ValidateAdminOrganizationMemberResponseBody(body *AdminOrganizationMemberResponseBody) (err error) {
@@ -58454,6 +59198,95 @@ func ValidateAdminOnboardingStepApplicabilityResponseBody(body *AdminOnboardingS
 	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	return
+}
+
+// ValidateAdminCustomerUsageResponseBody runs the validations defined on
+// AdminCustomerUsageResponseBody
+func ValidateAdminCustomerUsageResponseBody(body *AdminCustomerUsageResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.AccountType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("account_type", "body"))
+	}
+	if body.TrialState == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("trial_state", "body"))
+	}
+	if body.CurrentCycle == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("current_cycle", "body"))
+	}
+	if body.Window == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window", "body"))
+	}
+	if body.Products == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("products", "body"))
+	}
+	if body.PreviousPeriodCosts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("previous_period_costs", "body"))
+	}
+	if body.AccountType != nil {
+		if !(*body.AccountType == "enterprise" || *body.AccountType == "pro" || *body.AccountType == "payg") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.account_type", *body.AccountType, []any{"enterprise", "pro", "payg"}))
+		}
+	}
+	if body.TrialState != nil {
+		if !(*body.TrialState == "none" || *body.TrialState == "running" || *body.TrialState == "ending_soon" || *body.TrialState == "expired" || *body.TrialState == "demoted" || *body.TrialState == "converted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_state", *body.TrialState, []any{"none", "running", "ending_soon", "expired", "demoted", "converted"}))
+		}
+	}
+	if body.CurrentCycle != nil {
+		if err2 := ValidateMeterUsageWindowResponseBody(body.CurrentCycle); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Window != nil {
+		if err2 := ValidateMeterUsageWindowResponseBody(body.Window); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Products {
+		if e != nil {
+			if err2 := ValidateSpendProductResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.PreviousPeriod != nil {
+		if err2 := ValidateMeterUsageWindowResponseBody(body.PreviousPeriod); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.PreviousPeriodCosts {
+		if e != nil {
+			if err2 := ValidateAdminCustomerUsageProductCostResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAdminCustomerUsageProductCostResponseBody runs the validations
+// defined on AdminCustomerUsageProductCostResponseBody
+func ValidateAdminCustomerUsageProductCostResponseBody(body *AdminCustomerUsageProductCostResponseBody) (err error) {
+	if body.ProductID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("product_id", "body"))
+	}
+	if body.CostUsd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cost_usd", "body"))
+	}
+	if body.ProductID != nil {
+		if !(*body.ProductID == "agent_session_storage" || *body.ProductID == "risk_content_scans" || *body.ProductID == "mcp_egress") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.product_id", *body.ProductID, []any{"agent_session_storage", "risk_content_scans", "mcp_egress"}))
+		}
 	}
 	return
 }

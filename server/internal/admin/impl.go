@@ -110,6 +110,8 @@ type BillingOperations interface {
 	GetPaygBillingSummaryForOrganization(context.Context, string) (*usage.PaygBillingSummary, error)
 	GetMeterUsageForOrganization(context.Context, string, *usagegen.GetMeterUsagePayload) (*usagegen.MeterUsageResponse, error)
 	GetSpendBreakdownForOrganization(context.Context, string, *usagegen.GetSpendBreakdownPayload) (*usagegen.SpendBreakdownResponse, error)
+	// GetCustomerUsage reads usage for many organizations in one query, returning one entry per organization in request order.
+	GetCustomerUsage(context.Context, []usage.CustomerUsageOrganization, usage.CustomerUsageInterval) (*usage.CustomerUsageReport, error)
 	GetStripeCustomer(context.Context, string) (*stripeclient.CustomerDetails, error)
 	// GetStripeSubscriptionByID loads a live Stripe subscription so an assignment can verify its customer.
 	GetStripeSubscriptionByID(context.Context, string) (*stripeclient.SubscriptionState, error)

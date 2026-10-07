@@ -2128,6 +2128,18 @@ type SetStripeSubscriptionResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// ListCustomerUsageResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body.
+type ListCustomerUsageResponseBody struct {
+	Interval     string `form:"interval" json:"interval" xml:"interval"`
+	Currency     string `form:"currency" json:"currency" xml:"currency"`
+	PricingBasis string `form:"pricing_basis" json:"pricing_basis" xml:"pricing_basis"`
+	// Retrieval timestamp used to distinguish current and future buckets
+	QueriedAt string `form:"queried_at" json:"queried_at" xml:"queried_at"`
+	// Every qualifying organization, ordered by name
+	Customers []*AdminCustomerUsageResponseBody `form:"customers" json:"customers" xml:"customers"`
+}
+
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
 // endpoint HTTP response body for the "unauthorized" error.
 type LoginUnauthorizedResponseBody struct {
@@ -18036,6 +18048,207 @@ type SetStripeSubscriptionGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListCustomerUsageUnavailableResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "unavailable" error.
+type ListCustomerUsageUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageUnauthorizedResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "unauthorized" error.
+type ListCustomerUsageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageForbiddenResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "forbidden" error.
+type ListCustomerUsageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageBadRequestResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "bad_request" error.
+type ListCustomerUsageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageNotFoundResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "not_found" error.
+type ListCustomerUsageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageConflictResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "conflict" error.
+type ListCustomerUsageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageUnsupportedMediaResponseBody is the type of the "admin"
+// service "listCustomerUsage" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListCustomerUsageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageInvalidResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "invalid" error.
+type ListCustomerUsageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageInvariantViolationResponseBody is the type of the "admin"
+// service "listCustomerUsage" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListCustomerUsageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageUnexpectedResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "unexpected" error.
+type ListCustomerUsageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageGatewayErrorResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "gateway_error"
+// error.
+type ListCustomerUsageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -18884,6 +19097,41 @@ type AdminOnboardingStepApplicabilityResponseBody struct {
 	Applies bool `form:"applies" json:"applies" xml:"applies"`
 	// Why not, when it does not.
 	Reason string `form:"reason" json:"reason" xml:"reason"`
+}
+
+// AdminCustomerUsageResponseBody is used to define fields on response body
+// types.
+type AdminCustomerUsageResponseBody struct {
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	Name           string `form:"name" json:"name" xml:"name"`
+	Slug           string `form:"slug" json:"slug" xml:"slug"`
+	AccountType    string `form:"account_type" json:"account_type" xml:"account_type"`
+	TrialState     string `form:"trial_state" json:"trial_state" xml:"trial_state"`
+	// The billing cycle containing queried_at
+	CurrentCycle *MeterUsageWindowResponseBody `form:"current_cycle" json:"current_cycle" xml:"current_cycle"`
+	// From the first chart bucket's start to the last bucket's end
+	Window *MeterUsageWindowResponseBody `form:"window" json:"window" xml:"window"`
+	// The three metered products in stable display order. quantity and cost_usd
+	// cover the current cycle to date. buckets are the chart buckets for the
+	// requested interval: billing cycles for monthly, days or Monday-start weeks
+	// of the current cycle otherwise.
+	Products []*SpendProductResponseBody `form:"products" json:"products" xml:"products"`
+	// The start of the previous billing cycle, cut to the same number of elapsed
+	// days as the current one. Absent when the organization did not exist before
+	// the current cycle.
+	PreviousPeriod *MeterUsageWindowResponseBody `form:"previous_period,omitempty" json:"previous_period,omitempty" xml:"previous_period,omitempty"`
+	// Per-product costs over previous_period. Empty when previous_period is absent.
+	PreviousPeriodCosts []*AdminCustomerUsageProductCostResponseBody `form:"previous_period_costs" json:"previous_period_costs" xml:"previous_period_costs"`
+	// Why this organization's usage could not be read. products is empty when set.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+}
+
+// AdminCustomerUsageProductCostResponseBody is used to define fields on
+// response body types.
+type AdminCustomerUsageProductCostResponseBody struct {
+	ProductID string `form:"product_id" json:"product_id" xml:"product_id"`
+	// Exact estimated cost at current PAYG list prices
+	CostUsd string `form:"cost_usd" json:"cost_usd" xml:"cost_usd"`
 }
 
 // SupportDraftRequestBody is used to define fields on request body types.
@@ -20878,6 +21126,30 @@ func NewSetStripeSubscriptionResponseBody(res *admin.AdminOrganization) *SetStri
 		CreationSource:       res.CreationSource,
 		CreatedAt:            res.CreatedAt,
 		UpdatedAt:            res.UpdatedAt,
+	}
+	return body
+}
+
+// NewListCustomerUsageResponseBody builds the HTTP response body from the
+// result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageResponseBody(res *admin.AdminCustomerUsageResponse) *ListCustomerUsageResponseBody {
+	body := &ListCustomerUsageResponseBody{
+		Interval:     res.Interval,
+		Currency:     res.Currency,
+		PricingBasis: res.PricingBasis,
+		QueriedAt:    res.QueriedAt,
+	}
+	if res.Customers != nil {
+		body.Customers = make([]*AdminCustomerUsageResponseBody, len(res.Customers))
+		for i, val := range res.Customers {
+			if val == nil {
+				body.Customers[i] = nil
+				continue
+			}
+			body.Customers[i] = marshalAdminAdminCustomerUsageToAdminCustomerUsageResponseBody(val)
+		}
+	} else {
+		body.Customers = []*AdminCustomerUsageResponseBody{}
 	}
 	return body
 }
@@ -33354,6 +33626,162 @@ func NewSetStripeSubscriptionGatewayErrorResponseBody(res *goa.ServiceError) *Se
 	return body
 }
 
+// NewListCustomerUsageUnavailableResponseBody builds the HTTP response body
+// from the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageUnavailableResponseBody(res *goa.ServiceError) *ListCustomerUsageUnavailableResponseBody {
+	body := &ListCustomerUsageUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageUnauthorizedResponseBody(res *goa.ServiceError) *ListCustomerUsageUnauthorizedResponseBody {
+	body := &ListCustomerUsageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageForbiddenResponseBody builds the HTTP response body from
+// the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageForbiddenResponseBody(res *goa.ServiceError) *ListCustomerUsageForbiddenResponseBody {
+	body := &ListCustomerUsageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageBadRequestResponseBody builds the HTTP response body
+// from the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageBadRequestResponseBody(res *goa.ServiceError) *ListCustomerUsageBadRequestResponseBody {
+	body := &ListCustomerUsageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageNotFoundResponseBody builds the HTTP response body from
+// the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageNotFoundResponseBody(res *goa.ServiceError) *ListCustomerUsageNotFoundResponseBody {
+	body := &ListCustomerUsageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageConflictResponseBody builds the HTTP response body from
+// the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageConflictResponseBody(res *goa.ServiceError) *ListCustomerUsageConflictResponseBody {
+	body := &ListCustomerUsageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listCustomerUsage" endpoint of the "admin"
+// service.
+func NewListCustomerUsageUnsupportedMediaResponseBody(res *goa.ServiceError) *ListCustomerUsageUnsupportedMediaResponseBody {
+	body := &ListCustomerUsageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageInvalidResponseBody builds the HTTP response body from
+// the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageInvalidResponseBody(res *goa.ServiceError) *ListCustomerUsageInvalidResponseBody {
+	body := &ListCustomerUsageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listCustomerUsage" endpoint of the "admin"
+// service.
+func NewListCustomerUsageInvariantViolationResponseBody(res *goa.ServiceError) *ListCustomerUsageInvariantViolationResponseBody {
+	body := &ListCustomerUsageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageUnexpectedResponseBody(res *goa.ServiceError) *ListCustomerUsageUnexpectedResponseBody {
+	body := &ListCustomerUsageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageGatewayErrorResponseBody(res *goa.ServiceError) *ListCustomerUsageGatewayErrorResponseBody {
+	body := &ListCustomerUsageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -34463,6 +34891,16 @@ func NewSetStripeSubscriptionPayload(body *SetStripeSubscriptionRequestBody, adm
 		OrganizationID:       *body.OrganizationID,
 		StripeSubscriptionID: *body.StripeSubscriptionID,
 	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewListCustomerUsagePayload builds a admin service listCustomerUsage
+// endpoint payload.
+func NewListCustomerUsagePayload(interval string, adminSessionToken *string) *admin.ListCustomerUsagePayload {
+	v := &admin.ListCustomerUsagePayload{}
+	v.Interval = interval
 	v.AdminSessionToken = adminSessionToken
 
 	return v
