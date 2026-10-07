@@ -1603,8 +1603,7 @@ BEGIN
      'https://identity.example.com/.well-known/jwks.json',
      ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
      ARRAY['code'], ARRAY['none'], ARRAY['S256'], TRUE,
-     -- A pinned scope request, so the provider's page shows its override and
-     -- its clients' scope fields show the ignored-scopes warning.
+     -- An issuer-wide scope override, shown on the provider's page.
      'Example Workspace Identity', ARRAY['read']);
 
   INSERT INTO remote_session_clients
@@ -1616,7 +1615,8 @@ BEGIN
      demo.det_uuid('gram-demo-remote-identity-provider-linear'),
      'https://clients.example.com/gram-demo-linear.json',
      'https://clients.example.com/gram-demo-linear.json', clock_timestamp(), 'none',
-     ARRAY['read', 'write']);
+     -- No scope of its own: the resource pin decides once discovery is on.
+     NULL);
 
   INSERT INTO remote_session_client_user_session_issuers
     (remote_session_client_id, user_session_issuer_id)
