@@ -1,8 +1,14 @@
 import { Button } from "@/components/ui/Button";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/HoverCard";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
 import { ScopeMultiSelect } from "@/lib/remote-identity";
 import type { RemoteMcpServerScopes } from "@gram/client/models/components/remotemcpserverscopes.js";
+import { Info } from "lucide-react";
 import { useId, useMemo } from "react";
 import {
   scopePinStatus,
@@ -51,9 +57,27 @@ export function ResourceScopePinField({
 
   return (
     <div className="max-w-md space-y-1.5">
-      <Label id={labelId} htmlFor={id} className="block leading-normal">
-        Pinned scopes
-      </Label>
+      <div className="flex items-center gap-1.5">
+        <Label id={labelId} htmlFor={id} className="block leading-normal">
+          Pinned scopes
+        </Label>
+        <HoverCard openDelay={150}>
+          <HoverCardTrigger asChild>
+            <button
+              type="button"
+              aria-label="About pinned scopes"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Info className="size-3.5" />
+            </button>
+          </HoverCardTrigger>
+          <HoverCardContent align="start" className="w-80">
+            <Text small className="block">
+              {`Scopes are permissions defined by ${serverName || "the MCP server"} and its identity provider, not by Speakeasy. Speakeasy only asks for them when someone signs in; the identity provider decides what to grant and enforces it.`}
+            </Text>
+          </HoverCardContent>
+        </HoverCard>
+      </div>
       <ScopeMultiSelect
         id={id}
         labelId={labelId}

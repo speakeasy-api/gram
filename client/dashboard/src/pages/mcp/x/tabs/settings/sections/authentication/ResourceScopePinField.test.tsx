@@ -354,6 +354,34 @@ describe("ResourceScopePinField", () => {
     ).toBeDefined();
   });
 
+  it("explains that the MCP server and its identity provider define scopes", () => {
+    render(
+      <ResourceScopePinField
+        pin={pin(["read", "admin"])}
+        scopes={scopes({
+          pinnedScopes: ["read", "admin"],
+          clients: [
+            {
+              clientId: "client-1",
+              scopeSource: "resource_pin",
+              requestedScopes: ["read", "admin"],
+              unadvertisedPinnedScopes: ["admin"],
+              pinWouldDecide: true,
+            },
+          ],
+        })}
+        connectedClientId="client-1"
+        issuerScopes={[]}
+        serverName="eBay"
+        disabled={false}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "About pinned scopes" }),
+    ).toBeDefined();
+  });
+
   it("names the MCP server when it has no name", () => {
     render(
       <ResourceScopePinField
