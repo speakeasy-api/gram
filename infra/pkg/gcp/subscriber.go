@@ -30,19 +30,20 @@ type BatchReceiveSettings struct {
 	// MaxMessages is the number of buffered messages that triggers a flush. A
 	// value <= 0 falls back to defaultBatchMaxMessages. It bounds how many
 	// messages are held in memory, and left un-acked, per batch. It is
-	// independent of the receiver's ReceiveSettings.MaxOutstandingMessages: the
-	// underlying client releases that limit (really a concurrency cap on in-flight
-	// receive callbacks) when our callback returns after buffering, not when the
-	// message is acked, so buffering does not consume outstanding slots and the
-	// buffer can always reach MaxMessages regardless of the outstanding limit.
+	// separate from the receiver's ReceiveSettings.MaxOutstandingMessages, which
+	// is also sent to Pub/Sub as a server-side unacknowledged-message limit.
+	// Returning from the receive callback releases client-side flow control but
+	// does not acknowledge buffered messages. Set the outstanding limit above
+	// MaxMessages to let batches fill without waiting for the latency timer.
 	MaxMessages int
 	// MaxBytes is the combined size of buffered message payloads, in bytes, that
 	// triggers a flush. A value <= 0 disables byte-based flushing, leaving
 	// MaxMessages and MaxLatency as the only triggers. Like MaxMessages it is a
 	// trigger, not a hard cap: a single payload at or above MaxBytes flushes on
 	// its own, and a batch can overshoot MaxBytes by up to the size of the
-	// message that crossed the threshold. Memory is bounded by the receiver's
-	// ReceiveSettings.MaxOutstandingBytes, not by this setting.
+	// message that crossed the threshold. ReceiveSettings.MaxOutstandingBytes
+	// limits outstanding payload bytes separately; decoded messages and handler
+	// allocations add to the process's memory usage.
 	MaxBytes int
 	// MaxLatency is how long a partial batch waits before being flushed. A value
 	// <= 0 falls back to defaultBatchMaxLatency. It must stay well below the
