@@ -87,17 +87,13 @@ func TestLegacyEnv_ReachesParsedFlags(t *testing.T) { //nolint:paralleltest // s
 	}, got)
 }
 
-// TestLegacyEnv_NewNameWins checks that a SPEAKEASY_AI_* value is never
-// overwritten by the deprecated GRAM_* name, and that no notice is printed.
-func TestLegacyEnv_NewNameWins(t *testing.T) {
-	t.Setenv("SPEAKEASY_AI_PROJECT", "new-project")
-	t.Setenv("GRAM_PROJECT", "legacy-project")
+// TestLegacyEnv_NewNameWins checks that no SPEAKEASY_AI_* value is ever
+// overwritten by a conflicting deprecated GRAM_* value, for every setting, and
+// that no notice is printed.
+func TestLegacyEnv_NewNameWins(t *testing.T) { //nolint:paralleltest // sets process environment
 	for _, name := range flags.EnvSettings {
-		if name != "PROJECT" {
-			t.Setenv(flags.EnvVar(name), "")
-			t.Setenv("GRAM_"+name, "")
-			require.NoError(t, os.Unsetenv("GRAM_"+name))
-		}
+		t.Setenv(flags.EnvVar(name), "new-"+name)
+		t.Setenv("GRAM_"+name, "legacy-"+name)
 	}
 
 	notice, err := flags.ApplyLegacyEnv(os.LookupEnv, func(k, v string) error {
@@ -106,5 +102,7 @@ func TestLegacyEnv_NewNameWins(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, notice)
-	require.Equal(t, "new-project", os.Getenv("SPEAKEASY_AI_PROJECT"))
+	for _, name := range flags.EnvSettings {
+		require.Equal(t, "new-"+name, os.Getenv(flags.EnvVar(name)), name)
+	}
 }
