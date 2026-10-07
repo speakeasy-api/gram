@@ -29,7 +29,7 @@ export function ConnectionSetupProgress({
   return <SetupProgressSteps current={current} />;
 }
 
-export function SetupProgressSteps({
+function SetupProgressSteps({
   current,
 }: {
   current: number;
