@@ -316,6 +316,7 @@ func TestLogTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
 			logStringAttribute(string(enrich.OriginalInstrumentationScopeNameKey), "com.example.forged"),
 			logStringAttribute(string(enrich.OrganizationIDKey), "forged-org"),
 			logStringAttribute(string(enrich.ProjectIDKey), "forged-project"),
+			logStringAttribute(string(enrich.DirectoryGroupNamesKey), "forged-group"),
 			logStringAttribute("model", "claude-sonnet-4"),
 		},
 	}).Build()
@@ -340,8 +341,9 @@ func TestLogTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
 	require.Equal(t, []string{claudeCodeScopeName}, values[string(enrich.OriginalInstrumentationScopeNameKey)], "the transform's copy of the scope is the only one")
 	require.Equal(t, []string{testLogOrganizationID}, values[string(enrich.OrganizationIDKey)], "tenancy comes from provenance, not from the producer")
 	require.Equal(t, []string{testLogProjectID}, values[string(enrich.ProjectIDKey)])
+	require.Empty(t, values[string(enrich.DirectoryGroupNamesKey)], "a group the directory lookup did not find stays empty rather than taking the producer's")
 	require.Equal(t, []string{"claude-sonnet-4"}, values["model"], "the producer's own attributes stay")
-	require.Equal(t, int64(3), agentEventCount(t, reader, enrich.MeterReservedAttributesDropped, attr.OTELSignalKey, string(enrich.SignalLog)))
+	require.Equal(t, int64(4), agentEventCount(t, reader, enrich.MeterReservedAttributesDropped, attr.OTELSignalKey, string(enrich.SignalLog)))
 }
 
 // A record may arrive at the size limit with its whole budget spent on an

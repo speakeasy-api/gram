@@ -126,18 +126,26 @@ func IsAgentColumnKey(key string) bool {
 	return strings.HasPrefix(key, agentColumnKeyPrefix)
 }
 
-// pipelineKeyPrefix is the namespace of every attribute the pipeline itself
+// pipelineKeyPrefix is the namespace of most attributes the pipeline itself
 // writes on a record: tenancy, token counts, the producer's original scope,
-// directory roles and the agent_events columns.
+// the person's roles and the agent_events columns.
 const pipelineKeyPrefix = "speakeasy."
 
-// IsPipelineKey reports whether an attribute key is in the speakeasy
-// namespace, which the pipeline owns outright. Nothing upstream of the
-// transform writes there, so a key a producer sends under it is either a
+// directoryKeyPrefix is the namespace the directory enricher writes: the
+// directory id, the directory attributes and the group memberships the
+// agent_events writer stores beside the row.
+const directoryKeyPrefix = "directory."
+
+// IsPipelineKey reports whether an attribute key is in a namespace the
+// pipeline owns outright: speakeasy, and directory. Nothing upstream of the
+// transform writes there, so a key a producer sends under either is a
 // mistake or an attempt to pass as the pipeline: to classify its own record
-// (speakeasy.agent), to claim another tenant (speakeasy.organization) or to
-// pose as another producer (speakeasy.original_instrumentation_scope). The
-// transform drops every such key before it writes its own.
+// (speakeasy.agent), to claim another tenant (speakeasy.organization), to
+// pose as another producer (speakeasy.original_instrumentation_scope) or to
+// give a person a department or group the directory never did
+// (directory.attribute, directory.group). The transform drops every such
+// key before it writes its own, so a value a lookup leaves out stays empty
+// rather than taking what the producer offered.
 func IsPipelineKey(key string) bool {
-	return strings.HasPrefix(key, pipelineKeyPrefix)
+	return strings.HasPrefix(key, pipelineKeyPrefix) || strings.HasPrefix(key, directoryKeyPrefix)
 }

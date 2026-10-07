@@ -401,6 +401,7 @@ func TestSpanTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
 			spanTestStringAttribute("gen_ai.operation.name", "chat"),
 			spanTestStringAttribute(string(enrich.OriginalInstrumentationScopeNameKey), "com.example.forged"),
 			spanTestStringAttribute(string(enrich.OrganizationIDKey), "forged-org"),
+			spanTestStringAttribute(string(enrich.DirectoryIDKey), "forged-directory"),
 		},
 	}).Build()
 
@@ -423,5 +424,6 @@ func TestSpanTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
 	}
 	require.Equal(t, []string{"litellm"}, values[string(enrich.OriginalInstrumentationScopeNameKey)], "the transform's copy of the scope is the only one")
 	require.Equal(t, []string{testLogOrganizationID}, values[string(enrich.OrganizationIDKey)], "tenancy comes from provenance, not from the producer")
-	require.Equal(t, int64(2), agentEventCount(t, reader, enrich.MeterReservedAttributesDropped, attr.OTELSignalKey, string(enrich.SignalSpan)))
+	require.Empty(t, values[string(enrich.DirectoryIDKey)], "a directory id the lookup did not find stays empty rather than taking the producer's")
+	require.Equal(t, int64(3), agentEventCount(t, reader, enrich.MeterReservedAttributesDropped, attr.OTELSignalKey, string(enrich.SignalSpan)))
 }

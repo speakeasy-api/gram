@@ -105,11 +105,12 @@ func rewriteLogInstrumentationScope(record *otelv1.LogRecord) error {
 	})
 }
 
-// dropReservedLogAttributes removes what a producer sent under Gram's own
-// speakeasy namespace and says how many attributes went. Only the pipeline
-// writes there, and it leaves a key off when a record carries no value for
-// it, so a producer that sends one would otherwise classify its own record,
-// claim another tenant, or pose as another producer's scope. The enrichers
+// dropReservedLogAttributes removes what a producer sent under the
+// namespaces the pipeline writes, speakeasy and directory, and says how many
+// attributes went. Only the pipeline writes there, and it leaves a key off
+// when a record carries no value for it, so a producer that sends one would
+// otherwise classify its own record, claim another tenant, pose as another
+// producer's scope, or give a person a group or department. The enrichers
 // read the inbound record, so what they see is unchanged; the outbound
 // record is what every consumer and relay receives.
 func dropReservedLogAttributes(record *otelv1.LogRecord) int {
