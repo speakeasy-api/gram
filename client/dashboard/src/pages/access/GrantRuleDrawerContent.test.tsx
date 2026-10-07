@@ -165,7 +165,7 @@ describe("grant rule assistant list", () => {
         },
       ],
     };
-    const onChangeSelectors = vi.fn();
+    const onChangeSelectors = vi.fn<(selectors: unknown) => void>();
     render(
       <GrantRuleDrawerContent
         resourceType="assistant"
