@@ -1659,6 +1659,10 @@ SET
     slug = $2,
     visibility = $3,
     user_session_issuer_id = $4,
+    remote_session_issuer_id = CASE
+        WHEN $4::uuid IS NULL THEN NULL
+        ELSE remote_session_issuer_id
+    END,
     tool_variations_group_id = $5,
     network_access_mode = $6,
     updated_at = clock_timestamp()
@@ -1681,6 +1685,7 @@ type SyncHostedMCPServerParams struct {
 }
 
 // Projects a toolset's hosting columns onto its canonical wrapper (id = toolset id).
+// Unsetting the issuer clears the derived remote issuer, which no resync can reach.
 func (q *Queries) SyncHostedMCPServer(ctx context.Context, arg SyncHostedMCPServerParams) (McpServer, error) {
 	row := q.db.QueryRow(ctx, syncHostedMCPServer,
 		arg.Name,

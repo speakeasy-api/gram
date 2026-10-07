@@ -6,16 +6,13 @@ package hostedmcp
 import (
 	"context"
 	"errors"
-	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/tombstone"
@@ -55,23 +52,12 @@ func LockDomains(ctx context.Context, tx pgx.Tx, organizationID string, ids ...u
 			valid = append(valid, id.UUID)
 		}
 	}
-	slices.SortFunc(valid, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
-	dead := map[uuid.UUID]bool{}
-	for _, id := range slices.Compact(valid) {
-		_, err := customdomainsrepo.New(tx).LockCustomDomainByIDAndOrganization(ctx, customdomainsrepo.LockCustomDomainByIDAndOrganizationParams{ID: id, OrganizationID: organizationID})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			dead[id] = true
-		case err != nil:
-			return nil, fmt.Errorf("lock custom domain %s: %w", id, err)
-		}
-	}
-	return dead, nil
+	return tombstone.LockCustomDomains(ctx, tx, organizationID, valid) //nolint:wrapcheck // tombstone already names the failing domain.
 }
 
 // Sync mirrors a locked toolset onto its canonical wrapper; returned domains need a post-commit reconcile.
 func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset, requested *networkaccess.Mode) ([]uuid.UUID, error) {
-	if auditLogger == nil || actor.UserID == "" {
+	if auditLogger == nil || !tombstone.ActorPresent(ctx, actor.UserID) {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")
 	}
 	hasSlug := toolset.McpSlug.Valid && toolset.McpSlug.String != ""
@@ -189,13 +175,21 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 				return nil, err
 			}
 		}
-		if wantVisibility == visibility.Disabled && previous.Visibility != visibility.Disabled {
-			clearedRoots, err = endpointRepo.ClearRootMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ClearRootMCPEndpointsByMCPServerIDParams{McpServerID: toolset.ID, ProjectID: toolset.ProjectID})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "clear hosted MCP root endpoints")
-			}
-			if err := tombstone.LogRootAutoClears(ctx, tx, auditLogger, toolset.OrganizationID, principal, actor.Email, clearedRoots); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "audit hosted MCP root cleanup")
+	}
+
+	// A disabled server holds no domain root, including one left over from before this sync.
+	if wantVisibility == visibility.Disabled && slices.ContainsFunc(endpoints, isRoot) {
+		clearedRoots, err = endpointRepo.ClearRootMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ClearRootMCPEndpointsByMCPServerIDParams{McpServerID: toolset.ID, ProjectID: toolset.ProjectID})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "clear hosted MCP root endpoints")
+		}
+		if err := tombstone.LogRootAutoClears(ctx, tx, auditLogger, toolset.OrganizationID, principal, actor.Email, clearedRoots); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "audit hosted MCP root cleanup")
+		}
+		// Later steps must see the cleared rows, or they would audit the same cleanup again.
+		for i, endpoint := range endpoints {
+			if j := slices.IndexFunc(clearedRoots, func(cleared mcpendpointsrepo.McpEndpoint) bool { return cleared.ID == endpoint.ID }); j >= 0 {
+				endpoints[i] = clearedRoots[j]
 			}
 		}
 	}
@@ -258,7 +252,7 @@ func syncEndpoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, act
 		return nil, nil
 	}
 	existing := endpoints[0]
-	wasRoot := existing.IsDomainRoot.Valid && existing.IsDomainRoot.Bool
+	wasRoot := isRoot(existing)
 	keepRoot := wasRoot && existing.CustomDomainID == toolset.CustomDomainID && server.Visibility != visibility.Disabled
 	rootMarker := pgtype.Bool{}
 	if keepRoot {
@@ -297,9 +291,7 @@ func retireEndpoints(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, 
 		return nil, oops.E(oops.CodeUnexpected, err, "retire hosted MCP endpoints")
 	}
 	principal := urn.NewPrincipal(urn.PrincipalTypeUser, actor.UserID)
-	roots := slices.DeleteFunc(slices.Clone(endpoints), func(endpoint mcpendpointsrepo.McpEndpoint) bool {
-		return !endpoint.IsDomainRoot.Valid || !endpoint.IsDomainRoot.Bool
-	})
+	roots := slices.DeleteFunc(slices.Clone(endpoints), func(endpoint mcpendpointsrepo.McpEndpoint) bool { return !isRoot(endpoint) })
 	if err := tombstone.LogRootAutoClears(ctx, tx, auditLogger, toolset.OrganizationID, principal, actor.Email, roots); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit hosted MCP root cleanup")
 	}
@@ -316,10 +308,10 @@ func retireEndpoints(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, 
 
 // Delete tombstones a deleted toolset's canonical wrapper; returned domains need a post-commit reconcile.
 func Delete(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset) ([]uuid.UUID, error) {
-	if auditLogger == nil || actor.UserID == "" {
+	if auditLogger == nil || !tombstone.ActorPresent(ctx, actor.UserID) {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")
 	}
-	locked, err := tombstone.Lock(ctx, tx, toolset.ProjectID, toolset.ID)
+	locked, err := tombstone.Lock(ctx, tx, toolset.OrganizationID, toolset.ProjectID, toolset.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -342,6 +334,10 @@ func Delete(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Act
 		return nil, oops.E(oops.CodeUnexpected, err, "audit hosted MCP deletion")
 	}
 	return tombstone.RootDomainIDs(locked.RootEndpoints), nil
+}
+
+func isRoot(endpoint mcpendpointsrepo.McpEndpoint) bool {
+	return endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool
 }
 
 // resyncIssuers recomputes the derived remote_session_issuer_id for each issuer touched.

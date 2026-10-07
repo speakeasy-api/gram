@@ -3,6 +3,7 @@ package toolsets_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -11,12 +12,19 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	cdrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -181,9 +189,8 @@ func TestCanonicalWrapperLeavesFreshIDServersAlone(t *testing.T) {
 	require.Equal(t, member.ID, members[0].McpServerID)
 }
 
-func TestCanonicalWrapperFollowsCustomDomainLifecycle(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestToolsetsService(t)
+func createActiveCustomDomain(t *testing.T, ctx context.Context, ti *testInstance) cdrepo.CustomDomain {
+	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	domains := cdrepo.New(ti.conn)
@@ -199,6 +206,28 @@ func TestCanonicalWrapperFollowsCustomDomainLifecycle(t *testing.T) {
 		IngressName: conv.ToPGText("ingress-canonical"), CertSecretName: conv.ToPGText("cert-canonical"), ProvisionerKind: "ingress", ID: domain.ID,
 	})
 	require.NoError(t, err)
+	return domain
+}
+
+// createRootedToolsetOnDomain returns a public toolset whose canonical endpoint is the domain root.
+func createRootedToolsetOnDomain(t *testing.T, ctx context.Context, ti *testInstance, domain cdrepo.CustomDomain, name string) *types.Toolset {
+	t.Helper()
+	toolset := createMinimalPublicToolset(t, ctx, ti, name)
+	domainID := domain.ID.String()
+	updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: toolset.Slug, CustomDomainID: &domainID})
+	require.NoError(t, err)
+	endpoint := requireCanonicalMatches(t, ctx, ti, updated).endpoints[0]
+	require.NoError(t, cdrepo.New(ti.conn).SetRootMcpEndpoint(ctx, cdrepo.SetRootMcpEndpointParams{McpEndpointID: endpoint.ID, CustomDomainID: domain.ID}))
+	return updated
+}
+
+func TestCanonicalWrapperFollowsCustomDomainLifecycle(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	domains := cdrepo.New(ti.conn)
+	domain := createActiveCustomDomain(t, ctx, ti)
 
 	toolset := createMinimalPublicToolset(t, ctx, ti, "Canonical Domain")
 	platformEndpoint := requireCanonicalMatches(t, ctx, ti, toolset).endpoints[0]
@@ -227,4 +256,135 @@ func TestCanonicalWrapperFollowsCustomDomainLifecycle(t *testing.T) {
 	require.Equal(t, "Canonical Dead Domain", state.server.Name.String)
 	require.Equal(t, "public", state.server.Visibility)
 	require.Empty(t, state.endpoints, "no endpoint is recreated on a deleted domain")
+}
+
+func TestCanonicalWrapperDisableAndMoveAuditsRootCleanupOnce(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset := createRootedToolsetOnDomain(t, ctx, ti, createActiveCustomDomain(t, ctx, ti), "Canonical Disable Move")
+
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionCustomDomainsUpdate)
+	require.NoError(t, err)
+	movedSlug := types.Slug(authCtx.OrganizationSlug + "-canonical-disable-move")
+	updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: toolset.Slug, McpEnabled: new(false), McpSlug: &movedSlug})
+	require.NoError(t, err)
+	require.False(t, requireCanonicalMatches(t, ctx, ti, updated).endpoints[0].IsDomainRoot.Valid)
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionCustomDomainsUpdate)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after, "one root cleanup, audited once")
+}
+
+func TestCanonicalWrapperSyncClearsRootOnAlreadyDisabledServer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	domain := createActiveCustomDomain(t, ctx, ti)
+	toolset := createRootedToolsetOnDomain(t, ctx, ti, domain, "Canonical Disabled Root")
+	updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: toolset.Slug, McpEnabled: new(false)})
+	require.NoError(t, err)
+
+	// A root left on a server that was already disabled.
+	endpoint := requireCanonicalMatches(t, ctx, ti, updated).endpoints[0]
+	require.NoError(t, cdrepo.New(ti.conn).SetRootMcpEndpoint(ctx, cdrepo.SetRootMcpEndpointParams{McpEndpointID: endpoint.ID, CustomDomainID: domain.ID}))
+
+	updated, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: toolset.Slug, Name: new("Canonical Disabled Root Renamed")})
+	require.NoError(t, err)
+	require.False(t, requireCanonicalMatches(t, ctx, ti, updated).endpoints[0].IsDomainRoot.Valid)
+}
+
+func TestCanonicalWrapperDeletedWhenItsDomainIsAlreadyGone(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset := createRootedToolsetOnDomain(t, ctx, ti, createActiveCustomDomain(t, ctx, ti), "Canonical Domain Race")
+
+	// The domain row is gone while its endpoint is still live, as mid-way through a concurrent domain deletion.
+	require.NoError(t, cdrepo.New(ti.conn).DeleteCustomDomain(ctx, authCtx.ActiveOrganizationID))
+
+	require.NoError(t, ti.service.DeleteToolset(ctx, &gen.DeleteToolsetPayload{Slug: toolset.Slug}))
+	_, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: uuid.MustParse(toolset.ID), ProjectID: *authCtx.ProjectID})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "the canonical wrapper is tombstoned with its toolset")
+}
+
+func TestCanonicalWrapperUnsetIssuerClearsRemoteIssuer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset := createMinimalPublicToolset(t, ctx, ti, "Canonical Remote Issuer")
+
+	issuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true},
+		Slug:                         "canonical-remote",
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: 14 * 24 * 60 * 60 * 1_000_000, Valid: true},
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	remote := remotesessionsrepo.New(ti.conn)
+	remoteIssuer, err := remote.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              "canonical-remote-issuer",
+		Issuer:                            "https://canonical-remote.example.com",
+		AuthorizationEndpoint:             conv.ToPGText("https://canonical-remote.example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://canonical-remote.example.com/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
+	})
+	require.NoError(t, err)
+	client, err := remote.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		RemoteSessionIssuerID: remoteIssuer.ID,
+		ClientID:              "canonical-remote-client",
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, remote.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: client.ID,
+		UserSessionIssuerID:   issuer.ID,
+	}))
+
+	issuerID := issuer.ID.String()
+	updated, err := ti.service.SetUserSessionIssuer(ctx, &gen.SetUserSessionIssuerPayload{Slug: toolset.Slug, UserSessionIssuerID: &issuerID})
+	require.NoError(t, err)
+	require.Equal(t, uuid.NullUUID{UUID: remoteIssuer.ID, Valid: true}, requireCanonicalMatches(t, ctx, ti, updated).server.RemoteSessionIssuerID)
+
+	updated, err = ti.service.SetUserSessionIssuer(ctx, &gen.SetUserSessionIssuerPayload{Slug: toolset.Slug, UserSessionIssuerID: nil})
+	require.NoError(t, err)
+	require.False(t, requireCanonicalMatches(t, ctx, ti, updated).server.RemoteSessionIssuerID.Valid, "no issuer, no derived remote issuer")
+}
+
+func TestCanonicalWrapperSyncAcceptsAgentPrincipal(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset := createMinimalPublicToolset(t, ctx, ti, "Canonical Agent")
+
+	agent := urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString())
+	agentAuth := *authCtx
+	agentAuth.UserID, agentAuth.Email = "", nil
+	agentCtx := contextvalues.WithPrincipalAPIKeyAuthorization(ctx, &agentAuth, agent, contextvalues.PrincipalCredential{AuthorizerUserID: authCtx.UserID, DelegatedGrants: nil, DelegatedGrantsVersion: 0})
+
+	tx, err := ti.conn.Begin(agentCtx) //nolint:glint // notestingrawsql: hostedmcp.Sync runs in a caller-owned transaction.
+	require.NoError(t, err)
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(context.Background()) })
+	locked, err := toolsetsrepo.New(tx).GetToolsetForUpdate(agentCtx, toolsetsrepo.GetToolsetForUpdateParams{Slug: string(toolset.Slug), ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	locked.Name = "Canonical Agent Renamed"
+	_, err = hostedmcp.Sync(agentCtx, tx, audit.NewLogger(), hostedmcp.Actor{UserID: agentAuth.UserID, Email: nil}, locked, nil)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(agentCtx))
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMcpServerUpdate)
+	require.NoError(t, err)
+	require.Equal(t, string(urn.PrincipalTypeAgent), record.ActorType)
+	require.Equal(t, agent.ID, record.ActorID)
 }

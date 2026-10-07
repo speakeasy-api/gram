@@ -1035,7 +1035,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	lockedServer, err := tombstone.Lock(ctx, dbtx, *authCtx.ProjectID, serverID)
+	lockedServer, err := tombstone.Lock(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)

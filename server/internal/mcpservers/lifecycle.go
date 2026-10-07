@@ -124,7 +124,7 @@ func LockMCPServerVisibilityDependencies(ctx context.Context, tx pgx.Tx, organiz
 	if err != nil {
 		return fmt.Errorf("list MCP server custom domains: %w", err)
 	}
-	if err := tombstone.LockCustomDomains(ctx, tx, domainIDs); err != nil {
+	if _, err := tombstone.LockCustomDomains(ctx, tx, organizationID, domainIDs); err != nil {
 		return fmt.Errorf("lock MCP server custom domains: %w", err)
 	}
 	if _, err := mcpendpointsrepo.New(tx).LockRootMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockRootMCPEndpointsByMCPServerIDParams{McpServerID: serverID, ProjectID: projectID}); err != nil {
