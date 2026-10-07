@@ -127,6 +127,6 @@ func TestEnrichLogClassificationCountsWhatNoDialectNames(t *testing.T) {
 	require.Equal(t, dialect.EventTypeToolCallResult, columns[EventTypeColumnKey].AsString())
 
 	require.Equal(t, int64(1), counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface("claude-code")))
-	require.Equal(t, int64(1), counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface(counterSurfaceOther)))
+	require.Equal(t, int64(1), counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface(missingLabelOther)))
 	require.Zero(t, counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface("codex")))
 }

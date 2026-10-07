@@ -68,7 +68,7 @@ func TestScrubToolIODropsToolContentButKeepsTheSkillName(t *testing.T) {
 	t.Parallel()
 
 	tool := map[attr.Key]any{
-		attr.ToolNameKey:              "Bash",
+		attr.ToolNameKey:               "Bash",
 		attr.GenAIToolCallArgumentsKey: `{"command":"cat secrets.txt"}`,
 		attr.GenAIToolCallResultKey:    "hunter2",
 		attr.HookEventKey:              "PostToolUse",
@@ -79,7 +79,7 @@ func TestScrubToolIODropsToolContentButKeepsTheSkillName(t *testing.T) {
 	require.Equal(t, "PostToolUse", tool[attr.HookEventKey], "only tool IO is scrubbed")
 
 	skill := map[attr.Key]any{
-		attr.ToolNameKey:              "Skill",
+		attr.ToolNameKey:               "Skill",
 		attr.GenAIToolCallArgumentsKey: `{"skill":"repo-review","extra":"dropped"}`,
 		attr.GenAIToolCallResultKey:    "activated",
 	}

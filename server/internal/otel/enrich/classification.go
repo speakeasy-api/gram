@@ -66,7 +66,7 @@ func (c *logClassification) Enrich(ctx context.Context, record *otelv1.InboundLo
 	d := dialect.ForLog(record)
 	eventType := stated(d.EventType(record))
 	if eventType == dialect.EventTypeUnclassified {
-		c.instruments.recordUnclassified(ctx, counterSurfaceLog(d, record))
+		c.instruments.recordUnclassified(ctx, missingLabelLog(d, record))
 	}
 	return classify(
 		inboundLogSource(record),
@@ -91,7 +91,7 @@ func (c *spanClassification) Enrich(ctx context.Context, span *otelv1.InboundSpa
 	d := dialect.ForSpan(span)
 	eventType := stated(d.EventType(span))
 	if eventType == dialect.EventTypeUnclassified {
-		c.instruments.recordUnclassified(ctx, counterSurfaceSpan(d, span))
+		c.instruments.recordUnclassified(ctx, missingLabelSpan(d, span))
 	}
 	return classify(
 		inboundSpanSource(span),
