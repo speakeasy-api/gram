@@ -548,7 +548,7 @@ export function ChatLogsTable({
                                 <span className="text-muted-foreground/70">
                                   on behalf of
                                 </span>
-                                <span className="pointer-events-auto max-w-[120px] truncate">
+                                <span className="pointer-events-auto max-w-[120px] truncate pb-0.5">
                                   <ChatOwnerLabel
                                     members={membersData?.members}
                                     chat={chat}
@@ -560,7 +560,7 @@ export function ChatLogsTable({
                           ) : (
                             <>
                               <AccountTypeIcon accountType={chat.accountType} />
-                              <span className="pointer-events-auto max-w-[120px] truncate">
+                              <span className="pointer-events-auto max-w-[120px] truncate pb-0.5">
                                 <ChatOwnerLabel
                                   members={membersData?.members}
                                   chat={chat}
