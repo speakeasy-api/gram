@@ -105,26 +105,32 @@ func (s *SignalAuthoringService) scope(ctx context.Context, principal Principal,
 	if s == nil || s.management == nil || s.projects == nil || s.engine == nil || len(s.key) == 0 {
 		return ctx, project, state, ErrUnavailable
 	}
+
 	id, err := uuid.Parse(projectID)
 	if err != nil || id == uuid.Nil {
 		return ctx, project, state, oops.C(oops.CodeBadRequest)
 	}
+
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || auth == nil || principal.UserID == "" || auth.UserID != principal.UserID || auth.ActiveOrganizationID != principal.OrganizationID || principal.surface() != SurfacePlatformMCP {
 		return ctx, project, state, ErrForbidden
 	}
+
 	project, err = s.projects.resolveInventoryProject(ctx, principal.OrganizationID, FindMCPInput{ProjectID: id.String(), ProjectSlug: "", Query: "", Cursor: "", Limit: 0, Readiness: ""})
 	if err != nil {
 		return ctx, project, state, err
 	}
+
 	if project.ID != id {
 		return ctx, project, state, ErrForbidden
 	}
 	scoped := *auth
+
 	scoped.OrganizationSlug, err = NewPostgresOrganizationSlugResolver(s.db).OrganizationSlug(ctx, principal.OrganizationID)
 	if err != nil {
 		return ctx, project, state, err
 	}
+
 	scoped.ProjectID, scoped.ProjectSlug = &project.ID, &project.Slug
 	ctx = contextvalues.SetAuthContext(ctx, &scoped)
 	if write {
@@ -132,12 +138,14 @@ func (s *SignalAuthoringService) scope(ctx context.Context, principal Principal,
 			return ctx, project, state, err
 		}
 	}
+
 	// This independently checks entitlement and project read access, including
 	// before receipt replay. The mutation rechecks write access under its lock.
 	state, err = s.management.ReadAuthoringState(ctx)
 	if err != nil {
 		return ctx, project, state, fmt.Errorf("read signal authoring state: %w", err)
 	}
+
 	return ctx, project, state, nil
 }
 
@@ -152,6 +160,7 @@ func (s *SignalAuthoringService) previewToken(principal Principal, project Resol
 	if err != nil {
 		return "", fmt.Errorf("encode sensor proposal: %w", err)
 	}
+
 	mac := hmac.New(sha256.New, s.key)
 	_, _ = mac.Write([]byte("platform-signal-authoring-v1\x00"))
 	_, _ = mac.Write(data)
@@ -182,6 +191,7 @@ func (s *SignalAuthoringService) author(ctx context.Context, principal Principal
 		if err != nil {
 			return zero, fmt.Errorf("preview signal authoring: %w", err)
 		}
+
 		out := projectAuthoringResult(ctx, project, result)
 		out.Preview, out.Version = true, version
 		out.PreviewToken, err = s.previewToken(principal, project, version, input.Proposal)
@@ -217,6 +227,7 @@ func (s *SignalAuthoringService) author(ctx context.Context, principal Principal
 			if err != nil {
 				return signalReceipt{}, fmt.Errorf("apply signal authoring: %w", err)
 			}
+
 			var value signalReceipt
 			if result.Sensor != nil {
 				value.SensorID = result.Sensor.ID
@@ -232,6 +243,7 @@ func (s *SignalAuthoringService) author(ctx context.Context, principal Principal
 	}
 
 	var target signalReceipt
+
 	if err := json.Unmarshal(receipt.ResultPayload, &target); err != nil {
 		return zero, ErrUnavailable
 	}
@@ -316,9 +328,11 @@ func projectSensor(sensor *types.SigintSensor, signals map[string]signalConfigur
 			}
 		}
 	}
+
 	if err := matching.Validate(sensor.MatchExpression); err != nil {
 		result.Issues = append(result.Issues, "invalid_match_expression")
 	}
+
 	result.Ready = len(result.Issues) == 0
 	return result
 }
@@ -328,9 +342,11 @@ func projectAuthoringResult(ctx context.Context, project ResolvedProject, result
 	signals := signalProjections(result.State)
 	out.ProjectID, out.Version = project.ID.String(), result.State.Version
 	out.AffectedSensors = []sensorImpact{}
+
 	if auth, ok := contextvalues.GetAuthContext(ctx); ok && auth != nil && auth.OrganizationSlug != "" {
 		out.DashboardPath = "/" + auth.OrganizationSlug + "/projects/" + project.Slug + "/signals-intelligence"
 	}
+
 	if result.Sensor != nil {
 		value := projectSensor(result.Sensor, signals)
 		out.Sensor = &value
@@ -353,7 +369,9 @@ func signalToolError(err error) (*mcp.CallToolResult, bool) {
 	if result, ok := externalAuthorizationToolResult(err); ok {
 		return result, true
 	}
+
 	code, message := "unavailable", "Signals intelligence authoring is unavailable."
+
 	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
 		switch shareable.Code {
 		case oops.CodeBadRequest, oops.CodeInvalid:
@@ -370,6 +388,7 @@ func signalToolError(err error) (*mcp.CallToolResult, bool) {
 	} else if errors.Is(err, ErrForbidden) {
 		code, message = "permission_denied", "An authorized external user and exact project are required."
 	}
+
 	data, _ := json.Marshal(featureUnavailableResult{Code: code, Feature: "signals_intelligence", Message: message})
 	return &mcp.CallToolResult{Meta: nil, StructuredContent: nil, InputRequests: nil, RequestState: "", Content: []mcp.Content{&mcp.TextContent{Meta: nil, Annotations: nil, Text: string(data)}}, IsError: true}, true
 }

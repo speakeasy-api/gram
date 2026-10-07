@@ -71,6 +71,7 @@ func signalManifest(name, title, description string, read bool) *mcp.Tool {
 func registerSignalTools(reg *Registrar, service *SignalAuthoringService) {
 	readMeta := ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}
 	writeMeta := ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectWrite}
+
 	for _, operation := range []string{"create_sensor", "create_signal", "update_sensor", "update_signal"} {
 		addTool(reg, signalManifest(operation, strings.ReplaceAll(operation, "_", " "), "Author project-scoped signals intelligence. Call confirmed:false to validate and preview. Creation IDs in previews are provisional. Show the complete normalized proposal and affected sensors, obtain explicit confirmation, then resend the identical proposal with expected_version, preview_token, confirmed:true and a stable idempotency_key. Sensor creation atomically creates inline signals and ordered memberships; updates preserve omitted fields and replace supplied memberships. Shared signal changes affect every referencing sensor. Version covers the entire bounded project configuration. Returns current post-commit state; receipt replay does not prove a target still exists. Requires signals_intelligence and project:write plus project:read. Readiness is configuration only, never proof of active evaluation. External users only.", false), writeMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input signalAuthoringInput) (*mcp.CallToolResult, signalAuthoringOutput, error) {
 			return principalToolCall(ctx, signalToolError, func(principal Principal) (signalAuthoringOutput, error) {
@@ -81,15 +82,19 @@ func registerSignalTools(reg *Registrar, service *SignalAuthoringService) {
 	addTool(reg, signalManifest("find_signals", "Find Reusable Signals", "Find reusable signals by name or slug in an explicit project before creating duplicates. Returns criteria and referencing sensor counts. UUID-ordered bounded pagination; candidates are not automatic selections. Requires signals_intelligence and project:read. Authoring supports at most 1000 active signals and 1000 active sensors per project.", true), readMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input findSignalsInput) (*mcp.CallToolResult, findSignalsOutput, error) {
 		return principalToolCall(ctx, signalToolError, func(principal Principal) (findSignalsOutput, error) {
 			var out findSignalsOutput
+
 			if err := validateSignalSearch(&input); err != nil {
 				return out, err
 			}
+
 			_, _, state, err := service.scope(ctx, principal, input.ProjectID, false)
 			if err != nil {
 				return out, err
 			}
+
 			out.Signals, out.Version = []signalConfiguration{}, state.Version
 			projections := signalProjections(state)
+
 			for _, signal := range state.Signals {
 				if signal.ID <= input.Cursor || !signalSearchMatches(input.Query, signal.Name, string(signal.Slug)) {
 					continue
@@ -98,23 +103,29 @@ func registerSignalTools(reg *Registrar, service *SignalAuthoringService) {
 					out.NextCursor = out.Signals[len(out.Signals)-1].ID
 					break
 				}
+
 				out.Signals = append(out.Signals, projections[signal.ID])
 			}
+
 			return out, nil
 		})
 	})
 	addTool(reg, signalManifest("find_sensors", "Find Sensors", "Find project sensor summaries by name or slug, with matching expressions, signal counts and configuration readiness. Use get_sensor for ordered expanded definitions. Requires signals_intelligence and project:read. Pagination is UUID ordered; readiness does not prove evaluation is running. Bounded to projects with at most 1000 active sensors and 1000 active signals.", true), readMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input findSignalsInput) (*mcp.CallToolResult, findSensorsOutput, error) {
 		return principalToolCall(ctx, signalToolError, func(principal Principal) (findSensorsOutput, error) {
 			var out findSensorsOutput
+
 			if err := validateSignalSearch(&input); err != nil {
 				return out, err
 			}
+
 			_, _, state, err := service.scope(ctx, principal, input.ProjectID, false)
 			if err != nil {
 				return out, err
 			}
+
 			out.Sensors, out.Version = []sensorSummary{}, state.Version
 			projections := signalProjections(state)
+
 			for _, sensor := range state.Sensors {
 				if sensor.ID <= input.Cursor || !signalSearchMatches(input.Query, sensor.Name, string(sensor.Slug)) {
 					continue
@@ -126,6 +137,7 @@ func registerSignalTools(reg *Registrar, service *SignalAuthoringService) {
 				value := projectSensor(sensor, projections)
 				out.Sensors = append(out.Sensors, sensorSummary{ID: value.ID, Name: value.Name, Slug: value.Slug, Mode: value.Mode, MatchExpression: value.MatchExpression, SignalCount: len(value.Signals), Ready: value.Ready, Issues: value.Issues})
 			}
+
 			return out, nil
 		})
 	})
@@ -135,27 +147,34 @@ func registerSignalTools(reg *Registrar, service *SignalAuthoringService) {
 			if err != nil {
 				return signalAuthoringOutput{}, err
 			}
+
 			for _, sensor := range state.Sensors {
 				if sensor.ID == input.SensorID {
 					return projectAuthoringResult(ctx, project, sigint.AuthoringResult{Sensor: sensor, Signal: nil, State: state}), nil
 				}
 			}
+
 			return signalAuthoringOutput{}, oops.C(oops.CodeNotFound)
 		})
 	})
 	addTool(reg, signalManifest("preview_sensor_match", "Preview Sensor Matching", "Validate a boolean CEL predicate and evaluate up to 20 caller-supplied role examples without retrieving messages or running inference. Returns matched, not_matched, evaluation_error, or cost_limit per example. The message context currently exposes only role; absence is unbound, not an empty role. Configuration predicates do not broaden ingestion: conversation evaluation currently accepts only user/assistant creation events. Requires signals_intelligence and project:read.", true), readMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input previewSensorMatchInput) (*mcp.CallToolResult, previewSensorMatchOutput, error) {
 		return principalToolCall(ctx, signalToolError, func(principal Principal) (previewSensorMatchOutput, error) {
 			var out previewSensorMatchOutput
+
 			if _, _, _, err := service.scope(ctx, principal, input.ProjectID, false); err != nil {
 				return out, err
 			}
+
 			if len(input.Examples) > 20 {
 				return out, oops.C(oops.CodeBadRequest)
 			}
+
 			if err := matching.Validate(input.Expression); err != nil {
 				return out, oops.E(oops.CodeBadRequest, err, "invalid matching expression")
 			}
+
 			out.Contract, out.Results = matching.Version, []string{}
+
 			for _, example := range input.Examples {
 				var message *matching.Message
 				if example.Role != nil {
@@ -178,8 +197,10 @@ func registerSignalTools(reg *Registrar, service *SignalAuthoringService) {
 				case matched:
 					result = "matched"
 				}
+
 				out.Results = append(out.Results, result)
 			}
+
 			return out, nil
 		})
 	})
@@ -189,14 +210,17 @@ func validateSignalSearch(input *findSignalsInput) error {
 	if input.Limit == 0 {
 		input.Limit = 20
 	}
+
 	if input.Limit < 1 || input.Limit > 100 || len(input.Query) > 200 {
 		return oops.C(oops.CodeBadRequest)
 	}
+
 	if input.Cursor != "" {
 		if _, err := uuid.Parse(input.Cursor); err != nil {
 			return oops.C(oops.CodeBadRequest)
 		}
 	}
+
 	return nil
 }
 

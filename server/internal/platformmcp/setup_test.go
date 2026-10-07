@@ -27,12 +27,16 @@ type signalAuthoringFixture struct {
 
 func newSignalAuthoringFixture(t *testing.T) (context.Context, signalAuthoringFixture) {
 	t.Helper()
+
 	db, err := platformMCPInfra.CloneTestDatabase(t, "signal_authoring")
 	require.NoError(t, err)
+
 	principal, project := seedRegistrationLifecycle(t, t.Context(), db)
 	logger, tracer := testenv.NewLogger(t), testenv.NewTracerProvider(t)
+
 	redis, err := platformMCPInfra.NewRedisClient(t, 0)
 	require.NoError(t, err)
+
 	features := productfeatures.NewClient(logger, tracer, db, redis)
 	require.NoError(t, features.SetFeatureEnabled(t.Context(), principal.OrganizationID, productfeatures.FeatureSignalsIntelligence, true))
 	engine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
