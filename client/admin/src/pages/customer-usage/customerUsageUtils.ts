@@ -162,6 +162,9 @@ export function compareCustomers(
 }
 
 export type CustomerUsageView = {
+  // Pinned customers, first and whatever their usage, so a pinned customer
+  // with $0 this cycle still sits at the top.
+  pinned: CustomerUsageSummary[];
   // Customers with usage this cycle, or whose usage could not be read.
   active: CustomerUsageSummary[];
   // Customers with $0 this cycle.
@@ -171,6 +174,7 @@ export type CustomerUsageView = {
 export function customerUsageView(
   customers: readonly CustomerUsage[],
   controls: Pick<CustomerUsageControls, "q" | "plans" | "sort" | "products">,
+  pinnedIDs: ReadonlySet<string> = new Set(),
 ): CustomerUsageView {
   const term = controls.q.trim().toLocaleLowerCase("en");
   const summaries = customers
@@ -183,9 +187,13 @@ export function customerUsageView(
     .map((customer) => summarizeCustomer(customer, controls.products))
     .sort(compareCustomers(controls.sort));
 
-  const view: CustomerUsageView = { active: [], idle: [] };
+  const view: CustomerUsageView = { pinned: [], active: [], idle: [] };
   for (const summary of summaries) {
-    (hasNoUsage(summary) ? view.idle : view.active).push(summary);
+    if (pinnedIDs.has(summary.customer.organizationId)) {
+      view.pinned.push(summary);
+    } else {
+      (hasNoUsage(summary) ? view.idle : view.active).push(summary);
+    }
   }
   return view;
 }

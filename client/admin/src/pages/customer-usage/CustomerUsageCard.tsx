@@ -1,6 +1,12 @@
 import { useMemo, useState, type JSX } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowDownRight, ArrowUpRight, ChevronDown } from "lucide-react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  ChevronDown,
+  Pin,
+  PinOff,
+} from "lucide-react";
 
 import { TrialStateBadge } from "@/components/Trial";
 import { Badge } from "@/components/ui/badge";
@@ -84,6 +90,8 @@ export function CustomerUsageCard({
   interval,
   cumulative,
   collapsible = false,
+  pinned,
+  onTogglePinned,
   onRetry,
   isRetrying,
 }: {
@@ -94,6 +102,8 @@ export function CustomerUsageCard({
   cumulative: boolean;
   // Cards in "No usage this cycle" start as their header and can be expanded.
   collapsible?: boolean;
+  pinned: boolean;
+  onTogglePinned: () => void;
   onRetry: () => void;
   isRetrying: boolean;
 }): JSX.Element {
@@ -137,14 +147,30 @@ export function CustomerUsageCard({
               )}
             </p>
           </div>
-          <Button variant="link" size="sm" className="h-auto px-0" asChild>
-            <Link
-              to="/organizations/$idOrSlug/billing"
-              params={{ idOrSlug: customer.slug }}
+          <div className="flex shrink-0 items-center gap-2">
+            <Button variant="link" size="sm" className="h-auto px-0" asChild>
+              <Link
+                to="/organizations/$idOrSlug/billing"
+                params={{ idOrSlug: customer.slug }}
+              >
+                View billing
+              </Link>
+            </Button>
+            <Button
+              variant={pinned ? "secondary" : "ghost"}
+              size="icon-sm"
+              aria-pressed={pinned}
+              aria-label={
+                pinned
+                  ? `Unpin ${customer.name}`
+                  : `Pin ${customer.name} to top`
+              }
+              title={pinned ? "Unpin" : "Pin to top"}
+              onClick={onTogglePinned}
             >
-              View billing
-            </Link>
-          </Button>
+              {pinned ? <PinOff /> : <Pin />}
+            </Button>
+          </div>
         </div>
         {customer.error === undefined && (
           <div className="flex flex-wrap items-end justify-between gap-2">

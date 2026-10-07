@@ -290,3 +290,42 @@ describe("planFilterLabel", () => {
     );
   });
 });
+
+describe("pinned customers", () => {
+  const customers = [
+    customer({ name: "High", costs: ["100", "0", "0"] }),
+    customer({ name: "Low", costs: ["1", "0", "0"] }),
+    customer({ name: "Idle", accountType: "payg" }),
+  ];
+  const controls = {
+    q: "",
+    plans: new Set<CustomerPlan>(),
+    sort: "spend" as const,
+    products: ALL,
+  };
+
+  it("lifts pinned customers out of the other sections, including one with no usage", () => {
+    const view = customerUsageView(
+      customers,
+      controls,
+      new Set(["org_Low", "org_Idle"]),
+    );
+    expect(view.pinned.map((summary) => summary.customer.name)).toEqual([
+      "Low",
+      "Idle",
+    ]);
+    expect(view.active.map((summary) => summary.customer.name)).toEqual([
+      "High",
+    ]);
+    expect(view.idle).toEqual([]);
+  });
+
+  it("still applies search and plan filters to pinned customers", () => {
+    const view = customerUsageView(
+      customers,
+      { ...controls, plans: new Set<CustomerPlan>(["enterprise"]) },
+      new Set(["org_Idle"]),
+    );
+    expect(view.pinned).toEqual([]);
+  });
+});

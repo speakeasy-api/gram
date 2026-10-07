@@ -8,7 +8,7 @@ import {
 } from "./customerUsageSearch";
 
 describe("customer usage search", () => {
-  it("defaults to every product, monthly, cumulative, sorted by spend", () => {
+  it("defaults to every product, monthly, per-period (not cumulative), sorted by spend", () => {
     const controls = customerUsageControls(customerUsageSearch({}));
     expect(controls).toEqual({
       q: "",
@@ -20,7 +20,7 @@ describe("customer usage search", () => {
         "mcp_egress",
       ]),
       interval: "monthly",
-      cumulative: true,
+      cumulative: false,
     });
   });
 
@@ -32,7 +32,7 @@ describe("customer usage search", () => {
         sort: "bogus",
         products: ["mcp_egress"],
         interval: "weekly",
-        cumulative: false,
+        cumulative: true,
       }),
     ).toEqual({
       q: "example",
@@ -40,7 +40,7 @@ describe("customer usage search", () => {
       sort: undefined,
       products: ["mcp_egress"],
       interval: "weekly",
-      cumulative: false,
+      cumulative: true,
     });
   });
 

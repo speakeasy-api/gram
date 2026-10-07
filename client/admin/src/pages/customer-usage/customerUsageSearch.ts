@@ -35,7 +35,8 @@ const searchSchema = z.object({
     .optional()
     .catch(undefined),
   interval: z.enum(["daily", "weekly", "monthly"]).optional().catch(undefined),
-  // Cumulative is on by default, so only `false` is ever stored.
+  // Cumulative is off by default: a running total makes every customer's
+  // monthly chart climb, even one whose spend is falling. Only `true` is stored.
   cumulative: z.boolean().optional().catch(undefined),
 });
 
@@ -66,7 +67,7 @@ export function customerUsageControls(
     sort: search.sort ?? "spend",
     products: new Set(search.products ?? ALL_PRODUCT_IDS),
     interval: search.interval ?? "monthly",
-    cumulative: search.cumulative ?? true,
+    cumulative: search.cumulative ?? false,
   };
 }
 

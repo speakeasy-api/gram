@@ -29,6 +29,7 @@ import {
   SPEND_PRODUCT_COLOR,
   type SpendProductID,
 } from "@/pages/organization/spendBreakdownUtils";
+import { usePinnedCustomers } from "./pinnedCustomers";
 import {
   CustomerUsageCard,
   CustomerUsageCardSkeleton,
@@ -76,6 +77,7 @@ export function CustomerUsage(): JSX.Element {
   const search = route.useSearch();
   const navigate = route.useNavigate();
   const controls = useMemo(() => customerUsageControls(search), [search]);
+  const { pinned, togglePinned } = usePinnedCustomers();
   const query = useQuery({
     ...customerUsageQuery({ interval: controls.interval }),
     placeholderData: keepPreviousData,
@@ -83,9 +85,9 @@ export function CustomerUsage(): JSX.Element {
   const view = useMemo(
     () =>
       query.data
-        ? customerUsageView(query.data.customers, controls)
+        ? customerUsageView(query.data.customers, controls, pinned)
         : undefined,
-    [query.data, controls],
+    [query.data, controls, pinned],
   );
 
   const update = (patch: CustomerUsageSearch): void => {
@@ -127,13 +129,18 @@ export function CustomerUsage(): JSX.Element {
         interval={controls.interval}
         cumulative={controls.cumulative}
         collapsible={collapsible}
+        pinned={pinned.has(summary.customer.organizationId)}
+        onTogglePinned={() => togglePinned(summary.customer.organizationId)}
         onRetry={() => void query.refetch()}
         isRetrying={query.isFetching}
       />
     ) : null;
 
   const noMatches =
-    view !== undefined && view.active.length === 0 && view.idle.length === 0;
+    view !== undefined &&
+    view.pinned.length === 0 &&
+    view.active.length === 0 &&
+    view.idle.length === 0;
 
   return (
     <div className="@container space-y-6 p-6">
@@ -264,7 +271,7 @@ export function CustomerUsage(): JSX.Element {
               <Switch
                 checked={controls.cumulative}
                 onCheckedChange={(checked) =>
-                  update({ cumulative: checked ? undefined : false })
+                  update({ cumulative: checked ? true : undefined })
                 }
               />
               Cumulative
@@ -346,12 +353,35 @@ export function CustomerUsage(): JSX.Element {
         </p>
       )}
 
+      {view && view.pinned.length > 0 && (
+        <section aria-labelledby="pinned-title" className="space-y-3">
+          <h2 id="pinned-title" className="text-lg font-semibold">
+            Pinned{" "}
+            <span className="text-muted-foreground text-sm font-normal">
+              ({view.pinned.length})
+            </span>
+          </h2>
+          <div className={GRID_CLASSES}>
+            {view.pinned.map((summary) => renderCard(summary, false))}
+          </div>
+        </section>
+      )}
+
       {view && view.active.length > 0 && (
-        <section
-          aria-label="Customers with usage this cycle"
-          className={GRID_CLASSES}
-        >
-          {view.active.map((summary) => renderCard(summary, false))}
+        <section aria-labelledby="active-title" className="space-y-3">
+          {/* Only titled when the Pinned section sits above it, so the two
+              grids do not read as one. */}
+          <h2
+            id="active-title"
+            className={
+              view.pinned.length > 0 ? "text-lg font-semibold" : "sr-only"
+            }
+          >
+            Other customers
+          </h2>
+          <div className={GRID_CLASSES}>
+            {view.active.map((summary) => renderCard(summary, false))}
+          </div>
         </section>
       )}
 
