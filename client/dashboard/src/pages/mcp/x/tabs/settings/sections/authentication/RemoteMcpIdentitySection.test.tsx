@@ -1,3 +1,4 @@
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
@@ -2339,6 +2340,28 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect(
         screen.queryByRole("combobox", { name: "Pinned scopes" }),
       ).toBeNull();
+    });
+
+    it("explains a refusal: the pin needs edit access to every server on the URL", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({
+        data: undefined,
+        isError: true,
+        error: new GramError("permission denied", {
+          response: new Response(null, { status: 403 }),
+          request: new Request("https://app.getgram.ai/rpc/example"),
+          body: "",
+        }),
+      });
+
+      renderIdentity();
+
+      expect(
+        screen.getByText(
+          "Pinned scopes are shared by every MCP server that uses this URL. You need edit access to all of them to view or change the pin.",
+        ),
+      ).toBeDefined();
+      expect(screen.queryByText("Couldn't load pinned scopes.")).toBeNull();
     });
 
     it("says the pin is loading until it arrives", () => {

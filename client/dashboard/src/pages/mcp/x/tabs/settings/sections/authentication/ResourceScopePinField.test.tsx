@@ -66,6 +66,7 @@ function pin(
   return {
     data: undefined,
     isError: false,
+    forbidden: false,
     value,
     setValue,
     dirty,
@@ -159,6 +160,36 @@ describe("scopePinStatus", () => {
 
   it("says nothing about a pin until the connected client is known", () => {
     expect(scopePinStatus(scopes(), null)).toEqual([]);
+  });
+
+  it("describes an unsaved edit where the pin would decide", () => {
+    expect(
+      scopePinStatus(
+        withSource("cached_resource", { pinnedScopes: [] }, [], true),
+        "client-1",
+        ["read"],
+      ),
+    ).toEqual(["After you save, sign-ins request these scopes."]);
+    expect(scopePinStatus(withSource("resource_pin"), "client-1", [])).toEqual([
+      "After you save, sign-ins use the scopes the MCP server advertises.",
+    ]);
+  });
+
+  it("keeps the not-used line for an edit the pin would not decide", () => {
+    expect(
+      scopePinStatus(
+        withSource("client_scope", { pinnedScopes: [] }),
+        "client-1",
+        ["read"],
+      ),
+    ).toEqual(["Not used: this connection requests its own scopes."]);
+    expect(
+      scopePinStatus(
+        withSource("issuer_catalogue", { discoveryEnabled: false }),
+        "client-1",
+        [],
+      ),
+    ).toEqual([FLAG_OFF]);
   });
 });
 
@@ -275,6 +306,24 @@ describe("sharedServerLine", () => {
 });
 
 describe("ResourceScopePinField", () => {
+  it("describes the draft, not the saved pin, while editing", () => {
+    render(
+      <ResourceScopePinField
+        pin={pin(["read"], true)}
+        scopes={withSource("cached_resource", { pinnedScopes: [] }, [], true)}
+        connectedClientId="client-1"
+        issuerScopes={[]}
+        serverName="Linear"
+        disabled={false}
+      />,
+    );
+
+    expect(
+      screen.getByText("After you save, sign-ins request these scopes."),
+    ).toBeDefined();
+    expect(screen.queryByText(EMPTY_HINT)).toBeNull();
+  });
+
   it("shows the pinned scopes and the server's status", () => {
     render(
       <ResourceScopePinField

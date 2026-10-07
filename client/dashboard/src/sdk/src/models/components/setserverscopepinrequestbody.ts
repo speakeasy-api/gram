@@ -11,7 +11,7 @@ export type SetServerScopePinRequestBody = {
    */
   mcpServerId: string;
   /**
-   * Scopes to pin on the server's protected resource, shared by servers with the same upstream URL, in request order. Whitespace is trimmed, blanks and duplicates are dropped; an empty list clears the pin.
+   * Scopes to pin on the server's protected resource, shared by servers with the same upstream URL, in request order. Whitespace is trimmed, blanks and duplicates are dropped, and at most 100 scopes may remain; an empty list clears the pin.
    */
   scopes: Array<string>;
 };

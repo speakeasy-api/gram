@@ -1,5 +1,6 @@
 import { normalizeScopes } from "@/lib/remote-identity";
 import type { RemoteMcpServerScopes } from "@gram/client/models/components/remotemcpserverscopes.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
   setGetRemoteMcpServerScopesData,
   useGetRemoteMcpServerScopes,
@@ -11,6 +12,8 @@ import { useState } from "react";
 export type ResourceScopePin = {
   data: RemoteMcpServerScopes | undefined;
   isError: boolean;
+  /** The error is a 403: the caller cannot write every server sharing the URL. */
+  forbidden: boolean;
   /** The draft pin; the saved one until edited. Empty means no pin. */
   value: string[];
   setValue: (values: string[]) => void;
@@ -46,6 +49,10 @@ export function useResourceScopePin({
   return {
     data: enabled ? query.data : undefined,
     isError: enabled && query.isError,
+    forbidden:
+      enabled &&
+      query.error instanceof GramError &&
+      query.error.statusCode === 403,
     value,
     // Back to the saved pin drops the draft, so refetches show through.
     setValue: (values) => {
@@ -77,13 +84,26 @@ function connectedEntry(
 }
 
 /**
- * What the saved pin does for a sign-in through the connected client, flag
- * first. Read from the server's resolution, never re-derived here.
+ * What the pin does for a sign-in through the connected client, flag first.
+ * Read from the server's resolution, never re-derived here. `draft` is an
+ * unsaved edit, described only where the server says a pin would decide.
  */
 export function scopePinStatus(
   scopes: RemoteMcpServerScopes,
   connectedClientId: string | null,
+  draft?: string[],
 ): string[] {
+  if (
+    draft &&
+    scopes.discoveryEnabled &&
+    connectedEntry(scopes, connectedClientId)?.pinWouldDecide
+  ) {
+    return [
+      draft.length > 0
+        ? "After you save, sign-ins request these scopes."
+        : "After you save, sign-ins use the scopes the MCP server advertises.",
+    ];
+  }
   const lines: string[] = [];
   if (!scopes.discoveryEnabled) {
     lines.push(

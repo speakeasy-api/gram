@@ -335,8 +335,8 @@ func BuildSetServerScopePinPayload(remoteMcpSetServerScopePinBody string, remote
 			err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
-		if len(body.Scopes) > 100 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scopes", body.Scopes, len(body.Scopes), 100, false))
+		if len(body.Scopes) > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scopes", body.Scopes, len(body.Scopes), 1000, false))
 		}
 		for _, e := range body.Scopes {
 			if utf8.RuneCountInString(e) > 256 {

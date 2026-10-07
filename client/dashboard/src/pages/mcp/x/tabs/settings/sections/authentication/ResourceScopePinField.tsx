@@ -46,7 +46,11 @@ export function ResourceScopePinField({
   // Flag off, the pin can only be cleared, never added to.
   const readOnly = !scopes.discoveryEnabled;
   const canClear = readOnly && pin.value.length > 0;
-  const status = scopePinStatus(scopes, connectedClientId);
+  const status = scopePinStatus(
+    scopes,
+    connectedClientId,
+    pin.dirty ? pin.value : undefined,
+  );
   const unadvertised = unadvertisedPinnedScopes(
     scopes,
     pin.value,

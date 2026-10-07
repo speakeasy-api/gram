@@ -2,6 +2,8 @@ package remotemcp_test
 
 import (
 	"context"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	remotemcpserver "github.com/speakeasy-api/gram/server/gen/http/remote_mcp/server"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -242,6 +245,31 @@ func TestSetServerScopePin_RejectsInvalidScopes(t *testing.T) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	_, err = repo.New(ti.conn).GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: *authCtx.ProjectID, ResourceIdentifier: srv.url})
 	require.Error(t, err, "a rejected pin writes nothing")
+}
+
+func TestSetServerScopePin_CapCountsAfterDeduplication(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://pin-cap.example.com/mcp")
+
+	unique := make([]string, 100)
+	for i := range unique {
+		unique[i] = fmt.Sprintf("s%03d", i)
+	}
+	withDuplicate := append(slices.Clone(unique), " "+unique[0])
+	require.Len(t, withDuplicate, 101)
+	body := &remotemcpserver.SetServerScopePinRequestBody{McpServerID: &srv.mcpServerID, Scopes: withDuplicate}
+	require.NoError(t, remotemcpserver.ValidateSetServerScopePinRequestBody(body), "the transport bound leaves the cap to the handler")
+
+	got, err := setPin(ctx, ti, srv.mcpServerID, withDuplicate...)
+	require.NoError(t, err)
+	require.Equal(t, unique, got.PinnedScopes)
+
+	_, err = setPin(ctx, ti, srv.mcpServerID, append(slices.Clone(unique), "s100")...)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.Equal(t, unique, storedPin(t, ctx, ti, srv.url), "a rejected pin writes nothing")
+	require.Equal(t, int64(1), auditCount(t, ctx, ti))
 }
 
 func TestSetServerScopePin_WritesAudit(t *testing.T) {
@@ -491,10 +519,12 @@ func TestServerScopes_SharedUpstreamRequiresWriteOnEveryServer(t *testing.T) {
 				sibling = seedSiblingServer(t, ctx, ti, srv)
 			}
 
-			for _, id := range []string{srv.mcpServerID, sibling} {
+			for _, ids := range [][2]string{{srv.mcpServerID, sibling}, {sibling, srv.mcpServerID}} {
+				id, hidden := ids[0], ids[1]
 				oneOnly := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, id))
 				_, err := getScopes(oneOnly, ti, id)
 				requireOopsCode(t, err, oops.CodeForbidden)
+				require.NotContains(t, err.Error(), hidden, "the refusal does not name the unauthorized server")
 				_, err = setPin(oneOnly, ti, id, "read")
 				requireOopsCode(t, err, oops.CodeForbidden)
 			}

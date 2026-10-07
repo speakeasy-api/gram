@@ -75,7 +75,8 @@ type SetServerScopePinRequestBody struct {
 	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
 	// Scopes to pin on the server's protected resource, shared by servers with the
 	// same upstream URL, in request order. Whitespace is trimmed, blanks and
-	// duplicates are dropped; an empty list clears the pin.
+	// duplicates are dropped, and at most 100 scopes may remain; an empty list
+	// clears the pin.
 	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
 }
 
