@@ -158,3 +158,13 @@ func TestDiscardWithheldBodyPreventsTelemetryContent(t *testing.T) {
 	require.Zero(t, rw.body.Len())
 	require.NotContains(t, attrs, attr.GenAIToolCallResultKey)
 }
+
+func TestToolCallOutcomeFollowsTheIsErrorRule(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, toolCallOutcomeOK, toolCallOutcome(http.StatusOK))
+	require.Equal(t, toolCallOutcomeOK, toolCallOutcome(http.StatusNoContent))
+	require.Equal(t, toolCallOutcomeError, toolCallOutcome(http.StatusBadRequest))
+	require.Equal(t, toolCallOutcomeError, toolCallOutcome(http.StatusBadGateway))
+	require.Equal(t, toolCallOutcomeError, toolCallOutcome(http.StatusFound), "a redirect is not a tool result, so the client sees isError and so does the row")
+}

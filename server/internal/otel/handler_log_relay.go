@@ -23,6 +23,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 )
 
@@ -115,6 +117,10 @@ func (h *LogRelayHandler) HandleBatchWithResult(
 
 func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMessage) error {
 	logger := h.logger
+	messages, excluded := withoutBridgedToolCallLogs(messages)
+	if excluded > 0 {
+		h.recordDroppedLogs(ctx, excluded, relayReasonExcluded)
+	}
 	groups, invalid := groupLogsByProvenance(messages)
 	if invalid > 0 {
 		h.recordDroppedLogs(ctx, invalid, relayReasonInvalid)
@@ -236,6 +242,37 @@ func (h *LogRelayHandler) recordFailedLogs(ctx context.Context, count int, reaso
 	}
 
 	h.recordsFailed.Add(ctx, int64(count), metric.WithAttributes(attr.Reason(string(reason))))
+}
+
+// withoutBridgedToolCallLogs drops the tool call rows Gram's own gateway
+// wrote, which the tool-call log bridge put through the pipeline so they
+// land in agent_events. Those rows already reach a customer destination
+// through the tool_call_logs relay; relaying them here too would deliver
+// every hosted tool call twice to a project with both exports configured.
+// The transform keeps the producer's scope under its own attribute, which is
+// how a bridged row is told apart from a producer's.
+func withoutBridgedToolCallLogs(messages []logRelayMessage) ([]logRelayMessage, int) {
+	kept := messages[:0]
+	excluded := 0
+	for _, message := range messages {
+		if logOriginalScopeName(message.record) == dialect.GramTelemetryLogScope {
+			excluded++
+			continue
+		}
+		kept = append(kept, message)
+	}
+	return kept, excluded
+}
+
+// logOriginalScopeName is the producer's instrumentation scope as the
+// transform preserved it, or "" when the record carries none.
+func logOriginalScopeName(record *otelv1.LogRecord) string {
+	for _, kv := range record.GetAttributes() {
+		if kv.GetKey() == string(enrich.OriginalInstrumentationScopeNameKey) {
+			return kv.GetValue().GetStringValue()
+		}
+	}
+	return ""
 }
 
 func groupLogsByProvenance(messages []logRelayMessage) ([]logProvenanceGroup, int) {

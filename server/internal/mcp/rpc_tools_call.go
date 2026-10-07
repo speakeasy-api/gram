@@ -423,6 +423,7 @@ func handleToolsCall(
 
 		logAttrs[attr.EventSourceKey] = string(tm.EventSourceToolCall)
 		logAttrs.RecordStatusCode(rw.statusCode)
+		logAttrs[attr.OutcomeKey] = toolCallOutcome(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
 		logAttrs.RecordTraceContext(ctx)
@@ -629,6 +630,21 @@ func toolCallRejection(ctx context.Context, logger *slog.Logger, err error, args
 // sync with the status represented by an error returned from the MCP boundary.
 // The response writer starts at 200 because successful tool implementations may
 // write only a body, so failures that occur before WriteHeader must update it.
+const (
+	toolCallOutcomeOK    = "ok"
+	toolCallOutcomeError = "error"
+)
+
+// toolCallOutcome is how the call went, in the vocabulary agent_events
+// stores: the same rule that marks the tool result isError for the client,
+// so the row and the client never disagree about whether the call failed.
+func toolCallOutcome(statusCode int) string {
+	if statusCode < 200 || statusCode >= 300 {
+		return toolCallOutcomeError
+	}
+	return toolCallOutcomeOK
+}
+
 func recordToolCallErrorStatus(ctx context.Context, rw *toolCallResponseWriter, err error) {
 	if shareableErr, ok := errors.AsType[*oops.ShareableError](err); ok {
 		rw.statusCode = shareableErr.HTTPStatus(ctx)

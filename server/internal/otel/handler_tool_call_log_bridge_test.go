@@ -26,6 +26,7 @@ import (
 func gatewayToolCallAttributes() map[string]any {
 	return map[string]any{
 		string(attr.HTTPResponseStatusCodeKey): 200,
+		string(attr.OutcomeKey):                "ok",
 		string(attr.GenAIConversationIDKey):    "chat-1",
 		string(attr.SessionIDKey):              "mcp-session-1",
 		string(attr.ExternalUserIDKey):         "ext-user-1",

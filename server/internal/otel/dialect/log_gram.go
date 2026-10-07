@@ -120,14 +120,20 @@ func (GramLog) ToolName(record *otelv1.InboundLogRecord) (string, string, error)
 	return key, value, nil
 }
 
-// Outcome is read off the HTTP status the gateway recorded for the call, the
-// same way the telemetry writer derives the row's severity.
+// Outcome is what the gateway said about the call under gram.outcome, which
+// it derives by the rule that marks the tool result isError for the client.
+// A row written before the gateway stamped it, or by the remote MCP
+// interceptor, falls back to the HTTP status it recorded under the same
+// rule: anything but a 2xx failed.
 func (GramLog) Outcome(record *otelv1.InboundLogRecord) (string, string, error) {
+	if key, outcome := getOneLogAttr(record, string(attr.OutcomeKey)); key != "" {
+		return key, outcome, nil
+	}
 	key, status := getOneLogInt64(record, string(attr.HTTPResponseStatusCodeKey))
 	if key == "" {
 		return "", "", nil
 	}
-	if status >= 400 {
+	if status < 200 || status >= 300 {
 		return key, OutcomeError, nil
 	}
 	return key, OutcomeOK, nil

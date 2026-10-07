@@ -20,8 +20,11 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
@@ -524,4 +527,38 @@ func relayRequestLogEventNames(request *collectorlogsv1.ExportLogsServiceRequest
 		}
 	}
 	return names
+}
+
+// A hosted tool call's row reaches a customer destination through the
+// tool_call_logs relay; the bridged copy that lands in agent_events must not
+// go out a second time through the product telemetry relay.
+func TestLogRelayHandlerLeavesBridgedToolCallRowsToTheirOwnRelay(t *testing.T) {
+	t.Parallel()
+
+	capture := &logRelayRequestCapture{mu: sync.Mutex{}, requests: nil}
+	server := httptest.NewServer(http.HandlerFunc(capture.handler))
+	t.Cleanup(server.Close)
+	reader, meterProvider := readableMeter(t)
+	handler := newLogRelayTestHandler(t, meterProvider)
+	cacheLogRelayTestDestination(t, handler, testLogOrganizationID, testLogProjectID, server.URL, nil, true)
+
+	bridged := relayTestLogRecord("gram.tool_call", testLogOrganizationID, testLogProjectID, 0)
+	bridged.SetAttributes([]*otelv1.LogRecord_KeyValue{
+		relayTestLogAttribute(string(enrich.OriginalInstrumentationScopeNameKey), dialect.GramTelemetryLogScope),
+	})
+	producer := relayTestLogRecord("api_request", testLogOrganizationID, testLogProjectID, 0)
+	producer.SetAttributes([]*otelv1.LogRecord_KeyValue{
+		relayTestLogAttribute(string(enrich.OriginalInstrumentationScopeNameKey), "com.anthropic.claude_code.events"),
+	})
+
+	messages, failures := logRelayTestMessages(bridged, producer)
+	require.NoError(t, handler.handleBatch(t.Context(), messages))
+	for _, failure := range failures {
+		require.NoError(t, failure)
+	}
+
+	requests := capture.snapshot()
+	require.Len(t, requests, 1)
+	require.Equal(t, []string{"api_request"}, relayRequestLogBodies(requests[0].request))
+	require.Equal(t, int64(1), agentEventCount(t, reader, meterLogRelayRecordsDropped, attr.ReasonKey, string(relayReasonExcluded)))
 }

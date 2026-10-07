@@ -41,6 +41,7 @@ func TestGramLogToolCallIsAToolCallResult(t *testing.T) {
 		accessorTestKV("gram.tool.name", "list_repos"),
 		accessorTestKV("gram.toolset.slug", "github"),
 		accessorTestKV("gram.mcp.client.name", "claude-code"),
+		accessorTestKV("gram.outcome", OutcomeOK),
 		accessorTestIntKV("http.response.status_code", 200),
 		gramTestDoubleKV("gram.tool_call.duration", 1.5),
 	)
@@ -88,7 +89,7 @@ func TestGramLogToolCallIsAToolCallResult(t *testing.T) {
 
 	key, value, err = selected.Outcome(record)
 	require.NoError(t, err)
-	require.Equal(t, "http.response.status_code", key)
+	require.Equal(t, "gram.outcome", key)
 	require.Equal(t, OutcomeOK, value)
 
 	key, nanos, err := selected.DurationNano(record)
@@ -129,21 +130,22 @@ func TestGramLogOutcomeFollowsTheHTTPStatus(t *testing.T) {
 
 	cases := []struct {
 		name    string
-		status  *otelv1.InboundLogRecord_KeyValue
+		attrs   []*otelv1.InboundLogRecord_KeyValue
 		key     string
 		outcome string
 	}{
-		{name: "a 2xx is ok", status: accessorTestIntKV("http.response.status_code", 200), key: "http.response.status_code", outcome: OutcomeOK},
-		{name: "a 3xx is ok", status: accessorTestIntKV("http.response.status_code", 304), key: "http.response.status_code", outcome: OutcomeOK},
-		{name: "a 4xx is an error", status: accessorTestIntKV("http.response.status_code", 404), key: "http.response.status_code", outcome: OutcomeError},
-		{name: "a 5xx is an error", status: accessorTestIntKV("http.response.status_code", 503), key: "http.response.status_code", outcome: OutcomeError},
-		{name: "a stringified status still reads", status: accessorTestKV("http.response.status_code", "500"), key: "http.response.status_code", outcome: OutcomeError},
-		{name: "no status states no outcome", status: accessorTestKV("gram.tool.name", "x"), key: "", outcome: ""},
+		{name: "the gateway's own verdict wins", attrs: []*otelv1.InboundLogRecord_KeyValue{accessorTestKV("gram.outcome", OutcomeError), accessorTestIntKV("http.response.status_code", 200)}, key: "gram.outcome", outcome: OutcomeError},
+		{name: "a 2xx is ok", attrs: []*otelv1.InboundLogRecord_KeyValue{accessorTestIntKV("http.response.status_code", 200)}, key: "http.response.status_code", outcome: OutcomeOK},
+		{name: "a 3xx is not a tool result, so it is an error like isError says", attrs: []*otelv1.InboundLogRecord_KeyValue{accessorTestIntKV("http.response.status_code", 304)}, key: "http.response.status_code", outcome: OutcomeError},
+		{name: "a 4xx is an error", attrs: []*otelv1.InboundLogRecord_KeyValue{accessorTestIntKV("http.response.status_code", 404)}, key: "http.response.status_code", outcome: OutcomeError},
+		{name: "a 5xx is an error", attrs: []*otelv1.InboundLogRecord_KeyValue{accessorTestIntKV("http.response.status_code", 503)}, key: "http.response.status_code", outcome: OutcomeError},
+		{name: "a stringified status still reads", attrs: []*otelv1.InboundLogRecord_KeyValue{accessorTestKV("http.response.status_code", "500")}, key: "http.response.status_code", outcome: OutcomeError},
+		{name: "no verdict and no status states no outcome", attrs: []*otelv1.InboundLogRecord_KeyValue{accessorTestKV("gram.tool.name", "x")}, key: "", outcome: ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			record := gramToolCallRecord(tc.status)
+			record := gramToolCallRecord(tc.attrs...)
 			key, outcome, err := ForLog(record).Outcome(record)
 			require.NoError(t, err)
 			require.Equal(t, tc.key, key)
