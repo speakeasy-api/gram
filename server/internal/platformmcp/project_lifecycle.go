@@ -247,14 +247,7 @@ func (s *ProjectLifecycleService) completedCreateReceipt(ctx context.Context, pr
 		OrganizationID: principal.OrganizationID, UserID: conv.ToPGText(principal.UserID),
 		Operation: operationCreateProject, IdempotencyKey: key,
 	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return noReplay, false, nil
-	}
-	if err != nil {
-		return noReplay, false, fmt.Errorf("look up project creation receipt: %w", err)
-	}
-	replay, ok := replayableReceipt(row, inputHash, validProjectReceiptPayload)
-	return replay, ok, nil
+	return replayableReceipt(row, err, inputHash, validProjectReceiptPayload)
 }
 
 // charge returns the budget charge for one create or rename, run only when no

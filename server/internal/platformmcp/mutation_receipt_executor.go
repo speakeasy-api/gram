@@ -87,24 +87,24 @@ func completedMutationReceipt[T any](ctx context.Context, execution mutationRece
 		OrganizationID: execution.Principal.OrganizationID, ProjectID: execution.Project.ID, Operation: execution.Operation, IdempotencyKey: execution.IdempotencyKey,
 		UserID: conv.ToPGText(execution.Principal.UserID), SubjectUrn: userSubjectURN(execution.Principal.UserID),
 	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return noReplay, false, nil
-	}
-	if err != nil {
-		return noReplay, false, fmt.Errorf("look up %s receipt: %w", execution.Label, err)
-	}
-	replay, ok := replayableReceipt(row, execution.InputHash, execution.ValidateReplay)
-	return replay, ok, nil
+	return replayableReceipt(row, err, execution.InputHash, execution.ValidateReplay)
 }
 
-// replayableReceipt reports whether a stored receipt answers this exact
-// request. Expiry is not judged here: the query that loaded the row already
+// replayableReceipt judges a pre-check lookup: whether the stored receipt
+// answers this exact request, a plain miss, or a failed read, which is
+// returned. Expiry is not judged here: the query that loaded the row already
 // filtered it with the database clock, the same clock the locked path uses.
-func replayableReceipt(row platformrepo.PlatformMcpOperationReceipt, inputHash string, valid func([]byte) bool) (OperationReceipt, bool) {
-	if row.InputHash != inputHash || row.Status != receiptStatusSucceeded || len(row.ResultPayload) == 0 || !valid(row.ResultPayload) {
-		return noReplay, false
+func replayableReceipt(row platformrepo.PlatformMcpOperationReceipt, lookupErr error, inputHash string, valid func([]byte) bool) (OperationReceipt, bool, error) {
+	if errors.Is(lookupErr, pgx.ErrNoRows) {
+		return noReplay, false, nil
 	}
-	return operationReceiptFromRow(row, true), true
+	if lookupErr != nil {
+		return noReplay, false, fmt.Errorf("look up replay receipt: %w", lookupErr)
+	}
+	if row.InputHash != inputHash || row.Status != receiptStatusSucceeded || len(row.ResultPayload) == 0 || !valid(row.ResultPayload) {
+		return noReplay, false, nil
+	}
+	return operationReceiptFromRow(row, true), true, nil
 }
 
 // executeMutationReceipt owns the common idempotency transaction used by
