@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -33,4 +35,9 @@ func TestUpdateAssistantWithoutUserEnablesHostedWrapperAsCreator(t *testing.T) {
 	server, err := mcpserversrepo.New(db).GetMCPServerByIDAndProjectID(t.Context(), mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: ts.ID, ProjectID: project})
 	require.NoError(t, err)
 	require.Equal(t, "private", server.Visibility)
+
+	created, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionMcpServerCreate)
+	require.NoError(t, err)
+	require.Equal(t, "user-1", created.ActorID)
+	require.Equal(t, ts.ID.String(), created.SubjectID)
 }
