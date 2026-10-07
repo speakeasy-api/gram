@@ -817,6 +817,7 @@ SELECT
       JOIN user_session_issuers AS mi
         ON mi.id = l.user_session_issuer_id
        AND mi.deleted IS FALSE
+       AND (mi.project_id = p.id OR (mi.project_id IS NULL AND mi.organization_id = p.organization_id))
       WHERE l.remote_session_client_id = $1
         AND l.user_session_issuer_id = s.user_session_issuer_id
         AND s.user_session_issuer_id <> $2
@@ -831,6 +832,7 @@ SELECT
       JOIN user_session_issuers AS gi
         ON gi.id = gl.user_session_issuer_id
        AND gi.deleted IS FALSE
+       AND (gi.project_id = p.id OR (gi.project_id IS NULL AND gi.organization_id = p.organization_id))
       WHERE gl.user_session_issuer_id = $2
         AND gc.remote_session_issuer_id = $3
     )::integer AS gateway_provider_clients
