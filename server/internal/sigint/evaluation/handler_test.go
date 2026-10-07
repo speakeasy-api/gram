@@ -130,8 +130,10 @@ func handler(t *testing.T, m *conversationv1.MessageEvent, definitions []Sensor,
 	deps.On("IsFeatureEnabled", mock.Anything, m.GetOrganizationId(), productfeatures.FeatureSignalsIntelligence).Return(true, nil)
 	deps.On("Load", mock.Anything, m.GetOrganizationId(), uuid.MustParse(m.GetProjectId()), ConversationMessageKind).Return(definitions, nil)
 	var pub capturePublisher
+
 	evaluator, err := NewEvaluator(testenv.NewLogger(t), meters, &deps, &deps, &pub, c)
 	require.NoError(t, err)
+
 	row := storedMessage(m)
 	return NewConversationHandler(evaluator, nil, storedMessages{row.ChatMessage.ID: row}), &pub
 }
@@ -164,8 +166,10 @@ func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"model": "test-model", "answers": answers, "usage": map[string]int{"input_tokens": 100, "output_tokens": 20}})
 	}))
 	t.Cleanup(server.Close)
+
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
+
 	c := jev.New(policy, conv.NewSecret([]byte("test-key")), jev.WithEndpoint(server.URL))
 	m := message()
 	m.SetRole(conversationv1.MessageEvent_ROLE_ASSISTANT)
@@ -311,6 +315,7 @@ func TestHandlerOperationFailureSemantics(t *testing.T) {
 			result := classifier.NewResult(partial.Outcomes[len(partial.Outcomes)-1:], fmt.Errorf("wrapped: %w", tc.err))
 			c.On("Classify", mock.Anything, mock.Anything).Return(result).Once()
 			h, pub := handler(t, m, partialSensors(), c, meters)
+
 			err := h.Handle(t.Context(), m, gcp.MessageMetadata{})
 			if tc.retry {
 				require.Error(t, err)
@@ -319,6 +324,7 @@ func TestHandlerOperationFailureSemantics(t *testing.T) {
 			}
 			require.Len(t, pub.readings, 1)
 			require.Equal(t, "other", pub.readings[0].GetSensorId())
+
 			var data metricdata.ResourceMetrics
 			require.NoError(t, reader.Collect(t.Context(), &data))
 			var failures int64
@@ -406,8 +412,10 @@ func TestHandlerSkipsDisabledAndOtherRoles(t *testing.T) {
 	t.Cleanup(func() { deps.AssertExpectations(t) })
 	m := message()
 	deps.On("IsFeatureEnabled", mock.Anything, m.GetOrganizationId(), productfeatures.FeatureSignalsIntelligence).Return(false, nil).Once()
+
 	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil)
 	require.NoError(t, err)
+
 	row := storedMessage(m)
 	h := NewConversationHandler(evaluator, nil, storedMessages{row.ChatMessage.ID: row})
 	var meta gcp.MessageMetadata
@@ -423,8 +431,10 @@ func TestHandlerEntitlementFailureNacks(t *testing.T) {
 	deps.Test(t)
 	t.Cleanup(func() { deps.AssertExpectations(t) })
 	deps.On("IsFeatureEnabled", mock.Anything, mock.Anything, mock.Anything).Return(false, fmt.Errorf("lookup unavailable")).Once()
+
 	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil)
 	require.NoError(t, err)
+
 	row := storedMessage(m)
 	h := NewConversationHandler(evaluator, nil, storedMessages{row.ChatMessage.ID: row})
 	var meta gcp.MessageMetadata

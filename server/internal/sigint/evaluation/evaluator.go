@@ -48,14 +48,17 @@ type Evaluator struct {
 // Runtime concurrency is bounded across all adapters sharing this instance.
 func NewEvaluator(logger *slog.Logger, meters metric.MeterProvider, source Source, features Features, publisher gcp.Publisher[*sigintv1.Reading], c classifier.Classifier) (*Evaluator, error) {
 	meter := meters.Meter("github.com/speakeasy-api/gram/server/internal/sigint/evaluation")
+
 	failures, err := meter.Int64Counter("gram.sigint.evaluation.failures", metric.WithDescription("Terminal sensor or event evaluations acknowledged without a reading"))
 	if err != nil {
 		return nil, fmt.Errorf("create sensor failure counter: %w", err)
 	}
+
 	skipped, err := meter.Int64Counter("gram.sigint.evaluation.skipped", metric.WithDescription("Intentionally skipped sensor configurations and events"))
 	if err != nil {
 		return nil, fmt.Errorf("create sensor skip counter: %w", err)
 	}
+
 	return &Evaluator{logger: logger, source: source, features: features, publisher: publisher, classifier: c, failures: failures, skipped: skipped, slots: make(chan struct{}, 4)}, nil
 }
 
@@ -79,26 +82,32 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 		return nil
 	}
 	event = in.Event()
+
 	project, err := uuid.Parse(event.ProjectID)
 	if err != nil || project == uuid.Nil || strings.TrimSpace(event.OrganizationID) == "" || strings.TrimSpace(event.Subject.GetId()) == "" || strings.TrimSpace(event.Subject.GetKind()) == "" {
 		h.terminal(ctx, event, "invalid_identity")
 		return nil
 	}
+
 	if _, err := time.Parse(time.RFC3339Nano, event.Subject.GetOccurredAt()); err != nil {
 		h.terminal(ctx, event, "invalid_timestamp")
 		return nil
 	}
+
 	enabled, err := h.features.IsFeatureEnabled(ctx, event.OrganizationID, productfeatures.FeatureSignalsIntelligence)
 	if err != nil {
 		return fmt.Errorf("check evaluation entitlement: %w", err)
 	}
+
 	if !enabled {
 		return nil
 	}
+
 	sensors, err := h.source.Load(ctx, event.OrganizationID, project, event.Subject.GetKind())
 	if err != nil {
 		return fmt.Errorf("load sensor definitions: %w", err)
 	}
+
 	var compiled []compiledSensor
 	matchMessage := in.MatchingMessage()
 	for _, sensor := range sensors {
@@ -122,6 +131,7 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 			h.logger.ErrorContext(ctx, "sensor matching failed", attr.SlogSigintSensorID(sensor.ID), attr.SlogProjectID(event.ProjectID), attr.SlogError(err))
 			continue
 		}
+
 		if !matched {
 			h.skipped.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "not_matched")))
 			continue
@@ -136,23 +146,27 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 	if len(compiled) == 0 {
 		return nil
 	}
+
 	state, err := in.Resolve(ctx)
 	if err != nil {
 		if terminal, ok := errors.AsType[*permanentError](err); ok {
 			h.terminal(ctx, event, terminal.reason)
 			return nil
 		}
+
 		if errors.Is(err, ErrInvalidInput) {
 			h.terminal(ctx, event, "invalid_content")
 			return nil
 		}
 		return fmt.Errorf("resolve evaluation input: %w", err)
 	}
+
 	data, err := json.Marshal(state)
 	if err != nil || string(data) == "null" {
 		h.terminal(ctx, event, "invalid_content")
 		return nil
 	}
+
 	if len(data) > maxContentBytes {
 		h.terminal(ctx, event, "content_too_large")
 		return nil
@@ -173,9 +187,11 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 	var retry error
 	operationErr := result.Err()
 	permanentOperation := errors.Is(operationErr, classifier.ErrDisabled) || errors.Is(operationErr, classifier.ErrInvalidRequest)
+
 	if err := operationErr; err != nil && !permanentOperation && !errors.Is(err, classifier.ErrRequestTooLarge) {
 		retry = fmt.Errorf("evaluate sensors: %w", err)
 	}
+
 	var pending []gcp.PublishResult
 	for _, sensor := range compiled {
 		failed, transient := false, false
@@ -199,11 +215,13 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 			}
 			continue
 		}
+
 		r, err := reading(event, sensor, outcomes, attempt, at, result)
 		if err != nil {
 			h.terminal(ctx, event, "invalid_answer")
 			continue
 		}
+
 		if proto.Size(r) > maxReadingBytes {
 			h.terminal(ctx, event, "reading_too_large")
 			continue

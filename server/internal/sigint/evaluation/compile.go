@@ -149,10 +149,12 @@ func reading(event Event, sensor compiledSensor, answers map[classifier.Question
 			return nil, fmt.Errorf("missing selected signal slug")
 		}
 		value.SetSelectedSignalSlug(selectedSlug)
+
 		probabilities, err := distribution(answer.Distribution, sensor.signalSlugs)
 		if err != nil {
 			return nil, err
 		}
+
 		value.SetDistribution(probabilities)
 		if answer.Confidence != nil {
 			value.SetConfidence(*answer.Confidence)
@@ -165,10 +167,12 @@ func reading(event Event, sensor compiledSensor, answers map[classifier.Question
 		}
 		value := &sigintv1.Reading_Score{}
 		value.SetExpectedIndex(answer.ExpectedIndex)
+
 		probabilities, err := distribution(answer.Distribution, sensor.signalSlugs)
 		if err != nil {
 			return nil, err
 		}
+
 		value.SetDistribution(probabilities)
 		if answer.Confidence != nil {
 			value.SetConfidence(*answer.Confidence)

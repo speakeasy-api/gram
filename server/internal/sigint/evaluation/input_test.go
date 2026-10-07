@@ -40,8 +40,10 @@ func TestEvaluatorAcceptsIndependentEventStreams(t *testing.T) {
 	project := uuid.New()
 	subject := sigintv1.Reading_Event_builder{Kind: new("mcp.tool_call"), Id: new("execution/opaque-42"), OccurredAt: new("2026-09-30T12:00:00Z")}.Build()
 	subject.SetToolCall(sigintv1.Reading_ToolCall_builder{ToolName: new("lookup"), ToolCallId: new("call-1"), McpServerId: new(uuid.NewString())}.Build())
+
 	data, err := classifier.ParseEntry([]byte(`{"arguments":{"count":9007199254740993},"result":{"status":"ok"}}`))
 	require.NoError(t, err)
+
 	in := &eventInput{event: Event{OrganizationID: "test-organization", ProjectID: project.String(), Subject: subject, BillingUserID: new("allocated-user")}, data: data}
 	var deps dependencies
 	deps.Test(t)
@@ -54,11 +56,13 @@ func TestEvaluatorAcceptsIndependentEventStreams(t *testing.T) {
 		return reflect.DeepEqual(req.Input, data) && len(req.Questions) == 1
 	})).Return(partialResult(false)).Times(3)
 	var pub capturePublisher
+
 	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, &pub, c)
 	require.NoError(t, err)
 	require.NoError(t, evaluator.Evaluate(t.Context(), in))
 	require.NoError(t, evaluator.Evaluate(t.Context(), in))
 	require.Len(t, pub.readings, 2)
+
 	a, b := pub.readings[0], pub.readings[1]
 	require.Equal(t, a.GetId(), b.GetId())
 	require.NotEqual(t, a.GetEvaluationAttemptId(), b.GetEvaluationAttemptId())
@@ -69,8 +73,10 @@ func TestEvaluatorAcceptsIndependentEventStreams(t *testing.T) {
 	require.Equal(t, "lookup", a.GetEvent().GetToolCall().GetToolName())
 	require.False(t, a.HasActor())
 	require.Equal(t, "allocated-user", a.GetBillingUserId())
+
 	encoded, err := proto.Marshal(a)
 	require.NoError(t, err)
+
 	decoded := &sigintv1.Reading{}
 	require.NoError(t, proto.Unmarshal(encoded, decoded))
 	require.True(t, proto.Equal(a, decoded))
@@ -105,6 +111,7 @@ func TestEvaluatorDefersContentUntilEligible(t *testing.T) {
 			if tc.enabled {
 				deps.On("Load", mock.Anything, in.event.OrganizationID, project, "custom.event").Return(tc.definitions, nil).Once()
 			}
+
 			evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, nil, nil)
 			require.NoError(t, err)
 			require.NoError(t, evaluator.Evaluate(t.Context(), in))
@@ -129,6 +136,7 @@ func TestEvaluatorSourceErrorSemantics(t *testing.T) {
 			// Only metadata is reused; this input has no message payload or resolver.
 			in := &eventInput{event: (&conversationInput{message: m}).Event(), err: tc.err}
 			h, pub := handler(t, m, sensors(), nil, testenv.NewMeterProvider(t))
+
 			err := h.evaluator.Evaluate(t.Context(), in)
 			if tc.retry {
 				require.Error(t, err)
@@ -158,6 +166,7 @@ func TestEvaluatorRejectsInvalidEventMetadata(t *testing.T) {
 			t.Parallel()
 			in := &eventInput{event: (&conversationInput{message: message()}).Event()}
 			tc.mutate(&in.event)
+
 			evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), nil, nil, nil, nil)
 			require.NoError(t, err)
 			require.NoError(t, evaluator.Evaluate(t.Context(), in))

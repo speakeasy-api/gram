@@ -42,10 +42,13 @@ func TestReadingIdentityPresence(t *testing.T) {
 			for _, q := range sensor.questions {
 				answers[q.Key] = classifier.QuestionOutcome{Key: q.Key, Answer: &classifier.Answer{Noul: &classifier.NoulAnswer{Probability: 0.5}}}
 			}
+
 			r, err := reading((&conversationInput{message: m, stored: row}).Event(), sensor, answers, "attempt", "time", classifier.Result{})
 			require.NoError(t, err)
+
 			data, err := proto.Marshal(r)
 			require.NoError(t, err)
+
 			decoded := &sigintv1.Reading{}
 			require.NoError(t, proto.Unmarshal(data, decoded))
 			require.Equal(t, tc.actor != "", decoded.HasActor())

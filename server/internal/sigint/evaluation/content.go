@@ -38,6 +38,7 @@ func readReference(ctx context.Context, reader BlobReader, project, uri string, 
 	if err != nil || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
 		return nil, permanent("invalid_reference")
 	}
+
 	p := strings.TrimPrefix(u.Path, "/")
 	if u.Scheme == "file" {
 		if u.Opaque != "" {
@@ -64,6 +65,7 @@ func readReference(ctx context.Context, reader BlobReader, project, uri string, 
 	if reader == nil {
 		return nil, fmt.Errorf("evaluation asset storage unavailable")
 	}
+
 	r, err := reader.Read(ctx, u)
 	if errors.Is(err, os.ErrNotExist) || errors.Is(err, storage.ErrObjectNotExist) {
 		return nil, permanent("missing_asset")
@@ -72,10 +74,12 @@ func readReference(ctx context.Context, reader BlobReader, project, uri string, 
 		return nil, fmt.Errorf("read evaluation asset: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return r.Close() })
+
 	data, err := io.ReadAll(io.LimitReader(r, int64(*remaining)+1))
 	if err != nil {
 		return nil, fmt.Errorf("read evaluation content: %w", err)
 	}
+
 	if len(data) > *remaining {
 		return nil, permanent("content_too_large")
 	}
@@ -90,9 +94,11 @@ func jsonValue(data []byte) (any, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
 	var value any
+
 	if err := decoder.Decode(&value); err != nil {
 		return nil, permanent("invalid_content")
 	}
+
 	return value, nil
 }
 
@@ -106,6 +112,7 @@ func input(ctx context.Context, reader BlobReader, project string, row repo.Load
 		data := m.ContentRaw
 		if len(data) == 0 {
 			var err error
+
 			data, err = readReference(ctx, reader, project, m.ContentAssetUrl.String, &remaining)
 			if err != nil {
 				return empty, err
@@ -117,6 +124,7 @@ func input(ctx context.Context, reader BlobReader, project string, row repo.Load
 			return empty, permanent("content_too_large")
 		}
 		var err error
+
 		content, err = jsonValue(data)
 		if err != nil {
 			return empty, err
@@ -133,9 +141,11 @@ func input(ctx context.Context, reader BlobReader, project string, row repo.Load
 		data := bytes.TrimSpace(m.ToolCalls)
 		if len(data) > 0 && data[0] == '"' {
 			var wrapped string
+
 			if err := json.Unmarshal(data, &wrapped); err != nil {
 				return empty, permanent("invalid_content")
 			}
+
 			data = []byte(wrapped)
 		}
 		var calls []struct {
@@ -145,9 +155,11 @@ func input(ctx context.Context, reader BlobReader, project string, row repo.Load
 				Arguments json.RawMessage `json:"arguments"`
 			} `json:"function"`
 		}
+
 		if err := json.Unmarshal(data, &calls); err != nil {
 			return empty, permanent("invalid_content")
 		}
+
 		for _, call := range calls {
 			arguments := string(call.Function.Arguments)
 			if len(call.Function.Arguments) > 0 && call.Function.Arguments[0] == '"' {
@@ -163,21 +175,26 @@ func input(ctx context.Context, reader BlobReader, project string, row repo.Load
 		if err != nil {
 			return empty, err
 		}
+
 		if !utf8.Valid(data) {
 			return empty, permanent("invalid_content")
 		}
 		parts = append(parts, map[string]any{"text": string(data)})
 	}
+
 	data, err := json.Marshal(map[string]any{"role": "ROLE_" + strings.ToUpper(m.Role), "content": content, "parts": parts})
 	if err != nil {
 		return empty, permanent("invalid_content")
 	}
+
 	if len(data) > maxContentBytes {
 		return empty, permanent("content_too_large")
 	}
+
 	entry, err := classifier.ParseEntry(data)
 	if err != nil {
 		return empty, permanent("invalid_content")
 	}
+
 	return entry, nil
 }

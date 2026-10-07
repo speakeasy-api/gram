@@ -30,6 +30,7 @@ func (r *Repository) LoadMessages(ctx context.Context, org string, project uuid.
 	if err != nil {
 		return nil, fmt.Errorf("load evaluation messages: %w", err)
 	}
+
 	return rows, nil
 }
 
@@ -90,6 +91,7 @@ func (h *ConversationHandler) HandleBatchWithResult(ctx context.Context, message
 				seen[id] = true
 			}
 		}
+
 		rows, err := h.messages.LoadMessages(ctx, key.org, key.project, ids)
 		if err != nil {
 			for _, m := range batch {
@@ -97,6 +99,7 @@ func (h *ConversationHandler) HandleBatchWithResult(ctx context.Context, message
 			}
 			continue
 		}
+
 		byID := make(map[uuid.UUID]repo.LoadEvaluationMessagesRow, len(rows))
 		for _, row := range rows {
 			byID[row.ChatMessage.ID] = row
@@ -110,13 +113,16 @@ func (h *ConversationHandler) HandleBatchWithResult(ctx context.Context, message
 				if err := h.evaluate(ctx, m.Message, row); err != nil {
 					m.Fail(err)
 				}
+
 				return nil
 			})
 		}
 	}
+
 	if err := group.Wait(); err != nil {
 		return fmt.Errorf("evaluate conversation batch: %w", err)
 	}
+
 	return nil
 }
 
@@ -125,10 +131,12 @@ func (h *ConversationHandler) Handle(ctx context.Context, m *conversationv1.Mess
 	if !h.eligible(ctx, m) {
 		return nil
 	}
+
 	rows, err := h.messages.LoadMessages(ctx, m.GetOrganizationId(), uuid.MustParse(m.GetProjectId()), []uuid.UUID{uuid.MustParse(m.GetMessageId())})
 	if err != nil {
 		return fmt.Errorf("load conversation message: %w", err)
 	}
+
 	if len(rows) == 0 {
 		return nil
 	}
@@ -188,6 +196,7 @@ func (in *conversationInput) Event() Event {
 	if in.stored.UserAccountID.Valid {
 		account.SetUserAccountId(in.stored.UserAccountID.UUID.String())
 	}
+
 	if source := m.GetIngestion(); source != nil {
 		if source.HasObservedUserEmail() {
 			actor.SetUserEmail(source.GetObservedUserEmail())
@@ -211,6 +220,7 @@ func (in *conversationInput) Event() Event {
 			account.SetBillingMode(source.GetBillingMode())
 		}
 	}
+
 	if actor.HasUserId() || actor.HasExternalUserId() || actor.HasUserEmail() {
 		event.Actor = actor
 	}

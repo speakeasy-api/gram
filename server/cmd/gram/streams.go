@@ -417,7 +417,9 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("initialize evaluation asset storage: %w", err)
 			}
+
 			shutdownFuncs = append(shutdownFuncs, assetShutdown)
+
 			stripeClient, err := newStripeClient(ctx, logger, guardianPolicy, c)
 			if err != nil {
 				return fmt.Errorf("failed to create Stripe client: %w", err)
@@ -505,6 +507,7 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create sensor readings publisher: %w", err)
 			}
+
 			sensorEvaluator, err := evaluation.NewEvaluator(logger, meterProvider, evaluation.NewRepository(db), productFeatures, readingsPub, jev.New(guardianPolicy, conv.NewSecret([]byte(c.String("sigint-openrouter-api-key")))))
 			if err != nil {
 				return fmt.Errorf("create sensor evaluator: %w", err)

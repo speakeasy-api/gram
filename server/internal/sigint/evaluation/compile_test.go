@@ -65,28 +65,36 @@ func TestReadingIdentitySurvivesSensorConfigurationChanges(t *testing.T) {
 	}
 	m := message()
 	var result classifier.Result
+
 	a, err := reading((&conversationInput{message: m}).Event(), before, outcomes, "first-attempt", "2026-09-29T00:00:00Z", result)
 	require.NoError(t, err)
+
 	id, err := uuid.Parse(a.GetId())
 	require.NoError(t, err)
 	require.Equal(t, uuid.Version(5), id.Version())
 	require.Equal(t, uuid.RFC4122, id.Variant())
 	require.Equal(t, id.String(), a.GetId())
+
 	b, err := reading((&conversationInput{message: m}).Event(), after, outcomes, "second-attempt", "2026-09-29T00:01:00Z", result)
 	require.NoError(t, err)
 	require.Equal(t, a.GetId(), b.GetId())
 	require.NotEqual(t, a.GetDefinitionHash(), b.GetDefinitionHash())
 	require.NotEqual(t, a.GetEvaluationAttemptId(), b.GetEvaluationAttemptId())
+
 	// Mutation/delivery identity does not change the logical message reading.
 	m.SetId(uuid.NewString())
+
 	redelivered, err := reading((&conversationInput{message: m}).Event(), after, outcomes, "redelivery", "2026-09-29T00:01:30Z", result)
 	require.NoError(t, err)
 	require.Equal(t, b.GetId(), redelivered.GetId())
+
 	// Distinct messages and sensors must still have distinct logical readings.
 	m.SetMessageId("another-message")
+
 	c, err := reading((&conversationInput{message: m}).Event(), after, outcomes, "third-attempt", "2026-09-29T00:02:00Z", result)
 	require.NoError(t, err)
 	require.NotEqual(t, b.GetId(), c.GetId())
+
 	sensor.ID = "other"
 	after, ok = compileSensor(sensor)
 	require.True(t, ok)
@@ -94,6 +102,7 @@ func TestReadingIdentitySurvivesSensorConfigurationChanges(t *testing.T) {
 		"other/a": {Key: "other/a", Answer: &answer, Failure: nil},
 		"other/b": {Key: "other/b", Answer: &answer, Failure: nil},
 	}
+
 	d, err := reading((&conversationInput{message: m}).Event(), after, outcomes, "fourth-attempt", "2026-09-29T00:03:00Z", result)
 	require.NoError(t, err)
 	require.NotEqual(t, c.GetId(), d.GetId())

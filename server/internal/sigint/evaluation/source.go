@@ -57,10 +57,12 @@ func (r *Repository) Load(ctx context.Context, org string, project uuid.UUID, ki
 	if kind != ConversationMessageKind {
 		return nil, nil
 	}
+
 	rows, err := repo.New(r.db).LoadEvaluationSensors(ctx, repo.LoadEvaluationSensorsParams{ProjectID: project, OrganizationID: org})
 	if err != nil {
 		return nil, fmt.Errorf("load evaluation sensors: %w", err)
 	}
+
 	var sensors []Sensor
 	for _, row := range rows {
 		id := row.SensorID.String()

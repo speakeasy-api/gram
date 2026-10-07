@@ -30,30 +30,39 @@ func TestPubSubEvaluationPublishesCompleteSuccess(t *testing.T) {
 	// and cannot accidentally use the developer's or CI's Pub/Sub endpoint.
 	server := pstest.NewServer()
 	t.Cleanup(func() { require.NoError(t, server.Close()) })
+
 	conn, err := grpc.NewClient(server.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
+
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	project := "sigint-test-" + uuid.NewString()
+
 	client, err := pubsub.NewClient(ctx, project, option.WithGRPCConn(conn))
 	if err != nil {
 		require.NoError(t, conn.Close())
 	}
 	require.NoError(t, err)
 	defer func() { require.NoError(t, client.Close()) }()
+
 	broker := gcp.NewEmulatedPubSub(testenv.NewLogger(t), project, client, gen.Descriptors)
+
 	inputPub, err := gcp.PubSubPublisherForMessage(ctx, broker, &conversationv1.MessageEvent{})
 	require.NoError(t, err)
 	defer func() { require.NoError(t, inputPub.Stop(context.Background())) }()
+
 	outputPub, err := gcp.PubSubPublisherForMessage(ctx, broker, &sigintv1.Reading{})
 	require.NoError(t, err)
 	defer func() { require.NoError(t, outputPub.Stop(context.Background())) }()
+
 	sub, err := gcp.PubSubSubscriberForMessage(ctx, broker, &conversationv1.MessageEvent{}, &sigintv1.Evaluator{})
 	require.NoError(t, err)
+
 	// A test-only sink receives readings without adding a production storage consumer.
 	var sink pubsubpb.Subscription
 	sink.Name = "projects/" + project + "/subscriptions/readings-test"
 	sink.Topic = "projects/" + project + "/topics/gram-sigint-v1-reading"
+
 	_, err = client.SubscriptionAdminClient.CreateSubscription(ctx, &sink)
 	require.NoError(t, err)
 	defer func() {
@@ -66,6 +75,7 @@ func TestPubSubEvaluationPublishesCompleteSuccess(t *testing.T) {
 			require.NoError(t, client.TopicAdminClient.DeleteTopic(cleanup, &pubsubpb.DeleteTopicRequest{Topic: "projects/" + project + "/topics/" + name}))
 		}
 	}()
+
 	m := message()
 	c := classifiertest.NewMock(t)
 	c.On("Classify", mock.Anything, mock.Anything).Return(partialResult(false))
@@ -76,8 +86,10 @@ func TestPubSubEvaluationPublishesCompleteSuccess(t *testing.T) {
 		done <- sub.ReceiveBatchWithResult(ctx, gcp.BatchReceiveSettings{MaxMessages: 1, MaxBytes: 1 << 20, MaxLatency: time.Millisecond}, h.HandleBatchWithResult)
 	}()
 	defer func() { cancel(); require.NoError(t, <-done) }()
+
 	_, err = inputPub.Publish(ctx, m).Get(ctx)
 	require.NoError(t, err)
+
 	var request pubsubpb.PullRequest
 	request.Subscription = sink.Name
 	request.MaxMessages = 1
@@ -85,6 +97,7 @@ func TestPubSubEvaluationPublishesCompleteSuccess(t *testing.T) {
 	for ctx.Err() == nil {
 		received, err = client.SubscriptionAdminClient.Pull(ctx, &request)
 		require.NoError(t, err)
+
 		if len(received.GetReceivedMessages()) > 0 {
 			break
 		}
