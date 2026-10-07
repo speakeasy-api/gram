@@ -64,6 +64,12 @@ func TestHooksLogEventAccessors(t *testing.T) {
 			outcomeKey: "event_name", outcome: OutcomeOK,
 		},
 		{
+			name:      "PostToolUse carrying an error failed, as Cursor reports a failed tool",
+			record:    hooksRecord("PostToolUse", append(toolCall, accessorTestKV("gram.hook.error", "exit 1"))...),
+			eventType: EventTypeToolCallResult, subjectKey: "gen_ai.tool.call.id", subject: "call-1",
+			outcomeKey: "gram.hook.error", outcome: OutcomeError, message: "exit 1",
+		},
+		{
 			name:      "PostToolUseFailure is a tool_call_result that failed, with the error as its message",
 			record:    hooksRecord("PostToolUseFailure", append(toolCall, accessorTestKV("gram.hook.error", `{"message":"exit 1"}`))...),
 			eventType: EventTypeToolCallResult, subjectKey: "gen_ai.tool.call.id", subject: "call-1",
