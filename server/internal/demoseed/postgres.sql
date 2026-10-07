@@ -1784,7 +1784,8 @@ BEGIN
   VALUES (demo.det_uuid('gram-demo-attachment-client'), proj_a, demo_org,
           demo.det_uuid('gram-demo-remote-identity-provider-linear'),
           demo.det_uuid('gram-demo-attachment-client')::text, 'none',
-          ARRAY['read', 'write'], TRUE);
+          -- No scope of its own: the resource pin decides once discovery is on.
+          NULL, TRUE);
 
   INSERT INTO remote_session_client_user_session_issuers
     (remote_session_client_id, user_session_issuer_id)
