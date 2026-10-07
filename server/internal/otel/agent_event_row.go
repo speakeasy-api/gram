@@ -207,11 +207,6 @@ func agentEventRowFromSpan(span *otelv1.Span, observedAtUnixNano int64) (chrepo.
 // error is absent, never a guess, so the adapters below reduce every answer
 // to its value or the zero value.
 type answers interface {
-	SessionID() string
-	ExternalUserEmail() string
-	ExternalUserID() string
-	SubjectID() string
-	TurnID() string
 	Model() string
 	ToolName() string
 	Outcome() string
@@ -222,7 +217,6 @@ type answers interface {
 	AgentName() string
 	MCPServerName() string
 	MCPToolName() string
-	ExternalOrgID() string
 	DurationNano() int64
 	InputTokens() int64
 	OutputTokens() int64
@@ -236,56 +230,44 @@ type logAnswers struct {
 	record *otelv1.InboundLogRecord
 }
 
-func (a logAnswers) SessionID() string         { return stated(a.d.SessionID(a.record)) }
-func (a logAnswers) ExternalUserEmail() string { return stated(a.d.ExternalUserEmail(a.record)) }
-func (a logAnswers) ExternalUserID() string    { return stated(a.d.ExternalUserID(a.record)) }
-func (a logAnswers) SubjectID() string         { return stated(a.d.SubjectID(a.record)) }
-func (a logAnswers) TurnID() string            { return stated(a.d.TurnID(a.record)) }
-func (a logAnswers) Model() string             { return stated(a.d.Model(a.record)) }
-func (a logAnswers) ToolName() string          { return stated(a.d.ToolName(a.record)) }
-func (a logAnswers) Outcome() string           { return stated(a.d.Outcome(a.record)) }
-func (a logAnswers) OutcomeMessage() string    { return stated(a.d.OutcomeMessage(a.record)) }
-func (a logAnswers) Text() string              { return stated(a.d.Text(a.record)) }
-func (a logAnswers) QuerySource() string       { return stated(a.d.QuerySource(a.record)) }
-func (a logAnswers) SkillName() string         { return stated(a.d.SkillName(a.record)) }
-func (a logAnswers) AgentName() string         { return stated(a.d.AgentName(a.record)) }
-func (a logAnswers) MCPServerName() string     { return stated(a.d.MCPServerName(a.record)) }
-func (a logAnswers) MCPToolName() string       { return stated(a.d.MCPToolName(a.record)) }
-func (a logAnswers) ExternalOrgID() string     { return stated(a.d.ExternalOrgID(a.record)) }
-func (a logAnswers) DurationNano() int64       { return stated(a.d.DurationNano(a.record)) }
-func (a logAnswers) InputTokens() int64        { return stated(a.d.InputTokens(a.record)) }
-func (a logAnswers) OutputTokens() int64       { return stated(a.d.OutputTokens(a.record)) }
-func (a logAnswers) CacheReadTokens() int64    { return stated(a.d.CacheReadTokens(a.record)) }
-func (a logAnswers) CacheWriteTokens() int64   { return stated(a.d.CacheWriteTokens(a.record)) }
-func (a logAnswers) CostUSD() float64          { return stated(a.d.CostUSD(a.record)) }
+func (a logAnswers) Model() string           { return stated(a.d.Model(a.record)) }
+func (a logAnswers) ToolName() string        { return stated(a.d.ToolName(a.record)) }
+func (a logAnswers) Outcome() string         { return stated(a.d.Outcome(a.record)) }
+func (a logAnswers) OutcomeMessage() string  { return stated(a.d.OutcomeMessage(a.record)) }
+func (a logAnswers) Text() string            { return stated(a.d.Text(a.record)) }
+func (a logAnswers) QuerySource() string     { return stated(a.d.QuerySource(a.record)) }
+func (a logAnswers) SkillName() string       { return stated(a.d.SkillName(a.record)) }
+func (a logAnswers) AgentName() string       { return stated(a.d.AgentName(a.record)) }
+func (a logAnswers) MCPServerName() string   { return stated(a.d.MCPServerName(a.record)) }
+func (a logAnswers) MCPToolName() string     { return stated(a.d.MCPToolName(a.record)) }
+func (a logAnswers) DurationNano() int64     { return stated(a.d.DurationNano(a.record)) }
+func (a logAnswers) InputTokens() int64      { return stated(a.d.InputTokens(a.record)) }
+func (a logAnswers) OutputTokens() int64     { return stated(a.d.OutputTokens(a.record)) }
+func (a logAnswers) CacheReadTokens() int64  { return stated(a.d.CacheReadTokens(a.record)) }
+func (a logAnswers) CacheWriteTokens() int64 { return stated(a.d.CacheWriteTokens(a.record)) }
+func (a logAnswers) CostUSD() float64        { return stated(a.d.CostUSD(a.record)) }
 
 type spanAnswers struct {
 	d    dialect.SpanDialect
 	span *otelv1.InboundSpan
 }
 
-func (a spanAnswers) SessionID() string         { return stated(a.d.SessionID(a.span)) }
-func (a spanAnswers) ExternalUserEmail() string { return stated(a.d.ExternalUserEmail(a.span)) }
-func (a spanAnswers) ExternalUserID() string    { return stated(a.d.ExternalUserID(a.span)) }
-func (a spanAnswers) SubjectID() string         { return stated(a.d.SubjectID(a.span)) }
-func (a spanAnswers) TurnID() string            { return stated(a.d.TurnID(a.span)) }
-func (a spanAnswers) Model() string             { return stated(a.d.Model(a.span)) }
-func (a spanAnswers) ToolName() string          { return stated(a.d.ToolName(a.span)) }
-func (a spanAnswers) Outcome() string           { return stated(a.d.Outcome(a.span)) }
-func (a spanAnswers) OutcomeMessage() string    { return stated(a.d.OutcomeMessage(a.span)) }
-func (a spanAnswers) Text() string              { return stated(a.d.Text(a.span)) }
-func (a spanAnswers) QuerySource() string       { return stated(a.d.QuerySource(a.span)) }
-func (a spanAnswers) SkillName() string         { return stated(a.d.SkillName(a.span)) }
-func (a spanAnswers) AgentName() string         { return stated(a.d.AgentName(a.span)) }
-func (a spanAnswers) MCPServerName() string     { return stated(a.d.MCPServerName(a.span)) }
-func (a spanAnswers) MCPToolName() string       { return stated(a.d.MCPToolName(a.span)) }
-func (a spanAnswers) ExternalOrgID() string     { return stated(a.d.ExternalOrgID(a.span)) }
-func (a spanAnswers) DurationNano() int64       { return stated(a.d.DurationNano(a.span)) }
-func (a spanAnswers) InputTokens() int64        { return stated(a.d.InputTokens(a.span)) }
-func (a spanAnswers) OutputTokens() int64       { return stated(a.d.OutputTokens(a.span)) }
-func (a spanAnswers) CacheReadTokens() int64    { return stated(a.d.CacheReadTokens(a.span)) }
-func (a spanAnswers) CacheWriteTokens() int64   { return stated(a.d.CacheWriteTokens(a.span)) }
-func (a spanAnswers) CostUSD() float64          { return stated(a.d.CostUSD(a.span)) }
+func (a spanAnswers) Model() string           { return stated(a.d.Model(a.span)) }
+func (a spanAnswers) ToolName() string        { return stated(a.d.ToolName(a.span)) }
+func (a spanAnswers) Outcome() string         { return stated(a.d.Outcome(a.span)) }
+func (a spanAnswers) OutcomeMessage() string  { return stated(a.d.OutcomeMessage(a.span)) }
+func (a spanAnswers) Text() string            { return stated(a.d.Text(a.span)) }
+func (a spanAnswers) QuerySource() string     { return stated(a.d.QuerySource(a.span)) }
+func (a spanAnswers) SkillName() string       { return stated(a.d.SkillName(a.span)) }
+func (a spanAnswers) AgentName() string       { return stated(a.d.AgentName(a.span)) }
+func (a spanAnswers) MCPServerName() string   { return stated(a.d.MCPServerName(a.span)) }
+func (a spanAnswers) MCPToolName() string     { return stated(a.d.MCPToolName(a.span)) }
+func (a spanAnswers) DurationNano() int64     { return stated(a.d.DurationNano(a.span)) }
+func (a spanAnswers) InputTokens() int64      { return stated(a.d.InputTokens(a.span)) }
+func (a spanAnswers) OutputTokens() int64     { return stated(a.d.OutputTokens(a.span)) }
+func (a spanAnswers) CacheReadTokens() int64  { return stated(a.d.CacheReadTokens(a.span)) }
+func (a spanAnswers) CacheWriteTokens() int64 { return stated(a.d.CacheWriteTokens(a.span)) }
+func (a spanAnswers) CostUSD() float64        { return stated(a.d.CostUSD(a.span)) }
 
 // stated keeps a dialect's answer only when it stated one: an empty key or
 // a read error means absent, never a guess.
@@ -308,20 +290,20 @@ func agentEventRow(columns canonicalColumns, a answers, enrichment rowEnrichment
 		OccurredAtUnixNano: 0,
 		ObservedAtUnixNano: 0,
 		RecordID:           "",
-		SessionID:          a.SessionID(),
-		TurnID:             a.TurnID(),
-		EventID:            a.SubjectID(),
+		SessionID:          columns.sessionID,
+		TurnID:             columns.turnID,
+		EventID:            columns.eventID,
 		EventType:          columns.eventType,
 		RawEventName:       columns.rawEventName,
 		Source:             columns.source,
 		Provider:           columns.provider,
 		Surface:            columns.surface,
 		UserID:             enrichment.userID,
-		UserEmail:          a.ExternalUserEmail(),
-		ExternalUserID:     a.ExternalUserID(),
+		UserEmail:          columns.userEmail,
+		ExternalUserID:     columns.externalUserID,
 		AccountType:        enrichment.accountType,
 		BillingMode:        enrichment.billingMode,
-		ExternalOrgID:      a.ExternalOrgID(),
+		ExternalOrgID:      columns.externalOrgID,
 		DeviceID:           enrichment.deviceID,
 		DepartmentName:     enrichment.departmentName,
 		DivisionName:       enrichment.divisionName,
@@ -462,6 +444,13 @@ type canonicalColumns struct {
 	source       string
 	provider     string
 	surface      string
+
+	sessionID      string
+	turnID         string
+	eventID        string
+	userEmail      string
+	externalUserID string
+	externalOrgID  string
 }
 
 func (c *canonicalColumns) absorb(key string, value any) {
@@ -476,6 +465,18 @@ func (c *canonicalColumns) absorb(key string, value any) {
 		c.provider = enrichmentString(value)
 	case string(enrich.SurfaceColumnKey):
 		c.surface = enrichmentString(value)
+	case string(enrich.SessionIDColumnKey):
+		c.sessionID = enrichmentString(value)
+	case string(enrich.TurnIDColumnKey):
+		c.turnID = enrichmentString(value)
+	case string(enrich.EventIDColumnKey):
+		c.eventID = enrichmentString(value)
+	case string(enrich.UserEmailColumnKey):
+		c.userEmail = enrichmentString(value)
+	case string(enrich.ExternalUserIDColumnKey):
+		c.externalUserID = enrichmentString(value)
+	case string(enrich.ExternalOrgIDColumnKey):
+		c.externalOrgID = enrichmentString(value)
 	}
 }
 
@@ -490,11 +491,17 @@ func columnsFromSpanDialect(d dialect.SpanDialect, span *otelv1.InboundSpan, enr
 		provider = stated(d.Provider(span))
 	}
 	return canonicalColumns{
-		eventType:    stated(d.EventType(span)),
-		rawEventName: stated(d.EventName(span)),
-		source:       source,
-		provider:     provider,
-		surface:      stated(d.Surface(span)),
+		eventType:      stated(d.EventType(span)),
+		rawEventName:   stated(d.EventName(span)),
+		source:         source,
+		provider:       provider,
+		surface:        stated(d.Surface(span)),
+		sessionID:      stated(d.SessionID(span)),
+		turnID:         stated(d.TurnID(span)),
+		eventID:        stated(d.SubjectID(span)),
+		userEmail:      stated(d.ExternalUserEmail(span)),
+		externalUserID: stated(d.ExternalUserID(span)),
+		externalOrgID:  stated(d.ExternalOrgID(span)),
 	}
 }
 
