@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MAX_FILTER_VALUES } from "./exploreModel";
 import {
   barValuesFromSaved,
   sameFilters,
@@ -79,6 +80,16 @@ describe("savedFromContext", () => {
       ),
     ).toEqual({ range: { from, to, label: "L" }, values: {} });
     expect(savedFromContext({}, fields)).toEqual({ values: {} });
+  });
+
+  it("saves at most as many values as the cards answer with", () => {
+    const picked = Array.from(
+      { length: MAX_FILTER_VALUES + 5 },
+      (_, i) => `u${i}`,
+    );
+    expect(
+      savedFromContext({ filters: { user: picked } }, fields).values.user,
+    ).toEqual(picked.slice(0, MAX_FILTER_VALUES));
   });
 });
 
