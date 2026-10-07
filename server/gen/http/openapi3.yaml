@@ -87692,6 +87692,9 @@ components:
                     description: Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
                 agent_usage:
                     $ref: '#/components/schemas/AgentUsage'
+                assistant_agent_id:
+                    type: string
+                    description: The ID of the agent the assistant acts as, when the assistant has a dedicated agent identity
                 assistant_id:
                     type: string
                     description: The ID of the assistant that produced this chat, if any
@@ -87968,6 +87971,9 @@ components:
                 account_type:
                     type: string
                     description: Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.
+                assistant_agent_id:
+                    type: string
+                    description: The ID of the agent the assistant acts as, when the assistant has a dedicated agent identity
                 assistant_id:
                     type: string
                     description: The ID of the assistant that produced this chat, if any
