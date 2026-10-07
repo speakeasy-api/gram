@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync/atomic"
 
 	"github.com/google/uuid"
 
@@ -22,18 +21,17 @@ import (
 // dispatching an event, flipped when an enforcement scan actually executes
 // (rather than short-circuiting on a guard). It feeds the risk_scanned
 // dimension on hooks.event.duration so gating latency that includes a scan is
-// separable from the no-scan baseline. The flag is atomic because the legacy
-// Claude endpoint can answer while its handler is still scanning.
+// separable from the no-scan baseline.
 type riskScanTrackerKey struct{}
 
-func withRiskScanTracker(ctx context.Context) (context.Context, *atomic.Bool) {
-	scanned := new(atomic.Bool)
+func withRiskScanTracker(ctx context.Context) (context.Context, *bool) {
+	scanned := new(bool)
 	return context.WithValue(ctx, riskScanTrackerKey{}, scanned), scanned
 }
 
 func markRiskScanned(ctx context.Context) {
-	if scanned, ok := ctx.Value(riskScanTrackerKey{}).(*atomic.Bool); ok {
-		scanned.Store(true)
+	if scanned, ok := ctx.Value(riskScanTrackerKey{}).(*bool); ok {
+		*scanned = true
 	}
 }
 

@@ -171,7 +171,8 @@ func clearRejectedBlockLink(links []blockLink, err error) (string, bool) {
 func (s *Service) recordToolCallBlockAsync(ctx context.Context, p toolCallBlockParams) string {
 	// Only mint a URL when the block row can actually be persisted; otherwise
 	// the link would resolve to a /blocks/<id> page with no backing row. These
-	// preconditions must mirror insertToolCallBlock's guard.
+	// preconditions must mirror insertToolCallBlock's guard (except
+	// isVerdictSuperseded, which only the legacy Claude path sets).
 	if s.repo == nil || strings.TrimSpace(p.OrganizationID) == "" || p.ProjectID == uuid.Nil {
 		return ""
 	}

@@ -35,7 +35,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "codex", hookEventName, outcome, codexHookDecision(res), orgSlug, riskScanned.Load(), time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "codex", hookEventName, outcome, codexHookDecision(res), orgSlug, *riskScanned, time.Since(start))
 	}()
 
 	// APIKeyAuth already put the actor on ctx: scope the session id first.

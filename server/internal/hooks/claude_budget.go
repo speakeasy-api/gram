@@ -49,7 +49,7 @@ func withVerdictSupersededFlag(ctx context.Context) (context.Context, *atomic.Bo
 }
 
 // isVerdictSuperseded reports whether the event behind ctx was already
-// answered as a pass-through, so its block side effects must be skipped.
+// answered as a pass-through.
 func isVerdictSuperseded(ctx context.Context) bool {
 	superseded, ok := ctx.Value(hookVerdictSupersededKey{}).(*atomic.Bool)
 	return ok && superseded.Load()
@@ -59,18 +59,28 @@ func isVerdictSuperseded(ctx context.Context) bool {
 type claudeHookVerdict struct {
 	result *gen.ClaudeHookResult
 	err    error
+
+	// riskScanned reports whether the handler ran an enforcement scan.
+	riskScanned bool
+}
+
+// answer returns the verdict as the response and marks the request's risk-scan
+// tracker when the handler scanned.
+func (v claudeHookVerdict) answer(ctx context.Context) (*gen.ClaudeHookResult, bool, error) {
+	if v.riskScanned {
+		markRiskScanned(ctx)
+	}
+	return v.result, false, v.err
 }
 
 // decideClaudeHookWithinBudget runs the event's handler and returns its
-// verdict when it lands within claudeDecisionBudget of start. Otherwise it
-// answers from the org's fail-open posture and reports answeredFromPosture.
+// verdict when it lands within claudeBudget of start. Otherwise it answers
+// from the org's fail-open posture and reports answeredFromPosture.
 //
-// The handler runs on a detached context either way, so an overrun handler
-// still finishes its scan and telemetry after the response is sent, then logs
-// the verdict it would have returned. The event itself is persisted before
-// dispatch (recordHook), so an overrun never drops it. The posture is read
-// alongside the handler, so the fallback can claim the answer, and mark a
-// pass-through superseded, as soon as the budget fires.
+// The handler runs on a detached context either way. The event itself is
+// persisted before dispatch (recordHook), so an overrun never drops it. The
+// posture is read alongside the handler, so the fallback can claim the answer,
+// and mark a pass-through superseded, as soon as the budget fires.
 func (s *Service) decideClaudeHookWithinBudget(ctx context.Context, logger *slog.Logger, start time.Time, hookEvent any, hookEventName string) (*gen.ClaudeHookResult, bool, error) {
 	ctx, superseded := withVerdictSupersededFlag(ctx)
 	// answered goes to whichever side responds: the handler's verdict or the
@@ -80,16 +90,24 @@ func (s *Service) decideClaudeHookWithinBudget(ctx context.Context, logger *slog
 
 	noun, organizationID, blockable := claudeBlockableEvent(hookEvent)
 	postures := make(chan bool, 1)
-	s.claudeDecisionDrains.Go(func() {
-		postures <- !blockable || s.hooksFailOpen(ctx, organizationID)
-	})
+	if blockable {
+		s.claudeDrains.Go(func() { postures <- s.hooksFailOpen(ctx, organizationID) })
+	}
+	if !blockable {
+		// An event that cannot block always passes through.
+		postures <- true
+	}
 
 	decisionCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), legacyClaudeHookDetachedDecisionTimeout)
-	s.claudeDecisionDrains.Go(func() {
+	// The handler gets its own risk-scan tracker because it can still be
+	// scanning after an overrun response has recorded its metric. answer copies
+	// the flag to the request's tracker when the verdict lands in time.
+	decisionCtx, riskScanned := withRiskScanTracker(decisionCtx)
+	s.claudeDrains.Go(func() {
 		defer cancel()
 		result, err := s.dispatchClaudeHookEvent(decisionCtx, logger, hookEvent, hookEventName)
 		if answered.CompareAndSwap(false, true) {
-			verdicts <- claudeHookVerdict{result: result, err: err}
+			verdicts <- claudeHookVerdict{result: result, err: err, riskScanned: *riskScanned}
 			return
 		}
 		lateLogger := logger
@@ -99,39 +117,31 @@ func (s *Service) decideClaudeHookWithinBudget(ctx context.Context, logger *slog
 		lateLogger.WarnContext(decisionCtx, "claude hook verdict arrived after its decision budget",
 			attr.SlogEvent("claude_hook_late_verdict"),
 			attr.SlogHookDecision(claudeHookDecision(result)),
-			attr.SlogHookElapsed(time.Since(start)),
 		)
 	})
 
-	budget := time.NewTimer(s.claudeDecisionBudget - time.Since(start))
-	defer budget.Stop()
 	select {
 	case verdict := <-verdicts:
-		return verdict.result, false, verdict.err
-	case <-budget.C:
+		return verdict.answer(ctx)
+	case <-time.After(s.claudeBudget - time.Since(start)):
 	}
 
-	// The read started with the handler, so it is normally done by now.
 	failOpen := <-postures
 	if !answered.CompareAndSwap(false, true) {
 		// The verdict landed while the fallback waited on the posture, so it still answers.
-		verdict := <-verdicts
-		return verdict.result, false, verdict.err
+		return (<-verdicts).answer(ctx)
 	}
-	if failOpen {
-		superseded.Store(true)
-	}
+	superseded.Store(failOpen)
 
 	res := claudeBudgetFallback(hookEventName, noun, failOpen)
+	decision := claudeHookDecision(res)
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.Outcome(hookMetricOutcomeBudgetExceeded),
-		attr.HookFailOpen(failOpen),
+		attr.HookDecision(decision),
 	)
 	logger.WarnContext(ctx, "claude hook decision exceeded its budget; answered from the hooks fail-open setting",
 		attr.SlogEvent("claude_hook_decision_budget_exceeded"),
-		attr.SlogHookFailOpen(failOpen),
-		attr.SlogHookDecision(claudeHookDecision(res)),
-		attr.SlogHookElapsed(time.Since(start)),
+		attr.SlogHookDecision(decision),
 	)
 	return res, true, nil
 }
@@ -154,8 +164,7 @@ func claudeBlockableEvent(hookEvent any) (noun string, organizationID string, bl
 // decision budget. The fail-open answer is the pass-through shape the legacy
 // client accepts as success. It carries no permissionDecision, so Claude
 // Code's own permission rules still apply to a tool call the server did not
-// verify. The fail-closed answer blocks with a reason that says the check
-// timed out, so the user sees why instead of a transport error.
+// verify.
 func claudeBudgetFallback(hookEventName, noun string, failOpen bool) *gen.ClaudeHookResult {
 	if failOpen {
 		return makeHookResult(hookEventName)
@@ -166,14 +175,11 @@ func claudeBudgetFallback(hookEventName, noun string, failOpen bool) *gen.Claude
 	))
 }
 
-// hooksFailOpen reports whether the organization's hooks fail-open setting,
-// the posture the hooks binary mirrors from the ingest response's org
-// settings, is known to be on. The read is detached from the request and
-// bounded by hooksFailOpenLookupTimeout. An unknown organization, a missing
-// feature client or a failed read leaves the posture unresolved and fails
-// closed: the organization may have chosen to block unverified events, and the
-// shadow-MCP guard can deny a tool call even when the request carries no
-// organization.
+// hooksFailOpen reports whether the organization's hooks fail-open setting is
+// known to be on. An unknown organization, a missing feature client or a failed
+// read fails closed: the organization may have chosen to block unverified
+// events, and the shadow-MCP guard can deny a tool call even when the request
+// carries no organization.
 func (s *Service) hooksFailOpen(ctx context.Context, organizationID string) bool {
 	if organizationID == "" || s.productFeatures == nil {
 		return false

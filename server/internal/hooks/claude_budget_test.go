@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -25,9 +27,9 @@ import (
 )
 
 const (
-	// testClaudeDecisionBudget stands in for the 5s production budget so the
-	// overrun tests finish quickly.
-	testClaudeDecisionBudget = 200 * time.Millisecond
+	// testClaudeBudget stands in for the 5s production budget so the overrun
+	// tests finish quickly.
+	testClaudeBudget = 200 * time.Millisecond
 
 	// testClaudeBudgetAnswerWithin is how soon an overrun request must be
 	// answered: the budget, the posture read and CI scheduling slack. The slow
@@ -62,21 +64,14 @@ func (f hooksPostureFeatures) IsFeatureEnabled(_ context.Context, _ string, feat
 }
 
 // slowRiskScanner holds every enforcement scan until the test finishes it,
-// then returns result. It stands in for a risk scan slower than the budget.
+// then returns the embedded stub's result. It stands in for a risk scan slower
+// than the budget.
 type slowRiskScanner struct {
-	result      *risk.ScanResult
+	stubResultScanner
 	started     chan struct{}
 	startOnce   sync.Once
 	release     chan struct{}
 	releaseOnce sync.Once
-}
-
-func newSlowRiskScanner(result *risk.ScanResult) *slowRiskScanner {
-	return &slowRiskScanner{
-		result:  result,
-		started: make(chan struct{}),
-		release: make(chan struct{}),
-	}
 }
 
 func (s *slowRiskScanner) ScanForEnforcement(ctx context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
@@ -93,37 +88,44 @@ func (s *slowRiskScanner) finish() {
 	s.releaseOnce.Do(func() { close(s.release) })
 }
 
-func (s *slowRiskScanner) LookupShadowMCPBlockingPolicy(_ context.Context, _ string, _ uuid.UUID, _ string) (*risk.ShadowMCPPolicy, error) {
-	return nil, nil
-}
-
-func (s *slowRiskScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uuid.UUID) (bool, error) {
-	return false, nil
-}
-
-func (s *slowRiskScanner) HasAcknowledgedChallenge(_ context.Context, _ uuid.UUID, _, _, _, _ string) bool {
-	return false
-}
-
-func (s *slowRiskScanner) RecordPolicyChallenge(_ context.Context, _ string, _ uuid.UUID, _, _, _, _, _, _, _ string) {
-}
-
 // newBudgetedClaudeService wires a hooks service whose risk scans outlast a
-// short decision budget, for an organization with the given fail-open
-// posture. Cleanup finishes the held scans and waits for the detached
-// handlers before the test database goes away.
-func newBudgetedClaudeService(t *testing.T, failOpen bool, lateResult *risk.ScanResult) (context.Context, *testInstance, *slowRiskScanner) {
+// short decision budget and then return lateResult, for an organization with
+// the given hooks posture. Cleanup finishes the held scans and waits for the
+// detached handlers before the test database goes away.
+func newBudgetedClaudeService(t *testing.T, posture hooksPostureFeatures, lateResult *risk.ScanResult) (context.Context, *testInstance, *slowRiskScanner) {
 	t.Helper()
 	ctx, ti := newTestHooksService(t)
-	ti.service.productFeatures = hooksPostureFeatures{failOpen: failOpen}
-	ti.service.claudeDecisionBudget = testClaudeDecisionBudget
-	scanner := newSlowRiskScanner(lateResult)
+	scanner := &slowRiskScanner{
+		stubResultScanner: stubResultScanner{result: lateResult},
+		started:           make(chan struct{}),
+		release:           make(chan struct{}),
+	}
+	ti.service.productFeatures = posture
+	ti.service.claudeBudget = testClaudeBudget
 	ti.service.riskScanner = scanner
 	t.Cleanup(func() {
 		scanner.finish()
-		ti.service.claudeDecisionDrains.Wait()
+		ti.service.claudeDrains.Wait()
 	})
 	return ctx, ti, scanner
+}
+
+// budgetPayload builds a legacy Claude event for a fresh session: a prompt for
+// UserPromptSubmit, otherwise a Bash tool call.
+func budgetPayload(hookEventName string) *gen.ClaudePayload {
+	payload := &gen.ClaudePayload{
+		HookEventName: hookEventName,
+		SessionID:     new(uuid.NewString()),
+		UserEmail:     new("budget@example.com"),
+	}
+	if hookEventName == "UserPromptSubmit" {
+		payload.Prompt = new("a prompt whose scan overruns the budget")
+		return payload
+	}
+	payload.ToolName = new("Bash")
+	payload.ToolUseID = new("toolu_" + uuid.NewString())
+	payload.ToolInput = map[string]any{"command": "cat .env"}
+	return payload
 }
 
 func blockingScanResult() *risk.ScanResult {
@@ -135,182 +137,82 @@ func blockingScanResult() *risk.ScanResult {
 	}
 }
 
+// requireSignal fails the test unless ch signals within
+// testClaudeBudgetAnswerWithin.
+func requireSignal(t *testing.T, ch <-chan struct{}, msg string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(testClaudeBudgetAnswerWithin):
+		require.FailNow(t, msg)
+	}
+}
+
 // requireScanStarted proves the verdict was pending on the held scan, so the
 // response cannot have been the handler's own verdict.
 func requireScanStarted(t *testing.T, scanner *slowRiskScanner) {
 	t.Helper()
-	select {
-	case <-scanner.started:
-	case <-time.After(testClaudeBudgetAnswerWithin):
-		require.FailNow(t, "the enforcement scan never started")
+	requireSignal(t, scanner.started, "the enforcement scan never started")
+}
+
+// A scan that overruns the budget is answered from the org's hooks posture at
+// the budget: fail-open passes (a tool call without pre-approval), fail-closed
+// or unreadable blocks with a reason, and a prompt is still persisted.
+func TestClaude_DecisionBudget_OverrunAnswersFromPosture(t *testing.T) {
+	t.Parallel()
+	toolReason := "Speakeasy blocked this tool call: its security check did not finish in time. Retry in a moment, and contact your administrator if this keeps happening."
+	promptReason := strings.Replace(toolReason, "tool call", "prompt", 1)
+	failOpen := hooksPostureFeatures{failOpen: true}
+	toolDenied := &gen.ClaudeHookResult{
+		SystemMessage: &toolReason,
+		HookSpecificOutput: &HookSpecificOutput{
+			HookEventName:            new("PreToolUse"),
+			PermissionDecision:       new("deny"),
+			PermissionDecisionReason: &toolReason,
+		},
 	}
-}
+	cases := []struct {
+		name    string
+		posture hooksPostureFeatures
+		event   string
+		want    *gen.ClaudeHookResult
+	}{
+		{name: "fail-open passes prompt", posture: failOpen, event: "UserPromptSubmit", want: &gen.ClaudeHookResult{}},
+		{name: "fail-open passes tool call without pre-approval", posture: failOpen, event: "PreToolUse", want: &gen.ClaudeHookResult{HookSpecificOutput: &HookSpecificOutput{HookEventName: new("PreToolUse")}}},
+		{name: "fail-closed blocks tool call with reason", event: "PreToolUse", want: toolDenied},
+		{name: "fail-closed blocks prompt with reason", event: "UserPromptSubmit", want: &gen.ClaudeHookResult{Decision: new("block"), Reason: &promptReason}},
+		{name: "unreadable posture fails closed", posture: hooksPostureFeatures{failOpen: true, err: errors.New("feature store unavailable")}, event: "PreToolUse", want: toolDenied},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti, scanner := newBudgetedClaudeService(t, tc.posture, nil)
+			payload := budgetPayload(tc.event)
 
-// A fail-open organization gets the pass-through answer a legacy client treats
-// as success once the scan overruns the budget, and the prompt is still
-// persisted although its verdict never arrived.
-func TestClaude_DecisionBudget_FailOpenPassesPromptAndPersistsIt(t *testing.T) {
-	t.Parallel()
-	ctx, ti, scanner := newBudgetedClaudeService(t, true, blockingScanResult())
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
+			began := time.Now()
+			result, err := ti.service.Claude(ctx, payload)
+			elapsed := time.Since(began)
+			require.NoError(t, err)
+			requireScanStarted(t, scanner)
+			require.GreaterOrEqual(t, elapsed, testClaudeBudget, "the response waits out the budget")
+			require.Less(t, elapsed, testClaudeBudgetAnswerWithin, "the response must not wait for the scan")
+			require.Equal(t, tc.want, result)
+			if payload.Prompt == nil {
+				return
+			}
 
-	sessionID := uuid.NewString()
-	prompt := "a prompt whose scan overruns the budget"
-	userEmail := "budget-fail-open@example.com"
-
-	began := time.Now()
-	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
-		HookEventName: "UserPromptSubmit",
-		SessionID:     &sessionID,
-		Prompt:        &prompt,
-		UserEmail:     &userEmail,
-	})
-	elapsed := time.Since(began)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	requireScanStarted(t, scanner)
-	require.GreaterOrEqual(t, elapsed, testClaudeDecisionBudget, "the response waits out the budget")
-	require.Less(t, elapsed, testClaudeBudgetAnswerWithin, "the response must not wait for the scan")
-	require.Nil(t, result.Decision, "fail-open must not block the prompt")
-	require.Nil(t, result.Reason)
-	require.Nil(t, result.Continue)
-
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
-			ChatID:    sessionIDToUUID(sessionID),
-			ProjectID: *authCtx.ProjectID,
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			require.EventuallyWithT(t, func(c *assert.CollectT) {
+				msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+					ChatID:    sessionIDToUUID(*payload.SessionID),
+					ProjectID: *authCtx.ProjectID,
+				})
+				assert.NoError(c, err)
+				assert.Len(c, msgs, 1, "the prompt must be persisted even though its verdict missed the budget")
+			}, 5*time.Second, 50*time.Millisecond)
 		})
-		assert.NoError(c, err)
-		assert.Len(c, msgs, 1, "the prompt must be persisted even though its verdict missed the budget")
-	}, 5*time.Second, 50*time.Millisecond)
-}
-
-// A fail-open tool call passes through without a permissionDecision: "allow"
-// would skip the user's permission prompt for a call the server never
-// verified.
-func TestClaude_DecisionBudget_FailOpenPassesToolCallWithoutPreApproval(t *testing.T) {
-	t.Parallel()
-	ctx, ti, scanner := newBudgetedClaudeService(t, true, blockingScanResult())
-
-	sessionID := uuid.NewString()
-	toolName := "Bash"
-	toolUseID := "toolu_budget_fail_open"
-	userEmail := "budget-fail-open-tool@example.com"
-
-	began := time.Now()
-	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
-		HookEventName: "PreToolUse",
-		SessionID:     &sessionID,
-		UserEmail:     &userEmail,
-		ToolName:      &toolName,
-		ToolUseID:     &toolUseID,
-		ToolInput:     map[string]any{"command": "cat .env"},
-	})
-	elapsed := time.Since(began)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	requireScanStarted(t, scanner)
-	require.Less(t, elapsed, testClaudeBudgetAnswerWithin)
-
-	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
-	require.True(t, ok)
-	require.Equal(t, "PreToolUse", *output.HookEventName)
-	require.Nil(t, output.PermissionDecision, "fail-open must neither deny nor pre-approve the call")
-	require.Nil(t, output.PermissionDecisionReason)
-	require.Nil(t, result.SystemMessage)
-	require.Nil(t, result.Decision)
-}
-
-// A fail-closed organization still blocks, but within the budget and with a
-// reason the user can read, instead of the client timing out on HTTP 000.
-func TestClaude_DecisionBudget_FailClosedBlocksToolCallWithReason(t *testing.T) {
-	t.Parallel()
-	ctx, ti, scanner := newBudgetedClaudeService(t, false, nil)
-
-	sessionID := uuid.NewString()
-	toolName := "Bash"
-	toolUseID := "toolu_budget_fail_closed"
-	userEmail := "budget-fail-closed-tool@example.com"
-
-	began := time.Now()
-	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
-		HookEventName: "PreToolUse",
-		SessionID:     &sessionID,
-		UserEmail:     &userEmail,
-		ToolName:      &toolName,
-		ToolUseID:     &toolUseID,
-		ToolInput:     map[string]any{"command": "ls"},
-	})
-	elapsed := time.Since(began)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	requireScanStarted(t, scanner)
-	require.Less(t, elapsed, testClaudeBudgetAnswerWithin)
-
-	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
-	require.True(t, ok)
-	require.NotNil(t, output.PermissionDecision)
-	require.Equal(t, "deny", *output.PermissionDecision)
-	require.NotNil(t, output.PermissionDecisionReason)
-	require.Contains(t, *output.PermissionDecisionReason, "security check did not finish in time")
-	require.NotNil(t, result.SystemMessage, "the user sees the reason in the terminal")
-	require.Contains(t, *result.SystemMessage, "this tool call")
-}
-
-func TestClaude_DecisionBudget_FailClosedBlocksPromptWithReason(t *testing.T) {
-	t.Parallel()
-	ctx, ti, scanner := newBudgetedClaudeService(t, false, nil)
-
-	sessionID := uuid.NewString()
-	prompt := "a prompt whose scan overruns the budget"
-
-	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
-		HookEventName: "UserPromptSubmit",
-		SessionID:     &sessionID,
-		Prompt:        &prompt,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	requireScanStarted(t, scanner)
-	require.NotNil(t, result.Decision)
-	require.Equal(t, "block", *result.Decision)
-	require.NotNil(t, result.Reason)
-	require.Contains(t, *result.Reason, "Speakeasy blocked this prompt: its security check did not finish in time")
-}
-
-// An organization whose fail-open setting cannot be read is answered as
-// fail-closed: a pass-through could let through an event its organization
-// chose to block.
-func TestClaude_DecisionBudget_UnreadablePostureFailsClosed(t *testing.T) {
-	t.Parallel()
-	ctx, ti, scanner := newBudgetedClaudeService(t, true, nil)
-	ti.service.productFeatures = hooksPostureFeatures{failOpen: true, err: errors.New("feature store unavailable")}
-
-	sessionID := uuid.NewString()
-	toolName := "Bash"
-	toolUseID := "toolu_budget_unreadable_posture"
-	userEmail := "budget-unreadable-posture@example.com"
-
-	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
-		HookEventName: "PreToolUse",
-		SessionID:     &sessionID,
-		UserEmail:     &userEmail,
-		ToolName:      &toolName,
-		ToolUseID:     &toolUseID,
-		ToolInput:     map[string]any{"command": "ls"},
-	})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	requireScanStarted(t, scanner)
-
-	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
-	require.True(t, ok)
-	require.NotNil(t, output.PermissionDecision)
-	require.Equal(t, "deny", *output.PermissionDecision)
-	require.NotNil(t, output.PermissionDecisionReason)
-	require.Contains(t, *output.PermissionDecisionReason, "security check did not finish in time")
+	}
 }
 
 // The fail-open posture is read while the verdict is still pending, not once
@@ -318,35 +220,20 @@ func TestClaude_DecisionBudget_UnreadablePostureFailsClosed(t *testing.T) {
 // is marked superseded before a late deny can record its block.
 func TestClaude_DecisionBudget_ReadsPostureWhileVerdictPending(t *testing.T) {
 	t.Parallel()
-	ctx, ti, scanner := newBudgetedClaudeService(t, true, nil)
+	postureRead := make(chan struct{}, 1)
+	ctx, ti, scanner := newBudgetedClaudeService(t, hooksPostureFeatures{failOpen: true, read: postureRead}, nil)
 	// A budget this long cannot fire during the test, so any posture read it
 	// observes overlapped the pending verdict.
-	ti.service.claudeDecisionBudget = time.Hour
-	postureRead := make(chan struct{}, 1)
-	ti.service.productFeatures = hooksPostureFeatures{failOpen: true, read: postureRead}
+	ti.service.claudeBudget = time.Hour
 
-	sessionID := uuid.NewString()
-	prompt := "a prompt whose verdict is still pending"
-	type claudeResponse struct {
-		result *gen.ClaudeHookResult
-		err    error
-	}
-	responses := make(chan claudeResponse, 1)
+	responses := make(chan claudeHookVerdict, 1)
 	go func() {
-		result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
-			HookEventName: "UserPromptSubmit",
-			SessionID:     &sessionID,
-			Prompt:        &prompt,
-		})
-		responses <- claudeResponse{result: result, err: err}
+		result, err := ti.service.Claude(ctx, budgetPayload("UserPromptSubmit"))
+		responses <- claudeHookVerdict{result: result, err: err}
 	}()
 
 	requireScanStarted(t, scanner)
-	select {
-	case <-postureRead:
-	case <-time.After(testClaudeBudgetAnswerWithin):
-		require.FailNow(t, "the posture must be read while the verdict is pending")
-	}
+	requireSignal(t, postureRead, "the posture must be read while the verdict is pending")
 
 	scanner.finish()
 	response := <-responses
@@ -385,33 +272,18 @@ func TestHooksFailOpen_TrueOnlyForReadEnabledSetting(t *testing.T) {
 // really was blocked.
 func TestClaude_DecisionBudget_LateBlockStillRecordedWhenFailClosed(t *testing.T) {
 	t.Parallel()
-	ctx, ti, scanner := newBudgetedClaudeService(t, false, blockingScanResult())
+	ctx, ti, scanner := newBudgetedClaudeService(t, hooksPostureFeatures{failOpen: false}, blockingScanResult())
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	sessionID := uuid.NewString()
-	toolName := "Bash"
-	toolUseID := "toolu_budget_late_block"
-	userEmail := "budget-late-block@example.com"
 	began := time.Now()
 
-	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
-		HookEventName: "PreToolUse",
-		SessionID:     &sessionID,
-		UserEmail:     &userEmail,
-		ToolName:      &toolName,
-		ToolUseID:     &toolUseID,
-		ToolInput:     map[string]any{"command": "cat .env"},
-	})
+	result, err := ti.service.Claude(ctx, budgetPayload("PreToolUse"))
 	require.NoError(t, err)
 	requireScanStarted(t, scanner)
-	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
-	require.True(t, ok)
-	require.Contains(t, *output.PermissionDecisionReason, "did not finish in time", "the response is the timeout block")
+	require.Equal(t, hookMetricDecisionDeny, claudeHookDecision(result), "the response is the timeout block")
 
 	scanner.finish()
-	ti.service.claudeDecisionDrains.Wait()
+	ti.service.claudeDrains.Wait()
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		rows, err := repo.New(ti.conn).ListToolCallBlockSurfaceEvidence(ctx, repo.ListToolCallBlockSurfaceEvidenceParams{
@@ -437,21 +309,10 @@ func TestClaude_DecisionBudget_FastBlockUnchanged(t *testing.T) {
 	ti.service.productFeatures = hooksPostureFeatures{failOpen: true}
 	ti.service.riskScanner = &stubResultScanner{result: blockingScanResult()}
 
-	sessionID := uuid.NewString()
-	prompt := "here is a secret"
-
-	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
-		HookEventName: "UserPromptSubmit",
-		SessionID:     &sessionID,
-		Prompt:        &prompt,
-	})
+	result, err := ti.service.Claude(ctx, budgetPayload("UserPromptSubmit"))
 	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.NotNil(t, result.Decision)
-	require.Equal(t, "block", *result.Decision)
-	require.NotNil(t, result.Reason)
-	require.Contains(t, *result.Reason, "secret policy")
-	require.NotContains(t, *result.Reason, "did not finish in time")
+	require.Equal(t, "block", conv.PtrValOr(result.Decision, ""))
+	require.Contains(t, conv.PtrValOr(result.Reason, ""), "secret policy")
 }
 
 // A fast allow keeps its explicit permissionDecision.
@@ -461,24 +322,28 @@ func TestClaude_DecisionBudget_FastAllowUnchanged(t *testing.T) {
 	ti.service.productFeatures = hooksPostureFeatures{failOpen: false}
 	ti.service.riskScanner = &stubResultScanner{}
 
-	sessionID := uuid.NewString()
-	toolName := "Read"
-	toolUseID := "toolu_budget_fast_allow"
-	userEmail := "budget-fast-allow@example.com"
-
-	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
-		HookEventName: "PreToolUse",
-		SessionID:     &sessionID,
-		UserEmail:     &userEmail,
-		ToolName:      &toolName,
-		ToolUseID:     &toolUseID,
-		ToolInput:     map[string]any{"file_path": "/tmp/x"},
-	})
+	result, err := ti.service.Claude(ctx, budgetPayload("PreToolUse"))
 	require.NoError(t, err)
 	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
 	require.True(t, ok)
-	require.NotNil(t, output.PermissionDecision)
-	require.Equal(t, "allow", *output.PermissionDecision)
+	require.Equal(t, "allow", conv.PtrValOr(output.PermissionDecision, ""))
+}
+
+// A verdict that lands within the budget carries its handler's enforcement
+// scan to the request's tracker, which feeds the risk_scanned metric dimension.
+func TestClaude_DecisionBudget_FastVerdictReportsRiskScan(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = &stubResultScanner{}
+	payload := budgetPayload("UserPromptSubmit")
+	hookEvent, err := ti.service.normalizeClaudeHookEvent(ctx, payload, time.Now())
+	require.NoError(t, err)
+
+	ctx, scanned := withRiskScanTracker(ctx)
+	_, answeredFromPosture, err := ti.service.decideClaudeHookWithinBudget(ctx, testenv.NewLogger(t), time.Now(), hookEvent, payload.HookEventName)
+	require.NoError(t, err)
+	require.False(t, answeredFromPosture)
+	require.True(t, *scanned, "the handler's scan must reach the request's tracker")
 }
 
 // A block row written for an event already answered as a pass-through would
@@ -488,7 +353,6 @@ func TestInsertToolCallBlock_SkipsSupersededVerdict(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
 
 	supersededCtx, superseded := withVerdictSupersededFlag(ctx)
 	superseded.Store(true)
@@ -502,10 +366,7 @@ func TestInsertToolCallBlock_SkipsSupersededVerdict(t *testing.T) {
 		Reason:         "late block for a call that already passed",
 		ToolName:       "Bash",
 		UserID:         authCtx.UserID,
-		RiskPolicyID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ChatID:         chatIDForBlock("session-superseded"),
-		ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 
 	_, err = riskRepo.New(ti.conn).GetToolCallBlock(ctx, riskRepo.GetToolCallBlockParams{
