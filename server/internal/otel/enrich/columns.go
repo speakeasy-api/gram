@@ -21,5 +21,19 @@ func LogColumns(in *Instruments) []LogEnricher {
 		columnUserEmail(in),
 		columnExternalUserID(in),
 		columnExternalOrgID(in),
+
+		// Operation: what the event was about and how it went.
+		columnModel(in),
+		columnQuerySource(in),
+		columnSkillName(in),
+		columnAgentName(in),
+		columnMCPServerName(in),
+		columnMCPToolName(in),
+		columnName(in),
+		columnToolName(in),
+		columnText(in),
+		columnOutcome(in),
+		columnOutcomeMessage(in),
+		columnDurationNano(in),
 	}
 }
