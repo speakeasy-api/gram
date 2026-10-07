@@ -48,6 +48,26 @@ function worthShowing(client: RemoteMcpServerClientScopes): boolean {
   return requestsNothing(client) || shownScopes(client).length > 0;
 }
 
+/** One card per identity provider and request; several connections can share both. */
+function distinctRequests(
+  clients: RemoteMcpServerClientScopes[],
+): RemoteMcpServerClientScopes[] {
+  const byKey = new Map<string, RemoteMcpServerClientScopes>();
+  for (const client of clients) {
+    const key = JSON.stringify([
+      client.issuerUrl ?? "",
+      client.issuerName ?? "",
+      client.scopeSource,
+      client.requestedScopes,
+    ]);
+    const seen = byKey.get(key);
+    if (!seen) byKey.set(key, client);
+    else if (client.pinWouldDecide && !seen.pinWouldDecide)
+      byKey.set(key, { ...seen, pinWouldDecide: true });
+  }
+  return [...byKey.values()];
+}
+
 function issuerLabel(client: RemoteMcpServerClientScopes): string {
   return (
     issuerDisplayName({
@@ -95,7 +115,7 @@ export function RequestedScopesCard({
     { throwOnError: false },
   );
   if (error) return null;
-  const clients = data?.clients.filter(worthShowing) ?? [];
+  const clients = distinctRequests(data?.clients.filter(worthShowing) ?? []);
   if (!data || clients.length === 0) return null;
   const labels = issuerLabels(clients);
 

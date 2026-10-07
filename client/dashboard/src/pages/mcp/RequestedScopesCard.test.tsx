@@ -259,6 +259,35 @@ describe("RequestedScopesCard", () => {
     expect(screen.getByText(DISCLAIMER)).toBeTruthy();
   });
 
+  it("shows one card for connections that make the same request", () => {
+    loaded(
+      scopes(
+        [client({ pinWouldDecide: false }), client({ clientId: "client-2" })],
+        { canPin: true },
+      ),
+    );
+    renderCard();
+    expect(screen.getAllByText("Scopes requested from Acme SSO")).toHaveLength(
+      1,
+    );
+    expect(screen.getByRole("link", { name: "Edit scopes" })).toBeTruthy();
+  });
+
+  it("keeps a card per distinct request from the same provider", () => {
+    loaded(
+      scopes([
+        client(),
+        client({
+          clientId: "client-2",
+          scopeSource: "client_scope",
+          requestedScopes: ["admin"],
+        }),
+      ]),
+    );
+    renderCard();
+    expect(screen.getAllByRole("list")).toHaveLength(2);
+  });
+
   it("says how many servers share a pin", () => {
     loaded(scopes([client()], { sharedServerCount: 2 }));
     renderCard();
