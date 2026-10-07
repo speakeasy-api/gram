@@ -42,7 +42,7 @@ WHERE id = $1
   AND identity_provider_connection_id = $3
   AND token_endpoint_auth_method = 'client_secret_basic'
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
 
 type ClearManagedClientSecretParams struct {
@@ -73,6 +73,7 @@ func (q *Queries) ClearManagedClientSecret(ctx context.Context, arg ClearManaged
 		&i.TokenEndpointAuthAudienceFormat,
 		&i.ClientIDMetadataUri,
 		&i.LegacyCallbackUrl,
+		&i.CallbackBaseUrl,
 		&i.ResourceIdentifier,
 		&i.ResourceName,
 		&i.ResourceDocumentation,
@@ -1195,7 +1196,7 @@ WHERE id = $2
   AND identity_provider_connection_id = $4
   AND token_endpoint_auth_method = 'client_secret_basic'
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
 
 type SetManagedClientSecretParams struct {
@@ -1231,6 +1232,7 @@ func (q *Queries) SetManagedClientSecret(ctx context.Context, arg SetManagedClie
 		&i.TokenEndpointAuthAudienceFormat,
 		&i.ClientIDMetadataUri,
 		&i.LegacyCallbackUrl,
+		&i.CallbackBaseUrl,
 		&i.ResourceIdentifier,
 		&i.ResourceName,
 		&i.ResourceDocumentation,

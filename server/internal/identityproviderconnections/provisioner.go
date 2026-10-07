@@ -328,6 +328,7 @@ func (p *Provisioner) provisionSecretClient(ctx context.Context, params Provisio
 		Scope:                           nil,
 		Audience:                        pgtype.Text{String: "", Valid: false},
 		LegacyCallbackUrl:               false,
+		CallbackBaseUrl:                 pgtype.Text{String: "", Valid: false},
 		JsonWebKeySetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		IdentityProviderConnectionID:    conv.ToNullUUID(params.ConnectionID),
 	})
