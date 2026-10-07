@@ -32,7 +32,7 @@
     "db:seed": "node --import tsx scripts/seed.ts"
   },
   "dependencies": {
-    "@speakeasy-api/functions": "^0.19.0",
+    "@speakeasy-api/functions": "^0.20.0",
     "@modelcontextprotocol/sdk": "^1.20.1",
     "@openrouter/sdk": "^0.1.27",
     "@pinecone-database/pinecone": "^6.1.3",

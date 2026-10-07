@@ -2,7 +2,6 @@ package functions
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -25,9 +24,13 @@ const (
 	// a project.
 	sdkBuildEntry = "/build"
 
-	// MinSDKVersion is the first SDK release that exports the programmatic
-	// build entry. New projects depend on ^MinSDKVersion.
-	MinSDKVersion = "0.19.0"
+	// MinSDKVersion is the first release of SDKPackage. New projects depend
+	// on ^MinSDKVersion.
+	MinSDKVersion = "0.20.0"
+
+	// MinLegacySDKVersion is the first release of LegacySDKPackage that
+	// exports the programmatic build entry.
+	MinLegacySDKVersion = "0.19.0"
 
 	// MinNodeVersion is the oldest Node.js that runs the SDK. It strips
 	// TypeScript types without flags, which loading gram.config.ts needs.
@@ -209,8 +212,11 @@ func (r Runner) callSDK(ctx context.Context, action string, opts ProjectOptions,
 	case "missing":
 		return ErrSDKMissing
 	case "outdated":
-		pkg := cmp.Or(outcome.Package, SDKPackage)
-		return fmt.Errorf("%w: upgrade %s with 'npm install %s@^%s'", ErrSDKOutdated, pkg, pkg, MinSDKVersion)
+		pkg, version := SDKPackage, MinSDKVersion
+		if outcome.Package == LegacySDKPackage {
+			pkg, version = LegacySDKPackage, MinLegacySDKVersion
+		}
+		return fmt.Errorf("%w: upgrade %s with 'npm install %s@^%s'", ErrSDKOutdated, pkg, pkg, version)
 	default:
 		return fmt.Errorf("functions SDK %s failed: %s", action, outcome.Error)
 	}

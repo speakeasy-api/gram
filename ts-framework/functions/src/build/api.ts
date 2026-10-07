@@ -104,7 +104,7 @@ export async function resolveProject(
   const { cwd, config } = await loadProjectConfig(opts);
   const project = await describeProject(cwd, config);
 
-  // SDK releases before 0.19 wrote gram.zip. Keep deploying such a build
+  // SDK releases before 0.20 wrote gram.zip. Keep deploying such a build
   // until the project is rebuilt.
   const legacyZip = join(project.outDir, LEGACY_ZIP_NAME);
   if (!existsSync(project.zipFile) && existsSync(legacyZip)) {

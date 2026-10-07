@@ -8,7 +8,7 @@ import { $, ProcessPromise, chalk } from "zx";
 import { defaultCLIResolverDeps, resolveCLI } from "./cli.ts";
 import { CONFIG_FILE_NAMES, isCI, type ParsedUserConfig } from "./config.ts";
 
-/** The zip file name SDK releases before 0.19 wrote. */
+/** The zip file name SDK releases before 0.20 wrote. */
 export const LEGACY_ZIP_NAME = "gram.zip";
 
 type Artifacts = {

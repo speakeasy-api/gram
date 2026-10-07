@@ -33,7 +33,7 @@
     "db:seed": "CLICKHOUSE_HOST=localhost CLICKHOUSE_PORT=8124 CLICKHOUSE_USERNAME=gram_user CLICKHOUSE_PASSWORD=gram_password CLICKHOUSE_DATABASE=gram_example node --import tsx scripts/seed.ts"
   },
   "dependencies": {
-    "@speakeasy-api/functions": "^0.19.0",
+    "@speakeasy-api/functions": "^0.20.0",
     "@modelcontextprotocol/sdk": "^1.20.1",
     "zod": "^4",
     "@clickhouse/client-web": "^1.6.0"

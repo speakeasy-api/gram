@@ -64,7 +64,7 @@ func TestBuild_SDKOutdatedNamesThePackage(t *testing.T) {
 	bin := fakeNode(t, "v24.0.0", `echo '{"error":"outdated","package":"@gram-ai/functions"}' > "$SPEAKEASY_FUNCTIONS_RESULT"`+"\n")
 	_, err := testRunner(bin, &bytes.Buffer{}).Build(t.Context(), ProjectOptions{Dir: t.TempDir(), ConfigFile: "", Entrypoint: "", OutDir: ""})
 	require.ErrorIs(t, err, ErrSDKOutdated)
-	require.EqualError(t, err, "functions SDK is too old for the speakeasy CLI: upgrade @gram-ai/functions with 'npm install @gram-ai/functions@^"+MinSDKVersion+"'")
+	require.EqualError(t, err, "functions SDK is too old for the speakeasy CLI: upgrade @gram-ai/functions with 'npm install @gram-ai/functions@^"+MinLegacySDKVersion+"'")
 }
 
 func TestBuild_NodeFails(t *testing.T) {
