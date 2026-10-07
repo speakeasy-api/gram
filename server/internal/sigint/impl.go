@@ -98,6 +98,7 @@ func (s *Service) requireAccess(ctx context.Context, organizationID string, chec
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "check signals intelligence availability").LogError(ctx, s.logger)
 	}
+
 	if !enabled {
 		return oops.E(oops.CodeForbidden, nil, "signals intelligence is not enabled for this organization")
 	}
@@ -109,17 +110,21 @@ func (s *Service) CreateSignal(ctx context.Context, payload *gen.CreateSignalPay
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
 	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
+
 	name, err := validateName(payload.Name)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid signal name").LogError(ctx, s.logger)
 	}
+
 	slug, err := normalizeSlug(payload.Slug, name)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid signal slug")
 	}
+
 	id, err := uuid.NewV7()
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate signal id").LogError(ctx, s.logger)
@@ -130,10 +135,13 @@ func (s *Service) CreateSignal(ctx context.Context, payload *gen.CreateSignalPay
 		return nil, oops.E(oops.CodeUnexpected, err, "begin signal create").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
 	queries := repo.New(dbtx)
+
 	if err := queries.LockSigintProject(ctx, authCtx.ProjectID.String()); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock sigint project").LogError(ctx, s.logger)
 	}
+
 	row, err := queries.CreateSignal(ctx, repo.CreateSignalParams{
 		ID:                 id,
 		ProjectID:          *authCtx.ProjectID,
@@ -148,6 +156,7 @@ func (s *Service) CreateSignal(ctx context.Context, payload *gen.CreateSignalPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create signal").LogError(ctx, s.logger)
 	}
+
 	if err := s.audit.LogSigintSignalCreate(ctx, dbtx, audit.LogSigintSignalCreateEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
@@ -159,9 +168,11 @@ func (s *Service) CreateSignal(ctx context.Context, payload *gen.CreateSignalPay
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit signal create").LogError(ctx, s.logger)
 	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit signal create").LogError(ctx, s.logger)
 	}
+
 	return mv.BuildSigintSignalView(row), nil
 }
 
@@ -170,13 +181,16 @@ func (s *Service) GetSignal(ctx context.Context, payload *gen.GetSignalPayload) 
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
 	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
+
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid signal id").LogError(ctx, s.logger)
 	}
+
 	row, err := repo.New(s.db).GetSignal(ctx, repo.GetSignalParams{ID: id, ProjectID: *authCtx.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.C(oops.CodeNotFound)
@@ -184,6 +198,7 @@ func (s *Service) GetSignal(ctx context.Context, payload *gen.GetSignalPayload) 
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get signal").LogError(ctx, s.logger)
 	}
+
 	return mv.BuildSigintSignalView(row), nil
 }
 
@@ -192,17 +207,21 @@ func (s *Service) ListSignals(ctx context.Context, payload *gen.ListSignalsPaylo
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
 	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
+
 	cursor, err := parseCursor(payload.Cursor)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid signal cursor").LogError(ctx, s.logger)
 	}
+
 	rows, err := repo.New(s.db).ListSignals(ctx, repo.ListSignalsParams{ProjectID: *authCtx.ProjectID, Cursor: cursor, LimitValue: conv.SafeInt32(payload.Limit + 1)})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list signals").LogError(ctx, s.logger)
 	}
+
 	var nextCursor *string
 	if len(rows) > payload.Limit {
 		rows = rows[:payload.Limit]
@@ -216,22 +235,28 @@ func (s *Service) UpdateSignal(ctx context.Context, payload *gen.UpdateSignalPay
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
 	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
+
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid signal id").LogError(ctx, s.logger)
 	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin signal update").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
 	queries := repo.New(dbtx)
+
 	if err := queries.LockSigintProject(ctx, authCtx.ProjectID.String()); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock sigint project").LogError(ctx, s.logger)
 	}
+
 	before, err := queries.GetSignal(ctx, repo.GetSignalParams{ID: id, ProjectID: *authCtx.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.C(oops.CodeNotFound)
@@ -239,6 +264,7 @@ func (s *Service) UpdateSignal(ctx context.Context, payload *gen.UpdateSignalPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get signal for update").LogError(ctx, s.logger)
 	}
+
 	params := repo.UpdateSignalParams{
 		Slug:               before.Slug,
 		Name:               before.Name,
@@ -265,6 +291,7 @@ func (s *Service) UpdateSignal(ctx context.Context, payload *gen.UpdateSignalPay
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid signal slug")
 		}
 	}
+
 	after, err := queries.UpdateSignal(ctx, params)
 	if isSlugConflict(err) {
 		return nil, oops.E(oops.CodeConflict, err, "signal slug already exists")
@@ -272,8 +299,10 @@ func (s *Service) UpdateSignal(ctx context.Context, payload *gen.UpdateSignalPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update signal").LogError(ctx, s.logger)
 	}
+
 	beforeView := mv.BuildSigintSignalView(before)
 	afterView := mv.BuildSigintSignalView(after)
+
 	if err := s.audit.LogSigintSignalUpdate(ctx, dbtx, audit.LogSigintSignalUpdateEvent{
 		OrganizationID:       authCtx.ActiveOrganizationID,
 		ProjectID:            *authCtx.ProjectID,
@@ -287,9 +316,11 @@ func (s *Service) UpdateSignal(ctx context.Context, payload *gen.UpdateSignalPay
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit signal update").LogError(ctx, s.logger)
 	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit signal update").LogError(ctx, s.logger)
 	}
+
 	return afterView, nil
 }
 
@@ -298,22 +329,28 @@ func (s *Service) DeleteSignal(ctx context.Context, payload *gen.DeleteSignalPay
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
 	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
+
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid signal id").LogError(ctx, s.logger)
 	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin signal delete").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
 	queries := repo.New(dbtx)
+
 	if err := queries.LockSigintProject(ctx, authCtx.ProjectID.String()); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock sigint project").LogError(ctx, s.logger)
 	}
+
 	signal, err := queries.GetSignal(ctx, repo.GetSignalParams{ID: id, ProjectID: *authCtx.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.C(oops.CodeNotFound)
@@ -321,31 +358,39 @@ func (s *Service) DeleteSignal(ctx context.Context, payload *gen.DeleteSignalPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get signal for delete").LogError(ctx, s.logger)
 	}
+
 	beforeRows, err := queries.ListSensorsForSignal(ctx, repo.ListSensorsForSignalParams{SignalID: id, ProjectID: *authCtx.ProjectID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list affected sensors").LogError(ctx, s.logger)
 	}
+
 	beforeViews := make(map[uuid.UUID]*types.SigintSensor, len(beforeRows))
 	for _, row := range beforeRows {
 		beforeViews[row.ID] = sensorViewFromAffected(row)
 	}
+
 	affectedIDs, err := queries.DeleteSignalMemberships(ctx, repo.DeleteSignalMembershipsParams{ProjectID: *authCtx.ProjectID, SignalID: id})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "detach deleted signal").LogError(ctx, s.logger)
 	}
+
 	if len(affectedIDs) > 0 {
 		if err := queries.CompactSensorSignalOrder(ctx, repo.CompactSensorSignalOrderParams{ProjectID: *authCtx.ProjectID, SensorIds: affectedIDs}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "compact sensor signal order").LogError(ctx, s.logger)
 		}
+
 		if err := queries.TouchSensors(ctx, repo.TouchSensorsParams{ProjectID: *authCtx.ProjectID, SensorIds: affectedIDs}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "touch affected sensors").LogError(ctx, s.logger)
 		}
+
 		afterRows, err := queries.GetSensorsByIDs(ctx, repo.GetSensorsByIDsParams{ProjectID: *authCtx.ProjectID, Ids: affectedIDs})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "get affected sensors").LogError(ctx, s.logger)
 		}
+
 		for _, row := range afterRows {
 			afterView := mv.BuildSigintSensorByIDsView(row)
+
 			if err := s.audit.LogSigintSensorUpdate(ctx, dbtx, audit.LogSigintSensorUpdateEvent{
 				OrganizationID:       authCtx.ActiveOrganizationID,
 				ProjectID:            *authCtx.ProjectID,
@@ -361,10 +406,12 @@ func (s *Service) DeleteSignal(ctx context.Context, payload *gen.DeleteSignalPay
 			}
 		}
 	}
+
 	deleted, err := queries.DeleteSignal(ctx, repo.DeleteSignalParams{ID: id, ProjectID: *authCtx.ProjectID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "delete signal").LogError(ctx, s.logger)
 	}
+
 	if err := s.audit.LogSigintSignalDelete(ctx, dbtx, audit.LogSigintSignalDeleteEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
@@ -376,9 +423,11 @@ func (s *Service) DeleteSignal(ctx context.Context, payload *gen.DeleteSignalPay
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit signal delete").LogError(ctx, s.logger)
 	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit signal delete").LogError(ctx, s.logger)
 	}
+
 	return mv.BuildSigintSignalView(signal), nil
 }
 
@@ -387,52 +436,66 @@ func (s *Service) CreateSensor(ctx context.Context, payload *gen.CreateSensorPay
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
 	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
+
 	name, err := validateName(payload.Name)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor name").LogError(ctx, s.logger)
 	}
+
 	slug, err := normalizeSlug(payload.Slug, name)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor slug")
 	}
+
 	mode := string(payload.Mode)
 	expression := matching.DefaultExpression
 	if payload.MatchExpression != nil {
 		expression = *payload.MatchExpression
 	}
+
 	if err := matching.Validate(expression); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor match expression")
 	}
+
 	if err := validateSensorConfiguration(mode, len(payload.SignalIds)); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor configuration").LogError(ctx, s.logger)
 	}
+
 	signalIDs, err := parseUniqueSignalIDs(payload.SignalIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid signal ids").LogError(ctx, s.logger)
 	}
+
 	id, err := uuid.NewV7()
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate sensor id").LogError(ctx, s.logger)
 	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin sensor create").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
 	queries := repo.New(dbtx)
+
 	if err := queries.LockSigintProject(ctx, authCtx.ProjectID.String()); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock sigint project").LogError(ctx, s.logger)
 	}
+
 	available, err := liveSignalsAvailable(ctx, queries, *authCtx.ProjectID, signalIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "validate signal ids").LogError(ctx, s.logger)
 	}
+
 	if !available {
 		return nil, oops.E(oops.CodeNotFound, nil, "signal ids are unavailable").LogError(ctx, s.logger)
 	}
+
 	created, err := queries.CreateSensor(ctx, repo.CreateSensorParams{
 		Slug: slug,
 		ID:   id, ProjectID: *authCtx.ProjectID, Name: name,
@@ -445,13 +508,16 @@ func (s *Service) CreateSensor(ctx context.Context, payload *gen.CreateSensorPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create sensor").LogError(ctx, s.logger)
 	}
+
 	if err := queries.ReplaceSensorSignals(ctx, repo.ReplaceSensorSignalsParams{ProjectID: *authCtx.ProjectID, SensorID: created.ID, SignalIds: signalIDs}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "attach sensor signals").LogError(ctx, s.logger)
 	}
+
 	viewRow, err := queries.GetSensor(ctx, repo.GetSensorParams{ID: created.ID, ProjectID: *authCtx.ProjectID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get created sensor").LogError(ctx, s.logger)
 	}
+
 	if err := s.audit.LogSigintSensorCreate(ctx, dbtx, audit.LogSigintSensorCreateEvent{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
 		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ActorDisplayName: authCtx.Email, ActorSlug: nil,
@@ -459,9 +525,11 @@ func (s *Service) CreateSensor(ctx context.Context, payload *gen.CreateSensorPay
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit sensor create").LogError(ctx, s.logger)
 	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit sensor create").LogError(ctx, s.logger)
 	}
+
 	return mv.BuildSigintSensorView(viewRow), nil
 }
 
@@ -470,13 +538,16 @@ func (s *Service) GetSensor(ctx context.Context, payload *gen.GetSensorPayload) 
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
 	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
+
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor id").LogError(ctx, s.logger)
 	}
+
 	row, err := repo.New(s.db).GetSensor(ctx, repo.GetSensorParams{ID: id, ProjectID: *authCtx.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.C(oops.CodeNotFound)
@@ -484,6 +555,7 @@ func (s *Service) GetSensor(ctx context.Context, payload *gen.GetSensorPayload) 
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get sensor").LogError(ctx, s.logger)
 	}
+
 	return mv.BuildSigintSensorView(row), nil
 }
 
@@ -492,17 +564,21 @@ func (s *Service) ListSensors(ctx context.Context, payload *gen.ListSensorsPaylo
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
 	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
+
 	cursor, err := parseCursor(payload.Cursor)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor cursor").LogError(ctx, s.logger)
 	}
+
 	rows, err := repo.New(s.db).ListSensors(ctx, repo.ListSensorsParams{ProjectID: *authCtx.ProjectID, Cursor: cursor, LimitValue: conv.SafeInt32(payload.Limit + 1)})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list sensors").LogError(ctx, s.logger)
 	}
+
 	var nextCursor *string
 	if len(rows) > payload.Limit {
 		rows = rows[:payload.Limit]
@@ -516,13 +592,16 @@ func (s *Service) UpdateSensor(ctx context.Context, payload *gen.UpdateSensorPay
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
 	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
+
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor id").LogError(ctx, s.logger)
 	}
+
 	var replacementIDs []uuid.UUID
 	if payload.SignalIds != nil {
 		replacementIDs, err = parseUniqueSignalIDs(payload.SignalIds)
@@ -530,15 +609,19 @@ func (s *Service) UpdateSensor(ctx context.Context, payload *gen.UpdateSensorPay
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid signal ids").LogError(ctx, s.logger)
 		}
 	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin sensor update").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
 	queries := repo.New(dbtx)
+
 	if err := queries.LockSigintProject(ctx, authCtx.ProjectID.String()); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock sigint project").LogError(ctx, s.logger)
 	}
+
 	beforeRow, err := queries.GetSensor(ctx, repo.GetSensorParams{ID: id, ProjectID: *authCtx.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.C(oops.CodeNotFound)
@@ -546,6 +629,7 @@ func (s *Service) UpdateSensor(ctx context.Context, payload *gen.UpdateSensorPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get sensor for update").LogError(ctx, s.logger)
 	}
+
 	params := repo.UpdateSensorParams{
 		Slug: beforeRow.Slug,
 		Name: beforeRow.Name, Description: beforeRow.Description, Instructions: beforeRow.Instructions,
@@ -571,28 +655,34 @@ func (s *Service) UpdateSensor(ctx context.Context, payload *gen.UpdateSensorPay
 		if err := matching.Validate(*payload.MatchExpression); err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor match expression")
 		}
+
 		params.MatchExpression = *payload.MatchExpression
 	}
 	finalCount := len(beforeRow.SignalIds)
 	if payload.SignalIds != nil {
 		finalCount = len(replacementIDs)
+
 		available, err := liveSignalsAvailable(ctx, queries, *authCtx.ProjectID, replacementIDs)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "validate signal ids").LogError(ctx, s.logger)
 		}
+
 		if !available {
 			return nil, oops.E(oops.CodeNotFound, nil, "signal ids are unavailable").LogError(ctx, s.logger)
 		}
 	}
+
 	if err := validateSensorConfiguration(params.Mode, finalCount); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor configuration").LogError(ctx, s.logger)
 	}
+
 	if payload.Slug != nil {
 		params.Slug, err = normalizeSlug(payload.Slug, params.Name)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor slug")
 		}
 	}
+
 	updated, err := queries.UpdateSensor(ctx, params)
 	if isSlugConflict(err) {
 		return nil, oops.E(oops.CodeConflict, err, "sensor slug already exists")
@@ -600,17 +690,21 @@ func (s *Service) UpdateSensor(ctx context.Context, payload *gen.UpdateSensorPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update sensor").LogError(ctx, s.logger)
 	}
+
 	if payload.SignalIds != nil {
 		if err := queries.ReplaceSensorSignals(ctx, repo.ReplaceSensorSignalsParams{ProjectID: *authCtx.ProjectID, SensorID: id, SignalIds: replacementIDs}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "replace sensor signals").LogError(ctx, s.logger)
 		}
 	}
+
 	afterRow, err := queries.GetSensor(ctx, repo.GetSensorParams{ID: updated.ID, ProjectID: *authCtx.ProjectID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get updated sensor").LogError(ctx, s.logger)
 	}
+
 	beforeView := mv.BuildSigintSensorView(beforeRow)
 	afterView := mv.BuildSigintSensorView(afterRow)
+
 	if err := s.audit.LogSigintSensorUpdate(ctx, dbtx, audit.LogSigintSensorUpdateEvent{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
 		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ActorDisplayName: authCtx.Email, ActorSlug: nil,
@@ -619,9 +713,11 @@ func (s *Service) UpdateSensor(ctx context.Context, payload *gen.UpdateSensorPay
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit sensor update").LogError(ctx, s.logger)
 	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit sensor update").LogError(ctx, s.logger)
 	}
+
 	return afterView, nil
 }
 
@@ -630,22 +726,28 @@ func (s *Service) DeleteSensor(ctx context.Context, payload *gen.DeleteSensorPay
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+
 	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
+
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sensor id").LogError(ctx, s.logger)
 	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin sensor delete").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
 	queries := repo.New(dbtx)
+
 	if err := queries.LockSigintProject(ctx, authCtx.ProjectID.String()); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock sigint project").LogError(ctx, s.logger)
 	}
+
 	before, err := queries.GetSensor(ctx, repo.GetSensorParams{ID: id, ProjectID: *authCtx.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.C(oops.CodeNotFound)
@@ -653,13 +755,16 @@ func (s *Service) DeleteSensor(ctx context.Context, payload *gen.DeleteSensorPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "get sensor for delete").LogError(ctx, s.logger)
 	}
+
 	if err := queries.DeleteSensorSignals(ctx, repo.DeleteSensorSignalsParams{ProjectID: *authCtx.ProjectID, SensorID: id}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "delete sensor signals").LogError(ctx, s.logger)
 	}
+
 	deleted, err := queries.DeleteSensor(ctx, repo.DeleteSensorParams{ID: id, ProjectID: *authCtx.ProjectID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "delete sensor").LogError(ctx, s.logger)
 	}
+
 	if err := s.audit.LogSigintSensorDelete(ctx, dbtx, audit.LogSigintSensorDeleteEvent{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
 		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ActorDisplayName: authCtx.Email, ActorSlug: nil,
@@ -667,9 +772,11 @@ func (s *Service) DeleteSensor(ctx context.Context, payload *gen.DeleteSensorPay
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit sensor delete").LogError(ctx, s.logger)
 	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit sensor delete").LogError(ctx, s.logger)
 	}
+
 	return mv.BuildSigintSensorView(before), nil
 }
 
@@ -708,9 +815,11 @@ func parseUniqueSignalIDs(values []string) ([]uuid.UUID, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse signal id at index %d: %w", i, err)
 		}
+
 		if _, exists := seen[id]; exists {
 			return nil, fmt.Errorf("signal id %s is repeated", id)
 		}
+
 		seen[id] = struct{}{}
 		ids[i] = id
 	}
@@ -721,10 +830,12 @@ func liveSignalsAvailable(ctx context.Context, queries *repo.Queries, projectID 
 	if len(ids) == 0 {
 		return true, nil
 	}
+
 	found, err := queries.ListLiveSignalIDs(ctx, repo.ListLiveSignalIDsParams{ProjectID: projectID, Ids: ids})
 	if err != nil {
 		return false, fmt.Errorf("list live signals: %w", err)
 	}
+
 	return len(found) == len(ids), nil
 }
 
@@ -732,10 +843,12 @@ func parseCursor(value *string) (uuid.NullUUID, error) {
 	if value == nil || *value == "" {
 		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
 	}
+
 	id, err := uuid.Parse(*value)
 	if err != nil {
 		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("parse cursor: %w", err)
 	}
+
 	return uuid.NullUUID{UUID: id, Valid: true}, nil
 }
 

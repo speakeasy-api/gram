@@ -48,6 +48,7 @@ func TestConcurrentAttachAndDeleteLeavesNoDanglingMembership(t *testing.T) {
 		}
 	}
 	require.Empty(t, getSensor(t, ctx, ti, sensor.ID).SignalIds)
+
 	_, err := ti.service.GetSignal(ctx, &gen.GetSignalPayload{
 		ID: signal.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})

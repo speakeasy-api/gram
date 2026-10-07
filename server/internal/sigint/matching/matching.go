@@ -40,11 +40,13 @@ var compiler = sync.OnceValues(func() (*celeval.Compiler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create sensor matching environment: %w", err)
 	}
+
 	// Bound retained programs to 1024 and each evaluation to 10,000 CEL operations.
 	c, err := celeval.New(env, celeval.Config{Capacity: programCapacity, Predicate: true, MaxExpressionBytes: MaxExpressionBytes, CostLimit: new(evaluationCostLimit)})
 	if err != nil {
 		return nil, fmt.Errorf("create sensor matching compiler: %w", err)
 	}
+
 	return c, nil
 })
 
@@ -54,9 +56,11 @@ func Validate(expression string) error {
 	if err != nil {
 		return err
 	}
+
 	if _, err := c.Compile(expression); err != nil {
 		return fmt.Errorf("validate sensor predicate: %w", err)
 	}
+
 	return nil
 }
 
@@ -68,21 +72,26 @@ func Match(ctx context.Context, expression string, message *Message) (bool, erro
 	if err := ctx.Err(); err != nil {
 		return false, fmt.Errorf("match sensor: %w", err)
 	}
+
 	c, err := compiler()
 	if err != nil {
 		return false, err
 	}
+
 	program, err := c.Compile(expression)
 	if err != nil {
 		return false, fmt.Errorf("compile sensor predicate: %w", err)
 	}
+
 	activation := make(map[string]any)
 	if message != nil {
 		activation["message"] = message
 	}
+
 	matched, err := celeval.EvalPredicate(ctx, program, activation)
 	if err != nil {
 		return false, fmt.Errorf("evaluate sensor predicate: %w", err)
 	}
+
 	return matched, nil
 }

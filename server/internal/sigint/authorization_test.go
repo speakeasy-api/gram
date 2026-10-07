@@ -33,44 +33,54 @@ func TestReadOnlyProjectGrantCannotMutateConfiguration(t *testing.T) {
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+
 	_, err = ti.service.CreateSensor(readOnly, &gen.CreateSensorPayload{
 		Name: "forbidden", Description: nil, Instructions: nil, Mode: "exclusive", SignalIds: nil,
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+
 	name := "forbidden"
+
 	_, err = ti.service.UpdateSignal(readOnly, &gen.UpdateSignalPayload{
 		ID: signal.ID, Name: &name, Description: nil, ClassifierCriteria: nil,
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+
 	_, err = ti.service.UpdateSensor(readOnly, &gen.UpdateSensorPayload{
 		ID: sensor.ID, Name: &name, Description: nil, Instructions: nil, Mode: nil, SignalIds: nil,
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+
 	_, err = ti.service.DeleteSignal(readOnly, &gen.DeleteSignalPayload{
 		ID: signal.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+
 	_, err = ti.service.DeleteSensor(readOnly, &gen.DeleteSensorPayload{
 		ID: sensor.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	noGrants := authztest.WithExactGrants(t, ctx)
+
 	_, err = ti.service.GetSignal(noGrants, &gen.GetSignalPayload{
 		ID: signal.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+
 	_, err = ti.service.GetSensor(noGrants, &gen.GetSensorPayload{
 		ID: sensor.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+
 	_, err = ti.service.ListSignals(noGrants, &gen.ListSignalsPayload{
 		Cursor: nil, Limit: 2, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+
 	_, err = ti.service.ListSensors(noGrants, &gen.ListSensorsPayload{
 		Cursor: nil, Limit: 2, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})

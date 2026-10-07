@@ -101,6 +101,7 @@ func (s *Service) ReadAuthoringState(ctx context.Context) (AuthoringState, error
 		return AuthoringState{}, fmt.Errorf("begin authoring read: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
 	return s.authoringState(ctx, tx, authz.ScopeProjectRead)
 }
 
@@ -110,21 +111,27 @@ func (s *Service) authoringState(ctx context.Context, tx pgx.Tx, scope authz.Sco
 	if !ok || auth == nil || auth.ProjectID == nil {
 		return zero, oops.C(oops.CodeUnauthorized)
 	}
+
 	if err := s.requireAccess(ctx, auth.ActiveOrganizationID, authz.Check{Scope: scope, ResourceKind: "", ResourceID: auth.ProjectID.String(), Dimensions: nil}); err != nil {
 		return zero, err
 	}
+
 	q := repo.New(tx)
+
 	if err := q.LockSigintProject(ctx, auth.ProjectID.String()); err != nil {
 		return zero, fmt.Errorf("lock authoring state: %w", err)
 	}
+
 	sensors, err := q.ListSensors(ctx, repo.ListSensorsParams{ProjectID: *auth.ProjectID, Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, LimitValue: maxAuthoringResources + 1})
 	if err != nil {
 		return zero, fmt.Errorf("read authoring sensors: %w", err)
 	}
+
 	signals, err := q.ListSignals(ctx, repo.ListSignalsParams{ProjectID: *auth.ProjectID, Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, LimitValue: maxAuthoringResources + 1})
 	if err != nil {
 		return zero, fmt.Errorf("read authoring signals: %w", err)
 	}
+
 	if len(sensors) > maxAuthoringResources || len(signals) > maxAuthoringResources {
 		return zero, oops.E(oops.CodeBadRequest, nil, "project exceeds bounded authoring snapshot limit")
 	}
@@ -141,10 +148,12 @@ func (s *Service) authoringState(ctx context.Context, tx pgx.Tx, scope authz.Sco
 	for _, signal := range signals {
 		versions = append(versions, []string{"signal", signal.ID.String(), signal.UpdatedAt.Time.Format(time.RFC3339Nano)})
 	}
+
 	data, err := json.Marshal(versions)
 	if err != nil {
 		return zero, fmt.Errorf("encode authoring state: %w", err)
 	}
+
 	hash := sha256.Sum256(data)
 	state.Version = hex.EncodeToString(hash[:])
 	return state, nil
@@ -155,15 +164,18 @@ func (s *Service) authoringState(ctx context.Context, tx pgx.Tx, scope authz.Sco
 // Returned creation IDs are provisional and must never be used as committed IDs.
 func (s *Service) PreviewAuthoring(ctx context.Context, input AuthoringInput) (AuthoringResult, string, error) {
 	var zero AuthoringResult
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return zero, "", fmt.Errorf("begin authoring preview: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
 	before, err := s.authoringState(ctx, tx, authz.ScopeProjectWrite)
 	if err != nil {
 		return zero, "", err
 	}
+
 	result, err := s.AuthorInTransaction(ctx, tx, input, before.Version)
 	return result, before.Version, err
 }
@@ -173,16 +185,20 @@ func (s *Service) PreviewAuthoring(ctx context.Context, input AuthoringInput) (A
 // mutations use nested savepoints, preserving authorization and audit behavior.
 func (s *Service) AuthorInTransaction(ctx context.Context, tx pgx.Tx, input AuthoringInput, expectedVersion string) (AuthoringResult, error) {
 	var result AuthoringResult
+
 	before, err := s.authoringState(ctx, tx, authz.ScopeProjectWrite)
 	if err != nil {
 		return result, err
 	}
+
 	if expectedVersion == "" || expectedVersion != before.Version {
 		return result, oops.E(oops.CodeConflict, nil, "configuration changed; preview again")
 	}
+
 	if err := validateAuthoringInput(input); err != nil {
 		return result, err
 	}
+
 	bound := *s
 	bound.db = tx
 	var ids []string
@@ -195,6 +211,7 @@ func (s *Service) AuthorInTransaction(ctx context.Context, tx pgx.Tx, input Auth
 				if err != nil {
 					return result, err
 				}
+
 				id = created.ID
 			}
 			ids = append(ids, id)

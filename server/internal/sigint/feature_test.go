@@ -13,25 +13,35 @@ import (
 
 func requireConfigurationRejected(t *testing.T, ctx context.Context, ti *testInstance, code oops.Code) {
 	t.Helper()
+
 	// Nil payloads also verify gating happens before resource validation/access.
 	_, err := ti.service.CreateSignal(ctx, nil)
 	requireOopsCode(t, err, code)
+
 	_, err = ti.service.GetSignal(ctx, nil)
 	requireOopsCode(t, err, code)
+
 	_, err = ti.service.ListSignals(ctx, nil)
 	requireOopsCode(t, err, code)
+
 	_, err = ti.service.UpdateSignal(ctx, nil)
 	requireOopsCode(t, err, code)
+
 	_, err = ti.service.DeleteSignal(ctx, nil)
 	requireOopsCode(t, err, code)
+
 	_, err = ti.service.CreateSensor(ctx, nil)
 	requireOopsCode(t, err, code)
+
 	_, err = ti.service.GetSensor(ctx, nil)
 	requireOopsCode(t, err, code)
+
 	_, err = ti.service.ListSensors(ctx, nil)
 	requireOopsCode(t, err, code)
+
 	_, err = ti.service.UpdateSensor(ctx, nil)
 	requireOopsCode(t, err, code)
+
 	_, err = ti.service.DeleteSensor(ctx, nil)
 	requireOopsCode(t, err, code)
 }

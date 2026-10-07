@@ -31,11 +31,14 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
 	}
+
 	infra = res
 	code := m.Run()
+
 	if err := cleanup(); err != nil {
 		log.Fatalf("cleanup test infrastructure: %v", err)
 	}
+
 	os.Exit(code)
 }
 
@@ -50,10 +53,13 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
+
 	conn, err := infra.CloneTestDatabase(t, "sigint")
 	require.NoError(t, err)
+
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
+
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessions := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("sigint"), billingClient)
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessions)
@@ -71,30 +77,36 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 func createSignal(t *testing.T, ctx context.Context, ti *testInstance, name string) *types.SigintSignal {
 	t.Helper()
+
 	signal, err := ti.service.CreateSignal(ctx, &gen.CreateSignalPayload{
 		Name: name, Description: nil, ClassifierCriteria: nil,
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
+
 	return signal
 }
 
 func createSensor(t *testing.T, ctx context.Context, ti *testInstance, name string, mode types.SigintSensorMode, ids ...string) *types.SigintSensor {
 	t.Helper()
+
 	sensor, err := ti.service.CreateSensor(ctx, &gen.CreateSensorPayload{
 		Name: name, Description: nil, Instructions: nil, Mode: mode, SignalIds: ids,
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
+
 	return sensor
 }
 
 func getSensor(t *testing.T, ctx context.Context, ti *testInstance, id string) *types.SigintSensor {
 	t.Helper()
+
 	sensor, err := ti.service.GetSensor(ctx, &gen.GetSensorPayload{
 		ID: id, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
+
 	return sensor
 }
 

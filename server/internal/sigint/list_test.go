@@ -18,10 +18,12 @@ func TestListSignalsCursorSurvivesDeletionWithoutDroppingRows(t *testing.T) {
 		ids[i] = createSignal(t, ctx, ti, fmt.Sprintf("signal %d", i)).ID
 	}
 	slices.Sort(ids)
+
 	_, err := ti.service.DeleteSignal(ctx, &gen.DeleteSignalPayload{
 		ID: ids[2], SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
+
 	first, err := ti.service.ListSignals(ctx, &gen.ListSignalsPayload{
 		Cursor: nil, Limit: 2, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
@@ -34,6 +36,7 @@ func TestListSignalsCursorSurvivesDeletionWithoutDroppingRows(t *testing.T) {
 		ID: ids[1], SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
+
 	second, err := ti.service.ListSignals(ctx, &gen.ListSignalsPayload{
 		Cursor: first.NextCursor, Limit: 2, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})

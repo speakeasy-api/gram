@@ -74,6 +74,7 @@ func (u SigintSensor) MarshalJSON() ([]byte, error) {
 
 func (u *SigintSensor) UnmarshalJSON(data []byte) error {
 	var s string
+
 	if err := json.Unmarshal(data, &s); err != nil {
 		return fmt.Errorf("read sigint-sensor urn string from json: %w", err)
 	}

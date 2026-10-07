@@ -76,31 +76,38 @@ func TestUpdateSensorRejectsForeignMembershipAtomically(t *testing.T) {
 	sensor := createSensor(t, ctx, ti, "unchanged", "multi_label", own.ID)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+
 	project, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
 		Name: "Other project", Slug: "other-project", OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	require.NoError(t, err)
+
 	otherAuth := *authCtx
 	otherAuth.ProjectID = &project.ID
 	otherAuth.ProjectSlug = &project.Slug
 	otherCtx := contextvalues.SetAuthContext(ctx, &otherAuth)
 	foreign := createSignal(t, otherCtx, ti, "foreign")
 	changedName := "must not persist"
+
 	_, err = ti.service.UpdateSensor(ctx, &gen.UpdateSensorPayload{
 		ID: sensor.ID, Name: &changedName, Description: nil, Instructions: nil, Mode: nil,
 		SignalIds: []string{own.ID, foreign.ID}, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+
 	stored := getSensor(t, ctx, ti, sensor.ID)
 	require.Equal(t, sensor.Name, stored.Name)
 	require.Equal(t, []string{own.ID}, stored.SignalIds)
+
 	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSigintSensorUpdate)
 	require.NoError(t, err)
 	require.Zero(t, count)
+
 	_, err = ti.service.GetSignal(ctx, &gen.GetSignalPayload{
 		ID: foreign.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+
 	_, err = ti.service.GetSensor(otherCtx, &gen.GetSensorPayload{
 		ID: sensor.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
@@ -116,6 +123,7 @@ func TestUpdateSensorModeChangeValidatesFinalMembership(t *testing.T) {
 	}
 	sensor := createSensor(t, ctx, ti, "levels", "multi_label", ids...)
 	mode := types.SigintSensorMode("ordered_score")
+
 	_, err := ti.service.UpdateSensor(ctx, &gen.UpdateSensorPayload{
 		ID: sensor.ID, Name: nil, Description: nil, Instructions: nil, Mode: &mode, SignalIds: nil,
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
@@ -124,11 +132,13 @@ func TestUpdateSensorModeChangeValidatesFinalMembership(t *testing.T) {
 	require.Equal(t, types.SigintSensorMode("multi_label"), getSensor(t, ctx, ti, sensor.ID).Mode)
 
 	reversed := []string{ids[9], ids[8], ids[7], ids[6], ids[5], ids[4], ids[3], ids[2], ids[1], ids[0]}
+
 	_, err = ti.service.UpdateSensor(ctx, &gen.UpdateSensorPayload{
 		ID: sensor.ID, Name: nil, Description: nil, Instructions: nil, Mode: &mode, SignalIds: reversed,
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
+
 	stored := getSensor(t, ctx, ti, sensor.ID)
 	require.Equal(t, mode, stored.Mode)
 	require.Equal(t, reversed, stored.SignalIds)
@@ -140,12 +150,14 @@ func TestUpdateSensorRejectsDuplicateUUIDsAtomically(t *testing.T) {
 	signal := createSignal(t, ctx, ti, "api")
 	sensor := createSensor(t, ctx, ti, "unchanged", "exclusive", signal.ID)
 	name := "must not persist"
+
 	_, err := ti.service.UpdateSensor(ctx, &gen.UpdateSensorPayload{
 		ID: sensor.ID, Name: &name, Description: nil, Instructions: nil, Mode: nil,
 		SignalIds:    []string{signal.ID, strings.ToUpper(signal.ID)},
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+
 	stored := getSensor(t, ctx, ti, sensor.ID)
 	require.Equal(t, sensor.Name, stored.Name)
 	require.Equal(t, []string{signal.ID}, stored.SignalIds)
