@@ -182,7 +182,7 @@ type IdentityPlan struct {
 	Client ClientChoice
 
 	// Bound is what happens to clients already bound to the user session
-	// issuer: ReplaceBound or ReuseBound.
+	// issuer: ReplaceBound, ReuseBound or RequireUnbound.
 	Bound BoundPolicy
 
 	// ResourceDisplay, when set, stores RFC 9728 display members on the bound
@@ -279,6 +279,9 @@ const (
 	// ReuseBound keeps a client already bound for the plan's provider, which
 	// makes a retried commit idempotent.
 	ReuseBound
+
+	// RequireUnbound permits only initial manual setup, never replacement.
+	RequireUnbound
 )
 
 // ResourceDisplay is a protected resource's RFC 9728 display members. They are
@@ -421,6 +424,9 @@ func (c *IdentityCommitter) Prepare(plan IdentityPlan) *IdentityCommit {
 // so a plan that cannot land is refused before Register makes an upstream
 // client. The writes repeat each check under their locks.
 func (c *IdentityCommit) Preflight(ctx context.Context) error {
+	if c.plan.Bound == RequireUnbound && c.plan.Client.kind != clientManual {
+		return identityRefusal(ErrIdentityInvalid, nil, "initial binding requires a manual client")
+	}
 	q := repo.New(c.committer.db)
 	issuer, err := q.GetUserSessionIssuerForProject(ctx, repo.GetUserSessionIssuerForProjectParams{
 		ID:             c.plan.UserSessionIssuerID,
@@ -434,6 +440,9 @@ func (c *IdentityCommit) Preflight(ctx context.Context) error {
 		return fmt.Errorf("get user session issuer: %w", err)
 	}
 	c.userIssuerOrgLevel = !issuer.ProjectID.Valid
+	if err := c.requireUnbound(ctx, q); err != nil {
+		return err
+	}
 
 	if create := c.plan.Provider.create; create != nil {
 		if _, err := q.GetRemoteSessionIssuerBySlug(ctx, repo.GetRemoteSessionIssuerBySlugParams{Slug: create.Slug, ProjectID: create.ProjectID}); err == nil {
@@ -456,6 +465,8 @@ func (c *IdentityCommit) Preflight(ctx context.Context) error {
 		return err
 	}
 	switch c.plan.Bound {
+	case RequireUnbound:
+		// Checked before provider lookup; there is no client to replace or reuse.
 	case ReplaceBound:
 		// A new provider has no id yet, so every bound client belongs to another.
 		replaced, err := replacedClients(bound, c.provider.ID, c.plan.Client.keep())
@@ -539,6 +550,9 @@ func (c *IdentityCommit) readProvider(ctx context.Context, q *repo.Queries) erro
 // supported, otherwise dynamic registration when the provider offers it, and
 // otherwise reports that manual setup is required.
 func (c *IdentityCommit) Register(ctx context.Context) (Registration, error) {
+	if c.plan.Bound == RequireUnbound && c.plan.Client.kind != clientManual {
+		return Registration{}, identityRefusal(ErrIdentityInvalid, nil, "initial binding requires a manual client")
+	}
 	if err := c.readProvider(ctx, repo.New(c.committer.db)); err != nil {
 		return Registration{}, err
 	}
@@ -809,6 +823,12 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 	if !reg.Ready() {
 		return errors.New("identity commit: Bind with a registration that is not ready")
 	}
+	if c.plan.Bound == RequireUnbound && c.plan.Client.kind != clientManual {
+		return identityRefusal(ErrIdentityInvalid, nil, "initial binding requires a manual client")
+	}
+	if err := c.requireUnbound(ctx, tx.q); err != nil {
+		return err
+	}
 	if create := c.plan.Provider.create; create != nil {
 		if err := c.createProvider(ctx, tx, *create); err != nil {
 			return err
@@ -819,6 +839,8 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 	var attached []uuid.UUID
 	reused := false
 	switch c.plan.Bound {
+	case RequireUnbound:
+		// Checked under the lock before any provider or client insert.
 	case ReplaceBound:
 		bound, err := listUserSessionIssuerClients(ctx, tx.q, c.plan.Scope.ProjectID, c.plan.Scope.OrganizationID, c.plan.UserSessionIssuerID)
 		if err != nil {
@@ -944,6 +966,20 @@ func countProviderClients(bound []repo.RemoteSessionClient, providerID uuid.UUID
 		}
 	}
 	return n
+}
+
+func (c *IdentityCommit) requireUnbound(ctx context.Context, q *repo.Queries) error {
+	if c.plan.Bound != RequireUnbound {
+		return nil
+	}
+	bound, err := listUserSessionIssuerClients(ctx, q, c.plan.Scope.ProjectID, c.plan.Scope.OrganizationID, c.plan.UserSessionIssuerID)
+	if err != nil {
+		return err
+	}
+	if len(bound) > 0 {
+		return identityRefusal(ErrIdentityConflict, nil, "identity is already configured; reload the saved binding before explicitly replacing it")
+	}
+	return nil
 }
 
 // listUserSessionIssuerClients pages through every client bound to

@@ -62,6 +62,10 @@ export type CommitServerIdentityConfigurationForm = {
    */
   existingClientId?: string | undefined;
   /**
+   * Manual mode only. Refuse with a conflict if any live visible client is already bound to the user session issuer. Omitted or false preserves explicit replacement behavior.
+   */
+  initialBindingOnly?: boolean | undefined;
+  /**
    * The target MCP server. It must be backed directly by a Remote MCP source.
    */
   mcpServerId: string;
@@ -90,6 +94,7 @@ export type CommitServerIdentityConfigurationForm$Outbound = {
   client_mode: string;
   create_provider?: CreateRemoteSessionIssuerForm$Outbound | undefined;
   existing_client_id?: string | undefined;
+  initial_binding_only?: boolean | undefined;
   mcp_server_id: string;
   provider_id?: string | undefined;
   registration_method?: string | undefined;
@@ -108,6 +113,7 @@ export const CommitServerIdentityConfigurationForm$outboundSchema:
       clientMode: ClientMode$outboundSchema,
       createProvider: z.optional(CreateRemoteSessionIssuerForm$outboundSchema),
       existingClientId: z.optional(z.string()),
+      initialBindingOnly: z.optional(z.boolean()),
       mcpServerId: z.string(),
       providerId: z.optional(z.string()),
       registrationMethod: z.optional(RegistrationMethod$outboundSchema),
@@ -118,6 +124,7 @@ export const CommitServerIdentityConfigurationForm$outboundSchema:
         clientMode: "client_mode",
         createProvider: "create_provider",
         existingClientId: "existing_client_id",
+        initialBindingOnly: "initial_binding_only",
         mcpServerId: "mcp_server_id",
         providerId: "provider_id",
         registrationMethod: "registration_method",

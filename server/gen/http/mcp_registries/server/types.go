@@ -63,6 +63,9 @@ type GetSetupDocsResponseBody struct {
 	// Matching setup guides, most specific match first. Empty when no guide has
 	// been published for the server.
 	Guides []*MCPSetupGuideResponseBody `form:"guides" json:"guides" xml:"guides"`
+	// Deployment-derived canonical remote OAuth callback URL, including when no
+	// guides match.
+	OauthCallbackURL string `form:"oauth_callback_url" json:"oauth_callback_url" xml:"oauth_callback_url"`
 }
 
 // ClearCacheUnauthorizedResponseBody is the type of the "mcpRegistries"
@@ -1273,7 +1276,9 @@ func NewGetServerDetailsResponseBody(res *types.ExternalMCPServer) *GetServerDet
 // NewGetSetupDocsResponseBody builds the HTTP response body from the result of
 // the "getSetupDocs" endpoint of the "mcpRegistries" service.
 func NewGetSetupDocsResponseBody(res *mcpregistries.GetSetupDocsResult) *GetSetupDocsResponseBody {
-	body := &GetSetupDocsResponseBody{}
+	body := &GetSetupDocsResponseBody{
+		OauthCallbackURL: res.OauthCallbackURL,
+	}
 	if res.Guides != nil {
 		body.Guides = make([]*MCPSetupGuideResponseBody, len(res.Guides))
 		for i, val := range res.Guides {

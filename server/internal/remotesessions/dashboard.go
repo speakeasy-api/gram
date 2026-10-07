@@ -58,6 +58,7 @@ type serverIdentityRequest struct {
 	existingClientID    uuid.UUID
 	clientMode          string
 	clientConfiguration *gen.ServerIdentityClientConfiguration
+	initialBindingOnly  bool
 	// registrationMethod is "dcr" when auto mode must skip CIMD; otherwise it
 	// is empty or "cimd", both of which prefer CIMD.
 	registrationMethod string
@@ -234,6 +235,10 @@ func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target m
 			AllowCIMD:               r.registrationMethod != serverIdentityRegistrationMethodDCR,
 		})
 	}
+	bound := ReplaceBound
+	if r.initialBindingOnly {
+		bound = RequireUnbound
+	}
 	return IdentityPlan{
 		Scope: IdentityScope{
 			OrganizationID:   authCtx.ActiveOrganizationID,
@@ -246,7 +251,7 @@ func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target m
 		UserSessionIssuerID: target.UserSessionIssuerID.UUID,
 		Provider:            provider,
 		Client:              client,
-		Bound:               ReplaceBound,
+		Bound:               bound,
 		ResourceDisplay:     nil,
 	}
 }
@@ -347,8 +352,12 @@ func parseServerIdentityRequest(payload *gen.CommitServerIdentityConfigurationPa
 		clientMode:          payload.ClientMode,
 		clientConfiguration: payload.ClientConfiguration,
 		registrationMethod:  conv.PtrValOr(payload.RegistrationMethod, ""),
+		initialBindingOnly:  conv.PtrValOr(payload.InitialBindingOnly, false),
 	}
 	var err error
+	if req.initialBindingOnly && req.clientMode != serverIdentityClientModeManual {
+		return serverIdentityRequest{}, errors.New("initial_binding_only is only accepted in manual client mode")
+	}
 	req.mcpServerID, err = uuid.Parse(payload.McpServerID)
 	if err != nil {
 		return serverIdentityRequest{}, fmt.Errorf("parse mcp_server_id: %w", err)

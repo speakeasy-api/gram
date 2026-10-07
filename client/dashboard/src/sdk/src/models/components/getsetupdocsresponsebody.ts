@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -13,15 +14,27 @@ export type GetSetupDocsResponseBody = {
    * Matching setup guides, most specific match first. Empty when no guide has been published for the server.
    */
   guides: Array<MCPSetupGuide>;
+  /**
+   * Deployment-derived canonical remote OAuth callback URL, including when no guides match.
+   */
+  oauthCallbackUrl: string;
 };
 
 /** @internal */
 export const GetSetupDocsResponseBody$inboundSchema: z.ZodMiniType<
   GetSetupDocsResponseBody,
   unknown
-> = z.object({
-  guides: z.array(MCPSetupGuide$inboundSchema),
-});
+> = z.pipe(
+  z.object({
+    guides: z.array(MCPSetupGuide$inboundSchema),
+    oauth_callback_url: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "oauth_callback_url": "oauthCallbackUrl",
+    });
+  }),
+);
 
 export function getSetupDocsResponseBodyFromJSON(
   jsonString: string,

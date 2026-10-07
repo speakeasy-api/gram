@@ -156,6 +156,7 @@ var CommitServerIdentityConfigurationForm = Type("CommitServerIdentityConfigurat
 		Format(FormatUUID)
 	})
 	Attribute("client_configuration", ServerIdentityClientConfiguration, "Client settings for auto or manual mode. Forbidden for existing mode.")
+	Attribute("initial_binding_only", Boolean, "Manual mode only. Refuse with a conflict if any live visible client is already bound to the user session issuer. Omitted or false preserves explicit replacement behavior.")
 	Attribute("registration_method", String, "Auto mode only. cimd (the default) prefers a Client ID Metadata Document when the provider supports one and falls back to dynamic client registration; dcr always uses dynamic client registration.", func() {
 		Enum("cimd", "dcr")
 	})

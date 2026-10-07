@@ -57,6 +57,7 @@ import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 import { useUpstreamProbe } from "@/lib/remote-identity";
 import { UserIdentityRow } from "@/lib/remote-identity";
 import { useUserIdentityDraft } from "@/lib/remote-identity";
+import { GuidedOAuthSetup } from "@/lib/remote-identity/setup/GuidedOAuthSetup";
 
 export function RemoteMcpIdentitySectionBody({
   target,
@@ -504,17 +505,23 @@ export function RemoteMcpIdentitySectionBody({
             // The provider row is the whole decision, so it takes the full
             // width rather than sitting beside a label that restates it.
             <div className="px-6 py-5">
-              <UserIdentityRow
+              <GuidedOAuthSetup
+                serverUrl={sourceQuery.data?.url}
                 draft={userDraft}
                 disabled={identityReadOnly || userDraft.saving}
-                createHref={routes.remoteIdentityProviders.href()}
-                clientHref={(issuerId, clientId) =>
-                  routes.remoteIdentityProviders.clientDetail.href(
-                    issuerId,
-                    clientId,
-                  )
-                }
-              />
+              >
+                <UserIdentityRow
+                  draft={userDraft}
+                  disabled={identityReadOnly || userDraft.saving}
+                  createHref={routes.remoteIdentityProviders.href()}
+                  clientHref={(issuerId, clientId) =>
+                    routes.remoteIdentityProviders.clientDetail.href(
+                      issuerId,
+                      clientId,
+                    )
+                  }
+                />
+              </GuidedOAuthSetup>
             </div>
           ) : null}
 
