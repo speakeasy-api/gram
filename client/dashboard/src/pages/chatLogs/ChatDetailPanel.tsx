@@ -775,10 +775,14 @@ function ChatDetailHeader({
                       className="text-foreground [&_a]:pb-0.5"
                     />
                     <span>on behalf of</span>
-                    <span className="text-foreground">{userLabel}</span>
+                    <span className="text-foreground min-w-0 break-words">
+                      {userLabel}
+                    </span>
                   </>
                 ) : (
-                  <span className="text-foreground">{userLabel}</span>
+                  <span className="text-foreground min-w-0 break-words">
+                    {userLabel}
+                  </span>
                 )}
               </span>
               {compactMetadata ? (

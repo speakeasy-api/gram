@@ -5,6 +5,7 @@ import { SlackChannelLink } from "@/components/slack-channel-link";
 import { IdentityAvatar } from "@/components/identity-avatar";
 import { AccountTypeIcon } from "@/components/account-type-icon";
 import { ChatOwnerLabel } from "@/components/chat-owner-label";
+import { chatOwnerLabel } from "@/lib/chat-owner";
 import { AssistantActorLink } from "@/components/assistant-actor-link";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
@@ -544,23 +545,30 @@ export function ChatLogsTable({
                         {(chat.participants?.length ?? 0) === 0 &&
                           (chat.assistantName ? (
                             (chat.userId || chat.externalUserId) && (
-                              <SimpleTooltip tooltip="Acting on behalf of this member">
-                                <span className="pointer-events-auto inline-flex min-w-0 items-center gap-1.5">
-                                  <span className="text-muted-foreground/70">
-                                    for
-                                  </span>
-                                  <AccountTypeIcon
-                                    accountType={chat.accountType}
-                                  />
-                                  <span className="max-w-[120px] truncate">
-                                    <ChatOwnerLabel
-                                      members={membersData?.members}
-                                      chat={chat}
-                                      currentUser={user}
-                                    />
-                                  </span>
+                              <>
+                                <span className="text-muted-foreground/70">
+                                  for
                                 </span>
-                              </SimpleTooltip>
+                                <AccountTypeIcon
+                                  accountType={chat.accountType}
+                                />
+                                <span
+                                  className="pointer-events-auto max-w-[120px] truncate"
+                                  title={`Acting on behalf of ${chatOwnerLabel(
+                                    membersData?.members,
+                                    chat,
+                                    user,
+                                    personalAccountEmail(chat),
+                                  )}`}
+                                >
+                                  <ChatOwnerLabel
+                                    members={membersData?.members}
+                                    chat={chat}
+                                    currentUser={user}
+                                    accountEmail={personalAccountEmail(chat)}
+                                  />
+                                </span>
+                              </>
                             )
                           ) : (
                             <>
