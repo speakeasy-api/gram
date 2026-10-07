@@ -3,6 +3,7 @@ package gramotel
 import (
 	"context"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
@@ -234,4 +236,56 @@ func TestEmitWithoutAResultStillPublishes(t *testing.T) {
 	logger.Emit(authenticated(t.Context()), toolCallRecord(time.Unix(1_700_000_000, 0)))
 
 	require.Len(t, *published, 1)
+}
+
+func TestEmitRefusesTheReservedNamespaceOnTheResource(t *testing.T) {
+	t.Parallel()
+
+	publisher, published := capture(t, gcp.NewSuccessPublishResult())
+	res := resource.NewSchemaless(attribute.String(string(enrich.AgentEventTypeKey), "tool_call"))
+	logger := NewLoggerProvider(testenv.NewLogger(t), nil, publisher, res).Logger(testLoggerName)
+	ctx, result := WithResult(authenticated(t.Context()))
+
+	logger.Emit(ctx, toolCallRecord(time.Unix(1_700_000_000, 0)))
+
+	require.ErrorIs(t, result.Err(), ErrInvalid)
+	require.Empty(t, *published)
+}
+
+func TestEmitRefusesAnIncompleteTenantInsteadOfFallingBackToTheRequest(t *testing.T) {
+	t.Parallel()
+
+	publisher, published := capture(t, gcp.NewSuccessPublishResult())
+	logger := testLogger(t, publisher)
+	ctx, result := WithResult(WithTenant(authenticated(t.Context()), "org-2", ""))
+
+	logger.Emit(ctx, toolCallRecord(time.Unix(1_700_000_000, 0)))
+
+	require.ErrorIs(t, result.Err(), ErrInvalid)
+	require.Empty(t, *published)
+}
+
+func TestEmitKeepsEmptyAndNilBytesValues(t *testing.T) {
+	t.Parallel()
+
+	publisher, published := capture(t, gcp.NewSuccessPublishResult())
+	logger := testLogger(t, publisher)
+	ctx, result := WithResult(authenticated(t.Context()))
+
+	logger.Emit(ctx, toolCallRecord(time.Unix(1_700_000_000, 0),
+		log.Slice("list", log.StringValue("a"), log.Value{}),
+		log.Bytes("raw", nil),
+	))
+
+	require.NoError(t, result.Err())
+	require.Len(t, *published, 1)
+}
+
+func TestUnixNanoSaturatesInsteadOfOverflowing(t *testing.T) {
+	t.Parallel()
+
+	require.Zero(t, unixNano(time.Time{}))
+	require.Zero(t, unixNano(time.Unix(-1, 0)))
+	require.Equal(t, uint64(1_700_000_000_000_000_001), unixNano(time.Unix(1_700_000_000, 1)))
+	require.Equal(t, uint64(math.MaxUint64), unixNano(time.Unix(1<<62, 0)))
 }
