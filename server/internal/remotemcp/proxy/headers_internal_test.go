@@ -39,12 +39,13 @@ func TestApplyResponseHeadersStripsUpstreamCORS(t *testing.T) {
 
 	upstream := &http.Response{
 		Header: http.Header{
-			"Access-Control-Allow-Origin":   []string{"*"},
-			"Access-Control-Allow-Headers":  []string{"Content-Type, Authorization"},
-			"Access-Control-Allow-Methods":  []string{"POST, OPTIONS"},
-			"Access-Control-Expose-Headers": []string{"Mcp-Session-Id"},
-			"Access-Control-Max-Age":        []string{"86400"},
-			"Content-Type":                  []string{"text/event-stream"},
+			"Access-Control-Allow-Origin":      []string{"*"},
+			"Access-Control-Allow-Credentials": []string{"true"},
+			"Access-Control-Allow-Headers":     []string{"Content-Type, Authorization"},
+			"Access-Control-Allow-Methods":     []string{"POST, OPTIONS"},
+			"Access-Control-Expose-Headers":    []string{"Mcp-Session-Id"},
+			"Access-Control-Max-Age":           []string{"86400"},
+			"Content-Type":                     []string{"text/event-stream"},
 		},
 	}
 
@@ -53,6 +54,7 @@ func TestApplyResponseHeadersStripsUpstreamCORS(t *testing.T) {
 	applyResponseHeaders(rec, upstream, "")
 
 	require.Equal(t, []string{"https://app.example.com"}, rec.Header().Values("Access-Control-Allow-Origin"))
+	require.Empty(t, rec.Header().Values("Access-Control-Allow-Credentials"))
 	require.Empty(t, rec.Header().Values("Access-Control-Allow-Headers"))
 	require.Empty(t, rec.Header().Values("Access-Control-Allow-Methods"))
 	require.Empty(t, rec.Header().Values("Access-Control-Expose-Headers"))
