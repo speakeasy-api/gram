@@ -126,6 +126,13 @@ beforeEach(() => {
     },
   ]);
 });
+/** Every rendered table's text, so an assertion does not care which one. */
+const rowsText = () =>
+  screen
+    .getAllByTestId("rows")
+    .map((node) => node.textContent)
+    .join(" ");
+
 function setup(search = "", kind: "person" | "agent" = "agent") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -145,14 +152,7 @@ it.each(["disabled", "loading", "missing", "error"])(
   async (status) => {
     mocks.flag = status;
     setup("", "person");
-    await waitFor(() =>
-      expect(
-        screen
-          .getAllByTestId("rows")
-          .map((node) => node.textContent)
-          .join(" "),
-      ).toContain("unknown_subject"),
-    );
+    await waitFor(() => expect(rowsText()).toContain("unknown_subject"));
     expect(
       screen
         .getByRole("link", { name: "Configure IDP sync" })
@@ -180,14 +180,7 @@ it.each(["unknown", "unknown,agent"])(
   "preserves legacy kind=%s and exposes a clearable filter",
   async (kind) => {
     setup(`?kind=${kind}`, "person");
-    await waitFor(() =>
-      expect(
-        screen
-          .getAllByTestId("rows")
-          .map((node) => node.textContent)
-          .join(" "),
-      ).toContain("unknown_subject"),
-    );
+    await waitFor(() => expect(rowsText()).toContain("unknown_subject"));
     expect(
       screen
         .getAllByTestId("rows")

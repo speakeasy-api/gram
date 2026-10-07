@@ -107,8 +107,11 @@ export function ProvisionWizard({
   const lastSelfUse = useRef<number>(0);
 
   useEffect(() => {
-    onBusy?.(provisioning);
-  }, [provisioning, onBusy]);
+    // Minting counts as busy too: the key exists by then, and leaving while
+    // the setup command is still being prepared throws away the one chance
+    // to copy a secret that is shown once.
+    onBusy?.(provisioning || minting);
+  }, [provisioning, minting, onBusy]);
 
   // Project leads once one is available; an explicit pick always wins. Until
   // a project resolves, project scope would send an empty id, which the server
@@ -529,7 +532,10 @@ export function ProvisionWizard({
         // existing agent has no such order, so every step is reachable until
         // the key is issued.
         forward={existing && !secret}
-        onJump={setStep}
+        // Verify watches a key being used, so it has nothing to watch until
+        // one is issued. Without this an existing agent could jump straight
+        // to it and finish the flow having provisioned nothing.
+        onJump={(next) => setStep(secret ? next : Math.min(next, 3))}
       />
       {error && (
         <p

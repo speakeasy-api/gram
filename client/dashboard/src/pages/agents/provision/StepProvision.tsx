@@ -17,6 +17,45 @@ import { WizardStepHeader } from "./WizardChrome";
 
 const KEY_ENV = "GRAM_AGENT_KEY";
 
+/**
+ * The same affordance as Copyable, for a value that is several lines. The
+ * snippet keeps its own formatting, so the control sits above it rather than
+ * beside it.
+ */
+function CopyableBlock({
+  value,
+  label,
+}: {
+  value: string;
+  label: string;
+}): JSX.Element {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="border-border border">
+      <div className="border-border flex items-center justify-between gap-2 border-b px-3 py-2">
+        <Text muted small>
+          {label}
+        </Text>
+        <Button
+          size="sm"
+          variant="secondary"
+          aria-label={`Copy ${label}`}
+          onClick={() => {
+            void navigator.clipboard
+              .writeText(value)
+              .then(() => setCopied(true));
+          }}
+        >
+          {copied ? "Copied" : "Copy"}
+        </Button>
+      </div>
+      <pre className="overflow-x-auto p-3 text-xs">
+        <code>{value}</code>
+      </pre>
+    </div>
+  );
+}
+
 function Copyable({
   value,
   label,
@@ -201,9 +240,7 @@ export function StepProvision({
                 LangGraph, CrewAI, the OpenAI Agents SDK. Read the key from your
                 secret store; never commit it.
               </Text>
-              <pre className="border-border overflow-x-auto border p-3 text-xs">
-                <code>{code}</code>
-              </pre>
+              <CopyableBlock value={code} label="connection snippet" />
             </div>
           </TabsContent>
         </Tabs>

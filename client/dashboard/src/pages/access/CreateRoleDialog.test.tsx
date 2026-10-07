@@ -244,6 +244,33 @@ describe("agent management rollout", () => {
   );
   it("reads every agent page and shows the picker when enabled", async () => {
     mocks.enabled = true;
+    // Two pages: a picker that drained only the first would still look
+    // healthy with one, and dropping an agent from it is silent.
+    mocks.list.mockResolvedValue([
+      {
+        result: {
+          items: [
+            { id: "agent_first", name: "First agent", lifecycle: "active" },
+          ],
+        },
+      },
+      {
+        result: {
+          items: [
+            { id: "agent_second", name: "Second agent", lifecycle: "active" },
+          ],
+        },
+      },
+    ]);
+    renderEditor();
+    await waitFor(() => expect(mocks.list).toHaveBeenCalled());
+    fireEvent.click(screen.getByText("Assign Agents"));
+    expect(await screen.findByText("First agent")).toBeTruthy();
+    expect(screen.getByText("Second agent")).toBeTruthy();
+  });
+
+  it("shows the empty state when the organization has no agents", async () => {
+    mocks.enabled = true;
     renderEditor();
     await waitFor(() => expect(mocks.list).toHaveBeenCalled());
     fireEvent.click(screen.getByText("Assign Agents"));

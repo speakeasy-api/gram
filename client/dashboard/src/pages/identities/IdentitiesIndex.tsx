@@ -1148,7 +1148,8 @@ function IdentityGroup({
   visible: number;
   /** Overrides "more rows exist" for a list whose rest lives on the server. */
   hasMore?: boolean;
-  onLoadMore: () => void;
+  /** May be async: the table holds its loading state until it settles. */
+  onLoadMore: () => void | Promise<void>;
   sort: SortDescriptor | null;
   onSortChange: (next: SortDescriptor | null) => void;
   onRowClick: (row: Employee) => void;
@@ -1202,7 +1203,9 @@ function IdentityGroup({
             data={rows.slice(0, visible)}
             hideHeader
             hasMore={hasMore ?? visible < rows.length}
-            onLoadMore={async () => onLoadMore()}
+            onLoadMore={async () => {
+              await onLoadMore();
+            }}
             rowKey={(row) => row.id}
             onRowClick={onRowClick}
             noResultsMessage={emptyMessage}
