@@ -84,7 +84,7 @@ func TestIdentityColumnsForClaudeCode(t *testing.T) {
 		compaction := inboundTestLog(claudeCodeScopeName, "claude-code", "compaction", who...)
 		require.NotContains(t, identity(t, counted, compaction), EventIDColumnKey)
 
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "event_id"), "not in the table is never, not missing")
+		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("event_id")), "not in the table is never, not missing")
 	})
 
 	t.Run("an unclassified record gets none of them", func(t *testing.T) {
@@ -117,9 +117,9 @@ func TestIdentityColumnsCountWhatAProviderNeverStates(t *testing.T) {
 	require.Equal(t, "acct-1", columns[ExternalUserIDColumnKey].AsString())
 	require.NotContains(t, columns, TurnIDColumnKey)
 	require.NotContains(t, columns, ExternalOrgIDColumnKey)
-	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "turn_id"))
-	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "external_org_id"))
-	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "session_id"))
+	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("turn_id")))
+	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("external_org_id")))
+	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("session_id")))
 }
 
 func TestIdentityColumnsForSemconv(t *testing.T) {
