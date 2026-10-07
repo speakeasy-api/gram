@@ -377,6 +377,8 @@ func isCanonicalHostedWrapper(server repo.McpServer) bool {
 // toolset id when toolset-backed, else the row id. These are the ids the
 // serving path checks and the ids role-grant selectors name, so keying
 // management checks on them makes server-scoped grants effective here too.
+// It also means an mcp:write check on a toolset covers every server built on
+// it, which toolset writes such as SetUserSessionIssuer rely on.
 func grantResourceID(id uuid.UUID, toolsetID uuid.NullUUID) string {
 	if toolsetID.Valid {
 		return toolsetID.UUID.String()
