@@ -96,6 +96,7 @@ func TestAgentEventRowFromLogHasNoDialectFallbackForCanonicalColumns(t *testing.
 	record.SetAttributes([]*otelv1.LogRecord_KeyValue{
 		logEventTestKV(string(enrich.OriginalInstrumentationScopeNameKey), claudeCodeScopeName),
 		logEventTestKV("session.id", "session-1"),
+		logEventTestKV("model", "claude-sonnet-4"),
 	})
 
 	row, skip := agentEventRowFromLog(record, testObservedAt)
@@ -105,7 +106,9 @@ func TestAgentEventRowFromLogHasNoDialectFallbackForCanonicalColumns(t *testing.
 	require.Empty(t, row.Source)
 	require.Empty(t, row.Provider)
 	require.Empty(t, row.Surface)
-	require.Equal(t, "session-1", row.SessionID, "a column the transform does not fill yet still comes from the dialect")
+	require.Empty(t, row.SessionID)
+	require.Equal(t, "record-1", row.EventID, "with no subject the event id falls back to the record id")
+	require.Equal(t, "claude-sonnet-4", row.Model, "a column the transform does not fill yet still comes from the dialect")
 }
 
 // The canonical columns are read from the keys as written, whatever the

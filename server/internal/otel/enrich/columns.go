@@ -10,8 +10,16 @@ package enrich
 //
 // The instruments carry the missing-value counter the per-column enrichers
 // record into; the classification enricher counts nothing.
-func LogColumns(_ *Instruments) []LogEnricher {
+func LogColumns(in *Instruments) []LogEnricher {
 	return []LogEnricher{
 		&logClassification{},
+
+		// Identity: who the event belongs to.
+		columnSessionID(in),
+		columnTurnID(in),
+		columnEventID(in),
+		columnUserEmail(in),
+		columnExternalUserID(in),
+		columnExternalOrgID(in),
 	}
 }
