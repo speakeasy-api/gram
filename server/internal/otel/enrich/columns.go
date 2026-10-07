@@ -1,21 +1,27 @@
 package enrich
 
-// columns is every agent_events column a column enricher fills, in column
-// order, declared once and served to both signals. One file per column
-// holds its table and is the documentation of that column. The three groups
-// are the three column tickets; tests cover each group through its own
-// function so a column added to a group is covered with it.
-func columns() []columnDefinition {
+// registry is every agent_events column a column enricher fills, in column
+// order: the attribute registry, in OpenTelemetry's terms, where each
+// column[V] is one attribute definition. A definition is declared once and
+// referenced by both signals, the way a semantic-convention attribute group
+// is declared once and used by spans and logs alike
+// (https://opentelemetry.io/docs/specs/semconv/general/semantic-convention-groups/),
+// and it sets a requirement level per event type. One file per column holds
+// its definition and is the documentation of that column. The three groups
+// below are the three column tickets; tests cover each group through its
+// own function so a column added to a group is covered with it.
+func registry() []columnDefinition {
 	out := make([]columnDefinition, 0, 23)
-	out = append(out, whoAndWhereColumns()...)
-	out = append(out, whatHappenedColumns()...)
+	out = append(out, identityColumns()...)
+	out = append(out, operationColumns()...)
 	out = append(out, usageColumns()...)
 	return out
 }
 
-// whoAndWhereColumns says which session, turn, subject, person and account
-// an event belongs to.
-func whoAndWhereColumns() []columnDefinition {
+// identityColumns says who an event belongs to: the session, turn, subject,
+// person and account, mirroring the session.*, user.*, enduser.* and
+// gen_ai.conversation.id namespaces.
+func identityColumns() []columnDefinition {
 	return []columnDefinition{
 		columnSessionID(),
 		columnTurnID(),
@@ -26,8 +32,11 @@ func whoAndWhereColumns() []columnDefinition {
 	}
 }
 
-// whatHappenedColumns says what an event was about and how it went.
-func whatHappenedColumns() []columnDefinition {
+// operationColumns says what the operation was and how it went: the model,
+// the tool, the skill or agent, the words, the outcome and the duration,
+// mirroring what the GenAI conventions hang off gen_ai.operation.name as
+// request, response, tool, agent and error attributes.
+func operationColumns() []columnDefinition {
 	return []columnDefinition{
 		columnModel(),
 		columnQuerySource(),
@@ -64,7 +73,7 @@ func usageColumns() []columnDefinition {
 // The instruments carry the missing-value counter the per-column enrichers
 // record into; the classification enricher counts nothing.
 func LogColumns(in *Instruments) []LogEnricher {
-	definitions := columns()
+	definitions := registry()
 	out := make([]LogEnricher, 0, len(definitions)+1)
 	out = append(out, &logClassification{})
 	for _, definition := range definitions {
@@ -76,7 +85,7 @@ func LogColumns(in *Instruments) []LogEnricher {
 // SpanColumns is LogColumns for spans: the same columns, from the same
 // tables, in the same order, for the span transform.
 func SpanColumns(in *Instruments) []SpanEnricher {
-	definitions := columns()
+	definitions := registry()
 	out := make([]SpanEnricher, 0, len(definitions)+1)
 	out = append(out, &spanClassification{})
 	for _, definition := range definitions {

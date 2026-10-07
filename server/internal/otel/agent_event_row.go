@@ -81,8 +81,8 @@ func agentEventRowFromLog(record *otelv1.LogRecord, observedAtUnixNano int64) (c
 	var columns canonicalColumns
 	for _, kv := range record.GetAttributes() {
 		value := logEventAnyValue(kv.GetValue())
-		enrichment.absorb(kv.GetKey(), value)
-		columns.absorb(kv.GetKey(), value)
+		enrichment.read(kv.GetKey(), value)
+		columns.read(kv.GetKey(), value)
 	}
 
 	row := agentEventRow(columns, enrichment)
@@ -158,8 +158,8 @@ func agentEventRowFromSpan(span *otelv1.Span, observedAtUnixNano int64) (chrepo.
 	var columns canonicalColumns
 	for _, kv := range span.GetAttributes() {
 		value := spanEventAnyValue(kv.GetValue())
-		enrichment.absorb(kv.GetKey(), value)
-		columns.absorb(kv.GetKey(), value)
+		enrichment.read(kv.GetKey(), value)
+		columns.read(kv.GetKey(), value)
 	}
 
 	recordID := traceID + ":" + spanID
@@ -297,7 +297,7 @@ type canonicalColumns struct {
 	costUSD          float64
 }
 
-func (c *canonicalColumns) absorb(key string, value any) {
+func (c *canonicalColumns) read(key string, value any) {
 	switch key {
 	case string(enrich.EventTypeColumnKey):
 		c.eventType = enrichmentString(value)
@@ -386,7 +386,7 @@ var (
 	directoryCostCenterNameKey = enrich.DirectoryAttribute("cost_center_name")
 )
 
-func (e *rowEnrichment) absorb(key string, value any) {
+func (e *rowEnrichment) read(key string, value any) {
 	switch key {
 	case string(attr.UserIDKey):
 		e.userID = enrichmentString(value)

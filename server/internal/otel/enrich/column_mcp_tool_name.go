@@ -15,7 +15,7 @@ func columnMCPToolName() columnDefinition {
 	onTool := conditionallyRequired(tool, statedBy(server))
 	return column[string]{
 		key: MCPToolNameColumnKey,
-		byType: columnTable[string]{
+		byType: perEventType[string]{
 			dialect.EventTypeAPIRequest:     recommended(tool),
 			dialect.EventTypeToolCall:       onTool,
 			dialect.EventTypeToolCallResult: onTool,

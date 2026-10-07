@@ -17,7 +17,7 @@ func columnMCPServerName() columnDefinition {
 	onTool := conditionallyRequired(server, statedBy(tool))
 	return column[string]{
 		key: MCPServerNameColumnKey,
-		byType: columnTable[string]{
+		byType: perEventType[string]{
 			dialect.EventTypeAPIRequest:     recommended(server),
 			dialect.EventTypeToolCall:       onTool,
 			dialect.EventTypeToolCallResult: onTool,

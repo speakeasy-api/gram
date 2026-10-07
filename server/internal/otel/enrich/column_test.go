@@ -67,7 +67,7 @@ func TestLogColumnEnricherWritesTheColumnWhenTheTableNamesTheTypeAndTheProviderS
 
 	reader, meterProvider := readableMeter(t)
 	enricher := &logColumnEnricher[string]{
-		column:      column[string]{key: TurnIDColumnKey, byType: columnTable[string]{dialect.EventTypeAPIRequest: getter[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}}},
+		column:      column[string]{key: TurnIDColumnKey, byType: perEventType[string]{dialect.EventTypeAPIRequest: getter[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}}},
 		instruments: NewInstruments(testenv.NewLogger(t), meterProvider),
 	}
 	require.Equal(t, "enrich-column-turn_id", enricher.Name())
@@ -85,7 +85,7 @@ func TestLogColumnEnricherWritesNothingForATypeOutsideTheTable(t *testing.T) {
 
 	reader, meterProvider := readableMeter(t)
 	enricher := &logColumnEnricher[string]{
-		column:      column[string]{key: TurnIDColumnKey, byType: columnTable[string]{dialect.EventTypeAPIRequest: getter[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}}},
+		column:      column[string]{key: TurnIDColumnKey, byType: perEventType[string]{dialect.EventTypeAPIRequest: getter[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}}},
 		instruments: NewInstruments(testenv.NewLogger(t), meterProvider),
 	}
 
@@ -106,7 +106,7 @@ func TestLogColumnEnricherCountsATypeInTheTableWhoseProviderSaidNothing(t *testi
 
 	reader, meterProvider := readableMeter(t)
 	enricher := &logColumnEnricher[string]{
-		column:      column[string]{key: TurnIDColumnKey, byType: columnTable[string]{dialect.EventTypeAPIRequest: getter[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}}},
+		column:      column[string]{key: TurnIDColumnKey, byType: perEventType[string]{dialect.EventTypeAPIRequest: getter[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}}},
 		instruments: NewInstruments(testenv.NewLogger(t), meterProvider),
 	}
 
@@ -121,7 +121,7 @@ func TestLogColumnEnricherCountsATypeInTheTableWhoseProviderSaidNothing(t *testi
 		attr.AgentEventType(dialect.EventTypeAPIRequest),
 		attr.AgentEventColumn("turn_id"),
 	))
-	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventSurface(counterSurfaceOther)))
+	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventSurface(missingLabelOther)))
 }
 
 func TestLogColumnEnricherLabelsAnUnrecognisedProducerAsOther(t *testing.T) {
@@ -129,7 +129,7 @@ func TestLogColumnEnricherLabelsAnUnrecognisedProducerAsOther(t *testing.T) {
 
 	reader, meterProvider := readableMeter(t)
 	enricher := &logColumnEnricher[string]{
-		column:      column[string]{key: TurnIDColumnKey, byType: columnTable[string]{dialect.EventTypeAPIRequest: getter[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}}},
+		column:      column[string]{key: TurnIDColumnKey, byType: perEventType[string]{dialect.EventTypeAPIRequest: getter[string]{log: dialect.LogDialect.TurnID, span: dialect.SpanDialect.TurnID}}},
 		instruments: NewInstruments(testenv.NewLogger(t), meterProvider),
 	}
 
@@ -140,7 +140,7 @@ func TestLogColumnEnricherLabelsAnUnrecognisedProducerAsOther(t *testing.T) {
 
 	require.Empty(t, enrichedColumns(t, enricher, record))
 	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing,
-		attr.AgentEventSurface(counterSurfaceOther),
+		attr.AgentEventSurface(missingLabelOther),
 		attr.AgentEventColumn("turn_id"),
 	))
 }
@@ -149,7 +149,7 @@ func TestLogColumnEnricherWritesAConstantTheTypeImplies(t *testing.T) {
 	t.Parallel()
 
 	enricher := &logColumnEnricher[string]{
-		column:      column[string]{key: OutcomeColumnKey, byType: columnTable[string]{dialect.EventTypeAPIResponse: constant(dialect.OutcomeOK)}},
+		column:      column[string]{key: OutcomeColumnKey, byType: perEventType[string]{dialect.EventTypeAPIResponse: constant(dialect.OutcomeOK)}},
 		instruments: NewInstruments(testenv.NewLogger(t), testenv.NewMeterProvider(t)),
 	}
 
@@ -164,11 +164,11 @@ func TestLogColumnEnricherWritesNumbersAsNumbers(t *testing.T) {
 
 	m := NewInstruments(testenv.NewLogger(t), testenv.NewMeterProvider(t))
 	tokens := &logColumnEnricher[int64]{
-		column:      column[int64]{key: CacheReadTokensColumnKey, byType: columnTable[int64]{dialect.EventTypeAPIRequest: getter[int64]{log: dialect.LogDialect.CacheReadTokens, span: dialect.SpanDialect.CacheReadTokens}}},
+		column:      column[int64]{key: CacheReadTokensColumnKey, byType: perEventType[int64]{dialect.EventTypeAPIRequest: getter[int64]{log: dialect.LogDialect.CacheReadTokens, span: dialect.SpanDialect.CacheReadTokens}}},
 		instruments: m,
 	}
 	cost := &logColumnEnricher[float64]{
-		column:      column[float64]{key: CostUSDColumnKey, byType: columnTable[float64]{dialect.EventTypeAPIRequest: getter[float64]{log: dialect.LogDialect.CostUSD, span: dialect.SpanDialect.CostUSD}}},
+		column:      column[float64]{key: CostUSDColumnKey, byType: perEventType[float64]{dialect.EventTypeAPIRequest: getter[float64]{log: dialect.LogDialect.CostUSD, span: dialect.SpanDialect.CostUSD}}},
 		instruments: m,
 	}
 

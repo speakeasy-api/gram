@@ -21,7 +21,11 @@ import (
 //
 // A column is declared once and serves both signals: every getter has a log
 // leg and a span leg, and a column definition yields a log enricher and a
-// span enricher from the same table, so the two cannot drift.
+// span enricher from the same table, so the two cannot drift. In
+// OpenTelemetry's terms the definitions form an attribute registry, and each
+// one is used the way an attribute group is: declared once, referenced by
+// more than one signal, with a requirement level set per context, which here
+// is the event type.
 //
 // Each table entry carries a requirement level, after OpenTelemetry's
 // attribute requirement levels
@@ -172,11 +176,11 @@ func conditionallyRequired[V columnValue](g getter[V], when condition) getter[V]
 	}
 }
 
-// columnTable says, per event type, how a column's value is read and at
+// perEventType says, per event type, how a column's value is read and at
 // which requirement level. Keys are the agent vocabulary's event types; a
 // table never names the unclassified type, since an unclassified record gets
 // no column enricher.
-type columnTable[V columnValue] map[string]getter[V]
+type perEventType[V columnValue] map[string]getter[V]
 
 // classifiedEventTypes is every event type in the agent vocabulary, for the
 // columns that every classified record carries.
@@ -197,8 +201,8 @@ var classifiedEventTypes = []string{
 // everyClassifiedType builds a table that reads the same getter for every
 // classified event type, for the columns such as session_id that any kind
 // of event carries.
-func everyClassifiedType[V columnValue](g getter[V]) columnTable[V] {
-	table := make(columnTable[V], len(classifiedEventTypes))
+func everyClassifiedType[V columnValue](g getter[V]) perEventType[V] {
+	table := make(perEventType[V], len(classifiedEventTypes))
 	for _, eventType := range classifiedEventTypes {
 		table[eventType] = g
 	}
@@ -217,7 +221,7 @@ type columnDefinition interface {
 // column is the one columnDefinition, generic over the value it writes.
 type column[V columnValue] struct {
 	key    attribute.Key
-	byType columnTable[V]
+	byType perEventType[V]
 }
 
 func (c column[V]) name() string { return columnOf(c.key) }
@@ -242,8 +246,8 @@ func (e *logColumnEnricher[V]) Name() string {
 
 func (e *logColumnEnricher[V]) Enrich(ctx context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
 	d := dialect.ForLog(record)
-	return answerColumn(ctx, e.instruments, e.column, stated(d.EventType(record)), func() string {
-		return counterSurfaceLog(d, record)
+	return insertColumn(ctx, e.instruments, e.column, stated(d.EventType(record)), func() string {
+		return missingLabelLog(d, record)
 	}, func(get getter[V]) (string, V, error) {
 		return get.log(d, record)
 	})
@@ -262,18 +266,20 @@ func (e *spanColumnEnricher[V]) Name() string {
 
 func (e *spanColumnEnricher[V]) Enrich(ctx context.Context, span *otelv1.InboundSpan) ([]attribute.KeyValue, error) {
 	d := dialect.ForSpan(span)
-	return answerColumn(ctx, e.instruments, e.column, stated(d.EventType(span)), func() string {
-		return counterSurfaceSpan(d, span)
+	return insertColumn(ctx, e.instruments, e.column, stated(d.EventType(span)), func() string {
+		return missingLabelSpan(d, span)
 	}, func(get getter[V]) (string, V, error) {
 		return get.span(d, span)
 	})
 }
 
-// answerColumn is the one decision behind both signals: look the event type
-// up in the column's table, read the getter the table names, and write the
-// answer or count its absence. The surface label is read lazily, since it
-// is only needed to count a missing value.
-func answerColumn[V columnValue](
+// insertColumn is the one decision behind both signals, and it is the
+// Collector attributes processor's insert action: add the attribute when the
+// record has none, never overwrite. It looks the event type up in the
+// column's table, reads the getter the table names, and writes the value or
+// counts its absence. The surface label is read lazily, since it is only
+// needed to count a missing value.
+func insertColumn[V columnValue](
 	ctx context.Context,
 	in *Instruments,
 	c column[V],
@@ -305,28 +311,28 @@ func answerColumn[V columnValue](
 	return []attribute.KeyValue{kv}, nil
 }
 
-// counterSurfaceOther is the missing-value counter's surface label for a
+// missingLabelOther is the missing-value counter's surface label for a
 // producer the dialects do not recognise.
-const counterSurfaceOther = "other"
+const missingLabelOther = "other"
 
-// counterSurfaceLog is the surface label of the missing-value counter for a
+// missingLabelLog is the surface label of the missing-value counter for a
 // log record: the agent surface the dialect recognised, which is a small
 // fixed set, or "other". The producer's service.name is not used as a label
 // because it is free-form, and a label a producer controls would make the
 // counter's series unbounded.
-func counterSurfaceLog(d dialect.LogDialect, record *otelv1.InboundLogRecord) string {
+func missingLabelLog(d dialect.LogDialect, record *otelv1.InboundLogRecord) string {
 	if surface := stated(d.Surface(record)); surface != "" {
 		return surface
 	}
-	return counterSurfaceOther
+	return missingLabelOther
 }
 
-// counterSurfaceSpan is counterSurfaceLog for a span.
-func counterSurfaceSpan(d dialect.SpanDialect, span *otelv1.InboundSpan) string {
+// missingLabelSpan is missingLabelLog for a span.
+func missingLabelSpan(d dialect.SpanDialect, span *otelv1.InboundSpan) string {
 	if surface := stated(d.Surface(span)); surface != "" {
 		return surface
 	}
-	return counterSurfaceOther
+	return missingLabelOther
 }
 
 // columnOf is the agent_events column a canonical key carries.

@@ -13,22 +13,22 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-// whoAndWhere runs the six who-and-where column enrichers over one record,
+// identity runs the six who-and-where column enrichers over one record,
 // as the transform does, and indexes what they wrote by key.
-func whoAndWhere(t *testing.T, m *Instruments, record *otelv1.InboundLogRecord) map[attribute.Key]attribute.Value {
+func identity(t *testing.T, m *Instruments, record *otelv1.InboundLogRecord) map[attribute.Key]attribute.Value {
 	t.Helper()
 	columns := map[attribute.Key]attribute.Value{}
-	for _, definition := range whoAndWhereColumns() {
+	for _, definition := range identityColumns() {
 		maps.Copy(columns, enrichedColumns(t, definition.log(m), record))
 	}
 	return columns
 }
 
-func TestWhoAndWhereColumnsForClaudeCode(t *testing.T) {
+func TestIdentityColumnsForClaudeCode(t *testing.T) {
 	t.Parallel()
 
 	m := NewInstruments(testenv.NewLogger(t), testenv.NewMeterProvider(t))
-	identity := []*otelv1.InboundLogRecord_KeyValue{
+	who := []*otelv1.InboundLogRecord_KeyValue{
 		logStringAttribute("session.id", "session-1"),
 		logStringAttribute("prompt.id", "turn-1"),
 		logStringAttribute("user.email", "dev@example.com"),
@@ -38,9 +38,9 @@ func TestWhoAndWhereColumnsForClaudeCode(t *testing.T) {
 
 	t.Run("a prompt names its transcript message", func(t *testing.T) {
 		t.Parallel()
-		record := inboundTestLog(claudeCodeScopeName, "claude-code", "user_prompt", append(identity, logStringAttribute("message.uuid", "message-1"))...)
+		record := inboundTestLog(claudeCodeScopeName, "claude-code", "user_prompt", append(who, logStringAttribute("message.uuid", "message-1"))...)
 
-		columns := whoAndWhere(t, m, record)
+		columns := identity(t, m, record)
 		require.Len(t, columns, 6)
 		require.Equal(t, "session-1", columns[SessionIDColumnKey].AsString())
 		require.Equal(t, "turn-1", columns[TurnIDColumnKey].AsString())
@@ -52,20 +52,20 @@ func TestWhoAndWhereColumnsForClaudeCode(t *testing.T) {
 
 	t.Run("an api_request names the request", func(t *testing.T) {
 		t.Parallel()
-		record := inboundTestLog(claudeCodeScopeName, "claude-code", "api_request", append(identity, logStringAttribute("request_id", "req_011"))...)
-		require.Equal(t, "req_011", whoAndWhere(t, m, record)[EventIDColumnKey].AsString())
+		record := inboundTestLog(claudeCodeScopeName, "claude-code", "api_request", append(who, logStringAttribute("request_id", "req_011"))...)
+		require.Equal(t, "req_011", identity(t, m, record)[EventIDColumnKey].AsString())
 	})
 
 	t.Run("a tool_result names the tool invocation", func(t *testing.T) {
 		t.Parallel()
-		record := inboundTestLog(claudeCodeScopeName, "claude-code", "tool_result", append(identity, logStringAttribute("tool_use_id", "toolu_1"))...)
-		require.Equal(t, "toolu_1", whoAndWhere(t, m, record)[EventIDColumnKey].AsString())
+		record := inboundTestLog(claudeCodeScopeName, "claude-code", "tool_result", append(who, logStringAttribute("tool_use_id", "toolu_1"))...)
+		require.Equal(t, "toolu_1", identity(t, m, record)[EventIDColumnKey].AsString())
 	})
 
 	t.Run("a response body lands beside the request it answers", func(t *testing.T) {
 		t.Parallel()
-		record := inboundTestLog(claudeCodeScopeName, "claude-code", "api_response_body", append(identity, logStringAttribute("request_id", "req_011"))...)
-		require.Equal(t, "req_011", whoAndWhere(t, m, record)[EventIDColumnKey].AsString())
+		record := inboundTestLog(claudeCodeScopeName, "claude-code", "api_response_body", append(who, logStringAttribute("request_id", "req_011"))...)
+		require.Equal(t, "req_011", identity(t, m, record)[EventIDColumnKey].AsString())
 	})
 
 	t.Run("a request body and a compaction get no event id, so the writer keeps the record id", func(t *testing.T) {
@@ -73,25 +73,25 @@ func TestWhoAndWhereColumnsForClaudeCode(t *testing.T) {
 		reader, meterProvider := readableMeter(t)
 		counted := NewInstruments(testenv.NewLogger(t), meterProvider)
 
-		body := inboundTestLog(claudeCodeScopeName, "claude-code", "api_request_body", append(identity, logStringAttribute("request_id", "req_011"))...)
-		columns := whoAndWhere(t, counted, body)
+		body := inboundTestLog(claudeCodeScopeName, "claude-code", "api_request_body", append(who, logStringAttribute("request_id", "req_011"))...)
+		columns := identity(t, counted, body)
 		require.NotContains(t, columns, EventIDColumnKey, "the type is not in the table, even though a request id is present")
 		require.Equal(t, "session-1", columns[SessionIDColumnKey].AsString(), "the session columns still apply")
 
-		compaction := inboundTestLog(claudeCodeScopeName, "claude-code", "compaction", identity...)
-		require.NotContains(t, whoAndWhere(t, counted, compaction), EventIDColumnKey)
+		compaction := inboundTestLog(claudeCodeScopeName, "claude-code", "compaction", who...)
+		require.NotContains(t, identity(t, counted, compaction), EventIDColumnKey)
 
 		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("event_id")), "not in the table is never, not missing")
 	})
 
 	t.Run("an unclassified record gets none of them", func(t *testing.T) {
 		t.Parallel()
-		record := inboundTestLog(claudeCodeScopeName, "claude-code", "hook_registered", identity...)
-		require.Empty(t, whoAndWhere(t, m, record))
+		record := inboundTestLog(claudeCodeScopeName, "claude-code", "hook_registered", who...)
+		require.Empty(t, identity(t, m, record))
 	})
 }
 
-func TestWhoAndWhereColumnsCountWhatAProviderNeverStates(t *testing.T) {
+func TestIdentityColumnsCountWhatAProviderNeverStates(t *testing.T) {
 	t.Parallel()
 
 	reader, meterProvider := readableMeter(t)
@@ -107,7 +107,7 @@ func TestWhoAndWhereColumnsCountWhatAProviderNeverStates(t *testing.T) {
 		logStringAttribute("response.id", "resp-1"),
 	)
 
-	columns := whoAndWhere(t, m, record)
+	columns := identity(t, m, record)
 	require.Equal(t, "conv-1", columns[SessionIDColumnKey].AsString())
 	require.Equal(t, "resp-1", columns[EventIDColumnKey].AsString())
 	require.Equal(t, "dev@example.com", columns[UserEmailColumnKey].AsString())
@@ -119,7 +119,7 @@ func TestWhoAndWhereColumnsCountWhatAProviderNeverStates(t *testing.T) {
 	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("session_id")))
 }
 
-func TestWhoAndWhereColumnsForSemconv(t *testing.T) {
+func TestIdentityColumnsForSemconv(t *testing.T) {
 	t.Parallel()
 
 	m := NewInstruments(testenv.NewLogger(t), testenv.NewMeterProvider(t))
@@ -133,7 +133,7 @@ func TestWhoAndWhereColumnsForSemconv(t *testing.T) {
 			logStringAttribute("user.email", "dev@example.com"),
 		)
 
-		columns := whoAndWhere(t, m, record)
+		columns := identity(t, m, record)
 		require.Equal(t, "session-9", columns[SessionIDColumnKey].AsString())
 		require.Equal(t, "resp-1", columns[EventIDColumnKey].AsString())
 		require.Equal(t, "dev@example.com", columns[UserEmailColumnKey].AsString())
@@ -146,7 +146,7 @@ func TestWhoAndWhereColumnsForSemconv(t *testing.T) {
 			logStringAttribute("gen_ai.operation.name", "execute_tool"),
 			logStringAttribute("gen_ai.tool.call.id", "call-1"),
 		)
-		require.Equal(t, "call-1", whoAndWhere(t, m, record)[EventIDColumnKey].AsString())
+		require.Equal(t, "call-1", identity(t, m, record)[EventIDColumnKey].AsString())
 	})
 }
 

@@ -16,7 +16,7 @@ func columnSkillName() columnDefinition {
 	skill := recommended(getter[string]{log: dialect.LogDialect.SkillName, span: dialect.SpanDialect.SkillName})
 	return column[string]{
 		key: SkillNameColumnKey,
-		byType: columnTable[string]{
+		byType: perEventType[string]{
 			dialect.EventTypeAPIRequest:     skill,
 			dialect.EventTypeToolCall:       skill,
 			dialect.EventTypeToolCallResult: skill,

@@ -15,7 +15,7 @@ func columnDurationNano() columnDefinition {
 	duration := getter[int64]{log: dialect.LogDialect.DurationNano, span: dialect.SpanDialect.DurationNano}
 	return column[int64]{
 		key: DurationNanoColumnKey,
-		byType: columnTable[int64]{
+		byType: perEventType[int64]{
 			dialect.EventTypeAPIRequest:     duration,
 			dialect.EventTypeToolCall:       recommended(duration),
 			dialect.EventTypeToolCallResult: duration,

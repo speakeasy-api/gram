@@ -11,7 +11,7 @@ func columnToolName() columnDefinition {
 	tool := getter[string]{log: dialect.LogDialect.ToolName, span: dialect.SpanDialect.ToolName}
 	return column[string]{
 		key: ToolNameColumnKey,
-		byType: columnTable[string]{
+		byType: perEventType[string]{
 			dialect.EventTypeToolCall:       tool,
 			dialect.EventTypeToolCallResult: tool,
 			dialect.EventTypeToolDecision:   tool,

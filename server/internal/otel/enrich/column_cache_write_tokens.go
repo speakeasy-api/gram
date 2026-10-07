@@ -10,7 +10,7 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 func columnCacheWriteTokens() columnDefinition {
 	return column[int64]{
 		key: CacheWriteTokensColumnKey,
-		byType: columnTable[int64]{
+		byType: perEventType[int64]{
 			dialect.EventTypeAPIRequest: {log: dialect.LogDialect.CacheWriteTokens, span: dialect.SpanDialect.CacheWriteTokens},
 		},
 	}

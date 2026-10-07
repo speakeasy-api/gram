@@ -22,7 +22,7 @@ func columnOutcome() columnDefinition {
 	outcome := getter[string]{log: dialect.LogDialect.Outcome, span: dialect.SpanDialect.Outcome}
 	return column[string]{
 		key: OutcomeColumnKey,
-		byType: columnTable[string]{
+		byType: perEventType[string]{
 			dialect.EventTypeAPIResponse:    constant(dialect.OutcomeOK),
 			dialect.EventTypeAPIError:       constant(dialect.OutcomeError),
 			dialect.EventTypeAPIRefusal:     constant(dialect.OutcomeRefused),

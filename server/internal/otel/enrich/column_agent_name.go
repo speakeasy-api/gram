@@ -15,7 +15,7 @@ func columnAgentName() columnDefinition {
 	agent := recommended(getter[string]{log: dialect.LogDialect.AgentName, span: dialect.SpanDialect.AgentName})
 	return column[string]{
 		key: AgentNameColumnKey,
-		byType: columnTable[string]{
+		byType: perEventType[string]{
 			dialect.EventTypeAPIRequest:     agent,
 			dialect.EventTypeToolCall:       agent,
 			dialect.EventTypeToolCallResult: agent,

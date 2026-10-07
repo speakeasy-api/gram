@@ -19,7 +19,7 @@ func columnEventID() columnDefinition {
 	subject := getter[string]{log: dialect.LogDialect.SubjectID, span: dialect.SpanDialect.SubjectID}
 	return column[string]{
 		key: EventIDColumnKey,
-		byType: columnTable[string]{
+		byType: perEventType[string]{
 			dialect.EventTypePrompt:          subject,
 			dialect.EventTypeAPIRequest:      subject,
 			dialect.EventTypeAPIResponse:     subject,

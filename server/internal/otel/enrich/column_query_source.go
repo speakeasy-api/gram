@@ -11,7 +11,7 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 func columnQuerySource() columnDefinition {
 	return column[string]{
 		key: QuerySourceColumnKey,
-		byType: columnTable[string]{
+		byType: perEventType[string]{
 			dialect.EventTypeAPIRequest: {log: dialect.LogDialect.QuerySource, span: dialect.SpanDialect.QuerySource},
 		},
 	}

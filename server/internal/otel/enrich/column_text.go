@@ -17,7 +17,7 @@ func columnText() columnDefinition {
 	text := optIn(getter[string]{log: dialect.LogDialect.Text, span: dialect.SpanDialect.Text})
 	return column[string]{
 		key: TextColumnKey,
-		byType: columnTable[string]{
+		byType: perEventType[string]{
 			dialect.EventTypePrompt:       text,
 			dialect.EventTypeAPIResponse:  text,
 			dialect.EventTypeAPIError:     text,

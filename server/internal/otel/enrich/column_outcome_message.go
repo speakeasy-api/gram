@@ -14,7 +14,7 @@ func columnOutcomeMessage() columnDefinition {
 	message := getter[string]{log: dialect.LogDialect.OutcomeMessage, span: dialect.SpanDialect.OutcomeMessage}
 	return column[string]{
 		key: OutcomeMessageColumnKey,
-		byType: columnTable[string]{
+		byType: perEventType[string]{
 			dialect.EventTypeAPIError:       message,
 			dialect.EventTypeToolCallResult: conditionallyRequired(message, outcomeIsError),
 			dialect.EventTypeCompaction:     conditionallyRequired(message, outcomeIsError),

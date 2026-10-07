@@ -12,12 +12,12 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-// whatHappened runs the what-happened column enrichers over one record, as
+// operation runs the what-happened column enrichers over one record, as
 // the transform does, and indexes what they wrote by key.
-func whatHappened(t *testing.T, in *Instruments, record *otelv1.InboundLogRecord) map[attribute.Key]attribute.Value {
+func operation(t *testing.T, in *Instruments, record *otelv1.InboundLogRecord) map[attribute.Key]attribute.Value {
 	t.Helper()
 	columns := map[attribute.Key]attribute.Value{}
-	for _, definition := range whatHappenedColumns() {
+	for _, definition := range operationColumns() {
 		maps.Copy(columns, enrichedColumns(t, definition.log(in), record))
 	}
 	return columns
@@ -30,7 +30,7 @@ func inboundTestBoolAttribute(key string, value bool) *otelv1.InboundLogRecord_K
 	}).Build()
 }
 
-func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
+func TestOperationColumnsForClaudeCode(t *testing.T) {
 	t.Parallel()
 
 	t.Run("an api_request names the model and the request, and never gets an outcome", func(t *testing.T) {
@@ -48,7 +48,7 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 			inboundTestBoolAttribute("success", true),
 		)
 
-		columns := whatHappened(t, in, record)
+		columns := operation(t, in, record)
 		require.Equal(t, "claude-sonnet-4", columns[ModelColumnKey].AsString())
 		require.Equal(t, "user_prompt", columns[QuerySourceColumnKey].AsString())
 		require.Equal(t, "deploy", columns[SkillNameColumnKey].AsString())
@@ -73,7 +73,7 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 			inboundTestDoubleAttribute("duration_ms", 10),
 		)
 
-		columns := whatHappened(t, in, record)
+		columns := operation(t, in, record)
 		require.NotContains(t, columns, SkillNameColumnKey)
 		require.NotContains(t, columns, AgentNameColumnKey)
 		require.NotContains(t, columns, MCPServerNameColumnKey)
@@ -92,7 +92,7 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 			inboundTestIntAttribute("duration_ms", 12),
 		)
 
-		columns := whatHappened(t, in, record)
+		columns := operation(t, in, record)
 		require.Equal(t, "Bash", columns[NameColumnKey].AsString(), "the tool is the subject")
 		require.Equal(t, "Bash", columns[ToolNameColumnKey].AsString(), "and the deprecated column says the same")
 		require.Equal(t, dialect.OutcomeError, columns[OutcomeColumnKey].AsString())
@@ -111,7 +111,7 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 			inboundTestIntAttribute("duration_ms", 3),
 		)
 
-		columns := whatHappened(t, in, record)
+		columns := operation(t, in, record)
 		require.Equal(t, dialect.OutcomeOK, columns[OutcomeColumnKey].AsString())
 		require.NotContains(t, columns, OutcomeMessageColumnKey)
 		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("outcome_message")))
@@ -130,7 +130,7 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 			logStringAttribute("tool_parameters", `{"mcp_tool_name":"whoami"}`),
 		)
 
-		columns := whatHappened(t, in, record)
+		columns := operation(t, in, record)
 		require.Equal(t, "whoami", columns[MCPToolNameColumnKey].AsString())
 		require.NotContains(t, columns, MCPServerNameColumnKey)
 		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("mcp_server_name")))
@@ -148,7 +148,7 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 			logStringAttribute("mcp_server_name", "github"),
 			logStringAttribute("mcp_tool_name", "create_issue"),
 		)
-		columns := whatHappened(t, in, rejected)
+		columns := operation(t, in, rejected)
 		require.Equal(t, dialect.OutcomeRejected, columns[OutcomeColumnKey].AsString())
 		require.Equal(t, "reject", columns[TextColumnKey].AsString())
 		require.Equal(t, "Bash", columns[NameColumnKey].AsString())
@@ -159,7 +159,7 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 			logStringAttribute("tool_name", "Bash"),
 			logStringAttribute("decision_type", "accept"),
 		)
-		columns = whatHappened(t, in, accepted)
+		columns = operation(t, in, accepted)
 		require.NotContains(t, columns, OutcomeColumnKey, "the result row carries how an accepted call went")
 		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("outcome")))
 	})
@@ -172,7 +172,7 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 			logStringAttribute("model", "claude-sonnet-4"),
 			logStringAttribute("response", "Done."),
 		)
-		columns := whatHappened(t, in, response)
+		columns := operation(t, in, response)
 		require.Equal(t, dialect.OutcomeOK, columns[OutcomeColumnKey].AsString())
 		require.Equal(t, "Done.", columns[TextColumnKey].AsString())
 		require.Equal(t, "claude-sonnet-4", columns[ModelColumnKey].AsString())
@@ -182,13 +182,13 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 			logStringAttribute("model", "claude-sonnet-4"),
 			logStringAttribute("error", "overloaded"),
 		)
-		columns = whatHappened(t, in, apiError)
+		columns = operation(t, in, apiError)
 		require.Equal(t, dialect.OutcomeError, columns[OutcomeColumnKey].AsString())
 		require.Equal(t, "overloaded", columns[OutcomeMessageColumnKey].AsString())
 		require.Equal(t, "overloaded", columns[TextColumnKey].AsString())
 
 		refusal := inboundTestLog(claudeCodeScopeName, "claude-code", "api_refusal", logStringAttribute("model", "claude-sonnet-4"))
-		columns = whatHappened(t, in, refusal)
+		columns = operation(t, in, refusal)
 		require.Equal(t, dialect.OutcomeRefused, columns[OutcomeColumnKey].AsString())
 		require.Equal(t, "claude-sonnet-4", columns[ModelColumnKey].AsString())
 	})
@@ -202,13 +202,13 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 			logStringAttribute("model", "claude-sonnet-4"),
 			logStringAttribute("body", `{"messages":[]}`),
 		)
-		columns := whatHappened(t, in, withModel)
+		columns := operation(t, in, withModel)
 		require.Equal(t, "claude-sonnet-4", columns[ModelColumnKey].AsString())
 		require.NotContains(t, columns, OutcomeColumnKey)
 		require.NotContains(t, columns, TextColumnKey, "the body stays whole in the attributes")
 
 		withoutModel := inboundTestLog(claudeCodeScopeName, "claude-code", "api_response_body", logStringAttribute("body", `{}`))
-		require.NotContains(t, whatHappened(t, in, withoutModel), ModelColumnKey)
+		require.NotContains(t, operation(t, in, withoutModel), ModelColumnKey)
 		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("model")), "a capture states the model only sometimes")
 	})
 
@@ -221,7 +221,7 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 			inboundTestBoolAttribute("success", true),
 			inboundTestDoubleAttribute("duration_ms", 2500),
 		)
-		columns := whatHappened(t, in, ok)
+		columns := operation(t, in, ok)
 		require.Equal(t, dialect.OutcomeOK, columns[OutcomeColumnKey].AsString())
 		require.NotContains(t, columns, OutcomeMessageColumnKey)
 		require.NotContains(t, columns, DurationNanoColumnKey, "a compaction's duration is housekeeping, not a request or a tool")
@@ -230,7 +230,7 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 			inboundTestBoolAttribute("success", false),
 			logStringAttribute("error", "context too large"),
 		)
-		columns = whatHappened(t, in, failed)
+		columns = operation(t, in, failed)
 		require.Equal(t, dialect.OutcomeError, columns[OutcomeColumnKey].AsString())
 		require.Equal(t, "context too large", columns[OutcomeMessageColumnKey].AsString())
 		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("outcome_message")))
@@ -242,12 +242,12 @@ func TestWhatHappenedColumnsForClaudeCode(t *testing.T) {
 		in := NewInstruments(testenv.NewLogger(t), meterProvider)
 		record := inboundTestLog(claudeCodeScopeName, "claude-code", "user_prompt", inboundTestIntAttribute("prompt_length", 13))
 
-		require.NotContains(t, whatHappened(t, in, record), TextColumnKey)
+		require.NotContains(t, operation(t, in, record), TextColumnKey)
 		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("text")))
 	})
 }
 
-func TestWhatHappenedColumnsForCodex(t *testing.T) {
+func TestOperationColumnsForCodex(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a response.completed is a request with a model and a duration but no outcome", func(t *testing.T) {
@@ -259,7 +259,7 @@ func TestWhatHappenedColumnsForCodex(t *testing.T) {
 			inboundTestDoubleAttribute("duration_ms", 800),
 		)
 
-		columns := whatHappened(t, in, record)
+		columns := operation(t, in, record)
 		require.Equal(t, "gpt-5", columns[ModelColumnKey].AsString())
 		require.Equal(t, int64(800_000_000), columns[DurationNanoColumnKey].AsInt64())
 		require.NotContains(t, columns, OutcomeColumnKey, "a completed request is a request; the type carries that it completed")
@@ -275,7 +275,7 @@ func TestWhatHappenedColumnsForCodex(t *testing.T) {
 			logStringAttribute("error", "exit 1"),
 		)
 
-		columns := whatHappened(t, in, record)
+		columns := operation(t, in, record)
 		require.Equal(t, "shell", columns[NameColumnKey].AsString())
 		require.Equal(t, "shell", columns[ToolNameColumnKey].AsString())
 		require.Equal(t, dialect.OutcomeError, columns[OutcomeColumnKey].AsString())
@@ -283,7 +283,7 @@ func TestWhatHappenedColumnsForCodex(t *testing.T) {
 	})
 }
 
-func TestWhatHappenedColumnsForSemconv(t *testing.T) {
+func TestOperationColumnsForSemconv(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a tool call names its tool", func(t *testing.T) {
@@ -294,7 +294,7 @@ func TestWhatHappenedColumnsForSemconv(t *testing.T) {
 			logStringAttribute("gen_ai.tool.name", "search"),
 		)
 
-		columns := whatHappened(t, in, record)
+		columns := operation(t, in, record)
 		require.Equal(t, "search", columns[NameColumnKey].AsString())
 		require.Equal(t, "search", columns[ToolNameColumnKey].AsString())
 		require.NotContains(t, columns, OutcomeColumnKey, "a tool call records that a call was made, not how it went")
@@ -309,7 +309,7 @@ func TestWhatHappenedColumnsForSemconv(t *testing.T) {
 			logStringAttribute("gen_ai.agent.name", "planner"),
 		)
 
-		columns := whatHappened(t, in, record)
+		columns := operation(t, in, record)
 		require.Equal(t, "gpt-4o-2024-08-06", columns[ModelColumnKey].AsString())
 		require.Equal(t, "planner", columns[AgentNameColumnKey].AsString())
 	})
@@ -356,7 +356,7 @@ func TestRequirementLevelsSayWhenAnAbsenceIsAGap(t *testing.T) {
 
 // A tool_call log record is the moment the call started and states no
 // duration; that is Recommended, not a gap, so nothing is counted.
-func TestWhatHappenedColumnsLeaveAToolCallLogWithoutADurationUncounted(t *testing.T) {
+func TestOperationColumnsLeaveAToolCallLogWithoutADurationUncounted(t *testing.T) {
 	t.Parallel()
 
 	reader, meterProvider := readableMeter(t)
@@ -366,6 +366,6 @@ func TestWhatHappenedColumnsLeaveAToolCallLogWithoutADurationUncounted(t *testin
 		logStringAttribute("gen_ai.tool.name", "search"),
 	)
 
-	require.NotContains(t, whatHappened(t, in, record), DurationNanoColumnKey)
+	require.NotContains(t, operation(t, in, record), DurationNanoColumnKey)
 	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("duration_nano")))
 }

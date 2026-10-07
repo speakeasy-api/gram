@@ -9,7 +9,7 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 func columnCacheReadTokens() columnDefinition {
 	return column[int64]{
 		key: CacheReadTokensColumnKey,
-		byType: columnTable[int64]{
+		byType: perEventType[int64]{
 			dialect.EventTypeAPIRequest: {log: dialect.LogDialect.CacheReadTokens, span: dialect.SpanDialect.CacheReadTokens},
 		},
 	}

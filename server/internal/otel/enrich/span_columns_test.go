@@ -183,7 +183,7 @@ func TestSpanColumnsAnswerFromTheSameTablesAsLogs(t *testing.T) {
 
 		require.NotContains(t, enrichedSpanColumns(t, in, span), SessionIDColumnKey)
 		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("session_id")))
-		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventSurface(counterSurfaceOther)))
+		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventSurface(missingLabelOther)))
 	})
 }
 

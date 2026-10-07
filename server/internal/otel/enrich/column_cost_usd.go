@@ -10,7 +10,7 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 func columnCostUSD() columnDefinition {
 	return column[float64]{
 		key: CostUSDColumnKey,
-		byType: columnTable[float64]{
+		byType: perEventType[float64]{
 			dialect.EventTypeAPIRequest: {log: dialect.LogDialect.CostUSD, span: dialect.SpanDialect.CostUSD},
 		},
 	}

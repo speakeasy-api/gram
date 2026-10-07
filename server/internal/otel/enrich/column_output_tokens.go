@@ -7,7 +7,7 @@ import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
 func columnOutputTokens() columnDefinition {
 	return column[int64]{
 		key: OutputTokensColumnKey,
-		byType: columnTable[int64]{
+		byType: perEventType[int64]{
 			dialect.EventTypeAPIRequest: {log: dialect.LogDialect.OutputTokens, span: dialect.SpanDialect.OutputTokens},
 		},
 	}

@@ -14,7 +14,7 @@ func columnModel() columnDefinition {
 	model := getter[string]{log: dialect.LogDialect.Model, span: dialect.SpanDialect.Model}
 	return column[string]{
 		key: ModelColumnKey,
-		byType: columnTable[string]{
+		byType: perEventType[string]{
 			dialect.EventTypeAPIRequest:      model,
 			dialect.EventTypeAPIResponse:     model,
 			dialect.EventTypeAPIError:        model,
