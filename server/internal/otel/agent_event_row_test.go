@@ -805,7 +805,8 @@ func TestAgentEventRowFromSpanHasNoDialectFallbackForCanonicalColumns(t *testing
 
 // A PostToolUse the hooks ingest endpoint republished, as the tee shapes
 // it: the row's attributes under the hooks scope with the hook source as
-// the resource's service name.
+// the resource's service name. Codex states no per-call tool id, so the
+// row's subject falls back to the record id.
 func TestAgentEventRowFromLogReadsWhatTheHooksEndpointRecords(t *testing.T) {
 	t.Parallel()
 
@@ -818,10 +819,9 @@ func TestAgentEventRowFromLogReadsWhatTheHooksEndpointRecords(t *testing.T) {
 		logEventTestKV("gram.hook.source", "codex"),
 		logEventTestKV("gram.hook.adapter", "codex"),
 		logEventTestKV("gram.hook.decision", "allow"),
-		logEventTestKV("session.id", "codex-session-1"),
+		logEventTestKV("gram.session.id", "codex-session-1"),
 		logEventTestKV("gen_ai.conversation.id", "chat-uuid-1"),
 		logEventTestKV("gram.hook.turn_id", "turn-1"),
-		logEventTestKV("gen_ai.tool.call.id", "call-1"),
 		logEventTestKV("gram.tool.name", "shell"),
 		logEventTestKV("user.id", "user-1"),
 		logEventTestKV("user.email", "dev@example.com"),
@@ -838,7 +838,8 @@ func TestAgentEventRowFromLogReadsWhatTheHooksEndpointRecords(t *testing.T) {
 	require.Equal(t, "openai", row.Provider)
 	require.Equal(t, "codex-session-1", row.SessionID)
 	require.Equal(t, "turn-1", row.TurnID)
-	require.Equal(t, "call-1", row.EventID)
+	require.Equal(t, "record-1", row.RecordID)
+	require.Equal(t, row.RecordID, row.EventID, "no per-call id, so the record is the event")
 	require.Equal(t, "user-1", row.UserID)
 	require.Equal(t, "dev@example.com", row.UserEmail)
 	require.Equal(t, "shell", row.Name)

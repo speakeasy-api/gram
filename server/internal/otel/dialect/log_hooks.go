@@ -36,14 +36,19 @@ const (
 	hookProviderKey        = "gram.provider"
 	hookExternalOrgIDKey   = "gram.external_org_id"
 	hookExternalUserIDKey  = "gram.external_user.id"
-	hookSessionIDKey       = "session.id"
+	hookSessionIDKey       = "gram.session.id"
+	hookRawSessionIDKey    = "session.id"
 	hookResponseModelKey   = "gen_ai.response.model"
 	hookToolCallIDKey      = "gen_ai.tool.call.id"
 	hookUsageInputKey      = "gen_ai.usage.input_tokens"
 	hookUsageOutputKey     = "gen_ai.usage.output_tokens"
-	hookUsageCacheReadKey  = "gen_ai.usage.cache_read_input_tokens"
-	hookUsageCacheWriteKey = "gen_ai.usage.cache_creation_input_tokens"
-	hookUsageCostKey       = "gen_ai.usage.cost"
+	hookUsageCacheReadKey  = "gen_ai.usage.cache_read.input_tokens"
+	hookUsageCacheWriteKey = "gen_ai.usage.cache_creation.input_tokens"
+	// The underscore spellings are what some adapters sent before the
+	// dotted semconv names; read them second so older rows still count.
+	hookUsageCacheReadLegacyKey  = "gen_ai.usage.cache_read_input_tokens"
+	hookUsageCacheWriteLegacyKey = "gen_ai.usage.cache_creation_input_tokens"
+	hookUsageCostKey             = "gen_ai.usage.cost"
 
 	providerAnthropic = "anthropic"
 	providerOpenAI    = "openai"
@@ -92,8 +97,10 @@ func (HooksLog) OutputContent(*otelv1.InboundLogRecord) (string, genaiconv.Outpu
 
 // SessionID is the agent's own session id, as the other dialects answer it
 // for the same session; the chat it maps to rides as gen_ai.conversation.id.
+// SessionID is the agent's own session id. The hooks tee stamps it as
+// gram.session.id; a row that carries it as session.id is read second.
 func (HooksLog) SessionID(record *otelv1.InboundLogRecord) (string, string, error) {
-	key, value := getOneLogAttr(record, hookSessionIDKey)
+	key, value := getOneLogAttrAny(record, hookSessionIDKey, hookRawSessionIDKey)
 	return key, value, nil
 }
 
@@ -249,12 +256,12 @@ func (HooksLog) OutputTokens(record *otelv1.InboundLogRecord) (string, int64, er
 }
 
 func (HooksLog) CacheReadTokens(record *otelv1.InboundLogRecord) (string, int64, error) {
-	key, value := getOneLogInt64(record, hookUsageCacheReadKey)
+	key, value := getOneLogInt64(record, hookUsageCacheReadKey, hookUsageCacheReadLegacyKey)
 	return key, value, nil
 }
 
 func (HooksLog) CacheWriteTokens(record *otelv1.InboundLogRecord) (string, int64, error) {
-	key, value := getOneLogInt64(record, hookUsageCacheWriteKey)
+	key, value := getOneLogInt64(record, hookUsageCacheWriteKey, hookUsageCacheWriteLegacyKey)
 	return key, value, nil
 }
 
