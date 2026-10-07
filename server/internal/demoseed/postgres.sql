@@ -3401,15 +3401,19 @@ Channel context stays in the Raw view.
     ON s.id = t.id AND s.toolset_id = t.id AND s.deleted IS FALSE
    AND s.slug = t.mcp_slug AND s.name = t.name
    AND s.user_session_issuer_id IS NOT DISTINCT FROM t.user_session_issuer_id
+   AND s.tool_variations_group_id IS NOT DISTINCT FROM t.tool_variations_group_id
    AND s.visibility = CASE WHEN NOT t.mcp_enabled THEN 'disabled'
                            WHEN t.mcp_is_public THEN 'public'
                            ELSE 'private' END
   WHERE t.project_id = proj_a AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL
-    AND (s.id IS NULL OR 1 <> (
-      SELECT count(*) FROM mcp_endpoints e
-      WHERE e.mcp_server_id = t.id AND e.deleted IS FALSE
-        AND e.slug = t.mcp_slug
-        AND e.custom_domain_id IS NOT DISTINCT FROM t.custom_domain_id));
+    AND (s.id IS NULL
+      OR 1 <> (SELECT count(*) FROM mcp_endpoints e
+               WHERE e.mcp_server_id = t.id AND e.deleted IS FALSE)
+      OR NOT EXISTS (
+        SELECT 1 FROM mcp_endpoints e
+        WHERE e.mcp_server_id = t.id AND e.deleted IS FALSE
+          AND e.slug = t.mcp_slug
+          AND e.custom_domain_id IS NOT DISTINCT FROM t.custom_domain_id));
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % hosted toolsets lack a matching canonical wrapper and endpoint', stray;
   END IF;
