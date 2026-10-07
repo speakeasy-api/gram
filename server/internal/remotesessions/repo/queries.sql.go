@@ -2893,6 +2893,97 @@ func (q *Queries) GetActiveRemoteSession(ctx context.Context, arg GetActiveRemot
 	return i, err
 }
 
+const getClientCredentialsGrantClient = `-- name: GetClientCredentialsGrantClient :one
+SELECT
+    c.id                                   AS client_id,
+    c.organization_id                      AS organization_id,
+    c.client_id                            AS external_client_id,
+    c.client_secret_encrypted              AS client_secret_encrypted,
+    c.client_secret_expires_at             AS client_secret_expires_at,
+    c.token_endpoint_auth_method           AS token_endpoint_auth_method,
+    c.token_endpoint_auth_audience_format  AS token_endpoint_auth_audience_format,
+    c.json_web_key_set_id                  AS json_web_key_set_id,
+    c.scope                                AS client_scope,
+    c.audience                             AS client_audience,
+    i.id                                   AS issuer_id,
+    i.issuer                               AS issuer_url,
+    i.metadata                             AS issuer_metadata,
+    i.token_endpoint                       AS token_endpoint,
+    i.resource_indicator_supported         AS resource_indicator_supported,
+    i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
+    COALESCE(k.kid, '')                    AS active_key_id
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+LEFT JOIN LATERAL (
+    SELECT jwk.kid
+    FROM json_web_keys AS jwk
+    WHERE jwk.json_web_key_set_id = c.json_web_key_set_id
+      AND jwk.organization_id = c.organization_id
+      AND jwk.state = 'active'
+      AND jwk.deleted IS FALSE
+) AS k ON TRUE
+WHERE c.id = $1
+  AND c.organization_id = $2
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+`
+
+type GetClientCredentialsGrantClientParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+type GetClientCredentialsGrantClientRow struct {
+	ClientID                        uuid.UUID
+	OrganizationID                  pgtype.Text
+	ExternalClientID                string
+	ClientSecretEncrypted           pgtype.Text
+	ClientSecretExpiresAt           pgtype.Timestamptz
+	TokenEndpointAuthMethod         pgtype.Text
+	TokenEndpointAuthAudienceFormat pgtype.Text
+	JsonWebKeySetID                 uuid.NullUUID
+	ClientScope                     []string
+	ClientAudience                  pgtype.Text
+	IssuerID                        uuid.UUID
+	IssuerUrl                       string
+	IssuerMetadata                  []byte
+	TokenEndpoint                   pgtype.Text
+	ResourceIndicatorSupported      pgtype.Bool
+	TunneledMcpServerID             uuid.NullUUID
+	ActiveKeyID                     string
+}
+
+// A client in one organization with everything its client credentials grant
+// and the cached credential's version depend on. Global clients have no
+// organization and never match, so a client-owned upstream credential is never
+// shared across tenants. active_key_id is the key the client assertion signer
+// uses (same predicate as GetActiveJsonWebKey), so rotating the key set's
+// active key changes it. It is empty when the client has no key set.
+func (q *Queries) GetClientCredentialsGrantClient(ctx context.Context, arg GetClientCredentialsGrantClientParams) (GetClientCredentialsGrantClientRow, error) {
+	row := q.db.QueryRow(ctx, getClientCredentialsGrantClient, arg.ID, arg.OrganizationID)
+	var i GetClientCredentialsGrantClientRow
+	err := row.Scan(
+		&i.ClientID,
+		&i.OrganizationID,
+		&i.ExternalClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.JsonWebKeySetID,
+		&i.ClientScope,
+		&i.ClientAudience,
+		&i.IssuerID,
+		&i.IssuerUrl,
+		&i.IssuerMetadata,
+		&i.TokenEndpoint,
+		&i.ResourceIndicatorSupported,
+		&i.TunneledMcpServerID,
+		&i.ActiveKeyID,
+	)
+	return i, err
+}
+
 const getDueRemoteSessionRecheckCandidate = `-- name: GetDueRemoteSessionRecheckCandidate :one
 SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted, c.remote_session_issuer_id, i.issuer AS issuer_url
 FROM remote_sessions AS s
