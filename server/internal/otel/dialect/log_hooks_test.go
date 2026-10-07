@@ -168,7 +168,7 @@ func TestHooksLogWhoAndWhere(t *testing.T) {
 
 	record := hooksRecord("PostToolUse",
 		accessorTestKV("gram.hook.source", "codex"),
-		accessorTestKV("session.id", "codex-session-1"),
+		accessorTestKV("gram.session.id", "codex-session-1"),
 		accessorTestKV("gen_ai.conversation.id", "chat-uuid-1"),
 		accessorTestKV("gram.hook.turn_id", "turn-1"),
 		accessorTestKV("user.email", "dev@example.com"),
@@ -181,8 +181,14 @@ func TestHooksLogWhoAndWhere(t *testing.T) {
 
 	key, value, err := selected.SessionID(record)
 	require.NoError(t, err)
-	require.Equal(t, "session.id", key, "the agent's own session, not the chat it maps to")
+	require.Equal(t, "gram.session.id", key, "the agent's own session as the tee stamps it, not the chat it maps to")
 	require.Equal(t, "codex-session-1", value)
+
+	legacy := hooksRecord("PostToolUse", accessorTestKV("session.id", "codex-session-2"))
+	key, value, err = ForLog(legacy).SessionID(legacy)
+	require.NoError(t, err)
+	require.Equal(t, "session.id", key, "a row carrying the raw key is still read")
+	require.Equal(t, "codex-session-2", value)
 
 	key, value, err = selected.TurnID(record)
 	require.NoError(t, err)
@@ -311,8 +317,8 @@ func TestHooksLogDurationAndUsage(t *testing.T) {
 		gramTestDoubleKV("gram.tool_call.duration", 0.75),
 		accessorTestIntKV("gen_ai.usage.input_tokens", 120),
 		accessorTestIntKV("gen_ai.usage.output_tokens", 30),
-		accessorTestIntKV("gen_ai.usage.cache_read_input_tokens", 10),
-		accessorTestIntKV("gen_ai.usage.cache_creation_input_tokens", 5),
+		accessorTestIntKV("gen_ai.usage.cache_read.input_tokens", 10),
+		accessorTestIntKV("gen_ai.usage.cache_creation.input_tokens", 5),
 		gramTestDoubleKV("gen_ai.usage.cost", 0.0123),
 	)
 	selected := ForLog(record)
@@ -334,6 +340,17 @@ func TestHooksLogDurationAndUsage(t *testing.T) {
 	_, tokens, err = selected.CacheWriteTokens(record)
 	require.NoError(t, err)
 	require.Equal(t, int64(5), tokens)
+
+	legacy := hooksRecord("PostToolUse",
+		accessorTestIntKV("gen_ai.usage.cache_read_input_tokens", 7),
+		accessorTestIntKV("gen_ai.usage.cache_creation_input_tokens", 3),
+	)
+	_, tokens, err = ForLog(legacy).CacheReadTokens(legacy)
+	require.NoError(t, err)
+	require.Equal(t, int64(7), tokens, "the underscore spelling is still read")
+	_, tokens, err = ForLog(legacy).CacheWriteTokens(legacy)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), tokens)
 	_, cost, err := selected.CostUSD(record)
 	require.NoError(t, err)
 	require.InDelta(t, 0.0123, cost, 1e-9)
