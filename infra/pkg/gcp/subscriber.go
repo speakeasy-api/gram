@@ -11,6 +11,7 @@ import (
 
 	"cloud.google.com/go/pubsub/v2"
 	"github.com/speakeasy-api/gram/infra/internal/attr"
+	"github.com/speakeasy-api/gram/infra/internal/batching"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -55,6 +56,16 @@ type BatchReceiveSettings struct {
 	// MaxExtension the client stops extending, pubsub redelivers them before the
 	// batch flushes, and the eventual ack lands on a stale copy.
 	MaxLatency time.Duration
+
+	// MaxBufferedMessages opts into bounded batching and retains permits until
+	// settlement. Bounded mode holds one processing and one pending batch;
+	// deliveries unable to enter before cancellation are nacked.
+	MaxBufferedMessages int
+
+	// MaxBufferedBytes bounds raw input across callbacks, pending and processing
+	// batches. In bounded mode zero defaults to two MaxBytes-sized batches (or
+	// 64 MiB when byte flushing is disabled). Decoded allocations are additional.
+	MaxBufferedBytes int
 }
 
 type SubscriberBroker interface {
@@ -353,6 +364,22 @@ func (s *psSubscriber[M]) batchLoopMessages(
 	// maxBytes is an optional trigger: a value <= 0 leaves count and latency as
 	// the only flush conditions.
 	maxBytes := settings.MaxBytes
+	if settings.MaxBufferedMessages > 0 || settings.MaxBufferedBytes > 0 {
+		messages := settings.MaxBufferedMessages
+		if messages <= 0 {
+			messages = 2 * size
+		}
+		bytes := settings.MaxBufferedBytes
+		if bytes <= 0 {
+			bytes = max(2*maxBytes, 64<<20)
+		}
+		return batching.Run(ctx, batching.Settings{
+			MaxMessages: size, MaxBytes: maxBytes, MaxLatency: latency,
+			OutstandingMessages: messages, OutstandingBytes: bytes,
+		}, func(ctx context.Context, deliver func(context.Context, incomingMessage)) error {
+			return receive(ctx, func(m incomingMessage) { deliver(ctx, m) })
+		}, func(m incomingMessage) (int, string) { return len(m.data), "" }, func(m incomingMessage) { m.nack() }, handle)
+	}
 
 	newBuf := func() []incomingMessage { return make([]incomingMessage, 0, size) }
 
