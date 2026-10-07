@@ -34,9 +34,7 @@ export function claudeMarketplaceNameNoteParts(marketplaceName: {
     inlineCode("enabledPlugins"),
     " must be exactly ",
     marketplaceName,
-    ", not the GitHub repository name or an older ",
-    inlineCode("<org>-gram"),
-    " name. Otherwise Claude Code ignores ",
+    ", not the GitHub repository name. Otherwise Claude Code ignores ",
     inlineCode("autoUpdate"),
     " or never installs the plugin.",
   ];

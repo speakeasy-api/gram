@@ -181,7 +181,7 @@ describe("getAgentPlatforms", () => {
       );
       expect(step?.description).toContainEqual(marketplaceName);
       expect(JSON.stringify(step?.description)).toContain(
-        "not the GitHub repository name or an older ",
+        "not the GitHub repository name. Otherwise Claude Code ignores ",
       );
     }
     expect(managed?.helpLink?.url).toBe(

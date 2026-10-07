@@ -84,9 +84,10 @@ describe("installation instructions", () => {
       '"enabledPlugins": { "example-plugin@example-marketplace": true }',
     );
     expect(text).toContain(
-      "must be exactly example-marketplace, not the GitHub repository name or an older <org>-gram name",
+      "must be exactly example-marketplace, not the GitHub repository name. Otherwise Claude Code ignores autoUpdate",
     );
     expect(text).toContain("Otherwise Claude Code ignores autoUpdate");
+    expect(text).not.toContain("<org>-gram");
     expect(text).toContain(
       "open /plugin → Marketplaces, select example-marketplace, and choose Enable auto-update",
     );
