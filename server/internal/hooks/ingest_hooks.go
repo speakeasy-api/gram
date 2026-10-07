@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
@@ -1401,6 +1402,15 @@ func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.A
 }
 
 func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, timestamp time.Time, toolName string, attrs map[attr.Key]any) {
+	// Device details the speakeasy-hooks binary reported, so rows can be
+	// counted per client version. A spool replay's headers describe the binary
+	// draining the spool, which after an upgrade is not the one that captured
+	// the event, so replayed rows stay unstamped rather than miscounted.
+	if replayed, _ := attrs[attr.HookReplayedKey].(bool); !replayed {
+		for key, value := range middleware.HookDeviceAttributes(ctx) {
+			attrs[key] = value
+		}
+	}
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp: timestamp,
 		ToolInfo: telemetry.ToolInfo{
