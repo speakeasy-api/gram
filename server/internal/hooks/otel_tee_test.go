@@ -3,7 +3,6 @@ package hooks
 import (
 	"encoding/hex"
 	"errors"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"testing"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 

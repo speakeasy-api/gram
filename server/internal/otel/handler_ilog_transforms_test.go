@@ -2,7 +2,6 @@ package otel
 
 import (
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"strings"
 	"testing"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

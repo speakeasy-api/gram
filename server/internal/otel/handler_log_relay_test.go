@@ -2,7 +2,6 @@ package otel
 
 import (
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -23,6 +22,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )

@@ -1,7 +1,6 @@
 package otel
 
 import (
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"

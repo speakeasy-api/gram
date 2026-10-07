@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"io"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
@@ -12,6 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gen "github.com/speakeasy-api/gram/server/gen/otel"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 )
 
 const maxOTLPMetricsPerExport = 10_000

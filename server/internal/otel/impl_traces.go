@@ -3,7 +3,6 @@ package otel
 import (
 	"context"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"io"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
@@ -11,6 +10,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gen "github.com/speakeasy-api/gram/server/gen/otel"
+	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 )
 
 func (s *Service) Traces(ctx context.Context, payload *gen.TracesPayload, body io.ReadCloser) error {
