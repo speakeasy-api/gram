@@ -90,7 +90,7 @@ func isSkippedResponseHeader(name string) bool {
 	if mcpauthz.ReservedHeader(name) {
 		return true
 	}
-	// Gram's CORS middleware owns the browser-facing policy. An upstream's own
+	// The CORS middleware owns the browser-facing policy. An upstream's own
 	// Access-Control-* values would sit beside it, and a browser rejects a
 	// response carrying two Access-Control-Allow-Origin values.
 	if strings.HasPrefix(strings.ToLower(name), "access-control-") {

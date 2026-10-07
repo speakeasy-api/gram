@@ -31,7 +31,7 @@ func TestApplyResponseHeadersStripsTunnelError(t *testing.T) {
 	require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 }
 
-// TestApplyResponseHeadersStripsUpstreamCORS: Gram's CORS middleware sets the
+// TestApplyResponseHeadersStripsUpstreamCORS: the CORS middleware sets the
 // Access-Control-* headers for the browser. Relaying the upstream's copies
 // would duplicate them and the browser would reject the response.
 func TestApplyResponseHeadersStripsUpstreamCORS(t *testing.T) {
