@@ -28,8 +28,11 @@ type pluginPublishSignal struct {
 	userID    string
 }
 
+// recordingPluginPublishSignaler records every publish signal and answers each
+// with err, so a test can drive both a delivered and a refused signal.
 type recordingPluginPublishSignaler struct {
 	mu      sync.Mutex
+	err     error
 	signals []pluginPublishSignal
 }
 
@@ -37,7 +40,7 @@ func (r *recordingPluginPublishSignaler) SignalPluginPublish(_ context.Context, 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.signals = append(r.signals, pluginPublishSignal{projectID: projectID, userID: createdByUserID})
-	return nil
+	return r.err
 }
 
 func (r *recordingPluginPublishSignaler) recorded() []pluginPublishSignal {

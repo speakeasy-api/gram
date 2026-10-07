@@ -124,19 +124,15 @@ func ChangeToolsetToolsInTransaction(ctx context.Context, tx pgx.Tx, logger *slo
 	if err != nil {
 		return ToolExposureResult{}, oops.E(oops.CodeUnexpected, err, "failed to describe the toolset after changing its tools")
 	}
-	if err := auditLogger.LogToolsetUpdate(ctx, tx, audit.LogToolsetUpdateEvent{
-		OrganizationID:        locked.OrganizationID,
-		ProjectID:             *actor.ProjectID,
-		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, actor.UserID),
-		ActorDisplayName:      actor.Email,
-		ActorSlug:             nil,
-		ToolsetURN:            urn.NewToolset(locked.ID),
-		ToolsetName:           locked.Name,
-		ToolsetSlug:           locked.Slug,
-		ToolsetVersionAfter:   afterView.ToolsetVersion,
-		ToolsetSnapshotBefore: beforeView,
-		ToolsetSnapshotAfter:  afterView,
-	}); err != nil {
+	// The entry's organization is the actor's: the lock above already refused
+	// a toolset in any other.
+	if err := auditLogger.LogToolsetUpdate(ctx, tx, toolsetUpdateEvent(actor, toolsetUpdateAudit{
+		ToolsetID: locked.ID,
+		Name:      locked.Name,
+		Slug:      locked.Slug,
+		Before:    beforeView,
+		After:     afterView,
+	})); err != nil {
 		return ToolExposureResult{}, oops.E(oops.CodeUnexpected, err, "failed to record the toolset tool change")
 	}
 

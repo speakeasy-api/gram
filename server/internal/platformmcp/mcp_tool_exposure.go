@@ -572,7 +572,7 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal, project ResolvedProject, mcpID uuid.UUID, stored toolExposureReceipt, receipt OperationReceipt) MCPToolExposureMutationOutput {
 	output := MCPToolExposureMutationOutput{
 		Outcome: stored.Outcome, Applied: stored.Applied, Unchanged: stored.Unchanged,
-		Distributions: []MCPDistribution{}, PublicationRequest: stored.Publication, PublishSignal: "not_requested",
+		Distributions: []MCPDistribution{}, PublicationRequest: stored.Publication, PublishSignal: publishSignalNotRequested,
 		IndexSignal: "not_required", Receipt: riskMutationToolReceipt(receipt),
 	}
 	if output.Applied == nil {
@@ -581,14 +581,8 @@ func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal
 	if output.Unchanged == nil {
 		output.Unchanged = []string{}
 	}
-	if stored.Outcome == "applied" && stored.Publication != string(plugins.ProjectPublicationEnqueued) {
-		if s.publisher == nil {
-			output.PublishSignal = "unavailable"
-		} else if err := plugins.SignalPluginPublishAfterRequest(ctx, s.publisher, plugins.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {
-			output.PublishSignal = "request_failed"
-		} else {
-			output.PublishSignal = "best_effort_requested"
-		}
+	if stored.Outcome == "applied" {
+		output.PublishSignal = signalPublishAfterCommit(ctx, s.publisher, stored.Publication, project.ID, principal.UserID)
 	}
 	if memberships, err := s.queries.ListPlatformMCPInventoryPluginMemberships(ctx, platformrepo.ListPlatformMCPInventoryPluginMembershipsParams{
 		OrganizationID: principal.OrganizationID,

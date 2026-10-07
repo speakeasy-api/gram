@@ -666,19 +666,13 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		}
 	}
 
-	if err := s.audit.LogToolsetUpdate(ctx, dbtx, audit.LogToolsetUpdateEvent{
-		OrganizationID:        authCtx.ActiveOrganizationID,
-		ProjectID:             *authCtx.ProjectID,
-		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:      authCtx.Email,
-		ActorSlug:             nil,
-		ToolsetURN:            urn.NewToolset(updatedToolset.ID),
-		ToolsetName:           updatedToolset.Name,
-		ToolsetSlug:           updatedToolset.Slug,
-		ToolsetVersionAfter:   toolsetDetails.ToolsetVersion,
-		ToolsetSnapshotBefore: existingView,
-		ToolsetSnapshotAfter:  toolsetDetails,
-	}); err != nil {
+	if err := s.audit.LogToolsetUpdate(ctx, dbtx, toolsetUpdateEvent(authCtx, toolsetUpdateAudit{
+		ToolsetID: updatedToolset.ID,
+		Name:      updatedToolset.Name,
+		Slug:      updatedToolset.Slug,
+		Before:    existingView,
+		After:     toolsetDetails,
+	})); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset update").LogError(ctx, logger)
 	}
 
