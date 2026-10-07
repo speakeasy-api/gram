@@ -3410,6 +3410,25 @@ WHERE pa.plugin_id = @plugin_id
   AND p.project_id = @project_id
 ORDER BY pa.principal_urn;
 
+-- name: ListPlatformMCPPluginAssignmentsWithModes :many
+-- The same exact-plugin assignment set as ListPlatformMCPPluginAssignments,
+-- with each assignment's install mode, which the optimistic-concurrency version
+-- also covers.
+SELECT pa.principal_urn, pa.install_mode
+FROM plugin_assignments pa
+JOIN plugins p
+  ON p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.deleted IS FALSE
+JOIN projects
+  ON projects.id = p.project_id
+  AND projects.organization_id = p.organization_id
+  AND projects.deleted IS FALSE
+WHERE pa.plugin_id = @plugin_id
+  AND pa.organization_id = @organization_id
+  AND p.project_id = @project_id
+ORDER BY pa.principal_urn;
+
 -- name: ListPlatformMCPPluginAssignmentOptions :many
 -- Resolves only the bounded assignment options this Platform response can use.
 -- selected_principal_urns is empty for the organization-wide chooser and set to
