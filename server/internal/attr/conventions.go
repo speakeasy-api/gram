@@ -285,6 +285,7 @@ const (
 	EventURNKey                    = attribute.Key("gram.event.urn")
 	AgentEventTypeKey              = attribute.Key("gram.agent_event.type")
 	AgentEventColumnKey            = attribute.Key("gram.agent_event.column")
+	AgentEventSurfaceKey           = attribute.Key("gram.agent_event.surface")
 	FilterExpressionKey            = attribute.Key("gram.filter.src")
 	TriggerCorrelationIDKey        = attribute.Key("gram.trigger.correlation_id")
 	TriggerDefinitionSlugKey       = attribute.Key("gram.trigger.definition_slug")
@@ -1645,6 +1646,9 @@ func SlogAgentEventType(v string) slog.Attr      { return slog.String(string(Age
 
 func AgentEventColumn(v string) attribute.KeyValue { return AgentEventColumnKey.String(v) }
 func SlogAgentEventColumn(v string) slog.Attr      { return slog.String(string(AgentEventColumnKey), v) }
+
+func AgentEventSurface(v string) attribute.KeyValue { return AgentEventSurfaceKey.String(v) }
+func SlogAgentEventSurface(v string) slog.Attr      { return slog.String(string(AgentEventSurfaceKey), v) }
 
 func ErrorID(v string) attribute.KeyValue { return ErrorIDKey.String(v) }
 func SlogErrorID(v string) slog.Attr      { return slog.String(string(ErrorIDKey), v) }

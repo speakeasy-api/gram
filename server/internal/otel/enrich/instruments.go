@@ -10,9 +10,12 @@ import (
 )
 
 // meterColumnEnricherMissing counts the records where a column enricher's
-// table named the event type but the producer stated no value, by source,
-// event type and column. A producer renaming an attribute shows up here as
-// one column going quiet on one type for one source, the same day.
+// table named the event type but the producer stated no value for the
+// column, or one the dialect could not read, by surface, event type and
+// column. A producer renaming an attribute shows up here as one column
+// going quiet on one type for one surface, the same day. The label is the
+// surface the dialect recognised rather than the producer's service name,
+// so the series stay bounded.
 const meterColumnEnricherMissing = "gram.otel_column_enricher.missing"
 
 type Instruments struct {
@@ -58,7 +61,7 @@ func NewInstruments(logger *slog.Logger, meterProvider metric.MeterProvider) *In
 
 	columnValueMissing, err := meter.Int64Counter(
 		meterColumnEnricherMissing,
-		metric.WithDescription("Records where a column enricher's table named the event type but the producer stated no value for the column"),
+		metric.WithDescription("Records where a column enricher's table named the event type but the producer stated no value for the column, or one that could not be read"),
 	)
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterColumnEnricherMissing), attr.SlogError(err))
@@ -72,7 +75,7 @@ func NewInstruments(logger *slog.Logger, meterProvider metric.MeterProvider) *In
 	}
 }
 
-func (m *Instruments) recordColumnValueMissing(ctx context.Context, source, eventType, column string) {
+func (m *Instruments) recordColumnValueMissing(ctx context.Context, surface, eventType, column string) {
 	if m.columnValueMissing == nil {
 		return
 	}
@@ -81,7 +84,7 @@ func (m *Instruments) recordColumnValueMissing(ctx context.Context, source, even
 		ctx,
 		1,
 		metric.WithAttributes(
-			attr.EventSource(source),
+			attr.AgentEventSurface(surface),
 			attr.AgentEventType(eventType),
 			attr.AgentEventColumn(column),
 		),

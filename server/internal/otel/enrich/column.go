@@ -117,7 +117,7 @@ func (e *logColumnEnricher[V]) Enrich(ctx context.Context, record *otelv1.Inboun
 		// The provider did not say, or said something unreadable. Either way
 		// the column stays empty: absent, never a guess, and counted so a
 		// producer renaming an attribute is visible the same day.
-		e.instruments.recordColumnValueMissing(ctx, inboundLogSource(record), eventType, columnOf(e.column))
+		e.instruments.recordColumnValueMissing(ctx, counterSurface(d, record), eventType, columnOf(e.column))
 		return nil, nil
 	}
 
@@ -128,7 +128,23 @@ func (e *logColumnEnricher[V]) Enrich(ctx context.Context, record *otelv1.Inboun
 	return []attribute.KeyValue{kv}, nil
 }
 
-// columnName is the agent_events column a canonical key carries.
+// counterSurfaceOther is the missing-value counter's surface label for a
+// producer the dialects do not recognise.
+const counterSurfaceOther = "other"
+
+// counterSurface is the surface label of the missing-value counter: the
+// agent surface the dialect recognised, which is a small fixed set, or
+// "other". The producer's service.name is not used as a label because it is
+// free-form, and a label a producer controls would make the counter's
+// series unbounded.
+func counterSurface(d dialect.LogDialect, record *otelv1.InboundLogRecord) string {
+	if surface := stated(d.Surface(record)); surface != "" {
+		return surface
+	}
+	return counterSurfaceOther
+}
+
+// columnOf is the agent_events column a canonical key carries.
 func columnOf(key attribute.Key) string {
 	return strings.TrimPrefix(string(key), eventColumnKeyPrefix)
 }
