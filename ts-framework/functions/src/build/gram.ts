@@ -1,12 +1,12 @@
 import { getLogger, type Logger } from "@logtape/logtape";
 import { ZipArchive } from "archiver";
 import esbuild from "esbuild";
-import { existsSync } from "node:fs";
 import { mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { $, ProcessPromise, chalk } from "zx";
-import { isCI, type ParsedUserConfig } from "./config.ts";
+import { defaultCLIResolverDeps, resolveCLI } from "./cli.ts";
+import { CONFIG_FILE_NAMES, isCI, type ParsedUserConfig } from "./config.ts";
 
 type Artifacts = {
   funcFilename: string;
@@ -14,7 +14,9 @@ type Artifacts = {
   zipFilename: string;
 };
 
-async function resolveArtifacts(cfg: ParsedUserConfig): Promise<Artifacts> {
+export async function resolveArtifacts(
+  cfg: ParsedUserConfig,
+): Promise<Artifacts> {
   return {
     funcFilename: join(cfg.outDir, "functions.js"),
     manifestFilename: join(cfg.outDir, "manifest.json"),
@@ -22,33 +24,9 @@ async function resolveArtifacts(cfg: ParsedUserConfig): Promise<Artifacts> {
   };
 }
 
-function resolveGramCLI(): string {
-  // Check for local development mode using GRAM_DEV env var
-  const isLocalDev =
-    process.env["GRAM_DEV"]?.toLowerCase() === "true" ||
-    process.env["GRAM_DEV"] === "1";
-
-  if (isLocalDev) {
-    // In local dev, use the CLI from cli/bin/gram relative to workspace root
-    // From ts-framework/functions/src/build -> ../../../../cli/bin/gram
-    const localCliPath = resolve(
-      dirname(new URL(import.meta.url).pathname),
-      "../../../../cli/bin/gram",
-    );
-
-    // Check if the local CLI exists
-    if (existsSync(localCliPath)) {
-      return localCliPath;
-    }
-  }
-
-  // Use system-installed gram
-  return "gram";
-}
-
 export async function buildFunctions(logger: Logger, cfg: ParsedUserConfig) {
   const cwd = cfg.cwd ?? process.cwd();
-  const entrypoint = join(cwd, cfg.entrypoint);
+  const entrypoint = resolve(cwd, cfg.entrypoint);
   const exp = await import(resolve(entrypoint)).then((mod) => {
     return mod.default; // If this is a Promise (then-able) then it will be resolved
   });
@@ -94,7 +72,7 @@ export async function buildFunctions(logger: Logger, cfg: ParsedUserConfig) {
   };
 }
 
-async function inferSlug(cwd: string): Promise<string> {
+export async function inferSlug(cwd: string): Promise<string> {
   const result = await resolvePackageJson(cwd);
   if (!result) {
     throw new Error(`Could not find package.json in ${cwd} or any parent dir.`);
@@ -178,18 +156,7 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
   const cwd = config.cwd ?? process.cwd();
   const slug = config.slug || (await inferSlug(cwd));
 
-  const gramCLI = resolveGramCLI();
-  // Only check if CLI exists when using system gram
-  if (gramCLI === "gram") {
-    const cmd = process.platform === "win32" ? ["where"] : ["command", "-v"];
-    const gramPath = await $`${cmd} ${gramCLI}`.nothrow();
-
-    if (gramPath.exitCode !== 0) {
-      throw new Error(
-        `Gram CLI not found. Please install it from https://www.speakeasy.com/docs/gram/command-line/installation.`,
-      );
-    }
-  }
+  const gramCLI = await resolveCLI(defaultCLIResolverDeps());
 
   const artifacts = await resolveArtifacts(config);
   const { zipFilename } = artifacts;
@@ -215,23 +182,11 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
   logger.info(`Staging ${zipFilename} with slug: ${slug}`);
   await $`${gramCLI} stage ${stageArgs}`;
 
-  const pushArgs = [
-    "--log-pretty=false",
-    "--api-url",
-    "http://localhost:8080",
-    "push",
-    "--config",
-    config.deployStagingFile,
-  ];
-  if (config.deployProject) {
-    pushArgs.push("--project", config.deployProject);
-  }
-
   logger.info("Deploying function with Gram CLI");
 
   const pushcmd = $({
     stdio: ["pipe", "pipe", "pipe"],
-  })`${gramCLI} ${pushArgs}`
+  })`${gramCLI} ${pushArgs(config)}`
     .quiet()
     .nothrow();
 
@@ -251,6 +206,23 @@ export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
   logger.info("Gram Function deployed successfully");
 
   await handleOpenBrowser(logger, cwd, config);
+}
+
+/**
+ * Arguments for the CLI push command. The API URL is left to the CLI, which
+ * resolves it from --api-url, GRAM_API_URL or the active profile.
+ */
+export function pushArgs(config: ParsedUserConfig): string[] {
+  const args = [
+    "--log-pretty=false",
+    "push",
+    "--config",
+    config.deployStagingFile,
+  ];
+  if (config.deployProject) {
+    args.push("--project", config.deployProject);
+  }
+  return args;
 }
 
 async function resolvePackageJson(
@@ -381,9 +353,10 @@ const DASHBOARD_URL = "https://app.getgram.ai";
 async function resolveCreateServerURL(cfg: ParsedUserConfig): Promise<string> {
   const fallback = `${DASHBOARD_URL}?from=cli`;
   try {
+    const cli = await resolveCLI(defaultCLIResolverDeps());
     const result = await $({
       stdio: ["pipe", "pipe", "pipe"],
-    })`${resolveGramCLI()} whoami --json`
+    })`${cli} whoami --json`
       .quiet()
       .nothrow();
     if (result.exitCode !== 0) {
@@ -472,14 +445,7 @@ async function openBrowser(logger: Logger, url: string) {
 }
 
 async function updateConfigFile(cwd: string, shouldOpen: boolean) {
-  const configFiles = [
-    "gram.config.ts",
-    "gram.config.mts",
-    "gram.config.js",
-    "gram.config.mjs",
-  ];
-
-  for (const configFile of configFiles) {
+  for (const configFile of CONFIG_FILE_NAMES) {
     const configPath = join(cwd, configFile);
     try {
       await stat(configPath);

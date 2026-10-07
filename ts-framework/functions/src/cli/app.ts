@@ -6,18 +6,16 @@ import {
   type CommandContext,
   type FlagParametersForType,
 } from "@stricli/core";
-import {
-  configure,
-  getConsoleSink,
-  getLogger,
-  getLogLevels,
-  type LogLevel,
-} from "@logtape/logtape";
+import { getLogger, getLogLevels, type LogLevel } from "@logtape/logtape";
 
 import pkg from "../../package.json" with { type: "json" };
-import { isCI, loadConfig, type ParsedUserConfig } from "../build/config.ts";
-import { getPrettyFormatter } from "@logtape/pretty";
+import {
+  findConfigFile,
+  loadConfig,
+  type ParsedUserConfig,
+} from "../build/config.ts";
 import { buildFunctions, deployFunction } from "../build/gram.ts";
+import { configureLogger } from "../build/logging.ts";
 
 interface SharedFlags {
   "log-level": LogLevel;
@@ -37,16 +35,12 @@ const sharedFlags: FlagParametersForType<SharedFlags, CommandContext> = {
     default: "",
     brief: "Path to the configuration file",
     parse: async (configPath: string) => {
-      const candidates = configPath
-        ? [configPath]
-        : [
-            "gram.config.ts",
-            "gram.config.mts",
-            "gram.config.js",
-            "gram.config.mjs",
-          ];
-
-      const hit = candidates.find((f) => existsSync(f));
+      // A missing --config path falls back to the defaults, as it always has.
+      const hit = configPath
+        ? existsSync(configPath)
+          ? configPath
+          : undefined
+        : findConfigFile(process.cwd());
       const res = await loadConfig(hit);
       if (!res.success) {
         throw res.error;
@@ -97,12 +91,17 @@ const routes = buildRouteMap({
   },
 });
 
+function deprecationNotice(command: "build" | "push"): string {
+  return `gf ${command} is deprecated and will be removed in a future release. Run \`speakeasy functions ${command}\` instead.`;
+}
+
 async function build(
   this: CommandContext,
   { "log-level": logLevel, config }: BuildFlags,
 ) {
   await configureLogger(logLevel);
   const logger = getLogger([pkg.name]);
+  logger.warn(deprecationNotice("build"));
 
   await buildFunctions(logger, config);
 }
@@ -113,48 +112,13 @@ async function push(
 ) {
   await configureLogger(logLevel);
   const logger = getLogger([pkg.name]);
+  logger.warn(deprecationNotice("push"));
 
   if (project) {
     config.deployProject = project;
   }
 
   await deployFunction(logger, config);
-}
-
-async function configureLogger(lowestLevel: LogLevel) {
-  await configure({
-    sinks: {
-      console: getConsoleSink({
-        formatter: getPrettyFormatter({
-          colors: !isCI,
-          icons: !isCI,
-          properties: true,
-          timestampStyle: null,
-          levelStyle: ["bold"],
-          categoryStyle: ["italic"],
-          messageStyle: null,
-        }),
-      }),
-    },
-
-    loggers: [
-      {
-        category: ["logtape", "meta"],
-        lowestLevel: "warning",
-        sinks: ["console"],
-      },
-      {
-        category: [pkg.name],
-        lowestLevel,
-        sinks: ["console"],
-      },
-      {
-        category: ["gram", "cli"],
-        lowestLevel,
-        sinks: ["console"],
-      },
-    ],
-  });
 }
 
 export const app = buildApplication(routes, {

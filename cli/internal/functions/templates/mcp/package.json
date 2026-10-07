@@ -1,7 +1,7 @@
 {
   "type": "module",
-  "name": "gram-template-gram",
-  "version": "0.0.2",
+  "name": "gram-template-mcp",
+  "version": "0.0.0",
   "author": "",
   "description": "",
   "private": true,
@@ -20,9 +20,8 @@
   },
   "scripts": {
     "dev": "mcp-inspector --transport stdio nodemon -q --watch src --exec node --experimental-strip-types ./src/server.ts",
-    "lint": "tsc --noEmit",
-    "_:build": "gf build",
-    "push": "gf push",
+    "_:build": "speakeasy functions build",
+    "push": "speakeasy functions push",
     "prebuild": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run build"
   },

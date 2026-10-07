@@ -1,8 +1,24 @@
+import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import * as z from "zod";
 
 export const isCI = z.stringbool().catch(false).parse(process.env["CI"]);
+
+/** Config file names looked up in the project directory, in order. */
+export const CONFIG_FILE_NAMES = [
+  "gram.config.ts",
+  "gram.config.mts",
+  "gram.config.js",
+  "gram.config.mjs",
+];
+
+/** Returns the first config file that exists in dir, if any. */
+export function findConfigFile(dir: string): string | undefined {
+  return CONFIG_FILE_NAMES.map((name) => path.join(dir, name)).find((file) =>
+    existsSync(file),
+  );
+}
 
 export type UserConfig = {
   /**

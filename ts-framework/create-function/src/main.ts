@@ -59,6 +59,10 @@ async function init(argv: string[]): Promise<void> {
     return;
   }
 
+  log.warn(
+    "This scaffolder is superseded by `speakeasy functions init`, which creates the same projects. Install the CLI with `brew install speakeasy-api/tap/cli` or `npm i -g @speakeasy-api/cli`.",
+  );
+
   const template = await selectOrClack<string>({
     message: "Pick a framework",
     options: [
@@ -142,7 +146,12 @@ async function init(argv: string[]): Promise<void> {
   }
 
   let installCli = false;
-  const proc = await $`which gram`.quiet().nothrow();
+  // The project's build and push scripts run `speakeasy`, so look for the AI
+  // Control Plane CLI under that name rather than the old `gram` binary.
+  const proc =
+    await $`speakeasy --control-plane-cli 2>/dev/null | grep -qx speakeasy-ai-control-plane-cli`
+      .quiet()
+      .nothrow();
   // check exit code and decide if we should prompt
   if (proc.exitCode !== 0) {
     const res = await confirmOrClack({
@@ -163,7 +172,16 @@ async function init(argv: string[]): Promise<void> {
 
   tlog.message("Scaffolding");
   const dirname = import.meta.dirname;
-  const templateDir = resolve(join(dirname, "..", `gram-template-${template}`));
+  // The templates come from the speakeasy CLI, which embeds them; the build
+  // copies them into this package. "gram" is the CLI's "functions" template.
+  const templateDir = resolve(
+    join(
+      dirname,
+      "..",
+      "templates",
+      template === "gram" ? "functions" : template,
+    ),
+  );
   await fs.cp(templateDir, dir, {
     recursive: true,
     filter: (src) => {
@@ -249,7 +267,12 @@ async function init(argv: string[]): Promise<void> {
 
   if (installCli) {
     tlog.message("Installing Gram CLI");
-    await $`which gram || (curl -fsSL https://go.getgram.ai/cli.sh | bash; gram auth)`;
+    // A `speakeasy` on PATH may be the Speakeasy SDK generator CLI, which
+    // shares the name, so only skip the installer when the binary prints the
+    // AI Control Plane CLI marker. The installer puts the CLI in
+    // ${INSTALL_DIR:-/usr/local/bin}, so authenticate with that path rather
+    // than whatever `speakeasy` comes first on PATH.
+    await $`speakeasy --control-plane-cli 2>/dev/null | grep -qx speakeasy-ai-control-plane-cli || (curl -fsSL https://ai.speakeasy.com/cli.sh | bash && "\${INSTALL_DIR:-/usr/local/bin}/speakeasy" auth)`;
   }
 
   let successMessage = `All done! Run \`cd ${dir} && ${packageManager} run build\` to build your first Gram Function.`;

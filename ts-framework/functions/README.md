@@ -25,15 +25,24 @@ export default gram;
 
 ## Quickstart
 
-You can use one of the following command to scaffold a new Gram Function project quickly:
+Install the Speakeasy AI Control Plane CLI with
+`brew install speakeasy-api/tap/cli` or `npm i -g @speakeasy-api/cli`, then
+scaffold, build and deploy a project:
 
 ```
-pnpm create @gram-ai/function@latest --template gram
-
-## Or one of the following:
-# bun create @gram-ai/function@latest --template gram
-# npm create @gram-ai/function@latest -- --template gram
+speakeasy functions init my-tools
+cd my-tools
+speakeasy functions build
+speakeasy functions push
 ```
+
+`speakeasy functions dev` runs the project's `dev` script, which starts a local
+MCP server with the MCP Inspector. `speakeasy functions build` runs this
+package from the project's `node_modules`, so the build always matches the SDK
+version the project depends on.
+
+`npm create @gram-ai/function` and the `gf build` and `gf push` commands still
+work but are deprecated in favour of the `speakeasy functions` commands.
 
 ## Installation
 
@@ -500,6 +509,46 @@ const manifest = g.manifest();
 //   ]
 // }
 ```
+
+## Deploying
+
+Deploy with `speakeasy functions push`. It builds the project, adds the zip
+file to the deployment file (`gram.deploy.json` by default) and pushes a
+deployment. The target project is `--project` (or `GRAM_PROJECT`), then
+`deployProject` in `gram.config.ts`, then the project you chose with
+`speakeasy auth`. The slug comes from
+`--slug`, then `slug` in `gram.config.ts`, then the package.json `name`
+without its scope. Pass `--no-build` to deploy the existing build output.
+
+### Building programmatically
+
+`@gram-ai/functions/build` exports the build that `speakeasy functions build`
+runs:
+
+```typescript
+import { build, resolveProject } from "@gram-ai/functions/build";
+
+// Builds dist/gram.zip and returns the resolved project settings.
+const { project, files } = await build({ cwd: "./my-tools" });
+
+// Resolves the same settings without building.
+const settings = await resolveProject({ cwd: "./my-tools", outDir: "out" });
+```
+
+Both accept `cwd`, `configFile`, `entrypoint` and `outDir`; the last three
+override `gram.config.ts`.
+
+### Deploying with gf
+
+The deprecated `gf push` command runs the Speakeasy AI Control Plane CLI. It
+picks the CLI in this order:
+
+1. The path in the `GRAM_CLI_PATH` environment variable.
+2. `cli/bin/gram` from this repository, when `GRAM_DEV` is `1` or `true`.
+3. `speakeasy` on your `PATH`, if `speakeasy --control-plane-cli` confirms it
+   is the AI Control Plane CLI. The Speakeasy SDK generator CLI also installs
+   a `speakeasy` binary, and the SDK skips it.
+4. The legacy `gram` command.
 
 ## Handling Tool Calls
 

@@ -61,7 +61,7 @@ Runs three steps:
 ## Deploy
 
 ```bash
-gram auth
+speakeasy auth
 pnpm push
 ```
 
