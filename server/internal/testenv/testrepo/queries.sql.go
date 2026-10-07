@@ -5462,7 +5462,7 @@ func (q *Queries) SetProjectSlugFixture(ctx context.Context, arg SetProjectSlugF
 	return err
 }
 
-const setRemoteSessionIssuerOmitScopeFallbackFixture = `-- name: SetRemoteSessionIssuerOmitScopeFallbackFixture :exec
+const setRemoteSessionIssuerOmitScopeFallbackFixture = `-- name: SetRemoteSessionIssuerOmitScopeFallbackFixture :execrows
 UPDATE remote_session_issuers
 SET omit_scope_fallback = $1
 WHERE id = $2
@@ -5478,14 +5478,17 @@ type SetRemoteSessionIssuerOmitScopeFallbackFixtureParams struct {
 }
 
 // Scoped to the issuer's own tier: NULL project and organization name a global issuer.
-func (q *Queries) SetRemoteSessionIssuerOmitScopeFallbackFixture(ctx context.Context, arg SetRemoteSessionIssuerOmitScopeFallbackFixtureParams) error {
-	_, err := q.db.Exec(ctx, setRemoteSessionIssuerOmitScopeFallbackFixture,
+func (q *Queries) SetRemoteSessionIssuerOmitScopeFallbackFixture(ctx context.Context, arg SetRemoteSessionIssuerOmitScopeFallbackFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRemoteSessionIssuerOmitScopeFallbackFixture,
 		arg.OmitScopeFallback,
 		arg.ID,
 		arg.ProjectID,
 		arg.OrganizationID,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setRemoteSessionResourceFixture = `-- name: SetRemoteSessionResourceFixture :exec

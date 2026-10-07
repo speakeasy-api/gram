@@ -574,7 +574,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	})
 	require.NoError(t, err)
 	if options.omitScopeFallback {
-		require.NoError(t, testrepo.New(ti.conn).SetRemoteSessionIssuerOmitScopeFallbackFixture(ctx, testrepo.SetRemoteSessionIssuerOmitScopeFallbackFixtureParams{OmitScopeFallback: pgtype.Bool{Bool: true, Valid: true}, ID: issuer.ID, ProjectID: issuerProject, OrganizationID: issuerOrganization}))
+		n, err := testrepo.New(ti.conn).SetRemoteSessionIssuerOmitScopeFallbackFixture(ctx, testrepo.SetRemoteSessionIssuerOmitScopeFallbackFixtureParams{OmitScopeFallback: pgtype.Bool{Bool: true, Valid: true}, ID: issuer.ID, ProjectID: issuerProject, OrganizationID: issuerOrganization})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, n, "the fixture must reach the issuer it created")
 	}
 	if !options.issuerMetadataFetchedAt.IsZero() {
 		require.NoError(t, q.SetRemoteSessionIssuerMetadataTracking(ctx, repo.SetRemoteSessionIssuerMetadataTrackingParams{

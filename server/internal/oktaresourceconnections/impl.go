@@ -396,6 +396,7 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID,
 		}
 	}
 	if snap.discoverScopes {
+		var asks []remotesessions.ResourceOwnerQuery
 		for _, sv := range servers {
 			if !sv.RemoteUrl.Valid || !sv.UserSessionIssuerID.Valid {
 				continue
@@ -403,12 +404,13 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID,
 			if _, ok := snap.resources[resourceKey{projectID: sv.ProjectID, url: sv.RemoteUrl.String}]; !ok {
 				continue
 			}
-			owners, err := remotesessions.ResourceOwners(ctx, s.db, sv.ProjectID, organizationID, sv.UserSessionIssuerID.UUID, sv.RemoteUrl.String)
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "decide protected resource ownership").LogError(ctx, logger)
-			}
-			snap.owners[sv.ID] = owners
+			asks = append(asks, remotesessions.ResourceOwnerQuery{ServerID: sv.ID, ProjectID: sv.ProjectID, UserSessionIssuerID: sv.UserSessionIssuerID.UUID, Upstream: sv.RemoteUrl.String})
 		}
+		owners, err := remotesessions.ResourceOwnersForServers(ctx, s.db, organizationID, asks)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "decide protected resource ownership").LogError(ctx, logger)
+		}
+		snap.owners = owners
 	}
 	bindings, err := q.ListEMABindings(ctx, repo.ListEMABindingsParams{OrganizationID: organizationID, IssuerIds: issuerIDs})
 	if err != nil {

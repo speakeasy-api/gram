@@ -587,4 +587,20 @@ func TestResourceOwners_MatchesConnectOwnership(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, owners[owner])
 	require.False(t, owners[shared], "a sibling that derives the upstream on its own holds it")
+
+	// The batch answers per server from one listing and one attachment load,
+	// and only for projects in the caller's organization.
+	here, elsewhere := uuid.New(), uuid.New()
+	batch, err := remotesessions.ResourceOwnersForServers(ctx, fx.ti.conn, fx.orgID, []remotesessions.ResourceOwnerQuery{
+		{ServerID: here, ProjectID: fx.projectID, UserSessionIssuerID: fx.shared, Upstream: consentUpstreamA},
+		{ServerID: elsewhere, ProjectID: fx.projectID, UserSessionIssuerID: fx.shared, Upstream: consentUpstreamA},
+	})
+	require.NoError(t, err)
+	require.Equal(t, owners, batch[here])
+	require.Equal(t, owners, batch[elsewhere])
+	foreign, err := remotesessions.ResourceOwnersForServers(ctx, fx.ti.conn, "org-not-"+fx.orgID, []remotesessions.ResourceOwnerQuery{
+		{ServerID: here, ProjectID: fx.projectID, UserSessionIssuerID: fx.shared, Upstream: consentUpstreamA},
+	})
+	require.NoError(t, err)
+	require.Empty(t, foreign[here], "another organization's caller sees no clients")
 }
