@@ -16,8 +16,11 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import { PolicyMCPScopePicker } from "./PolicyMCPScopePicker";
 import { StandardPolicyEditor } from "./PolicyDetail";
 import {
+  initialPolicyMCPScopeValue,
+  policyMCPScopeComplete,
   policyMCPScopePayload,
   policyMCPScopeValue,
+  policyScopeSummary,
   type PolicyMCPScopeValue,
 } from "./policy-mcp-scope";
 
@@ -304,7 +307,7 @@ function policy(overrides: Partial<RiskPolicy> = {}): RiskPolicy {
   };
 }
 
-function renderEditor(p: RiskPolicy) {
+function renderEditor(p: RiskPolicy | null) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -359,7 +362,7 @@ describe("StandardPolicyEditor scope rows", () => {
 
     renderEditor(policy());
 
-    expect(screen.queryByText("Selected MCP servers")).toBeNull();
+    expect(screen.queryByText("Specific MCP servers")).toBeNull();
     expect(screen.getByText("Secrets")).toBeTruthy();
   });
 
@@ -376,7 +379,7 @@ describe("StandardPolicyEditor scope rows", () => {
       }),
     );
 
-    expect(screen.getByText("Selected MCP servers")).toBeTruthy();
+    expect(screen.getByText("Specific MCP servers")).toBeTruthy();
   });
 
   it("keeps the picker after a stored scope is switched back to everywhere", () => {
@@ -391,9 +394,9 @@ describe("StandardPolicyEditor scope rows", () => {
         },
       }),
     );
-    fireEvent.click(screen.getByText("Everywhere"));
+    fireEvent.click(screen.getByText("Client sessions"));
 
-    expect(screen.getByText("Selected MCP servers")).toBeTruthy();
+    expect(screen.getByText("Specific MCP servers")).toBeTruthy();
   });
 
   it("shows a hint instead of an empty card when the picker is hidden and no detector is enabled", () => {
@@ -401,7 +404,7 @@ describe("StandardPolicyEditor scope rows", () => {
 
     renderEditor(policy({ sources: [], customRuleIds: [] }));
 
-    expect(screen.queryByText("Selected MCP servers")).toBeNull();
+    expect(screen.queryByText("Specific MCP servers")).toBeNull();
     expect(
       screen.getByText("Scope options appear here once you enable a detector."),
     ).toBeTruthy();
@@ -410,7 +413,7 @@ describe("StandardPolicyEditor scope rows", () => {
   it("keeps the picker for an in-progress MCP draft when the flag becomes unavailable", async () => {
     renderEditor(policy({ sources: ["gitleaks"] }));
 
-    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(screen.getByText("Specific MCP servers"));
     mocks.flagResult.mockReturnValue({ status: "error" });
     // Any picker edit re-renders the step under the now-unavailable flag.
     const server = screen.getByRole("checkbox", { name: "Support MCP" });
@@ -434,7 +437,7 @@ describe("StandardPolicyEditor scope rows", () => {
     );
 
     mocks.step = "action";
-    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(screen.getByText("Specific MCP servers"));
 
     expect(screen.getByTestId("selected-policy-action").textContent).toBe(
       "block",
@@ -465,7 +468,7 @@ describe("StandardPolicyEditor scope rows", () => {
   it("shows MCP-only columns without disabling response inspection", () => {
     renderEditor(policy());
 
-    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(screen.getByText("Specific MCP servers"));
 
     expect(
       screen.getAllByLabelText("User is not part of an MCP call").length,
@@ -500,7 +503,7 @@ describe("StandardPolicyEditor scope rows", () => {
       screen.queryByRole("checkbox", { name: /^Account identity:/ }),
     ).toBeNull();
 
-    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(screen.getByText("Specific MCP servers"));
     expect(
       screen.getByText("Inspection surfaces do not apply to this detector."),
     ).toBeTruthy();
@@ -512,7 +515,7 @@ describe("StandardPolicyEditor scope rows", () => {
   it("keeps a server in scope as a wildcard when its last tool is unchecked", async () => {
     renderEditor(policy({ sources: ["gitleaks"] }));
 
-    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(screen.getByText("Specific MCP servers"));
     const server = screen.getByRole("checkbox", { name: "Support MCP" });
     fireEvent.click(server);
     await waitFor(() => {
@@ -543,7 +546,7 @@ describe("StandardPolicyEditor scope rows", () => {
   it("drops a rule-mode server when its sole rule-matching tool is unchecked, instead of wildcarding", async () => {
     renderEditor(policy({ sources: ["gitleaks"] }));
 
-    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(screen.getByText("Specific MCP servers"));
     fireEvent.click(
       screen.getByRole("button", { name: "Tool rule: All tools" }),
     );
@@ -580,7 +583,7 @@ describe("StandardPolicyEditor scope rows", () => {
   it("drops a custom-selection server when its last tool is unchecked while a top-level rule is set, instead of saving a tool list the backend rejects", async () => {
     renderEditor(policy({ sources: ["gitleaks"] }));
 
-    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(screen.getByText("Specific MCP servers"));
     fireEvent.click(
       screen.getByRole("button", { name: "Tool rule: All tools" }),
     );
@@ -627,7 +630,7 @@ describe("StandardPolicyEditor scope rows", () => {
       }),
     );
 
-    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(screen.getByText("Specific MCP servers"));
 
     expect(
       screen
@@ -641,7 +644,7 @@ describe("StandardPolicyEditor scope rows", () => {
   it("keeps the pane on the deselected server so its tools stay pickable", async () => {
     renderEditor(policy({ sources: ["gitleaks"] }));
 
-    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(screen.getByText("Specific MCP servers"));
     const server = screen.getByRole("checkbox", { name: "Support MCP" });
     fireEvent.click(server);
     await waitFor(() => {
@@ -671,15 +674,15 @@ describe("StandardPolicyEditor scope rows", () => {
   it("preserves server selection across mode switches", async () => {
     renderEditor(policy({ sources: ["gitleaks"] }));
 
-    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(screen.getByText("Specific MCP servers"));
     const server = screen.getByRole("checkbox", { name: "Support MCP" });
     fireEvent.click(server);
     await waitFor(() => {
       expect(server.getAttribute("aria-checked")).toBe("true");
     });
 
-    fireEvent.click(screen.getByText("Everywhere"));
-    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(screen.getByText("Client sessions"));
+    fireEvent.click(screen.getByText("Specific MCP servers"));
     expect(
       screen
         .getByRole("checkbox", { name: "Support MCP" })
@@ -700,16 +703,16 @@ describe("StandardPolicyEditor scope rows", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: "CEL" })[0]!);
     expect(screen.getByText(expression)).toBeTruthy();
-    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(screen.getByText("Specific MCP servers"));
     expect(screen.queryByText(expression)).toBeNull();
-    fireEvent.click(screen.getByText("Everywhere"));
+    fireEvent.click(screen.getByText("Client sessions"));
     expect(screen.getByText(expression)).toBeTruthy();
   });
 
   it("configures the global annotation rule", () => {
     renderEditor(policy());
 
-    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(screen.getByText("Specific MCP servers"));
     fireEvent.click(
       screen.getByRole("button", { name: "Tool rule: All tools" }),
     );
@@ -725,12 +728,94 @@ describe("StandardPolicyEditor scope rows", () => {
   it("shows the block latency note in MCP mode", () => {
     renderEditor(policy({ action: "block" }));
 
-    fireEvent.click(screen.getByText("Selected MCP servers"));
+    fireEvent.click(screen.getByText("Specific MCP servers"));
     expect(
       screen.getByText(
         "Block runs before each matching call. Detector time adds to call latency.",
       ),
     ).toBeTruthy();
+  });
+});
+
+describe("StandardPolicyEditor scope choice", () => {
+  afterEach(cleanup);
+
+  beforeEach(() => {
+    mocks.flagResult.mockReturnValue({ status: "enabled" });
+    mocks.step = "scope";
+    vi.mocked(useSdkClient).mockReturnValue({
+      access: { listShadowMCPInventory: vi.fn() },
+    } as unknown as ReturnType<typeof useSdkClient>);
+  });
+
+  it("starts a new policy with no scope chosen and nothing else on the step", () => {
+    renderEditor(null);
+
+    expect(screen.getByRole("radio", { name: "Client sessions" })).toBeTruthy();
+    expect(
+      screen.getByRole("radio", { name: "Specific MCP servers" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Choose where this policy applies to continue."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Inspect")).toBeNull();
+    expect(screen.queryByText("Servers")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("reveals the step once Client sessions is chosen", () => {
+    renderEditor(null);
+
+    fireEvent.click(screen.getByText("Client sessions"));
+
+    expect(
+      screen.queryByText("Choose where this policy applies to continue."),
+    ).toBeNull();
+    expect(screen.queryByText("Servers")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
+  it("reveals the server picker once Specific MCP servers is chosen", () => {
+    renderEditor(null);
+
+    fireEvent.click(screen.getByText("Specific MCP servers"));
+
+    expect(screen.getByText("Servers")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Select at least one MCP server or apply the policy to all servers.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("preselects the stored scope when editing", () => {
+    renderEditor(policy());
+
+    expect(
+      screen
+        .getByRole("radio", { name: "Client sessions" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(screen.getByText("Secrets")).toBeTruthy();
+  });
+
+  it("offers only Client sessions when the flag is off and takes it for a new policy", async () => {
+    mocks.flagResult.mockReturnValue({ status: "disabled" });
+
+    renderEditor(null);
+
+    expect(screen.queryByText("Specific MCP servers")).toBeNull();
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("radio", { name: "Client sessions" })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+    });
   });
 });
 
@@ -864,7 +949,7 @@ describe("MCP scope form conversion", () => {
     });
   });
 
-  it("serializes Everywhere as no MCP scope", () => {
+  it("serializes Client sessions as no MCP scope", () => {
     const value = policyMCPScopeValue({
       allServers: true,
       toolAnnotations: ["readOnlyHint"],
@@ -872,5 +957,54 @@ describe("MCP scope form conversion", () => {
     });
 
     expect(policyMCPScopePayload({ ...value, mode: "everywhere" })).toBeNull();
+  });
+
+  it("starts a new policy unset and hydrates a stored policy to a real mode", () => {
+    const fresh = initialPolicyMCPScopeValue(null);
+    expect(fresh.mode).toBe("unset");
+    expect(policyMCPScopePayload(fresh)).toBeNull();
+    expect(policyMCPScopeComplete(fresh)).toBe(false);
+
+    expect(initialPolicyMCPScopeValue({ mcpScope: null }).mode).toBe(
+      "everywhere",
+    );
+    expect(
+      initialPolicyMCPScopeValue({
+        mcpScope: { allServers: true, toolAnnotations: [], servers: [] },
+      }).mode,
+    ).toBe("mcp");
+  });
+
+  it("reports completeness and a summary per mode", () => {
+    const base: PolicyMCPScopeValue = {
+      mode: "mcp",
+      allServers: false,
+      toolAnnotations: [],
+      servers: [],
+    };
+
+    expect(policyMCPScopeComplete({ ...base, mode: "everywhere" })).toBe(true);
+    expect(policyMCPScopeComplete(base)).toBe(false);
+    expect(policyMCPScopeComplete({ ...base, allServers: true })).toBe(true);
+    expect(
+      policyMCPScopeComplete({
+        ...base,
+        servers: [{ mcpServerId: "11111111-1111-4111-8111-111111111111" }],
+      }),
+    ).toBe(true);
+
+    expect(policyScopeSummary({ ...base, mode: "everywhere" })).toBe(
+      "Client sessions",
+    );
+    expect(policyScopeSummary({ ...base, allServers: true })).toBe(
+      "Specific MCP servers · all servers",
+    );
+    expect(
+      policyScopeSummary({
+        ...base,
+        servers: [{ mcpServerId: "11111111-1111-4111-8111-111111111111" }],
+      }),
+    ).toBe("Specific MCP servers · 1 server");
+    expect(policyScopeSummary({ ...base, mode: "unset" })).toBe("Not chosen");
   });
 });

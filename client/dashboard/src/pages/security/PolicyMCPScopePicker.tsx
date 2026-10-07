@@ -7,7 +7,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/Popover";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Text } from "@/components/ui/Text";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
@@ -375,39 +374,12 @@ export function PolicyMCPScopePicker({
         ? `${TOOL_ANNOTATIONS.find(({ value: annotation }) => annotation === value.toolAnnotations[0])?.label ?? value.toolAnnotations[0]} tools`
         : `${value.toolAnnotations.length} annotations`;
 
+  // The mode choice lives in PolicyScopeModeCards; this picker is mounted only
+  // once "Specific MCP servers" is chosen.
   return (
     <div className="space-y-6">
-      <div className="flex flex-nowrap items-center justify-between gap-4">
-        <Text small muted className="min-w-0 flex-1 text-pretty">
-          {value.mode === "everywhere"
-            ? "Every chat session and MCP tool call in this project."
-            : "Only tool calls through the servers below, checked at the gateway before the tool runs."}
-        </Text>
-        <SegmentedControl
-          value={value.mode}
-          onChange={(mode) => onChange({ ...value, mode })}
-          options={[
-            { value: "everywhere", label: "Everywhere" },
-            { value: "mcp", label: "Selected MCP servers" },
-          ]}
-          className="h-9"
-        />
-      </div>
-
-      <div
-        className={cn(
-          "grid transition-[grid-template-rows,opacity,margin] duration-[260ms] ease-[cubic-bezier(0.215,0.61,0.355,1)]",
-          value.mode === "mcp"
-            ? "grid-rows-[1fr] opacity-100"
-            : "-mt-3 grid-rows-[0fr] opacity-0",
-        )}
-      >
-        <div
-          className={cn(
-            "min-h-0",
-            ruleOpen ? "overflow-visible" : "overflow-hidden",
-          )}
-        >
+      <div>
+        <div>
           <div className="border-border border">
             <div className="bg-muted/30 border-border grid grid-cols-[minmax(220px,300px)_minmax(0,1fr)] border-b">
               <div className="border-border flex items-center justify-between border-r px-3 py-2">
