@@ -91,6 +91,9 @@ function setup() {
         onDone={(id) => {
           onDone(id);
         }}
+        // The real cadence is five seconds, which the verify test would have
+        // to either outwait or race.
+        verifyPollMs={20}
       />
     </QueryClientProvider>,
   );
@@ -208,36 +211,24 @@ describe("Provisioning a new agent", () => {
     await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
   });
 
-  it(
-    "does not count the dashboard's own use of the key as the first call",
-    { timeout: 15000 },
-    async () => {
-      // Minting the setup command authenticates with the key, so the key's
-      // access time moves before any runtime has called.
-      mocks.listKeys.mockResolvedValue({
-        keys: [
-          { id: "key_new", lastAccessedAt: new Date(Date.now() - 60_000) },
-        ],
-      });
-      fireEvent.click(await reachCredentialStep());
-      fireEvent.click(
-        await screen.findByRole("button", { name: "Continue to verification" }),
-      );
+  it("does not count the dashboard's own use of the key as the first call", async () => {
+    // Minting the setup command authenticates with the key, so the key's
+    // access time moves before any runtime has called.
+    mocks.listKeys.mockResolvedValue({
+      keys: [{ id: "key_new", lastAccessedAt: new Date(Date.now() - 60_000) }],
+    });
+    fireEvent.click(await reachCredentialStep());
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue to verification" }),
+    );
 
-      expect(
-        await screen.findByText("Waiting for the first call"),
-      ).toBeTruthy();
+    expect(await screen.findByText("Waiting for the first call")).toBeTruthy();
 
-      mocks.listKeys.mockResolvedValue({
-        keys: [
-          { id: "key_new", lastAccessedAt: new Date(Date.now() + 60_000) },
-        ],
-      });
-      expect(
-        await screen.findByText("Connected", {}, { timeout: 8000 }),
-      ).toBeTruthy();
-    },
-  );
+    mocks.listKeys.mockResolvedValue({
+      keys: [{ id: "key_new", lastAccessedAt: new Date(Date.now() + 60_000) }],
+    });
+    expect(await screen.findByText("Connected")).toBeTruthy();
+  });
 });
 
 describe("Agent scope", () => {

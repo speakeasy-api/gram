@@ -57,6 +57,7 @@ export function ProvisionWizard({
   agent,
   onDone,
   onBusy,
+  verifyPollMs = 5000,
 }: {
   /**
    * The agent being provisioned again. While creating one there is no agent:
@@ -67,6 +68,11 @@ export function ProvisionWizard({
   /** Leaves the wizard for the agent it created, or the list if it made none. */
   onDone: (agentID?: string) => void;
   onBusy?: (busy: boolean) => void;
+  /**
+   * How often the verify step re-reads the key. Only a test shortens it: at
+   * the real cadence a test either waits five seconds per tick or races one.
+   */
+  verifyPollMs?: number;
 }): JSX.Element {
   const sdk = useSdkClient();
   const organization = useOrganization();
@@ -132,10 +138,12 @@ export function ProvisionWizard({
     : scope === "project"
       ? project.id
       : undefined;
+  // Falls back to the id, not the browsed project: an agent bound to a project
+  // the caller cannot see would otherwise be labelled with the wrong one.
   const scopeName = scopedProjectID
     ? ((organization.projects ?? []).find(
         (candidate) => candidate.id === scopedProjectID,
-      )?.name ?? project.name)
+      )?.name ?? scopedProjectID)
     : organization.name;
 
   const gatewayURL = agentID ? agentGatewayURL(agentID) : "";
@@ -162,12 +170,12 @@ export function ProvisionWizard({
       }
     };
     void poll();
-    const timer = window.setInterval(() => void poll(), 5000);
+    const timer = window.setInterval(() => void poll(), verifyPollMs);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [step, agentID, verify, sdk]);
+  }, [step, agentID, verify, sdk, verifyPollMs]);
 
   const regenerate = (key: string, url: string) => {
     setMinting(true);

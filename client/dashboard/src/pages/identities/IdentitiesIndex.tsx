@@ -1227,6 +1227,8 @@ function IdentityGroup({
           they both fill, so a column is the same column in each. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-x-auto overscroll-x-contain [&_table]:overflow-visible">
         <div className="flex min-h-0 min-w-min flex-1 flex-col">
+          {/* The sortable header the reader sees. It is the one that carries
+              the controls, so the copy below it is hidden from them. */}
           <div className="[&_table]:border-b-0 [&_tbody]:hidden">
             <Table
               columns={columns}
@@ -1237,11 +1239,15 @@ function IdentityGroup({
               noResultsMessage={null}
             />
           </div>
-          <div className="border-border min-h-0 flex-1 overflow-y-auto overscroll-y-contain border-b [&_table]:border-t-0 [&_table]:border-b-0">
+          {/* The rows keep a header of their own rather than hideHeader, or a
+              screen reader would read this table's cells with no column names
+              at all. It is collapsed to nothing instead of removed: the column
+              tracks come from the grid template, so a zero-height row costs no
+              layout, where sr-only would take the cells out of the subgrid. */}
+          <div className="border-border min-h-0 flex-1 overflow-y-auto overscroll-y-contain border-b [&_table]:border-t-0 [&_table]:border-b-0 [&_thead]:h-0 [&_thead]:overflow-hidden [&_thead_th]:h-0 [&_thead_th]:overflow-hidden [&_thead_th]:border-0 [&_thead_th]:p-0">
             <Table
               columns={columns}
               data={rows.slice(0, visible)}
-              hideHeader
               hasMore={hasMore ?? visible < rows.length}
               onLoadMore={async () => {
                 await onLoadMore();

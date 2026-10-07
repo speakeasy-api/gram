@@ -101,7 +101,12 @@ export function useServerInventory(): ServerInventory {
           kind: "Toolset" as const,
         };
       })
-      .filter((toolset) => Boolean(toolset.projectSlug)),
+      // Both have to hold: the resolver returns nothing for a toolset that
+      // answers on no route, and offering one would issue a key for an
+      // endpoint the agent cannot reach.
+      .filter(
+        (toolset) => Boolean(toolset.projectSlug) && Boolean(toolset.slug),
+      ),
   ];
 
   return {

@@ -74,6 +74,15 @@ import (
 //     the tool's discovery and live authorization cannot reuse an existing
 //     member-default scope.
 //
+//   - Agent role assignment is deferred with the rest, for the same reason and
+//     not by oversight. The access API and the role dialog now take agent_ids,
+//     while Platform MCP's CreateRoleTx and UpdateRoleTx still pass
+//     AgentIds: nil, so an MCP caller editing a role cannot silently drop the
+//     agents already on it — the nil is "leave alone", not "clear". Exposing
+//     assignment before the lifecycle contract settles would let an agent grant
+//     another agent standing access, which is the one mutation here that widens
+//     authority rather than narrowing it.
+//
 // Revisit when the rollout flag is retired. Evidence that the deferred lane is
 // ready: agent:read grants are stable, the lifecycle enum is closed, and the
 // owner identity has an agreed masked wire form.
