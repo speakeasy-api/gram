@@ -52,6 +52,19 @@ func doInstallClaudeCode(c *cli.Context) error {
 				slog.String("name", info.Name),
 				slog.String("url", info.URL))
 
+			// Remove an entry an earlier release installed under the legacy
+			// default name, as the config file path below does. It usually
+			// doesn't exist, so a failure here is only logged.
+			if legacy, ok := mcp.LegacyServerName(info.Name); ok {
+				if err := mcp.RemoveViaClaudeCLI(legacy, scope); err != nil {
+					logger.DebugContext(ctx, "no legacy server to remove via claude CLI",
+						slog.String("legacy_name", legacy), slog.String("error", err.Error()))
+				} else {
+					logger.InfoContext(ctx, "removed server installed under its legacy name",
+						slog.String("legacy_name", legacy), slog.String("name", info.Name))
+				}
+			}
+
 			fmt.Printf("\n✓ Successfully installed MCP server '%s' via claude CLI\n", info.Name)
 			fmt.Printf("  URL: %s\n", info.URL)
 			fmt.Printf("  Transport: HTTP (native)\n")

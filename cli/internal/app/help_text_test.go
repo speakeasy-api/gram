@@ -2,6 +2,8 @@ package app
 
 import (
 	"bytes"
+	"io/fs"
+	"os"
 	"strings"
 	"testing"
 
@@ -59,17 +61,27 @@ func TestHelpText_HasNoGramBranding(t *testing.T) {
 	checkCommands(t, "speakeasy", app.Commands)
 }
 
+// helpInvocations returns a "--help" invocation for every command and
+// subcommand under prefix, so the rendered check follows the command tree.
+func helpInvocations(prefix []string, cmds []*cli.Command) [][]string {
+	var out [][]string
+	for _, cmd := range cmds {
+		if cmd.Name == "help" {
+			continue
+		}
+		path := append(append([]string{}, prefix...), cmd.Name)
+		out = append(out, append(append([]string{}, path...), "--help"))
+		out = append(out, helpInvocations(path, cmd.Subcommands)...)
+	}
+	return out
+}
+
 func TestHelpText_RenderedHelpHasNoGramBranding(t *testing.T) {
 	t.Parallel()
 
-	for _, args := range [][]string{
-		{"--help"},
-		{"functions", "--help"},
-		{"auth", "--help"},
-		{"install", "--help"},
-		{"stage", "--help"},
-		{"push", "--help"},
-	} {
+	invocations := append([][]string{{"--help"}}, helpInvocations(nil, newApp().Commands)...)
+	require.Greater(t, len(invocations), 10, "expected every command and subcommand to be rendered")
+	for _, args := range invocations {
 		var out bytes.Buffer
 		app := newApp()
 		app.Writer = &out
@@ -77,4 +89,9 @@ func TestHelpText_RenderedHelpHasNoGramBranding(t *testing.T) {
 		require.NoError(t, app.RunContext(t.Context(), append([]string{"speakeasy", "--profile-path", t.TempDir() + "/profile.json"}, args...)))
 		requireUnbranded(t, strings.Join(args, " "), out.String())
 	}
+
+	// Help must not have side effects: "stage function --help" used to create
+	// a deployment file in the working directory.
+	_, err := os.Stat(defaultDeployFile)
+	require.ErrorIs(t, err, fs.ErrNotExist, "rendering help created %s", defaultDeployFile)
 }

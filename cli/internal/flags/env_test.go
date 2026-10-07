@@ -1,6 +1,7 @@
 package flags
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -88,3 +89,20 @@ func TestApplyLegacyEnv(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyLegacyEnv_SetterError(t *testing.T) {
+	t.Parallel()
+
+	env := map[string]string{"GRAM_API_KEY": "old"}
+	notice, err := ApplyLegacyEnv(
+		func(key string) (string, bool) {
+			v, ok := env[key]
+			return v, ok
+		},
+		func(string, string) error { return errSetenv },
+	)
+	require.ErrorIs(t, err, errSetenv)
+	require.Empty(t, notice)
+}
+
+var errSetenv = errors.New("setenv failed")

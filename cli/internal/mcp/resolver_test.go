@@ -19,4 +19,11 @@ func TestLegacyServerName(t *testing.T) {
 
 	_, ok = LegacyServerName("my-toolset")
 	require.False(t, ok)
+
+	// A URL-derived name that only starts with the default never maps, so
+	// installing it can't remove an unrelated gram-mcp-* entry.
+	for _, name := range []string{DefaultServerName + "-foo", DefaultServerName + "-server-2"} {
+		_, ok = LegacyServerName(name)
+		require.False(t, ok, name)
+	}
 }

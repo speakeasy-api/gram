@@ -225,8 +225,13 @@ func stageConfigFlag() *cli.PathFlag {
 }
 
 // ensureStageConfig resolves the --config deployment file, creates it when it
-// is missing and validates it otherwise.
+// is missing and validates it otherwise. It runs before the subcommand parses
+// its own flags, so it skips help requests: "stage function --help" must not
+// create a deployment file in the working directory.
 func ensureStageConfig(cCtx *cli.Context) error {
+	if helpRequested(cCtx.Args().Slice()) {
+		return nil
+	}
 	configPath := resolveDeployFile(cCtx.Path("config"), cCtx.App.ErrWriter)
 	if err := cCtx.Set("config", configPath); err != nil {
 		return fmt.Errorf("set --config: %w", err)
@@ -235,6 +240,19 @@ func ensureStageConfig(cCtx *cli.Context) error {
 		return fmt.Errorf("invalid config file %s: %w", configPath, err)
 	}
 	return nil
+}
+
+// helpRequested reports whether args ask for help rather than an action.
+func helpRequested(args []string) bool {
+	for _, arg := range args {
+		switch arg {
+		case "--help", "-h", "help", "h":
+			return true
+		case "--":
+			return false
+		}
+	}
+	return false
 }
 
 func newStageFunctionCommand() *cli.Command {
