@@ -1,5 +1,50 @@
 # dashboard
 
+## 0.132.0
+
+### Minor Changes
+
+- 396924e: The MCP server Team Access tab gains a Check access section: pick an organization member to see whether they can connect to, view, and manage the server, and which rules decide it. The new `access.explainResourceAccess` endpoint returns the decision from the same evaluation as runtime enforcement, naming each rule's source, whether it is blocked or overridden, and the directory role mapping behind a role for organization admins.
+- 36a200f: Assistants have an Identity tab. An assistant without an agent identity can be set up from it, either with a new agent you name or with an existing agent of the project that you own or can authorize. The tab links to the assigned agent. Deleting an assistant withdraws its trigger workload identities and leaves its agent in place, to be managed like any other agent. The upgrade endpoint and the Platform MCP upgrade tool accept the same agent choice.
+- 1a1da25: Add dedicated `assistant:read` and `assistant:write` permissions. Grants can cover every assistant, every assistant in selected projects, or a single assistant, and agent policies can hold them too. Admins keep full assistant access and members keep read access by default; `project:*` grants no longer open assistants.
+- c5f5fd1: Persist Claude Tag message participants independently of session ownership, resolve them through the Slack directory, and show their session rollup. Recognize standing-owner deliveries and retain Claude Tag classification across ambiguous source reports. Persist and display parent/subagent relationships and Slack channels. Detect nonce-prefixed channel wake deliveries regardless of the reported source.
+- 53c0436: Move the dashboard to the active organization's own host. When `auth.info` reports that the active organization lives on a different platform host, the dashboard replaces the page with the same path, query, and hash on that host, where the user signs in once. Each tab moves to a given host at most once, so hosts can never bounce a tab back and forth, and support or impersonation sessions never move.
+- 7f4e1c9: Moving to your organization's own host no longer asks you to sign in again. When your organization lives on a different platform host from the one you are using, the dashboard and the login page now hand your session over to that host and open the same page there. If the hand-over cannot finish, you land on that host's sign-in page instead of an error. Organizations without a recorded host stay where they are.
+- 136ac53: Clicking a Risk Events row opens a detail drawer for every finding kind, including MCP findings. For MCP findings it shows the call path, and with chat:read the full scanned tool-call payload with each finding highlighted in place. Payload reveals are audited.
+
+### Patch Changes
+
+- 23d750a: Agent network allowlists now list both platform hosts, `app.getgram.ai` and `ai.speakeasy.com` (`dev.getgram.ai` and `dev.ai.speakeasy.com` on dev), on whichever host you open the setup page from. Published plugins send to the server URL from their last publish, so an allowlist with both hosts keeps working when the server URL changes and plugins republish.
+- 315511f: The Okta connection form accepts a pasted Admin Console address, and the Okta setup instructions match the current Admin Console, including each server's issuer for enabling Cross App Access.
+- 80e692a: Link MCP overview tools to filtered logs
+- 2eace0c: `https://ai.speakeasy.com/cli.sh` and `/cli.ps1` now redirect to the CLI install scripts, so `curl -fsSL https://ai.speakeasy.com/cli.sh | bash` works. Before, those paths returned the dashboard page.
+- 8f0a3c2: Explore has a Dashboards tab. A dashboard lays saved widgets out on a 12-column grid for everyone in the project:
+  
+  - Any member makes one and adds the project's saved widgets to it; the same widget may be placed more than once, and editing it changes it on every dashboard it is on.
+  - Its creator, or anyone with write access to the project, drags cards by their header and resizes them by their corner. Each move is saved as it lands.
+  - A dashboard can be renamed, duplicated (which copies its widgets too) and deleted from its page or the list; a card opens its question in Explore.
+- 668278c: Fix the gateway "Installation page" link showing "Server Not Found". Gateways with private network access enabled now render their public install page, and a gateway on a custom domain opens its install page on the Gram host you are signed in to, with the custom-domain URL in the instructions.
+- fd3148b: Switching between Dashboard and Headless no longer leaves a band of frozen starfield streaks along the right edge of the Headless page, or an empty strip beside its scrollbar, and the switch animation now lays its two cards out within the visible viewport instead of off the bottom of a long dashboard page.
+- 261c304: Show `speakeasy` instead of `gram` in the CLI commands for OpenAPI uploads.
+- 261c304: Show the `speakeasy functions` commands in the Gram Functions getting started steps.
+- 33867cc: Opening an MCP install page (`/mcp/<slug>/install`) while already signed in now loads the page instead of landing on the organization's home page. The login return target for that page is server-rendered, and the dashboard was routing to it client-side.
+- bd3827f: Simplify the Okta identity provider page. On the Cross App Access tab the setup checklist collapses to a single line once every step is complete, the server list gets its own "Server connections" heading, and the explanatory copy is shorter and sits next to the thing it describes. The Setup tab drops its checklist heading, a checklist you expand or collapse stays that way when you switch tabs, and the page intro is reworded.
+- 4fab2ab: Returning to the old dashboard host in the same tab moves you to your organization's host again. The guard that stops a redirect loop now lasts 15 seconds instead of the life of the tab.
+- e150a29: The tunneled MCP setup no longer shows a CLI tab. Its `gram tunnel run` command never existed. Run the tunnel agent with the Kubernetes or Docker snippet instead.
+- b083989: The Widgets tab can draw each widget as a card. A List | Cards toggle switches views and is kept in the URL. Each card has the same actions as its row and runs its query only once it scrolls into view. Above the cards sits the dashboard's shared filter bar, offering only the fields (user, agent, model, MCP server, status) some widget can be filtered by:
+  
+  - Each card keeps its own saved window until a date range is picked.
+  - A card opens in Explore as the question it ran.
+- c1cef83: Widgets and Explore now use the dashboard's date presets (15 minutes to 90 days), and Explore's Window control is the dashboard's date picker. Widgets saved with "24h" still open, as "1d". A page that places widgets uses the shared filter bar, configured to show only the catalog fields it names, and every widget on it answers within that bar:
+  
+  - The page's date range replaces each widget's own window, and the buckets follow it.
+  - Page filters are ANDed with each widget's own filters, and a card names any page filter its dataset cannot apply.
+  - Dragging across a time chart narrows the page.
+  
+  Open in Explore shows exactly what the card showed.
+- 1fd4e0b: The Widgets tab says where each widget is used. A Dashboards column counts the dashboards a widget is on and names them on hover; saving edits to a widget that is on dashboards says so beside Save, since its card changes on each of them; and deleting one names the dashboards its card leaves.
+- 24e7b01: A widget can be drawn on its own, outside Explore: it runs its own query, names itself, links back into Explore with exactly its query, and says why when it no longer works instead of showing stale or empty numbers.
+
 ## 0.131.0
 
 ### Minor Changes

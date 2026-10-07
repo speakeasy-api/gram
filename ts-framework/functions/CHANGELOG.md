@@ -1,5 +1,16 @@
 # @gram-ai/functions
 
+## 0.19.0
+
+### Minor Changes
+
+- 261c304: Add `build` and `resolveProject` to `@gram-ai/functions/build`, which `speakeasy functions build` and `speakeasy functions push` use to build a project with the SDK version it depends on. `gf build` and `gf push` keep working and now print a notice that points to the `speakeasy functions` commands. Project templates now run `speakeasy functions build` and `speakeasy functions push`.
+
+### Patch Changes
+
+- 261c304: Deploy with the renamed `speakeasy` CLI. The SDK uses `GRAM_CLI_PATH` when it is set, then the local `cli/bin/gram` build under `GRAM_DEV`, then `speakeasy` only when `speakeasy --control-plane-cli` confirms it is the AI Control Plane CLI and not the SDK generator, then `gram`. When none is found, the error lists the install commands.
+- 261c304: `gf push` no longer forces the CLI to deploy to `http://localhost:8080`. The CLI now picks the API URL from `--api-url`, `GRAM_API_URL` or your `speakeasy auth` profile, so deploys go to the server you are logged in to.
+
 ## 0.18.3
 
 ### Patch Changes
