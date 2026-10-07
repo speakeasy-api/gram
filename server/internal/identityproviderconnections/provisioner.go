@@ -990,6 +990,17 @@ type SwitchAuthMethodParams struct {
 	// Actor is the administrator recorded on the client's audit entry.
 	Actor            urn.Principal
 	ActorDisplayName *string
+
+	// Record writes the caller's audit entry inside the switch transaction.
+	Record func(ctx context.Context, dbtx pgx.Tx, client *ManagedClient) error
+}
+
+// record runs the caller's audit hook, when set, before the switch commits.
+func (params SwitchAuthMethodParams) record(ctx context.Context, dbtx pgx.Tx, client *ManagedClient) error {
+	if params.Record == nil {
+		return nil
+	}
+	return params.Record(ctx, dbtx, client)
 }
 
 // SwitchAuthMethod changes how a connection's client authenticates while its
@@ -1066,6 +1077,9 @@ func (p *Provisioner) switchToSecret(ctx context.Context, params SwitchAuthMetho
 		return nil, err
 	}
 	if existing.AuthMethod == remotesessions.TokenEndpointAuthMethodBasic {
+		if err := params.record(ctx, dbtx, existing); err != nil {
+			return nil, err
+		}
 		if err := dbtx.Commit(ctx); err != nil {
 			return nil, fmt.Errorf("commit method switch transaction: %w", err)
 		}
@@ -1087,11 +1101,7 @@ func (p *Provisioner) switchToSecret(ctx context.Context, params SwitchAuthMetho
 	if err := p.logClientUpdate(ctx, dbtx, params.OrganizationID, params.Actor, params.ActorDisplayName, row.RemoteSessionClient, updated); err != nil {
 		return nil, err
 	}
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit method switch transaction: %w", err)
-	}
-
-	return &ManagedClient{
+	switched := &ManagedClient{
 		ClientRowID:           updated.ID,
 		ClientID:              updated.ClientID,
 		IssuerID:              updated.RemoteSessionIssuerID,
@@ -1103,7 +1113,14 @@ func (p *Provisioner) switchToSecret(ctx context.Context, params SwitchAuthMetho
 		ActiveKid:             "",
 		ActivatedAt:           time.Time{},
 		JSONWebKeySetURL:      "",
-	}, nil
+	}
+	if err := params.record(ctx, dbtx, switched); err != nil {
+		return nil, err
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit method switch transaction: %w", err)
+	}
+	return switched, nil
 }
 
 func (p *Provisioner) switchToKeySet(ctx context.Context, params SwitchAuthMethodParams) (*ManagedClient, error) {
@@ -1145,13 +1162,37 @@ func (p *Provisioner) switchToKeySet(ctx context.Context, params SwitchAuthMetho
 	client, err := p.switchToKeySetRows(ctx, params, signer, created)
 	if err != nil {
 		p.abandonKey(ctx, logger, kms, params.ConnectionID, created.key, signer, err)
+		if errors.Is(err, errAlreadyOnMethod) {
+			return client, nil
+		}
 		return nil, err
 	}
 	return client, nil
 }
 
-// errNoParkedKeySet sends a switch to private_key_jwt down the minting path.
-var errNoParkedKeySet = errors.New("identityproviderconnections: no parked key set")
+var (
+	// errNoParkedKeySet sends a switch to private_key_jwt down the minting path.
+	errNoParkedKeySet = errors.New("identityproviderconnections: no parked key set")
+
+	// errAlreadyOnMethod reports that a concurrent switch already landed the
+	// requested method; the caller discards any key it minted and succeeds.
+	errAlreadyOnMethod = errors.New("identityproviderconnections: client is already on the requested method")
+)
+
+// finishAlreadySwitched records the listing mode and audit for a switch a
+// concurrent request already applied, and commits.
+func (p *Provisioner) finishAlreadySwitched(ctx context.Context, dbtx pgx.Tx, tq *repo.Queries, params SwitchAuthMethodParams, existing *ManagedClient) error {
+	if err := p.setListingMode(ctx, tq, params); err != nil {
+		return err
+	}
+	if err := params.record(ctx, dbtx, existing); err != nil {
+		return err
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit method switch transaction: %w", err)
+	}
+	return nil
+}
 
 // reattachParkedKeySet points the client back at its parked key set.
 func (p *Provisioner) reattachParkedKeySet(ctx context.Context, params SwitchAuthMethodParams) (*ManagedClient, error) {
@@ -1166,8 +1207,11 @@ func (p *Provisioner) reattachParkedKeySet(ctx context.Context, params SwitchAut
 	if err != nil {
 		return nil, err
 	}
-	if existing.AuthMethod != remotesessions.TokenEndpointAuthMethodBasic {
-		return nil, ErrAuthMethodMismatch
+	if existing.AuthMethod == remotesessions.TokenEndpointAuthMethodPrivateKeyJWT {
+		if err := p.finishAlreadySwitched(ctx, dbtx, tq, params, existing); err != nil {
+			return nil, err
+		}
+		return existing, nil
 	}
 	parked, err := tq.ListParkedConnectionKeySets(ctx, repo.ListParkedConnectionKeySetsParams{
 		OrganizationID:               params.OrganizationID,
@@ -1202,6 +1246,9 @@ func (p *Provisioner) reattachParkedKeySet(ctx context.Context, params SwitchAut
 
 	reattached, err := p.lookupManagedClient(ctx, tq, params.OrganizationID, params.ConnectionID)
 	if err != nil {
+		return nil, err
+	}
+	if err := params.record(ctx, dbtx, reattached); err != nil {
 		return nil, err
 	}
 	if err := dbtx.Commit(ctx); err != nil {
@@ -1249,6 +1296,16 @@ func (p *Provisioner) retireParkedKeySets(ctx context.Context, dbtx pgx.Tx, orga
 	jq := jwksrepo.New(dbtx)
 	var revoked []jwksrepo.JsonWebKey
 	for _, set := range parked {
+		attached, err := repo.New(dbtx).KeySetAttached(ctx, repo.KeySetAttachedParams{
+			OrganizationID:  conv.ToPGText(organizationID),
+			JsonWebKeySetID: conv.ToNullUUID(set.ID),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("recheck parked key set: %w", err)
+		}
+		if attached {
+			continue
+		}
 		live, err := jq.ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{
 			JsonWebKeySetID: set.ID,
 			OrganizationID:  organizationID,
@@ -1313,11 +1370,8 @@ func (p *Provisioner) switchListingOnly(ctx context.Context, params SwitchAuthMe
 	if existing.AuthMethod != params.AuthMethod {
 		return nil, ErrAuthMethodMismatch
 	}
-	if err := p.setListingMode(ctx, tq, params); err != nil {
+	if err := p.finishAlreadySwitched(ctx, dbtx, tq, params, existing); err != nil {
 		return nil, err
-	}
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("commit method switch transaction: %w", err)
 	}
 	return existing, nil
 }
@@ -1334,8 +1388,11 @@ func (p *Provisioner) switchToKeySetRows(ctx context.Context, params SwitchAuthM
 	if err != nil {
 		return nil, err
 	}
-	if existing.AuthMethod != remotesessions.TokenEndpointAuthMethodBasic {
-		return nil, ErrAuthMethodMismatch
+	if existing.AuthMethod == remotesessions.TokenEndpointAuthMethodPrivateKeyJWT {
+		if err := p.finishAlreadySwitched(ctx, dbtx, tq, params, existing); err != nil {
+			return nil, err
+		}
+		return existing, errAlreadyOnMethod
 	}
 
 	connectionName := providerDisplayNames[params.Provider] + " connection " + params.ConnectionID.String()
@@ -1405,12 +1462,7 @@ func (p *Provisioner) switchToKeySetRows(ctx context.Context, params SwitchAuthM
 	if err := p.logClientUpdate(ctx, dbtx, params.OrganizationID, params.Actor, params.ActorDisplayName, row.RemoteSessionClient, updated); err != nil {
 		return nil, err
 	}
-
-	if err := commitPublication(ctx, dbtx, params.OrganizationID); err != nil {
-		return nil, err
-	}
-
-	return &ManagedClient{
+	switched := &ManagedClient{
 		ClientRowID:           updated.ID,
 		ClientID:              updated.ClientID,
 		IssuerID:              updated.RemoteSessionIssuerID,
@@ -1422,7 +1474,15 @@ func (p *Provisioner) switchToKeySetRows(ctx context.Context, params SwitchAuthM
 		ActiveKid:             key.Kid,
 		ActivatedAt:           key.ActivatedAt.Time,
 		JSONWebKeySetURL:      remotesessions.ClientJSONWebKeySetURL(p.cfg.ServerURL, updated.ID),
-	}, nil
+	}
+	if err := params.record(ctx, dbtx, switched); err != nil {
+		return nil, err
+	}
+
+	if err := commitPublication(ctx, dbtx, params.OrganizationID); err != nil {
+		return nil, err
+	}
+	return switched, nil
 }
 
 // logClientUpdate audits a managed client change; the snapshots carry no secret.

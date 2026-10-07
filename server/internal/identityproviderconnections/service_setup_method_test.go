@@ -224,3 +224,47 @@ func TestSetSetupMethod_OtherOrganizationCannotSwitch(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.TokenEndpointAuthMethodBasic, managed.AuthMethod)
 }
+
+func TestSetSetupMethod_ConcurrentSwitchesAllSucceed(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+
+	created := createOINConnection(t, ctx, si)
+	const switches = 4
+	errs := make(chan error, switches)
+	for range switches {
+		go func() {
+			_, err := setSetupMethod(ctx, si, created.ID, identityproviderconnections.ListingModeCustomApp)
+			errs <- err
+		}()
+	}
+	for range switches {
+		require.NoError(t, <-errs)
+	}
+
+	managed, err := si.provisioner.GetManagedClient(ctx, si.orgID, mustParseUUID(t, created.ID))
+	require.NoError(t, err)
+	require.Equal(t, remotesessions.TokenEndpointAuthMethodPrivateKeyJWT, managed.AuthMethod)
+	require.Contains(t, managedJWKS(t, ctx, si, managed), managed.ActiveKid)
+
+	submitted := submitClientID(t, ctx, si, created.ID)
+	require.Equal(t, identityproviderconnections.StatusVerified, submitted.Status)
+}
+
+func TestRetireParkedKeySets_LeavesAnAttachedSet(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+
+	created := createConnection(t, ctx, si, fullOrgURL)
+	_, err := setSetupMethod(ctx, si, created.ID, identityproviderconnections.ListingModeOIN)
+	require.NoError(t, err)
+	_, err = setSetupMethod(ctx, si, created.ID, identityproviderconnections.ListingModeCustomApp)
+	require.NoError(t, err)
+	managed, err := si.provisioner.GetManagedClient(ctx, si.orgID, mustParseUUID(t, created.ID))
+	require.NoError(t, err)
+
+	retired, err := si.provisioner.RetireParkedKeySets(ctx, si.orgID, mustParseUUID(t, created.ID))
+	require.NoError(t, err)
+	require.Zero(t, retired)
+	requireKeySetLive(t, ctx, si, managed.JSONWebKeySetID.UUID, true)
+}

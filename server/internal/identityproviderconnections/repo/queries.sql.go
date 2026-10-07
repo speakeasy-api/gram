@@ -708,6 +708,30 @@ func (q *Queries) GetPlatformGcpIamCredentialForProvisioning(ctx context.Context
 	return i, err
 }
 
+const keySetAttached = `-- name: KeySetAttached :one
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_clients
+  WHERE organization_id = $1
+    AND json_web_key_set_id = $2
+    AND deleted IS FALSE
+)
+`
+
+type KeySetAttachedParams struct {
+	OrganizationID  pgtype.Text
+	JsonWebKeySetID uuid.NullUUID
+}
+
+// Rechecked after the parked set is locked: reattachment takes the same set
+// lock first, so a set seen detached here cannot be reattached before commit.
+func (q *Queries) KeySetAttached(ctx context.Context, arg KeySetAttachedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, keySetAttached, arg.OrganizationID, arg.JsonWebKeySetID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listParkedConnectionKeySets = `-- name: ListParkedConnectionKeySets :many
 SELECT s.id, s.organization_id, s.project_id, s.external_key_id, s.name, s.identity_provider_connection_id, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM json_web_key_sets AS s
