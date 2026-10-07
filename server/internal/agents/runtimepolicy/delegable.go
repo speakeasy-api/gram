@@ -148,6 +148,8 @@ func delegationFor(candidate authz.Grant, carryExclusions bool, policies ...[]au
 
 // partiallyOverridden reports whether a direct grant in policy overrides some
 // of overlap for scope at runtime, such as one tool on a blocked server.
+// liveOverlaps has already removed overlaps a direct grant fully overrides;
+// both follow authz.DirectOverrideGrants and must change with it.
 func partiallyOverridden(policy []authz.Grant, scope authz.Scope, overlap authz.Selector) bool {
 	if !authz.ExclusionYieldsToDirectGrants(scope) {
 		return false
