@@ -122,10 +122,11 @@ func delegableGrantKey(grant authz.Grant) (string, error) {
 }
 
 // delegationFor returns candidate plus, when carrying, the exclusion withdrawing
-// each live parent restriction that overlaps it. It reports false when an
-// exclusion would withdraw the whole candidate. Nothing is carried when the
+// each live parent restriction that overlaps it. Nothing is carried when the
 // exclusion scope cannot be delegated, so the candidate falls back to failing
-// containment.
+// containment. It reports false when a direct grant overrides only part of an
+// overlap: delegated policies cannot express that override, and the carried
+// exclusion would also withdraw the directly granted part.
 func delegationFor(candidate authz.Grant, carryExclusions bool, policies ...[]authz.Grant) ([]authz.Grant, bool) {
 	delegated := []authz.Grant{candidate}
 	exclusion, ok := authz.ExclusionScopeFor(candidate.Scope)
@@ -134,15 +135,33 @@ func delegationFor(candidate authz.Grant, carryExclusions bool, policies ...[]au
 	}
 	for _, policy := range policies {
 		for _, overlap := range liveOverlaps(policy, candidate, exclusion) {
-			if overlap.StrictMatches(candidate.Selector) {
+			if overlap.inherited && partiallyOverridden(policy, candidate.Scope, overlap.selector) {
 				return nil, false
 			}
-			if !slices.ContainsFunc(delegated[1:], func(existing authz.Grant) bool { return maps.Equal(existing.Selector, overlap) }) {
-				delegated = append(delegated, authz.Grant{PrincipalUrn: "", Scope: exclusion, Selector: overlap})
+			if !slices.ContainsFunc(delegated[1:], func(existing authz.Grant) bool { return maps.Equal(existing.Selector, overlap.selector) }) {
+				delegated = append(delegated, authz.Grant{PrincipalUrn: "", Scope: exclusion, Selector: overlap.selector})
 			}
 		}
 	}
 	return delegated, true
+}
+
+// partiallyOverridden reports whether a direct grant in policy overrides some
+// of overlap for scope at runtime, such as one tool on a blocked server.
+func partiallyOverridden(policy []authz.Grant, scope authz.Scope, overlap authz.Selector) bool {
+	if !authz.ExclusionYieldsToDirectGrants(scope) {
+		return false
+	}
+	for _, direct := range authz.DirectOverrideGrants(policy) {
+		if authz.IsBlocklistScope(direct.Scope) {
+			continue
+		}
+		narrowed, ok := intersectSelectors(overlap, direct.Selector)
+		if ok && authz.GrantsContainSelector([]authz.Grant{direct}, scope, narrowed) {
+			return true
+		}
+	}
+	return false
 }
 
 // DelegationContained proves that the entire delegated selector set, including
@@ -170,7 +189,7 @@ func DelegationContained(delegated DelegatedPolicy, policies ...[]authz.Grant) (
 			}
 			for _, overlap := range liveOverlaps(policy, grant, exclusion) {
 				covered := slices.ContainsFunc(grants, func(carried authz.Grant) bool {
-					return carried.Scope == exclusion && carried.Selector.StrictMatches(overlap)
+					return carried.Scope == exclusion && carried.Selector.StrictMatches(overlap.selector)
 				})
 				if !covered {
 					return false, nil
@@ -181,13 +200,20 @@ func DelegationContained(delegated DelegatedPolicy, policies ...[]authz.Grant) (
 	return true, nil
 }
 
+// liveOverlap is the part of a grant one restriction withdraws. inherited
+// marks a restriction from a role or user:all, which a direct grant outranks.
+type liveOverlap struct {
+	selector  authz.Selector
+	inherited bool
+}
+
 // liveOverlaps returns the part of grant each restriction in policy withdraws
 // at runtime. Root is deliberately not an exclusion, matching authz's
 // evaluator. A direct grant naming the restricted resource outranks
 // restrictions inherited from roles or user:all, exactly as it does at
 // runtime; the principal's own restrictions are never outranked.
-func liveOverlaps(policy []authz.Grant, grant authz.Grant, exclusion authz.Scope) []authz.Selector {
-	var overlaps []authz.Selector
+func liveOverlaps(policy []authz.Grant, grant authz.Grant, exclusion authz.Scope) []liveOverlap {
+	var overlaps []liveOverlap
 	for _, restriction := range policy {
 		if !slices.Contains(authz.ScopeImplicationClosure(restriction.Scope), exclusion) {
 			continue
@@ -196,11 +222,12 @@ func liveOverlaps(policy []authz.Grant, grant authz.Grant, exclusion authz.Scope
 		if !ok {
 			continue
 		}
-		outranked := !authz.IsDirectGrant(restriction) &&
+		inherited := !authz.IsDirectGrant(restriction)
+		outranked := inherited &&
 			authz.ExclusionYieldsToDirectGrants(grant.Scope) &&
 			authz.GrantsContainSelector(authz.DirectOverrideGrants(policy), grant.Scope, overlap)
 		if !outranked {
-			overlaps = append(overlaps, overlap)
+			overlaps = append(overlaps, liveOverlap{selector: overlap, inherited: inherited})
 		}
 	}
 	return overlaps

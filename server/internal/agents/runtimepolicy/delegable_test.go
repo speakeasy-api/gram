@@ -237,16 +237,12 @@ func TestDelegableGrantsWithExclusions(t *testing.T) {
 		{"own restriction narrows the wildcard", []authz.Grant{roleAllow, ownBlock}, true, false},
 		{"direct grant outranks inherited restriction", []authz.Grant{roleAllow, roleBlock, direct}, true, true},
 		{"own restriction is never outranked", []authz.Grant{roleAllow, roleBlock, direct, ownBlock}, true, false},
-		{"restriction covering the wildcard removes it", []authz.Grant{roleAllow, roleBlockAll}, false, false},
+		{"restriction covering the wildcard withdraws it", []authz.Grant{roleAllow, roleBlockAll}, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			grants, err := DelegableGrantsWithExclusions([]authz.Grant{wildcard}, []authz.Grant{roleAllow}, tc.caller)
 			require.NoError(t, err)
-			if !tc.connectsOther {
-				require.Empty(t, grants)
-				return
-			}
 			policy, err := NewDelegatedPolicy(CurrentDelegatedPolicyVersion, grants)
 			require.NoError(t, err)
 			contained, err := DelegationContained(policy, []authz.Grant{wildcard}, []authz.Grant{roleAllow}, tc.caller)
@@ -256,6 +252,52 @@ func TestDelegableGrantsWithExclusions(t *testing.T) {
 			require.Equal(t, tc.connectsBlock, connects(t, grants, blocked))
 		})
 	}
+
+	for _, dimension := range []struct{ key, blocked, other string }{
+		{authz.SelectorKeyTool, "blocked-tool", "other-tool"},
+		{authz.SelectorKeyDisposition, authz.DispositionDestructive, authz.DispositionReadOnly},
+		{authz.SelectorKeyTool, "*", ""},
+	} {
+		t.Run("restriction on "+dimension.key+" "+dimension.blocked+" narrows only that dimension", func(t *testing.T) {
+			t.Parallel()
+			block := authz.Grant{PrincipalUrn: role, Scope: authz.ScopeMCPBlockedConnect, Selector: authz.NewSelector(authz.ScopeMCPBlockedConnect, blocked)}
+			block.Selector[dimension.key] = dimension.blocked
+			grants, err := DelegableGrantsWithExclusions([]authz.Grant{wildcard}, []authz.Grant{roleAllow}, []authz.Grant{roleAllow, block})
+			require.NoError(t, err)
+			policy, err := NewDelegatedPolicy(CurrentDelegatedPolicyVersion, grants)
+			require.NoError(t, err)
+			allowed := func(value string) bool {
+				check := authz.MCPCheck(authz.ScopeMCPConnect, blocked, project)
+				if value != "" {
+					check.Dimensions[dimension.key] = value
+				}
+				ok, err := authz.GrantsAuthorize(policy.RuntimeGrants(), check)
+				require.NoError(t, err)
+				return ok
+			}
+			require.True(t, allowed(""), "server-level connect survives a dimension-scoped restriction")
+			require.False(t, allowed(dimensionValue(dimension.blocked)))
+			if dimension.other != "" {
+				require.True(t, allowed(dimension.other))
+			}
+		})
+	}
+
+	t.Run("direct grant overriding part of an inherited restriction falls back to allow-only", func(t *testing.T) {
+		t.Parallel()
+		directTool := authz.Grant{PrincipalUrn: user, Scope: authz.ScopeMCPConnect, Selector: authz.NewSelector(authz.ScopeMCPConnect, blocked)}
+		directTool.Selector[authz.SelectorKeyTool] = "direct-tool"
+		grants, err := DelegableGrantsWithExclusions([]authz.Grant{wildcard}, []authz.Grant{roleAllow}, []authz.Grant{roleAllow, roleBlock, directTool})
+		require.NoError(t, err)
+		require.False(t, connects(t, grants, other))
+		policy, err := NewDelegatedPolicy(CurrentDelegatedPolicyVersion, grants)
+		require.NoError(t, err)
+		check := authz.MCPCheck(authz.ScopeMCPConnect, blocked, project)
+		check.Dimensions[authz.SelectorKeyTool] = "direct-tool"
+		ok, err := authz.GrantsAuthorize(policy.RuntimeGrants(), check)
+		require.NoError(t, err)
+		require.True(t, ok)
+	})
 
 	t.Run("allow-only discovery still drops the overlapping wildcard", func(t *testing.T) {
 		t.Parallel()
@@ -281,4 +323,12 @@ func TestDelegableGrantsWithExclusions(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, contained)
 	})
+}
+
+// dimensionValue picks a concrete value a wildcard restriction must block.
+func dimensionValue(restricted string) string {
+	if restricted == "*" {
+		return "any-tool"
+	}
+	return restricted
 }
