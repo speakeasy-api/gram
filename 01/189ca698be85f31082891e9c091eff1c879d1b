@@ -1,0 +1,52 @@
+server/internal/networkingress/admission_test.go
+  h_9630b74bdac540 65-74
+server/cmd/gram/start_network_ingress_test.go
+  h_9630b74bdac540 31,34,59-86
+server/internal/networkingress/admission.go
+  h_9630b74bdac540 7,25,30-38,90
+server/cmd/gram/start.go
+  h_9630b74bdac540 294,297-304,1120-1125,1909-1910
+server/internal/networkingress/impl.go
+  h_9630b74bdac540 129-133
+client/dashboard/src/pages/org/PrivateNetworkSection.tsx
+  h_9630b74bdac540 24,52-112,305-306,339-340
+client/dashboard/src/pages/org/PrivateNetworkSection.test.tsx
+  h_9630b74bdac540 18-25,71-73,78-79,103,134-135,201-236
+  h_9630b74bdac540 74-77,237
+client/dashboard/src/components/mcp-server-x-sidebar-nav.tsx
+  h_9630b74bdac540 15,30,46-57,64-69,73-76,99-101,103-112,315-319,321-327,331,333-336,341-344,352,354
+  h_9630b74bdac540 58-63,70-72,102,320,328-330,345
+client/dashboard/src/hooks/usePrivateMcpServerUrls.ts
+  h_9630b74bdac540 1-76
+server/internal/networkingress/impl_test.go
+  h_9630b74bdac540 84-90
+client/dashboard/src/hooks/usePrivateMcpServerUrls.test.ts
+  h_9630b74bdac540 1-52
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 39-44
+client/dashboard/src/pages/mcp/x/tabs/settings/SettingsTab.tsx
+  h_9630b74bdac540 65
+server/internal/k8s/tailscale_network_ingress_provisioner.go
+  h_9630b74bdac540 332-340,342-344,348-350,359-361,370-372,381,388,391,410-412,421-423,432-434,454-456
+  h_9630b74bdac540 341,345-346,382-387
+server/internal/k8s/tailscale_network_ingress_provisioner_test.go
+  h_9630b74bdac540 545,547,558-571,580-583,585-587
+  h_9630b74bdac540 546
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/ServerUrlSection.tsx
+  h_9630b74bdac540 2-8,26-28,31-32,34-38,40-41,43-44,46-50,81,87,93-97,195-196,241-287
+  h_9630b74bdac540 1
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 7,19-22,123,189-190,311-335
+  h_9630b74bdac540 122,124,188,191
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "01189ca698be85f31082891e9c091eff1c879d1b",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

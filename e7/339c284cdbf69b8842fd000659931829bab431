@@ -1,0 +1,14 @@
+server/internal/otel/chrepo/agent_events_ch_test.go
+  h_9630b74bdac540 5,17,23-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e7339c284cdbf69b8842fd000659931829bab431",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

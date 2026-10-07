@@ -1,0 +1,18 @@
+server/internal/platformmcp/privacy.go
+  h_9630b74bdac540 86-88,90
+server/internal/platformmcp/descriptor_test.go
+  h_9630b74bdac540 331-361
+.changeset/platform-mcp-plugin-member-count.md
+  h_9630b74bdac540 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "5047a4410128f3e99424b1dc6d58a474be2fd8c9",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

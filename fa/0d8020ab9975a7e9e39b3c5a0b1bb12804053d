@@ -1,0 +1,14 @@
+server/Dockerfile
+  h_9630b74bdac540 5-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fa0d8020ab9975a7e9e39b3c5a0b1bb12804053d",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

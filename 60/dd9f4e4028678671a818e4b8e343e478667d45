@@ -1,0 +1,40 @@
+server/internal/background/network_ingress_reconcile_test.go
+  h_9630b74bdac540 108-142
+server/internal/networkingress/reconcile.go
+  h_9630b74bdac540 7,221-229,261-277,372-373,394-397
+  h_9630b74bdac540 278-279
+.changeset/network-ingress-cleanup-blocked.md
+  h_9630b74bdac540 1-6
+client/dashboard/src/pages/org/PrivateNetworkSection.test.tsx
+  h_9630b74bdac540 36,336-364
+server/internal/networkingress/reconcile_test.go
+  h_9630b74bdac540 184-215
+server/internal/k8s/network_ingress_provisioner.go
+  h_9630b74bdac540 30-31,41-44
+server/internal/k8s/tailscale_network_ingress_provisioner.go
+  h_9630b74bdac540 45-46,330-350,1014-1018,1021,1025-1027,1030
+server/internal/networkingress/queries.sql
+  h_9630b74bdac540 147,232-240
+  h_9630b74bdac540 241
+client/dashboard/src/pages/org/PrivateNetworkSection.tsx
+  h_9630b74bdac540 72-74,82-87,90,100-114
+  h_9630b74bdac540 88-89
+server/internal/k8s/tailscale_network_ingress_provisioner_test.go
+  h_9630b74bdac540 518-548
+server/internal/background/network_ingress_reconcile.go
+  h_9630b74bdac540 20,22-28,113-116
+  h_9630b74bdac540 21
+server/internal/networkingress/repo/queries.sql.go
+  h_9630b74bdac540 692-722,848
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "60dd9f4e4028678671a818e4b8e343e478667d45",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

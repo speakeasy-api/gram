@@ -1,0 +1,39 @@
+server/internal/mcpendpoints/address_command_test.go
+  h_9630b74bdac540 21,142-144,159-163
+server/internal/platformmcp/tool_connection_mutation_test.go
+  h_9630b74bdac540 4,8-9,13-27,48-55
+  h_9630b74bdac540 28
+server/internal/platformmcp/connection_mutation.go
+  h_9630b74bdac540 278,280-281,398-404
+  h_9630b74bdac540 279,332
+server/internal/plugins/publication_requests_test.go
+  h_9630b74bdac540 30,34,36
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 195
+server/internal/platformmcp/tool_connection_mutation.go
+  h_9630b74bdac540 58-60
+server/internal/mcpendpoints/address_command.go
+  h_9630b74bdac540 10,12,19,58,97-100,113-120,165,237-240
+  h_9630b74bdac540 121-122
+server/internal/metamcp/updatemetamcpserver_test.go
+  h_9630b74bdac540 41
+server/cmd/gram/start.go
+  h_9630b74bdac540 1547
+server/internal/mcpservers/lifecycle.go
+  h_9630b74bdac540 20,73-76
+server/internal/platformmcp/tool_connection_settings.go
+  h_9630b74bdac540 18
+server/internal/mcpservers/updatemcpserver_test.go
+  h_9630b74bdac540 45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "80c3da99a91209f73d9c4cd53337ef4bccc228db",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

@@ -1,0 +1,43 @@
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 54-55,61-62
+  h_9630b74bdac540 53
+server/internal/platformmcp/tool_list_projects.go
+  h_9630b74bdac540 17
+server/internal/platformmcp/tool_get_mcp.go
+  h_9630b74bdac540 17
+server/internal/platformmcp/tool_find_mcp.go
+  h_9630b74bdac540 17
+server/internal/platformmcp/runtime_test.go
+  h_9630b74bdac540 5,15,154-205,284,292-294,296
+  h_9630b74bdac540 282-283,295
+server/internal/platformmcp/descriptor_test.go
+  h_9630b74bdac540 12-13,241-296
+  h_9630b74bdac540 297-298
+server/internal/platformmcp/descriptor.go
+  h_9630b74bdac540 8,14-15,74-78,81-89,217-290
+  h_9630b74bdac540 90,291-292
+server/internal/platformmcp/runtime.go
+  h_9630b74bdac540 13,145,176-237
+  h_9630b74bdac540 238-239
+server/internal/platformmcp/tool_get_platform_context.go
+  h_9630b74bdac540 8-9,23-29,36-37,41-63
+  h_9630b74bdac540 30,32-35,64
+server/internal/platformmcp/tool_plugins.go
+  h_9630b74bdac540 10-11,51,69,87,98,109,139-146,148
+  h_9630b74bdac540 147
+server/internal/platformmcp/skills_integration_test.go
+  h_9630b74bdac540 546
+server/internal/platformmcp/tool_skills.go
+  h_9630b74bdac540 94,105,116,127,138,149,159,169,179,226-230
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1a0c2c7c3dc9317ba18ce568da71d32fe7d775e6",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

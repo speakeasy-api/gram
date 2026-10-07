@@ -1,0 +1,34 @@
+client/dashboard/src/pages/org/PrivateNetworkSection.test.tsx
+  h_9630b74bdac540 153,165-179,182,184-187,387,389-390,440-465
+  s_edd6cbbb5ad9c0::t_73979daa521c24 183,386,388,391
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 496,499,525-557
+  s_edd6cbbb5ad9c0::t_7f64c907b4ca94 558
+client/dashboard/src/pages/org/PrivateNetworkSection.tsx
+  h_9630b74bdac540 381,408,416,431-443,455,457-461
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 194,487-488,642
+.changeset/network-access-staff-entitlement.md
+  h_9630b74bdac540 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a473a219e8193c7af37b6d8fb7bd0d7bd9897a8b",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_edd6cbbb5ad9c0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5a32fa0f-d5e2-4f83-a958-8ac5f5d193eb",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

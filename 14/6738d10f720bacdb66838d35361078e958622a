@@ -1,0 +1,15 @@
+server/internal/adminmcp/tool_write_onboarding_test.go
+  h_9630b74bdac540 25-27,29-31,88,94-96,100,108,133-134,143-146,162,177,225,230
+  h_9630b74bdac540 28,226
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "146738d10f720bacdb66838d35361078e958622a",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

@@ -1,0 +1,100 @@
+server/internal/platformmcp/tool_data_exports.go
+  h_9630b74bdac540 179,195
+server/internal/platformmcp/descriptor.go
+  h_9630b74bdac540 52-62,64,103-106,108,154,158,161-164,212-214,223-228,230-232,266-268,276-292
+server/internal/platformmcp/tool_organization_events.go
+  h_9630b74bdac540 166,204
+server/internal/platformmcp/runtime.go
+  h_9630b74bdac540 93-94,96-98,143,235-236,238,241,248
+server/internal/platformmcp/oauthhttp_test.go
+  h_9630b74bdac540 112-119,125-133
+server/internal/platformmcp/tool_shadow_inventory.go
+  h_9630b74bdac540 22,32,44
+server/internal/platformmcp/tool_list_projects.go
+  h_9630b74bdac540 17
+server/internal/platformmcp/tool_readiness.go
+  h_9630b74bdac540 49,84
+server/internal/platformmcp/tool_create_data_export.go
+  h_9630b74bdac540 200,221
+server/internal/platformmcp/risk_mutation_controls_test.go
+  h_9630b74bdac540 440,442
+server/internal/platformmcp/tool_search_docs.go
+  h_9630b74bdac540 38,129
+server/internal/platformmcp/tool_access_role_mutations.go
+  h_9630b74bdac540 41
+server/internal/platformmcp/tool_lifecycle_visibility.go
+  h_9630b74bdac540 50,76
+server/internal/platformmcp/tool_get_mcp.go
+  h_9630b74bdac540 17
+server/internal/platformmcp/tool_get_platform_context.go
+  h_9630b74bdac540 16
+server/internal/platformmcp/tool_usage_attribution.go
+  h_9630b74bdac540 16,36,56,87
+server/internal/platformmcp/tool_catalog.go
+  h_9630b74bdac540 59,121
+server/internal/platformmcp/tool_read_doc.go
+  h_9630b74bdac540 42
+server/internal/platformmcp/setup_resources.go
+  h_9630b74bdac540 195
+server/cmd/gram/platform_mcp.go
+  h_9630b74bdac540 154,563
+server/internal/platformmcp/runtime_test.go
+  h_9630b74bdac540 90,99-101,232-247
+server/internal/platformmcp/tool_lifecycle_metadata.go
+  h_9630b74bdac540 36
+server/internal/platformmcp/tool_registration.go
+  h_9630b74bdac540 58,124
+server/internal/platformmcp/tool_diagnostics.go
+  h_9630b74bdac540 16,36,66
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 342,371,381,389,397,405,413,431,449
+server/internal/platformmcp/tool_client_admission.go
+  h_9630b74bdac540 65,70,83,102
+server/internal/platformmcp/tool_lifecycle.go
+  h_9630b74bdac540 35
+server/internal/platformmcp/tool_find_mcp.go
+  h_9630b74bdac540 17
+server/internal/platformmcp/tool_session_recall.go
+  h_9630b74bdac540 26,50,103,108
+server/internal/platformmcp/tool_plugins.go
+  h_9630b74bdac540 27,38,49,60,83
+server/internal/platformmcp/registration_integration_test.go
+  h_9630b74bdac540 9,22,26-27,39,41,62-171
+server/internal/platformmcp/descriptor_test.go
+  h_9630b74bdac540 26-28,31-34,63-64,84,86,95,152-153,169-176,179-262,348-349
+server/internal/platformmcp/tool_risk_reads.go
+  h_9630b74bdac540 32,43,54,83,160
+server/internal/platformmcp/tool_shadow_decision.go
+  h_9630b74bdac540 16,19
+server/internal/platformmcp/tool_skills.go
+  h_9630b74bdac540 73,84,95,105,115,125,135,168
+server/internal/platformmcp/tool_feedback.go
+  h_9630b74bdac540 59
+server/internal/platformmcp/tool_drilldown.go
+  h_9630b74bdac540 22,42,62,82,102,135
+server/internal/platformmcp/adapters.go
+  h_9630b74bdac540 8,92,103,106-114,134-135,139,154-155,168-176
+server/internal/platformmcp/tool_access_reads.go
+  h_9630b74bdac540 23,34,45,68
+server/internal/platformmcp/oauthhttp.go
+  h_9630b74bdac540 879,883,894-896,901
+server/internal/platformmcp/tool_onboarding_lifecycle.go
+  h_9630b74bdac540 38,47
+server/internal/platformmcp/authorization.go
+  h_9630b74bdac540 1-185
+server/internal/platformmcp/tool_recent_tool_calls.go
+  h_9630b74bdac540 214,230
+server/internal/platformmcp/tool_distribution.go
+  h_9630b74bdac540 38,92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "fe5995e5a01bf420a04f967b1f2298ad022b7148",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

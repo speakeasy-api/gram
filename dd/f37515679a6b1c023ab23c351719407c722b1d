@@ -1,0 +1,21 @@
+server/cmd/risk-pi-report/main.go
+  s_34bb055991fd9f::t_dd1cf5d3bf2c40 1156,1158
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_34bb055991fd9f::t_6d23a8d62e5337 458-460
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "ddf37515679a6b1c023ab23c351719407c722b1d",
+  "prompts": {},
+  "sessions": {
+    "s_34bb055991fd9f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7fb75c1e-7536-4618-bdda-3b9973bfb8e2",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,44 @@
+server/internal/adminmcp/authenticator.go
+  h_9630b74bdac540 1-129
+server/internal/adminmcp/oauth_authorize.go
+  h_9630b74bdac540 1-333
+server/internal/adminmcp/oauth_crypto.go
+  h_9630b74bdac540 1-22
+server/internal/adminmcp/oauth_store_integration_test.go
+  h_9630b74bdac540 1-110
+server/internal/adminmcp/oauth_authorization_store.go
+  h_9630b74bdac540 1-69
+server/internal/adminmcp/oauth.go
+  h_9630b74bdac540 1-88
+server/internal/adminmcp/oauth_clients_test.go
+  h_9630b74bdac540 1-94
+server/internal/adminmcp/oauth_authorize_test.go
+  h_9630b74bdac540 1-209
+server/internal/adminmcp/oauth_token.go
+  h_9630b74bdac540 1-234
+server/internal/adminmcp/oauth_clients.go
+  h_9630b74bdac540 1-164
+server/internal/adminmcp/oauth_token_test.go
+  h_9630b74bdac540 1-154
+server/internal/adminmcp/authenticator_test.go
+  h_9630b74bdac540 1-168
+server/internal/adminmcp/oauth_token_store.go
+  h_9630b74bdac540 1-314
+server/internal/adminmcp/runtime.go
+  h_9630b74bdac540 1-140
+server/internal/adminmcp/runtime_test.go
+  h_9630b74bdac540 1-149
+server/internal/adminmcp/tool_context.go
+  h_9630b74bdac540 1-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "96d2ef4004c1e1bcf0e0c0b2984fdbe8e60cdd2c",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

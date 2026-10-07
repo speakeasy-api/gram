@@ -1,0 +1,52 @@
+server/internal/mcp/authnchallenge_consent.go
+  h_9630b74bdac540 673,676,683
+server/internal/mcp/serveendpoint.go
+  h_9630b74bdac540 11,30-31,38,104-109,409-412,414-417,419-457,459-475
+server/internal/networkingress/telemetry.go
+  h_9630b74bdac540 1-126,128-129,131-135,137-138,140-149,151-152,154-162
+server/internal/mcp/private_oauth_authority.go
+  h_9630b74bdac540 5,7,11,15-27
+server/cmd/gram/netingress_attestor.go
+  h_9630b74bdac540 1-66,68-144
+server/internal/netingress/attestation.go
+  h_9630b74bdac540 1-170,172-347
+server/internal/mcp/authnchallenge_token.go
+  h_9630b74bdac540 314,316,323
+server/internal/netingress/telemetry_test.go
+  h_9630b74bdac540 1-41,45-78,81-139
+server/cmd/gram/start.go
+  h_9630b74bdac540 5,102-104,127-128,204-220,305-309,311-319,832-833,843-844,1257-1261,1268-1272,1572,1575,1583-1586,1595-1596,1664-1742,1851-1859,1876-1884,1941-1942,1945-1947,1949-1955,1957,1966-1967,1970-1972,1974-1980,1982
+server/internal/mcp/authnchallenge_idp_callback.go
+  h_9630b74bdac540 12,84,86,93
+server/internal/mcp/issuergate_rejected_metric_test.go
+  h_9630b74bdac540 67,73
+server/internal/netingress/attestor.go
+  h_9630b74bdac540 1-92,94-97,100-119,121-125,127-132,135-163,165-172
+server/internal/netingress/telemetry.go
+  h_9630b74bdac540 1-46
+server/internal/netingress/middleware.go
+  h_9630b74bdac540 1-130
+server/internal/mcp/mcpmetrics/metrics.go
+  h_9630b74bdac540 311
+server/internal/mcp/mcpmetrics/surface.go
+  h_9630b74bdac540 3-8,35-40,42-49
+server/internal/mcp/mcpmetrics/requestcounter.go
+  h_9630b74bdac540 34,83
+server/internal/mcp/impl.go
+  h_9630b74bdac540 25,74,108,396,400,484-486,514-567,746,857,956
+server/internal/attr/conventions.go
+  h_9630b74bdac540 288-291,1396-1423,1553
+server/internal/mcp/mcpmetrics/metrics_test.go
+  h_9630b74bdac540 8,17,206,227-249
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "bbb579e7b5db36670c49210e91d79931cbd586e3",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

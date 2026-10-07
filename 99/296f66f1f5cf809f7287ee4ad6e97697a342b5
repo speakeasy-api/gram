@@ -1,0 +1,35 @@
+server/internal/plugins/plugin_write_test.go
+  h_9630b74bdac540 25,78-97,102-118,124-141,159,161,178-182,199-215
+server/internal/plugins/queries.sql
+  h_9630b74bdac540 281-282,284
+  h_9630b74bdac540 279-280,283,285
+server/internal/shadowmcp/admission/guard.go
+  h_9630b74bdac540 11,14,32-34,150-152,236-238,430-512
+  h_9630b74bdac540 7,146-149
+server/internal/metamcp/impl.go
+  h_9630b74bdac540 378-391
+server/internal/plugins/impl.go
+  h_9630b74bdac540 945,1304,3064-3065,3069,3073-3077,3079,3092,3096,3100
+  h_9630b74bdac540 3066-3068,3070-3072,3078
+server/internal/shadowmcp/admission/guard_integration_test.go
+  h_9630b74bdac540 11,72-106
+server/internal/platformmcp/plugin_audience_mutation.go
+  h_9630b74bdac540 255-256
+server/internal/platformmcp/plugin_audience_mutation_test.go
+  h_9630b74bdac540 23
+server/internal/plugins/distribution_admission.go
+  h_9630b74bdac540 50-51
+server/internal/plugins/repo/queries.sql.go
+  h_9630b74bdac540 334-340
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "99296f66f1f5cf809f7287ee4ad6e97697a342b5",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

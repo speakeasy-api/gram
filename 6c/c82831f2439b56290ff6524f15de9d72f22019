@@ -1,0 +1,62 @@
+server/cmd/gram/start.go
+  s_6e98547094df99::t_75a68b348927d0 942
+server/internal/risk/enforcereply/inbox.go
+  s_6e98547094df99::t_47fdbfe329edb5 66-68
+server/internal/risk/scanner.go
+  s_6e98547094df99::t_75a68b348927d0 909-912
+server/internal/risk/enforcereply/setup_test.go
+  s_6e98547094df99::t_85250fb73c49af 16-18,20-21
+  s_6e98547094df99::t_734ef683824cb1 19,49
+server/internal/risk/enforcereply/dispatch.go
+  s_6e98547094df99::t_734ef683824cb1 140,144-150
+  s_6e98547094df99::t_4877d711a4405d 206-212,218-222
+  s_6e98547094df99::t_051e91269f5696 7,10,13,19,28-29,86-87,91,139,151,161-168,171,213,223,243-253
+  s_6e98547094df99::t_34bd79d51cdcc7 152
+pystreams/src/pystreams/risk/enforce_handler.py
+  s_6e98547094df99::t_47fdbfe329edb5 44,47
+server/cmd/tools/enforceload/main.go
+  s_6e98547094df99::t_75a68b348927d0 615
+server/cmd/tools/enforceproto/main.go
+  s_6e98547094df99::t_75a68b348927d0 117
+infra/proto/gram/risk/v1/presidio_enforcement.proto
+  s_6e98547094df99::t_47fdbfe329edb5 29
+infra/gen_py/gram/risk/v1/presidio_enforcement_pb2.pyi
+  s_6e98547094df99::t_a48ea51a87d7f2 11,23,35-36
+infra/gen/kcc.yaml
+  s_6e98547094df99::t_a48ea51a87d7f2 935,981
+infra/gen_py/gram/risk/v1/gitleaks_enforcement_pb2.pyi
+  s_6e98547094df99::t_a48ea51a87d7f2 9,19,29-30
+infra/proto/gram/risk/v1/gitleaks_enforcement.proto
+  s_6e98547094df99::t_47fdbfe329edb5 22
+server/internal/attr/conventions.go
+  s_6e98547094df99::t_47fdbfe329edb5 524,2181-2183
+  s_6e98547094df99::t_9e20cc68d8249f 2184
+server/internal/risk/enforcereply/dispatch_test.go
+  s_6e98547094df99::t_734ef683824cb1 14,69-75,84,104,161,215,234,262,276-278,295,318
+  s_6e98547094df99::t_2d517c3f51369e 54-66
+  s_6e98547094df99::t_ba3a3344ae80ed 10,83,115,122,249,254-261,264,267,270-275,279-294,296-310
+infra/gen/gram/risk/v1/gitleaks_enforcement.pb.go
+  s_6e98547094df99::t_d3e849aa32afee 35,154-160,163,168,173,178,183,188,193,198,203-208,274-280,326-330,343,351,355,359,363,367,371,375,379,383,386-389,397,411-412
+infra/gen/gram/risk/v1/presidio_enforcement.pb.go
+  s_6e98547094df99::t_2bac4443edf763 37,170-176,179,184,189,194,199,204,209,214,219,228-233,306-312,363-367,383-384,392,396,400,404,408,412,416,420,424,429,432-435,443,459-460
+infra/gen_py/gram/risk/v1/gitleaks_enforcement_pb2.py
+  s_6e98547094df99::t_d46ae14ba97253 28,39
+infra/gen_py/gram/risk/v1/presidio_enforcement_pb2.py
+  s_6e98547094df99::t_c064234a08eea5 28,39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "6cc82831f2439b56290ff6524f15de9d72f22019",
+  "prompts": {},
+  "sessions": {
+    "s_6e98547094df99": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a080cb-8687-7451-aa62-0997d8ac3369",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+server/internal/risk/scanner.go
+  s_d57c903c3bc12c::t_f7b56e47129e6d 427,584,618
+server/internal/background/activities/risk_analysis/category_scopes.go
+  s_d57c903c3bc12c::t_497202f1536974 116,136,201
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_d57c903c3bc12c::t_9bef4736796a61 276
+server/internal/risk/scanner_test.go
+  s_d57c903c3bc12c::t_36c7a2d7d20d67 761,767,776,797,822,832-834,840,845-846,855
+server/internal/background/activities/risk_analysis/category_scopes_test.go
+  s_d57c903c3bc12c::t_0c6b3bb40eaaca 236-238
+  s_d57c903c3bc12c::t_3755635c7d59d0 70,76,107-110,113-114,121,134,153,169,212,241,316,325,334
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "671e1fe14598d28073841107e5156d180fdd8916",
+  "prompts": {},
+  "sessions": {
+    "s_d57c903c3bc12c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db8bb333-57c1-4f55-9089-77952e65a646",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

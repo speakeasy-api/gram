@@ -1,0 +1,15 @@
+server/internal/platformmcp/registration_integration_test.go
+  h_9630b74bdac540 1306
+  h_9630b74bdac540 1303-1305,1307-1313
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5d23a00287892202d559fb1578272e4ef80abc14",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

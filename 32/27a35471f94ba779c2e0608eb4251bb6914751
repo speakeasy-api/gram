@@ -1,0 +1,104 @@
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkTrafficChart.tsx
+  h_9630b74bdac540 1-222
+server/internal/telemetry/mcp_network_traffic_test.go
+  h_9630b74bdac540 1-115
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 54-66,315-344
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 50,398-404
+server/internal/telemetry/mcp_network_traffic.go
+  h_9630b74bdac540 1-165
+server/internal/telemetry/mcp_network_traffic_internal_test.go
+  h_9630b74bdac540 1-53
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkTrafficPanel.tsx
+  h_9630b74bdac540 1-78
+server/internal/mcp/serve_meta.go
+  h_9630b74bdac540 85-88
+server/design/telemetry/design.go
+  h_9630b74bdac540 281-309,2978-3015
+  h_9630b74bdac540 3016-3017
+server/internal/demoseed/clickhouse.sql
+  h_9630b74bdac540 78-79,2425-2464
+  h_9630b74bdac540 2465
+server/internal/mcp/network_traffic.go
+  h_9630b74bdac540 1-88
+.changeset/mcp-network-traffic-graph.md
+  h_9630b74bdac540 1-8
+server/internal/mcp/serveendpoint.go
+  h_9630b74bdac540 185
+server/internal/telemetry/repo/mcp_network_traffic.go
+  h_9630b74bdac540 1-70
+seed/demo/PAGES.md
+  h_9630b74bdac540 48
+server/clickhouse/schema.sql
+  h_9630b74bdac540 1572-1601
+.speakeasy/out.openapi.yaml
+  h_9630b74bdac540 59128-59233,80764-80811,86204-86222
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  h_9630b74bdac540 626,1059-1060,1337,2086,2870-2871,6568-6578
+client/dashboard/src/sdk/src/funcs/telemetryGetMcpNetworkTraffic.ts
+  h_9630b74bdac540 1-224
+client/dashboard/src/sdk/src/models/components/getmcpnetworktrafficpayload.ts
+  h_9630b74bdac540 1-74
+client/dashboard/src/sdk/src/models/components/getmcpnetworktrafficresult.ts
+  h_9630b74bdac540 1-76
+client/dashboard/src/sdk/src/models/components/mcpnetworktrafficpoint.ts
+  h_9630b74bdac540 1-56
+client/dashboard/src/sdk/src/models/operations/getmcpnetworktraffic.ts
+  h_9630b74bdac540 1-184
+client/dashboard/src/sdk/src/react-query/getMcpNetworkTraffic.core.ts
+  h_9630b74bdac540 1-88
+client/dashboard/src/sdk/src/react-query/getMcpNetworkTraffic.ts
+  h_9630b74bdac540 1-162
+client/dashboard/src/sdk/src/sdk/telemetry.ts
+  h_9630b74bdac540 8,45,90-93,279-297
+server/clickhouse/local/golang_migrate/20260925223533_mcp-network-traffic.down.sql
+  h_9630b74bdac540 1-4
+server/clickhouse/local/golang_migrate/20260925223533_mcp-network-traffic.up.sql
+  h_9630b74bdac540 1-13
+server/clickhouse/local/golang_migrate/atlas.sum
+  h_9630b74bdac540 1,117
+server/clickhouse/migrations/20260925223526_mcp-network-traffic.sql
+  h_9630b74bdac540 1-13
+server/clickhouse/migrations/atlas.sum
+  h_9630b74bdac540 1,122
+server/gen/http/cli/gram/cli.go
+  h_9630b74bdac540 185,3460-3465,5212,7688-7690,10425-10427,25376,25625-25648
+server/gen/http/openapi3.yaml
+  h_9630b74bdac540 63386-63490,86096-86143,91795-91813
+server/gen/http/telemetry/client/cli.go
+  h_9630b74bdac540 590-642
+server/gen/http/telemetry/client/client.go
+  h_9630b74bdac540 56-59,192,443-466
+server/gen/http/telemetry/client/encode_decode.go
+  h_9630b74bdac540 2207-2449,9337-9349
+server/gen/http/telemetry/client/paths.go
+  h_9630b74bdac540 55-59
+server/gen/http/telemetry/client/types.go
+  h_9630b74bdac540 193-203,898-912,2838-3027,8402-8412,9398-9408,11991-12164,12177-12179,12192-12194,12207-12209,12222-12224,16901-16934,19757-19996,26934-26951
+server/gen/http/telemetry/server/encode_decode.go
+  h_9630b74bdac540 2167-2403,8984-8996
+server/gen/http/telemetry/server/paths.go
+  h_9630b74bdac540 55-59
+server/gen/http/telemetry/server/server.go
+  h_9630b74bdac540 31,96,133,177,220,734-786
+server/gen/http/telemetry/server/types.go
+  h_9630b74bdac540 193-203,898-912,2838-3027,8297-8307,9379-9402,11451-11600,15678-15692,17146-17165
+server/gen/telemetry/client.go
+  h_9630b74bdac540 27,57,68,301-323
+server/gen/telemetry/endpoints.go
+  h_9630b74bdac540 28,71,112,684-742
+server/gen/telemetry/service.go
+  h_9630b74bdac540 39-41,143,308-336,1393-1401
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3227a35471f94ba779c2e0608eb4251bb6914751",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

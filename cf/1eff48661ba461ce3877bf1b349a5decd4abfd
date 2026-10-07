@@ -1,0 +1,18 @@
+client/dashboard/src/contexts/AuthProvider.tsx
+  h_9630b74bdac540 318-322,324,326,385-391,412-414,418-424,427-430,437,439-442
+  h_9630b74bdac540 415-417
+client/dashboard/src/contexts/AuthProvider.test.tsx
+  h_9630b74bdac540 16-17,332-333,343,355,358-393,444-467
+  h_9630b74bdac540 468-469
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cf1eff48661ba461ce3877bf1b349a5decd4abfd",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

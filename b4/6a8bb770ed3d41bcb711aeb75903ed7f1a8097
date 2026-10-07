@@ -1,0 +1,16 @@
+server/internal/platformmcp/queries.sql
+  h_9630b74bdac540 2586-2588,2596-2613,2644-2646,2654-2671,2789-2790,2805-2806,2828-2831,2855-2860
+server/internal/platformmcp/plugins_integration_test.go
+  h_9630b74bdac540 153,155,165-167,170-171,176-185,205,217,228-236
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "b46a8bb770ed3d41bcb711aeb75903ed7f1a8097",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

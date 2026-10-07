@@ -1,0 +1,27 @@
+.agents/skills/maintaining-admin-mcp/SKILL.md
+  h_9630b74bdac540 1-26
+server/internal/adminmcp/tool_context.go
+  h_9630b74bdac540 19,30-33,38
+server/internal/adminmcp/runtime.go
+  h_9630b74bdac540 13-14,49-53,56,65-70
+  h_9630b74bdac540 54-55
+CLAUDE.md
+  h_9630b74bdac540 123-126
+server/internal/adminmcp/tool_organizations.go
+  h_9630b74bdac540 1-166
+server/internal/adminmcp/tool_organizations_test.go
+  h_9630b74bdac540 1-158
+server/internal/adminmcp/runtime_test.go
+  h_9630b74bdac540 150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "68c783baedc8bbadaa6878d92cfec190ddf9e57c",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

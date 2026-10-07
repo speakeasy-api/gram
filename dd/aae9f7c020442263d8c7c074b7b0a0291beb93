@@ -1,0 +1,24 @@
+server/internal/platformmcp/access_role_mutations_test.go
+  h_9630b74bdac540 99,101-102,104-105,112,115,120-124
+server/internal/platformmcp/access_role_mutation_receipt.go
+  h_9630b74bdac540 68-73,94-95,108,110,121,128,134,138-147
+server/internal/platformmcp/operation_budget_test.go
+  h_9630b74bdac540 37-42
+server/internal/access/role_manager_test.go
+  h_9630b74bdac540 4,114-139
+server/internal/platformmcp/access_role_mutations.go
+  h_9630b74bdac540 192,281
+server/internal/access/role_manager.go
+  h_9630b74bdac540 38,40-41,1131-1132,1137,1139
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ddaae9f7c020442263d8c7c074b7b0a0291beb93",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

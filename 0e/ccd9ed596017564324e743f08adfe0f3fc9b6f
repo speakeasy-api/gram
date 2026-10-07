@@ -1,0 +1,20 @@
+client/dashboard/src/lib/constants.ts
+  h_9630b74bdac540 7
+client/dashboard/src/components/enterprise-gate.tsx
+  h_9630b74bdac540 1,42
+client/dashboard/src/pages/org/PrivateNetworkSection.tsx
+  h_9630b74bdac540 11,166
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 27,358
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0eccd9ed596017564324e743f08adfe0f3fc9b6f",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

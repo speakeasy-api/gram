@@ -1,0 +1,20 @@
+client/dashboard/src/pages/skills/SkillFeedback.tsx
+  h_9630b74bdac540 21
+client/dashboard/src/pages/skills/SkillContent.tsx
+  h_9630b74bdac540 40
+client/dashboard/src/pages/plugins/Plugins.tsx
+  h_9630b74bdac540 784-790,792,796
+client/dashboard/src/components/platform-mcp/member-workflow-cta.test.tsx
+  h_9630b74bdac540 1-184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "60a5a8d54763564d4bd7889c957957403289c944",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

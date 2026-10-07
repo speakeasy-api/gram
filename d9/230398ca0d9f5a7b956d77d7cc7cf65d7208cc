@@ -1,0 +1,16 @@
+server/cmd/gram/private_ingress_health.go
+  h_9630b74bdac540 11,17,20-23
+server/cmd/gram/private_ingress_safety_test.go
+  h_9630b74bdac540 13,127-130,153,165-199
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d9230398ca0d9f5a7b956d77d7cc7cf65d7208cc",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

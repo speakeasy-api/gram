@@ -1,0 +1,18 @@
+server/internal/background/network_ingress_sweep.go
+  h_9630b74bdac540 76
+server/internal/networkingress/orphans_test.go
+  h_9630b74bdac540 10,41,50,100
+server/internal/networkingress/queries.sql
+  h_9630b74bdac540 256-260
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "6643bde6ab1cd48ed27ec4b37c9c02ff4e9c1d65",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

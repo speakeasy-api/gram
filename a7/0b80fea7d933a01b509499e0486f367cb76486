@@ -1,0 +1,35 @@
+server/internal/plugins/generate_test.go
+  h_9630b74bdac540 3150-3219
+server/internal/platformmcp/queries.sql
+  h_9630b74bdac540 3114-3146
+.changeset/platform-mcp-existing-servers-private-network.md
+  h_9630b74bdac540 1-7
+server/internal/platformmcp/adapters.go
+  h_9630b74bdac540 348,372
+server/internal/platformmcp/tool_network_ingress.go
+  h_9630b74bdac540 1-193
+server/cmd/gram/platform_mcp.go
+  h_9630b74bdac540 396,836
+server/internal/platformmcp/descriptor_test.go
+  h_9630b74bdac540 402,404
+server/internal/plugins/platform_mcp_skills/add-existing-mcp-servers/SKILL.md
+  h_9630b74bdac540 3,8,12,14,16-25,35,37-41,47,81,89-99,101,107,111
+  h_9630b74bdac540 15,36,100
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 213,229-233,267
+server/internal/platformmcp/tool_network_ingress_test.go
+  h_9630b74bdac540 1-173
+server/internal/platformmcp/repo/queries.sql.go
+  h_9630b74bdac540 1938-1995,2837-2860
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a70b80fea7d933a01b509499e0486f367cb76486",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

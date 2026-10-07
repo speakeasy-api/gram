@@ -1,0 +1,14 @@
+server/internal/mcpendpoints/address_command_test.go
+  h_9630b74bdac540 48,53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "27106c21a1136a2420f6ece8823f4b1847560ee5",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

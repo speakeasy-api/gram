@@ -1,0 +1,19 @@
+server/migrations/20260923183736_scope_gateway_plugin_membership.sql
+  h_9630b74bdac540 1-12
+server/database/schema.sql
+  h_9630b74bdac540 6396-6397,6412,6424-6425,6452-6453
+  h_9630b74bdac540 6454
+server/migrations/atlas.sum
+  h_9630b74bdac540 1,431
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5330150199ecfb87be32c7dd02b936fe63a4d6c5",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

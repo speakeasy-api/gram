@@ -1,0 +1,77 @@
+server/internal/adminmcp/tool_write_organization_access.go
+  h_9630b74bdac540 1-202
+server/internal/admin/impl.go
+  h_9630b74bdac540 1192,1196-1201,1203,1205-1209,1212-1218
+server/internal/adminmcp/write_guard_test.go
+  h_9630b74bdac540 46-61
+server/internal/adminmcp/write_guard.go
+  h_9630b74bdac540 89-103,110
+server/internal/adminmcp/runtime.go
+  h_9630b74bdac540 53,117-118,127,133
+.changeset/admin-mcp-guarded-configuration.md
+  h_9630b74bdac540 1-5
+server/internal/adminmcp/tool_context.go
+  h_9630b74bdac540 17,20,54,77-87,90-91
+  h_9630b74bdac540 13-16,89,92-93
+server/internal/adminmcp/tool_support_matrix_entry_test.go
+  h_9630b74bdac540 1-37
+server/internal/adminmcp/tool_write_chat_analysis.go
+  h_9630b74bdac540 1-212
+server/internal/admin/supportmatrix.go
+  h_9630b74bdac540 59-72
+server/internal/outbox/events/audit_log.go
+  h_9630b74bdac540 59
+server/internal/adminmcp/tool_write_chat_analysis_test.go
+  h_9630b74bdac540 1-214
+server/internal/adminmcp/tool_write_organization_access_test.go
+  h_9630b74bdac540 1-195
+server/internal/admin/queries.sql
+  h_9630b74bdac540 435-454
+server/internal/adminmcp/tool_write_support_matrix.go
+  h_9630b74bdac540 1-377
+server/internal/admin/organization_access_test.go
+  h_9630b74bdac540 1-40
+server/internal/adminmcp/proposal_approval.go
+  h_9630b74bdac540 61,81-86,91,105,224
+server/internal/adminmcp/tool_support_matrix_entry.go
+  h_9630b74bdac540 1-127
+server/internal/adminmcp/write_tools.go
+  h_9630b74bdac540 100,232-235,247
+  h_9630b74bdac540 99
+server/internal/audit/organizations.go
+  h_9630b74bdac540 42-43,938-990
+  h_9630b74bdac540 991-992
+server/internal/adminmcp/write_tools_test.go
+  h_9630b74bdac540 6-7,71,80-152
+server/internal/admin/organization_access.go
+  h_9630b74bdac540 1-101
+server/internal/organizations/queries.sql
+  h_9630b74bdac540 55-62
+server/internal/chatanalysis/settings_persistence.go
+  h_9630b74bdac540 37-72
+server/internal/adminmcp/tool_write_support_matrix_test.go
+  h_9630b74bdac540 1-221
+server/internal/auditapi/speakeasy_mask_test.go
+  h_9630b74bdac540 105-132
+server/internal/audit/organization_access_test.go
+  h_9630b74bdac540 1-71
+server/internal/admin/repo/queries.sql.go
+  h_9630b74bdac540 1245-1271,1384-1422
+server/internal/organizations/repo/queries.sql.go
+  h_9630b74bdac540 1348-1383
+server/internal/outbox/events/catalog_gen.go
+  h_9630b74bdac540 50
+server/internal/outbox/events/catalog_gen.yaml
+  h_9630b74bdac540 2331-2388
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cb4e1d7844e6e0155b7023e29efa60445843a879",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

@@ -1,0 +1,37 @@
+server/internal/admin/impl.go
+  h_9630b74bdac540 477-478
+  h_9630b74bdac540 479
+client/admin/vite.config.ts
+  h_9630b74bdac540 1,113-125
+  h_9630b74bdac540 126-127
+server/internal/middleware/admin_security.go
+  h_9630b74bdac540 67-72
+server/cmd/gram/admin.go
+  h_9630b74bdac540 16-17,29,33,42,105-108,111-114,488-502,601-607
+  h_9630b74bdac540 18,109-110
+server/internal/adminmcp/oauth_metadata_test.go
+  h_9630b74bdac540 1-79
+server/internal/adminmcp/oauth.go
+  h_9630b74bdac540 25,29,43-46,55,59-64
+  h_9630b74bdac540 20-24,50-54
+server/internal/middleware/logging.go
+  h_9630b74bdac540 91-94
+server/internal/middleware/admin_security_test.go
+  h_9630b74bdac540 139-167
+server/internal/middleware/logging_test.go
+  h_9630b74bdac540 37-40
+  h_9630b74bdac540 36
+server/cmd/gram/admin_mcp_test.go
+  h_9630b74bdac540 1-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b53b03597b6406d2503f3fb37f22b13e213f1b3e",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

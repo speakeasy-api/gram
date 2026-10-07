@@ -1,0 +1,21 @@
+client/dashboard/src/pages/org/OrgHome.test.tsx
+  h_9630b74bdac540 43,51,64,76-79
+  h_9630b74bdac540 80-81
+client/dashboard/src/pages/org/OrgWelcomeBanner.test.tsx
+  h_9630b74bdac540 32-42,54-71,82-84,199-207,278-302,304-328
+  h_9630b74bdac540 72,303,329-330
+client/dashboard/src/pages/org/OrgWelcomeBanner.tsx
+  h_9630b74bdac540 9-10,13-14,49-51,54,71-72,77,107-140,232-248,305-325,327
+  h_9630b74bdac540 304,326,328
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cbae026b224e486c84edf9b94499de343c57f7eb",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

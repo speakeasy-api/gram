@@ -1,0 +1,26 @@
+server/cmd/gram/start.go
+  h_9630b74bdac540 306,314,327,452,569-585,609,618-622,626,629-630,637,697,732,736-742,744,1048,1052-1055,1058-1067,1559-1569,1655,1900,1902,1975,1977,1991,1996,2015
+server/cmd/gram/private_ingress_runtime.go
+  h_9630b74bdac540 1-7,9-60,63-244
+server/cmd/gram/server_identity.go
+  h_9630b74bdac540 1-83
+server/cmd/gram/private_ingress.go
+  h_9630b74bdac540 1-263
+server/cmd/gram/mcp_runtime_deps.go
+  h_9630b74bdac540 1-50
+server/cmd/gram/mcp_service.go
+  h_9630b74bdac540 1-100
+server/cmd/gram/private_ingress_test.go
+  h_9630b74bdac540 1-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "14eb329965e9f891f6210395296442cbf2068d9b",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

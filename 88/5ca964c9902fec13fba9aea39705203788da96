@@ -1,0 +1,18 @@
+server/internal/adminmcp/oauth_clients.go
+  h_9630b74bdac540 18
+server/internal/adminmcp/oauth_token.go
+  h_9630b74bdac540 17
+server/internal/adminmcp/oauth_authorize.go
+  h_9630b74bdac540 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "885ca964c9902fec13fba9aea39705203788da96",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

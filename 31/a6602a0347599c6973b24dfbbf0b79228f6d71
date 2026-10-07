@@ -1,0 +1,48 @@
+server/internal/networkingress/impl.go
+  h_9630b74bdac540 86-91,121,126-128,131,136
+seed/demo/verify.md
+  h_9630b74bdac540 30-35
+client/dashboard/src/pages/org/PrivateNetworkSetupSheet.tsx
+  h_9630b74bdac540 1-194
+client/dashboard/src/pages/org/OrgDomains.tsx
+  h_9630b74bdac540 2,21-67,621,849-854,856-865
+client/dashboard/src/pages/mcp/x/tabs/settings/SettingsTab.tsx
+  h_9630b74bdac540 3,9,13-15,18-19,60-61,65-67
+server/internal/networkingress/impl_test.go
+  h_9630b74bdac540 48-56,161,165-172
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 1-409
+client/dashboard/src/pages/org/PrivateNetworkLifecycleDialogs.tsx
+  h_9630b74bdac540 1-196
+server/internal/networkingress/rollout_test.go
+  h_9630b74bdac540 49,54,57-64
+server/design/networkingress/design.go
+  h_9630b74bdac540 30-34,49,51
+client/dashboard/src/pages/org/PrivateNetworkSection.tsx
+  h_9630b74bdac540 1-300
+client/dashboard/src/hooks/useNetworkIngressRollout.ts
+  h_9630b74bdac540 1-20
+seed/demo/PAGES.md
+  h_9630b74bdac540 47
+.changeset/ais-607-network-access-dashboard.md
+  h_9630b74bdac540 1-6
+client/dashboard/src/pages/org/NetworkIngressCredentialsFields.tsx
+  h_9630b74bdac540 1-40
+client/dashboard/src/pages/org/PrivateNetworkSection.test.tsx
+  h_9630b74bdac540 1-176
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 1-300
+client/dashboard/src/lib/featureFlags.ts
+  h_9630b74bdac540 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "31a6602a0347599c6973b24dfbbf0b79228f6d71",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

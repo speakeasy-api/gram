@@ -1,0 +1,24 @@
+server/internal/adminmcp/tool_write_feature_test.go
+  h_9630b74bdac540 49,64,197,213
+server/internal/adminmcp/tool_write_feature_refresh_test.go
+  h_9630b74bdac540 19,36,139
+.changeset/admin-mcp-identity-entitlements.md
+  h_9630b74bdac540 1-5
+server/internal/adminmcp/tool_write_feature_entitlements_test.go
+  h_9630b74bdac540 1-177
+server/internal/adminmcp/tool_write_feature.go
+  h_9630b74bdac540 28-29,44,159,276
+server/internal/adminmcp/runtime.go
+  h_9630b74bdac540 96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3f6e901ec632638dc0366e6a221e9ac58267404d",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

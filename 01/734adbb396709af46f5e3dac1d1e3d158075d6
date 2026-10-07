@@ -1,0 +1,27 @@
+server/internal/productfeatures/productfeature_contract_test.go
+  h_9630b74bdac540 4,82-115
+  h_9630b74bdac540 116
+server/internal/admin/impl.go
+  h_9630b74bdac540 50,270-281
+  h_9630b74bdac540 30,282-283
+server/internal/productfeatures/snapshot.go
+  h_9630b74bdac540 36-47,49-58,65-67,74-75,77-78,85,88,110-111,113
+  h_9630b74bdac540 76,79-84,112
+server/internal/adminmcp/tool_configuration.go
+  h_9630b74bdac540 61,76
+server/internal/adminmcp/runtime.go
+  h_9630b74bdac540 64
+server/internal/adminmcp/tool_configuration_test.go
+  h_9630b74bdac540 26-27,59,87-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "01734adbb396709af46f5e3dac1d1e3d158075d6",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

@@ -1,0 +1,96 @@
+server/internal/remotemcp/provisioning.go
+  h_9630b74bdac540 126-128
+server/internal/usersessions/bindings/bindings.go
+  h_9630b74bdac540 18-25,27,29-59
+server/internal/remotesessions/queries.sql
+  h_9630b74bdac540 3098-3163
+server/internal/feature/flags.go
+  h_9630b74bdac540 64-71
+server/internal/remotesessions/gatewaymembercredentials.go
+  h_9630b74bdac540 1-41
+server/internal/metamcp/membercredentials.go
+  h_9630b74bdac540 1-184
+server/internal/remotesessions/impl.go
+  h_9630b74bdac540 45,87-90,140,144-147
+  s_1ba8e9c8673b38::t_a99628c7c93e6a 148-149
+.changeset/gateway-member-credentials-writers.md
+  h_9630b74bdac540 1-5
+server/internal/remotesessions/clienthandlers.go
+  h_9630b74bdac540 62-130,134,149,153,156,783-785,814
+server/internal/usersessions/organizationissuermigration.go
+  h_9630b74bdac540 465-474
+  s_c255af0f0004b5::t_aaca252ceff50b 475
+server/internal/usersessions/queries.sql
+  h_9630b74bdac540 159-190
+server/internal/metamcp/impl.go
+  h_9630b74bdac540 33,49,64-65,95,99-109,200,345,386-393,439-442,449-451,453,461-462,719-725,832,928-932,934-937,1104,1164-1165,1167-1170,1218-1223,1228-1240
+  s_02bfd552693e7b::t_47972c864df28b 443,726,1241-1242
+server/internal/metamcp/queries.sql
+  h_9630b74bdac540 462-569
+server/cmd/gram/start.go
+  h_9630b74bdac540 1699,1707
+server/internal/toolsets/set_user_session_issuer.go
+  h_9630b74bdac540 72-74
+server/internal/usersessions/organizationissuermigration_test.go
+  h_9630b74bdac540 602-650
+server/internal/metamcp/membercredentials_test.go
+  h_9630b74bdac540 1-381
+server/internal/remotesessions/globalauth.go
+  h_9630b74bdac540 48
+server/internal/mcpservers/impl.go
+  h_9630b74bdac540 220-222,805-806
+  s_972457a91e299b::t_36b81e8ef84da7 807
+server/internal/remotesessions/gatewaymembercredentials_test.go
+  h_9630b74bdac540 1-225
+server/internal/metamcp/repo/queries.sql.go
+  s_02bfd552693e7b::t_55c0652b9d9d27 15-61,114-180,569-613
+server/internal/remotesessions/repo/queries.sql.go
+  s_02bfd552693e7b::t_4f5798af2c1da0 5821-5864,5938-5992
+server/internal/usersessions/repo/queries.sql.go
+  s_02bfd552693e7b::t_b0f5933efeb8d8 5153-5175,5198-5227
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3fb43f6b168e72d88af5c5a97f0ddfa6ae8180bf",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  },
+  "sessions": {
+    "s_02bfd552693e7b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "42bb97b0-b569-42b0-8bd2-126ab2e4ef5f",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    },
+    "s_1ba8e9c8673b38": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cb8a1148-d358-4965-bb7a-5e6c6747935b",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    },
+    "s_972457a91e299b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c9cd5dc6-797e-4fd5-bde7-f48d1a775d31",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    },
+    "s_c255af0f0004b5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fbd0cf95-e3c4-4e75-9cc5-9d90bc0dc5dc",
+        "model": "unknown"
+      },
+      "human_author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

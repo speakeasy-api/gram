@@ -1,0 +1,38 @@
+server/internal/toolsets/impl.go
+  h_9630b74bdac540 469-476,522-523,740-749,776-777
+server/internal/mcpendpoints/address_command.go
+  h_9630b74bdac540 72-74,197-199
+server/internal/toolsets/hosted_network_access_test.go
+  h_9630b74bdac540 16,22,138-139,141,147-215,225-228
+  h_9630b74bdac540 216-217
+server/internal/mcpendpoints/address_command_test.go
+  h_9630b74bdac540 19,24-78
+server/internal/toolsets/hosted_network_access.go
+  h_9630b74bdac540 24-45,156,180-183,186
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 40-43,58-63,203,225,228,231,236-245,348-351,356,362,378,381-407
+server/internal/platformmcp/connection_mutation.go
+  h_9630b74bdac540 26,34,240-250,252
+  h_9630b74bdac540 251
+server/internal/plugins/platform_mcp_skills/configure-private-mcp-access/SKILL.md
+  h_9630b74bdac540 8,11,13
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 332-333
+server/internal/mcp/resolved_mcp_endpoint.go
+  h_9630b74bdac540 630,666
+server/internal/platformmcp/connection_mutation_hosted_test.go
+  h_9630b74bdac540 1-109
+server/internal/assistants/impl_test.go
+  h_9630b74bdac540 248-252,289-291
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "708660bf6748b9aa46322943681ef300fc7d6985",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

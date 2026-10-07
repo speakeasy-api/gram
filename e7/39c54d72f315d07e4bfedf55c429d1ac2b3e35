@@ -1,0 +1,19 @@
+server/internal/platformmcp/adapters.go
+  s_fc4a57d3a07893::t_f369e31eda5e63 399-402,404-408
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e739c54d72f315d07e4bfedf55c429d1ac2b3e35",
+  "prompts": {},
+  "sessions": {
+    "s_fc4a57d3a07893": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c8a2fba3-9438-400d-9886-62fdc8005ae9",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Alex Martin <alex.martin@speakeasy.com>"
+    }
+  }
+}

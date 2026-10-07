@@ -1,0 +1,106 @@
+server/internal/adminmcp/tool_organizations.go
+  h_9630b74bdac540 19-20,22-29,31-51,67-72,103,110-112,117,139-145
+server/internal/adminmcp/tool_registry_test.go
+  h_9630b74bdac540 1-121,123-126,128-167,176-195,220-232
+server/internal/adminmcp/tool_registry.go
+  h_9630b74bdac540 1-141,143-144,150-228,230-351
+server/internal/admin/members_page_test.go
+  h_9630b74bdac540 1-65
+server/internal/usage/meter_usage_test.go
+  h_9630b74bdac540 188,192,207,211,219,222
+server/internal/adminmcp/runtime.go
+  h_9630b74bdac540 53,114-117,118-119,129,132-134,135
+.changeset/admin-mcp-readonly-parity.md
+  h_9630b74bdac540 1-5
+server/internal/adminmcp/tool_billing_detail_test.go
+  h_9630b74bdac540 1-42,44-49,51-184
+server/internal/adminmcp/organization_filters.go
+  h_9630b74bdac540 1-9,11-27,30-31,33-47,49-94,96-130
+server/internal/adminmcp/tool_context.go
+  h_9630b74bdac540 13-16,17,20,54,65-76,77-87,89,90-91,92-93
+server/internal/adminmcp/tool_billing_detail.go
+  h_9630b74bdac540 1-402
+server/internal/adminmcp/tool_organization_detail_test.go
+  h_9630b74bdac540 1-122
+server/internal/adminmcp/tool_organization_detail.go
+  h_9630b74bdac540 1-134,136-192
+server/internal/admin/members_page.go
+  h_9630b74bdac540 1-25,27-32,37-79
+server/internal/admin/queries.sql
+  h_9630b74bdac540 435-454,555-580
+server/internal/usage/meter_usage.go
+  h_9630b74bdac540 62,87-89
+server/internal/adminmcp/organization_filters_test.go
+  h_9630b74bdac540 1-4,6-45,60-67,73-98
+server/internal/usage/spend_breakdown.go
+  h_9630b74bdac540 76
+server/internal/admin/repo/queries.sql.go
+  h_9630b74bdac540 407-428,607-666,1512-1538,1705-1743
+server/internal/adminmcp/tool_write_organization_access.go
+  h_9630b74bdac540 1-202
+server/internal/admin/impl.go
+  h_9630b74bdac540 1209,1213-1218,1220,1222-1226,1229-1235
+server/internal/adminmcp/write_guard_test.go
+  h_9630b74bdac540 46-61
+server/internal/adminmcp/write_guard.go
+  h_9630b74bdac540 89-103,110
+.changeset/admin-mcp-guarded-configuration.md
+  h_9630b74bdac540 1-5
+server/internal/adminmcp/tool_support_matrix_entry_test.go
+  h_9630b74bdac540 1-37
+server/internal/adminmcp/tool_write_chat_analysis.go
+  h_9630b74bdac540 1-212
+server/internal/admin/supportmatrix.go
+  h_9630b74bdac540 61-74
+server/internal/outbox/events/audit_log.go
+  h_9630b74bdac540 59
+server/internal/adminmcp/tool_write_chat_analysis_test.go
+  h_9630b74bdac540 1-214
+server/internal/adminmcp/tool_write_organization_access_test.go
+  h_9630b74bdac540 1-195
+server/internal/adminmcp/tool_write_support_matrix.go
+  h_9630b74bdac540 1-377
+server/internal/admin/organization_access_test.go
+  h_9630b74bdac540 1-40
+server/internal/adminmcp/proposal_approval.go
+  h_9630b74bdac540 61,81-86,91,105,224
+server/internal/adminmcp/tool_support_matrix_entry.go
+  h_9630b74bdac540 1-127
+server/internal/adminmcp/write_tools.go
+  h_9630b74bdac540 100,232-235,247
+  h_9630b74bdac540 99
+server/internal/audit/organizations.go
+  h_9630b74bdac540 47-48,992-1044
+  h_9630b74bdac540 1045-1046
+server/internal/adminmcp/write_tools_test.go
+  h_9630b74bdac540 6-7,71,80-152
+server/internal/admin/organization_access.go
+  h_9630b74bdac540 1-101
+server/internal/organizations/queries.sql
+  h_9630b74bdac540 55-62
+server/internal/chatanalysis/settings_persistence.go
+  h_9630b74bdac540 37-72
+server/internal/adminmcp/tool_write_support_matrix_test.go
+  h_9630b74bdac540 1-221
+server/internal/auditapi/speakeasy_mask_test.go
+  h_9630b74bdac540 105-132
+server/internal/audit/organization_access_test.go
+  h_9630b74bdac540 1-71
+server/internal/organizations/repo/queries.sql.go
+  h_9630b74bdac540 2194-2229
+server/internal/outbox/events/catalog_gen.go
+  h_9630b74bdac540 50
+server/internal/outbox/events/catalog_gen.yaml
+  h_9630b74bdac540 2331-2388
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "397b71f8096089fc2e76cb290afabb9553bd0740",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

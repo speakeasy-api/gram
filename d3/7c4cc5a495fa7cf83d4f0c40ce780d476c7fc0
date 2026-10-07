@@ -1,0 +1,60 @@
+server/internal/platformmcp/management.go
+  h_9630b74bdac540 509
+.changeset/platform-mcp-shadow-distribution-enforcement.md
+  h_9630b74bdac540 1-5
+server/internal/platformmcp/distribution_service.go
+  h_9630b74bdac540 19,39-40,112-113,123-130,174,191,212-221,413-419,424,435-439,441-447,495-541
+server/internal/shadowmcp/admission/guard.go
+  h_9630b74bdac540 1-36,38-39,42-115,117-243,245-343
+server/internal/platformmcp/lifecycle_visibility.go
+  h_9630b74bdac540 19,84-85,95-100,136-146,190-194,197,199
+server/cmd/gram/platform_mcp.go
+  h_9630b74bdac540 50,67,332-333,339-340,461,500-503,715-716,722-723
+server/internal/shadowmcp/admission/rollout_test.go
+  h_9630b74bdac540 1-315
+server/internal/remotemcp/impl.go
+  h_9630b74bdac540 38,52,257-259,268-270,297-301
+server/internal/feature/flags.go
+  h_9630b74bdac540 66-74
+server/internal/shadowmcp/admission/guard_test.go
+  h_9630b74bdac540 1-33,35-47
+server/internal/plugins/assignments/command.go
+  h_9630b74bdac540 79-85,88-91,93-103,167-168,170-171
+server/internal/plugins/impl.go
+  h_9630b74bdac540 56,171,780-782,847-851,854-857,1158-1160,1166-1168,1185
+server/internal/remotemcp/distribution_admission.go
+  h_9630b74bdac540 1-22,24-32
+server/internal/mcpservers/impl.go
+  h_9630b74bdac540 54,78,645-647,659-661,708-721
+server/internal/platformmcp/queries.sql
+  h_9630b74bdac540 1839-1938
+server/internal/platformmcp/plugin_audience_mutation.go
+  h_9630b74bdac540 19,99-105,107,143-145,158-160,184-185,187,190-191,205,208,252,259-260
+server/cmd/gram/start.go
+  h_9630b74bdac540 149,1618-1619,1674,1676-1677,1684-1685,1742
+server/internal/platformmcp/tool_distribution.go
+  h_9630b74bdac540 150-153
+server/internal/plugins/distribution_admission.go
+  h_9630b74bdac540 1-36,38-43,57-59,61,63-73
+server/internal/shadowmcp/admission/rollout.go
+  h_9630b74bdac540 1-116,119,123,125-131,133,135-137,139-144
+server/internal/mcpservers/distribution_admission.go
+  h_9630b74bdac540 1-34,36-44
+server/internal/platformmcp/plugins.go
+  h_9630b74bdac540 23,258
+server/internal/mcpendpoints/impl.go
+  h_9630b74bdac540 42,56,87-93,134-136,145-147,235-240
+server/internal/platformmcp/plugins_integration_test.go
+  h_9630b74bdac540 515-517,522
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d37c4cc5a495fa7cf83d4f0c40ce780d476c7fc0",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

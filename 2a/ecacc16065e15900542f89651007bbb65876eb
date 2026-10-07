@@ -1,0 +1,32 @@
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 10,61-64,219,240-264,270-271
+  h_9630b74bdac540 266,269
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 24,67-68,93,126,351-355
+  h_9630b74bdac540 66,69-70,350,356
+client/dashboard/src/pages/org/networkAccessPageVisibility.ts
+  h_9630b74bdac540 7
+client/dashboard/src/pages/org/PrivateNetworkSection.tsx
+  h_9630b74bdac540 13,29,126,130,157-159,162-172,318-319,325,352,360-361,374-382,387-391,403-406
+  h_9630b74bdac540 371-373,407-408
+client/dashboard/src/pages/org/networkAccessPageVisibility.test.ts
+  h_9630b74bdac540 9,13-14,17-18
+client/dashboard/src/pages/org/PrivateNetworkSection.test.tsx
+  h_9630b74bdac540 9,40-43,131,145-161,163-174,176-177,179-180,312-313,333-347
+  h_9630b74bdac540 175,178
+client/dashboard/src/components/enterprise-gate.tsx
+  h_9630b74bdac540 5-6,9,13,21,25
+client/dashboard/src/components/org-sidebar.tsx
+  h_9630b74bdac540 73-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2aecacc16065e15900542f89651007bbb65876eb",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

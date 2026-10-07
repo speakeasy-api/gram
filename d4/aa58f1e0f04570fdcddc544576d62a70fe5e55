@@ -1,0 +1,47 @@
+server/internal/platformmcp/feedback.go
+  h_9630b74bdac540 390-391
+server/internal/mcpapproval/platform_request_test.go
+  h_9630b74bdac540 56,69-79
+  h_9630b74bdac540 80-81
+server/internal/mcpapproval/platform_request.go
+  h_9630b74bdac540 77,81-83
+server/internal/platformmcp/operation_budget.go
+  h_9630b74bdac540 33-34,82-83,206,298
+  h_9630b74bdac540 204-205,207-210
+server/internal/mcpapproval/identity/identity.go
+  h_9630b74bdac540 227-247
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 207
+server/internal/mcpapproval/identity/identity_test.go
+  h_9630b74bdac540 552-569
+server/internal/platformmcp/operation_budget_test.go
+  h_9630b74bdac540 18
+server/cmd/gram/platform_mcp.go
+  h_9630b74bdac540 229-232,371,654-657,785
+  h_9630b74bdac540 233-235,658-660
+server/internal/mcpapproval/create_request_test.go
+  h_9630b74bdac540 136-137,140-142
+  h_9630b74bdac540 143
+server/internal/platformmcp/adapters.go
+  h_9630b74bdac540 352,374,413-414,416
+server/internal/mcpapproval/impl.go
+  h_9630b74bdac540 670,681-683,782-791
+  h_9630b74bdac540 792-793
+server/internal/platformmcp/tool_review_requests.go
+  h_9630b74bdac540 9,56,67-69,76,124-126,138-140,142
+  h_9630b74bdac540 141
+server/internal/platformmcp/tool_review_requests_test.go
+  h_9630b74bdac540 12-13,17,25,29,47-52,56,73,82-108,117
+  h_9630b74bdac540 109-110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d4aa58f1e0f04570fdcddc544576d62a70fe5e55",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

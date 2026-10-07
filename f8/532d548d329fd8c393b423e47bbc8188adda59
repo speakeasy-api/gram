@@ -1,0 +1,14 @@
+server/internal/k8s/tailscale_network_ingress_provisioner_test.go
+  h_9630b74bdac540 141
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "f8532d548d329fd8c393b423e47bbc8188adda59",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

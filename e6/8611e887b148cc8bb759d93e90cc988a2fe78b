@@ -1,0 +1,24 @@
+server/internal/platformmcp/plugins.go
+  h_9630b74bdac540 22,25,28,265,300,318-331,367-377
+  h_9630b74bdac540 378-379
+server/cmd/gram/platform_mcp.go
+  h_9630b74bdac540 341,761
+server/internal/platformmcp/tool_plugins.go
+  h_9630b74bdac540 90-111,126-127,134,141-149,151
+  h_9630b74bdac540 150,152-153
+server/internal/platformmcp/member_mcp_status_test.go
+  h_9630b74bdac540 1-242
+server/internal/platformmcp/member_mcp_status.go
+  h_9630b74bdac540 1-263
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e68611e887b148cc8bb759d93e90cc988a2fe78b",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

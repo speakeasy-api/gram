@@ -1,0 +1,82 @@
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 26,41-42,48-49,66-70,75-83,90,95-96,112-113,119-134,141,145,148-150,157-162,166-167,285,297-299,313-335,364,438,466,485
+  h_9630b74bdac540 65,97,135-136,300-301,378
+server/internal/toolsets/hosted_network_access_test.go
+  h_9630b74bdac540 1-155
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 8,37,194-205,242-249,303,315-360
+server/internal/toolsets/impl.go
+  h_9630b74bdac540 43-44,50,76,113,117-119,469-484,491-500,649-650,739-744,779-780
+  h_9630b74bdac540 59-75,96-112,120-121,501,651,781
+server/internal/mcpservers/impl.go
+  h_9630b74bdac540 372-375,665-667,713-715,1021-1022,1025-1027,1065-1067
+server/internal/mcpendpoints/impl.go
+  h_9630b74bdac540 190-192,535-537,727-728,778-794
+  h_9630b74bdac540 729
+server/design/toolsets/design.go
+  h_9630b74bdac540 460
+server/design/shared/toolset.go
+  h_9630b74bdac540 92
+server/internal/networkaccess/mode.go
+  h_9630b74bdac540 22
+server/internal/mcp/impl.go
+  h_9630b74bdac540 24-25,1552-1565
+server/internal/mcp/serveendpoint.go
+  h_9630b74bdac540 294-296
+server/internal/mcpmetadata/impl.go
+  h_9630b74bdac540 1200-1207,1882-1890
+server/internal/mcpendpoints/resolve.go
+  h_9630b74bdac540 23,191-201
+  h_9630b74bdac540 202
+server/internal/assistants/service.go
+  h_9630b74bdac540 1126-1138
+server/internal/assistants/impl_test.go
+  h_9630b74bdac540 195-199,222-224
+server/internal/mcp/resolved_mcp_endpoint.go
+  h_9630b74bdac540 630-639,675-682
+server/internal/mcpservers/lifecycle.go
+  h_9630b74bdac540 73-75
+client/dashboard/src/pages/mcp/MCPDetails.tsx
+  h_9630b74bdac540 113,1598
+  h_9630b74bdac540 1599
+server/internal/toolsets/set_user_session_issuer.go
+  h_9630b74bdac540 16,19,59-64,76,81,87-88
+  h_9630b74bdac540 80,89
+server/internal/mv/toolset.go
+  h_9630b74bdac540 27-28,624-631,814
+server/internal/toolsets/hosted_network_access.go
+  h_9630b74bdac540 1-222
+server/cmd/gram/start.go
+  h_9630b74bdac540 1608
+.speakeasy/out.openapi.yaml
+  h_9630b74bdac540 97776-97782,100200-100206
+client/dashboard/src/sdk/src/models/components/toolset.ts
+  h_9630b74bdac540 8,43-57,108-111,180-184,208,243
+client/dashboard/src/sdk/src/models/components/updatetoolsetrequestbody.ts
+  h_9630b74bdac540 7-22,53-56,75-80,90,110-112,125
+server/gen/http/cli/gram/cli.go
+  h_9630b74bdac540 26596
+server/gen/http/openapi3.yaml
+  h_9630b74bdac540 104023-104029,106655-106661,106717-106723
+server/gen/http/toolsets/client/cli.go
+  h_9630b74bdac540 149,167-171,221-224
+server/gen/http/toolsets/client/types.go
+  h_9630b74bdac540 57-58,147-148,235-236,309-310,411-412,485-486,559-560,633-634,707-708,781-782,4338-4341,4431-4434,5033-5036,5453-5456,6217-6220,6487-6490,6757-6760,7027-7030,7297-7300,7567-7570,7937-7941,8130-8134,8291-8295,8500-8504,8661-8665,8822-8826,8983-8987,9144-9148,9305-9309
+server/gen/http/toolsets/server/types.go
+  h_9630b74bdac540 57-58,147-148,235-236,309-310,411-412,485-486,559-560,633-634,707-708,781-782,4319-4322,4498-4501,4639-4642,4835-4838,4976-4979,5118-5121,5259-5262,5400-5403,5541-5544,7900-7903,8110-8114
+server/gen/toolsets/service.go
+  h_9630b74bdac540 312-313
+server/gen/types/toolset.go
+  h_9630b74bdac540 57-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "05d801e5a7b1cbec3ce8d3e0cd3ce55a76340a96",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

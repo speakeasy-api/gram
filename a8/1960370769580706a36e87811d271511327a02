@@ -1,0 +1,22 @@
+server/internal/adminmcp/write_tools_test.go
+  h_9630b74bdac540 69,77
+server/internal/adminmcp/tool_write_trial.go
+  h_9630b74bdac540 1-259
+server/internal/adminmcp/write_tools.go
+  h_9630b74bdac540 230
+server/internal/adminmcp/tool_write_trial_test.go
+  h_9630b74bdac540 1-333
+server/internal/admin/impl.go
+  h_9630b74bdac540 1210-1220,1247,1249-1250,1286-1287
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a81960370769580706a36e87811d271511327a02",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

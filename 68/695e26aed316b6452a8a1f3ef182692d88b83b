@@ -1,0 +1,28 @@
+server/cmd/tools/migrations/legacypolicyscope/runner.go
+  s_d57c903c3bc12c::t_ee7be7fa244037 382-388,393-394
+  s_d57c903c3bc12c::t_5c7a5524bc88e6 395
+server/cmd/tools/migrations/legacy_policy_scope_cmd_test.go
+  s_d57c903c3bc12c::t_2df2ce70bac3b0 127-144
+server/cmd/tools/migrations/legacypolicyscope/runner_test.go
+  s_d57c903c3bc12c::t_2df2ce70bac3b0 360-384
+server/cmd/tools/migrations/legacy_policy_scope_cmd.go
+  s_d57c903c3bc12c::t_ee7be7fa244037 78-82
+server/cmd/tools/migrations/LEGACY_POLICY_SCOPE_MIGRATION.md
+  s_d57c903c3bc12c::t_b6c228d17113fa 127-129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "68695e26aed316b6452a8a1f3ef182692d88b83b",
+  "prompts": {},
+  "sessions": {
+    "s_d57c903c3bc12c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db8bb333-57c1-4f55-9089-77952e65a646",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

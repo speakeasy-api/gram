@@ -1,0 +1,32 @@
+server/internal/shadowmcp/admission/guard.go
+  h_9630b74bdac540 152-154
+server/internal/plugins/impl.go
+  h_9630b74bdac540 3059-3062,3064,3066-3070,3079,3081-3084,3088,3244-3246,3256-3257
+  h_9630b74bdac540 3071-3078,3080,3085-3087,3258
+server/internal/plugins/queries.sql
+  h_9630b74bdac540 573,588,594
+server/internal/shadowmcp/admission/guard_integration_test.go
+  h_9630b74bdac540 65
+server/internal/plugins/plugin_write_test.go
+  h_9630b74bdac540 20,104-122,140-151
+  h_9630b74bdac540 123
+.speakeasy/out.openapi.yaml
+  h_9630b74bdac540 71540,71543-71547,71564,86882-86886,86900
+client/dashboard/src/sdk/src/models/components/addpluginserverform.ts
+  h_9630b74bdac540 17,21,24-27,32,46,61,71
+client/dashboard/src/sdk/src/models/components/pluginserver.ts
+  h_9630b74bdac540 35,38-41,51,72,82
+server/internal/plugins/repo/queries.sql.go
+  h_9630b74bdac540 1568,1583,1589,1616,1645
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "11ec3ffc07afaad99c7b1adf5631392851406b9d",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+server/internal/background/network_ingress_reconcile_test.go
+  h_9630b74bdac540 12,32-33,47-62,98
+server/internal/background/network_ingress_sweep.go
+  h_9630b74bdac540 25-27
+server/internal/background/network_ingress_activities_test.go
+  h_9630b74bdac540 4,7,14-30
+server/internal/k8s/tailscale_network_ingress_provisioner_test.go
+  h_9630b74bdac540 146-160,315-318
+server/internal/k8s/tailscale_network_ingress_provisioner.go
+  h_9630b74bdac540 282-298,304-305,313,321,324,326,329,347,350,358,366,374,382,390,396,398-403,405-418,707-710
+server/internal/background/network_ingress_reconcile.go
+  h_9630b74bdac540 25,61,89-90
+server/internal/networkingress/queries.sql
+  h_9630b74bdac540 260
+server/internal/networkingress/orphans_test.go
+  h_9630b74bdac540 41,50,100
+server/internal/background/network_ingress_sweep_test.go
+  h_9630b74bdac540 40-41
+server/internal/background/network_ingress_activities.go
+  h_9630b74bdac540 78,86,97-100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "af2c9355af7d43917a2e17380ed429bea4e0ee28",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

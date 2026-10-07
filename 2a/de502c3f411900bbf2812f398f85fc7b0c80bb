@@ -1,0 +1,17 @@
+client/dashboard/src/pages/plugins/Plugins.tsx
+  h_9630b74bdac540 777,799,804
+  h_9630b74bdac540 42,776,806
+client/dashboard/src/pages/org/OrgWelcomeBanner.test.tsx
+  h_9630b74bdac540 339,345
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2ade502c3f411900bbf2812f398f85fc7b0c80bb",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

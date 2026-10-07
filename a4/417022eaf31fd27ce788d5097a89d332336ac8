@@ -1,0 +1,14 @@
+server/internal/database/models.go
+  h_9630b74bdac540 85-128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a4417022eaf31fd27ce788d5097a89d332336ac8",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

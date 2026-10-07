@@ -1,0 +1,24 @@
+server/internal/platformmcp/direct_remote_test.go
+  h_9630b74bdac540 202,204,230-232,249-251,261-264,266-311
+server/internal/platformmcp/remotesessionprovider/adapter.go
+  h_9630b74bdac540 299-301,385
+server/internal/platformmcp/catalog_readiness.go
+  h_9630b74bdac540 195-197,262
+server/internal/platformmcp/direct_remote.go
+  h_9630b74bdac540 103-107,127-131,314-318,322-327,345-350,355,362,364,398,401-402
+server/internal/platformmcp/remotesessionprovider/adapter_test.go
+  h_9630b74bdac540 125-142
+server/internal/platformmcp/catalog_readiness_unit_test.go
+  h_9630b74bdac540 5,34-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "52186630783e425e3bb9f41626207da468c4984d",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
