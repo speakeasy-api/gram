@@ -216,9 +216,8 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			flags.Project(),
 			flags.Org(),
 			&cli.PathFlag{
-				Name:     "config",
-				Usage:    "Path to the deployment file",
-				Required: true,
+				Name:  "config",
+				Usage: "Path to the deployment file (default: " + defaultDeployFile + ", or the deprecated " + legacyDeployFile + " when only it exists)",
 			},
 			&cli.StringFlag{
 				Name:  "method",
@@ -250,7 +249,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 
 			result, err := DoPush(ctx, PushOptions{
 				Profile:        profile.FromContext(ctx),
-				ConfigFile:     c.String("config"),
+				ConfigFile:     resolveDeployFile(c.Path("config"), c.App.ErrWriter),
 				ProjectSlug:    c.String("project"),
 				OrgSlug:        c.String("org"),
 				IdempotencyKey: c.String("idempotency-key"),
@@ -265,8 +264,9 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 	}
 }
 
-// explicitAPIURL returns --api-url or GRAM_API_URL when one is given and ""
-// otherwise, so DoPush uses the profile's URL before the flag's default.
+// explicitAPIURL returns --api-url, SPEAKEASY_AI_API_URL or the deprecated
+// GRAM_API_URL when one is given and "" otherwise, so DoPush uses the
+// profile's URL before the flag's default.
 func explicitAPIURL(c *cli.Context) string {
 	if !c.IsSet("api-url") {
 		return ""

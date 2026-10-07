@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 
 	"github.com/urfave/cli/v2"
@@ -35,6 +37,32 @@ var (
 
 var supportedRuntimes = map[string]struct{}{"nodejs:22": {}, "nodejs:24": {}}
 
+const (
+	// defaultDeployFile is the deployment file stage and push use when none
+	// is given.
+	defaultDeployFile = "speakeasy.deploy.json"
+
+	// legacyDeployFile is the deprecated name of defaultDeployFile. It is
+	// used when it exists and defaultDeployFile does not.
+	legacyDeployFile = "gram.deploy.json"
+)
+
+// resolveDeployFile returns path when it is set. Otherwise it returns
+// defaultDeployFile, or legacyDeployFile when only that file exists, in which
+// case it writes a deprecation note to w.
+func resolveDeployFile(path string, w io.Writer) string {
+	if path != "" {
+		return path
+	}
+	if _, err := os.Stat(defaultDeployFile); errors.Is(err, fs.ErrNotExist) {
+		if _, err := os.Stat(legacyDeployFile); err == nil {
+			_, _ = fmt.Fprintf(w, "Note: %s is deprecated and still works. Rename it to %s.\n", legacyDeployFile, defaultDeployFile)
+			return legacyDeployFile
+		}
+	}
+	return defaultDeployFile
+}
+
 type StageFunctionOptions struct {
 	ConfigFile string
 	Slug       string
@@ -53,9 +81,7 @@ type StageOpenAPIOptions struct {
 }
 
 func DoStageFunction(opts StageFunctionOptions) error {
-	if opts.ConfigFile == "" {
-		opts.ConfigFile = "gram.deploy.json"
-	}
+	opts.ConfigFile = resolveDeployFile(opts.ConfigFile, os.Stderr)
 	if opts.Runtime == "" {
 		opts.Runtime = "nodejs:22"
 	}
@@ -99,9 +125,7 @@ func DoStageFunction(opts StageFunctionOptions) error {
 }
 
 func DoStageOpenAPI(opts StageOpenAPIOptions) error {
-	if opts.ConfigFile == "" {
-		opts.ConfigFile = "gram.deploy.json"
-	}
+	opts.ConfigFile = resolveDeployFile(opts.ConfigFile, os.Stderr)
 	if opts.Slug == "" {
 		return fmt.Errorf("slug is required")
 	}
@@ -195,15 +219,17 @@ YAML/JSON documents.
 func stageConfigFlag() *cli.PathFlag {
 	return &cli.PathFlag{
 		Name:  "config",
-		Usage: "Path to the deployment config file",
-		Value: "gram.deploy.json",
+		Usage: "Path to the deployment config file (default: " + defaultDeployFile + ", or the deprecated " + legacyDeployFile + " when only it exists)",
 	}
 }
 
-// ensureStageConfig creates the --config deployment file when it is missing
-// and validates it otherwise.
+// ensureStageConfig resolves the --config deployment file, creates it when it
+// is missing and validates it otherwise.
 func ensureStageConfig(cCtx *cli.Context) error {
-	configPath := cCtx.Path("config")
+	configPath := resolveDeployFile(cCtx.Path("config"), cCtx.App.ErrWriter)
+	if err := cCtx.Set("config", configPath); err != nil {
+		return fmt.Errorf("set --config: %w", err)
+	}
 	if err := ensureConfigFileExists(configPath); err != nil {
 		return fmt.Errorf("invalid config file %s: %w", configPath, err)
 	}

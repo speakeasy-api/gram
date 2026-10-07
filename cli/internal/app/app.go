@@ -50,7 +50,7 @@ func newApp() *cli.App {
 				Name:    "log-level",
 				Value:   "info",
 				Usage:   "Set the base log level",
-				EnvVars: []string{"GRAM_LOG_LEVEL"},
+				EnvVars: flags.EnvVars("LOG_LEVEL"),
 				Action: func(c *cli.Context, val string) error {
 					if _, ok := o11y.Levels[val]; !ok {
 						return fmt.Errorf("invalid log level: %s", val)
@@ -62,17 +62,17 @@ func newApp() *cli.App {
 				Name:    "log-pretty",
 				Value:   true,
 				Usage:   "Toggle pretty logging",
-				EnvVars: []string{"GRAM_LOG_PRETTY"},
+				EnvVars: flags.EnvVars("LOG_PRETTY"),
 			},
 			&cli.StringFlag{
 				Name:    "profile",
 				Usage:   "Profile name to use",
-				EnvVars: []string{"GRAM_PROFILE"},
+				EnvVars: flags.EnvVars("PROFILE"),
 			},
 			&cli.StringFlag{
 				Name:    "profile-path",
 				Usage:   fmt.Sprintf("Path to profile JSON file (default: %s)", defaultProfilePath),
-				EnvVars: []string{"GRAM_PROFILE_PATH"},
+				EnvVars: flags.EnvVars("PROFILE_PATH"),
 				Hidden:  true,
 			},
 			&cli.BoolFlag{
@@ -175,6 +175,9 @@ func writeLegacyCommandNotice(w io.Writer, arg0 string) {
 func Execute(ctx context.Context, osArgs []string) {
 	if len(osArgs) > 0 {
 		writeLegacyCommandNotice(os.Stderr, osArgs[0])
+	}
+	if notice := flags.LegacyEnvNotice(os.LookupEnv); notice != "" {
+		_, _ = fmt.Fprintln(os.Stderr, notice)
 	}
 
 	if err := newApp().RunContext(ctx, osArgs); err != nil {

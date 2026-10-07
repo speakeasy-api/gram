@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/cli/internal/api"
 	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/auth"
+	"github.com/speakeasy-api/gram/cli/internal/flags"
 	"github.com/speakeasy-api/gram/cli/internal/profile"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/cli/internal/workflow"
@@ -117,12 +118,12 @@ func newAuthCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:    "api-url",
 				Usage:   "URL of the Gram API server",
-				EnvVars: []string{"GRAM_API_URL"},
+				EnvVars: flags.EnvVars("API_URL"),
 			},
 			&cli.StringFlag{
 				Name:    "dashboard-url",
 				Usage:   "URL of the Gram dashboard for authentication",
-				EnvVars: []string{"GRAM_SITE_URL"},
+				EnvVars: flags.EnvVars("SITE_URL"),
 			},
 		},
 		Subcommands: []*cli.Command{
