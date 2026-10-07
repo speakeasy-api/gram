@@ -13,6 +13,7 @@ import (
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
@@ -79,7 +80,7 @@ func TestToolCallEventsPairStartedAndCompletedByTheCallID(t *testing.T) {
 
 	fixture.events.started(t.Context())
 	*fixture.at = fixture.at.Add(1500 * time.Millisecond)
-	fixture.events.completed(t.Context(), http.StatusOK, nil)
+	fixture.events.completed(t.Context(), http.StatusOK, false, nil)
 
 	published := *fixture.published
 	require.Len(t, published, 2)
@@ -124,7 +125,7 @@ func TestToolCallEventsCompletedCarriesTheGatewaysOwnFailure(t *testing.T) {
 	failure := oops.E(oops.CodeForbidden, errors.New("policy rule 7 matched"), "blocked by policy")
 
 	fixture.events.started(t.Context())
-	fixture.events.completed(t.Context(), http.StatusForbidden, failure)
+	fixture.events.completed(t.Context(), http.StatusForbidden, false, failure)
 
 	completed := (*fixture.published)[1]
 	require.Equal(t, dialect.OutcomeError, recordStringAttribute(completed, "gram.outcome"))
@@ -140,16 +141,69 @@ func TestToolCallEventsNeverFailTheCall(t *testing.T) {
 	// the loss is counted and logged by gramotel and named by the gateway,
 	// and the caller sees no error to fail the call with.
 	fixture.events.started(t.Context())
-	fixture.events.completed(t.Context(), http.StatusOK, nil)
+	fixture.events.completed(t.Context(), http.StatusOK, false, nil)
 	require.Len(t, *fixture.published, 2, "both records were handed to the publisher before it refused them")
+}
+
+func TestToolCallEventsCompletedFollowsAPassthroughResultsOwnVerdict(t *testing.T) {
+	t.Parallel()
+
+	fixture := newToolCallEventsFixture(t, gcp.NewSuccessPublishResult(), toolCallIdentity{callID: "call-4"})
+
+	fixture.events.started(t.Context())
+	fixture.events.completed(t.Context(), http.StatusOK, true, nil)
+
+	completed := (*fixture.published)[1]
+	require.Equal(t, dialect.OutcomeError, recordStringAttribute(completed, "gram.outcome"), "the upstream said isError, so the client read an error")
+	require.False(t, recordHasAttribute(completed, "error.message"), "the result document is the record of it")
+	for _, kv := range completed.GetAttributes() {
+		if kv.GetKey() == "http.response.status_code" {
+			require.Equal(t, int64(http.StatusOK), kv.GetValue().GetIntValue())
+		}
+	}
 }
 
 func TestToolCallOutcomeFollowsTheIsErrorRule(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, dialect.OutcomeOK, toolCallOutcome(http.StatusOK))
-	require.Equal(t, dialect.OutcomeOK, toolCallOutcome(http.StatusNoContent))
-	require.Equal(t, dialect.OutcomeError, toolCallOutcome(http.StatusBadRequest))
-	require.Equal(t, dialect.OutcomeError, toolCallOutcome(http.StatusBadGateway))
-	require.Equal(t, dialect.OutcomeError, toolCallOutcome(http.StatusFound), "a redirect is not a tool result, so the client sees isError and so does the row")
+	require.Equal(t, dialect.OutcomeOK, toolCallOutcome(http.StatusOK, false))
+	require.Equal(t, dialect.OutcomeOK, toolCallOutcome(http.StatusNoContent, false))
+	require.Equal(t, dialect.OutcomeError, toolCallOutcome(http.StatusBadRequest, false))
+	require.Equal(t, dialect.OutcomeError, toolCallOutcome(http.StatusBadGateway, false))
+	require.Equal(t, dialect.OutcomeError, toolCallOutcome(http.StatusFound, false), "a redirect is not a tool result, so the client sees isError and so does the row")
+	require.Equal(t, dialect.OutcomeError, toolCallOutcome(http.StatusOK, true), "a passthrough result's own isError is the verdict the client reads")
+}
+
+func TestMCPResultIsErrorReadsOnlyAResultDocument(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, mcpResultIsError([]byte(`{"content":[{"type":"text","text":"boom"}],"isError":true}`)))
+	require.False(t, mcpResultIsError([]byte(`{"content":[{"type":"text","text":"ok"}]}`)))
+	require.False(t, mcpResultIsError([]byte(`{"content":[],"isError":false}`)))
+	require.False(t, mcpResultIsError([]byte(`not json`)))
+	require.False(t, mcpResultIsError(nil))
+}
+
+func TestToolCallCallerIsNamedOnlyInsideTheToolsOrganization(t *testing.T) {
+	t.Parallel()
+
+	inside := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org-1"})
+	outside := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org-2"})
+	payload := &mcpInputs{authenticated: true, userID: "user-1"}
+
+	userID, email := toolCallCaller(inside, payload, "org-1", "dev@example.com")
+	require.Equal(t, "user-1", userID)
+	require.Equal(t, "dev@example.com", email)
+
+	userID, email = toolCallCaller(outside, payload, "org-1", "dev@example.com")
+	require.Empty(t, userID, "an outside caller on a public MCP is identified by its external user id alone")
+	require.Empty(t, email)
+
+	userID, email = toolCallCaller(inside, &mcpInputs{authenticated: false, userID: "user-1"}, "org-1", "dev@example.com")
+	require.Empty(t, userID)
+	require.Empty(t, email)
+
+	userID, email = toolCallCaller(t.Context(), payload, "org-1", "dev@example.com")
+	require.Empty(t, userID, "no auth context names nobody")
+	require.Empty(t, email)
 }

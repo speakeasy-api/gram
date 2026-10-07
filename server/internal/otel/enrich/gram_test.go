@@ -54,20 +54,18 @@ func TestIdentityForGram(t *testing.T) {
 	// Both halves of a call carry the same identity: the session, the user
 	// and the call id that is the event. The gateway has no turn, and an
 	// external org only when the caller carried one, so those are counted.
+	// Both enrichments run before the counter is read.
 	for name, record := range map[string]*otelv1.InboundLogRecord{
 		"started":   gramStartedRecord(gramIdentity()...),
 		"completed": gramCompletedRecord(gramIdentity()...),
 	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			attrs := identity(t, m, record)
-			require.Equal(t, "mcp-session-1", attrs[AgentSessionIDKey].AsString())
-			require.Equal(t, "call-1", attrs[AgentEventIDKey].AsString())
-			require.Equal(t, "ext-user-1", attrs[AgentExternalUserIDKey].AsString())
-			require.Equal(t, "dev@example.com", attrs[AgentUserEmailKey].AsString())
-			require.NotContains(t, attrs, AgentTurnIDKey)
-			require.NotContains(t, attrs, AgentExternalOrgIDKey)
-		})
+		attrs := identity(t, m, record)
+		require.Equal(t, "mcp-session-1", attrs[AgentSessionIDKey].AsString(), name)
+		require.Equal(t, "call-1", attrs[AgentEventIDKey].AsString(), name)
+		require.Equal(t, "ext-user-1", attrs[AgentExternalUserIDKey].AsString(), name)
+		require.Equal(t, "dev@example.com", attrs[AgentUserEmailKey].AsString(), name)
+		require.NotContains(t, attrs, AgentTurnIDKey, name)
+		require.NotContains(t, attrs, AgentExternalOrgIDKey, name)
 	}
 
 	require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventSurface("claude-code")),

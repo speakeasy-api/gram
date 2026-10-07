@@ -347,10 +347,11 @@ func handleToolsCall(
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 	rw := &toolCallResponseWriter{
-		headers:    make(http.Header),
-		body:       new(bytes.Buffer),
-		statusCode: http.StatusOK,
-		failure:    nil,
+		headers:       make(http.Header),
+		body:          new(bytes.Buffer),
+		statusCode:    http.StatusOK,
+		failure:       nil,
+		resultIsError: false,
 	}
 
 	requestBodyBytes := params.Arguments
@@ -394,6 +395,8 @@ func handleToolsCall(
 		externalUserID = jwtclaims.UnsafeExtractSubject(oauthToken)
 	}
 
+	callerID, callerEmail := toolCallCaller(ctx, payload, descriptor.OrganizationID, gramEmail)
+
 	// One id names the call on its telemetry_logs row and on the pair of
 	// records that becomes its agent_events rows. The tenant is the tool's
 	// own organization and project, as the telemetry row records them.
@@ -413,8 +416,8 @@ func handleToolsCall(
 		clientName:      clientIdentity.Name,
 		clientVersion:   clientIdentity.Version,
 		externalUserID:  externalUserID,
-		userID:          payload.userID,
-		userEmail:       gramEmail,
+		userID:          callerID,
+		userEmail:       callerEmail,
 	}, time.Now)
 
 	logAttrs := tm.HTTPLogAttributes{}
@@ -446,7 +449,7 @@ func handleToolsCall(
 
 		logAttrs[attr.EventSourceKey] = string(tm.EventSourceToolCall)
 		logAttrs[attr.ToolCallIDKey] = events.callID
-		logAttrs[attr.OutcomeKey] = toolCallOutcome(rw.statusCode)
+		logAttrs[attr.OutcomeKey] = toolCallOutcome(rw.statusCode, rw.resultIsError)
 		logAttrs[attr.ToolCallDurationKey] = time.Since(events.start).Seconds()
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
@@ -495,7 +498,7 @@ func handleToolsCall(
 	// between. Each Emit waits for the Pub/Sub ack, so this is two publishes
 	// on the call's path; a publish that fails never fails the call.
 	events.started(ctx)
-	defer func() { events.completed(ctx, rw.statusCode, rw.failure) }()
+	defer func() { events.completed(ctx, rw.statusCode, rw.resultIsError, rw.failure) }()
 
 	requestSubject := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface:         mcpriskscan.SurfaceHostedMCP,
@@ -571,6 +574,9 @@ func handleToolsCall(
 			recordToolCallErrorStatus(ctx, rw, failure)
 			return nil, failure
 		}
+		// The result goes to the client untouched, with the upstream's own
+		// isError verdict in it; the call's records follow that verdict.
+		rw.resultIsError = mcpResultIsError(rw.body.Bytes())
 		bs, err := json.Marshal(result[json.RawMessage]{
 			ID:             req.ID,
 			Result:         json.RawMessage(rw.body.Bytes()),
@@ -578,7 +584,9 @@ func handleToolsCall(
 			cacheHints:     nil,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").LogError(ctx, logger)
+			failure := oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").LogError(ctx, logger)
+			recordToolCallErrorStatus(ctx, rw, failure)
+			return nil, failure
 		}
 
 		return bs, nil
@@ -586,7 +594,9 @@ func handleToolsCall(
 
 	chunk, structured, err := formatResult(*rw, plan.Kind)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed format tool call result").LogError(ctx, logger)
+		failure := oops.E(oops.CodeUnexpected, err, "failed format tool call result").LogError(ctx, logger)
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
 	}
 	responseContent := []json.RawMessage{chunk}
 	if plan.Kind != gateway.ToolKindPrompt {
@@ -614,7 +624,9 @@ func handleToolsCall(
 		cacheHints:     nil,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger)
+		failure := oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger)
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
 	}
 
 	return bs, nil
@@ -797,6 +809,10 @@ type toolCallResponseWriter struct {
 	// status. Nil when the tool produced the response itself, however it
 	// went.
 	failure *oops.ShareableError
+	// resultIsError is the upstream's own isError verdict on a passthrough
+	// result the gateway forwards untouched. The client reads that verdict,
+	// so the call's records follow it too.
+	resultIsError bool
 }
 
 func (w *toolCallResponseWriter) Header() http.Header {
