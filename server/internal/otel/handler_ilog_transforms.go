@@ -103,7 +103,7 @@ func rewriteLogInstrumentationScope(record *otelv1.LogRecord) error {
 }
 
 // dropReservedLogAttributes removes what a producer sent under Gram's own
-// speakeasy.event namespace and says how many attributes went. Only the
+// speakeasy.agent namespace and says how many attributes went. Only the
 // column enrichers write there, and they leave a key off when a record
 // carries no value for it, so a producer that sends one would otherwise
 // classify its own record. The enrichers read the inbound record, so what
@@ -112,7 +112,7 @@ func rewriteLogInstrumentationScope(record *otelv1.LogRecord) error {
 func dropReservedLogAttributes(record *otelv1.LogRecord) int {
 	attributes := record.GetAttributes()
 	kept := slices.DeleteFunc(attributes, func(kv *otelv1.LogRecord_KeyValue) bool {
-		return enrich.IsEventColumnKey(kv.GetKey())
+		return enrich.IsAgentColumnKey(kv.GetKey())
 	})
 	dropped := len(attributes) - len(kept)
 	if dropped > 0 {

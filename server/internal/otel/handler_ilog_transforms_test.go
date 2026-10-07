@@ -198,7 +198,7 @@ func logStringAttribute(key, value string) *otelv1.InboundLogRecord_KeyValue {
 }
 
 // A producer may not classify its own record: anything it sends under the
-// reserved speakeasy.event namespace is dropped, and only what the column
+// reserved speakeasy.agent namespace is dropped, and only what the column
 // enrichers wrote reaches a consumer.
 func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 	t.Parallel()

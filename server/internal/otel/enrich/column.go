@@ -13,7 +13,7 @@ import (
 // A column enricher fills one agent_events column in the transform stage.
 // It holds a table from event type to how the value is read for that type:
 // a question the provider dialect answers, or a constant the type implies.
-// The value lands on the record as a canonical speakeasy.event.<column>
+// The value lands on the record as a canonical speakeasy.agent.<column>
 // attribute, next to the producer's original attributes, and the
 // agent_events writer copies it from there. The file that declares a
 // column's table is the documentation of that column.
@@ -146,7 +146,7 @@ func counterSurface(d dialect.LogDialect, record *otelv1.InboundLogRecord) strin
 
 // columnOf is the agent_events column a canonical key carries.
 func columnOf(key attribute.Key) string {
-	return strings.TrimPrefix(string(key), eventColumnKeyPrefix)
+	return strings.TrimPrefix(string(key), agentColumnKeyPrefix)
 }
 
 // columnKeyValue encodes a column's value under its canonical key. A stated

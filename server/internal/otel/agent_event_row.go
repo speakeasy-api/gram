@@ -20,7 +20,7 @@ import (
 // row and golden tests can pin the projection.
 //
 // A column the transform's column enrichers fill arrives on the record as a
-// canonical speakeasy.event.<column> attribute, and the builder copies it
+// canonical speakeasy.agent.<column> attribute, and the builder copies it
 // from there without asking a dialect. There is no dialect fallback for such
 // a column: the transform and this writer deploy together, and a record that
 // reached the normalized topic before the enricher ran lands with that column
@@ -453,7 +453,7 @@ func contentJSON[E any, M ~[]E](_ string, messages M, err error) string {
 
 // canonicalColumns is what the transform's column enrichers wrote onto the
 // record: one value per agent_events column they fill, read back from the
-// speakeasy.event.* keys. A key the transform did not write reads as the
+// speakeasy.agent.* keys. A key the transform did not write reads as the
 // zero value, which the row stores as "not stated"; there is no dialect
 // fallback.
 type canonicalColumns struct {

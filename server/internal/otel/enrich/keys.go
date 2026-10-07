@@ -59,64 +59,69 @@ func DirectoryGroupNames(v []string) attribute.KeyValue {
 
 func GramUserRoles(v []string) attribute.KeyValue { return GramUserRolesKey.StringSlice(v) }
 
-// eventColumnKeyPrefix is the namespace of the canonical agent_events
+// agentColumnKeyPrefix is the namespace of the canonical agent_events
 // columns on a normalized record: one key per column, named after it.
-const eventColumnKeyPrefix = "speakeasy.event."
+const agentColumnKeyPrefix = "speakeasy.agent."
 
-// EventColumnKey is the attribute key that carries one agent_events column
-// on a normalized record. The column enrichers in the transform write these
-// keys next to the producer's original attributes, which stay as they were,
-// and the agent_events writer copies them into the row without asking a
-// dialect. The set below is the contract between the transform and every
+// AgentColumnKey is the attribute key that carries one agent_events column
+// on a normalized record. The speakeasy.agent namespace holds one record
+// described in the agent vocabulary: what kind of event it is, whose session
+// it belongs to, what model or tool it concerns, how it went and what it
+// used. Only the column enrichers in the transform write these keys, next to
+// the producer's original attributes, which stay as they were; a key a
+// producer sends under this namespace is stripped before the enrichers run.
+// The keys are forwarded to customer destinations like the other speakeasy.*
+// keys, and the agent_events writer copies them into the row without asking
+// a dialect. The set below is the contract between the transform and every
 // consumer on the normalized topics: a column that is not listed is filled
 // by the pipeline some other way (tenancy, timing, the directory enricher)
 // or not at all.
-func EventColumnKey(column string) attribute.Key {
-	return attribute.Key(eventColumnKeyPrefix + column)
+func AgentColumnKey(column string) attribute.Key {
+	return attribute.Key(agentColumnKeyPrefix + column)
 }
 
 const (
 	// What the record is.
-	EventTypeColumnKey    = attribute.Key(eventColumnKeyPrefix + "event_type")
-	RawEventNameColumnKey = attribute.Key(eventColumnKeyPrefix + "raw_event_name")
-	SourceColumnKey       = attribute.Key(eventColumnKeyPrefix + "source")
-	ProviderColumnKey     = attribute.Key(eventColumnKeyPrefix + "provider")
-	SurfaceColumnKey      = attribute.Key(eventColumnKeyPrefix + "surface")
+	EventTypeColumnKey    = attribute.Key(agentColumnKeyPrefix + "event_type")
+	RawEventNameColumnKey = attribute.Key(agentColumnKeyPrefix + "raw_event_name")
+	SourceColumnKey       = attribute.Key(agentColumnKeyPrefix + "source")
+	ProviderColumnKey     = attribute.Key(agentColumnKeyPrefix + "provider")
+	SurfaceColumnKey      = attribute.Key(agentColumnKeyPrefix + "surface")
 
 	// Who and where.
-	SessionIDColumnKey      = attribute.Key(eventColumnKeyPrefix + "session_id")
-	TurnIDColumnKey         = attribute.Key(eventColumnKeyPrefix + "turn_id")
-	EventIDColumnKey        = attribute.Key(eventColumnKeyPrefix + "event_id")
-	UserEmailColumnKey      = attribute.Key(eventColumnKeyPrefix + "user_email")
-	ExternalUserIDColumnKey = attribute.Key(eventColumnKeyPrefix + "external_user_id")
-	ExternalOrgIDColumnKey  = attribute.Key(eventColumnKeyPrefix + "external_org_id")
+	SessionIDColumnKey      = attribute.Key(agentColumnKeyPrefix + "session_id")
+	TurnIDColumnKey         = attribute.Key(agentColumnKeyPrefix + "turn_id")
+	EventIDColumnKey        = attribute.Key(agentColumnKeyPrefix + "event_id")
+	UserEmailColumnKey      = attribute.Key(agentColumnKeyPrefix + "user_email")
+	ExternalUserIDColumnKey = attribute.Key(agentColumnKeyPrefix + "external_user_id")
+	ExternalOrgIDColumnKey  = attribute.Key(agentColumnKeyPrefix + "external_org_id")
 
 	// What happened.
-	ModelColumnKey          = attribute.Key(eventColumnKeyPrefix + "model")
-	QuerySourceColumnKey    = attribute.Key(eventColumnKeyPrefix + "query_source")
-	SkillNameColumnKey      = attribute.Key(eventColumnKeyPrefix + "skill_name")
-	AgentNameColumnKey      = attribute.Key(eventColumnKeyPrefix + "agent_name")
-	MCPServerNameColumnKey  = attribute.Key(eventColumnKeyPrefix + "mcp_server_name")
-	MCPToolNameColumnKey    = attribute.Key(eventColumnKeyPrefix + "mcp_tool_name")
-	NameColumnKey           = attribute.Key(eventColumnKeyPrefix + "name")
-	ToolNameColumnKey       = attribute.Key(eventColumnKeyPrefix + "tool_name")
-	TextColumnKey           = attribute.Key(eventColumnKeyPrefix + "text")
-	OutcomeColumnKey        = attribute.Key(eventColumnKeyPrefix + "outcome")
-	OutcomeMessageColumnKey = attribute.Key(eventColumnKeyPrefix + "outcome_message")
-	DurationNanoColumnKey   = attribute.Key(eventColumnKeyPrefix + "duration_nano")
+	ModelColumnKey          = attribute.Key(agentColumnKeyPrefix + "model")
+	QuerySourceColumnKey    = attribute.Key(agentColumnKeyPrefix + "query_source")
+	SkillNameColumnKey      = attribute.Key(agentColumnKeyPrefix + "skill_name")
+	AgentNameColumnKey      = attribute.Key(agentColumnKeyPrefix + "agent_name")
+	MCPServerNameColumnKey  = attribute.Key(agentColumnKeyPrefix + "mcp_server_name")
+	MCPToolNameColumnKey    = attribute.Key(agentColumnKeyPrefix + "mcp_tool_name")
+	NameColumnKey           = attribute.Key(agentColumnKeyPrefix + "name")
+	ToolNameColumnKey       = attribute.Key(agentColumnKeyPrefix + "tool_name")
+	TextColumnKey           = attribute.Key(agentColumnKeyPrefix + "text")
+	OutcomeColumnKey        = attribute.Key(agentColumnKeyPrefix + "outcome")
+	OutcomeMessageColumnKey = attribute.Key(agentColumnKeyPrefix + "outcome_message")
+	DurationNanoColumnKey   = attribute.Key(agentColumnKeyPrefix + "duration_nano")
 
 	// Usage, carried by api_request only.
-	InputTokensColumnKey      = attribute.Key(eventColumnKeyPrefix + "input_tokens")
-	OutputTokensColumnKey     = attribute.Key(eventColumnKeyPrefix + "output_tokens")
-	CacheReadTokensColumnKey  = attribute.Key(eventColumnKeyPrefix + "cache_read_tokens")
-	CacheWriteTokensColumnKey = attribute.Key(eventColumnKeyPrefix + "cache_write_tokens")
-	CostUSDColumnKey          = attribute.Key(eventColumnKeyPrefix + "cost_usd")
+	InputTokensColumnKey      = attribute.Key(agentColumnKeyPrefix + "input_tokens")
+	OutputTokensColumnKey     = attribute.Key(agentColumnKeyPrefix + "output_tokens")
+	CacheReadTokensColumnKey  = attribute.Key(agentColumnKeyPrefix + "cache_read_tokens")
+	CacheWriteTokensColumnKey = attribute.Key(agentColumnKeyPrefix + "cache_write_tokens")
+	CostUSDColumnKey          = attribute.Key(agentColumnKeyPrefix + "cost_usd")
 )
 
-// IsEventColumnKey reports whether an attribute key is in the reserved
-// speakeasy.event namespace. Only the column enrichers write there: a
+// IsAgentColumnKey reports whether an attribute key is in the reserved
+// speakeasy.agent namespace. Only the column enrichers write there: a
 // producer that sends such a key is trying to classify its own record, and
 // the transform drops it before the enrichers write theirs.
-func IsEventColumnKey(key string) bool {
-	return strings.HasPrefix(key, eventColumnKeyPrefix)
+func IsAgentColumnKey(key string) bool {
+	return strings.HasPrefix(key, agentColumnKeyPrefix)
 }
