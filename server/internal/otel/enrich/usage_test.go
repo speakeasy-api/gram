@@ -78,7 +78,7 @@ func TestUsageColumnsForClaudeCode(t *testing.T) {
 		require.Empty(t, usage(t, in, result))
 
 		for _, column := range []string{"input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "cost_usd"} {
-			require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, column), column)
+			require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn(column)), column)
 		}
 	})
 }
@@ -103,9 +103,9 @@ func TestUsageColumnsForCodex(t *testing.T) {
 		require.Equal(t, int64(7), columns[OutputTokensColumnKey].AsInt64())
 		require.NotContains(t, columns, CacheWriteTokensColumnKey, "Codex reports no cache writes")
 		require.NotContains(t, columns, CostUSDColumnKey, "Codex reports no cost")
-		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "cache_write_tokens"))
-		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "cost_usd"))
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumnKey, "input_tokens"))
+		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("cache_write_tokens")))
+		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("cost_usd")))
+		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("input_tokens")))
 	})
 
 	t.Run("a cached count larger than the input is clamped so bad data never increases usage", func(t *testing.T) {
