@@ -143,6 +143,8 @@ async function setupOpenCode(servers: MCPServer[], file: string) {
     config && typeof config === "object" && !Array.isArray(config),
     "config must be an object",
   );
+  // Edit the JSONC text in place: confbox can parse it, but a parse/stringify
+  // round trip would discard the user's comments and trailing commas.
   const set = (path: string[], value: unknown) => {
     source = applyEdits(
       source,
