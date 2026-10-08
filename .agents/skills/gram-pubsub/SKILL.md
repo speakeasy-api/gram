@@ -310,9 +310,18 @@ publishers: production code publishes from wherever the event originates (an API
 handler, a workflow activity) using `gcp.PubSubPublisherForMessage`, not from a
 loop in the streams process.
 
-## Go storage subscriptions
+## Go storage subscriptions (explicit opt-in only)
 
-Declare `(gcp.pubsub.v1.storage_subscription)` on a dedicated marker, with `topic`.
+Storage subscriptions are an **optional feature**. Create one only when the user
+explicitly requests durable Parquet/GCS storage for a particular event stream and
+the stated problem calls for it. Adding a topic, publisher, ordinary subscriber,
+or event schema does not imply a storage subscription. Do not automatically add
+storage markers, buckets, or runners for completeness, speculative analytics, or
+future use. If the intended storage requirement is unclear, ask the user before
+adding one.
+
+Once explicitly requested, declare `(gcp.pubsub.v1.storage_subscription)` on a
+dedicated marker, with `topic`.
 The logical `bucket` is optional and defaults to `lake`; set it explicitly to
 select another bucket. It is exclusive with ordinary subscription/topic options.
 Parquet and daily UTC ingestion-time Hive partitions are defaults; hourly and
