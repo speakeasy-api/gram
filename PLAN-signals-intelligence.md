@@ -85,7 +85,7 @@ without accessing configuration. Existing project authorization still applies.
 | Signal   | `createSignal`, `getSignal`, `listSignals`, `updateSignal`, `deleteSignal` |
 | Sensor   | `createSensor`, `getSensor`, `listSensors`, `updateSensor`, `deleteSensor` |
 
-- GET for get/list; POST for create/update; DELETE with `id` query parameter for deletes. Use standard Gram errors and Goa operation/SDK/hook metadata.
+- GET for get/list; POST for create/update; DELETE with `id` query parameter for deletes. Use standard Speakeasy errors and Goa operation/SDK/hook metadata.
 - Signal model returns ID, project ID, domain fields, timestamps. Sensor model adds required ordered `signal_ids` (empty array when unattached); no expanded duplicate signal definitions or public membership resource.
 - Sensor create/update accepts ordered `signal_ids`. This one operation handles attach, detach, replace, and reorder transactionally; no additional membership endpoints.
 - Create requires signal `name`, or sensor `name` and `mode`; omitted membership means empty.
