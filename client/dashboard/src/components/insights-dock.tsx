@@ -429,9 +429,7 @@ function InsightsBottomBar({
         className="group border-border bg-card hover:border-foreground flex h-9 items-center gap-2 border px-3 text-sm font-medium shadow-xs transition-colors"
       >
         New Chat
-        <kbd className="text-muted-foreground group-hover:text-foreground ml-1 font-mono text-sm font-normal transition-colors">
-          {isMac ? "⌘/" : "Ctrl /"}
-        </kbd>
+        <InsightsShortcutKeys className="ml-1" />
       </button>
       {showHistory && (
         <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
@@ -1667,8 +1665,17 @@ export function InsightsProvider({
   // Page content (outlet) + the docked composer. The document scrolls, so the
   // composer rides a zero-height sticky rail at the end of the content: it
   // pins to the viewport bottom and spans the content area's width.
+  const showBottomBar = !INSIGHTS_DOCK_ENABLED && assistantAllowed;
   const dockSurface = (
-    <div className="relative flex w-full flex-1 flex-col">
+    <div
+      className="relative flex w-full flex-1 flex-col"
+      // Viewport-sized pages (the full-page chat) subtract the bottom bar.
+      style={
+        {
+          "--insights-bar-height": showBottomBar ? "3.5rem" : "0px",
+        } as React.CSSProperties
+      }
+    >
       {children}
 
       {/* Backdrop overlay - closes the chat panel when clicked. A page that
@@ -1721,7 +1728,7 @@ export function InsightsProvider({
 
       {/* While the dock is turned off, a thin bottom bar is the entry point:
           it summons the expanded dock or opens chat history. */}
-      {!INSIGHTS_DOCK_ENABLED && assistantAllowed && (
+      {showBottomBar && (
         <InsightsBottomBar
           onOpen={summonDock}
           onPickHistory={() => {

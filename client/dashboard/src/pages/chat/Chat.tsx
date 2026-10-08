@@ -1013,7 +1013,7 @@ export function ChatConversation(): ReactElement {
   // explicitly — `h-full` collapses to the content and lifts the composer off
   // the bottom of the screen on short threads.
   return (
-    <div className="flex h-[calc(100dvh-var(--banner-offset,0px))] flex-col">
+    <div className="flex h-[calc(100dvh-var(--banner-offset,0px)-var(--insights-bar-height,0px))] flex-col">
       {/* h-(--header-height) + px-8: same row height and content inset as
           Page.Header, so this header's rule lines up with the sidebar's. */}
       <header className="border-border flex h-(--header-height) shrink-0 items-center gap-3 border-b px-8">

@@ -60,7 +60,8 @@ export function InsightsDockShortcutHint({
 }): ReactElement | null {
   const { available } = useInsightsState();
   const { dismissed } = useInsightsDockCta();
-  if (!available || (INSIGHTS_DOCK_ENABLED && dismissed)) return null;
+  // While the dock is off the bottom bar carries the shortcut hint.
+  if (!INSIGHTS_DOCK_ENABLED || !available || dismissed) return null;
 
   return (
     <span
