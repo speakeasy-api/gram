@@ -59,7 +59,8 @@ func newCredentialTestServer(t *testing.T, opts credentialServerOptions) *creden
 	exe, err := os.Executable()
 	require.NoError(t, err)
 	if opts.command == "" {
-		opts.command = stdioFixtureEnv + "=1 " + stdioFixtureReadTokenAtStart + "=1 '" + exe + "'"
+		// exec, as documented, so the server owns its stdin pipe alone.
+		opts.command = "exec env " + stdioFixtureEnv + "=1 " + stdioFixtureReadTokenAtStart + "=1 '" + exe + "'"
 	}
 	if opts.maxAge == 0 {
 		opts.maxAge = time.Hour
@@ -567,12 +568,78 @@ func TestCredentialsServerExitStopsPublishing(t *testing.T) {
 func TestCredentialsFailedInitializeRemovesCredentials(t *testing.T) {
 	t.Parallel()
 	c := newCredentialTestServer(t, credentialServerOptions{command: "exit 0"})
-	resp := c.do(t, credentialCall{token: testTokenA, body: initializeBody})
-	require.Contains(t, []int{http.StatusBadGateway, http.StatusGatewayTimeout}, resp.StatusCode)
-	require.Eventually(t, func() bool {
-		created, _, live := c.store.counts()
-		return created == 1 && live == 0
-	}, 20*time.Second, 20*time.Millisecond)
+	for attempt := 1; attempt <= 3; attempt++ {
+		resp := c.do(t, credentialCall{token: testTokenA, body: initializeBody})
+		require.Contains(t, []int{http.StatusBadGateway, http.StatusGatewayTimeout}, resp.StatusCode)
+		require.Eventually(t, func() bool {
+			created, _, live := c.store.counts()
+			return created == attempt && live == 0
+		}, 20*time.Second, 20*time.Millisecond, "a server that exits at once leaves no credentials and blocks nothing")
+	}
+	closed := make(chan struct{})
+	go func() {
+		c.bridge.Close()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+	case <-time.After(20 * time.Second):
+		t.Fatal("bridge shutdown must not hang after failed starts")
+	}
+}
+
+func TestCredentialsForwardFailureEndsSession(t *testing.T) {
+	t.Parallel()
+	c := newCredentialTestServer(t, credentialServerOptions{})
+	call := credentialCall{token: testTokenA}
+	call.sid = c.initialize(t, call)
+	require.Equal(t, "closed", c.toolText(t, call, "close-stdin"))
+	sess := c.bridge.session(call.sid)
+	_, writes, _ := c.store.counts()
+
+	call.body = `{"jsonrpc":"2.0","id":8,"method":"tools/list"}`
+	require.Equal(t, http.StatusNotFound, c.do(t, call).StatusCode)
+	require.True(t, sess.closing.Load(), "a request that cannot be forwarded ends the session")
+	require.Equal(t, http.StatusNotFound, c.do(t, call).StatusCode)
+	_, writesAfter, _ := c.store.counts()
+	require.Equal(t, writes+1, writesAfter, "only the failed request published")
+	c.requireSessionEnds(t, call.sid)
+}
+
+func TestCredentialsCleanupWaitsForAdmittedPublisher(t *testing.T) {
+	t.Parallel()
+	c := newCredentialTestServer(t, credentialServerOptions{})
+	call := credentialCall{token: testTokenA}
+	call.sid = c.initialize(t, call)
+	sess := c.bridge.session(call.sid)
+
+	published := make(chan struct{})
+	resume := make(chan struct{})
+	require.True(t, sess.enterGate(t.Context()))
+	sess.cred.afterPublish = func() {
+		close(published)
+		<-resume
+	}
+	sess.leaveGate()
+
+	posted := make(chan int, 1)
+	go func() {
+		call.token = testTokenB
+		call.body = `{"jsonrpc":"2.0","id":7,"method":"tools/list"}`
+		posted <- c.do(t, call).StatusCode
+	}()
+	<-published
+	// The server dies while the publisher holds the gate.
+	require.NoError(t, sess.cmd.Process.Kill())
+	<-sess.terminated
+	require.Never(t, func() bool {
+		_, _, live := c.store.counts()
+		return live == 0
+	}, 300*time.Millisecond, 20*time.Millisecond, "storage outlives the publisher using it")
+
+	close(resume)
+	<-posted
+	c.requireSessionEnds(t, call.sid)
 }
 
 func TestCredentialsRemovedEvenWhenGroupSurvives(t *testing.T) {
@@ -611,4 +678,22 @@ func TestCredentialsConcurrentRequestsAndRefresh(t *testing.T) {
 	}
 	wg.Wait()
 	require.NotNil(t, c.bridge.session(call.sid))
+}
+
+func TestCredentialsTokenWriteFailureEndsSession(t *testing.T) {
+	t.Parallel()
+	c := newCredentialTestServer(t, credentialServerOptions{})
+	call := credentialCall{token: testTokenA}
+	call.sid = c.initialize(t, call)
+
+	c.store.failWrites.Store(true)
+	call.body = `{"jsonrpc":"2.0","id":8,"method":"tools/list"}`
+	require.Equal(t, http.StatusNotFound, c.do(t, call).StatusCode, "nothing is forwarded without its token")
+	c.requireSessionEnds(t, call.sid)
+
+	resp := c.do(t, credentialCall{token: testTokenA, body: initializeBody})
+	require.Equal(t, http.StatusBadGateway, resp.StatusCode, "a server never starts without its token file")
+	created, _, live := c.store.counts()
+	require.Equal(t, 2, created)
+	require.Zero(t, live)
 }

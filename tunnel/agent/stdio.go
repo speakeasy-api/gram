@@ -509,7 +509,7 @@ func (b *stdioBridge) start(cred *admittedCredential, owner principal) (*stdioSe
 	}
 
 	if b.creds == nil {
-		sess, err := startStdioSession(id, b.command, b.env, false, logger)
+		sess, err := startStdioSession(id, b.command, b.env, nil, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -555,16 +555,14 @@ func startCredentialedSession(id, command string, env []string, creds *sessionCr
 	if err := creds.dir.writeToken(cred.token); err != nil {
 		return nil, fmt.Errorf("write session token: %w", err)
 	}
-	sess, err := startStdioSession(id, command, env, true, logger)
+	sess, err := startStdioSession(id, command, env, creds, logger)
 	if err != nil {
 		return nil, err
 	}
-	sess.cred = creds
-	sess.enterGate(context.Background())
-	creds.generation++
-	generation := creds.generation
-	creds.timer = time.AfterFunc(creds.deadline(cred, now), func() { sess.expireCredential(generation) })
-	sess.leaveGate()
+	// Nothing else can reach the session yet, and the expiry callback takes
+	// the gate before reading this state, so it is set without the gate.
+	creds.generation = 1
+	creds.timer = time.AfterFunc(creds.deadline(cred, now), func() { sess.expireCredential(1) })
 	return sess, nil
 }
 
@@ -673,9 +671,11 @@ type stdioSession struct {
 	lastActive   time.Time
 }
 
-// quietStderr counts the server's stderr instead of logging it: in
-// credentials mode it can carry the user's token.
-func startStdioSession(id, command string, env []string, quietStderr bool, logger *slog.Logger) (*stdioSession, error) {
+// creds is the session's credential state in credentials mode, set before
+// any of the session's goroutines start; nil otherwise. In credentials mode
+// the server's stderr is counted instead of logged: it can carry the token.
+func startStdioSession(id, command string, env []string, creds *sessionCredentials, logger *slog.Logger) (*stdioSession, error) {
+	quietStderr := creds != nil
 	cmd := shellCommand(command)
 	cmd.Env = env
 	configureProcessGroup(cmd, quietStderr)
@@ -716,7 +716,7 @@ func startStdioSession(id, command string, env []string, quietStderr bool, logge
 		cmd:          cmd,
 		stdin:        stdin,
 		logger:       logger.With(slog.Int("pid", cmd.Process.Pid)),
-		cred:         nil,
+		cred:         creds,
 		closing:      atomic.Bool{},
 		groupAlive:   nil,
 		writeSem:     make(chan struct{}, 1),

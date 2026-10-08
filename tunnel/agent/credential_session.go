@@ -252,7 +252,14 @@ func (s *stdioSession) sendCredentialed(ctx context.Context, msgs []rpcMessage, 
 	if s.cred.afterPublish != nil {
 		s.cred.afterPublish()
 	}
-	return s.send(ctx, msgs)
+	// A request admitted with a published token that cannot be forwarded,
+	// whether stdin is closed, a write failed part way, or the caller gave up
+	// waiting, ends the session before the gate is released.
+	if err := s.send(ctx, msgs); err != nil {
+		s.close()
+		return err
+	}
+	return nil
 }
 
 // expireCredential ends the session unless a newer token superseded the one
@@ -282,14 +289,12 @@ func (s *stdioSession) terminate() {
 }
 
 // removeCredentials deletes the session's storage once nothing can publish
-// to it any more: the session is closing and the gate is free.
+// to it any more: the session is closing and the gate is free. A gate holder
+// is bounded by the stdin write timeout or its request ending, so this waits
+// for it rather than pull its directory out from under it.
 func (s *stdioSession) removeCredentials() {
-	select {
-	case s.cred.gate <- struct{}{}:
-		defer s.leaveGate()
-	case <-time.After(stdioWriteTimeout + stdioShutdownGrace):
-		// A holder stuck past its bounded write: remove regardless.
-	}
+	s.cred.gate <- struct{}{}
+	defer s.leaveGate()
 	if s.cred.timer != nil {
 		s.cred.timer.Stop()
 	}

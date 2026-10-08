@@ -136,6 +136,14 @@ func TestVerifierRejectsBadHeaders(t *testing.T) {
 	_, err = v.verify(t.Context(), alias)
 	require.ErrorIs(t, err, errAssertionInvalid)
 
+	aliasOnly := http.Header{"X_Speakeasy_Identity": []string{raw}}
+	_, err = v.verify(t.Context(), aliasOnly)
+	require.ErrorIs(t, err, errAssertionInvalid, "an underscore spelling alone is refused")
+
+	lowercase := http.Header{"x-speakeasy-identity": []string{raw}}
+	_, err = v.verify(t.Context(), lowercase)
+	require.NoError(t, err, "the hyphenated name is matched in any case")
+
 	noncanonical := assertionRequestHeader(raw)
 	noncanonical["x-speakeasy-identity"] = []string{raw}
 	_, err = v.verify(t.Context(), noncanonical)
@@ -400,4 +408,13 @@ func TestCredentialChildEnvReplacesInheritedValues(t *testing.T) {
 	t.Parallel()
 	env := credentialChildEnv([]string{"PATH=/bin", "HOME=/root", "OKTA_ACCESS_TOKEN_FILE=/shared/token", AccessTokenFileEnv + "=/shared/other", "XDG_CONFIG_HOME=/etc"}, "/s/token", "/s/home")
 	require.Equal(t, []string{"PATH=/bin", AccessTokenFileEnv + "=/s/token", "HOME=/s/home", "XDG_CONFIG_HOME=/s/home/.config", "XDG_DATA_HOME=/s/home/.local/share"}, env)
+}
+
+func TestCredentialDeadlineIsEarlierOfExpiryAndMaxAge(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	c := newSessionCredentials(principal{}, credentialContext{}, nil, time.Hour, 30*time.Second, time.Now)
+	require.Equal(t, time.Hour, c.deadline(admittedCredential{token: "", context: credentialContext{}, expiresAt: time.Time{}, assertionExpiresAt: now}, now), "unknown expiry uses the maximum age")
+	require.Equal(t, 10*time.Minute+30*time.Second, c.deadline(admittedCredential{token: "", context: credentialContext{}, expiresAt: now.Add(10 * time.Minute), assertionExpiresAt: now}, now))
+	require.Equal(t, time.Hour, c.deadline(admittedCredential{token: "", context: credentialContext{}, expiresAt: now.Add(24 * time.Hour), assertionExpiresAt: now}, now), "a long-lived token still ends at the maximum age")
 }

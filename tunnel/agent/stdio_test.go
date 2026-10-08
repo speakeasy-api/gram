@@ -110,6 +110,11 @@ func runStdioFixture() {
 				}
 				encoded, _ := json.Marshal(env)
 				reply(map[string]any{"content": []any{map[string]any{"type": "text", "text": string(encoded)}}})
+			case "close-stdin":
+				// Stops reading requests but keeps running.
+				reply(map[string]any{"content": []any{map[string]any{"type": "text", "text": "closed"}}})
+				_ = os.Stdin.Close()
+				time.Sleep(time.Hour)
 			case "leak":
 				// Emulates an SDK error that prints the credential.
 				token, _ := os.ReadFile(os.Getenv(AccessTokenFileEnv))
