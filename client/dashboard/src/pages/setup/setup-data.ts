@@ -401,7 +401,7 @@ const setupAgentPlatforms = (
       {
         title: "Download the Copilot CLI observability plugin",
         description:
-          "Download a self-contained plugin with a hooks-scoped credential embedded. Downloading requires a Speakeasy org admin and enabled project observability. Distribute the ZIP privately and never commit it or upload it publicly.",
+          "Download a self-contained plugin with a hooks-scoped credential embedded. Downloading requires a Speakeasy org admin and enabled project observability. Distribute the ZIP privately and never commit it or upload it publicly. Coordinate rotation and replacement; a new download does not revoke keys in older copies.",
         download: { platform: "copilot", label: "Download for Copilot CLI" },
       },
       {

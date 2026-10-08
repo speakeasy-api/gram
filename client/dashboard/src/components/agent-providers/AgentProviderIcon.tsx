@@ -336,7 +336,7 @@ export function CopilotIcon({
 }
 
 // Microsoft Copilot logo
-export function MicrosoftCopilotIcon({
+function MicrosoftCopilotIcon({
   className,
 }: {
   className?: string;
