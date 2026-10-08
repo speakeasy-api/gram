@@ -975,6 +975,13 @@ export function InsightsProvider({
     setFocusComposerKey((k) => k + 1);
   }, []);
   const unsummonDock = useCallback(() => setDockSummoned(false), []);
+  // Closing the chat panel puts a summoned dock away too, rather than leaving
+  // its composer expanded behind the closed panel.
+  const wasExpandedRef = useRef(isExpanded);
+  useEffect(() => {
+    if (wasExpandedRef.current && !isExpanded) setDockSummoned(false);
+    wasExpandedRef.current = isExpanded;
+  }, [isExpanded]);
   const [pendingPrompt, setPendingPrompt] = useState<{
     text: string;
     nonce: number;
@@ -1519,6 +1526,11 @@ export function InsightsProvider({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [assistantAllowed, isExpanded, handleStartFresh, routes]);
 
+  // Header New chat: summon the dock onto a fresh conversation.
+  const openNewChatDock = useCallback(() => {
+    handleStartFresh();
+    summonDock();
+  }, [handleStartFresh, summonDock]);
   const pickHistoryChat = useCallback(() => {
     setHistoryView(false);
     setIsExpanded(true);
@@ -1530,8 +1542,10 @@ export function InsightsProvider({
             start: <ModeSwitcher mode="canvas" inline />,
             end: (
               <InsightsHeaderActions
-                assistantAllowed={assistantAllowed}
-                onOpen={summonDock}
+                // Routes that mount their own runtime (Playground, assistant
+                // onboarding) can't host the shared dock.
+                assistantAllowed={assistantAllowed && !pageOwnsRuntime}
+                onOpen={openNewChatDock}
                 onPickHistory={pickHistoryChat}
                 showHistory={runtimeMounted}
               />
@@ -1541,7 +1555,8 @@ export function InsightsProvider({
     [
       headerChrome,
       assistantAllowed,
-      summonDock,
+      pageOwnsRuntime,
+      openNewChatDock,
       pickHistoryChat,
       runtimeMounted,
     ],

@@ -538,7 +538,17 @@ const routesWithSubroutes = (routes: AppRoute[]) => {
           <Route
             index
             element={
-              <AppRouteContentErrorBoundary fallback={<RouteLoadingFallback />}>
+              // Under a shell route the shell already renders the header, so
+              // the index only needs a body fallback.
+              <AppRouteContentErrorBoundary
+                fallback={
+                  item.component ? (
+                    <div className="p-8 text-sm">Loading…</div>
+                  ) : (
+                    <RouteLoadingFallback />
+                  )
+                }
+              >
                 <item.indexComponent />
               </AppRouteContentErrorBoundary>
             }

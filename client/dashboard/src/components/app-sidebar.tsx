@@ -313,7 +313,7 @@ export function AppSidebar({
       <SidebarBrandHeader homeHref={`/${orgSlug}`} />
       {/* Project switcher sits above all nav items; the page header row no
           longer carries it (the assistant bottom bar took its other controls). */}
-      <div className="border-sidebar-border border-b p-2 group-data-[collapsible=icon]:hidden">
+      <div className="border-sidebar-border border-b p-2">
         <WorkspaceSwitcher className="w-full" />
       </div>
       <SidebarContent className="pt-2">{sidebarContent}</SidebarContent>
