@@ -456,16 +456,9 @@ func (s *PluginsService) finishPluginMetadataMutation(ctx context.Context, princ
 	if err := json.Unmarshal(receipt.ResultPayload, &result); err != nil {
 		return PluginMetadataMutationOutput{}, pluginMetadataMutationUnavailable(err)
 	}
-	output := PluginMetadataMutationOutput{PluginMetadataReceiptResult: result, PublishSignal: "not_requested", Receipt: riskMutationToolReceipt(receipt)}
-	if !receipt.Replayed && result.PublicationRequest != string(plugindelivery.ProjectPublicationEnqueued) {
-		switch {
-		case s.publisher == nil:
-			output.PublishSignal = "unavailable"
-		case plugindelivery.SignalPluginPublishAfterRequest(ctx, s.publisher, plugindelivery.ProjectPublicationRequestOutcome(result.PublicationRequest), project.ID, principal.UserID) != nil:
-			output.PublishSignal = "request_failed"
-		default:
-			output.PublishSignal = "best_effort_requested"
-		}
+	output := PluginMetadataMutationOutput{PluginMetadataReceiptResult: result, PublishSignal: publishSignalNotRequested, Receipt: riskMutationToolReceipt(receipt)}
+	if !receipt.Replayed {
+		output.PublishSignal = signalPublishAfterCommit(ctx, s.publisher, result.PublicationRequest, project.ID, principal.UserID)
 	}
 	return output, nil
 }

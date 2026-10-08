@@ -9,14 +9,12 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 	variationsRepo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
 
@@ -81,30 +79,9 @@ func (s *Service) SetToolVariationsGroup(ctx context.Context, payload *gen.SetTo
 		return nil, oops.E(oops.CodeUnexpected, err, "update toolset tool_variations_group").LogError(ctx, s.logger)
 	}
 
-	afterView, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
+	afterView, err := s.describeAndLogToolsetUpdate(ctx, dbtx, authCtx, payload.Slug, beforeView)
 	if err != nil {
 		return nil, err
-	}
-
-	toolsetUUID, err := uuid.Parse(afterView.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset id").LogError(ctx, s.logger)
-	}
-
-	if err := s.audit.LogToolsetUpdate(ctx, dbtx, audit.LogToolsetUpdateEvent{
-		OrganizationID:        authCtx.ActiveOrganizationID,
-		ProjectID:             *authCtx.ProjectID,
-		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:      authCtx.Email,
-		ActorSlug:             nil,
-		ToolsetURN:            urn.NewToolset(toolsetUUID),
-		ToolsetName:           afterView.Name,
-		ToolsetSlug:           string(afterView.Slug),
-		ToolsetVersionAfter:   afterView.ToolsetVersion,
-		ToolsetSnapshotBefore: beforeView,
-		ToolsetSnapshotAfter:  afterView,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log toolset update").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

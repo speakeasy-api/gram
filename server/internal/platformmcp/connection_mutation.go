@@ -342,15 +342,10 @@ func (s *MCPConnectionMutationService) execute(ctx context.Context, principal Pr
 }
 
 func (s *MCPConnectionMutationService) finish(ctx context.Context, principal Principal, projectID uuid.UUID, projectIDText string, kind MCPConnectionSettingsTargetKind, targetID uuid.UUID, stored connectionMutationReceipt, receipt OperationReceipt) (MCPConnectionMutationOutput, error) {
-	output := MCPConnectionMutationOutput{PublicationRequest: stored.PublicationRequest, PublishSignal: "not_requested", Receipt: riskMutationToolReceipt(receipt)}
-	if stored.PublicationRequest != string(plugins.ProjectPublicationEnqueued) {
-		if s.publisher == nil {
-			output.PublishSignal = "unavailable"
-		} else if err := plugins.SignalPluginPublishAfterRequest(ctx, s.publisher, plugins.ProjectPublicationRequestOutcome(stored.PublicationRequest), projectID, principal.UserID); err != nil {
-			output.PublishSignal = "request_failed"
-		} else {
-			output.PublishSignal = "best_effort_requested"
-		}
+	output := MCPConnectionMutationOutput{
+		PublicationRequest: stored.PublicationRequest,
+		PublishSignal:      signalPublishAfterCommit(ctx, s.publisher, stored.PublicationRequest, projectID, principal.UserID),
+		Receipt:            riskMutationToolReceipt(receipt),
 	}
 	settings, err := s.settings.Get(ctx, principal, GetMCPConnectionSettingsInput{ProjectID: projectIDText, TargetKind: kind, TargetID: targetID.String()})
 	if err != nil {

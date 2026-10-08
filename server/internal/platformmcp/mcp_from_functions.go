@@ -301,25 +301,18 @@ func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, pri
 	output := CreateMCPFromFunctionsOutput{
 		Outcome: "created", MCPID: stored.MCPID, MCPName: stored.MCPName, MCPSlug: stored.MCPSlug, Visibility: stored.Visibility,
 		AddedToDefaultPlugin: stored.AddedToDefaultPlugin,
-		PublicationRequest:   stored.Publication, PublishSignal: "not_requested", IndexSignal: "not_required",
+		PublicationRequest:   stored.Publication, PublishSignal: publishSignalNotRequested, IndexSignal: "not_required",
 		Receipt: riskMutationToolReceipt(receipt),
 	}
-	// Signalled for every outcome but enqueued, which is the one case
-	// SignalPluginPublishAfterRequest itself skips. not_configured in
-	// particular still needs it: with emission enabled it means the project
-	// has no marketplace connection yet, and the publish can create that first
+	// Signalled for every outcome but enqueued. not_configured in particular
+	// still needs it: with emission enabled it means the project has no
+	// marketplace connection yet, and the publish can create that first
 	// repository, exactly as the dashboard's first-server path does.
-	if stored.AddedToDefaultPlugin && stored.Publication != string(plugins.ProjectPublicationEnqueued) {
-		if s.publisher == nil {
-			output.PublishSignal = "unavailable"
-		} else if err := plugins.SignalPluginPublishAfterRequest(ctx, s.publisher, plugins.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {
-			output.PublishSignal = "request_failed"
-		} else {
-			output.PublishSignal = "best_effort_requested"
-		}
+	if stored.AddedToDefaultPlugin {
+		output.PublishSignal = signalPublishAfterCommit(ctx, s.publisher, stored.Publication, project.ID, principal.UserID)
 	}
 	output.PublicationRequested = stored.AddedToDefaultPlugin &&
-		(stored.Publication == string(plugins.ProjectPublicationEnqueued) || output.PublishSignal == "best_effort_requested")
+		(stored.Publication == string(plugins.ProjectPublicationEnqueued) || output.PublishSignal == publishSignalBestEffortRequested)
 	// Creating the toolset's first version left it without a search index, and
 	// a dynamic-mode server refuses tools/list outright until one exists. The
 	// target is the toolset recorded in the receipt, so a replay schedules the
