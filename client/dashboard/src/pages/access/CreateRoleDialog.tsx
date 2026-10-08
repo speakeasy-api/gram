@@ -40,7 +40,7 @@ import {
   Loader2,
   Lock,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import {
   getSelectableMembers,
@@ -337,6 +337,14 @@ export function CreateRoleDialog({
     },
   });
 
+  const submitted = useRef<{
+    name: string;
+    description: string;
+    grantKeys: string;
+    members: Set<string>;
+    agents: Set<string>;
+  } | null>(null);
+
   const updateRole = useUpdateRoleMutation({
     onSuccess: async () => {
       await Promise.all([
@@ -346,12 +354,15 @@ export function CreateRoleDialog({
       // On its own page the editor stays open after a save: what was saved
       // becomes the starting point, so Save waits for the next change. The
       // sheet over the roles list closes as before.
-      if (presentation === "page") {
-        setInitialName(name);
-        setInitialDescription(description);
-        setInitialGrantKeys(grantKeysStringFn(grants));
-        setInitialMembers(new Set(selectedMembers));
-        setInitialAgents(new Set(selectedAgents));
+      // The baseline is what the click sent, not the form now: an edit made
+      // while the save was in flight stays unsaved and keeps Save enabled.
+      const saved = submitted.current;
+      if (presentation === "page" && saved) {
+        setInitialName(saved.name);
+        setInitialDescription(saved.description);
+        setInitialGrantKeys(saved.grantKeys);
+        setInitialMembers(saved.members);
+        setInitialAgents(saved.agents);
         toast.success("Role saved");
         return;
       }
@@ -592,6 +603,13 @@ export function CreateRoleDialog({
         scopeDefinitions,
       );
       const { addGrants, removeGrants } = diffGrants(initialGrants, sdkGrants);
+      submitted.current = {
+        name,
+        description,
+        grantKeys: grantKeysStringFn(grants),
+        members: new Set(selectedMembers),
+        agents: new Set(selectedAgents),
+      };
 
       updateRole.mutate({
         request: {
