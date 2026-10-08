@@ -62,6 +62,8 @@ export function RolePermissionsSection({
   renderScopeRule,
   subjectLabel = "this role",
   markAgentIneligible = false,
+  renderMcpAccess,
+  mcpAccessCount,
 }: {
   groups: ScopeGroup[];
   selectedScopes: Set<string>;
@@ -78,6 +80,14 @@ export function RolePermissionsSection({
    * its agent members rather than granted. Set once the role has any.
    */
   markAgentIneligible?: boolean;
+  /**
+   * Replaces the MCP access tab's permission list with a server picker. Given
+   * a way back to Platform access, where the admin permissions that also
+   * connect are managed.
+   */
+  renderMcpAccess?: (controls: { showPlatformAccess: () => void }) => ReactNode;
+  /** What the MCP access tab counts when it shows servers, not permissions. */
+  mcpAccessCount?: number;
 }): JSX.Element {
   const [tab, setTab] = useState("mcp");
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -102,6 +112,7 @@ export function RolePermissionsSection({
   const otherSelected = selectedIn(otherGroups);
   const activeGroups = tab === "mcp" ? mcpGroups : otherGroups;
   const activeSelected = tab === "mcp" ? mcpSelected : otherSelected;
+  const showsMcpAccess = tab === "mcp" && !!renderMcpAccess;
 
   const addButton = (
     <PopoverTrigger asChild>
@@ -132,14 +143,14 @@ export function RolePermissionsSection({
           <div className="border-border bg-muted/30 flex items-center justify-between gap-3 border-b px-4">
             <PageTabsList>
               <PageTabsTrigger value="mcp">
-                MCP access ({mcpSelected.length})
+                MCP access ({mcpAccessCount ?? mcpSelected.length})
               </PageTabsTrigger>
               <PageTabsTrigger value="organization">
                 Platform access ({otherSelected.length})
               </PageTabsTrigger>
             </PageTabsList>
 
-            {activeSelected.length > 0 && addButton}
+            {activeSelected.length > 0 && !showsMcpAccess && addButton}
             <PopoverContent
               align="end"
               className="w-[min(24rem,calc(100vw-2rem))] p-0"
@@ -206,7 +217,11 @@ export function RolePermissionsSection({
               directly under a popover trigger, so a box that grew or shrank as
               permissions came and went would shift the page under the cursor. */}
           <TabsContent value={tab} forceMount className="min-h-[13.5rem]">
-            {activeSelected.length === 0 ? (
+            {showsMcpAccess ? (
+              renderMcpAccess?.({
+                showPlatformAccess: () => setTab("organization"),
+              })
+            ) : activeSelected.length === 0 ? (
               <div className="flex min-h-[13.5rem] flex-col items-center justify-center px-4 text-center">
                 <Text variant="body" className="font-medium">
                   {tab === "mcp"
@@ -263,6 +278,8 @@ export function RolePermissionsSection({
                           >
                             Also allows connecting to these servers with every
                             tool.
+                            {renderMcpAccess &&
+                              " They show as locked on the MCP access tab."}
                           </Alert>
                         )}
                       </div>

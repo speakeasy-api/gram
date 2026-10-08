@@ -55,19 +55,37 @@ export function membersHaveChanged(
   return false;
 }
 
+function selectorIdentity(s: Selector): string {
+  return [
+    s.resourceKind,
+    s.resourceId,
+    s.projectId ?? "",
+    s.tool ?? "",
+    s.disposition ?? "",
+    s.serverUrl ?? "",
+  ].join("/");
+}
+
 /** Sorted, comma-joined grant keys for cheap equality check.
- *  Encodes each rule's effect and selector count so any change marks dirty. */
+ *  Encodes what each effect covers — every selector, not how the rules group
+ *  them — so swapping one server for another marks the form dirty while
+ *  regrouping the same selectors does not. */
 export function grantKeysString(grants: Record<string, RoleGrant>): string {
   return Object.entries(grants)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, g]) => {
-      const summary = g.rules
-        .map((r) => {
-          const selKey =
-            r.selectors === null ? "*" : String(r.selectors.length);
-          return `${r.effect}:${selKey}`;
+      const summary = (["allow", "deny"] as const)
+        .flatMap((effect) => {
+          const rules = g.rules.filter((r) => r.effect === effect);
+          if (rules.length === 0) return [];
+          if (rules.some((r) => r.selectors === null)) return [`${effect}:*`];
+          const ids = [
+            ...new Set(
+              rules.flatMap((r) => (r.selectors ?? []).map(selectorIdentity)),
+            ),
+          ].sort();
+          return [`${effect}:${ids.join("|")}`];
         })
-        .sort()
         .join("+");
       return `${key}[${summary}]`;
     })

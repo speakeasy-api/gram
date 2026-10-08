@@ -1,0 +1,447 @@
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/Sheet";
+import { useOrganization } from "@/contexts/Auth";
+import { useToolMetadata } from "@/hooks/useToolMetadata";
+import { mcpServerRouteParam } from "@/lib/sources";
+import { useRoutes } from "@/routes";
+import type { Disposition } from "@gram/client/models/components/selector.js";
+import { Check, PlugZap } from "lucide-react";
+import { useEffect, useMemo, useState, type JSX } from "react";
+import { Link } from "react-router";
+
+import { ServerTile } from "./McpAccessParts";
+import {
+  convertToolLimit,
+  DISPOSITION_COPY,
+  DISPOSITIONS,
+  toolDisposition,
+  type ServerWithProject,
+  type ToolLimit,
+} from "./mcpAccessModel";
+import { toolMetadataToServerTools } from "./remoteToolMetadata";
+import type { ServerTool } from "./serverMerge";
+
+export type ToolAccessTarget =
+  | { kind: "all" }
+  | { kind: "server"; entry: ServerWithProject };
+
+export type ToolSheetTab = "tools" | "annotations";
+
+/**
+ * Where a server's tool list comes from. Toolset servers know their tools at
+ * deploy time; remote servers know them once someone has connected and their
+ * tools were stored; tunneled servers resolve them only when called.
+ */
+type ToolSource =
+  | { status: "ready"; tools: ServerTool[] }
+  | { status: "loading" }
+  | { status: "error"; retry: () => void }
+  | { status: "needs-connect" }
+  | { status: "dynamic" }
+  | { status: "none" };
+
+function useServerTools(
+  target: ToolAccessTarget,
+  enabled: boolean,
+): ToolSource {
+  const organization = useOrganization();
+  const entry = target.kind === "server" ? target.entry : undefined;
+  const server = entry?.server;
+  const remote = !!server?.dynamicTools && server.remoteBacked;
+  const projectSlug = organization.projects.find(
+    (p) => p.id === entry?.projectId,
+  )?.slug;
+  const metadata = useToolMetadata(server?.id, {
+    enabled: enabled && remote,
+    projectSlug,
+  });
+  const remoteTools = useMemo(
+    () =>
+      server
+        ? toolMetadataToServerTools(
+            server.id,
+            Object.values(metadata.metadataByTool),
+          )
+        : [],
+    [server, metadata.metadataByTool],
+  );
+
+  if (!server) return { status: "none" };
+  if (!server.dynamicTools) return { status: "ready", tools: server.tools };
+  if (!server.remoteBacked) return { status: "dynamic" };
+  if (metadata.isLoading) return { status: "loading" };
+  if (metadata.isError) return { status: "error", retry: metadata.refetch };
+  if (remoteTools.length === 0) return { status: "needs-connect" };
+  return { status: "ready", tools: remoteTools };
+}
+
+/** Edit one server's tool access, or the tool access of All servers. */
+export function ToolAccessSheet({
+  target,
+  limit,
+  initialTab,
+  applyTab = false,
+  onChange,
+  onClose,
+}: {
+  target: ToolAccessTarget | null;
+  limit: ToolLimit;
+  initialTab: ToolSheetTab;
+  /**
+   * Limit the server the way `initialTab` says as soon as its tools are known,
+   * as picking "Edit by tool…" or "Edit by annotation…" asks.
+   */
+  applyTab?: boolean;
+  onChange: (limit: ToolLimit) => void;
+  onClose: () => void;
+}): JSX.Element {
+  return (
+    <Sheet
+      open={!!target}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-0 sm:max-w-md"
+      >
+        {target && (
+          <ToolAccessSheetBody
+            key={target.kind === "server" ? target.entry.server.id : "*"}
+            target={target}
+            limit={limit}
+            initialTab={initialTab}
+            applyTab={applyTab}
+            onChange={onChange}
+            onClose={onClose}
+          />
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function ToolAccessSheetBody({
+  target,
+  limit,
+  initialTab,
+  applyTab,
+  onChange,
+  onClose,
+}: {
+  target: ToolAccessTarget;
+  limit: ToolLimit;
+  initialTab: ToolSheetTab;
+  applyTab: boolean;
+  onChange: (limit: ToolLimit) => void;
+  onClose: () => void;
+}): JSX.Element {
+  const isAllServers = target.kind === "all";
+  const entry = target.kind === "server" ? target.entry : undefined;
+  // All servers has no tool list, so it is limited by annotation only.
+  const [tab, setTab] = useState<ToolSheetTab>(
+    isAllServers ? "annotations" : initialTab,
+  );
+  const source = useServerTools(target, true);
+  const readyTools = source.status === "ready" ? source.tools : undefined;
+  const tools = useMemo(() => readyTools ?? [], [readyTools]);
+  const specific = limit.kind !== "all";
+
+  // A remote server's tools arrive after the sheet opens, and converting
+  // before then would carry nothing over.
+  const [pendingApply, setPendingApply] = useState(applyTab);
+  useEffect(() => {
+    if (!pendingApply || source.status === "loading") return;
+    setPendingApply(false);
+    onChange(convertToolLimit(limit, tab, tools));
+  }, [pendingApply, source.status, limit, tab, tools, onChange]);
+
+  const chooseTab = (next: ToolSheetTab) => {
+    setTab(next);
+    onChange(convertToolLimit(limit, next, tools));
+  };
+
+  return (
+    <>
+      <SheetHeader className="border-border border-b">
+        <div className="flex items-center gap-3 pr-6">
+          {entry && <ServerTile />}
+          <div className="min-w-0">
+            <p className="text-eyebrow">
+              Tool access · {entry ? entry.projectName : "Every project"}
+            </p>
+            <SheetTitle className="truncate">
+              {entry ? entry.server.name : "All servers"}
+            </SheetTitle>
+          </div>
+        </div>
+        <SheetDescription className="sr-only">
+          Choose which tools members of this role can call.
+        </SheetDescription>
+      </SheetHeader>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-2 text-sm font-medium">
+            Which tools can members call?
+          </legend>
+          <RadioCardGroup
+            size="sm"
+            value={specific ? "specific" : "all"}
+            onValueChange={(value) =>
+              onChange(
+                value === "all"
+                  ? { kind: "all" }
+                  : convertToolLimit(limit, tab, tools),
+              )
+            }
+          >
+            <RadioCard value="all" title="All tools">
+              Every tool, including ones added later.
+            </RadioCard>
+            <RadioCard value="specific" title="Specific tools">
+              {isAllServers
+                ? "Allow tools by their annotation."
+                : "Pick tools, or allow them by annotation."}
+            </RadioCard>
+          </RadioCardGroup>
+        </fieldset>
+
+        {specific && !isAllServers && (
+          <SegmentedControl
+            value={tab}
+            onChange={chooseTab}
+            className="w-full [&>button]:flex-1 [&>button]:justify-center"
+            options={[
+              { value: "tools", label: "By tool" },
+              { value: "annotations", label: "By annotation" },
+            ]}
+          />
+        )}
+
+        {specific && tab === "tools" && limit.kind === "tools" && entry && (
+          <ToolChecklist
+            entry={entry}
+            source={source}
+            selected={limit.tools}
+            onChange={(names) => onChange({ kind: "tools", tools: names })}
+          />
+        )}
+        {specific && tab === "annotations" && limit.kind === "annotations" && (
+          <AnnotationChecklist
+            tools={entry && source.status === "ready" ? tools : undefined}
+            selected={limit.dispositions}
+            onChange={(dispositions) =>
+              onChange({ kind: "annotations", dispositions })
+            }
+          />
+        )}
+      </div>
+
+      <SheetFooter className="border-border flex-row justify-end border-t">
+        <Button variant="primary" onClick={onClose}>
+          <Button.LeftIcon>
+            <Check className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Done</Button.Text>
+        </Button>
+      </SheetFooter>
+    </>
+  );
+}
+
+function ToolChecklist({
+  entry,
+  source,
+  selected,
+  onChange,
+}: {
+  entry: ServerWithProject;
+  source: ToolSource;
+  selected: string[];
+  onChange: (tools: string[]) => void;
+}): JSX.Element {
+  switch (source.status) {
+    case "loading":
+      return <SheetNote>Loading tools…</SheetNote>;
+    case "error":
+      return (
+        <SheetNote>
+          Couldn&rsquo;t load this server&rsquo;s tools.{" "}
+          <Button variant="tertiary" size="xs" onClick={source.retry}>
+            <Button.Text>Retry</Button.Text>
+          </Button>
+        </SheetNote>
+      );
+    case "dynamic":
+    case "none":
+      return (
+        <SheetNote>
+          This server resolves its tools when they&rsquo;re called, so it
+          can&rsquo;t be limited by tool. Limit it by annotation instead.
+        </SheetNote>
+      );
+    case "needs-connect":
+      return <ConnectPrompt entry={entry} />;
+    case "ready":
+      break;
+  }
+
+  const chosen = new Set(selected);
+  const { tools } = source;
+  const picked = tools.filter((tool) => chosen.has(tool.name)).length;
+  const toggle = (name: string, on: boolean) =>
+    onChange(
+      on ? [...selected, name] : selected.filter((tool) => tool !== name),
+    );
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <span className="text-muted-foreground mr-auto text-sm">
+          {picked} of {tools.length} tools selected
+        </span>
+        <Button
+          variant="tertiary"
+          size="xs"
+          onClick={() => onChange(tools.map((tool) => tool.name))}
+        >
+          <Button.Text>Select all</Button.Text>
+        </Button>
+        <Button variant="tertiary" size="xs" onClick={() => onChange([])}>
+          <Button.Text>Clear</Button.Text>
+        </Button>
+      </div>
+      <div className="border-border divide-border divide-y border">
+        {tools.map((tool) => {
+          const disposition = toolDisposition(tool);
+          return (
+            <label
+              key={tool.id}
+              className="hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2"
+            >
+              <Checkbox
+                checked={chosen.has(tool.name)}
+                onCheckedChange={(next) => toggle(tool.name, next === true)}
+              />
+              <span className="min-w-0 flex-1 truncate font-mono text-xs">
+                {tool.name}
+              </span>
+              {disposition && (
+                <Badge variant="neutral" size="sm">
+                  {DISPOSITION_COPY[disposition].label}
+                </Badge>
+              )}
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AnnotationChecklist({
+  tools,
+  selected,
+  onChange,
+}: {
+  /** The server's tools, to count per annotation; absent for All servers. */
+  tools: ServerTool[] | undefined;
+  selected: Disposition[];
+  onChange: (dispositions: Disposition[]) => void;
+}): JSX.Element {
+  const toggle = (disposition: Disposition, on: boolean) =>
+    onChange(
+      DISPOSITIONS.filter((d) =>
+        d === disposition ? on : selected.includes(d),
+      ),
+    );
+  return (
+    <div className="border-border divide-border divide-y border">
+      {DISPOSITIONS.map((disposition) => {
+        const copy = DISPOSITION_COPY[disposition];
+        const count = tools?.filter(
+          (tool) => toolDisposition(tool) === disposition,
+        ).length;
+        return (
+          <label
+            key={disposition}
+            className="hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5"
+          >
+            <Checkbox
+              checked={selected.includes(disposition)}
+              onCheckedChange={(next) => toggle(disposition, next === true)}
+            />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="text-sm">{copy.label}</span>
+              <span className="text-muted-foreground text-xs">
+                {copy.description}
+              </span>
+            </span>
+            {count !== undefined && (
+              <Badge variant="neutral" size="sm">
+                {count} {count === 1 ? "tool" : "tools"}
+              </Badge>
+            )}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * A remote server lists its tools only once someone has connected to it.
+ * The Inspect tab opens in a new tab so unsaved changes to the role survive.
+ */
+function ConnectPrompt({ entry }: { entry: ServerWithProject }): JSX.Element {
+  const organization = useOrganization();
+  const projectSlug = organization.projects.find(
+    (p) => p.id === entry.projectId,
+  )?.slug;
+  const routes = useRoutes({ projectSlug });
+  return (
+    <div className="border-border bg-card flex flex-col items-start gap-3 border p-4">
+      <div className="flex items-center gap-2">
+        <PlugZap className="text-muted-foreground h-4 w-4" />
+        <p className="text-sm">
+          You must connect in order to permission by tool
+        </p>
+      </div>
+      <Button variant="secondary" size="sm" asChild>
+        <Link
+          to={routes.mcp.x.inspect.href(
+            mcpServerRouteParam({
+              id: entry.server.id,
+              slug: entry.server.slug,
+            }),
+          )}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <Button.Text>Connect</Button.Text>
+        </Link>
+      </Button>
+    </div>
+  );
+}
+
+function SheetNote({ children }: { children: React.ReactNode }): JSX.Element {
+  return (
+    <div className="border-border text-muted-foreground flex items-center gap-2 border px-3 py-3 text-sm">
+      {children}
+    </div>
+  );
+}

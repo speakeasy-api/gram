@@ -46,6 +46,9 @@ import {
   membersWithRole,
 } from "./changeRoleState";
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
+import { MCP_CONNECT_SCOPE } from "./mcpAccessModel";
+import { McpAccessPanel } from "./McpAccessPanel";
+import { useMcpAccessCount } from "./useMcpAccessCount";
 import { PermissionScopeControl } from "./PermissionScopeControl";
 import { RolePermissionsSection } from "./RolePermissionsSection";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
@@ -231,6 +234,8 @@ export function CreateRoleDialog({
     [scopeDefinitions],
   );
 
+  const mcpAccessCount = useMcpAccessCount(grants);
+
   const projectList = useMemo(
     () => organization.projects.map((p) => ({ id: p.id, name: p.name })),
     [organization.projects],
@@ -385,6 +390,15 @@ export function CreateRoleDialog({
           ],
         };
       }
+      return next;
+    });
+  };
+
+  const setConnectGrant = (grant: RoleGrant | undefined) => {
+    updateGrants((prev) => {
+      const next = { ...prev };
+      if (grant) next[MCP_CONNECT_SCOPE] = grant;
+      else delete next[MCP_CONNECT_SCOPE];
       return next;
     });
   };
@@ -762,6 +776,14 @@ export function CreateRoleDialog({
               disabled={false}
               markAgentIneligible={selectedAgents.size > 0}
               onToggleScope={toggleScope}
+              mcpAccessCount={mcpAccessCount}
+              renderMcpAccess={({ showPlatformAccess }) => (
+                <McpAccessPanel
+                  grants={grants}
+                  onChangeConnectGrant={setConnectGrant}
+                  onShowPlatformAccess={showPlatformAccess}
+                />
+              )}
               renderScopeRule={(scopeDef) => {
                 const grant = grants[scopeDef.slug];
                 if (!grant) return null;
