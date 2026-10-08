@@ -2,12 +2,13 @@ package platformmcp
 
 import (
 	"context"
+	"errors"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"errors"
 	"github.com/speakeasy-api/gram/server/internal/celeval"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sigint"
@@ -65,7 +66,8 @@ type previewSensorMatchOutput struct {
 }
 
 func signalManifest(name, title, description string, read bool) *mcp.Tool {
-	return &mcp.Tool{Meta: nil, Name: name, Title: title, Description: description, InputSchema: nil, OutputSchema: nil, Icons: nil, Annotations: &mcp.ToolAnnotations{Title: "", ReadOnlyHint: read, DestructiveHint: new(!read), IdempotentHint: true, OpenWorldHint: new(false)}}
+	destructive := name == "update_sensor" || name == "update_signal"
+	return &mcp.Tool{Meta: nil, Name: name, Title: title, Description: description, InputSchema: nil, OutputSchema: nil, Icons: nil, Annotations: &mcp.ToolAnnotations{Title: "", ReadOnlyHint: read, DestructiveHint: new(destructive), IdempotentHint: true, OpenWorldHint: new(false)}}
 }
 
 func registerSignalTools(reg *Registrar, service *SignalAuthoringService) {
@@ -211,7 +213,7 @@ func validateSignalSearch(input *findSignalsInput) error {
 		input.Limit = 20
 	}
 
-	if input.Limit < 1 || input.Limit > 100 || len(input.Query) > 200 {
+	if input.Limit < 1 || input.Limit > 100 || utf8.RuneCountInString(input.Query) > 200 {
 		return oops.C(oops.CodeBadRequest)
 	}
 

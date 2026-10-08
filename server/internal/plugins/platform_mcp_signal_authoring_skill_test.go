@@ -24,6 +24,12 @@ func TestGeneratePlatformMCPPackageEmitsSignalAuthoringWorkflow(t *testing.T) {
 		require.Contains(t, string(source), "`"+tool+"`")
 	}
 	require.Contains(t, string(source), "explicit confirmation")
+	remaining := string(source)
+	for _, guardrail := range []string{"## Preview and confirm", "`confirmed:false`", "explicit confirmation", "identical proposal", "`confirmed:true`", "`expected_version`", "`preview_token`", "`idempotency_key`", "Keep that key and all inputs unchanged", "A version conflict requires another read, preview, and", "confirmation;", "## Verify", "`snapshot_scope: verification_unavailable`"} {
+		_, after, found := strings.Cut(remaining, guardrail)
+		require.True(t, found, "missing or out-of-order guardrail: %s", guardrail)
+		remaining = after
+	}
 	require.Contains(t, string(source), "target_available")
 	require.NotContains(t, strings.ToLower(string(source)), "gram")
 	require.NotContains(t, string(source), "speakeasy-skill-feedback")

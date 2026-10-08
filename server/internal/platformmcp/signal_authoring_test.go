@@ -1,7 +1,11 @@
 package platformmcp
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -12,6 +16,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sigint"
 )
@@ -51,7 +57,7 @@ func TestSignalAuthoringBundleConfirmationReplayAndLiveRead(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 1, count)
 
-	_, err = f.service.management.DeleteSensor(ctx, &gensigint.DeleteSensorPayload{ID: created.Sensor.ID})
+	_, err = f.management.DeleteSensor(ctx, &gensigint.DeleteSensorPayload{ID: created.Sensor.ID})
 	require.NoError(t, err)
 
 	replayed, err = f.service.author(ctx, f.principal, "create_sensor", input)
@@ -76,7 +82,7 @@ func TestSignalAuthoringRejectsChangedProposalAndStalePreview(t *testing.T) {
 	_, err = f.service.author(ctx, f.principal, "create_signal", changed)
 	require.Error(t, err)
 
-	_, err = f.service.management.CreateSignal(ctx, &gensigint.CreateSignalPayload{Name: "Concurrent signal"})
+	_, err = f.management.CreateSignal(ctx, &gensigint.CreateSignalPayload{Name: "Concurrent signal"})
 	require.NoError(t, err)
 
 	_, err = f.service.author(ctx, f.principal, "create_signal", input)
@@ -110,10 +116,10 @@ func TestSignalAuthoringUpdateSharedSignalImpact(t *testing.T) {
 	t.Parallel()
 	ctx, f := newSignalAuthoringFixture(t)
 
-	signal, err := f.service.management.CreateSignal(ctx, &gensigint.CreateSignalPayload{Name: "Shared signal"})
+	signal, err := f.management.CreateSignal(ctx, &gensigint.CreateSignalPayload{Name: "Shared signal"})
 	require.NoError(t, err)
 
-	sensor, err := f.service.management.CreateSensor(ctx, &gensigint.CreateSensorPayload{Name: "Consumer", Mode: "multi_label", SignalIds: []string{signal.ID}})
+	sensor, err := f.management.CreateSensor(ctx, &gensigint.CreateSensorPayload{Name: "Consumer", Mode: "multi_label", SignalIds: []string{signal.ID}})
 	require.NoError(t, err)
 
 	input := signalAuthoringInput{ProjectID: f.project.ID.String(), Proposal: sigint.AuthoringInput{ID: signal.ID, Criteria: new("Updated criteria")}}
@@ -146,6 +152,8 @@ func TestSignalToolContractsAndUnavailableParity(t *testing.T) {
 		other := descriptorByName(t, unavailable, descriptor.Name)
 		require.Equal(t, descriptor.Meta, other.Meta)
 		require.JSONEq(t, string(descriptor.InputSchema), string(other.InputSchema))
+		require.Equal(t, descriptor.Annotations, other.Annotations)
+		require.Equal(t, descriptor.Name == "update_sensor" || descriptor.Name == "update_signal", *descriptor.Annotations.DestructiveHint)
 		require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
 		require.Equal(t, ExternalAuthorizationMember, descriptor.Meta.Authorization)
 	}
@@ -185,13 +193,13 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	t.Parallel()
 	ctx, f := newSignalAuthoringFixture(t)
 
-	first, err := f.service.management.CreateSignal(ctx, &gensigint.CreateSignalPayload{Name: "First topic"})
+	first, err := f.management.CreateSignal(ctx, &gensigint.CreateSignalPayload{Name: "First topic"})
 	require.NoError(t, err)
 
-	second, err := f.service.management.CreateSignal(ctx, &gensigint.CreateSignalPayload{Name: "Second topic"})
+	second, err := f.management.CreateSignal(ctx, &gensigint.CreateSignalPayload{Name: "Second topic"})
 	require.NoError(t, err)
 
-	sensor, err := f.service.management.CreateSensor(ctx, &gensigint.CreateSensorPayload{Name: "Topics", Mode: "multi_label", SignalIds: []string{first.ID}, Instructions: new("Classify the message")})
+	sensor, err := f.management.CreateSensor(ctx, &gensigint.CreateSensorPayload{Name: "Topics", Mode: "multi_label", SignalIds: []string{first.ID}, Instructions: new("Classify the message")})
 	require.NoError(t, err)
 
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "signals", Version: "1"}, nil))
@@ -263,4 +271,119 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, summaries.Sensors, 1)
 	require.Equal(t, 2, summaries.Sensors[0].SignalCount)
+}
+
+func TestSignalToolsUnavailableRefusals(t *testing.T) {
+	t.Parallel()
+	server := mcp.NewServer(&mcp.Implementation{Name: "signals-unavailable", Version: "1"}, nil)
+	bindExternalTestPrincipal(server)
+	reg := newRegistrar(server)
+	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
+	registerSignalTools(reg, nil)
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+
+	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
+	require.NoError(t, err)
+	defer o11y.NoLogDefer(serverSession.Close)
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "signals-client", Version: "1"}, nil)
+	session, err := client.Connect(t.Context(), clientTransport, nil)
+	require.NoError(t, err)
+	defer o11y.NoLogDefer(session.Close)
+
+	for _, descriptor := range reg.For(AudienceExternal) {
+		args := map[string]any{"project_id": uuid.NewString()}
+		switch descriptor.Name {
+		case "create_sensor", "create_signal", "update_sensor", "update_signal":
+			args["proposal"] = map[string]any{"operation": descriptor.Name}
+			args["confirmed"] = false
+		case "get_sensor":
+			args["sensor_id"] = uuid.NewString()
+		case "preview_sensor_match":
+			args["match_expression"] = `message.role == "user"`
+			args["examples"] = []any{}
+		}
+
+		result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: descriptor.Name, Arguments: args})
+		require.NoError(t, err, descriptor.Name)
+		require.True(t, result.IsError, descriptor.Name)
+		require.Len(t, result.Content, 1)
+		text, ok := result.Content[0].(*mcp.TextContent)
+		require.True(t, ok)
+		require.JSONEq(t, `{"code":"unavailable","feature":"signals_intelligence","message":"Signals intelligence authoring is unavailable."}`, text.Text, descriptor.Name)
+	}
+}
+
+func TestSignalToolsHideUnauthorizedProjectExistence(t *testing.T) {
+	t.Parallel()
+	ctx, f := newSignalAuthoringFixture(t)
+	ctx = authz.GrantsToContext(ctx, nil)
+	for _, write := range []bool{false, true} {
+		for _, id := range []string{f.project.ID.String(), uuid.NewString()} {
+			_, _, _, err := f.service.scope(ctx, f.principal, id, write)
+			require.ErrorIs(t, err, ErrForbidden)
+		}
+	}
+}
+
+// failingSignalVerification fails the fresh read after the authorization snapshot.
+type failingSignalVerification struct {
+	*sigint.Service
+	reads int
+}
+
+func (f *failingSignalVerification) ReadAuthoringState(ctx context.Context) (sigint.AuthoringState, error) {
+	f.reads++
+	if f.reads == 2 {
+		return sigint.AuthoringState{}, errors.New("verification unavailable")
+	}
+	state, err := f.Service.ReadAuthoringState(ctx)
+	if err != nil {
+		return state, fmt.Errorf("read verification fixture: %w", err)
+	}
+	return state, nil
+}
+
+func TestSignalAuthoringPreservesCommittedReceiptWhenVerificationFails(t *testing.T) {
+	t.Parallel()
+	ctx, f := newSignalAuthoringFixture(t)
+	input := signalAuthoringInput{ProjectID: f.project.ID.String(), Proposal: sigint.AuthoringInput{Name: new("Committed signal")}}
+
+	preview, err := f.service.author(ctx, f.principal, "create_signal", input)
+	require.NoError(t, err)
+	input.Confirmed, input.ExpectedVersion, input.PreviewToken, input.IdempotencyKey = true, preview.Version, preview.PreviewToken, "verification-failure"
+	f.service.management = &failingSignalVerification{Service: f.management}
+
+	created, err := f.service.author(ctx, f.principal, "create_signal", input)
+	require.NoError(t, err)
+	require.NotEmpty(t, created.ReceiptID)
+	require.False(t, created.Replayed)
+	require.False(t, created.Preview)
+	require.Equal(t, "verification_unavailable", created.SnapshotScope)
+	require.False(t, created.TargetAvailable)
+	require.Nil(t, created.Signal)
+	require.Empty(t, created.Version)
+
+	f.service.management = f.management
+	replayed, err := f.service.author(ctx, f.principal, "create_signal", input)
+	require.NoError(t, err)
+	require.True(t, replayed.Replayed)
+	require.Equal(t, created.ReceiptID, replayed.ReceiptID)
+	require.Equal(t, "current_configuration", replayed.SnapshotScope)
+	require.True(t, replayed.TargetAvailable)
+
+	state, err := f.management.ReadAuthoringState(ctx)
+	require.NoError(t, err)
+	require.Len(t, state.Signals, 1)
+}
+
+func TestSignalSearchUnicodeCharacterLimit(t *testing.T) {
+	t.Parallel()
+	input := findSignalsInput{Query: strings.Repeat("界", 200)}
+	require.NoError(t, validateSignalSearch(&input))
+	input.Query += "界"
+	err := validateSignalSearch(&input)
+	var failure *oops.ShareableError
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, oops.CodeBadRequest, failure.Code)
 }

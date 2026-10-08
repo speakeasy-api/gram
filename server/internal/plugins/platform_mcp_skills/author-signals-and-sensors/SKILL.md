@@ -63,7 +63,11 @@ scores. Sensors perform classification; they do not enforce access policies.
     signal, call `find_signals` and verify its exact ID and definition. Report
     committed state and configuration readiness separately from active inference
     or observed readings, which these tools cannot prove.
-11. A replayed receipt proves a historical write, not current existence. Check
+11. A committed receipt with `snapshot_scope: verification_unavailable` means the
+    write succeeded but the fresh read failed. Keep the same retry key and inputs;
+    retry verification rather than creating again. A false `target_available` in
+    this state does not prove deletion. A replayed receipt proves a historical
+    write, not current existence. Check
     `target_available` and the fresh target state; do not recreate a deleted
     target by changing the retry key. Present the returned dashboard path when
     available. If the capability is unavailable, stop rather than bypassing its

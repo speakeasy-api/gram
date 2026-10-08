@@ -30,16 +30,27 @@ const maxSignalProposalBytes = 64 << 10 // 64 KiB
 // SignalAuthoringService composes the authorized owning service with Platform
 // receipt and exact-project controls. External users are the only admitted actors.
 type SignalAuthoringService struct {
-	management *sigint.Service
+	management signalAuthoringManagement
 	projects   *PostgresReader
 	engine     *authz.Engine
 	db         *pgxpool.Pool
 	key        []byte
 }
 
+// signalAuthoringManagement retains owning-service authorization and transaction boundaries.
+type signalAuthoringManagement interface {
+	ReadAuthoringState(context.Context) (sigint.AuthoringState, error)
+	PreviewAuthoring(context.Context, sigint.AuthoringInput) (sigint.AuthoringResult, string, error)
+	AuthorInTransaction(context.Context, pgx.Tx, sigint.AuthoringInput, string) (sigint.AuthoringResult, error)
+}
+
 // NewSignalAuthoringService retains the normal management authorization and audit path.
 func NewSignalAuthoringService(management *sigint.Service, projects *PostgresReader, engine *authz.Engine, key string) *SignalAuthoringService {
-	return &SignalAuthoringService{management: management, projects: projects, engine: engine, db: projects.db, key: []byte(key)}
+	var authoring signalAuthoringManagement
+	if management != nil {
+		authoring = management
+	}
+	return &SignalAuthoringService{management: authoring, projects: projects, engine: engine, db: projects.db, key: []byte(key)}
 }
 
 type signalConfiguration struct {
@@ -85,6 +96,9 @@ type signalAuthoringOutput struct {
 	Replayed        bool                 `json:"replayed"`
 	TargetAvailable bool                 `json:"target_available"`
 	DashboardPath   string               `json:"dashboard_path"`
+
+	// SnapshotScope distinguishes fresh state from an unavailable post-commit verification.
+	SnapshotScope string `json:"snapshot_scope"`
 }
 
 type sensorImpact struct {
@@ -116,6 +130,16 @@ func (s *SignalAuthoringService) scope(ctx context.Context, principal Principal,
 		return ctx, project, state, ErrForbidden
 	}
 
+	// Check exact selectors before looking up rows so denied callers cannot probe existence.
+	if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: id.String(), Dimensions: nil}); err != nil {
+		return ctx, project, state, ErrForbidden
+	}
+	if write {
+		if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: id.String(), Dimensions: nil}); err != nil {
+			return ctx, project, state, ErrForbidden
+		}
+	}
+
 	project, err = s.projects.resolveInventoryProject(ctx, principal.OrganizationID, FindMCPInput{ProjectID: id.String(), ProjectSlug: "", Query: "", Cursor: "", Limit: 0, Readiness: ""})
 	if err != nil {
 		return ctx, project, state, err
@@ -133,11 +157,6 @@ func (s *SignalAuthoringService) scope(ctx context.Context, principal Principal,
 
 	scoped.ProjectID, scoped.ProjectSlug = &project.ID, &project.Slug
 	ctx = contextvalues.SetAuthContext(ctx, &scoped)
-	if write {
-		if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: id.String(), Dimensions: nil}); err != nil {
-			return ctx, project, state, err
-		}
-	}
 
 	// This independently checks entitlement and project read access, including
 	// before receipt replay. The mutation rechecks write access under its lock.
@@ -194,6 +213,7 @@ func (s *SignalAuthoringService) author(ctx context.Context, principal Principal
 
 		out := projectAuthoringResult(ctx, project, result)
 		out.Preview, out.Version = true, version
+		out.SnapshotScope = "preview"
 		out.PreviewToken, err = s.previewToken(principal, project, version, input.Proposal)
 		return out, err
 	}
@@ -250,7 +270,10 @@ func (s *SignalAuthoringService) author(ctx context.Context, principal Principal
 
 	state, err := s.management.ReadAuthoringState(ctx)
 	if err != nil {
-		return zero, fmt.Errorf("verify signal authoring: %w", err)
+		out := projectAuthoringResult(ctx, project, sigint.AuthoringResult{State: sigint.AuthoringState{Version: "", Sensors: nil, Signals: nil}, Sensor: nil, Signal: nil})
+		out.ReceiptID, out.Replayed = receipt.ID.String(), receipt.Replayed
+		out.SnapshotScope = "verification_unavailable"
+		return out, nil
 	}
 
 	result := sigint.AuthoringResult{State: state, Sensor: nil, Signal: nil}
@@ -341,6 +364,7 @@ func projectAuthoringResult(ctx context.Context, project ResolvedProject, result
 	var out signalAuthoringOutput
 	signals := signalProjections(result.State)
 	out.ProjectID, out.Version = project.ID.String(), result.State.Version
+	out.SnapshotScope = "current_configuration"
 	out.AffectedSensors = []sensorImpact{}
 
 	if auth, ok := contextvalues.GetAuthContext(ctx); ok && auth != nil && auth.OrganizationSlug != "" {

@@ -19,10 +19,11 @@ import (
 )
 
 type signalAuthoringFixture struct {
-	service   *SignalAuthoringService
-	principal Principal
-	project   ResolvedProject
-	features  *productfeatures.Client
+	service    *SignalAuthoringService
+	management *sigint.Service
+	principal  Principal
+	project    ResolvedProject
+	features   *productfeatures.Client
 }
 
 func newSignalAuthoringFixture(t *testing.T) (context.Context, signalAuthoringFixture) {
@@ -32,6 +33,8 @@ func newSignalAuthoringFixture(t *testing.T) (context.Context, signalAuthoringFi
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, t.Context(), db)
+	principal.ClientID = "signal-authoring-test-client"
+	principal.Surface = SurfacePlatformMCP
 	logger, tracer := testenv.NewLogger(t), testenv.NewTracerProvider(t)
 
 	redis, err := platformMCPInfra.NewRedisClient(t, 0)
@@ -44,5 +47,5 @@ func newSignalAuthoringFixture(t *testing.T) (context.Context, signalAuthoringFi
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = contextWithPrincipal(ctx, principal)
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, project.ID.String()), authz.NewGrant(authz.ScopeProjectWrite, project.ID.String())})
-	return ctx, signalAuthoringFixture{service: NewSignalAuthoringService(management, NewPostgresReader(logger, db), engine, "test-signal-authoring-key"), principal: principal, project: project, features: features}
+	return ctx, signalAuthoringFixture{service: NewSignalAuthoringService(management, NewPostgresReader(logger, db), engine, "test-signal-authoring-key"), management: management, principal: principal, project: project, features: features}
 }
