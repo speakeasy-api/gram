@@ -11,12 +11,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	approvalrepo "github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const shadowReviewFixtureURL = "https://fixture.invalid/mcp"
@@ -62,14 +64,24 @@ func seedReadyDirectRemoteDistributionTarget(t *testing.T, ctx context.Context, 
 	return principal, project
 }
 
+// seedBlockingShadowMCPPolicy creates an enabled block policy and puts the
+// everyone-audience grant. The raw policy row alone is enough for the
+// audience guard, but the registration-time check also requires the caller to
+// hold the policy's evaluate grant, as the policy service would create it.
 func seedBlockingShadowMCPPolicy(t *testing.T, ctx context.Context, conn *pgxpool.Pool, principal Principal, project ResolvedProject, name string) {
 	t.Helper()
+	policyID := uuid.New()
 	_, err := riskrepo.New(conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
-		ID: uuid.New(), ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: name, PolicyType: "standard",
+		ID: policyID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: name, PolicyType: "standard",
 		Sources: []string{shadowmcp.SourceShadowMCP}, PresidioEntities: nil, AnalyzerConfig: nil, PromptInjectionRules: nil, DisabledRules: nil, CustomRuleIds: nil,
 		Enabled: true, Action: "block", AudienceType: "everyone", ShadowMcpDisposition: pgtype.Text{}, AutoName: false, UserMessage: pgtype.Text{}, Prompt: pgtype.Text{}, ModelConfig: nil, Score: pgtype.Float8{},
 	})
 	require.NoError(t, err)
+	require.NoError(t, authz.ReplaceGrantAudience(ctx, conn, authz.ResourceGrant{
+		Resource:   authz.Resource{OrganizationID: principal.OrganizationID, Scope: authz.ScopeRiskPolicyEvaluate, ResourceID: policyID.String()},
+		Principals: []urn.Principal{authz.AllUsersPrincipal()},
+		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID.String()),
+	}))
 }
 
 func seedApprovedShadowMCPDecision(t *testing.T, ctx context.Context, conn *pgxpool.Pool, principal Principal, project ResolvedProject, canonicalURL string, principals []string) {
