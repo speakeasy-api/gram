@@ -703,7 +703,12 @@ const ROUTE_STRUCTURE = {
           overview: { title: "Overview", url: "overview" },
           mcpServers: { title: "MCP Servers", url: "mcp-servers" },
           sessions: { title: "Sessions", url: "sessions" },
-          settings: { title: "Settings", url: "settings" },
+          // Merged into Overview; RemoteSessionClientDetail redirects it there.
+          settings: {
+            title: "Settings",
+            url: "settings",
+            legacyRedirect: true,
+          },
         },
       },
     },

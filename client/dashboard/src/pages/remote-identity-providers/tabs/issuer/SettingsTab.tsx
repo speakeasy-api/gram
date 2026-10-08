@@ -3,9 +3,9 @@ import { RequireScope } from "@/components/require-scope";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Label } from "@/components/ui/Label";
-import { MultiSelect } from "@/components/ui/MultiSelect";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
+import { ScopeMultiSelect } from "@/lib/remote-identity";
 import { useRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
@@ -16,7 +16,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { ExistingIssuerLink } from "../../ExistingIssuerLink";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import {
   EndpointsFields,
@@ -57,14 +57,6 @@ export function SettingsTab({
   // on the next unrelated save.
   const [scopeOverride, setScopeOverride] = useState<string[]>(
     issuer.scopeOverride ?? [],
-  );
-  // Typed scopes join the list so the menu shows every selection.
-  const scopeOptions = useMemo(
-    () =>
-      [...new Set([...(issuer.scopesSupported ?? []), ...scopeOverride])].map(
-        (scope) => ({ label: scope, value: scope }),
-      ),
-    [issuer.scopesSupported, scopeOverride],
   );
   // Undefined until the operator flips the switch, so it tracks the saved
   // value and a save only sends the flag when it was deliberately changed:
@@ -382,23 +374,18 @@ export function SettingsTab({
           <Label id="scope-override-label" htmlFor="scope-override">
             Scope override
           </Label>
-          <MultiSelect
+          <ScopeMultiSelect
             id="scope-override"
-            aria-labelledby="scope-override-label"
-            options={scopeOptions}
+            labelId="scope-override-label"
+            options={issuer.scopesSupported ?? []}
             value={scopeOverride}
             onValueChange={setScopeOverride}
             placeholder="No override"
-            emptyIndicator="Type a scope to add it."
-            badgeClassName="normal-case tracking-normal"
-            maxCount={8}
-            creatable
-            caseSensitiveCreate
-            hideSelectAll
+            disabled={false}
           />
           <Text small muted>
-            Choose from the scopes this provider advertises, or type one to add
-            it.
+            Choose from the scopes this identity provider advertises, or type
+            one to add it.
           </Text>
         </div>
         <div className="flex flex-col gap-1.5">

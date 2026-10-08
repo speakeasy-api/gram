@@ -154,7 +154,7 @@ which carries a scope override (`read`), shown on its Overview and editable on i
 Settings tab; the Scope fallback row reads Every advertised scope. Its client
 has no scopes of its own and is flagged as a legacy callback client. Platform admins see the legacy callback warning with its
 Migrate button on the client's pages and the compatibility-mode switch on its
-Settings tab; everyone else sees neither. Browser verification: `[~]`.
+Overview tab; everyone else sees neither. Browser verification: `[~]`.
 
 Linear's protected resource (`https://mcp.linear.app/mcp`) has a PG
 `remote_protected_resources` row read two hours before the seed ran,
