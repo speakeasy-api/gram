@@ -471,6 +471,9 @@ BEGIN
   DELETE FROM remote_session_clients WHERE project_id = proj_a OR organization_id = demo_org;
   DELETE FROM remote_session_issuers WHERE project_id = proj_a OR organization_id = demo_org;
   DELETE FROM mcp_servers WHERE project_id = proj_a;
+  -- Tunnels cascade with the project too; cleared here, after the MCP servers
+  -- that RESTRICT them, so a rerun never depends on that cascade order.
+  DELETE FROM tunneled_mcp_servers WHERE project_id = proj_a;
   DELETE FROM remote_protected_resources WHERE project_id = proj_a;
   DELETE FROM meta_mcp_servers WHERE organization_id = demo_org;
   -- meta_mcp_servers RESTRICTs its issuer, so issuers clear after it.
@@ -1762,6 +1765,44 @@ BEGIN
      demo.det_uuid('gram-demo-mcpserver-linear'), 'acme-demo-linear'),
     (demo.det_uuid('gram-demo-endpoint-slack'), proj_a, NULL,
      demo.det_uuid('gram-demo-mcpserver-slack'), 'acme-demo-slack');
+
+  ------------------------------------------------------------------
+  -- One tunnel fronted by two MCP servers: a private one and a public one
+  -- (the tunnel owner has allowed public serving). Shows the existing-tunnel
+  -- picker, the shared-tunnel notices on every tunnel-wide setting, and the
+  -- split between deleting one server and deleting the tunnel. No agent ever
+  -- connects, so the tunnel reads as never connected; the key hash is a fake
+  -- marker, not a hash of any key.
+  ------------------------------------------------------------------
+  INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix,
+                                    allow_public) VALUES
+    (demo.det_uuid('gram-demo-tunshare-tunnel'), proj_a, 'JAMF Inventory',
+     'DEMO-NOT-A-VALID-HASH-' || demo.det_uuid('gram-demo-tunshare-tunnel')::text,
+     'gram_tun_DEMO', TRUE);
+
+  INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                    authn_challenge_mode, session_duration) VALUES
+    (demo.det_uuid('gram-demo-tunshare-issuer-private'), proj_a, demo_org,
+     'jamf-inventory', 'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
+    (demo.det_uuid('gram-demo-tunshare-issuer-public'), proj_a, demo_org,
+     'jamf-inventory-public', 'interactive', make_interval(secs => 14 * 24 * 60 * 60));
+
+  INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
+                           user_session_issuer_id, visibility) VALUES
+    (demo.det_uuid('gram-demo-tunshare-mcpserver-private'), proj_a,
+     'JAMF Inventory', 'jamf-inventory',
+     demo.det_uuid('gram-demo-tunshare-tunnel'),
+     demo.det_uuid('gram-demo-tunshare-issuer-private'), 'private'),
+    (demo.det_uuid('gram-demo-tunshare-mcpserver-public'), proj_a,
+     'JAMF Inventory (Public)', 'jamf-inventory-public',
+     demo.det_uuid('gram-demo-tunshare-tunnel'),
+     demo.det_uuid('gram-demo-tunshare-issuer-public'), 'public');
+
+  INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug) VALUES
+    (demo.det_uuid('gram-demo-tunshare-endpoint-private'), proj_a,
+     demo.det_uuid('gram-demo-tunshare-mcpserver-private'), 'acme-demo-jamf-inventory'),
+    (demo.det_uuid('gram-demo-tunshare-endpoint-public'), proj_a,
+     demo.det_uuid('gram-demo-tunshare-mcpserver-public'), 'acme-demo-jamf-inventory-public');
 
   -- Live connections spread across the MCP servers, not pooled on one issuer.
   -- The identity page's connections tab groups by MCP server, and every
@@ -3661,12 +3702,12 @@ Channel context stays in the Raw view.
   -- duplicated any of them would leave the badges telling a different story
   -- than the one they were seeded to tell.
   -- One issuer per Connections credential story (acme-partner-gateway), three
-  -- project MCP issuers, and the organization-wide workforce issuer used by
-  -- GitHub.
+  -- project MCP issuers, one for each MCP server on the shared tunnel, and the
+  -- organization-wide workforce issuer used by GitHub.
   SELECT count(*) INTO stray FROM user_session_issuers
   WHERE project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 4 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 4 project user session issuers, found %', stray;
+  IF stray <> 6 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 6 project user session issuers, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_session_issuers
@@ -4001,6 +4042,19 @@ Channel context stays in the Raw view.
   SELECT count(*) INTO stray FROM widgets WHERE project_id = proj_a AND deleted IS FALSE;
   IF stray <> 5 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 5 Explore widgets, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM tunneled_mcp_servers
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 tunneled MCP source, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM mcp_servers
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND tunneled_mcp_server_id = demo.det_uuid('gram-demo-tunshare-tunnel');
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 MCP servers sharing the demo tunnel, found %', stray;
   END IF;
 
   RAISE NOTICE 'demo seed ok: % chats, % findings, % members, % tools',
