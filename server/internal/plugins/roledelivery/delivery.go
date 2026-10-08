@@ -42,8 +42,9 @@ func servers(ctx context.Context, tx pgx.Tx, org string, projectID uuid.UUID) ([
 }
 
 // allowed reports whether grants deliver s. Only connect (or root) grants
-// deliver: read and write still satisfy connect at the endpoint, but counting
-// them here would make a narrowed connect rule meaningless.
+// deliver: read and write still satisfy connect at the endpoint (see
+// authz scopeExpansions[ScopeMCPConnect]), but counting them here would make a
+// narrowed connect rule meaningless.
 func allowed(grants []authz.Grant, s server) (bool, error) {
 	grants = slices.DeleteFunc(slices.Clone(grants), func(g authz.Grant) bool {
 		return g.Scope == authz.ScopeMCPRead || g.Scope == authz.ScopeMCPWrite
