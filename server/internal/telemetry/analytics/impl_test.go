@@ -17,7 +17,7 @@ func TestDescribe(t *testing.T) {
 
 	result, err := ti.service.Describe(ctx, &gen.DescribePayload{SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
-	require.Len(t, result.Datasets, 2)
+	require.Len(t, result.Datasets, 3)
 
 	sessions := result.Datasets[0]
 	require.Equal(t, "sessions", sessions.Name)
@@ -49,17 +49,50 @@ func TestDescribe(t *testing.T) {
 	for _, f := range toolCalls.Fields {
 		toolFields[f.Name] = f
 	}
-	require.NotNil(t, toolFields["skill"].Description, "describe carries the caveat on which producers report skills")
-	require.Contains(t, *toolFields["skill"].Description, "Claude Code")
-	require.Equal(t, []string{"count_distinct"}, toolFields["skill"].Aggregations)
+	require.NotContains(t, toolFields, "skill", "a Skill call is an ordinary call here; skills are their own dataset")
 	require.Nil(t, toolFields["tool_name"].Description, "a field with nothing to add has no description")
 	require.Nil(t, byName["user"].Description)
+
+	skills := result.Datasets[2]
+	require.Equal(t, "skills", skills.Name)
+	require.Equal(t, "skill invocation", skills.Grain)
+	require.Contains(t, skills.Description, "Claude Code", "describe carries the caveat on which producers report skills")
+	require.Equal(t, []string{"skill"}, defaultFields(skills), "the skills view opens broken down by skill")
+	skillFields := make(map[string]*gen.AnalyticsField, len(skills.Fields))
+	for _, f := range skills.Fields {
+		skillFields[f.Name] = f
+	}
+	require.Equal(t, []string{"count_distinct"}, skillFields["skill"].Aggregations, "skills used is a distinct count")
+	require.Equal(t, []string{"count_distinct"}, skillFields["user"].Aggregations)
 
 	t.Run("it requires an authenticated project", func(t *testing.T) {
 		t.Parallel()
 		_, err := ti.service.Describe(t.Context(), &gen.DescribePayload{SessionToken: nil, ProjectSlugInput: nil})
 		requireOopsCode(t, err, oops.CodeUnauthorized)
 	})
+}
+
+// TestDescribeDatasetsCarriesFieldDescriptions: a field's description
+// reaches describe when the catalog gives one, and is absent otherwise.
+func TestDescribeDatasetsCarriesFieldDescriptions(t *testing.T) {
+	t.Parallel()
+
+	described := describeDatasets(MustCatalog(&Dataset{
+		Name:        "things",
+		Kind:        KindEvent,
+		Grain:       "thing",
+		Description: "things",
+		TimeExpr:    "started_at",
+		Fields: []Field{
+			{Name: "kind", Type: TypeString, Role: RoleDimension, Default: true, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "kind", Description: "Which producers fill it."},
+			{Name: "thing", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id", Description: ""},
+		},
+		Source: sessionsSource,
+	}))
+	require.Len(t, described, 1)
+	require.NotNil(t, described[0].Fields[0].Description)
+	require.Equal(t, "Which producers fill it.", *described[0].Fields[0].Description)
+	require.Nil(t, described[0].Fields[1].Description, "a field with nothing to add has no description")
 }
 
 func TestQuery(t *testing.T) {

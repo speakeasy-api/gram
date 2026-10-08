@@ -37,7 +37,6 @@ var ToolCalls = &Dataset{
 		// producer named are what tell them apart.
 		{Name: "mcp_server", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "mcp_server_name", Description: ""},
 		{Name: "mcp_tool", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "mcp_tool_name", Description: ""},
-		{Name: "skill", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "skill_name", Description: skillDescription},
 		{Name: "session", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "session_id", Description: ""},
 		{Name: "user", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "user_email", Description: ""},
 		{Name: "surface", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "surface", Description: ""},
@@ -51,10 +50,28 @@ var ToolCalls = &Dataset{
 	Source: toolCallsSource,
 }
 
-// skillDescription is on the skill dimension because only one producer
-// family states a skill: a sparse breakdown means skills were not reported,
-// not that none were used, and the picker has to say so.
-const skillDescription = "Skill a Skill tool invocation named. Reported by Claude Code when tool details are logged and by Speakeasy hooks; Codex and generic OpenTelemetry producers report no skills, so a sparse breakdown means they were not reported, not that none were used."
+// Skills is one row per skill invocation: a tool call that named a skill,
+// resolved to its terminal observation like any other call. Only one
+// producer family states a skill, so the dataset says so: an empty
+// breakdown means skills were not reported, not that none were used.
+var Skills = &Dataset{
+	Name:        "skills",
+	Kind:        KindEvent,
+	Grain:       "skill invocation",
+	Description: "One row per skill invocation: a tool call that named a skill, resolved to its latest observation. count counts invocations; skills used is count_distinct over skill, people over user. Claude Code reports the skill when tool details are logged, as do Speakeasy hooks; Codex and generic OpenTelemetry producers report none, so an empty breakdown means skills were not reported, not that none were used.",
+	TimeExpr:    "started_at",
+	Fields: []Field{
+		{Name: "skill", Type: TypeString, Role: RoleDimension, Default: true, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "skill_name", Description: ""},
+		{Name: "session", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "session_id", Description: ""},
+		{Name: "user", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "user_email", Description: ""},
+		{Name: "surface", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "surface", Description: ""},
+		// status is the invocation's outcome in the same vocabulary as a tool
+		// call's: ok, error, rejected or refused.
+		{Name: "status", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "status", Description: ""},
+		{Name: "duration_ms", Type: TypeFloat64, Role: RoleMeasure, Default: false, Unit: "ms", Operators: nil, Aggregations: []Aggregation{AggregationSum, AggregationAvg, AggregationP95}, Expr: "duration_nano / 1e6", Description: ""},
+	},
+	Source: skillsSource,
+}
 
-// Default is the v1 catalog: both datasets read agent_events.
-var Default = MustCatalog(Sessions, ToolCalls)
+// Default is the v1 catalog: every dataset reads agent_events.
+var Default = MustCatalog(Sessions, ToolCalls, Skills)

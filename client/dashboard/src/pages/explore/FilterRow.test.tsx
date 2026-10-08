@@ -54,12 +54,12 @@ const dataset: AnalyticsDataset = {
       operators: ["in"],
     },
     {
-      name: "skill",
+      name: "surface",
       type: "string",
       role: "dimension",
       default: false,
       operators: ["equals", "in"],
-      description: "Reported by Claude Code; Codex reports no skills.",
+      description: "Where the call ran, as the producer reported it.",
     },
   ],
 };
@@ -140,9 +140,9 @@ describe("FilterRow", () => {
     fireEvent.keyDown(screen.getByRole("combobox", { name: "Filter field" }), {
       key: "Enter",
     });
-    expect(await screen.findByRole("option", { name: /skill/ })).toBeTruthy();
+    expect(await screen.findByRole("option", { name: /surface/ })).toBeTruthy();
     expect(
-      screen.getByText("Reported by Claude Code; Codex reports no skills."),
+      screen.getByText("Where the call ran, as the producer reported it."),
     ).toBeTruthy();
   });
 

@@ -2436,7 +2436,7 @@ WHERE t < turns;
 -- Tool rows: 0-3 calls per turn. A Claude call is a decision then a result
 -- (or the rejecting decision alone); a Codex call is its result. A share of
 -- the Claude calls are Skill invocations naming one of three skills, which
--- is what fills the tool_calls skill dimension; Codex reports no skills.
+-- is what fills the skills dataset; Codex reports no skills.
 INSERT INTO agent_events
   (organization_id, project_id, occurred_at_unix_nano, observed_at_unix_nano,
    record_id, session_id, turn_id, event_id, event_type, raw_event_name,

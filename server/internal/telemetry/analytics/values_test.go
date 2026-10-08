@@ -80,7 +80,7 @@ func TestDimensionValues(t *testing.T) {
 	require.Equal(t, "gpt-5", result.Values[1].Value)
 	require.EqualValues(t, 1, result.Values[1].Count)
 
-	t.Run("it offers a tool_calls dimension's values", func(t *testing.T) {
+	t.Run("it offers the skills a window saw", func(t *testing.T) {
 		t.Parallel()
 		call := func(recordID, tool, skill string, at time.Time) chrepo.AgentEventRow {
 			r := agentEventFixture(ti.organizationID, recordID, "", "", recordID, "tool_call_result", at.UnixNano())
@@ -97,10 +97,10 @@ func TestDimensionValues(t *testing.T) {
 		}))
 
 		result, err := ti.service.DimensionValues(ctx, &gen.DimensionValuesPayload{
-			Dataset: "tool_calls", Dimension: "skill", From: from, To: to, Limit: 0, SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "skills", Dimension: "skill", From: from, To: to, Limit: 0, SessionToken: nil, ProjectSlugInput: nil,
 		})
 		require.NoError(t, err)
-		require.Len(t, result.Values, 2, "a call that named no skill is never offered")
+		require.Len(t, result.Values, 2, "a call that named no skill is no invocation, so the empty value is never offered")
 		require.Equal(t, "deploy", result.Values[0].Value)
 		require.EqualValues(t, 2, result.Values[0].Count)
 		require.Equal(t, "review", result.Values[1].Value)

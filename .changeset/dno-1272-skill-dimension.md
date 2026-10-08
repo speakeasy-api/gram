@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-The tool_calls analytics dataset gains a `skill` dimension, the skill a Skill tool invocation named, so Explore, saved widgets and dashboards can break tool calls down by skill or count the skills used. Describe now carries a description on fields that need one, and the Explore pickers show it.
+A `skills` analytics dataset, one row per skill invocation (a tool call that named a skill), so Explore, saved widgets and dashboards can rank skills and count the skills used. Its description says which producers report skills, since Codex and generic OpenTelemetry producers report none.
