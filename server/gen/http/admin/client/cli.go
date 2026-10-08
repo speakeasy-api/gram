@@ -2098,6 +2098,49 @@ func BuildDescribeMcpServerHealthPayload(adminDescribeMcpServerHealthOrganizatio
 	return v, nil
 }
 
+// BuildSetMcpServerScopePinPayload builds the payload for the admin
+// setMcpServerScopePin endpoint from CLI flags.
+func BuildSetMcpServerScopePinPayload(adminSetMcpServerScopePinBody string, adminSetMcpServerScopePinAdminSessionToken string) (*admin.SetMcpServerScopePinPayload, error) {
+	var err error
+	var body SetMcpServerScopePinRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetMcpServerScopePinBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		if body.Scopes == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetMcpServerScopePinAdminSessionToken != "" {
+			adminSessionToken = &adminSetMcpServerScopePinAdminSessionToken
+		}
+	}
+	v := &admin.SetMcpServerScopePinPayload{
+		OrganizationID: body.OrganizationID,
+		ProjectID:      body.ProjectID,
+		McpServerID:    body.McpServerID,
+	}
+	if body.Scopes != nil {
+		v.Scopes = make([]string, len(body.Scopes))
+		for i, val := range body.Scopes {
+			v.Scopes[i] = val
+		}
+	} else {
+		v.Scopes = []string{}
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetMcpServerToolCallsPayload builds the payload for the admin
 // getMcpServerToolCalls endpoint from CLI flags.
 func BuildGetMcpServerToolCallsPayload(adminGetMcpServerToolCallsOrganizationID string, adminGetMcpServerToolCallsProjectID string, adminGetMcpServerToolCallsMcpServerID string, adminGetMcpServerToolCallsWindowDays string, adminGetMcpServerToolCallsAdminSessionToken string) (*admin.GetMcpServerToolCallsPayload, error) {

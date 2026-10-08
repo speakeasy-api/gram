@@ -141,6 +141,25 @@ function requestUrl(input: RequestInfo | URL): URL {
 }
 
 const TOOL_CALLS_PATH = "/admin/project.mcpServerToolCalls";
+const SET_PIN_PATH = "/admin/project.setMcpServerScopePin";
+
+const RESOURCE_SCOPES = {
+  resource_url: "https://mcp.example.test/mcp",
+  pinned_scopes: ["read"],
+  advertised_scopes_known: true,
+  advertised_scopes: ["read", "write"],
+  challenge_scopes: [],
+  shared_server_count: 1,
+  clients: [
+    {
+      client_id: "rsc_1",
+      scope_source: "client_scope",
+      requested_scopes: ["api"],
+      unadvertised_pinned_scopes: [],
+      pin_would_decide: false,
+    },
+  ],
+};
 
 // Set by a test to hold or fail the telemetry read on its own.
 let toolCallsResponse: Promise<Response> | undefined;
@@ -172,6 +191,9 @@ beforeEach(() => {
     }
     if (url.pathname === TOOL_CALLS_PATH) {
       return toolCallsResponse ?? Promise.resolve(json(toolCalls));
+    }
+    if (url.pathname === SET_PIN_PATH) {
+      return Promise.resolve(json(RESOURCE_SCOPES));
     }
     return Promise.resolve(new Response("not found", { status: 404 }));
   });
@@ -639,5 +661,78 @@ describe("McpServerHealth", () => {
     );
     expect(healthRequests()).toEqual([]);
     expect(requestsTo(TOOL_CALLS_PATH)).toEqual([]);
+  });
+
+  describe("login scopes", () => {
+    function withScopes(windowDays: number): Body {
+      return { ...withIssuer(windowDays), resource_scopes: RESOURCE_SCOPES };
+    }
+
+    it("shows the pin and what each client would request", async () => {
+      respond = withScopes;
+      await open();
+
+      const scopes = await screen.findByRole("region", {
+        name: "Login scopes",
+      });
+      expect(
+        (within(scopes).getByLabelText("Pinned scopes") as HTMLInputElement)
+          .value,
+      ).toBe("read");
+      expect(within(scopes).getByText("read write")).toBeTruthy();
+      expect(
+        within(scopes).getByText("1 other server on this URL"),
+      ).toBeTruthy();
+      expect(within(scopes).getByText("Client's own scopes")).toBeTruthy();
+      expect(within(scopes).getByText(/a pin would not apply/)).toBeTruthy();
+    });
+
+    it("saves an edited pin for the server", async () => {
+      respond = withScopes;
+      await open();
+      const scopes = await screen.findByRole("region", {
+        name: "Login scopes",
+      });
+
+      fireEvent.change(within(scopes).getByLabelText("Pinned scopes"), {
+        target: { value: "read write read" },
+      });
+      const readsBeforeSave = healthRequests().length;
+      fireEvent.click(within(scopes).getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(requestsTo(SET_PIN_PATH)).toHaveLength(1));
+      // A successful write refetches the report.
+      await waitFor(() =>
+        expect(healthRequests().length).toBeGreaterThan(readsBeforeSave),
+      );
+      const call = mocks.healthFetch.mock.calls.find(
+        ([input]) => requestUrl(input).pathname === SET_PIN_PATH,
+      );
+      const body = (await (call![0] as Request).json()) as unknown;
+      expect(body).toEqual({
+        organization_id: ORG.id,
+        project_id: PROJECT.id,
+        mcp_server_id: SERVER_ID,
+        scopes: ["read", "write"],
+      });
+    });
+
+    it("leaves Save off until the pin changes", async () => {
+      respond = withScopes;
+      await open();
+      const scopes = await screen.findByRole("region", {
+        name: "Login scopes",
+      });
+
+      const save = within(scopes).getByRole("button", { name: "Save" });
+      expect((save as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("draws no login scopes for a server without a remote backend", async () => {
+      await open();
+      await screen.findByRole("heading", { name: "crm" });
+
+      expect(screen.queryByRole("region", { name: "Login scopes" })).toBe(null);
+    });
   });
 });

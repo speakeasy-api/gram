@@ -297,6 +297,11 @@ func DescribeMcpServerHealthAdminPath() string {
 	return "/admin/project.mcpServerHealth"
 }
 
+// SetMcpServerScopePinAdminPath returns the URL path to the admin service setMcpServerScopePin HTTP endpoint.
+func SetMcpServerScopePinAdminPath() string {
+	return "/admin/project.setMcpServerScopePin"
+}
+
 // GetMcpServerToolCallsAdminPath returns the URL path to the admin service getMcpServerToolCalls HTTP endpoint.
 func GetMcpServerToolCallsAdminPath() string {
 	return "/admin/project.mcpServerToolCalls"

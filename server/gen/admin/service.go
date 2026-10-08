@@ -219,6 +219,11 @@ type Service interface {
 	// counts (admin view, no auth scoping). Tool calls come from
 	// getMcpServerToolCalls.
 	DescribeMcpServerHealth(context.Context, *DescribeMcpServerHealthPayload) (res *AdminMcpServerHealth, err error)
+	// Sets or clears the scopes pinned on the protected resource behind a
+	// remote-backed MCP server (admin view, no auth scoping). The pin applies to
+	// every live server in the project with the same upstream URL. Audited as the
+	// staff member.
+	SetMcpServerScopePin(context.Context, *SetMcpServerScopePinPayload) (res *AdminMcpServerResourceScopes, err error)
 	// Reads one MCP server's tool call outcomes and series over a window (admin
 	// view, no auth scoping). Returns logging:disabled without reading telemetry
 	// when the organization's logs are off.
@@ -318,7 +323,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [84]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage"}
+var MethodNames = [85]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "setMcpServerScopePin", "getMcpServerToolCalls", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -512,6 +517,8 @@ type AdminMcpServerHealth struct {
 	// issuer.
 	LegacyAuth        *string
 	UserSessionIssuer *AdminMcpServerHealthUserSessionIssuer
+	// Set only when a remote MCP server backs the server.
+	ResourceScopes *AdminMcpServerResourceScopes
 }
 
 // The identities telemetry is matched on for this server.
@@ -673,6 +680,43 @@ type AdminMcpServerHealthUserSessions struct {
 	LastIssuedAt *string
 	// Sessions whose refresh deadline has not passed.
 	Live int64
+}
+
+// What a login through one remote session client bound to the server would
+// request now.
+type AdminMcpServerResourceScopeClient struct {
+	// The remote session client ID.
+	ClientID string
+	// Which source decides the client's requested scopes.
+	ScopeSource string
+	// The scopes a login would request.
+	RequestedScopes []string
+	// Pinned scopes the MCP server does not advertise. They are still requested.
+	UnadvertisedPinnedScopes []string
+	// Whether a pin, if set, decides this client's request: the client owns the
+	// resource and neither its own scopes nor a challenge outranks the pin.
+	PinWouldDecide bool
+}
+
+// AdminMcpServerResourceScopes is the result type of the admin service
+// setMcpServerScopePin method.
+type AdminMcpServerResourceScopes struct {
+	// The upstream URL the protected resource is keyed by.
+	ResourceURL string
+	// Scopes pinned on the resource. Empty when there is no pin.
+	PinnedScopes []string
+	// Whether the resource's advertised scopes are known from a fresh RFC 9728
+	// read.
+	AdvertisedScopesKnown bool
+	// The RFC 9728 scopes_supported the resource advertises. Absent when unknown.
+	AdvertisedScopes []string
+	// Scopes named by the resource's last WWW-Authenticate challenge.
+	ChallengeScopes []string
+	// Other live MCP servers in the project with the same upstream URL. A pin
+	// applies to all of them.
+	SharedServerCount int
+	// Remote session clients bound to the server's user session issuer.
+	Clients []*AdminMcpServerResourceScopeClient
 }
 
 // Tool calls in one bucket of the series.
@@ -2208,6 +2252,21 @@ type SetInferenceKeyMonthlyLimitPayload struct {
 	OrganizationID    string
 	KeyType           string
 	MonthlyCredits    int
+}
+
+// SetMcpServerScopePinPayload is the payload type of the admin service
+// setMcpServerScopePin method.
+type SetMcpServerScopePinPayload struct {
+	AdminSessionToken *string
+	// Organization the project must belong to. A project outside it is reported as
+	// not found.
+	OrganizationID string
+	// Project ID.
+	ProjectID string
+	// The mcp_servers row ID.
+	McpServerID string
+	// The new pin. Trimmed and de-duplicated; an empty list clears the pin.
+	Scopes []string
 }
 
 // SetOrganizationChatAnalysisSettingsPayload is the payload type of the admin

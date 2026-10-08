@@ -20,6 +20,10 @@ import {
   AdminMcpServerHealthUserSessionIssuer,
   AdminMcpServerHealthUserSessionIssuer$inboundSchema,
 } from "./adminmcpserverhealthusersessionissuer.js";
+import {
+  AdminMcpServerResourceScopes,
+  AdminMcpServerResourceScopes$inboundSchema,
+} from "./adminmcpserverresourcescopes.js";
 
 /**
  * Legacy authentication in force. Set only when the server has no user session issuer.
@@ -47,6 +51,10 @@ export type AdminMcpServerHealth = {
    */
   legacyAuth?: LegacyAuth | undefined;
   /**
+   * The scopes logins through a remote-backed MCP server request, read from the cached protected resource without probing. Resolved as if the organization had the remote-session-live-resource-scopes rollout on: this view does not evaluate the flag, and with it off logins ignore the pin and the resource's scopes.
+   */
+  resourceScopes?: AdminMcpServerResourceScopes | undefined;
+  /**
    * The server the health report describes, as listProjectMcpServers lists it.
    */
   server: AdminMcpServerHealthServer;
@@ -68,6 +76,7 @@ export const AdminMcpServerHealth$inboundSchema: z.ZodMiniType<
   z.object({
     correlation: AdminMcpServerHealthCorrelation$inboundSchema,
     legacy_auth: z.optional(LegacyAuth$inboundSchema),
+    resource_scopes: z.optional(AdminMcpServerResourceScopes$inboundSchema),
     server: AdminMcpServerHealthServer$inboundSchema,
     user_session_issuer: z.optional(
       AdminMcpServerHealthUserSessionIssuer$inboundSchema,
@@ -76,6 +85,7 @@ export const AdminMcpServerHealth$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "legacy_auth": "legacyAuth",
+      "resource_scopes": "resourceScopes",
       "user_session_issuer": "userSessionIssuer",
     });
   }),

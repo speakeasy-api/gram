@@ -75,6 +75,7 @@ type Endpoints struct {
 	UpdateSupportMatrix                   goa.Endpoint
 	GetSupportCoverage                    goa.Endpoint
 	DescribeMcpServerHealth               goa.Endpoint
+	SetMcpServerScopePin                  goa.Endpoint
 	GetMcpServerToolCalls                 goa.Endpoint
 	GetRegistryOktaCandidates             goa.Endpoint
 	ListRegistryOktaUnmapped              goa.Endpoint
@@ -184,6 +185,7 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdateSupportMatrix:                   NewUpdateSupportMatrixEndpoint(s, a.APIKeyAuth),
 		GetSupportCoverage:                    NewGetSupportCoverageEndpoint(s, a.APIKeyAuth),
 		DescribeMcpServerHealth:               NewDescribeMcpServerHealthEndpoint(s, a.APIKeyAuth),
+		SetMcpServerScopePin:                  NewSetMcpServerScopePinEndpoint(s, a.APIKeyAuth),
 		GetMcpServerToolCalls:                 NewGetMcpServerToolCallsEndpoint(s, a.APIKeyAuth),
 		GetRegistryOktaCandidates:             NewGetRegistryOktaCandidatesEndpoint(s, a.APIKeyAuth),
 		ListRegistryOktaUnmapped:              NewListRegistryOktaUnmappedEndpoint(s, a.APIKeyAuth),
@@ -273,6 +275,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateSupportMatrix = m(e.UpdateSupportMatrix)
 	e.GetSupportCoverage = m(e.GetSupportCoverage)
 	e.DescribeMcpServerHealth = m(e.DescribeMcpServerHealth)
+	e.SetMcpServerScopePin = m(e.SetMcpServerScopePin)
 	e.GetMcpServerToolCalls = m(e.GetMcpServerToolCalls)
 	e.GetRegistryOktaCandidates = m(e.GetRegistryOktaCandidates)
 	e.ListRegistryOktaUnmapped = m(e.ListRegistryOktaUnmapped)
@@ -1593,6 +1596,29 @@ func NewDescribeMcpServerHealthEndpoint(s Service, authAPIKeyFn security.AuthAPI
 			return nil, err
 		}
 		return s.DescribeMcpServerHealth(ctx, p)
+	}
+}
+
+// NewSetMcpServerScopePinEndpoint returns an endpoint function that calls the
+// method "setMcpServerScopePin" of service "admin".
+func NewSetMcpServerScopePinEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetMcpServerScopePinPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetMcpServerScopePin(ctx, p)
 	}
 }
 

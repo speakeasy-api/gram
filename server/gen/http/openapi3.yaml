@@ -4658,6 +4658,85 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/project.setMcpServerScopePin:
+        post:
+            description: Sets or clears the scopes pinned on the protected resource behind a remote-backed MCP server (admin view, no auth scoping). The pin applies to every live server in the project with the same upstream URL. Audited as the staff member.
+            operationId: adminSetMcpServerScopePin
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetMcpServerScopePinRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminMcpServerResourceScopes'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: setMcpServerScopePin admin
+            tags:
+                - admin
+            x-speakeasy-name-override: setMcpServerScopePin
+            x-speakeasy-react-hook:
+                name: AdminSetMcpServerScopePin
     /admin/registry.create:
         post:
             description: Staff-only registry administration.
@@ -84995,6 +85074,8 @@ components:
                         - external_oauth
                         - oauth_proxy
                         - gram_private
+                resource_scopes:
+                    $ref: '#/components/schemas/AdminMcpServerResourceScopes'
                 server:
                     $ref: '#/components/schemas/AdminMcpServerHealthServer'
                 user_session_issuer:
@@ -85339,6 +85420,87 @@ components:
                 - distinct_subjects_ever
                 - distinct_subjects_in_window
                 - live
+        AdminMcpServerResourceScopeClient:
+            type: object
+            properties:
+                client_id:
+                    type: string
+                    description: The remote session client ID.
+                pin_would_decide:
+                    type: boolean
+                    description: 'Whether a pin, if set, decides this client''s request: the client owns the resource and neither its own scopes nor a challenge outranks the pin.'
+                requested_scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: The scopes a login would request.
+                scope_source:
+                    type: string
+                    description: Which source decides the client's requested scopes.
+                    enum:
+                        - client_scope
+                        - challenge_scope
+                        - resource_pin
+                        - live_resource
+                        - cached_resource
+                        - issuer_override
+                        - issuer_omitted
+                        - issuer_catalogue
+                        - none
+                unadvertised_pinned_scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: Pinned scopes the MCP server does not advertise. They are still requested.
+            description: What a login through one remote session client bound to the server would request now.
+            required:
+                - client_id
+                - scope_source
+                - requested_scopes
+                - unadvertised_pinned_scopes
+                - pin_would_decide
+        AdminMcpServerResourceScopes:
+            type: object
+            properties:
+                advertised_scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: The RFC 9728 scopes_supported the resource advertises. Absent when unknown.
+                advertised_scopes_known:
+                    type: boolean
+                    description: Whether the resource's advertised scopes are known from a fresh RFC 9728 read.
+                challenge_scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: Scopes named by the resource's last WWW-Authenticate challenge.
+                clients:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminMcpServerResourceScopeClient'
+                    description: Remote session clients bound to the server's user session issuer.
+                pinned_scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: Scopes pinned on the resource. Empty when there is no pin.
+                resource_url:
+                    type: string
+                    description: The upstream URL the protected resource is keyed by.
+                    format: uri
+                shared_server_count:
+                    type: integer
+                    description: Other live MCP servers in the project with the same upstream URL. A pin applies to all of them.
+                    format: int64
+            description: 'The scopes logins through a remote-backed MCP server request, read from the cached protected resource without probing. Resolved as if the organization had the remote-session-live-resource-scopes rollout on: this view does not evaluate the flag, and with it off logins ignore the pin and the resource''s scopes.'
+            required:
+                - resource_url
+                - pinned_scopes
+                - advertised_scopes_known
+                - challenge_scopes
+                - shared_server_count
+                - clients
         AdminMcpServerToolCallBucket:
             type: object
             properties:
@@ -109619,6 +109781,30 @@ components:
                     description: The slug of the toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
+        SetMcpServerScopePinRequestBody:
+            type: object
+            properties:
+                mcp_server_id:
+                    type: string
+                    description: The mcp_servers row ID.
+                    format: uuid
+                organization_id:
+                    type: string
+                    description: Organization the project must belong to. A project outside it is reported as not found.
+                project_id:
+                    type: string
+                    description: Project ID.
+                    format: uuid
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: The new pin. Trimmed and de-duplicated; an empty list clears the pin.
+            required:
+                - organization_id
+                - project_id
+                - mcp_server_id
+                - scopes
         SetOrganizationChatAnalysisSettingsRequestBody:
             type: object
             properties:

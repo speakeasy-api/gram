@@ -14,13 +14,20 @@ import (
 )
 
 const (
-	maxHealthOtherServers  = 100
-	maxHealthClients       = 50
-	maxHealthScopes        = 64
-	maxHealthGrantTypes    = 16
-	maxHealthValueLength   = 256
-	maxHealthIssuerURL     = 2048
-	defaultHealthWindowDay = 14
+	maxHealthOtherServers = 100
+	maxHealthClients      = 50
+	maxHealthScopes       = 64
+	maxHealthGrantTypes   = 16
+	maxHealthValueLength  = 256
+	maxHealthIssuerURL    = 2048
+
+	// maxHealthPinnedScopes matches the most scopes the server lets a pin hold.
+	maxHealthPinnedScopes = 100
+
+	// maxHealthResourceScopes bounds a protected resource's advertised and
+	// challenge scope lists. Real resources advertise a few dozen at most.
+	maxHealthResourceScopes = 256
+	defaultHealthWindowDay  = 14
 )
 
 var errServerHealthUnavailable = errors.New("MCP server health is unavailable")
@@ -38,6 +45,7 @@ var (
 	healthNetworking          = []string{"public", "tunneled"}
 	healthPKCE                = []string{"supported", "unsupported", "none", "uncaptured"}
 	healthWindowDays          = []int{14, 30, 90}
+	healthScopeSources        = []string{"client_scope", "challenge_scope", "resource_pin", "live_resource", "cached_resource", "issuer_override", "issuer_omitted", "issuer_catalogue", "none"}
 )
 
 type MCPServerHealthReader interface {
@@ -59,7 +67,30 @@ type MCPServerHealth struct {
 	Correlation       MCPServerHealthCorrelation `json:"correlation"`
 	LegacyAuth        *string                    `json:"legacy_auth,omitempty"`
 	UserSessionIssuer *MCPServerHealthUserIssuer `json:"user_session_issuer,omitempty"`
-	ToolCalls         MCPServerHealthToolCalls   `json:"tool_calls"`
+
+	// ResourceScopes is set only for a server backed by a remote MCP server.
+	ResourceScopes *MCPServerHealthResourceScopes `json:"resource_scopes,omitempty"`
+	ToolCalls      MCPServerHealthToolCalls       `json:"tool_calls"`
+}
+
+// MCPServerHealthResourceScopes is what logins through the server request,
+// resolved as if the scope discovery rollout were on.
+type MCPServerHealthResourceScopes struct {
+	ResourceURL           string                               `json:"resource_url"`
+	PinnedScopes          []string                             `json:"pinned_scopes"`
+	AdvertisedScopesKnown bool                                 `json:"advertised_scopes_known"`
+	AdvertisedScopes      []string                             `json:"advertised_scopes,omitempty"`
+	ChallengeScopes       []string                             `json:"challenge_scopes"`
+	SharedServerCount     int                                  `json:"shared_server_count"`
+	Clients               []MCPServerHealthResourceScopeClient `json:"clients"`
+}
+
+type MCPServerHealthResourceScopeClient struct {
+	ClientID                 string   `json:"client_id"`
+	ScopeSource              string   `json:"scope_source"`
+	RequestedScopes          []string `json:"requested_scopes"`
+	UnadvertisedPinnedScopes []string `json:"unadvertised_pinned_scopes"`
+	PinWouldDecide           bool     `json:"pin_would_decide"`
 }
 
 type MCPServerHealthServer struct {
@@ -185,6 +216,7 @@ func registerServerHealthTools(server *mcp.Server, organizations OrganizationRea
 			"An upstream client's validation_status_counts cover live sessions only; its reauthorizations and first_linked_at also include revoked sessions. " +
 			"Upstream session counts are per client, so a client shared by several issuers reports the same sessions under each. " +
 			"An organization or global issuer's user session counts span every project that uses it, not just this server. " +
+			"resource_scopes (remote-backed servers only; omitted when its scope lists exceed the tool's bounds) is what a login through each bound client would request and which source decides it; a pin applies to every server sharing the upstream URL and decides a client only where pin_would_decide. It is resolved as if the organization had the remote-session-live-resource-scopes rollout on; with it off, logins ignore the pin and the resource's scopes. " +
 			"tool_calls.type logging:disabled means the organization's logs feature is off and calls were never recorded; prepare_set_organization_feature can propose turning logs on.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input MCPServerHealthInput) (*mcp.CallToolResult, MCPServerHealth, error) {
@@ -276,7 +308,44 @@ func projectServerHealth(result *gen.AdminMcpServerHealth, calls *gen.AdminMcpSe
 		}
 		output.UserSessionIssuer = &issuer
 	}
+	if result.ResourceScopes != nil {
+		if s.Source != "remote" {
+			return MCPServerHealth{}, false
+		}
+		// Scope lists come from the upstream and its provider, so one outside
+		// the bounds drops this block rather than the whole report.
+		if scopes, ok := projectHealthResourceScopes(result.ResourceScopes); ok {
+			output.ResourceScopes = &scopes
+		}
+	}
 	return output, true
+}
+
+func projectHealthResourceScopes(r *gen.AdminMcpServerResourceScopes) (MCPServerHealthResourceScopes, bool) {
+	if r.ResourceURL == "" || len(r.ResourceURL) > maxHealthIssuerURL || r.SharedServerCount < 0 ||
+		r.PinnedScopes == nil || !validHealthList(r.PinnedScopes, maxHealthPinnedScopes) ||
+		r.ChallengeScopes == nil || !validHealthList(r.ChallengeScopes, maxHealthResourceScopes) ||
+		(r.AdvertisedScopes != nil && !validHealthList(r.AdvertisedScopes, maxHealthResourceScopes)) ||
+		r.Clients == nil || len(r.Clients) > maxHealthClients {
+		return MCPServerHealthResourceScopes{}, false
+	}
+	clients := make([]MCPServerHealthResourceScopeClient, 0, len(r.Clients))
+	for _, c := range r.Clients {
+		if c == nil || !validIssuerID(c.ClientID) || !slices.Contains(healthScopeSources, c.ScopeSource) ||
+			c.RequestedScopes == nil || !validHealthList(c.RequestedScopes, maxHealthResourceScopes) ||
+			c.UnadvertisedPinnedScopes == nil || !validHealthList(c.UnadvertisedPinnedScopes, maxHealthPinnedScopes) {
+			return MCPServerHealthResourceScopes{}, false
+		}
+		clients = append(clients, MCPServerHealthResourceScopeClient{
+			ClientID: c.ClientID, ScopeSource: c.ScopeSource, RequestedScopes: c.RequestedScopes,
+			UnadvertisedPinnedScopes: c.UnadvertisedPinnedScopes, PinWouldDecide: c.PinWouldDecide,
+		})
+	}
+	return MCPServerHealthResourceScopes{
+		ResourceURL: r.ResourceURL, PinnedScopes: r.PinnedScopes, AdvertisedScopesKnown: r.AdvertisedScopesKnown,
+		AdvertisedScopes: r.AdvertisedScopes, ChallengeScopes: r.ChallengeScopes, SharedServerCount: r.SharedServerCount,
+		Clients: clients,
+	}, true
 }
 
 // projectHealthToolCalls drops the daily series and bucket width.

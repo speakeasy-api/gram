@@ -386,6 +386,20 @@ type UpdateSupportMatrixRequestBody struct {
 	Draft    *SupportDraftRequestBody `form:"draft" json:"draft" xml:"draft"`
 }
 
+// SetMcpServerScopePinRequestBody is the type of the "admin" service
+// "setMcpServerScopePin" endpoint HTTP request body.
+type SetMcpServerScopePinRequestBody struct {
+	// Organization the project must belong to. A project outside it is reported as
+	// not found.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Project ID.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The mcp_servers row ID.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// The new pin. Trimmed and de-duplicated; an empty list clears the pin.
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
+}
+
 // CreateRegistryEntryRequestBody is the type of the "admin" service
 // "createRegistryEntry" endpoint HTTP request body.
 type CreateRegistryEntryRequestBody struct {
@@ -1801,6 +1815,29 @@ type DescribeMcpServerHealthResponseBody struct {
 	// issuer.
 	LegacyAuth        *string                                            `form:"legacy_auth,omitempty" json:"legacy_auth,omitempty" xml:"legacy_auth,omitempty"`
 	UserSessionIssuer *AdminMcpServerHealthUserSessionIssuerResponseBody `form:"user_session_issuer,omitempty" json:"user_session_issuer,omitempty" xml:"user_session_issuer,omitempty"`
+	// Set only when a remote MCP server backs the server.
+	ResourceScopes *AdminMcpServerResourceScopesResponseBody `form:"resource_scopes,omitempty" json:"resource_scopes,omitempty" xml:"resource_scopes,omitempty"`
+}
+
+// SetMcpServerScopePinResponseBody is the type of the "admin" service
+// "setMcpServerScopePin" endpoint HTTP response body.
+type SetMcpServerScopePinResponseBody struct {
+	// The upstream URL the protected resource is keyed by.
+	ResourceURL *string `form:"resource_url,omitempty" json:"resource_url,omitempty" xml:"resource_url,omitempty"`
+	// Scopes pinned on the resource. Empty when there is no pin.
+	PinnedScopes []string `form:"pinned_scopes,omitempty" json:"pinned_scopes,omitempty" xml:"pinned_scopes,omitempty"`
+	// Whether the resource's advertised scopes are known from a fresh RFC 9728
+	// read.
+	AdvertisedScopesKnown *bool `form:"advertised_scopes_known,omitempty" json:"advertised_scopes_known,omitempty" xml:"advertised_scopes_known,omitempty"`
+	// The RFC 9728 scopes_supported the resource advertises. Absent when unknown.
+	AdvertisedScopes []string `form:"advertised_scopes,omitempty" json:"advertised_scopes,omitempty" xml:"advertised_scopes,omitempty"`
+	// Scopes named by the resource's last WWW-Authenticate challenge.
+	ChallengeScopes []string `form:"challenge_scopes,omitempty" json:"challenge_scopes,omitempty" xml:"challenge_scopes,omitempty"`
+	// Other live MCP servers in the project with the same upstream URL. A pin
+	// applies to all of them.
+	SharedServerCount *int `form:"shared_server_count,omitempty" json:"shared_server_count,omitempty" xml:"shared_server_count,omitempty"`
+	// Remote session clients bound to the server's user session issuer.
+	Clients []*AdminMcpServerResourceScopeClientResponseBody `form:"clients,omitempty" json:"clients,omitempty" xml:"clients,omitempty"`
 }
 
 // GetMcpServerToolCallsResponseBody is the type of the "admin" service
@@ -13287,6 +13324,192 @@ type DescribeMcpServerHealthGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SetMcpServerScopePinUnauthorizedResponseBody is the type of the "admin"
+// service "setMcpServerScopePin" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetMcpServerScopePinUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinForbiddenResponseBody is the type of the "admin" service
+// "setMcpServerScopePin" endpoint HTTP response body for the "forbidden" error.
+type SetMcpServerScopePinForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinBadRequestResponseBody is the type of the "admin"
+// service "setMcpServerScopePin" endpoint HTTP response body for the
+// "bad_request" error.
+type SetMcpServerScopePinBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinNotFoundResponseBody is the type of the "admin" service
+// "setMcpServerScopePin" endpoint HTTP response body for the "not_found" error.
+type SetMcpServerScopePinNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinConflictResponseBody is the type of the "admin" service
+// "setMcpServerScopePin" endpoint HTTP response body for the "conflict" error.
+type SetMcpServerScopePinConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinUnsupportedMediaResponseBody is the type of the "admin"
+// service "setMcpServerScopePin" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetMcpServerScopePinUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinInvalidResponseBody is the type of the "admin" service
+// "setMcpServerScopePin" endpoint HTTP response body for the "invalid" error.
+type SetMcpServerScopePinInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinInvariantViolationResponseBody is the type of the
+// "admin" service "setMcpServerScopePin" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetMcpServerScopePinInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinUnexpectedResponseBody is the type of the "admin"
+// service "setMcpServerScopePin" endpoint HTTP response body for the
+// "unexpected" error.
+type SetMcpServerScopePinUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMcpServerScopePinGatewayErrorResponseBody is the type of the "admin"
+// service "setMcpServerScopePin" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetMcpServerScopePinGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetMcpServerToolCallsUnauthorizedResponseBody is the type of the "admin"
 // service "getMcpServerToolCalls" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -18924,6 +19147,43 @@ type AdminMcpServerHealthRemoteSessionsResponseBody struct {
 	ValidationStatusCounts map[string]int64 `form:"validation_status_counts,omitempty" json:"validation_status_counts,omitempty" xml:"validation_status_counts,omitempty"`
 }
 
+// AdminMcpServerResourceScopesResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerResourceScopesResponseBody struct {
+	// The upstream URL the protected resource is keyed by.
+	ResourceURL *string `form:"resource_url,omitempty" json:"resource_url,omitempty" xml:"resource_url,omitempty"`
+	// Scopes pinned on the resource. Empty when there is no pin.
+	PinnedScopes []string `form:"pinned_scopes,omitempty" json:"pinned_scopes,omitempty" xml:"pinned_scopes,omitempty"`
+	// Whether the resource's advertised scopes are known from a fresh RFC 9728
+	// read.
+	AdvertisedScopesKnown *bool `form:"advertised_scopes_known,omitempty" json:"advertised_scopes_known,omitempty" xml:"advertised_scopes_known,omitempty"`
+	// The RFC 9728 scopes_supported the resource advertises. Absent when unknown.
+	AdvertisedScopes []string `form:"advertised_scopes,omitempty" json:"advertised_scopes,omitempty" xml:"advertised_scopes,omitempty"`
+	// Scopes named by the resource's last WWW-Authenticate challenge.
+	ChallengeScopes []string `form:"challenge_scopes,omitempty" json:"challenge_scopes,omitempty" xml:"challenge_scopes,omitempty"`
+	// Other live MCP servers in the project with the same upstream URL. A pin
+	// applies to all of them.
+	SharedServerCount *int `form:"shared_server_count,omitempty" json:"shared_server_count,omitempty" xml:"shared_server_count,omitempty"`
+	// Remote session clients bound to the server's user session issuer.
+	Clients []*AdminMcpServerResourceScopeClientResponseBody `form:"clients,omitempty" json:"clients,omitempty" xml:"clients,omitempty"`
+}
+
+// AdminMcpServerResourceScopeClientResponseBody is used to define fields on
+// response body types.
+type AdminMcpServerResourceScopeClientResponseBody struct {
+	// The remote session client ID.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Which source decides the client's requested scopes.
+	ScopeSource *string `form:"scope_source,omitempty" json:"scope_source,omitempty" xml:"scope_source,omitempty"`
+	// The scopes a login would request.
+	RequestedScopes []string `form:"requested_scopes,omitempty" json:"requested_scopes,omitempty" xml:"requested_scopes,omitempty"`
+	// Pinned scopes the MCP server does not advertise. They are still requested.
+	UnadvertisedPinnedScopes []string `form:"unadvertised_pinned_scopes,omitempty" json:"unadvertised_pinned_scopes,omitempty" xml:"unadvertised_pinned_scopes,omitempty"`
+	// Whether a pin, if set, decides this client's request: the client owns the
+	// resource and neither its own scopes nor a challenge outranks the pin.
+	PinWouldDecide *bool `form:"pin_would_decide,omitempty" json:"pin_would_decide,omitempty" xml:"pin_would_decide,omitempty"`
+}
+
 // AdminMcpServerToolCallOutcomesResponseBody is used to define fields on
 // response body types.
 type AdminMcpServerToolCallOutcomesResponseBody struct {
@@ -19556,6 +19816,25 @@ func NewUpdateSupportMatrixRequestBody(p *admin.UpdateSupportMatrixPayload) *Upd
 	}
 	if p.Draft != nil {
 		body.Draft = marshalAdminSupportDraftToSupportDraftRequestBody(p.Draft)
+	}
+	return body
+}
+
+// NewSetMcpServerScopePinRequestBody builds the HTTP request body from the
+// payload of the "setMcpServerScopePin" endpoint of the "admin" service.
+func NewSetMcpServerScopePinRequestBody(p *admin.SetMcpServerScopePinPayload) *SetMcpServerScopePinRequestBody {
+	body := &SetMcpServerScopePinRequestBody{
+		OrganizationID: p.OrganizationID,
+		ProjectID:      p.ProjectID,
+		McpServerID:    p.McpServerID,
+	}
+	if p.Scopes != nil {
+		body.Scopes = make([]string, len(p.Scopes))
+		for i, val := range p.Scopes {
+			body.Scopes[i] = val
+		}
+	} else {
+		body.Scopes = []string{}
 	}
 	return body
 }
@@ -29940,6 +30219,9 @@ func NewDescribeMcpServerHealthAdminMcpServerHealthOK(body *DescribeMcpServerHea
 	if body.UserSessionIssuer != nil {
 		v.UserSessionIssuer = unmarshalAdminMcpServerHealthUserSessionIssuerResponseBodyToAdminAdminMcpServerHealthUserSessionIssuer(body.UserSessionIssuer)
 	}
+	if body.ResourceScopes != nil {
+		v.ResourceScopes = unmarshalAdminMcpServerResourceScopesResponseBodyToAdminAdminMcpServerResourceScopes(body.ResourceScopes)
+	}
 
 	return v
 }
@@ -30082,6 +30364,190 @@ func NewDescribeMcpServerHealthUnexpected(body *DescribeMcpServerHealthUnexpecte
 // NewDescribeMcpServerHealthGatewayError builds a admin service
 // describeMcpServerHealth endpoint gateway_error error.
 func NewDescribeMcpServerHealthGatewayError(body *DescribeMcpServerHealthGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinAdminMcpServerResourceScopesOK builds a "admin"
+// service "setMcpServerScopePin" endpoint result from a HTTP "OK" response.
+func NewSetMcpServerScopePinAdminMcpServerResourceScopesOK(body *SetMcpServerScopePinResponseBody) *admin.AdminMcpServerResourceScopes {
+	v := &admin.AdminMcpServerResourceScopes{
+		ResourceURL:           *body.ResourceURL,
+		AdvertisedScopesKnown: *body.AdvertisedScopesKnown,
+		SharedServerCount:     *body.SharedServerCount,
+	}
+	v.PinnedScopes = make([]string, len(body.PinnedScopes))
+	for i, val := range body.PinnedScopes {
+		v.PinnedScopes[i] = val
+	}
+	if body.AdvertisedScopes != nil {
+		v.AdvertisedScopes = make([]string, len(body.AdvertisedScopes))
+		for i, val := range body.AdvertisedScopes {
+			v.AdvertisedScopes[i] = val
+		}
+	}
+	v.ChallengeScopes = make([]string, len(body.ChallengeScopes))
+	for i, val := range body.ChallengeScopes {
+		v.ChallengeScopes[i] = val
+	}
+	v.Clients = make([]*admin.AdminMcpServerResourceScopeClient, len(body.Clients))
+	for i, val := range body.Clients {
+		if val == nil {
+			v.Clients[i] = nil
+			continue
+		}
+		v.Clients[i] = unmarshalAdminMcpServerResourceScopeClientResponseBodyToAdminAdminMcpServerResourceScopeClient(val)
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinUnauthorized builds a admin service
+// setMcpServerScopePin endpoint unauthorized error.
+func NewSetMcpServerScopePinUnauthorized(body *SetMcpServerScopePinUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinForbidden builds a admin service setMcpServerScopePin
+// endpoint forbidden error.
+func NewSetMcpServerScopePinForbidden(body *SetMcpServerScopePinForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinBadRequest builds a admin service
+// setMcpServerScopePin endpoint bad_request error.
+func NewSetMcpServerScopePinBadRequest(body *SetMcpServerScopePinBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinNotFound builds a admin service setMcpServerScopePin
+// endpoint not_found error.
+func NewSetMcpServerScopePinNotFound(body *SetMcpServerScopePinNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinConflict builds a admin service setMcpServerScopePin
+// endpoint conflict error.
+func NewSetMcpServerScopePinConflict(body *SetMcpServerScopePinConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinUnsupportedMedia builds a admin service
+// setMcpServerScopePin endpoint unsupported_media error.
+func NewSetMcpServerScopePinUnsupportedMedia(body *SetMcpServerScopePinUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinInvalid builds a admin service setMcpServerScopePin
+// endpoint invalid error.
+func NewSetMcpServerScopePinInvalid(body *SetMcpServerScopePinInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinInvariantViolation builds a admin service
+// setMcpServerScopePin endpoint invariant_violation error.
+func NewSetMcpServerScopePinInvariantViolation(body *SetMcpServerScopePinInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinUnexpected builds a admin service
+// setMcpServerScopePin endpoint unexpected error.
+func NewSetMcpServerScopePinUnexpected(body *SetMcpServerScopePinUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMcpServerScopePinGatewayError builds a admin service
+// setMcpServerScopePin endpoint gateway_error error.
+func NewSetMcpServerScopePinGatewayError(body *SetMcpServerScopePinGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -36206,6 +36672,45 @@ func ValidateDescribeMcpServerHealthResponseBody(body *DescribeMcpServerHealthRe
 	if body.UserSessionIssuer != nil {
 		if err2 := ValidateAdminMcpServerHealthUserSessionIssuerResponseBody(body.UserSessionIssuer); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ResourceScopes != nil {
+		if err2 := ValidateAdminMcpServerResourceScopesResponseBody(body.ResourceScopes); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinResponseBody runs the validations defined on
+// SetMcpServerScopePinResponseBody
+func ValidateSetMcpServerScopePinResponseBody(body *SetMcpServerScopePinResponseBody) (err error) {
+	if body.ResourceURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_url", "body"))
+	}
+	if body.PinnedScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pinned_scopes", "body"))
+	}
+	if body.AdvertisedScopesKnown == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("advertised_scopes_known", "body"))
+	}
+	if body.ChallengeScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("challenge_scopes", "body"))
+	}
+	if body.SharedServerCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("shared_server_count", "body"))
+	}
+	if body.Clients == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("clients", "body"))
+	}
+	if body.ResourceURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource_url", *body.ResourceURL, goa.FormatURI))
+	}
+	for _, e := range body.Clients {
+		if e != nil {
+			if err2 := ValidateAdminMcpServerResourceScopeClientResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -51362,6 +51867,246 @@ func ValidateDescribeMcpServerHealthGatewayErrorResponseBody(body *DescribeMcpSe
 	return
 }
 
+// ValidateSetMcpServerScopePinUnauthorizedResponseBody runs the validations
+// defined on setMcpServerScopePin_unauthorized_response_body
+func ValidateSetMcpServerScopePinUnauthorizedResponseBody(body *SetMcpServerScopePinUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinForbiddenResponseBody runs the validations
+// defined on setMcpServerScopePin_forbidden_response_body
+func ValidateSetMcpServerScopePinForbiddenResponseBody(body *SetMcpServerScopePinForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinBadRequestResponseBody runs the validations
+// defined on setMcpServerScopePin_bad_request_response_body
+func ValidateSetMcpServerScopePinBadRequestResponseBody(body *SetMcpServerScopePinBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinNotFoundResponseBody runs the validations
+// defined on setMcpServerScopePin_not_found_response_body
+func ValidateSetMcpServerScopePinNotFoundResponseBody(body *SetMcpServerScopePinNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinConflictResponseBody runs the validations
+// defined on setMcpServerScopePin_conflict_response_body
+func ValidateSetMcpServerScopePinConflictResponseBody(body *SetMcpServerScopePinConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinUnsupportedMediaResponseBody runs the
+// validations defined on setMcpServerScopePin_unsupported_media_response_body
+func ValidateSetMcpServerScopePinUnsupportedMediaResponseBody(body *SetMcpServerScopePinUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinInvalidResponseBody runs the validations defined
+// on setMcpServerScopePin_invalid_response_body
+func ValidateSetMcpServerScopePinInvalidResponseBody(body *SetMcpServerScopePinInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinInvariantViolationResponseBody runs the
+// validations defined on setMcpServerScopePin_invariant_violation_response_body
+func ValidateSetMcpServerScopePinInvariantViolationResponseBody(body *SetMcpServerScopePinInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinUnexpectedResponseBody runs the validations
+// defined on setMcpServerScopePin_unexpected_response_body
+func ValidateSetMcpServerScopePinUnexpectedResponseBody(body *SetMcpServerScopePinUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMcpServerScopePinGatewayErrorResponseBody runs the validations
+// defined on setMcpServerScopePin_gateway_error_response_body
+func ValidateSetMcpServerScopePinGatewayErrorResponseBody(body *SetMcpServerScopePinGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetMcpServerToolCallsUnauthorizedResponseBody runs the validations
 // defined on getMcpServerToolCalls_unauthorized_response_body
 func ValidateGetMcpServerToolCallsUnauthorizedResponseBody(body *GetMcpServerToolCallsUnauthorizedResponseBody) (err error) {
@@ -58881,6 +59626,66 @@ func ValidateAdminMcpServerHealthRemoteSessionsResponseBody(body *AdminMcpServer
 	}
 	if body.FirstLinkedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_linked_at", *body.FirstLinkedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAdminMcpServerResourceScopesResponseBody runs the validations
+// defined on AdminMcpServerResourceScopesResponseBody
+func ValidateAdminMcpServerResourceScopesResponseBody(body *AdminMcpServerResourceScopesResponseBody) (err error) {
+	if body.ResourceURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_url", "body"))
+	}
+	if body.PinnedScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pinned_scopes", "body"))
+	}
+	if body.AdvertisedScopesKnown == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("advertised_scopes_known", "body"))
+	}
+	if body.ChallengeScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("challenge_scopes", "body"))
+	}
+	if body.SharedServerCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("shared_server_count", "body"))
+	}
+	if body.Clients == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("clients", "body"))
+	}
+	if body.ResourceURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource_url", *body.ResourceURL, goa.FormatURI))
+	}
+	for _, e := range body.Clients {
+		if e != nil {
+			if err2 := ValidateAdminMcpServerResourceScopeClientResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAdminMcpServerResourceScopeClientResponseBody runs the validations
+// defined on AdminMcpServerResourceScopeClientResponseBody
+func ValidateAdminMcpServerResourceScopeClientResponseBody(body *AdminMcpServerResourceScopeClientResponseBody) (err error) {
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.ScopeSource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope_source", "body"))
+	}
+	if body.RequestedScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requested_scopes", "body"))
+	}
+	if body.UnadvertisedPinnedScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unadvertised_pinned_scopes", "body"))
+	}
+	if body.PinWouldDecide == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pin_would_decide", "body"))
+	}
+	if body.ScopeSource != nil {
+		if !(*body.ScopeSource == "client_scope" || *body.ScopeSource == "challenge_scope" || *body.ScopeSource == "resource_pin" || *body.ScopeSource == "live_resource" || *body.ScopeSource == "cached_resource" || *body.ScopeSource == "issuer_override" || *body.ScopeSource == "issuer_omitted" || *body.ScopeSource == "issuer_catalogue" || *body.ScopeSource == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope_source", *body.ScopeSource, []any{"client_scope", "challenge_scope", "resource_pin", "live_resource", "cached_resource", "issuer_override", "issuer_omitted", "issuer_catalogue", "none"}))
+		}
 	}
 	return
 }

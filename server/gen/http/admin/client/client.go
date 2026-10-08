@@ -248,6 +248,10 @@ type Client struct {
 	// describeMcpServerHealth endpoint.
 	DescribeMcpServerHealthDoer goahttp.Doer
 
+	// SetMcpServerScopePin Doer is the HTTP client used to make requests to the
+	// setMcpServerScopePin endpoint.
+	SetMcpServerScopePinDoer goahttp.Doer
+
 	// GetMcpServerToolCalls Doer is the HTTP client used to make requests to the
 	// getMcpServerToolCalls endpoint.
 	GetMcpServerToolCallsDoer goahttp.Doer
@@ -430,6 +434,7 @@ func NewClient(
 		UpdateSupportMatrixDoer:                   doer,
 		GetSupportCoverageDoer:                    doer,
 		DescribeMcpServerHealthDoer:               doer,
+		SetMcpServerScopePinDoer:                  doer,
 		GetMcpServerToolCallsDoer:                 doer,
 		GetRegistryOktaCandidatesDoer:             doer,
 		ListRegistryOktaUnmappedDoer:              doer,
@@ -1856,6 +1861,30 @@ func (c *Client) DescribeMcpServerHealth() goa.Endpoint {
 		resp, err := c.DescribeMcpServerHealthDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "describeMcpServerHealth", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetMcpServerScopePin returns an endpoint that makes HTTP requests to the
+// admin service setMcpServerScopePin server.
+func (c *Client) SetMcpServerScopePin() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetMcpServerScopePinRequest(c.encoder)
+		decodeResponse = DecodeSetMcpServerScopePinResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetMcpServerScopePinRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetMcpServerScopePinDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setMcpServerScopePin", err)
 		}
 		return decodeResponse(resp)
 	}

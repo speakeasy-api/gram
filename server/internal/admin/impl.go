@@ -48,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -104,6 +105,9 @@ type Service struct {
 
 	supportCoverage SupportCoverageReader
 	mcpServerHealth MCPServerHealthReader
+
+	// scopes reads and writes remote MCP server scope pins.
+	scopes *remotemcp.StaffScopes
 }
 
 type BillingOperations interface {
@@ -252,6 +256,7 @@ func NewService(
 		productFeatures:      productFeatures,
 		chatAnalysisSignaler: chatAnalysisSignaler,
 		audit:                audit.NewLogger(),
+		scopes:               remotemcp.NewStaffScopes(logger, db, audit.NewLogger()),
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
 			adminCache,
@@ -466,6 +471,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.SetRegistryEntryPublished = service.strictAdminJSON(server.SetRegistryEntryPublished, func() any { return new(adminserver.SetRegistryEntryPublishedRequestBody) })
 	server.GetSupportMatrix = service.preauthorizeAdmin(server.GetSupportMatrix)
 	server.UpdateSupportMatrix = service.strictAdminJSON(server.UpdateSupportMatrix, func() any { return new(adminserver.UpdateSupportMatrixRequestBody) })
+	server.SetMcpServerScopePin = service.strictAdminJSON(server.SetMcpServerScopePin, func() any { return new(adminserver.SetMcpServerScopePinRequestBody) })
 	adminserver.Mount(mux, server)
 
 }

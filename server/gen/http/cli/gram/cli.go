@@ -198,7 +198,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|get-mcp-server-tool-calls|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -4466,6 +4466,10 @@ func ParseEndpoint(
 		adminDescribeMcpServerHealthWindowDaysFlag        = adminDescribeMcpServerHealthFlags.String("window-days", "14", "")
 		adminDescribeMcpServerHealthAdminSessionTokenFlag = adminDescribeMcpServerHealthFlags.String("admin-session-token", "", "")
 
+		adminSetMcpServerScopePinFlags                 = flag.NewFlagSet("set-mcp-server-scope-pin", flag.ExitOnError)
+		adminSetMcpServerScopePinBodyFlag              = adminSetMcpServerScopePinFlags.String("body", "REQUIRED", "")
+		adminSetMcpServerScopePinAdminSessionTokenFlag = adminSetMcpServerScopePinFlags.String("admin-session-token", "", "")
+
 		adminGetMcpServerToolCallsFlags                 = flag.NewFlagSet("get-mcp-server-tool-calls", flag.ExitOnError)
 		adminGetMcpServerToolCallsOrganizationIDFlag    = adminGetMcpServerToolCallsFlags.String("organization-id", "REQUIRED", "")
 		adminGetMcpServerToolCallsProjectIDFlag         = adminGetMcpServerToolCallsFlags.String("project-id", "REQUIRED", "")
@@ -5835,6 +5839,7 @@ func ParseEndpoint(
 	adminUpdateSupportMatrixFlags.Usage = adminUpdateSupportMatrixUsage
 	adminGetSupportCoverageFlags.Usage = adminGetSupportCoverageUsage
 	adminDescribeMcpServerHealthFlags.Usage = adminDescribeMcpServerHealthUsage
+	adminSetMcpServerScopePinFlags.Usage = adminSetMcpServerScopePinUsage
 	adminGetMcpServerToolCallsFlags.Usage = adminGetMcpServerToolCallsUsage
 	adminGetRegistryOktaCandidatesFlags.Usage = adminGetRegistryOktaCandidatesUsage
 	adminListRegistryOktaUnmappedFlags.Usage = adminListRegistryOktaUnmappedUsage
@@ -8808,6 +8813,9 @@ func ParseEndpoint(
 
 			case "describe-mcp-server-health":
 				epf = adminDescribeMcpServerHealthFlags
+
+			case "set-mcp-server-scope-pin":
+				epf = adminSetMcpServerScopePinFlags
 
 			case "get-mcp-server-tool-calls":
 				epf = adminGetMcpServerToolCallsFlags
@@ -11798,6 +11806,9 @@ func ParseEndpoint(
 			case "describe-mcp-server-health":
 				endpoint = c.DescribeMcpServerHealth()
 				data, err = adminc.BuildDescribeMcpServerHealthPayload(*adminDescribeMcpServerHealthOrganizationIDFlag, *adminDescribeMcpServerHealthProjectIDFlag, *adminDescribeMcpServerHealthMcpServerIDFlag, *adminDescribeMcpServerHealthWindowDaysFlag, *adminDescribeMcpServerHealthAdminSessionTokenFlag)
+			case "set-mcp-server-scope-pin":
+				endpoint = c.SetMcpServerScopePin()
+				data, err = adminc.BuildSetMcpServerScopePinPayload(*adminSetMcpServerScopePinBodyFlag, *adminSetMcpServerScopePinAdminSessionTokenFlag)
 			case "get-mcp-server-tool-calls":
 				endpoint = c.GetMcpServerToolCalls()
 				data, err = adminc.BuildGetMcpServerToolCallsPayload(*adminGetMcpServerToolCallsOrganizationIDFlag, *adminGetMcpServerToolCallsProjectIDFlag, *adminGetMcpServerToolCallsMcpServerIDFlag, *adminGetMcpServerToolCallsWindowDaysFlag, *adminGetMcpServerToolCallsAdminSessionTokenFlag)
@@ -29915,6 +29926,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    update-support-matrix: Save coverage against the last read revision; rejects concurrent changes.`)
 	fmt.Fprintln(os.Stderr, `    get-support-coverage: Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.`)
 	fmt.Fprintln(os.Stderr, `    describe-mcp-server-health: Describes one MCP server's health: authentication configuration and session counts (admin view, no auth scoping). Tool calls come from getMcpServerToolCalls.`)
+	fmt.Fprintln(os.Stderr, `    set-mcp-server-scope-pin: Sets or clears the scopes pinned on the protected resource behind a remote-backed MCP server (admin view, no auth scoping). The pin applies to every live server in the project with the same upstream URL. Audited as the staff member.`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-tool-calls: Reads one MCP server's tool call outcomes and series over a window (admin view, no auth scoping). Returns logging:disabled without reading telemetry when the organization's logs are off.`)
 	fmt.Fprintln(os.Stderr, `    get-registry-okta-candidates: Staff-only registry administration: Okta application names observed across synced tenants that plausibly belong to the entry, for confirmation in the editor.`)
 	fmt.Fprintln(os.Stderr, `    list-registry-okta-unmapped: Staff-only registry administration: observed Okta application names no entry claims yet, with the entry the heuristic would propose.`)
@@ -31173,6 +31185,26 @@ func adminDescribeMcpServerHealthUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin describe-mcp-server-health --organization-id \"abc123\" --project-id \"550e8400-e29b-41d4-a716-446655440000\" --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --window-days 30 --admin-session-token \"abc123\"")
+}
+
+func adminSetMcpServerScopePinUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin set-mcp-server-scope-pin", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Sets or clears the scopes pinned on the protected resource behind a remote-backed MCP server (admin view, no auth scoping). The pin applies to every live server in the project with the same upstream URL. Audited as the staff member.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-mcp-server-scope-pin --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminGetMcpServerToolCallsUsage() {
