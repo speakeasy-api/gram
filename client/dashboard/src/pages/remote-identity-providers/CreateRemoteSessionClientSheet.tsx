@@ -52,7 +52,7 @@ const UNSELECTED_PROJECT = "";
 
 // DocumentationLinks surfaces the issuer's documentation so customers can create
 // the upstream OAuth client themselves, owning its credentials, access, and rate
-// limits rather than sharing a Gram-owned client. Renders nothing when the
+// limits rather than sharing a Speakeasy-owned client. Renders nothing when the
 // issuer carries no documentation URLs.
 function DocumentationLinks({ issuer }: { issuer: RemoteSessionIssuer }) {
   const links = issuerDocumentationLinks(issuer);

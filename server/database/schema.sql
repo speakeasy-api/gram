@@ -2558,6 +2558,20 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- this client; its mutation guards refuse edits to marked rows.
   identity_provider_connection_id uuid,
 
+  -- Who the upstream access credential belongs to. This describes the token
+  -- Speakeasy presents to the upstream resource, not the client's own secret or
+  -- key material, which always belongs to the client.
+  --
+  --   subject  the credential belongs to a session subject (a user), obtained
+  --            through a per-user flow; every row created before this column
+  --            existed reads as subject
+  --   self     the credential belongs to the client itself, e.g. obtained with
+  --            the client_credentials grant
+  --
+  -- The allowed values are validated in application code. The owner is fixed
+  -- at creation: no update query sets this column.
+  credential_owner TEXT NOT NULL DEFAULT 'subject',
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -2594,6 +2608,22 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
       client_id_metadata_uri <> ''
       AND client_secret_encrypted IS NULL
       AND client_id = client_id_metadata_uri
+    )
+  ),
+  -- Structural rules for a client that owns its upstream credential: it must
+  -- be project or organization scoped (no platform-global shared credential),
+  -- must not publish a CIMD document or use the legacy callback, and must
+  -- authenticate at the token endpoint with an explicit method other than
+  -- none. Required key material depends on the authentication method, not the
+  -- owner, so it is not part of this check.
+  CONSTRAINT remote_session_clients_credential_owner_check CHECK (
+    credential_owner <> 'self'
+    OR (
+      (project_id IS NOT NULL OR organization_id IS NOT NULL)
+      AND client_id_metadata_uri IS NULL
+      AND legacy_callback_url IS FALSE
+      AND token_endpoint_auth_method IS NOT NULL
+      AND token_endpoint_auth_method NOT IN ('', 'none')
     )
   )
 );
@@ -7075,6 +7105,10 @@ CREATE TABLE IF NOT EXISTS plugin_assignments (
   plugin_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
   principal_urn TEXT NOT NULL,
+  -- How the device agent installs the plugin for this audience: 'required'
+  -- (on, can't be turned off), 'default' (on, user can turn it off) or
+  -- 'available' (off, user can turn it on). Validated in application code.
+  install_mode TEXT NOT NULL DEFAULT 'default',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

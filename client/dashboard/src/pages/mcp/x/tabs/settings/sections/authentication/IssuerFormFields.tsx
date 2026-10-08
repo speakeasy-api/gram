@@ -485,7 +485,7 @@ export function ClientCredentialsFields({
 
 // OverridesFields renders the per-client OAuth dance overrides. Both fields
 // are optional and apply in both DCR and manual modes — they control what
-// Gram sends at authorize/token time, independent of how the client was
+// Speakeasy sends at authorize/token time, independent of how the client was
 // registered.
 export function OverridesFields({
   scopeOverride,

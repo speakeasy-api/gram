@@ -1125,6 +1125,14 @@ RETURNING id;
 INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject)
 VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject);
 
+-- name: CreateWorkloadIdentityRuleFixture :exec
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind)
+VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject, @match_kind);
+
+-- name: CreateWorkloadAgentAssignmentFixture :exec
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, match_kind, agent_id)
+VALUES (@organization_id, @workload_issuer_id, @subject, @match_kind, @agent_id);
+
 -- name: SoftDeleteWorkloadIssuerFixture :execrows
 UPDATE workload_issuers
 SET deleted_at = clock_timestamp()

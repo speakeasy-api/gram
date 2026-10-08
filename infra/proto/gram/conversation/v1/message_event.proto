@@ -48,12 +48,12 @@ message MessageEvent {
     // Canonical normalized ingestion source.
     string source = 1;
 
-    // Gram user to whom ingestion explicitly allocates usage. Independent of
+    // Speakeasy user to whom ingestion explicitly allocates usage. Independent of
     // actor identity; consumers must not infer it from the actor or account owner.
     // Absence means unassigned. This is not proof that a charge occurred.
     string billing_user_id = 2;
 
-    // Gram assistant resource associated with the workload, when supplied.
+    // Speakeasy assistant resource associated with the workload, when supplied.
     string assistant_id = 3;
 
     // Actor email explicitly observed by ingestion, not a directory lookup.
@@ -69,12 +69,12 @@ message MessageEvent {
     string hostname = 7;
 
     // Ingestion-time classification of the external AI account, such as "team"
-    // or "personal". Not the organization's Gram billing plan.
+    // or "personal". Not the organization's Speakeasy billing plan.
     string account_type = 8;
 
     // External AI account billing mode, such as "metered" or "flat_rate".
     // "unknown" or absence can represent an unresolved mode. Does not select a
-    // billing user or determine Gram pricing.
+    // billing user or determine Speakeasy pricing.
     string billing_mode = 9;
 
     // Historical source import/replay marker, not Pub/Sub redelivery.
@@ -91,10 +91,10 @@ message MessageEvent {
   string organization_id = 3;
   string project_id = 4;
 
-  // Persisted Gram conversation UUID.
+  // Persisted Speakeasy conversation UUID.
   string conversation_id = 5;
 
-  // Persisted Gram message UUID, distinct from the mutation event ID.
+  // Persisted Speakeasy message UUID, distinct from the mutation event ID.
   string message_id = 6;
 
   // Role at the time of the mutation; allows filtering before fetching content.

@@ -293,7 +293,7 @@ func (s *Manager) ClearSession(ctx context.Context, session Session) error {
 	// again on next login rather than being auto-authenticated.
 	if session.WorkOSSessionID != "" && s.idpClient != nil {
 		if err := s.idpClient.RevokeSession(ctx, session.WorkOSSessionID); err != nil {
-			// Non-fatal: the Gram session is still cleared, and the WorkOS
+			// Non-fatal: the Speakeasy session is still cleared, and the WorkOS
 			// session will expire naturally.
 			s.logger.ErrorContext(ctx, "failed to revoke WorkOS session", attr.SlogError(err))
 		}

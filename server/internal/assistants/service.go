@@ -216,7 +216,7 @@ type assistantToolsetRow struct {
 }
 
 // assistantMCPServerRow is the hydrated view of a row in assistant_mcp_servers
-// joined with mcp_servers + its Gram-hosted endpoint + environments. Like
+// joined with mcp_servers + its Speakeasy-hosted endpoint + environments. Like
 // assistantToolsetRow, everything dispatch needs to build the MCP server URL
 // comes from one read; ServerSlug is the display/runtime ID and EndpointSlug is
 // the public /mcp/{slug} path segment the runner connects to.
@@ -680,7 +680,7 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	// until the assistant is deleted. The local reconciliation below is the
 	// narrow exception for a row whose container no longer exists.
 	queries := assistantrepo.New(s.db)
-	// Local containers can be removed outside Gram (docker rm, daemon reset,
+	// Local containers can be removed outside Speakeasy (docker rm, daemon reset,
 	// pruning). Reconcile those rows before the age-based SQL sweep: unlike a
 	// healthy idle runtime, a definitively missing container can never make
 	// progress. Stop only the row; the next admission recreates the container
@@ -990,14 +990,14 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 		// Reject servers the runtime cannot reach so a bad attach fails the
 		// write instead of silently vanishing from reads and dispatch:
 		// tunnelled backends have no /mcp serving path, disabled servers 404
-		// there, and without a Gram-hosted endpoint there is no URL to build.
+		// there, and without a Speakeasy-hosted endpoint there is no URL to build.
 		switch {
 		case row.Tunneled:
 			return nil, assistantValidationError("mcp server %q is tunnel-backed and cannot be attached to an assistant", row.Slug.String)
 		case row.Visibility == visibility.Disabled:
 			return nil, assistantValidationError("mcp server %q is disabled", row.Slug.String)
 		case !row.HasGramEndpoint:
-			return nil, assistantValidationError("mcp server %q has no Gram-hosted MCP endpoint", row.Slug.String)
+			return nil, assistantValidationError("mcp server %q has no Speakeasy-hosted MCP endpoint", row.Slug.String)
 		}
 		serverIDs[row.Slug.String] = row.ID
 	}
@@ -1076,7 +1076,7 @@ func (s *ServiceCore) loadAssistantToolsets(ctx context.Context, projectID uuid.
 
 // loadAssistantMcpServers pulls the hydrated mcp_servers attachments for one or
 // more assistants in a single query, mirroring loadAssistantToolsets. Rows
-// whose server has no Gram-hosted endpoint (empty EndpointSlug) are kept so
+// whose server has no Speakeasy-hosted endpoint (empty EndpointSlug) are kept so
 // the attachment stays visible and detachable on API reads;
 // resolveAssistantMCPServers skips them at dispatch.
 func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uuid.UUID, assistantIDs []uuid.UUID) (map[uuid.UUID][]assistantMCPServerRow, error) {
@@ -2109,7 +2109,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	}, nil
 }
 
-// dashboardChatUserID extracts the Gram user id from a dashboard turn payload
+// dashboardChatUserID extracts the Speakeasy user id from a dashboard turn payload
 // so UpsertAssistantChat can stamp it on the chats row. External-source turns
 // return empty — see assistantChatOwnerID for who owns those.
 func dashboardChatUserID(sourceKind string, normalizedPayloadJSON []byte) string {
@@ -3369,7 +3369,7 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 	// uniformly as an MCP endpoint to connect to, so these need only the same
 	// {ID, URL, Headers} shape: the public /mcp/{endpoint} path that
 	// serveRemoteBackend already proxies, plus an optional bound environment.
-	// Rows without a Gram-hosted endpoint (deleted after attach) are skipped
+	// Rows without a Speakeasy-hosted endpoint (deleted after attach) are skipped
 	// so dispatch never builds a slugless MCP URL; the attachment stays
 	// visible on reads. ServerSlug is the runtime ID (agentkit namespaces
 	// tool names by it, 64-char cap). Disabled servers 404 at the /mcp

@@ -8,6 +8,7 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 import type { ServerIdentityClientConfiguration } from "@gram/client/models/components/serveridentityclientconfiguration.js";
+import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { queryKeyRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
 import {
@@ -319,7 +320,10 @@ export type UserIdentityDraft = {
   replacesClient: boolean;
   status: UserIdentityStatus;
   canSave: boolean;
-  save: () => Promise<void>;
+  /** The operator changed the selection, whether or not it can be saved yet. */
+  pendingChange: boolean;
+  /** Resolves true when the commit landed; failures are already on screen. */
+  save: () => Promise<boolean>;
   saving: boolean;
 };
 
@@ -831,6 +835,7 @@ export function useUserIdentityDraft({
         invalidateAllRemoteSessionClients(queryClient),
         invalidateAllRemoteSessionIssuers(queryClient),
         invalidateAllRemoteSessionsCount(queryClient),
+        invalidateAllGetRemoteMcpServerScopes(queryClient),
       ]);
     },
     onError: (error: unknown) => {
@@ -860,6 +865,11 @@ export function useUserIdentityDraft({
   if (choice === "existing")
     choiceComplete = !!existingClient && !sameAsConnected;
   if (choice === "manual") choiceComplete = clientId.trim() !== "";
+
+  const pendingChange =
+    touched &&
+    status.kind !== "done" &&
+    !(choice === "existing" && sameAsConnected);
 
   const canSave =
     !!selected &&
@@ -935,14 +945,17 @@ export function useUserIdentityDraft({
     replacesClient,
     status,
     canSave,
-    save: async (): Promise<void> => {
+    pendingChange,
+    save: async (): Promise<boolean> => {
       // Awaitable so callers can sequence work after it. onError has already
       // put the failure on screen, so the rejection is swallowed here rather
       // than surfacing twice or escaping as an unhandled rejection.
       try {
         await runCommit();
+        return true;
       } catch {
         /* reported by onError */
+        return false;
       }
     },
     saving: isPending,

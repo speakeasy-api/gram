@@ -27,7 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
-	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -37,7 +37,7 @@ const sharedIssuerIDParam = "issuerID"
 
 // sharedAuthorizationServerPattern is the chi route pattern every shared
 // authorization server endpoint extends.
-const sharedAuthorizationServerPattern = usersessions.SharedAuthorizationServerPathPrefix + "{" + sharedIssuerIDParam + "}"
+const sharedAuthorizationServerPattern = authserver.SharedPathPrefix + "{" + sharedIssuerIDParam + "}"
 
 // sharedResourceLogMaxBytes bounds how much of a rejected resource indicator
 // is logged. Legitimate values are MCP server URLs well under this; the bound
@@ -70,7 +70,7 @@ type sharedAuthorizationServer struct {
 
 // origin is the scheme and host the authorization server is served on.
 func (a *sharedAuthorizationServer) origin() string {
-	return urlOrigin(a.issuer)
+	return requestorigin.URLOrigin(a.issuer)
 }
 
 // urls are the endpoints the authorization server advertises, rooted at its
@@ -97,7 +97,7 @@ func (a *sharedAuthorizationServer) urls() (AuthorizationServerURLs, error) {
 
 // consentPath is the path of the authorization server's consent page.
 func (a *sharedAuthorizationServer) consentPath() string {
-	return usersessions.SharedAuthorizationServerPath(a.issuerID) + "/connect"
+	return authserver.SharedPath(a.issuerID) + "/connect"
 }
 
 // consentURL is the consent page URL for the challenge stateID.
@@ -149,68 +149,30 @@ func (s *Service) SetPlatformHosts(hosts map[string]string) {
 	s.platformHosts = hosts
 }
 
-// issuerInSharedMode reports whether an issuer serves a shared authorization
-// server.
-func issuerInSharedMode(issuer usersessions_repo.UserSessionIssuer) bool {
-	return usersessions.AuthorizationServerMode(issuer.AuthorizationServerMode) == usersessions.AuthorizationServerModeShared
+// sharedAuthorizationServerHosts are the hosts this service serves shared
+// authorization servers on.
+func (s *Service) sharedAuthorizationServerHosts() authserver.Hosts {
+	return authserver.Hosts{
+		ServerURL:                 s.serverURL.String(),
+		AuthenticationHostBaseURL: s.authenticationHostBaseURL,
+		PlatformHosts:             s.platformHosts,
+	}
+}
+
+// issuerIDJAGConfigured reports whether an issuer accepts the ID-JAG grant:
+// an organization issuer with an explicit trust link to an upstream issuer.
+func issuerIDJAGConfigured(issuer usersessions_repo.UserSessionIssuer) bool {
+	return !issuer.ProjectID.Valid && issuer.OrganizationID.Valid && issuer.TrustedRemoteSessionIssuerID.Valid
 }
 
 // sharedAuthorizationServerFor builds the shared authorization server of an
-// issuer in shared mode. The pinned issuer URL wins when set. Otherwise the
-// issuer is derived: the authentication host when the issuer opts in to it and
-// one is configured, else the server URL, followed by the issuer's path.
-//
-// An issuer naming a server this deployment does not serve is refused, so its
-// MCP servers keep their per-endpoint authorization servers rather than
-// pointing clients at a 404: a pinned issuer URL whose path is not the
-// issuer's own, and one on a host the shared routes are not mounted on.
+// issuer in shared mode, refusing one this deployment does not serve.
 func (s *Service) sharedAuthorizationServerFor(issuer usersessions_repo.UserSessionIssuer) (*sharedAuthorizationServer, error) {
-	if !issuerInSharedMode(issuer) {
-		return nil, fmt.Errorf("user session issuer %s is not in shared mode", issuer.ID)
+	issuerURL, err := s.sharedAuthorizationServerHosts().SharedIssuerURL(issuer)
+	if err != nil {
+		return nil, fmt.Errorf("derive shared issuer: %w", err)
 	}
-	path := usersessions.SharedAuthorizationServerPath(issuer.ID)
-	origin := ""
-	if issuer.PinnedIssuerUrl.Valid && issuer.PinnedIssuerUrl.String != "" {
-		pinned, err := url.Parse(issuer.PinnedIssuerUrl.String)
-		if err != nil {
-			return nil, fmt.Errorf("parse pinned issuer URL: %w", err)
-		}
-		if pinned.RawQuery != "" || pinned.Fragment != "" || pinned.Path != path {
-			return nil, fmt.Errorf("pinned issuer URL %q is not this issuer's shared authorization server", issuer.PinnedIssuerUrl.String)
-		}
-		origin = urlOrigin(issuer.PinnedIssuerUrl.String)
-	} else {
-		base := s.serverURL.String()
-		if issuer.UseAuthenticationHost && s.authenticationHostBaseURL != "" {
-			base = s.authenticationHostBaseURL
-		}
-		origin = urlOrigin(base)
-	}
-	if !s.servesSharedAuthorizationServersOn(origin) {
-		return nil, fmt.Errorf("shared authorization server issuer origin %q is not served by this deployment", origin)
-	}
-	return &sharedAuthorizationServer{issuerID: issuer.ID, issuer: origin + path}, nil
-}
-
-// servesSharedAuthorizationServersOn reports whether the shared authorization
-// server routes are served on origin: the server URL's or an extra platform
-// host's. Comparing whole origins also pins the scheme, so a pinned issuer is
-// https wherever the deployment is.
-//
-// TODO(AIM-415): include the authentication host once it serves them.
-func (s *Service) servesSharedAuthorizationServersOn(origin string) bool {
-	if origin == "" {
-		return false
-	}
-	if origin == urlOrigin(s.serverURL.String()) {
-		return true
-	}
-	for _, baseURL := range s.platformHosts {
-		if origin == urlOrigin(baseURL) {
-			return true
-		}
-	}
-	return false
+	return &sharedAuthorizationServer{issuerID: issuer.ID, issuer: issuerURL}, nil
 }
 
 // sharedIssuer is the issuer-level state of a request to a shared
@@ -225,6 +187,12 @@ type sharedIssuer struct {
 	// client_id_metadata_admission_mode, carried verbatim for
 	// admission.ResolveMode.
 	cimdAdmissionModeRaw pgtype.Text
+
+	// organizationID scopes capability queries to the issuer's organization.
+	organizationID string
+
+	// idJAGConfigured reports an organization issuer's explicit trust link.
+	idJAGConfigured bool
 
 	// logger carries the issuer id for every line the request logs.
 	logger *slog.Logger
@@ -255,7 +223,7 @@ func (s *Service) sharedIssuerForRequest(r *http.Request) (*sharedIssuer, error)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load user session issuer").LogError(ctx, logger)
 	}
-	if !issuerInSharedMode(row.UserSessionIssuer) {
+	if !authserver.IssuerInSharedMode(row.UserSessionIssuer) {
 		return nil, notFound
 	}
 	authorizationServer, err := s.sharedAuthorizationServerFor(row.UserSessionIssuer)
@@ -268,13 +236,15 @@ func (s *Service) sharedIssuerForRequest(r *http.Request) (*sharedIssuer, error)
 	if baseURL, ok := authenticationHostBaseURL(ctx); ok {
 		arrivedAt = baseURL
 	}
-	if urlOrigin(arrivedAt) != authorizationServer.origin() {
+	if requestorigin.URLOrigin(arrivedAt) != authorizationServer.origin() {
 		return nil, notFound
 	}
 
 	return &sharedIssuer{
 		authorizationServer:  authorizationServer,
 		cimdAdmissionModeRaw: row.UserSessionIssuer.ClientIDMetadataAdmissionMode,
+		organizationID:       row.ResolvedOrganizationID,
+		idJAGConfigured:      issuerIDJAGConfigured(row.UserSessionIssuer),
 		logger:               logger.With(attr.SlogOrganizationID(row.ResolvedOrganizationID)),
 	}, nil
 }
@@ -356,7 +326,7 @@ func (s *Service) resolveSharedResource(ctx context.Context, logger *slog.Logger
 		return nil, rejection, err
 	}
 
-	basePath := strings.TrimSuffix(strings.TrimPrefix(origin.BaseURL, urlOrigin(origin.BaseURL)), "/")
+	basePath := strings.TrimSuffix(strings.TrimPrefix(origin.BaseURL, requestorigin.URLOrigin(origin.BaseURL)), "/")
 	routePath, ok := strings.CutPrefix(parsed.Path, basePath+"/")
 	if !ok {
 		return nil, sharedResourceMalformed, nil
@@ -527,8 +497,8 @@ func (s *Service) resourceBaseURL(r *http.Request, endpoint *ResolvedMcpEndpoint
 
 // checkSharedResourceSession checks the issuer of a token accepted on the
 // endpoint's exact resource audience, and reports whether the shared
-// authorization server minted it, which makes it the one kind of
-// resource-bound session that carries a refresh token.
+// authorization server minted it. Refreshability is determined separately
+// from the stored session policy.
 //
 // A token naming the endpoint's own per-endpoint authorization server, which
 // mints its ID-JAG and workload sessions for the exact resource, is accepted
@@ -544,10 +514,6 @@ func (s *Service) resourceBaseURL(r *http.Request, endpoint *ResolvedMcpEndpoint
 // this loads it only for a token naming neither the endpoint's own
 // authorization server nor the dashboard, keeping the lookup off every token
 // endpoint-mode issuers mint.
-//
-// TODO(AIM-402): report refreshability from how the session was issued once
-// the shared token endpoint also mints ID-JAG and workload sessions, which
-// will carry its issuer without carrying a refresh token.
 func (s *Service) checkSharedResourceSession(ctx context.Context, session sessiontokens.ValidatedSession, endpoint *ResolvedMcpEndpoint, baseURL string) (bool, error) {
 	if session.ClientID() == sessiontokens.FirstPartyClientID {
 		return false, nil

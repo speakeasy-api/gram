@@ -54,7 +54,7 @@ func testOrgHosts(t *testing.T) *orghost.Resolver {
 	})
 }
 
-// seedLocalRole inserts an organization_roles row and returns its Gram local
+// seedLocalRole inserts an organization_roles row and returns its Speakeasy local
 // UUID — the same identifier the dashboard receives from access.listRoles and
 // sends back in invite payloads.
 func seedLocalRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, slug, name string) string {

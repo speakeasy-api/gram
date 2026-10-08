@@ -41,7 +41,7 @@ interface ToolGroup {
   packageName?: string;
 }
 
-/** A read-only tool advertised by a remote MCP server (no Gram-side identity). */
+/** A read-only tool advertised by a remote MCP server (no Speakeasy-side identity). */
 interface ReadOnlyTool {
   name: string;
   description?: string;
@@ -51,7 +51,7 @@ interface ToolsetSectionProps {
   tools?: Tool[];
   /**
    * Live tools from a remote-MCP-backed server, rendered read-only. When set,
-   * the grouped/editable Gram-tool list is replaced by this flat list.
+   * the grouped/editable Speakeasy-tool list is replaced by this flat list.
    */
   remoteTools?: ReadOnlyTool[];
   selectedTools?: Set<string>;
@@ -499,7 +499,7 @@ function ToolsBody({
   );
 }
 
-/** The grouped, editable Gram-tool list (toolset-backed servers). */
+/** The grouped, editable Speakeasy-tool list (toolset-backed servers). */
 function GroupedToolList({
   toolGroups,
   expandedGroups,

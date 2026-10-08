@@ -6,18 +6,15 @@ import { scaleLinear } from "@tanstack/charts/scales/linear";
 import { tooltip } from "@tanstack/charts/tooltip";
 
 import { inclusiveEnd } from "./billingUsageSearch";
-import {
-  meterAxisTicks,
-  meterDateLabel,
-  type MeterGranularity,
-} from "./meterUsageUtils";
+import { meterAxisTicks, meterDateLabel } from "./meterUsageUtils";
 import {
   SPEND_PRODUCT_COLOR,
   formatScaledUsdAxis,
   formatSpendUsd,
   spendChartData,
   sumSpendCosts,
-  type AdminSpendBreakdown,
+  type SpendChartSource,
+  type SpendGrouping,
   type SpendProductID,
 } from "./spendBreakdownUtils";
 
@@ -26,11 +23,16 @@ export function SpendBreakdownChart({
   selectedProductIDs,
   granularity,
   cumulative,
+  height = 320,
+  compact = false,
 }: {
-  data: AdminSpendBreakdown;
+  data: SpendChartSource;
   selectedProductIDs: ReadonlySet<SpendProductID>;
-  granularity: MeterGranularity;
+  granularity: SpendGrouping;
   cumulative: boolean;
+  height?: number;
+  // A narrower y-axis gutter for charts in small cards.
+  compact?: boolean;
 }): JSX.Element {
   const definition = useMemo(() => {
     const chart = spendChartData(
@@ -50,7 +52,12 @@ export function SpendBreakdownChart({
     });
     return defineChart({
       marks: [mark],
-      margin: { left: 84, right: 16, top: 16, bottom: 40 },
+      margin: {
+        left: compact ? 64 : 84,
+        right: compact ? 8 : 16,
+        top: 16,
+        bottom: compact ? 32 : 40,
+      },
       theme: {
         foreground: "var(--foreground)",
         muted: "var(--muted-foreground)",
@@ -101,13 +108,13 @@ export function SpendBreakdownChart({
         },
       },
     });
-  }, [cumulative, data, granularity, selectedProductIDs]);
+  }, [compact, cumulative, data, granularity, selectedProductIDs]);
 
   return (
     <Chart
       definition={definition}
-      height={320}
-      ariaLabel={`${cumulative ? "Cumulative" : granularity} estimated spend in USD by product. Use arrow keys to inspect values.`}
+      height={height}
+      ariaLabel={`${cumulative ? "Cumulative" : granularity === "bucket" ? "Per-period" : granularity} estimated spend in USD by product. Use arrow keys to inspect values.`}
     />
   );
 }

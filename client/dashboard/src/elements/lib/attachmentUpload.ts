@@ -53,7 +53,7 @@ interface UploadChatAttachmentInit {
 }
 
 /**
- * Uploads one file to Gram and returns the asset it was stored as. The endpoint
+ * Uploads one file to Speakeasy and returns the asset it was stored as. The endpoint
  * takes the raw bytes as the request body, so no multipart encoding is
  * involved. `Content-Length` is a forbidden header name in browsers — it is
  * stripped and recomputed from the body, so it is not set here.
@@ -97,7 +97,7 @@ function toAbsoluteUrl(apiUrl: string, path: string): string {
 }
 
 /**
- * Reads the Gram asset id back out of an attachment URL minted by
+ * Reads the Speakeasy asset id back out of an attachment URL minted by
  * `uploadChatAttachment`. The URL is what survives assistant-ui's attachment →
  * message-part conversion, so it is how a sent attachment is traced back to the
  * asset the assistant runtime should read.
@@ -119,7 +119,7 @@ interface AttachmentAdapterInit {
 }
 
 /**
- * An assistant-ui attachment adapter backed by Gram's chat attachment storage.
+ * An assistant-ui attachment adapter backed by Speakeasy's chat attachment storage.
  *
  * Files upload as soon as they are attached rather than on send, so the user
  * sees failures (too large, unsupported type) while they are still composing.

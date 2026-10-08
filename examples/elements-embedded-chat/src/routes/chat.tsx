@@ -8,7 +8,7 @@ import "@gram-ai/elements/elements.css";
 export const Route = createFileRoute("/chat")({ component: ChatPage });
 
 /**
- * Chat page — embeds Gram Elements and passes the user's credential to the
+ * Chat page — embeds Speakeasy Elements and passes the user's credential to the
  * MCP server. The token stored during login is forwarded via the `environment`
  * config field, so the end-user never has to manage it directly.
  */
@@ -43,11 +43,11 @@ function ChatPage() {
   if (!username || !token) return null;
 
   const config: ElementsConfig = {
-    projectSlug: import.meta.env.VITE_GRAM_PROJECT_SLUG,
+    projectSlug: import.meta.env.VITE_SPEAKEASY_AI_PROJECT_SLUG,
 
     // session obtains a short-lived client token from our server-side proxy
-    // (/api/chat/session), which in turn calls Gram's session API using our
-    // secret GRAM_API_KEY. This keeps the API key off the client.
+    // (/api/chat/session), which in turn calls Speakeasy's session API using our
+    // secret SPEAKEASY_AI_API_KEY. This keeps the API key off the client.
     api: {
       session: async () => {
         const request = new Request("/api/chat/session", {
@@ -73,14 +73,14 @@ function ChatPage() {
       },
     },
 
-    mcp: import.meta.env.VITE_GRAM_MCP_URL,
+    mcp: import.meta.env.VITE_SPEAKEASY_AI_MCP_URL,
 
     // 'standalone' renders a full-page chat UI (as opposed to 'widget' or 'sidecar').
     variant: "standalone",
 
     // This is the key integration point: `environment` values are forwarded to the
     // MCP server as headers. The env var name (MY_MCP_BEARER_TOKEN) must match what
-    // is configured on the MCP server's settings page in the Gram dashboard.
+    // is configured on the MCP server's settings page in the Speakeasy dashboard.
     environment: { MY_MCP_BEARER_TOKEN: token },
   };
 

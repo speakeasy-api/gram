@@ -344,7 +344,7 @@ var _ = Service("plugins", func() {
 	})
 
 	Method("downloadObservabilityPlugin", func() {
-		Description("Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.")
+		Description("Download a ZIP of the per-org observability plugin (Speakeasy hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.")
 
 		Payload(func() {
 			Attribute("platform", String, func() {
@@ -512,11 +512,11 @@ var PluginServerModel = Type("PluginServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
-		Description("Gram toolset ID. Exactly one backend ID is set.")
+		Description("Speakeasy toolset ID. Exactly one backend ID is set.")
 		Format(FormatUUID)
 	})
 	Attribute("mcp_server_id", String, func() {
-		Description("Gram MCP server ID. Exactly one backend ID is set.")
+		Description("Speakeasy MCP server ID. Exactly one backend ID is set.")
 		Format(FormatUUID)
 	})
 	Attribute("meta_mcp_server_id", String, func() {
@@ -615,11 +615,11 @@ var AddPluginServerForm = Type("AddPluginServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
-		Description("Gram toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id.")
+		Description("Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id.")
 		Format(FormatUUID)
 	})
 	Attribute("mcp_server_id", String, func() {
-		Description("Gram MCP server ID. Provide exactly one backend ID.")
+		Description("Speakeasy MCP server ID. Provide exactly one backend ID.")
 		Format(FormatUUID)
 	})
 	Attribute("meta_mcp_server_id", String, func() {

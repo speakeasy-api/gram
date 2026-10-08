@@ -97,6 +97,12 @@ func (h *AuthenticationHost) Host() string {
 	return h.host
 }
 
+// BaseURL returns the authentication host's base URL, or "" when it is
+// disabled.
+func (h *AuthenticationHost) BaseURL() string {
+	return h.baseURL
+}
+
 // Middleware diverts requests whose Host is the authentication host to the
 // host's own router and passes every other request to next.
 //

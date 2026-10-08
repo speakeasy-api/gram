@@ -44,7 +44,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// The local Gram server presents a mkcert certificate this process does
+	// The local Speakeasy server presents a mkcert certificate this process does
 	// not trust. The hop only forwards to the URL it was started with.
 	client := &http.Client{
 		Timeout: upstreamTimeout,

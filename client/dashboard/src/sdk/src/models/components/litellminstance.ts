@@ -15,14 +15,14 @@ import {
 import { ProjectEntry, ProjectEntry$inboundSchema } from "./projectentry.js";
 
 /**
- * How LiteLLM behaves when Gram cannot evaluate a request.
+ * How LiteLLM behaves when Speakeasy cannot evaluate a request.
  */
 export const LiteLLMInstanceFailurePosture = {
   FailClosed: "fail_closed",
   FailOpen: "fail_open",
 } as const;
 /**
- * How LiteLLM behaves when Gram cannot evaluate a request.
+ * How LiteLLM behaves when Speakeasy cannot evaluate a request.
  */
 export type LiteLLMInstanceFailurePosture = ClosedEnum<
   typeof LiteLLMInstanceFailurePosture
@@ -40,7 +40,7 @@ export type LiteLLMInstance = {
    */
   diagnostics: LiteLLMInstanceDiagnostics;
   /**
-   * How LiteLLM behaves when Gram cannot evaluate a request.
+   * How LiteLLM behaves when Speakeasy cannot evaluate a request.
    */
   failurePosture: LiteLLMInstanceFailurePosture;
   id: string;

@@ -343,7 +343,7 @@ function AddServersDialog({
 
   const options = useMemo(() => {
     // Mirror the attach-time validation in the assistants service: tunneled
-    // backends, disabled servers, and servers without a Gram-hosted endpoint
+    // backends, disabled servers, and servers without a Speakeasy-hosted endpoint
     // are rejected on write, so don't offer them.
     const serverIdsWithGramEndpoint = new Set(
       (endpointsResult?.mcpEndpoints ?? [])

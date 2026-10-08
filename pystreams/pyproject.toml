@@ -1,7 +1,7 @@
 [project]
 name = "pystreams"
 version = "0.1.0"
-description = "Python Pub/Sub subscribers for Gram streams"
+description = "Python Pub/Sub subscribers for Speakeasy streams"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [

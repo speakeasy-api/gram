@@ -43,7 +43,7 @@ func TestNewPaygTierLimits(t *testing.T) {
 		"30 day log retention",
 		"SSO",
 		"Audit logs",
-		"Self-hosting Gram dataplane",
+		"Self-hosting Speakeasy dataplane",
 	}, want.FeatureBullets)
 
 	other := billing.NewPaygTierLimits()

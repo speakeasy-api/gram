@@ -41,7 +41,7 @@ func TestPostEphemeralTool_PostsToChatPostEphemeral(t *testing.T) {
 		"thread_ts":"123.000",
 		"link_names":true,
 		"icon_emoji":":robot_face:",
-		"username":"Gram"
+		"username":"Speakeasy"
 	}`), &out)
 	require.NoError(t, err)
 
@@ -52,7 +52,7 @@ func TestPostEphemeralTool_PostsToChatPostEphemeral(t *testing.T) {
 	require.Equal(t, "123.000", requestPayload.Get("thread_ts"))
 	require.Equal(t, "true", requestPayload.Get("link_names"))
 	require.Equal(t, ":robot_face:", requestPayload.Get("icon_emoji"))
-	require.Equal(t, "Gram", requestPayload.Get("username"))
+	require.Equal(t, "Speakeasy", requestPayload.Get("username"))
 	require.JSONEq(t, `{"ok":true,"message_ts":"123.456"}`, out.String())
 }
 

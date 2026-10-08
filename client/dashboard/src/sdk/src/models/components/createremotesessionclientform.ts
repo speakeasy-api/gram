@@ -54,7 +54,7 @@ export type CreateRemoteSessionClientForm = {
    */
   clientIdIssuedAt?: Date | undefined;
   /**
-   * client_secret supplied by the caller. Gram encrypts before persisting.
+   * client_secret supplied by the caller. Speakeasy encrypts before persisting.
    */
   clientSecret?: string | undefined;
   /**

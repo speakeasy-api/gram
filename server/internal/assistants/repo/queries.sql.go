@@ -2340,9 +2340,9 @@ type LoadAssistantMcpServersRow struct {
 }
 
 // Hydrates assistant_mcp_servers with the fronting mcp_servers row, its
-// Gram-hosted endpoint slug (custom_domain_id IS NULL), and the bound
+// Speakeasy-hosted endpoint slug (custom_domain_id IS NULL), and the bound
 // environment. Soft-deleted servers are skipped so the runtime never targets a
-// dead endpoint; a row whose server has no Gram-hosted endpoint yields a NULL
+// dead endpoint; a row whose server has no Speakeasy-hosted endpoint yields a NULL
 // endpoint_slug and is filtered out in Go. Visibility is returned rather than
 // filtered here so API reads still show disabled attachments while the runtime
 // resolver skips them. Mirrors LoadAssistantToolsets: one read supplies
@@ -3453,7 +3453,7 @@ type ResolveMcpServersForWriteRow struct {
 // Besides resolving slugs to ids, this returns everything attach-time
 // validation needs to reject servers the assistant runtime cannot reach:
 // the backend kind (tunnelled servers have no serving path), visibility,
-// and whether a Gram-hosted endpoint exists to build the /mcp/{slug} URL.
+// and whether a Speakeasy-hosted endpoint exists to build the /mcp/{slug} URL.
 func (q *Queries) ResolveMcpServersForWrite(ctx context.Context, arg ResolveMcpServersForWriteParams) ([]ResolveMcpServersForWriteRow, error) {
 	rows, err := q.db.Query(ctx, resolveMcpServersForWrite, arg.ProjectID, arg.Slugs)
 	if err != nil {
@@ -4046,7 +4046,7 @@ type UpsertAssistantChatParams struct {
 
 // user_id is the conversation owner — stamped on first insert so reads can
 // scope to the user who started the chat. The dashboard source passes the
-// Gram user id; external-source turns (Slack/cron/wake) pass NULL. On conflict
+// Speakeasy user id; external-source turns (Slack/cron/wake) pass NULL. On conflict
 // the existing user_id is preserved when already set so a later NULL-user-id
 // retry doesn't unclaim the chat; pre-existing rows with NULL user_id are
 // backfilled on first owned send so dashboard ownership checks accept the

@@ -402,7 +402,7 @@ func (s *Service) authenticateTokenClient(
 	// consultation, so it costs one in-memory comparison.
 	//
 	// `presets` deliberately does NOT enforce here. Preset membership is
-	// implicit and Gram-mutable — removing a catalog entry de-admits it on
+	// implicit and Speakeasy-mutable — removing a catalog entry de-admits it on
 	// every presets-mode issuer at deploy — so enforcing at /token would let
 	// a one-line catalog edit terminate live sessions fleet-wide, surfacing
 	// as a mid-session failure no client recovers from. Admission for
@@ -441,7 +441,7 @@ func (s *Service) authenticateTokenClient(
 
 	// Shadow AI blocking DOES enforce here, unlike `presets` admission above,
 	// and for the opposite reason: it is a decision an administrator of this
-	// organization made about this tool, not implicit membership Gram can
+	// organization made about this tool, not implicit membership Speakeasy can
 	// change under them. An admin who blocks a tool expects its outstanding
 	// refresh tokens to stop working rather than to keep it connected until
 	// they happen to expire.
@@ -498,10 +498,14 @@ func (s *Service) handleTokenJWTBearerGrant(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "resource_mismatch")
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
+	assertionAudience := canonicalResource
+	if shared := endpoint.servingSharedAuthorizationServer(); shared != nil {
+		assertionAudience = shared.issuer
+	}
 	result, err := s.idJAGValidator.Validate(ctx, req.Assertion, idjag.Request{
 		OrganizationID:      endpoint.OrganizationID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		Audience:            canonicalResource,
+		Audience:            assertionAudience,
 		Resource:            canonicalResource,
 		ClientID:            clientRow.ClientID,
 	})
@@ -1568,7 +1572,7 @@ const accessTokenLifetime = 1 * time.Hour
 // Lifetimes:
 //   - authorization: the subject's consent choice, capped by the issuer's
 //     session_duration, and fixed for the lifetime of the grant.
-//   - refresh token: the remaining authorization lifetime. Gram does not
+//   - refresh token: the remaining authorization lifetime. Speakeasy does not
 //     impose a separate refresh-token idle timeout.
 //   - access token: min(accessTokenLifetime, remaining authorization).
 //

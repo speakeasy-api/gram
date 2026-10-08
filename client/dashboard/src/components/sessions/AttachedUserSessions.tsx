@@ -53,8 +53,8 @@ export function AttachedUserSessions({
   if (blocked)
     return (
       <Text small muted>
-        Use an ordinary Gram session without an RBAC scope override to manage
-        upstream account attachments.
+        Use an ordinary Speakeasy session without an RBAC scope override to
+        manage upstream account attachments.
       </Text>
     );
   return (

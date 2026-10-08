@@ -114,7 +114,7 @@ type SendInviteResponseBody struct {
 	AcceptedAt *string `form:"accepted_at,omitempty" json:"accepted_at,omitempty" xml:"accepted_at,omitempty"`
 	// When the invitation was revoked.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
-	// Gram user ID of the inviter, when known.
+	// Speakeasy user ID of the inviter, when known.
 	InviterUserID *string `form:"inviter_user_id,omitempty" json:"inviter_user_id,omitempty" xml:"inviter_user_id,omitempty"`
 	// WorkOS role slug assigned when the invite is accepted.
 	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
@@ -137,7 +137,7 @@ type UpdateInviteRoleResponseBody struct {
 	AcceptedAt *string `form:"accepted_at,omitempty" json:"accepted_at,omitempty" xml:"accepted_at,omitempty"`
 	// When the invitation was revoked.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
-	// Gram user ID of the inviter, when known.
+	// Speakeasy user ID of the inviter, when known.
 	InviterUserID *string `form:"inviter_user_id,omitempty" json:"inviter_user_id,omitempty" xml:"inviter_user_id,omitempty"`
 	// WorkOS role slug assigned when the invite is accepted.
 	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
@@ -158,7 +158,7 @@ type ListInvitesResponseBody struct {
 // ListUsersResponseBody is the type of the "organizations" service "listUsers"
 // endpoint HTTP response body.
 type ListUsersResponseBody struct {
-	// Users linked to the organization in Gram.
+	// Users linked to the organization in Speakeasy.
 	Users []*OrganizationUserResponseBody `form:"users,omitempty" json:"users,omitempty" xml:"users,omitempty"`
 }
 
@@ -3460,7 +3460,7 @@ type OrganizationInvitationResponseBody struct {
 	AcceptedAt *string `form:"accepted_at,omitempty" json:"accepted_at,omitempty" xml:"accepted_at,omitempty"`
 	// When the invitation was revoked.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
-	// Gram user ID of the inviter, when known.
+	// Speakeasy user ID of the inviter, when known.
 	InviterUserID *string `form:"inviter_user_id,omitempty" json:"inviter_user_id,omitempty" xml:"inviter_user_id,omitempty"`
 	// WorkOS role slug assigned when the invite is accepted.
 	RoleSlug *string `form:"role_slug,omitempty" json:"role_slug,omitempty" xml:"role_slug,omitempty"`
@@ -3472,11 +3472,11 @@ type OrganizationInvitationResponseBody struct {
 
 // OrganizationUserResponseBody is used to define fields on response body types.
 type OrganizationUserResponseBody struct {
-	// Gram relationship row ID.
+	// Speakeasy relationship row ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram organization ID.
+	// Speakeasy organization ID.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// Gram user ID.
+	// Speakeasy user ID.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// User display name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
@@ -3504,14 +3504,14 @@ type OnboardingHookEventResponseBody struct {
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
 	// Hook event name (e.g. PreToolUse, SessionStart).
 	EventName *string `form:"event_name,omitempty" json:"event_name,omitempty" xml:"event_name,omitempty"`
-	// Slug of the Gram project that received the event.
+	// Slug of the Speakeasy project that received the event.
 	ProjectSlug *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
 	// Outcome status: allowed, blocked, failure, or pending.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Email of the user whose session produced the event, when present in hook
 	// attributes.
 	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
-	// Gram chat/session ID that owns this event, when present.
+	// Speakeasy chat/session ID that owns this event, when present.
 	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
 }
 

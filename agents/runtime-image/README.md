@@ -1,4 +1,4 @@
-# Gram Assistant Runtime Image
+# Speakeasy Assistant Runtime Image
 
 The container image assistant runtimes run in: the Rust runner
 (`agents/runner`), the bun-based sandbox, and a lightpanda browser.
@@ -10,7 +10,7 @@ Local development uses the `local` assistant runtime provider. `./zero`
 `GRAM_ASSISTANT_RUNTIME_PROVIDER=local` and
 `GRAM_ASSISTANT_RUNTIME_OCI_IMAGE=gram-assistant-runtime` into `mise.local.toml`
 when those vars are unset, and builds `gram-assistant-runtime:dev` if the image
-is missing. The Gram server then starts one runtime container per assistant on
+is missing. The Speakeasy server then starts one runtime container per assistant on
 your machine's Docker daemon, on demand. No Fly.io credentials, apps, or
 registry pushes are involved.
 
@@ -25,7 +25,7 @@ registry pushes are involved.
    mise run build:assistants-runtime-image
    ```
 
-2. Start Gram normally (e.g. `./zero --agent`).
+2. Start Speakeasy normally (e.g. `./zero --agent`).
 
 3. Send a turn to an assistant (for example from the dashboard). The server
    launches the matching `gram-asst-<assistant-id>` container automatically,
