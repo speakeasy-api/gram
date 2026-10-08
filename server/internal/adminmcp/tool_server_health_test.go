@@ -320,20 +320,7 @@ func TestDescribeMCPServerHealthFailsClosedOnMalformedResults(t *testing.T) {
 		"nil validation counts": func(h *gen.AdminMcpServerHealth) {
 			h.UserSessionIssuer.RemoteSessionClients[0].Sessions.ValidationStatusCounts = nil
 		},
-		"scopes on toolset":    func(h *gen.AdminMcpServerHealth) { h.Server.Source = "toolset" },
-		"empty resource url":   func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.ResourceURL = "" },
-		"nil pinned scopes":    func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.PinnedScopes = nil },
-		"empty pinned scope":   func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.PinnedScopes = []string{""} },
-		"nil challenge scopes": func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.ChallengeScopes = nil },
-		"negative shared":      func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.SharedServerCount = -1 },
-		"unknown scope source": func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.Clients[0].ScopeSource = "guess" },
-		"inexact scope client": func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.Clients[0].ClientID = "client" },
-		"nil scope client": func(h *gen.AdminMcpServerHealth) {
-			h.ResourceScopes.Clients = append(h.ResourceScopes.Clients, nil)
-		},
-		"too many pinned": func(h *gen.AdminMcpServerHealth) {
-			h.ResourceScopes.PinnedScopes = make([]string, maxHealthPinnedScopes+1)
-		},
+		"scopes on toolset":   func(h *gen.AdminMcpServerHealth) { h.Server.Source = "toolset" },
 		"legacy with issuer":  func(h *gen.AdminMcpServerHealth) { h.LegacyAuth = new("gram_private") },
 		"unknown legacy":      func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer = nil; h.LegacyAuth = new("basic") },
 		"unscoped attachment": func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.AttachmentScope = "project:" + testProjectID },
@@ -423,4 +410,36 @@ func TestDescribeMCPServerHealthContextAvailability(t *testing.T) {
 	require.Contains(t, body, workflow)
 	_, body, _ = callStaffReadTool(t, testProjectReads(), "get_admin_context", `{}`)
 	require.NotContains(t, body, workflow)
+}
+
+func TestDescribeMCPServerHealthOmitsResourceScopesOutsideBounds(t *testing.T) {
+	t.Parallel()
+	cases := map[string]func(*gen.AdminMcpServerHealth){
+		"empty resource url":   func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.ResourceURL = "" },
+		"nil pinned scopes":    func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.PinnedScopes = nil },
+		"empty pinned scope":   func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.PinnedScopes = []string{""} },
+		"nil challenge scopes": func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.ChallengeScopes = nil },
+		"negative shared":      func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.SharedServerCount = -1 },
+		"unknown scope source": func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.Clients[0].ScopeSource = "guess" },
+		"inexact scope client": func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.Clients[0].ClientID = "client" },
+		"nil scope client": func(h *gen.AdminMcpServerHealth) {
+			h.ResourceScopes.Clients = append(h.ResourceScopes.Clients, nil)
+		},
+		"too many pinned": func(h *gen.AdminMcpServerHealth) {
+			h.ResourceScopes.PinnedScopes = make([]string, maxHealthPinnedScopes+1)
+		},
+	}
+	for name, alter := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			reads := testServerHealthReads()
+			alter(reads.health)
+			body, data, isError := callServerHealthTool(t, reads, nil, healthArgs(""))
+			require.False(t, isError, body)
+			var output MCPServerHealth
+			require.NoError(t, json.Unmarshal(data, &output))
+			require.Nil(t, output.ResourceScopes)
+			require.NotNil(t, output.UserSessionIssuer, "the rest of the report survives")
+		})
+	}
 }

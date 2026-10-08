@@ -695,11 +695,16 @@ describe("McpServerHealth", () => {
       });
 
       fireEvent.change(within(scopes).getByLabelText("Pinned scopes"), {
-        target: { value: "read, write read" },
+        target: { value: "read write read" },
       });
+      const readsBeforeSave = healthRequests().length;
       fireEvent.click(within(scopes).getByRole("button", { name: "Save" }));
 
       await waitFor(() => expect(requestsTo(SET_PIN_PATH)).toHaveLength(1));
+      // A successful write refetches the report.
+      await waitFor(() =>
+        expect(healthRequests().length).toBeGreaterThan(readsBeforeSave),
+      );
       const call = mocks.healthFetch.mock.calls.find(
         ([input]) => requestUrl(input).pathname === SET_PIN_PATH,
       );

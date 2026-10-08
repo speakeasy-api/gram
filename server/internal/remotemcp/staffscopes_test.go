@@ -94,6 +94,10 @@ func TestStaffScopes_SetPinIgnoresFlagAndAuditsTheStaffActor(t *testing.T) {
 	got, err = staff.SetPin(ctx, remotemcp.StaffScopePin{Target: target, Scopes: []string{}, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, "staff-subject"), ActorDisplayName: nil})
 	require.NoError(t, err)
 	require.Empty(t, got.PinnedScopes)
+	require.Nil(t, storedPin(t, ctx, ti, srv.url), "an empty list stores NULL")
+	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerScopePinUpdate)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, count, "the clear is audited too")
 }
 
 func TestStaffScopes_SetPinRejectsInvalidScopes(t *testing.T) {

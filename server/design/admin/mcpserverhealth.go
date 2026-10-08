@@ -192,7 +192,7 @@ var AdminMcpServerResourceScopes = Type("AdminMcpServerResourceScopes", func() {
 	Description("The scopes logins through a remote-backed MCP server request, read from the cached protected resource without probing. Resolved as if the organization had the remote-session-live-resource-scopes rollout on: this view does not evaluate the flag, and with it off logins ignore the pin and the resource's scopes.")
 	Required("resource_url", "pinned_scopes", "advertised_scopes_known", "challenge_scopes", "shared_server_count", "clients")
 
-	Attribute("resource_url", String, "The upstream URL the protected resource is keyed by.")
+	Attribute("resource_url", String, "The upstream URL the protected resource is keyed by.", func() { Format(FormatURI) })
 	Attribute("pinned_scopes", ArrayOf(String), "Scopes pinned on the resource. Empty when there is no pin.")
 	Attribute("advertised_scopes_known", Boolean, "Whether the resource's advertised scopes are known from a fresh RFC 9728 read.")
 	Attribute("advertised_scopes", ArrayOf(String), "The RFC 9728 scopes_supported the resource advertises. Absent when unknown.")

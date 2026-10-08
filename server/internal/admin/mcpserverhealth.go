@@ -115,10 +115,14 @@ func (s *Service) DescribeMcpServerHealth(ctx context.Context, payload *gen.Desc
 	}
 	if healthServerSource(target.row) == "remote" {
 		scopes, err := s.scopes.Describe(ctx, remotemcp.StaffScopeTarget{OrganizationID: payload.OrganizationID, ProjectID: target.projectID, McpServerID: target.row.ID})
-		if err != nil {
-			return nil, fmt.Errorf("admin describe resource scopes: %w", err)
+		switch {
+		case errors.Is(err, remotemcp.ErrNotRemoteBacked):
+			// The remote row was deleted under a live server: no resource to report.
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "read mcp server resource scopes").LogError(ctx, s.logger, target.logAttrs...)
+		default:
+			result.ResourceScopes = adminResourceScopes(scopes)
 		}
-		result.ResourceScopes = adminResourceScopes(scopes)
 	}
 	return result, nil
 }

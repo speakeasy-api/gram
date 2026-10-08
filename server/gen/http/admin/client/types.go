@@ -36703,6 +36703,9 @@ func ValidateSetMcpServerScopePinResponseBody(body *SetMcpServerScopePinResponse
 	if body.Clients == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("clients", "body"))
 	}
+	if body.ResourceURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource_url", *body.ResourceURL, goa.FormatURI))
+	}
 	for _, e := range body.Clients {
 		if e != nil {
 			if err2 := ValidateAdminMcpServerResourceScopeClientResponseBody(e); err2 != nil {
@@ -59647,6 +59650,9 @@ func ValidateAdminMcpServerResourceScopesResponseBody(body *AdminMcpServerResour
 	}
 	if body.Clients == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("clients", "body"))
+	}
+	if body.ResourceURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource_url", *body.ResourceURL, goa.FormatURI))
 	}
 	for _, e := range body.Clients {
 		if e != nil {

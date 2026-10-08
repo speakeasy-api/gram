@@ -18,8 +18,9 @@ import (
 )
 
 // seedRemoteServer is an mcp_servers row backed by a remote MCP server at url,
-// authenticating through issuerID (uuid.Nil for none).
-func (f healthFixture) seedRemoteServer(t *testing.T, url string, issuerID uuid.UUID) uuid.UUID {
+// authenticating through issuerID (uuid.Nil for none). It returns the
+// mcp_servers ID and the remote MCP server's ID.
+func (f healthFixture) seedRemoteServer(t *testing.T, url string, issuerID uuid.UUID) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 
 	slug := "remote-" + uuid.NewString()[:8]
@@ -48,7 +49,7 @@ func (f healthFixture) seedRemoteServer(t *testing.T, url string, issuerID uuid.
 		NetworkAccessMode:     pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	return srv.ID
+	return srv.ID, remote.ID
 }
 
 func (f healthFixture) setScopePin(t *testing.T, serverID uuid.UUID, scopes ...string) (*gen.AdminMcpServerResourceScopes, error) {
@@ -73,7 +74,7 @@ func TestDescribeMcpServerHealth_ReportsResourceScopesForRemoteServer(t *testing
 	issuerID := f.seedUserSessionIssuer(t, "remote-"+uuid.NewString()[:8])
 	remoteIssuerID := f.seedGlobalRemoteSessionIssuer(t, "upstream-"+uuid.NewString()[:8])
 	clientID := f.seedRemoteSessionClient(t, remoteIssuerID, issuerID, "scoped-client", true)
-	serverID := f.seedRemoteServer(t, "https://scopes.example.com/mcp", issuerID)
+	serverID, _ := f.seedRemoteServer(t, "https://scopes.example.com/mcp", issuerID)
 	_, err := f.setScopePin(t, serverID, "read")
 	require.NoError(t, err)
 
@@ -85,6 +86,20 @@ func TestDescribeMcpServerHealth_ReportsResourceScopesForRemoteServer(t *testing
 	require.Equal(t, []string{"read"}, got.ResourceScopes.PinnedScopes)
 	require.Len(t, got.ResourceScopes.Clients, 1)
 	require.Equal(t, clientID.String(), got.ResourceScopes.Clients[0].ClientID)
+}
+
+func TestDescribeMcpServerHealth_OmitsResourceScopesWhenRemoteRowIsDeleted(t *testing.T) {
+	t.Parallel()
+
+	f := newHealthFixture(t, true)
+	serverID, remoteID := f.seedRemoteServer(t, "https://deleted.example.com/mcp", uuid.Nil)
+	_, err := remotemcprepo.New(f.conn).DeleteServer(t.Context(), remotemcprepo.DeleteServerParams{ID: remoteID, ProjectID: f.projectID})
+	require.NoError(t, err)
+
+	got, err := f.describe(t, serverID, 14)
+	require.NoError(t, err)
+	require.Equal(t, "remote", got.Server.Source)
+	require.Nil(t, got.ResourceScopes)
 }
 
 func TestDescribeMcpServerHealth_OmitsResourceScopesForToolsetServer(t *testing.T) {
@@ -102,7 +117,7 @@ func TestSetMcpServerScopePin_SetsClearsAndAudits(t *testing.T) {
 	t.Parallel()
 
 	f := newHealthFixture(t, true)
-	serverID := f.seedRemoteServer(t, "https://pin.example.com/mcp", uuid.Nil)
+	serverID, _ := f.seedRemoteServer(t, "https://pin.example.com/mcp", uuid.Nil)
 
 	got, err := f.setScopePin(t, serverID, "read", "write")
 	require.NoError(t, err)
@@ -116,13 +131,17 @@ func TestSetMcpServerScopePin_SetsClearsAndAudits(t *testing.T) {
 	got, err = f.setScopePin(t, serverID)
 	require.NoError(t, err)
 	require.Empty(t, got.PinnedScopes)
+
+	count, err := audittest.AuditLogCountByAction(t.Context(), f.conn, audit.ActionMcpServerScopePinUpdate)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, count, "the clear is audited too")
 }
 
 func TestSetMcpServerScopePin_ProjectInAnotherOrganizationIsNotFound(t *testing.T) {
 	t.Parallel()
 
 	f := newHealthFixture(t, true)
-	serverID := f.seedRemoteServer(t, "https://theirs.example.com/mcp", uuid.Nil)
+	serverID, _ := f.seedRemoteServer(t, "https://theirs.example.com/mcp", uuid.Nil)
 	otherOrg := "org_other_" + strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
 	seedOrg(t, t.Context(), f.conn, orgFixture{id: otherOrg, name: "Other", slug: otherOrg})
 

@@ -208,12 +208,16 @@ describe("platformMcpPrompt", () => {
 });
 
 describe("parseScopes", () => {
-  it("splits on spaces and commas, keeping order and dropping repeats", () => {
-    expect(parseScopes(" read, write  read\tadmin ")).toEqual([
+  it("splits on whitespace, keeping order and dropping repeats", () => {
+    expect(parseScopes(" read write  read\tadmin ")).toEqual([
       "read",
       "write",
       "admin",
     ]);
+  });
+
+  it("keeps a comma inside a scope", () => {
+    expect(parseScopes("read,write")).toEqual(["read,write"]);
   });
 
   it("reads an empty field as no pin", () => {

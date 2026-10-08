@@ -43,7 +43,7 @@ import { errorMessage, type AdminOrganization } from "@/lib/gramAdminApi";
 import {
   adminSetMcpServerScopePin,
   mcpServerHealthQuery,
-  mcpServerHealthServerKey,
+  mcpServerHealthProjectKey,
   mcpServerToolCallsQuery,
 } from "@/lib/gramAdminClient";
 import { LEAVES_THE_APP } from "@/lib/impersonation";
@@ -303,8 +303,9 @@ function HealthReport({
 
       {health.resourceScopes && (
         <ResourceScopesCard
-          // A fresh read resets an unsaved edit to what the server now holds.
-          key={health.resourceScopes.pinnedScopes.join(" ")}
+          // A fresh read, or another server, resets an unsaved edit to what
+          // that server now holds.
+          key={`${server.id}:${health.resourceScopes.pinnedScopes.join(" ")}`}
           scopes={health.resourceScopes}
           organizationId={organizationId}
           idOrSlug={idOrSlug}
@@ -1169,7 +1170,7 @@ function ResourceScopesCard({
     onSuccess: async (_, pin) => {
       toast.success(pin.length > 0 ? "Pinned scopes saved" : "Pin cleared");
       await queryClient.invalidateQueries({
-        queryKey: mcpServerHealthServerKey(idOrSlug, project, serverId),
+        queryKey: mcpServerHealthProjectKey(idOrSlug, project),
       });
     },
     onError: (error) => {
@@ -1248,8 +1249,7 @@ function ResourceScopesCard({
               <span className={cn(MONO, "truncate")}>{client.clientId}</span>
               <span className="flex min-w-0 flex-col gap-0.5">
                 <span>
-                  {SCOPE_SOURCE_LABELS[client.scopeSource] ??
-                    client.scopeSource}
+                  {SCOPE_SOURCE_LABELS[client.scopeSource]}
                   {!client.pinWouldDecide && (
                     <span className={MUTED}> · a pin would not apply</span>
                   )}

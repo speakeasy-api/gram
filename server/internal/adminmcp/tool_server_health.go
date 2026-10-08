@@ -216,7 +216,7 @@ func registerServerHealthTools(server *mcp.Server, organizations OrganizationRea
 			"An upstream client's validation_status_counts cover live sessions only; its reauthorizations and first_linked_at also include revoked sessions. " +
 			"Upstream session counts are per client, so a client shared by several issuers reports the same sessions under each. " +
 			"An organization or global issuer's user session counts span every project that uses it, not just this server. " +
-			"resource_scopes (remote-backed servers only) is what a login through each bound client would request and which source decides it; a pin applies to every server sharing the upstream URL and decides a client only where pin_would_decide. It is resolved as if the organization had the remote-session-live-resource-scopes rollout on; with it off, logins ignore the pin and the resource's scopes. " +
+			"resource_scopes (remote-backed servers only; omitted when its scope lists exceed the tool's bounds) is what a login through each bound client would request and which source decides it; a pin applies to every server sharing the upstream URL and decides a client only where pin_would_decide. It is resolved as if the organization had the remote-session-live-resource-scopes rollout on; with it off, logins ignore the pin and the resource's scopes. " +
 			"tool_calls.type logging:disabled means the organization's logs feature is off and calls were never recorded; prepare_set_organization_feature can propose turning logs on.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input MCPServerHealthInput) (*mcp.CallToolResult, MCPServerHealth, error) {
@@ -312,11 +312,11 @@ func projectServerHealth(result *gen.AdminMcpServerHealth, calls *gen.AdminMcpSe
 		if s.Source != "remote" {
 			return MCPServerHealth{}, false
 		}
-		scopes, ok := projectHealthResourceScopes(result.ResourceScopes)
-		if !ok {
-			return MCPServerHealth{}, false
+		// Scope lists come from the upstream and its provider, so one outside
+		// the bounds drops this block rather than the whole report.
+		if scopes, ok := projectHealthResourceScopes(result.ResourceScopes); ok {
+			output.ResourceScopes = &scopes
 		}
-		output.ResourceScopes = &scopes
 	}
 	return output, true
 }

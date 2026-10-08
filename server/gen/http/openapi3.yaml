@@ -85488,6 +85488,7 @@ components:
                 resource_url:
                     type: string
                     description: The upstream URL the protected resource is keyed by.
+                    format: uri
                 shared_server_count:
                     type: integer
                     description: Other live MCP servers in the project with the same upstream URL. A pin applies to all of them.

@@ -304,18 +304,17 @@ function createMcpServerHealthQuery(
   });
 }
 
-// Every window's health read of one server: a pin write changes what each of
+// Every health read in one project. A pin applies to every server in the
+// project that shares its upstream URL, so a pin write changes what each of
 // them reports.
-export function mcpServerHealthServerKey(
+export function mcpServerHealthProjectKey(
   organizationIdOrSlug: string,
   projectId: string,
-  mcpServerId: string,
-): readonly [string, string, string, string] {
+): readonly [string, string, string] {
   return [
     "gram-admin-mcp-server-health",
     organizationIdOrSlug,
     projectId,
-    mcpServerId,
   ] as const;
 }
 
