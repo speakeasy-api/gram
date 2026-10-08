@@ -287,7 +287,7 @@ func (q *Queries) GetDirectoryGroupSyncStateByWorkOSID(ctx context.Context, work
 }
 
 const getDirectoryUserByWorkOSID = `-- name: GetDirectoryUserByWorkOSID :one
-SELECT id, organization_id, user_id, workos_directory_user_id, email, attributes, created_at, updated_at, deleted_at, deleted, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, workos_last_event_id
+SELECT id, organization_id, user_id, workos_directory_user_id, directory_id, email, attributes, created_at, updated_at, deleted_at, deleted, workos_created_at, workos_updated_at, workos_deleted_at, workos_deleted, workos_last_event_id
 FROM directory_users
 WHERE workos_directory_user_id = $1
   AND deleted_at IS NULL
@@ -301,6 +301,7 @@ func (q *Queries) GetDirectoryUserByWorkOSID(ctx context.Context, workosDirector
 		&i.OrganizationID,
 		&i.UserID,
 		&i.WorkosDirectoryUserID,
+		&i.DirectoryID,
 		&i.Email,
 		&i.Attributes,
 		&i.CreatedAt,

@@ -1,4 +1,4 @@
-h1:XA3oVXYWu9dMkbKM6bi/kQVDmg08fTyrwONUyRDN6kY=
+h1:H+b7LJHliW7kivYZ6BMMBG8CGboEeJ6LE1VEtgYVxyo=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -462,3 +462,4 @@ h1:XA3oVXYWu9dMkbKM6bi/kQVDmg08fTyrwONUyRDN6kY=
 20261006184412_index-plugin-servers-mcp-server-id.sql h1:6Zdyd/8NlvPhbHum3jwrrNhRIJQNTdWOT++82l9j1AU=
 20261006195242_remote-protected-resources-scope-override.sql h1:0wBqBI5REay+3/BKsSHMIPCGCgPToZpAkCHdfvszAyg=
 20261007130946_remote-session-clients-add-credential-owner.sql h1:JWsIsEZsfvjCTT6Q967qBYWixlDEzlkxau/2dP9MagM=
+20261008023002_directory-source-identities.sql h1:/rtGGd/0+RsnTALOB4hIk+Sq9xl52cAqnnL0EMv0/ww=
