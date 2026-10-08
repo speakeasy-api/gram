@@ -33,6 +33,7 @@ const state = vi.hoisted(() => ({
     | { customerManagedEncryptionKeysEnabled: boolean }
     | undefined,
   keys: [] as unknown[],
+  sets: [] as unknown[],
   preflight: vi.fn(),
 }));
 
@@ -64,7 +65,7 @@ vi.mock("@gram/client/react-query/organizationRemoteSessionClient.js", () => ({
 vi.mock("@gram/client/react-query/listJsonWebKeySets.js", () => ({
   invalidateAllListJsonWebKeySets: vi.fn(),
   useListJsonWebKeySets: () => ({
-    data: { sets: [{ id: "set-1", name: "Set 1", externalKeyId: "key-1" }] },
+    data: { sets: state.sets },
     isLoading: false,
     error: null,
   }),
@@ -136,6 +137,7 @@ beforeEach(() => {
   state.setUp.mockResolvedValue({ issuer: { slug: "okta-sign-in" } });
   state.features = { customerManagedEncryptionKeysEnabled: true };
   state.keys = [];
+  state.sets = [{ id: "set-1", name: "Set 1", externalKeyId: "key-1" }];
   state.preflight.mockReset();
   state.preflight.mockResolvedValue({
     ok: true,
@@ -348,7 +350,24 @@ describe("OktaSignInSection", () => {
     expect(setUpButton().disabled).toBe(true);
   });
 
-  it("reuses the previous agent's signing key set when setting up a new agent", async () => {
+  it("lets an administrator select the previous agent's signing key set among available sets", async () => {
+    state.sets = [
+      {
+        id: "other-set",
+        name: "Other signing set",
+        externalKeyId: "other-key",
+      },
+      {
+        id: "set-1",
+        name: "Previous agent signing set",
+        externalKeyId: "key-1",
+      },
+      {
+        id: "managed-set",
+        name: "Connection-managed set",
+        externalKeyId: "managed-key",
+      },
+    ];
     state.clients = loaded([
       {
         result: {
@@ -376,6 +395,17 @@ describe("OktaSignInSection", () => {
     renderSection();
 
     expect(setUpButton().disabled).toBe(false);
+    // Reuse is an administrator choice, not an automatic preference for old keys.
+    const picker = screen.getByRole("combobox");
+    expect(picker.textContent).toContain("Other signing set");
+    fireEvent.keyDown(picker, { key: "ArrowDown" });
+    expect(
+      screen.queryByRole("option", { name: "Connection-managed set" }),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("option", { name: "Previous agent signing set" }),
+    );
+    expect(picker.textContent).toContain("Previous agent signing set");
     fireEvent.click(setUpButton());
     await waitFor(() =>
       expect(state.setUp).toHaveBeenCalledWith(
