@@ -10,6 +10,7 @@ import { PaygCapReachedBanners } from "./billing/billing-banners.tsx";
 import { HatchRule } from "./hatch-rule.tsx";
 import { useShowsImpersonationBanner } from "./impersonation-banner-state";
 import { InsightsDockShortcutHint } from "./insights-dock-shortcut-hint.tsx";
+import { useInsightsState } from "./insights-context";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "@/components/ui/Heading";
 import { Breadcrumb, type BreadcrumbItem } from "@/components/ui/Breadcrumb";
@@ -58,6 +59,9 @@ function PageHeaderComponent({
   const onBillingPage = useMatch("/:orgSlug/billing") !== null;
   const showBreadcrumbs = useShowBreadcrumbs();
   const stickyRef = useStickyTopVar();
+  // Project pages swap the project switcher (now in the sidebar) and search
+  // for the provider's header controls.
+  const { headerChrome } = useInsightsState();
 
   return (
     <>
@@ -70,6 +74,9 @@ function PageHeaderComponent({
         <header
           className={cn(
             "flex h-(--header-height) shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)",
+            // Project pages use a grey top bar that carries the mode switcher
+            // and assistant controls; the breadcrumb bar below stays white.
+            headerChrome && "bg-muted/50",
             className,
           )}
         >
@@ -83,11 +90,15 @@ function PageHeaderComponent({
             {/* Project context lives here, in the slot the breadcrumbs used to
               occupy, rather than in the sidebar. The collapse control moved to
               the sidebar header alongside the logo. */}
-            <WorkspaceSwitcher className="-ml-1.5 w-auto border-0 px-1.5" />
+            {headerChrome ? (
+              headerChrome.start
+            ) : (
+              <WorkspaceSwitcher className="-ml-1.5 w-auto border-0 px-1.5" />
+            )}
             {!showBreadcrumbs && children}
             <div className="ml-auto flex shrink-0 items-center gap-2">
               <InsightsDockShortcutHint />
-              <CommandPaletteTrigger />
+              {headerChrome ? headerChrome.end : <CommandPaletteTrigger />}
             </div>
           </div>
         </header>

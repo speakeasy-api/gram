@@ -18,6 +18,7 @@ import { SidebarBrandHeader } from "./sidebar-brand-header";
 import { DevSidebarSlot } from "@/dev/sidebar-slot";
 import { Icon } from "@/components/ui/Icon";
 import { InsightsDockResumeButton } from "./insights-dock-resume-button";
+import { WorkspaceSwitcher } from "./workspace-switcher";
 import { Link } from "react-router";
 import { McpDetailSidebarNav } from "./mcp-detail-sidebar-nav";
 import { GatewaySidebarNav } from "./gateway-sidebar-nav";
@@ -309,8 +310,12 @@ export function AppSidebar({
 
   return (
     <Sidebar collapsible="icon" {...props}>
-      {/* Brand row only — the project switcher now lives in the page header. */}
       <SidebarBrandHeader homeHref={`/${orgSlug}`} />
+      {/* Project switcher sits above all nav items; the page header row no
+          longer carries it (the assistant bottom bar took its other controls). */}
+      <div className="border-sidebar-border border-b p-2 group-data-[collapsible=icon]:hidden">
+        <WorkspaceSwitcher className="w-full" />
+      </div>
       <SidebarContent className="pt-2">{sidebarContent}</SidebarContent>
       <SidebarFooter className="border-t">
         <FreeTierExceededNotification />

@@ -48,6 +48,7 @@ import {
   HistoryIcon,
   Loader2,
   Maximize2,
+  Plus,
   SquarePen,
   Terminal,
   X,
@@ -70,6 +71,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/Popover";
 import { useAskAiListener } from "./command-palette/askAiBridge";
+import { ModeSwitcher } from "./mode-switcher";
+import { Button } from "./ui/Button";
+import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
 export type { InsightsConfigOptions } from "./insights-context";
@@ -396,22 +400,24 @@ interface InsightsDockProps {
   /** Called when the dock settles back to the resting pill (composer
    *  collapsed, no draft, panel closed). */
   onIdle?: () => void;
-  /** Anchor the card bottom-right, just above the bottom bar's trigger,
-   *  instead of floating bottom-center. */
+  /** Anchor the card top-right, under the header's New Chat button, instead
+   *  of floating bottom-center. */
   anchorEnd?: boolean;
 }
 
 /**
- * Thin bottom bar (Linear-style) that replaces the resting dock while the dock
- * is turned off (INSIGHTS_DOCK_ENABLED). A grey strip with a raised card
- * button so the entry point stands out from page content. Sticks to the viewport bottom and
- * reserves its own height, so it never covers page content.
+ * Assistant controls for the right of the project page header while the dock
+ * is turned off (INSIGHTS_DOCK_ENABLED): search, a New Chat button that
+ * summons the expanded dock, and a Recent chats popover.
  */
-function InsightsBottomBar({
+function InsightsHeaderActions({
+  assistantAllowed,
   onOpen,
   onPickHistory,
   showHistory,
 }: {
+  /** New Chat and history need the assistant; search is always shown. */
+  assistantAllowed: boolean;
   onOpen: () => void;
   /** Called after a chat is picked from the history popover. */
   onPickHistory: () => void;
@@ -421,30 +427,37 @@ function InsightsBottomBar({
   const [historyOpen, setHistoryOpen] = useState(false);
   const isMac = isMacPlatform();
   return (
-    <div className="border-border bg-muted text-foreground sticky bottom-0 z-20 flex h-14 shrink-0 items-center justify-end gap-1 border-t px-5">
-      <button
-        type="button"
-        onClick={onOpen}
-        aria-keyshortcuts={isMac ? "Meta+/" : "Control+/"}
-        className="group border-border bg-card hover:border-foreground flex h-9 items-center gap-2 border px-3 text-sm font-medium shadow-xs transition-colors"
-      >
-        New Chat
-        <InsightsShortcutKeys className="ml-1" />
-      </button>
-      {showHistory && (
+    <div className="flex items-center gap-1">
+      {assistantAllowed && (
+        // The design system's primary button, so it reads like the rest of
+        // the dashboard's actions; the shortcut lives in the tooltip.
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={onOpen}
+          aria-keyshortcuts={isMac ? "Meta+/" : "Control+/"}
+          title={`New chat (${isMac ? "⌘/" : "Ctrl /"})`}
+        >
+          <Button.LeftIcon>
+            <Plus />
+          </Button.LeftIcon>
+          <Button.Text>New chat</Button.Text>
+        </Button>
+      )}
+      {assistantAllowed && showHistory && (
         <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
           <PopoverTrigger asChild>
             <button
               type="button"
               aria-label="Recent chats"
               title="Recent chats"
-              className="text-muted-foreground hover:text-foreground hover:bg-card data-[state=open]:bg-card data-[state=open]:text-foreground flex size-9 items-center justify-center transition-colors"
+              className="text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted data-[state=open]:text-foreground flex size-8 items-center justify-center transition-colors"
             >
               <HistoryIcon className="size-4" strokeWidth={1.75} />
             </button>
           </PopoverTrigger>
           <PopoverContent
-            side="top"
+            side="bottom"
             align="end"
             sideOffset={8}
             className="flex max-h-96 w-80 flex-col p-0"
@@ -466,6 +479,7 @@ function InsightsBottomBar({
           </PopoverContent>
         </Popover>
       )}
+      <CommandPaletteTrigger className="size-8" />
     </div>
   );
 }
@@ -473,9 +487,14 @@ function InsightsBottomBar({
 /** Width of the dock card across its states: chat panel open, composer
  *  focused (or holding draft text), and collapsed bar. The card itself
  *  carries the single floating-overlay shadow. */
-function dockCardShapeClass(open: boolean, composerExpanded: boolean): string {
-  if (open) return "max-w-3xl";
-  if (composerExpanded) return "max-w-2xl";
+function dockCardShapeClass(
+  open: boolean,
+  composerExpanded: boolean,
+  anchorEnd: boolean,
+): string {
+  // Dropped from the header button, the card stays popover-sized.
+  if (open) return anchorEnd ? "max-w-xl" : "max-w-3xl";
+  if (composerExpanded) return anchorEnd ? "max-w-lg" : "max-w-2xl";
   return "max-w-md";
 }
 
@@ -663,8 +682,10 @@ function InsightsDock({
   return (
     <div
       className={cn(
-        "pointer-events-none absolute inset-x-0 bottom-0 z-30 flex pt-14",
-        anchorEnd ? "justify-end px-5 pb-3" : "justify-center px-4 pb-12",
+        "pointer-events-none absolute inset-x-0 z-30 flex",
+        anchorEnd
+          ? "top-0 justify-end px-5 pt-2"
+          : "bottom-0 justify-center px-4 pt-14 pb-12",
       )}
     >
       {/* Frosted veil under the dock: blurs the page content directly behind
@@ -680,7 +701,7 @@ function InsightsDock({
         className={cn(
           "border-border bg-card text-card-foreground pointer-events-auto w-full border shadow-md",
           "transition-all duration-300 ease-out",
-          dockCardShapeClass(open, composerExpanded),
+          dockCardShapeClass(open, composerExpanded, anchorEnd),
           // Pairs with the sidebar resume button for the dismiss/resume genie
           // (see useInsightsDockCta). The inner wrapper carries the content
           // name so text fades at the endpoints instead of warping mid-flight.
@@ -783,38 +804,54 @@ function InsightsDock({
                           ghosts looked like artifacts) and staggers the new
                           chips in. A chip shared between pages keeps its
                           element and doesn't re-animate. */}
-                      <div className="flex flex-wrap items-center gap-1.5 px-2.5 pt-1 pb-2.5">
-                        {suggestions
-                          .slice(0, DOCK_SUGGESTION_LIMIT)
-                          .map((suggestion, index) => {
-                            const SuggestionIcon =
-                              INSIGHTS_SUGGESTION_ICONS[
-                                suggestion.icon ?? "sparkles"
-                              ];
-                            return (
-                              <motion.button
-                                key={suggestion.title}
-                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                animate={{
-                                  opacity: 1,
-                                  y: 0,
-                                  scale: 1,
-                                  transition: {
-                                    delay: index * 0.06,
-                                    duration: 0.25,
-                                    ease: "easeOut",
-                                  },
-                                }}
-                                type="button"
-                                tabIndex={composerExpanded ? 0 : -1}
-                                onClick={() => submit(suggestion.prompt)}
-                                className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-1.5 border px-2 py-1 text-xs transition-colors"
-                              >
-                                <SuggestionIcon className="size-3 shrink-0" />
-                                {suggestion.title}
-                              </motion.button>
-                            );
-                          })}
+                      <div className="flex items-start gap-1.5 pt-1 pb-2.5">
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                          {suggestions
+                            .slice(0, DOCK_SUGGESTION_LIMIT)
+                            .map((suggestion, index) => {
+                              const SuggestionIcon =
+                                INSIGHTS_SUGGESTION_ICONS[
+                                  suggestion.icon ?? "sparkles"
+                                ];
+                              return (
+                                <motion.button
+                                  key={suggestion.title}
+                                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                  animate={{
+                                    opacity: 1,
+                                    y: 0,
+                                    scale: 1,
+                                    transition: {
+                                      delay: index * 0.06,
+                                      duration: 0.25,
+                                      ease: "easeOut",
+                                    },
+                                  }}
+                                  type="button"
+                                  tabIndex={composerExpanded ? 0 : -1}
+                                  onClick={() => submit(suggestion.prompt)}
+                                  className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-1.5 border px-2 py-1 text-xs transition-colors"
+                                >
+                                  <SuggestionIcon className="size-3 shrink-0" />
+                                  {suggestion.title}
+                                </motion.button>
+                              );
+                            })}
+                        </div>
+                        {/* Anchored under the header, close sits top
+                            right beside the chips instead of in the input. */}
+                        {anchorEnd && (
+                          <button
+                            type="button"
+                            onClick={onDismiss}
+                            tabIndex={composerExpanded ? 0 : -1}
+                            className={cn(PANEL_ICON_BUTTON_CLASS, "shrink-0")}
+                            aria-label="Close the assistant dock"
+                            title="Close"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -833,7 +870,8 @@ function InsightsDock({
                 >
                   {composerField}
                   {value.trim() && <DockSubmitButton />}
-                  {composerExpanded && (
+                  {/* Anchored under the header, history lives in the header. */}
+                  {composerExpanded && !anchorEnd && (
                     <button
                       type="button"
                       onClick={onOpenHistory}
@@ -852,16 +890,18 @@ function InsightsDock({
                   {!composerExpanded && !continueMode && !runtimeReady && (
                     <InsightsShortcutKeys className="opacity-60" />
                   )}
-                  <button
-                    type="button"
-                    onClick={onDismiss}
-                    tabIndex={open ? -1 : 0}
-                    className={PANEL_ICON_BUTTON_CLASS}
-                    aria-label="Dismiss the assistant dock"
-                    title="Dismiss"
-                  >
-                    <X className="size-3.5" />
-                  </button>
+                  {!(anchorEnd && suggestions.length > 0) && (
+                    <button
+                      type="button"
+                      onClick={onDismiss}
+                      tabIndex={open ? -1 : 0}
+                      className={PANEL_ICON_BUTTON_CLASS}
+                      aria-label="Dismiss the assistant dock"
+                      title="Dismiss"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  )}
                 </form>
               </div>
             </div>
@@ -904,6 +944,9 @@ interface InsightsProviderProps {
   suggestions?: InsightsSuggestion[];
   /** Default expanded state. */
   defaultExpanded?: boolean;
+  /** Supply the page header's mode switcher and assistant controls (search,
+   *  New Chat, history) while the dock is turned off. Project layout only. */
+  headerChrome?: boolean;
   /** Children rendered alongside the dock (page content). */
   children: React.ReactNode;
 }
@@ -914,6 +957,7 @@ export function InsightsProvider({
   subtitle: defaultSubtitle,
   suggestions: defaultSuggestions = [],
   defaultExpanded = false,
+  headerChrome = false,
   children,
 }: InsightsProviderProps): ReactElement {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
@@ -923,7 +967,7 @@ export function InsightsProvider({
   // ignores the initial value.
   const [focusComposerKey, setFocusComposerKey] = useState(0);
   // While the dock is turned off (INSIGHTS_DOCK_ENABLED) it is mounted only
-  // on demand: the bottom bar or Cmd+/ summons it expanded, and it goes
+  // on demand: the header's New Chat button summons it expanded, and it goes
   // away again once it settles back to the resting pill.
   const [dockSummoned, setDockSummoned] = useState(false);
   const summonDock = useCallback(() => {
@@ -1475,9 +1519,38 @@ export function InsightsProvider({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [assistantAllowed, isExpanded, handleStartFresh, routes]);
 
+  const pickHistoryChat = useCallback(() => {
+    setHistoryView(false);
+    setIsExpanded(true);
+  }, []);
+  const headerChromeNodes = useMemo(
+    () =>
+      headerChrome && !INSIGHTS_DOCK_ENABLED
+        ? {
+            start: <ModeSwitcher mode="canvas" inline />,
+            end: (
+              <InsightsHeaderActions
+                assistantAllowed={assistantAllowed}
+                onOpen={summonDock}
+                onPickHistory={pickHistoryChat}
+                showHistory={runtimeMounted}
+              />
+            ),
+          }
+        : null,
+    [
+      headerChrome,
+      assistantAllowed,
+      summonDock,
+      pickHistoryChat,
+      runtimeMounted,
+    ],
+  );
+
   const contextValue = useMemo(
     () => ({
       available: assistantAllowed,
+      headerChrome: headerChromeNodes,
       isExpanded,
       setIsExpanded,
       setOverride: handleSetOverride,
@@ -1491,6 +1564,7 @@ export function InsightsProvider({
     }),
     [
       assistantAllowed,
+      headerChromeNodes,
       isExpanded,
       handleSetOverride,
       handleSendPrompt,
@@ -1665,17 +1739,8 @@ export function InsightsProvider({
   // Page content (outlet) + the docked composer. The document scrolls, so the
   // composer rides a zero-height sticky rail at the end of the content: it
   // pins to the viewport bottom and spans the content area's width.
-  const showBottomBar = !INSIGHTS_DOCK_ENABLED && assistantAllowed;
   const dockSurface = (
-    <div
-      className="relative flex w-full flex-1 flex-col"
-      // Viewport-sized pages (the full-page chat) subtract the bottom bar.
-      style={
-        {
-          "--insights-bar-height": showBottomBar ? "3.5rem" : "0px",
-        } as React.CSSProperties
-      }
-    >
+    <div className="relative flex w-full flex-1 flex-col">
       {children}
 
       {/* Backdrop overlay - closes the chat panel when clicked. A page that
@@ -1693,19 +1758,21 @@ export function InsightsProvider({
             the Project Assistant. Expands in place into the chat panel.
             Hidden without assistant access, and while dismissed
             to the sidebar resume button. While the dock is turned off it
-            mounts only when summoned (bottom bar or Cmd+/) or with the
+            mounts only when summoned (header New Chat button) or with the
             panel open, and unmounts once it settles back to the resting pill,
             so the resting composer never shows. */}
       {assistantAllowed &&
         (INSIGHTS_DOCK_ENABLED
           ? !dockDismissed
           : dockSummoned || isExpanded) && (
-          // With the bottom bar showing, the rail sits on top of it (h-14) so
-          // the dock keeps its usual gap above the bar, not the viewport.
+          // Summoned from the header's New Chat button, the dock drops down
+          // from just under the header instead of resting at the bottom.
           <div
             className={cn(
-              "pointer-events-none sticky z-30 h-0 shrink-0",
-              INSIGHTS_DOCK_ENABLED ? "bottom-0" : "bottom-14",
+              "pointer-events-none z-30 h-0 shrink-0",
+              INSIGHTS_DOCK_ENABLED
+                ? "sticky bottom-0"
+                : "fixed inset-x-0 top-[calc(var(--banner-offset,0px)+var(--header-height))]",
             )}
           >
             <InsightsDock
@@ -1725,19 +1792,6 @@ export function InsightsProvider({
             />
           </div>
         )}
-
-      {/* While the dock is turned off, a thin bottom bar is the entry point:
-          it summons the expanded dock or opens chat history. */}
-      {showBottomBar && (
-        <InsightsBottomBar
-          onOpen={summonDock}
-          onPickHistory={() => {
-            setHistoryView(false);
-            setIsExpanded(true);
-          }}
-          showHistory={runtimeMounted}
-        />
-      )}
     </div>
   );
 

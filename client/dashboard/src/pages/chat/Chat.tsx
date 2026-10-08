@@ -113,8 +113,10 @@ export function ChatHome(): ReactElement {
           <Home className="size-4" />
         </Link>
       </header>
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-3xl flex-col px-6 pt-[clamp(10rem,26vh,16rem)] pb-16">
+      {/* my-auto centers the landing vertically when it fits, and still lets
+          the column scroll from the top when it doesn't. */}
+      <div className="flex flex-1 flex-col overflow-y-auto">
+        <div className="mx-auto my-auto flex w-full max-w-3xl flex-col px-6 py-16">
           <ChatLanding autoFocusInput />
         </div>
       </div>
@@ -1013,7 +1015,7 @@ export function ChatConversation(): ReactElement {
   // explicitly — `h-full` collapses to the content and lifts the composer off
   // the bottom of the screen on short threads.
   return (
-    <div className="flex h-[calc(100dvh-var(--banner-offset,0px)-var(--insights-bar-height,0px))] flex-col">
+    <div className="flex h-[calc(100dvh-var(--banner-offset,0px))] flex-col">
       {/* h-(--header-height) + px-8: same row height and content inset as
           Page.Header, so this header's rule lines up with the sidebar's. */}
       <header className="border-border flex h-(--header-height) shrink-0 items-center gap-3 border-b px-8">

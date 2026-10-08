@@ -1,6 +1,6 @@
 import type { InsightsSuggestion } from "@/lib/insights-suggestions";
 import type { ElementsConfig } from "@/elements";
-import { createContext, useContext } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 
 /**
  * Per-page overrides for the global AI Insights panel. Pages mount
@@ -17,6 +17,10 @@ export interface InsightsConfigOptions {
 
 export interface InsightsContextValue {
   available: boolean;
+  /** Controls the page header renders in place of its default project
+   *  switcher and search: the mode switcher on the left; search, New Chat and
+   *  history on the right. Null outside the project layout. */
+  headerChrome: { start: ReactNode; end: ReactNode } | null;
   isExpanded: boolean;
   setIsExpanded: (expanded: boolean) => void;
   /** Pages call this to register a per-page config override. Pass null to
@@ -40,6 +44,7 @@ export interface InsightsContextValue {
 
 export const InsightsContext = createContext<InsightsContextValue>({
   available: false,
+  headerChrome: null,
   isExpanded: false,
   setIsExpanded: () => {},
   setOverride: () => {},
