@@ -1,0 +1,18 @@
+server/database/schema.sql
+  h_9630b74bdac540 5313-5315
+server/migrations/20261008012430_directory-role-set-index-removal.sql
+  h_9630b74bdac540 1-6
+server/migrations/atlas.sum
+  h_9630b74bdac540 1,466
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a196374dedcd6dd51a62e85747acc5f658b58fdf",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
