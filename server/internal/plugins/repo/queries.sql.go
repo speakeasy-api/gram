@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const addGatewayPluginServer = `-- name: AddGatewayPluginServer :one
@@ -1386,6 +1387,146 @@ func (q *Queries) ListAgentPluginCompatibilityIssuesForProject(ctx context.Conte
 	return items, nil
 }
 
+const listDeliveryToolsetToolURNs = `-- name: ListDeliveryToolsetToolURNs :many
+SELECT latest.tool_urns
+FROM toolsets t
+JOIN projects p ON p.id = t.project_id
+CROSS JOIN LATERAL (
+  SELECT v.tool_urns FROM toolset_versions v
+  WHERE v.toolset_id = t.id AND v.deleted IS FALSE
+  ORDER BY v.version DESC LIMIT 1
+) latest
+WHERE p.organization_id = $1 AND p.id = $2
+  AND p.deleted IS FALSE AND t.deleted IS FALSE
+  AND (t.id = $3::uuid OR EXISTS (
+    SELECT 1 FROM mcp_servers m
+    WHERE m.id = $4::uuid
+      AND m.project_id = p.id AND m.toolset_id = t.id AND m.deleted IS FALSE
+  ))
+`
+
+type ListDeliveryToolsetToolURNsParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ToolsetID      uuid.NullUUID
+	McpServerID    uuid.NullUUID
+}
+
+// Resolve direct and wrapped toolsets without changing removal eligibility.
+func (q *Queries) ListDeliveryToolsetToolURNs(ctx context.Context, arg ListDeliveryToolsetToolURNsParams) ([][]urn.Tool, error) {
+	rows, err := q.db.Query(ctx, listDeliveryToolsetToolURNs,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ToolsetID,
+		arg.McpServerID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items [][]urn.Tool
+	for rows.Next() {
+		var tool_urns []urn.Tool
+		if err := rows.Scan(&tool_urns); err != nil {
+			return nil, err
+		}
+		items = append(items, tool_urns)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformCleanupMemberships = `-- name: ListPlatformCleanupMemberships :many
+SELECT ps.id, ps.plugin_id, ps.project_id, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id, ps.display_name, ps.policy, ps.sort_order, ps.created_at, ps.updated_at, ps.deleted_at, ps.deleted,
+  (EXISTS (
+    SELECT 1 FROM audit_logs a
+    WHERE a.organization_id = $1 AND a.project_id = $2
+      AND a.subject_type = 'plugin' AND a.subject_id = ps.plugin_id::text
+      AND a.action = 'plugin:server_add' AND a.metadata->>'server_id' = ps.id::text
+    GROUP BY a.subject_id
+    HAVING count(*) = 1 AND bool_and(a.actor_type = 'system' AND a.actor_id = 'automatic-role-distribution')
+  ) AND NOT EXISTS (
+    SELECT 1 FROM audit_logs a
+    WHERE a.organization_id = $1 AND a.project_id = $2
+      AND a.subject_type = 'plugin' AND a.subject_id = ps.plugin_id::text
+      AND a.metadata->>'server_id' = ps.id::text
+      AND a.action IN ('plugin:server_update', 'plugin:server_remove')
+  ))::boolean AS automatic_provenance
+FROM plugin_servers ps
+JOIN plugins p ON p.id = ps.plugin_id
+JOIN projects project ON project.id = p.project_id
+LEFT JOIN mcp_servers m ON m.id = ps.mcp_server_id AND m.project_id = $2 AND m.deleted IS FALSE
+WHERE p.organization_id = $1 AND p.project_id = $2
+  AND project.organization_id = $1 AND project.deleted IS FALSE
+  AND p.deleted IS FALSE AND ps.deleted IS FALSE
+  AND (ps.toolset_id IS NOT NULL OR m.toolset_id IS NOT NULL)
+  AND ($3::uuid IS NULL OR ps.toolset_id = $3::uuid OR m.toolset_id = $3::uuid)
+  AND (cardinality($4::uuid[]) = 0 OR ps.id = ANY($4::uuid[]))
+  AND ps.id > $5::uuid
+ORDER BY ps.id
+LIMIT $6::integer
+`
+
+type ListPlatformCleanupMembershipsParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	ToolsetID      uuid.NullUUID
+	MembershipIds  []uuid.UUID
+	AfterID        uuid.UUID
+	PageSize       int32
+}
+
+type ListPlatformCleanupMembershipsRow struct {
+	PluginServer        PluginServer
+	AutomaticProvenance bool
+}
+
+// Exact membership audit provenance only. Initiating-user Default attachments
+// and manually updated entries remain ambiguous and must never be auto-cleaned.
+func (q *Queries) ListPlatformCleanupMemberships(ctx context.Context, arg ListPlatformCleanupMembershipsParams) ([]ListPlatformCleanupMembershipsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformCleanupMemberships,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ToolsetID,
+		arg.MembershipIds,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformCleanupMembershipsRow
+	for rows.Next() {
+		var i ListPlatformCleanupMembershipsRow
+		if err := rows.Scan(
+			&i.PluginServer.ID,
+			&i.PluginServer.PluginID,
+			&i.PluginServer.ProjectID,
+			&i.PluginServer.ToolsetID,
+			&i.PluginServer.McpServerID,
+			&i.PluginServer.MetaMcpServerID,
+			&i.PluginServer.DisplayName,
+			&i.PluginServer.Policy,
+			&i.PluginServer.SortOrder,
+			&i.PluginServer.CreatedAt,
+			&i.PluginServer.UpdatedAt,
+			&i.PluginServer.DeletedAt,
+			&i.PluginServer.Deleted,
+			&i.AutomaticProvenance,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPluginAssignments = `-- name: ListPluginAssignments :many
 SELECT pa.id, pa.plugin_id, pa.organization_id, pa.principal_urn, pa.install_mode, pa.created_at, pa.updated_at
 FROM plugin_assignments pa
@@ -2436,16 +2577,27 @@ SELECT m.id, m.project_id, COALESCE(NULLIF(m.name, ''), NULLIF(m.slug, ''), m.id
   'mcp_server'::text AS backend_kind, COALESCE(m.toolset_id, m.id)::uuid AS resource_id, m.toolset_id AS legacy_toolset_id,
   (m.visibility <> 'disabled' AND (m.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
     SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = m.id AND e.project_id = p.id AND e.deleted IS FALSE
-  )))::boolean AS eligible
+  )))::boolean AS eligible, latest.tool_urns
 FROM mcp_servers m JOIN projects p ON p.id = m.project_id
+LEFT JOIN toolsets backing ON backing.id = m.toolset_id AND backing.project_id = p.id AND backing.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT v.tool_urns FROM toolset_versions v
+  WHERE v.toolset_id = backing.id AND v.deleted IS FALSE
+  ORDER BY v.version DESC LIMIT 1
+) latest ON true
 WHERE p.organization_id = $1 AND p.id = $2
   AND p.deleted IS FALSE AND m.deleted IS FALSE
 UNION ALL
 SELECT t.id, t.project_id, t.name, 'toolset'::text, t.id, t.id,
   (t.mcp_enabled AND COALESCE(t.mcp_slug, '') <> '' AND NOT EXISTS (
     SELECT 1 FROM mcp_servers m WHERE m.toolset_id = t.id AND m.project_id = p.id AND m.deleted IS FALSE
-  ))::boolean
+  ))::boolean, latest.tool_urns
 FROM toolsets t JOIN projects p ON p.id = t.project_id
+LEFT JOIN LATERAL (
+  SELECT v.tool_urns FROM toolset_versions v
+  WHERE v.toolset_id = t.id AND v.deleted IS FALSE
+  ORDER BY v.version DESC LIMIT 1
+) latest ON true
 WHERE p.organization_id = $1 AND p.id = $2
   AND p.deleted IS FALSE AND t.deleted IS FALSE
 ORDER BY id
@@ -2464,9 +2616,11 @@ type ListRoleDeliveryServersRow struct {
 	ResourceID      uuid.UUID
 	LegacyToolsetID uuid.NullUUID
 	Eligible        bool
+	ToolUrns        []urn.Tool
 }
 
 // Keep ineligible live backends as removal candidates. Only additions require eligibility.
+// Load latest live contents with the inventory for typed platform classification.
 func (q *Queries) ListRoleDeliveryServers(ctx context.Context, arg ListRoleDeliveryServersParams) ([]ListRoleDeliveryServersRow, error) {
 	rows, err := q.db.Query(ctx, listRoleDeliveryServers, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
@@ -2484,6 +2638,7 @@ func (q *Queries) ListRoleDeliveryServers(ctx context.Context, arg ListRoleDeliv
 			&i.ResourceID,
 			&i.LegacyToolsetID,
 			&i.Eligible,
+			&i.ToolUrns,
 		); err != nil {
 			return nil, err
 		}
@@ -2585,6 +2740,47 @@ func (q *Queries) LockMarketplaceSettings(ctx context.Context, projectID uuid.UU
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const lockPlatformCleanupMemberships = `-- name: LockPlatformCleanupMemberships :many
+SELECT ps.id
+FROM plugin_servers ps
+JOIN plugins p ON p.id = ps.plugin_id
+JOIN projects project ON project.id = p.project_id
+WHERE p.organization_id = $1 AND p.project_id = $2
+  AND project.organization_id = $1 AND project.deleted IS FALSE
+  AND p.deleted IS FALSE AND ps.deleted IS FALSE
+  AND ps.id = ANY($3::uuid[])
+ORDER BY ps.id
+FOR UPDATE OF ps
+`
+
+type LockPlatformCleanupMembershipsParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	MembershipIds  []uuid.UUID
+}
+
+// Lock exact live rows before the final audit-provenance read. Manual updates
+// lock these rows even when they do not acquire project admission/plugin locks.
+func (q *Queries) LockPlatformCleanupMemberships(ctx context.Context, arg LockPlatformCleanupMembershipsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockPlatformCleanupMemberships, arg.OrganizationID, arg.ProjectID, arg.MembershipIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockRoleDeliveryPlugin = `-- name: LockRoleDeliveryPlugin :one
@@ -2786,6 +2982,52 @@ func (q *Queries) RemoveDeletedRolePluginAssignment(ctx context.Context, arg Rem
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const removePlatformCleanupMembership = `-- name: RemovePlatformCleanupMembership :one
+UPDATE plugin_servers ps
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM plugins p, projects project
+WHERE ps.id = $1 AND ps.plugin_id = $2 AND ps.deleted IS FALSE
+  AND p.id = ps.plugin_id AND p.deleted IS FALSE
+  AND p.organization_id = $3 AND p.project_id = $4
+  AND project.id = p.project_id AND project.organization_id = $3
+  AND project.deleted IS FALSE
+RETURNING ps.id, ps.plugin_id, ps.project_id, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id, ps.display_name, ps.policy, ps.sort_order, ps.created_at, ps.updated_at, ps.deleted_at, ps.deleted
+`
+
+type RemovePlatformCleanupMembershipParams struct {
+	ID             uuid.UUID
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Reassert tenant scope on the write after cleanup's scoped reads and row locks.
+func (q *Queries) RemovePlatformCleanupMembership(ctx context.Context, arg RemovePlatformCleanupMembershipParams) (PluginServer, error) {
+	row := q.db.QueryRow(ctx, removePlatformCleanupMembership,
+		arg.ID,
+		arg.PluginID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var i PluginServer
+	err := row.Scan(
+		&i.ID,
+		&i.PluginID,
+		&i.ProjectID,
+		&i.ToolsetID,
+		&i.McpServerID,
+		&i.MetaMcpServerID,
+		&i.DisplayName,
+		&i.Policy,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const removePluginServer = `-- name: RemovePluginServer :one
