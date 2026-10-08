@@ -39,9 +39,15 @@ vi.mock("@gram/client/react-query/listMcpServerToolMetadata.js", () => ({
 vi.mock("@gram/client/react-query/addMcpServerToolMetadataBatch.js", () => ({
   useAddMcpServerToolMetadataBatchMutation: (options: MutationOptions) => {
     mocks.addOptions.push(options);
+    // Like React Query, the hook-level onError runs before the returned
+    // promise rejects.
     return {
       mutate: mocks.addBatch,
-      mutateAsync: mocks.autoAdd,
+      mutateAsync: (vars: unknown) =>
+        mocks.autoAdd(vars).catch(async (error: unknown) => {
+          await options.onError?.(error);
+          throw error;
+        }),
       isPending: false,
       variables: undefined,
     };
@@ -169,7 +175,7 @@ describe("useSyncToolMetadata additive mode", () => {
     ]);
   });
 
-  it("keeps the union of disjoint listings", () => {
+  it("keeps the union of disjoint listings", async () => {
     const { rerender } = renderAdditive({
       live: live("list_devices"),
       stored: stored(),
@@ -177,6 +183,8 @@ describe("useSyncToolMetadata additive mode", () => {
     expect(recordedNames(mocks.autoAdd.mock.calls[0]!)).toEqual([
       "list_devices",
     ]);
+    // The first write settles before the next listing is reconciled.
+    await act(async () => {});
 
     // Another session sees a disjoint set once the first has been stored.
     rerender({ live: live("wipe_device"), stored: stored("list_devices") });
@@ -189,11 +197,12 @@ describe("useSyncToolMetadata additive mode", () => {
     expect(mocks.deleteOne).not.toHaveBeenCalled();
   });
 
-  it("does not repeat a recording for the same tools", () => {
+  it("does not repeat a recording for the same tools", async () => {
     const { rerender } = renderAdditive({
       live: live("lock_device"),
       stored: stored(),
     });
+    await act(async () => {});
     rerender({ live: live("lock_device"), stored: stored() });
 
     expect(mocks.autoAdd).toHaveBeenCalledOnce();
@@ -262,7 +271,7 @@ describe("useSyncToolMetadata additive mode", () => {
     ]);
   });
 
-  it("keeps a newer batch guarded when an older one fails late", async () => {
+  it("sends nothing for a server while its batch is in flight, then retries once", async () => {
     let rejectFirst: (error: unknown) => void = () => {};
     mocks.autoAdd
       .mockImplementationOnce(
@@ -282,17 +291,18 @@ describe("useSyncToolMetadata additive mode", () => {
       stored: stored(),
       listedAt: 2,
     });
-    expect(mocks.autoAdd).toHaveBeenCalledTimes(2);
+    rerender({ live: live("lock_device"), stored: stored(), listedAt: 3 });
+    expect(mocks.autoAdd).toHaveBeenCalledOnce();
 
     await act(async () => {
       rejectFirst(new Error("late failure"));
     });
-    // The newer batch is still in flight: re-rendering it sends nothing new.
-    rerender({
-      live: live("lock_device", "wipe_device"),
-      stored: stored(),
-      listedAt: 2,
-    });
+    // The failure is retried against the latest listing, once.
+    expect(mocks.autoAdd).toHaveBeenCalledTimes(2);
+    expect(recordedNames(mocks.autoAdd.mock.calls[1]!)).toEqual([
+      "lock_device",
+    ]);
+    rerender({ live: live("lock_device"), stored: stored(), listedAt: 3 });
     expect(mocks.autoAdd).toHaveBeenCalledTimes(2);
   });
 
