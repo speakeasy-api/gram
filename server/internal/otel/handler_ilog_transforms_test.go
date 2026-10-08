@@ -6,7 +6,6 @@ import (
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
@@ -199,15 +198,14 @@ func logStringAttribute(key, value string) *otelv1.InboundLogRecord_KeyValue {
 }
 
 // A producer may not classify its own record: anything it sends under the
-// reserved speakeasy.agent namespace is dropped, and only what the column
-// enrichers wrote reaches a consumer.
+// reserved speakeasy.agent namespace is dropped, and only what the agent
+// attribute enrichers wrote reaches a consumer.
 func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 	t.Parallel()
 
 	// publish runs one record through the handler and returns what reached
-	// the topic, plus how many reserved attributes the counter says were
-	// dropped on the way.
-	publish := func(t *testing.T, inbound *otelv1.InboundLogRecord) (map[string]*otelv1.LogRecord_AnyValue, int64) {
+	// the topic.
+	publish := func(t *testing.T, inbound *otelv1.InboundLogRecord) map[string]*otelv1.LogRecord_AnyValue {
 		t.Helper()
 		var published *otelv1.LogRecord
 		publisher := gcp.NewMockPublisher[*otelv1.LogRecord]()
@@ -216,7 +214,7 @@ func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 			require.True(t, ok)
 			published = record
 		}).Return(gcp.NewSuccessPublishResult()).Once()
-		reader, meterProvider := readableMeter(t)
+		meterProvider := testenv.NewMeterProvider(t)
 		handler := NewLogTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
 		require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
 		require.NotNil(t, published)
@@ -224,8 +222,7 @@ func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 		for _, item := range published.GetAttributes() {
 			attributes[item.GetKey()] = item.GetValue()
 		}
-		dropped := agentEventCount(t, reader, enrich.MeterReservedAttributesDropped, attr.OTELSignalKey, string(enrich.SignalLog))
-		return attributes, dropped
+		return attributes
 	}
 
 	t.Run("a classified record keeps the enricher's classification, not the producer's", func(t *testing.T) {
@@ -246,11 +243,10 @@ func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 			},
 		}).Build()
 
-		attributes, dropped := publish(t, inbound)
+		attributes := publish(t, inbound)
 		require.Equal(t, "api_request", attributes[string(enrich.AgentEventTypeKey)].GetStringValue())
 		require.Equal(t, "anthropic", attributes[string(enrich.AgentProviderKey)].GetStringValue())
 		require.NotContains(t, attributes, string(enrich.AgentTextKey), "a key no enricher writes is gone, not kept")
-		require.Equal(t, int64(3), dropped, "every forged key is counted, so a producer writing the namespace is visible")
 	})
 
 	t.Run("an unclassified record gets no type key however hard the producer tries", func(t *testing.T) {
@@ -269,11 +265,10 @@ func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 			},
 		}).Build()
 
-		attributes, dropped := publish(t, inbound)
+		attributes := publish(t, inbound)
 		require.NotContains(t, attributes, string(enrich.AgentEventTypeKey))
 		require.Equal(t, enrich.SourceUnknown, attributes[string(enrich.AgentSourceKey)].GetStringValue())
 		require.Contains(t, attributes, "gen_ai.input.messages", "the producer's own attributes stay")
-		require.Equal(t, int64(1), dropped)
 	})
 
 	t.Run("a record that sends nothing reserved counts nothing", func(t *testing.T) {
@@ -290,8 +285,7 @@ func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 			Attributes: []*otelv1.InboundLogRecord_KeyValue{logStringAttribute("model", "claude-sonnet-4")},
 		}).Build()
 
-		_, dropped := publish(t, inbound)
-		require.Zero(t, dropped)
+		require.NotNil(t, publish(t, inbound))
 	})
 }
 
@@ -328,7 +322,7 @@ func TestLogTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
 		require.True(t, ok)
 		published = record
 	}).Return(gcp.NewSuccessPublishResult()).Once()
-	reader, meterProvider := readableMeter(t)
+	meterProvider := testenv.NewMeterProvider(t)
 	handler := NewLogTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
 
 	require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
@@ -343,14 +337,13 @@ func TestLogTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
 	require.Equal(t, []string{testLogProjectID}, values[string(enrich.ProjectIDKey)])
 	require.Empty(t, values[string(enrich.DirectoryGroupNamesKey)], "a group the directory lookup did not find stays empty rather than taking the producer's")
 	require.Equal(t, []string{"claude-sonnet-4"}, values["model"], "the producer's own attributes stay")
-	require.Equal(t, int64(4), agentEventCount(t, reader, enrich.MeterReservedAttributesDropped, attr.OTELSignalKey, string(enrich.SignalLog)))
 }
 
 // A record may arrive at the size limit with its whole budget spent on an
 // opted-in prompt. The transform copies the words onto the canonical text
 // key beside the original, so without a cap the copy would double them and
 // the record would no longer fit a relay export. The copy is cut to the
-// cap, counted, and the enriched record still fits.
+// cap and the enriched record still fits.
 func TestNearLimitPromptStillFitsRelayExportAfterEnrichment(t *testing.T) {
 	t.Parallel()
 
@@ -387,7 +380,7 @@ func TestNearLimitPromptStillFitsRelayExportAfterEnrichment(t *testing.T) {
 		require.True(t, ok)
 		published = record
 	}).Return(gcp.NewSuccessPublishResult()).Once()
-	reader, meterProvider := readableMeter(t)
+	meterProvider := testenv.NewMeterProvider(t)
 	handler := NewLogTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
 
 	require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
@@ -400,7 +393,6 @@ func TestNearLimitPromptStillFitsRelayExportAfterEnrichment(t *testing.T) {
 	require.Equal(t, "prompt", attributes[string(enrich.AgentEventTypeKey)].GetStringValue())
 	require.Len(t, attributes["prompt"].GetStringValue(), len(prompt), "the producer's own words are untouched")
 	require.Len(t, attributes[string(enrich.AgentTextKey)].GetStringValue(), 64*constants.KiB, "the copy is cut to the cap")
-	require.Equal(t, int64(1), agentEventCount(t, reader, "gram.otel_column_enricher.truncated", attr.AgentEventColumnKey, "text"))
 
 	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{published}, true)
 	require.NoError(t, err)

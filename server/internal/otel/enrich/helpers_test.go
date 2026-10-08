@@ -1,15 +1,12 @@
 package enrich
 
 import (
-	"context"
 	"maps"
 	"testing"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
 const (
@@ -121,77 +118,37 @@ func indexed(out []attribute.KeyValue) map[attribute.Key]attribute.Value {
 }
 
 // identity, operation and usage run one family's log enricher over a record.
-func identity(t *testing.T, in *Instruments, record *otelv1.InboundLogRecord) map[attribute.Key]attribute.Value {
+func identity(t *testing.T, record *otelv1.InboundLogRecord) map[attribute.Key]attribute.Value {
 	t.Helper()
-	return enriched(t, &logIdentity{instruments: in}, record)
+	return enriched(t, &logIdentity{}, record)
 }
 
-func operation(t *testing.T, in *Instruments, record *otelv1.InboundLogRecord) map[attribute.Key]attribute.Value {
+func operation(t *testing.T, record *otelv1.InboundLogRecord) map[attribute.Key]attribute.Value {
 	t.Helper()
-	return enriched(t, &logOperation{instruments: in}, record)
+	return enriched(t, &logOperation{}, record)
 }
 
-func usage(t *testing.T, in *Instruments, record *otelv1.InboundLogRecord) map[attribute.Key]attribute.Value {
+func usage(t *testing.T, record *otelv1.InboundLogRecord) map[attribute.Key]attribute.Value {
 	t.Helper()
-	return enriched(t, &logUsage{instruments: in}, record)
+	return enriched(t, &logUsage{}, record)
 }
 
 // agentAttributes runs every agent attribute enricher over one record or
 // span, as the transform does, and indexes what they wrote by key.
-func agentAttributes(t *testing.T, in *Instruments, record *otelv1.InboundLogRecord) map[attribute.Key]attribute.Value {
+func agentAttributes(t *testing.T, record *otelv1.InboundLogRecord) map[attribute.Key]attribute.Value {
 	t.Helper()
 	out := map[attribute.Key]attribute.Value{}
-	for _, enricher := range LogAgentAttributes(in) {
+	for _, enricher := range LogAgentAttributes() {
 		maps.Copy(out, enriched(t, enricher, record))
 	}
 	return out
 }
 
-func spanAgentAttributes(t *testing.T, in *Instruments, span *otelv1.InboundSpan) map[attribute.Key]attribute.Value {
+func spanAgentAttributes(t *testing.T, span *otelv1.InboundSpan) map[attribute.Key]attribute.Value {
 	t.Helper()
 	out := map[attribute.Key]attribute.Value{}
-	for _, enricher := range SpanAgentAttributes(in) {
+	for _, enricher := range SpanAgentAttributes() {
 		maps.Copy(out, enrichedSpan(t, enricher, span))
 	}
 	return out
-}
-
-// readableMeter is a meter provider whose counters a test can read back, so
-// a counter is asserted rather than trusted. The noop provider testenv hands
-// out would let a broken wiring pass.
-func readableMeter(t *testing.T) (*sdkmetric.ManualReader, *sdkmetric.MeterProvider) {
-	t.Helper()
-	reader := sdkmetric.NewManualReader()
-	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
-	return reader, provider
-}
-
-// counterValue reads the one data point of a counter that carries every
-// given attribute, or zero when none was recorded. Asking for several
-// attributes at once proves they were recorded on the same point rather
-// than scattered across points that each carry one.
-func counterValue(t *testing.T, reader *sdkmetric.ManualReader, metricName string, want ...attribute.KeyValue) int64 {
-	t.Helper()
-	var resourceMetrics metricdata.ResourceMetrics
-	require.NoError(t, reader.Collect(t.Context(), &resourceMetrics))
-	for _, scopeMetrics := range resourceMetrics.ScopeMetrics {
-		for _, candidate := range scopeMetrics.Metrics {
-			if candidate.Name != metricName {
-				continue
-			}
-			sum, ok := candidate.Data.(metricdata.Sum[int64])
-			require.True(t, ok)
-		points:
-			for _, point := range sum.DataPoints {
-				for _, kv := range want {
-					if got, ok := point.Attributes.Value(kv.Key); !ok || got != kv.Value {
-						continue points
-					}
-				}
-				return point.Value
-			}
-		}
-	}
-	return 0
 }

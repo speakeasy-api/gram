@@ -4,16 +4,13 @@ import (
 	"testing"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
-	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
 func TestIdentityForClaudeCode(t *testing.T) {
 	t.Parallel()
 
-	in := NewInstruments(testenv.NewLogger(t), testenv.NewMeterProvider(t))
-	require.Equal(t, "enrich-identity", (&logIdentity{instruments: in}).Name())
+	require.Equal(t, "enrich-identity", (&logIdentity{}).Name())
 	who := []*otelv1.InboundLogRecord_KeyValue{
 		logStringAttribute("session.id", "session-1"),
 		logStringAttribute("prompt.id", "turn-1"),
@@ -26,7 +23,7 @@ func TestIdentityForClaudeCode(t *testing.T) {
 		t.Parallel()
 		record := inboundTestLog(claudeCodeScopeName, "claude-code", "user_prompt", append(who, logStringAttribute("message.uuid", "message-1"))...)
 
-		attrs := identity(t, in, record)
+		attrs := identity(t, record)
 		require.Len(t, attrs, 6)
 		require.Equal(t, "session-1", attrs[AgentSessionIDKey].AsString())
 		require.Equal(t, "turn-1", attrs[AgentTurnIDKey].AsString())
@@ -39,52 +36,46 @@ func TestIdentityForClaudeCode(t *testing.T) {
 	t.Run("an api_request names the request", func(t *testing.T) {
 		t.Parallel()
 		record := inboundTestLog(claudeCodeScopeName, "claude-code", "api_request", append(who, logStringAttribute("request_id", "req_011"))...)
-		require.Equal(t, "req_011", identity(t, in, record)[AgentEventIDKey].AsString())
+		require.Equal(t, "req_011", identity(t, record)[AgentEventIDKey].AsString())
 	})
 
 	t.Run("a tool_result names the tool invocation", func(t *testing.T) {
 		t.Parallel()
 		record := inboundTestLog(claudeCodeScopeName, "claude-code", "tool_result", append(who, logStringAttribute("tool_use_id", "toolu_1"))...)
-		require.Equal(t, "toolu_1", identity(t, in, record)[AgentEventIDKey].AsString())
+		require.Equal(t, "toolu_1", identity(t, record)[AgentEventIDKey].AsString())
 	})
 
 	t.Run("a response body lands beside the request it answers", func(t *testing.T) {
 		t.Parallel()
 		record := inboundTestLog(claudeCodeScopeName, "claude-code", "api_response_body", append(who, logStringAttribute("request_id", "req_011"))...)
-		require.Equal(t, "req_011", identity(t, in, record)[AgentEventIDKey].AsString())
+		require.Equal(t, "req_011", identity(t, record)[AgentEventIDKey].AsString())
 	})
 
 	t.Run("a request body and a compaction get no event id, so the writer keeps the record id", func(t *testing.T) {
 		t.Parallel()
-		reader, meterProvider := readableMeter(t)
-		counted := NewInstruments(testenv.NewLogger(t), meterProvider)
 
 		body := inboundTestLog(claudeCodeScopeName, "claude-code", "api_request_body", append(who, logStringAttribute("request_id", "req_011"))...)
-		attrs := identity(t, counted, body)
+		attrs := identity(t, body)
 		require.NotContains(t, attrs, AgentEventIDKey, "a request id is present, but the type has no subject of its own")
 		require.Equal(t, "session-1", attrs[AgentSessionIDKey].AsString(), "the session attributes still apply")
 
 		compaction := inboundTestLog(claudeCodeScopeName, "claude-code", "compaction", who...)
-		require.NotContains(t, identity(t, counted, compaction), AgentEventIDKey)
+		require.NotContains(t, identity(t, compaction), AgentEventIDKey)
 
-		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("event_id")), "not expected is never, not missing")
 	})
 
 	t.Run("an unclassified record gets none of them", func(t *testing.T) {
 		t.Parallel()
 		record := inboundTestLog(claudeCodeScopeName, "claude-code", "hook_registered", who...)
-		require.Empty(t, identity(t, in, record))
+		require.Empty(t, identity(t, record))
 	})
 }
 
-func TestIdentityCountsWhatAProviderNeverStates(t *testing.T) {
+func TestIdentityLeavesOutWhatAProviderNeverStates(t *testing.T) {
 	t.Parallel()
 
-	reader, meterProvider := readableMeter(t)
-	in := NewInstruments(testenv.NewLogger(t), meterProvider)
-
 	// Codex states a conversation, a user and a response id, but no turn
-	// and no organization, so those two are counted on its api_request.
+	// and no organization.
 	record := inboundTestLog(codexScopeName, "codex", "codex.sse_event",
 		logStringAttribute("event.kind", "response.completed"),
 		logStringAttribute("conversation.id", "conv-1"),
@@ -93,22 +84,17 @@ func TestIdentityCountsWhatAProviderNeverStates(t *testing.T) {
 		logStringAttribute("response.id", "resp-1"),
 	)
 
-	attrs := identity(t, in, record)
+	attrs := identity(t, record)
 	require.Equal(t, "conv-1", attrs[AgentSessionIDKey].AsString())
 	require.Equal(t, "resp-1", attrs[AgentEventIDKey].AsString())
 	require.Equal(t, "dev@example.com", attrs[AgentUserEmailKey].AsString())
 	require.Equal(t, "acct-1", attrs[AgentExternalUserIDKey].AsString())
 	require.NotContains(t, attrs, AgentTurnIDKey)
 	require.NotContains(t, attrs, AgentExternalOrgIDKey)
-	require.Equal(t, int64(1), counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("turn_id")))
-	require.Equal(t, int64(1), counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("external_org_id")))
-	require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("session_id")))
 }
 
 func TestIdentityForSemconv(t *testing.T) {
 	t.Parallel()
-
-	in := NewInstruments(testenv.NewLogger(t), testenv.NewMeterProvider(t))
 
 	t.Run("a chat record names its conversation and response", func(t *testing.T) {
 		t.Parallel()
@@ -119,7 +105,7 @@ func TestIdentityForSemconv(t *testing.T) {
 			logStringAttribute("user.email", "dev@example.com"),
 		)
 
-		attrs := identity(t, in, record)
+		attrs := identity(t, record)
 		require.Equal(t, "session-9", attrs[AgentSessionIDKey].AsString())
 		require.Equal(t, "resp-1", attrs[AgentEventIDKey].AsString())
 		require.Equal(t, "dev@example.com", attrs[AgentUserEmailKey].AsString())
@@ -132,16 +118,14 @@ func TestIdentityForSemconv(t *testing.T) {
 			logStringAttribute("gen_ai.operation.name", "execute_tool"),
 			logStringAttribute("gen_ai.tool.call.id", "call-1"),
 		)
-		require.Equal(t, "call-1", identity(t, in, record)[AgentEventIDKey].AsString())
+		require.Equal(t, "call-1", identity(t, record)[AgentEventIDKey].AsString())
 	})
 }
 
-func TestSpanIdentityNamesTheConversationAndCountsItsAbsence(t *testing.T) {
+func TestSpanIdentityNamesTheConversation(t *testing.T) {
 	t.Parallel()
 
-	reader, meterProvider := readableMeter(t)
-	in := NewInstruments(testenv.NewLogger(t), meterProvider)
-	enricher := &spanIdentity{instruments: in}
+	enricher := &spanIdentity{}
 	require.Equal(t, "enrich-identity", enricher.Name())
 
 	named := inboundTestSpan("litellm", "litellm", "chat gpt-4o", otelv1.InboundSpan_STATUS_CODE_OK,
@@ -157,5 +141,4 @@ func TestSpanIdentityNamesTheConversationAndCountsItsAbsence(t *testing.T) {
 		spanStringAttribute("gen_ai.operation.name", "chat"),
 	)
 	require.NotContains(t, enrichedSpan(t, enricher, unnamed), AgentSessionIDKey)
-	require.Equal(t, int64(1), counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventSurface(missingLabelOther), attr.AgentEventColumn("session_id")))
 }

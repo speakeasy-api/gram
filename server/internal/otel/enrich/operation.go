@@ -1,8 +1,6 @@
 package enrich
 
 import (
-	"context"
-
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 )
@@ -13,13 +11,11 @@ import (
 const maxTextBytes = 64 * constants.KiB
 
 // capText cuts the canonical copy of a record's words at capBytes on a
-// character boundary and counts the cut; the producer's own attribute is
-// untouched.
-func capText(ctx context.Context, in *Instruments, surface func() string, eventType, text string, capBytes int) string {
+// character boundary; the producer's own attribute is untouched.
+func capText(text string, capBytes int) string {
 	if len(text) <= capBytes {
 		return text
 	}
-	in.recordAgentAttributeTruncated(ctx, surface(), eventType, attributeName(AgentTextKey))
 	return truncateUTF8(text, capBytes)
 }
 

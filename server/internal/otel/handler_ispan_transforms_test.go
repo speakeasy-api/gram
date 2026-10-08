@@ -1,7 +1,6 @@
 package otel
 
 import (
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"testing"
 
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -300,15 +299,14 @@ func spanTestStringAttribute(key, value string) *otelv1.InboundSpan_KeyValue {
 }
 
 // A producer that writes Speakeasy's own speakeasy.agent namespace on a span is
-// dropped and counted, exactly as for a log record: only what the column
+// dropped, exactly as for a log record: only what the agent attribute
 // enrichers wrote reaches a consumer.
 func TestSpanTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 	t.Parallel()
 
 	// publish runs one span through the handler and returns what reached
-	// the topic, plus how many reserved attributes the counter says were
-	// dropped on the way.
-	publish := func(t *testing.T, inbound *otelv1.InboundSpan) (map[string]*otelv1.Span_AnyValue, int64) {
+	// the topic.
+	publish := func(t *testing.T, inbound *otelv1.InboundSpan) map[string]*otelv1.Span_AnyValue {
 		t.Helper()
 		var published *otelv1.Span
 		publisher := gcp.NewMockPublisher[*otelv1.Span]()
@@ -317,7 +315,7 @@ func TestSpanTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 			require.True(t, ok)
 			published = span
 		}).Return(gcp.NewSuccessPublishResult()).Once()
-		reader, meterProvider := readableMeter(t)
+		meterProvider := testenv.NewMeterProvider(t)
 		handler := NewSpanTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
 		require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
 		require.NotNil(t, published)
@@ -325,8 +323,7 @@ func TestSpanTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 		for _, item := range published.GetAttributes() {
 			attributes[item.GetKey()] = item.GetValue()
 		}
-		dropped := agentEventCount(t, reader, enrich.MeterReservedAttributesDropped, attr.OTELSignalKey, string(enrich.SignalSpan))
-		return attributes, dropped
+		return attributes
 	}
 
 	span := func(name string, attributes ...*otelv1.InboundSpan_KeyValue) *otelv1.InboundSpan {
@@ -348,7 +345,7 @@ func TestSpanTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 
 	t.Run("a classified span keeps the enricher's classification, not the producer's", func(t *testing.T) {
 		t.Parallel()
-		attributes, dropped := publish(t, span("chat gpt-4o",
+		attributes := publish(t, span("chat gpt-4o",
 			spanTestStringAttribute("gen_ai.operation.name", "chat"),
 			spanTestStringAttribute("gen_ai.provider.name", "openai"),
 			spanTestStringAttribute(string(enrich.AgentEventTypeKey), "tool_call"),
@@ -358,24 +355,21 @@ func TestSpanTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 		require.Equal(t, "api_request", attributes[string(enrich.AgentEventTypeKey)].GetStringValue())
 		require.Equal(t, "openai", attributes[string(enrich.AgentProviderKey)].GetStringValue())
 		require.NotContains(t, attributes, string(enrich.AgentCostUSDKey), "a key no enricher writes is gone, not kept")
-		require.Equal(t, int64(3), dropped)
 	})
 
 	t.Run("an unclassified span gets no type key however hard the producer tries", func(t *testing.T) {
 		t.Parallel()
-		attributes, dropped := publish(t, span("GET /health",
+		attributes := publish(t, span("GET /health",
 			spanTestStringAttribute(string(enrich.AgentEventTypeKey), "api_request"),
 			spanTestStringAttribute("http.request.method", "GET"),
 		))
 		require.NotContains(t, attributes, string(enrich.AgentEventTypeKey))
 		require.Contains(t, attributes, "http.request.method", "the producer's own attributes stay")
-		require.Equal(t, int64(1), dropped)
 	})
 
-	t.Run("a span that sends nothing reserved counts nothing", func(t *testing.T) {
+	t.Run("a span that sends nothing reserved passes through", func(t *testing.T) {
 		t.Parallel()
-		_, dropped := publish(t, span("chat gpt-4o", spanTestStringAttribute("gen_ai.operation.name", "chat")))
-		require.Zero(t, dropped)
+		require.NotNil(t, publish(t, span("chat gpt-4o", spanTestStringAttribute("gen_ai.operation.name", "chat"))))
 	})
 }
 
@@ -412,7 +406,7 @@ func TestSpanTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
 		require.True(t, ok)
 		published = span
 	}).Return(gcp.NewSuccessPublishResult()).Once()
-	reader, meterProvider := readableMeter(t)
+	meterProvider := testenv.NewMeterProvider(t)
 	handler := NewSpanTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
 
 	require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
@@ -425,5 +419,4 @@ func TestSpanTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
 	require.Equal(t, []string{"litellm"}, values[string(enrich.OriginalInstrumentationScopeNameKey)], "the transform's copy of the scope is the only one")
 	require.Equal(t, []string{testLogOrganizationID}, values[string(enrich.OrganizationIDKey)], "tenancy comes from provenance, not from the producer")
 	require.Empty(t, values[string(enrich.DirectoryIDKey)], "a directory id the lookup did not find stays empty rather than taking the producer's")
-	require.Equal(t, int64(3), agentEventCount(t, reader, enrich.MeterReservedAttributesDropped, attr.OTELSignalKey, string(enrich.SignalSpan)))
 }

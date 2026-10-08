@@ -6,8 +6,8 @@ import (
 )
 
 // classify writes what a record is: event type, raw event name, source,
-// provider and surface. Nothing is counted here; an unclassified record keeps
-// its raw name and source and gets no type. A provider the pipeline already
+// provider and surface. An unclassified record keeps its raw name and source
+// and gets no type. A provider the pipeline already
 // attributed (gram.provider) wins over the dialect's.
 func classify(source, rawEventName, eventType, attributedProvider, dialectProvider, surface string) []attribute.KeyValue {
 	out := []attribute.KeyValue{AgentSourceKey.String(source)}

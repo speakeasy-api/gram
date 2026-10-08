@@ -10,15 +10,13 @@ import (
 
 // logIdentity writes whose event a log record is: the session, the turn,
 // the subject, the person and the account.
-type logIdentity struct {
-	instruments *Instruments
-}
+type logIdentity struct{}
 
 func (*logIdentity) Name() string {
 	return identityEnricherName
 }
 
-func (e *logIdentity) Enrich(ctx context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
+func (*logIdentity) Enrich(_ context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
 	d := dialect.ForLog(record)
 	eventType := stated(d.EventType(record))
 	if eventType == dialect.EventTypeUnclassified {
@@ -48,7 +46,5 @@ func (e *logIdentity) Enrich(ctx context.Context, record *otelv1.InboundLogRecor
 	if key, v, err := d.ExternalOrgID(record); known(key, err) {
 		out = append(out, AgentExternalOrgIDKey.String(v))
 	}
-
-	countMissing(ctx, e.instruments, func() string { return missingLabel(d.Surface(record)) }, eventType, identityExpectations, out)
 	return out, nil
 }

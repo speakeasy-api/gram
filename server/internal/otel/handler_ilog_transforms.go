@@ -44,7 +44,7 @@ func NewLogTransformHandler(
 		enrich.NewLogTokens(),
 		enrich.NewLogDirectory(logger, replicaDB, cacheImpl),
 	}
-	enrichers = append(enrichers, enrich.LogAgentAttributes(in)...)
+	enrichers = append(enrichers, enrich.LogAgentAttributes()...)
 
 	return &LogTransformHandler{
 		logger:       logger,
@@ -62,7 +62,7 @@ func (h *LogTransformHandler) Handle(ctx context.Context, record *otelv1.Inbound
 	// The producer's copy of anything in the pipeline's namespace goes
 	// before the pipeline writes its own, so the scope rewrite below and
 	// the enrichers after it leave exactly one copy of each key.
-	h.instruments.RecordReservedAttributesDropped(ctx, enrich.SignalLog, dropReservedLogAttributes(out))
+	dropReservedLogAttributes(out)
 	if err := rewriteLogInstrumentationScope(out); err != nil {
 		return fmt.Errorf("rewrite instrumentation scope: %w", err)
 	}
@@ -113,16 +113,14 @@ func rewriteLogInstrumentationScope(record *otelv1.LogRecord) error {
 // producer's scope, or give a person a group or department. The enrichers
 // read the inbound record, so what they see is unchanged; the outbound
 // record is what every consumer and relay receives.
-func dropReservedLogAttributes(record *otelv1.LogRecord) int {
+func dropReservedLogAttributes(record *otelv1.LogRecord) {
 	attributes := record.GetAttributes()
 	kept := slices.DeleteFunc(attributes, func(kv *otelv1.LogRecord_KeyValue) bool {
 		return enrich.IsPipelineKey(kv.GetKey())
 	})
-	dropped := len(attributes) - len(kept)
-	if dropped > 0 {
+	if len(kept) != len(attributes) {
 		record.SetAttributes(kept)
 	}
-	return dropped
 }
 
 func applyLogEnrichments(out *otelv1.LogRecord, enrichments []otelattr.KeyValue) error {

@@ -11,21 +11,18 @@ import (
 // logOperation writes what happened in a log record and how it went: the
 // model, the tool, the skill or agent, the words, the outcome and the
 // duration.
-type logOperation struct {
-	instruments *Instruments
-}
+type logOperation struct{}
 
 func (*logOperation) Name() string {
 	return operationEnricherName
 }
 
-func (e *logOperation) Enrich(ctx context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
+func (*logOperation) Enrich(_ context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
 	d := dialect.ForLog(record)
 	eventType := stated(d.EventType(record))
 	if eventType == dialect.EventTypeUnclassified {
 		return nil, nil
 	}
-	surface := func() string { return missingLabel(d.Surface(record)) }
 	isRequest := eventType == dialect.EventTypeAPIRequest
 	isTool := isToolEvent(eventType)
 
@@ -63,7 +60,7 @@ func (e *logOperation) Enrich(ctx context.Context, record *otelv1.InboundLogReco
 	}
 	if carriesText(eventType) {
 		if key, v, err := d.Text(record); known(key, err) {
-			out = append(out, AgentTextKey.String(capText(ctx, e.instruments, surface, eventType, v, maxTextBytes)))
+			out = append(out, AgentTextKey.String(capText(v, maxTextBytes)))
 		}
 	}
 	if implied := impliedOutcome(eventType); implied != "" {
@@ -83,7 +80,5 @@ func (e *logOperation) Enrich(ctx context.Context, record *otelv1.InboundLogReco
 			out = append(out, AgentDurationNanoKey.Int64(v))
 		}
 	}
-
-	countMissing(ctx, e.instruments, surface, eventType, operationExpectations, out)
 	return out, nil
 }

@@ -9,21 +9,18 @@ import (
 )
 
 // spanOperation is logOperation for spans.
-type spanOperation struct {
-	instruments *Instruments
-}
+type spanOperation struct{}
 
 func (*spanOperation) Name() string {
 	return operationEnricherName
 }
 
-func (e *spanOperation) Enrich(ctx context.Context, span *otelv1.InboundSpan) ([]attribute.KeyValue, error) {
+func (*spanOperation) Enrich(_ context.Context, span *otelv1.InboundSpan) ([]attribute.KeyValue, error) {
 	d := dialect.ForSpan(span)
 	eventType := stated(d.EventType(span))
 	if eventType == dialect.EventTypeUnclassified {
 		return nil, nil
 	}
-	surface := func() string { return missingLabel(d.Surface(span)) }
 	isRequest := eventType == dialect.EventTypeAPIRequest
 	isTool := isToolEvent(eventType)
 
@@ -59,7 +56,7 @@ func (e *spanOperation) Enrich(ctx context.Context, span *otelv1.InboundSpan) ([
 	}
 	if carriesText(eventType) {
 		if key, v, err := d.Text(span); known(key, err) {
-			out = append(out, AgentTextKey.String(capText(ctx, e.instruments, surface, eventType, v, maxTextBytes)))
+			out = append(out, AgentTextKey.String(capText(v, maxTextBytes)))
 		}
 	}
 	if implied := impliedOutcome(eventType); implied != "" {
@@ -79,7 +76,5 @@ func (e *spanOperation) Enrich(ctx context.Context, span *otelv1.InboundSpan) ([
 			out = append(out, AgentDurationNanoKey.Int64(v))
 		}
 	}
-
-	countMissing(ctx, e.instruments, surface, eventType, operationExpectations, out)
 	return out, nil
 }

@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -12,9 +11,8 @@ import (
 func TestSpanAgentAttributesAreTheLogAgentAttributesInTheSameOrder(t *testing.T) {
 	t.Parallel()
 
-	in := NewInstruments(testenv.NewLogger(t), testenv.NewMeterProvider(t))
-	logs := LogAgentAttributes(in)
-	spans := SpanAgentAttributes(in)
+	logs := LogAgentAttributes()
+	spans := SpanAgentAttributes()
 	require.Len(t, spans, len(logs))
 	for i := range logs {
 		require.Equal(t, logs[i].Name(), spans[i].Name())
@@ -29,8 +27,6 @@ func TestSpanAgentAttributesAreTheLogAgentAttributesInTheSameOrder(t *testing.T)
 // other event types come from log-only producers.
 func TestALogAndASpanThatSayTheSameThingGetTheSameAttributes(t *testing.T) {
 	t.Parallel()
-
-	in := NewInstruments(testenv.NewLogger(t), testenv.NewMeterProvider(t))
 
 	cases := []struct {
 		name  string
@@ -73,8 +69,8 @@ func TestALogAndASpanThatSayTheSameThingGetTheSameAttributes(t *testing.T) {
 				logAttrs = append(logAttrs, logStringAttribute(k, v))
 				spanAttrs = append(spanAttrs, spanStringAttribute(k, v))
 			}
-			fromLog := agentAttributes(t, in, inboundTestLog("litellm", "litellm", tc.event, logAttrs...))
-			fromSpan := spanAgentAttributes(t, in, inboundTestSpan("litellm", "litellm", tc.span, otelv1.InboundSpan_STATUS_CODE_OK, spanAttrs...))
+			fromLog := agentAttributes(t, inboundTestLog("litellm", "litellm", tc.event, logAttrs...))
+			fromSpan := spanAgentAttributes(t, inboundTestSpan("litellm", "litellm", tc.span, otelv1.InboundSpan_STATUS_CODE_OK, spanAttrs...))
 
 			require.NotContains(t, fromLog, AgentDurationNanoKey)
 			require.Equal(t, int64(500), fromSpan[AgentDurationNanoKey].AsInt64())
@@ -94,7 +90,6 @@ func TestALogAndASpanThatSayTheSameThingGetTheSameAttributes(t *testing.T) {
 func TestSpanAgentAttributesForAChatSpan(t *testing.T) {
 	t.Parallel()
 
-	in := NewInstruments(testenv.NewLogger(t), testenv.NewMeterProvider(t))
 	span := inboundTestSpan("litellm", "litellm", "chat gpt-4o", otelv1.InboundSpan_STATUS_CODE_ERROR,
 		spanStringAttribute("gen_ai.operation.name", "chat"),
 		spanStringAttribute("gen_ai.provider.name", "openai"),
@@ -106,7 +101,7 @@ func TestSpanAgentAttributesForAChatSpan(t *testing.T) {
 		spanStringAttribute("gen_ai.usage.cost", "0.002"),
 	)
 
-	attrs := spanAgentAttributes(t, in, span)
+	attrs := spanAgentAttributes(t, span)
 	want := map[attribute.Key]string{
 		AgentEventIDKey:   "resp-1",
 		AgentSessionIDKey: "session-9",

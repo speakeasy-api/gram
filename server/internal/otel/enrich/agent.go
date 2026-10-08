@@ -1,7 +1,5 @@
 package enrich
 
-import "github.com/speakeasy-api/gram/server/internal/otel/dialect"
-
 // The agent attribute enrichers write the canonical speakeasy.agent.*
 // attributes beside a producer's own, for logs and spans alike, so every
 // consumer reads one vocabulary. Design doc: "Populating agent_events,
@@ -14,38 +12,23 @@ const (
 	usageEnricherName          = "enrich-usage"
 )
 
-// classifiedEventTypes is the agent vocabulary without the unclassified type.
-var classifiedEventTypes = []string{
-	dialect.EventTypePrompt,
-	dialect.EventTypeAPIRequest,
-	dialect.EventTypeAPIResponse,
-	dialect.EventTypeAPIError,
-	dialect.EventTypeAPIRefusal,
-	dialect.EventTypeToolCall,
-	dialect.EventTypeToolCallResult,
-	dialect.EventTypeToolDecision,
-	dialect.EventTypeAPIRequestBody,
-	dialect.EventTypeAPIResponseBody,
-	dialect.EventTypeCompaction,
-}
-
 // LogAgentAttributes is every enricher that writes an agent attribute for a
 // log record, classification first.
-func LogAgentAttributes(in *Instruments) []LogEnricher {
+func LogAgentAttributes() []LogEnricher {
 	return []LogEnricher{
 		&logClassification{},
-		&logIdentity{instruments: in},
-		&logOperation{instruments: in},
-		&logUsage{instruments: in},
+		&logIdentity{},
+		&logOperation{},
+		&logUsage{},
 	}
 }
 
 // SpanAgentAttributes is LogAgentAttributes for spans.
-func SpanAgentAttributes(in *Instruments) []SpanEnricher {
+func SpanAgentAttributes() []SpanEnricher {
 	return []SpanEnricher{
 		&spanClassification{},
-		&spanIdentity{instruments: in},
-		&spanOperation{instruments: in},
-		&spanUsage{instruments: in},
+		&spanIdentity{},
+		&spanOperation{},
+		&spanUsage{},
 	}
 }

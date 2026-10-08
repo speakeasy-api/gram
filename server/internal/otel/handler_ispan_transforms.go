@@ -43,7 +43,7 @@ func NewSpanTransformHandler(
 		enrich.NewSpanTokens(),
 		enrich.NewSpanDirectory(logger, replicaDB, cacheImpl),
 	}
-	enrichers = append(enrichers, enrich.SpanAgentAttributes(in)...)
+	enrichers = append(enrichers, enrich.SpanAgentAttributes()...)
 
 	return &SpanTransformHandler{
 		logger:        logger,
@@ -61,7 +61,7 @@ func (h *SpanTransformHandler) Handle(ctx context.Context, m *otelv1.InboundSpan
 	// The producer's copy of anything in the pipeline's namespace goes
 	// before the pipeline writes its own, so the scope rewrite below and
 	// the enrichers after it leave exactly one copy of each key.
-	h.instruments.RecordReservedAttributesDropped(ctx, enrich.SignalSpan, dropReservedSpanAttributes(out))
+	dropReservedSpanAttributes(out)
 	if err := rewriteInstrumentationScope(out); err != nil {
 		return fmt.Errorf("rewrite instrumentation scope: %w", err)
 	}
@@ -112,16 +112,14 @@ func rewriteInstrumentationScope(span *otelv1.Span) error {
 // classify its own span, claim another tenant, pose as another producer's
 // scope, or give a person a group or department. The enrichers read
 // the inbound span, so what they see is unchanged.
-func dropReservedSpanAttributes(span *otelv1.Span) int {
+func dropReservedSpanAttributes(span *otelv1.Span) {
 	attributes := span.GetAttributes()
 	kept := slices.DeleteFunc(attributes, func(kv *otelv1.Span_KeyValue) bool {
 		return enrich.IsPipelineKey(kv.GetKey())
 	})
-	dropped := len(attributes) - len(kept)
-	if dropped > 0 {
+	if len(kept) != len(attributes) {
 		span.SetAttributes(kept)
 	}
-	return dropped
 }
 
 func applySpanEnrichments(out *otelv1.Span, enrichments []otelattr.KeyValue) error {

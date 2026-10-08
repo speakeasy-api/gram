@@ -9,15 +9,13 @@ import (
 )
 
 // spanUsage is logUsage for spans.
-type spanUsage struct {
-	instruments *Instruments
-}
+type spanUsage struct{}
 
 func (*spanUsage) Name() string {
 	return usageEnricherName
 }
 
-func (e *spanUsage) Enrich(ctx context.Context, span *otelv1.InboundSpan) ([]attribute.KeyValue, error) {
+func (*spanUsage) Enrich(_ context.Context, span *otelv1.InboundSpan) ([]attribute.KeyValue, error) {
 	d := dialect.ForSpan(span)
 	eventType := stated(d.EventType(span))
 	if eventType != dialect.EventTypeAPIRequest {
@@ -40,7 +38,5 @@ func (e *spanUsage) Enrich(ctx context.Context, span *otelv1.InboundSpan) ([]att
 	if key, v, err := d.CostUSD(span); known(key, err) {
 		out = append(out, AgentCostUSDKey.Float64(v))
 	}
-
-	countMissing(ctx, e.instruments, func() string { return missingLabel(d.Surface(span)) }, eventType, usageExpectations, out)
 	return out, nil
 }

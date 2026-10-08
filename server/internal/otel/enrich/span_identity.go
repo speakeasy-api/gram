@@ -9,15 +9,13 @@ import (
 )
 
 // spanIdentity is logIdentity for spans.
-type spanIdentity struct {
-	instruments *Instruments
-}
+type spanIdentity struct{}
 
 func (*spanIdentity) Name() string {
 	return identityEnricherName
 }
 
-func (e *spanIdentity) Enrich(ctx context.Context, span *otelv1.InboundSpan) ([]attribute.KeyValue, error) {
+func (*spanIdentity) Enrich(_ context.Context, span *otelv1.InboundSpan) ([]attribute.KeyValue, error) {
 	d := dialect.ForSpan(span)
 	eventType := stated(d.EventType(span))
 	if eventType == dialect.EventTypeUnclassified {
@@ -45,7 +43,5 @@ func (e *spanIdentity) Enrich(ctx context.Context, span *otelv1.InboundSpan) ([]
 	if key, v, err := d.ExternalOrgID(span); known(key, err) {
 		out = append(out, AgentExternalOrgIDKey.String(v))
 	}
-
-	countMissing(ctx, e.instruments, func() string { return missingLabel(d.Surface(span)) }, eventType, identityExpectations, out)
 	return out, nil
 }
