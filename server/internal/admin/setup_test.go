@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
@@ -76,6 +77,7 @@ func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool
 		logger:          logger,
 		db:              conn,
 		audit:           audit.NewLogger(),
+		scopes:          remotemcp.NewStaffScopes(logger, conn, audit.NewLogger()),
 		trial:           trialemails.NoopNotifier{},
 		sessions:        sessions,
 		loginStates:     cache.NewTypedObjectCache[LoginState](logger, adminCache, cache.SuffixNone),

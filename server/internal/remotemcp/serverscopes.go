@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -31,6 +32,10 @@ const (
 	maxPinnedScopeBytes = 256
 )
 
+// ErrNotRemoteBacked reports an MCP server with no remote MCP server behind it,
+// so it has no protected resource to pin scopes on.
+var ErrNotRemoteBacked = errors.New("mcp server is not backed by a remote mcp server")
+
 // pinnableServer is a remote-backed MCP server and the protected resource its logins are for.
 type pinnableServer struct {
 	server      mcpserversrepo.McpServer
@@ -42,7 +47,7 @@ func (s *Service) GetServerScopes(ctx context.Context, payload *gen.GetServerSco
 	if err != nil {
 		return nil, err
 	}
-	target, err := s.loadPinnableServer(ctx, logger, *authCtx.ProjectID, mcpServerID)
+	target, err := loadPinnableServer(ctx, s.db, logger, *authCtx.ProjectID, mcpServerID)
 	if err != nil {
 		return nil, err
 	}
@@ -51,11 +56,7 @@ func (s *Service) GetServerScopes(ctx context.Context, payload *gen.GetServerSco
 		return nil, err
 	}
 	discover := remotesessions.ResourceScopeDiscoveryEnabled(ctx, logger, s.features, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug)
-	cached, _, err := remotesessions.CachedResourceScopes(ctx, s.db, *authCtx.ProjectID, target.resourceURL, discover)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get protected resource").LogError(ctx, logger)
-	}
-	return s.serverScopes(ctx, logger, authCtx, target, sharedServerCount(sharing, target), cached)
+	return readServerScopes(ctx, s.db, logger, authCtx.ActiveOrganizationID, *authCtx.ProjectID, target, sharing, discover)
 }
 
 func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerScopePinPayload) (*gen.RemoteMcpServerScopes, error) {
@@ -67,7 +68,7 @@ func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerS
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
 	}
-	target, err := s.loadPinnableServer(ctx, logger, *authCtx.ProjectID, mcpServerID)
+	target, err := loadPinnableServer(ctx, s.db, logger, *authCtx.ProjectID, mcpServerID)
 	if err != nil {
 		return nil, err
 	}
@@ -83,15 +84,43 @@ func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerS
 		return nil, oops.E(oops.CodeBadRequest, nil, "pinned scopes are not enabled for this organization; a pin can only be cleared")
 	}
 
-	dbtx, err := s.db.Begin(ctx)
+	return commitScopePin(ctx, s.db, s.audit, logger, s.beforeScopePinLock, scopePinWrite{
+		organizationID:   authCtx.ActiveOrganizationID,
+		projectID:        *authCtx.ProjectID,
+		actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		actorDisplayName: authCtx.Email,
+		target:           target,
+		authorized:       sharing,
+		scopes:           scopes,
+	}, discover)
+}
+
+type scopePinWrite struct {
+	organizationID   string
+	projectID        uuid.UUID
+	actor            urn.Principal
+	actorDisplayName *string
+	target           pinnableServer
+
+	// authorized is the sharing set the caller was cleared for; the write
+	// refuses if it changed before the lock was taken.
+	authorized []uuid.UUID
+	scopes     []string
+}
+
+// commitScopePin writes the pin in its own transaction and returns the view as
+// it stands afterwards, resolved with discover. beforeLock runs inside the
+// transaction before it locks anything; tests only, nil otherwise.
+func commitScopePin(ctx context.Context, db *pgxpool.Pool, auditLogger *audit.Logger, logger *slog.Logger, beforeLock func(), w scopePinWrite, discover bool) (*gen.RemoteMcpServerScopes, error) {
+	dbtx, err := db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-	if s.beforeScopePinLock != nil {
-		s.beforeScopePinLock()
+	if beforeLock != nil {
+		beforeLock()
 	}
-	row, err := writeScopePin(ctx, dbtx, s.audit, logger, scopePinWrite{authCtx: authCtx, target: target, authorized: sharing, scopes: scopes})
+	row, err := writeScopePin(ctx, dbtx, auditLogger, logger, w)
 	if err != nil {
 		return nil, err
 	}
@@ -100,21 +129,14 @@ func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerS
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return s.serverScopes(ctx, logger, authCtx, target, sharedServerCount(sharing, target), remotesessions.ResourceScopesFromRow(row, discover))
-}
-
-type scopePinWrite struct {
-	authCtx    *contextvalues.AuthContext
-	target     pinnableServer
-	authorized []uuid.UUID
-	scopes     []string
+	return serverScopes(ctx, db, logger, w.organizationID, w.projectID, w.target, sharedServerCount(w.authorized, w.target), remotesessions.ResourceScopesFromRow(row, discover))
 }
 
 // writeScopePin runs only on dbtx: a second pool connection taken while holding
 // the resource lock can starve requests queued on it. It returns the resource
 // row as committed, nil when there is none.
 func writeScopePin(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, logger *slog.Logger, w scopePinWrite) (*repo.RemoteProtectedResource, error) {
-	projectID := *w.authCtx.ProjectID
+	projectID := w.projectID
 	q := repo.New(dbtx)
 	url, err := q.GetRemoteURLForMcpServerForShare(ctx, repo.GetRemoteURLForMcpServerForShareParams{McpServerID: w.target.server.ID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -156,7 +178,7 @@ func writeScopePin(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, 
 
 	updated, err := q.UpsertRemoteProtectedResourceScopeOverride(ctx, repo.UpsertRemoteProtectedResourceScopeOverrideParams{
 		ProjectID:          projectID,
-		OrganizationID:     w.authCtx.ActiveOrganizationID,
+		OrganizationID:     w.organizationID,
 		ResourceIdentifier: w.target.resourceURL,
 		ScopeOverride:      w.scopes,
 	})
@@ -169,10 +191,10 @@ func writeScopePin(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, 
 		affected = append(affected, id.String())
 	}
 	if err := auditLogger.LogMcpServerScopePinUpdate(ctx, dbtx, audit.LogMcpServerScopePinUpdateEvent{
-		OrganizationID:       w.authCtx.ActiveOrganizationID,
+		OrganizationID:       w.organizationID,
 		ProjectID:            projectID,
-		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, w.authCtx.UserID),
-		ActorDisplayName:     w.authCtx.Email,
+		Actor:                w.actor,
+		ActorDisplayName:     w.actorDisplayName,
 		ActorSlug:            nil,
 		McpServerURN:         urn.NewMcpServer(w.target.server.ID),
 		McpServerName:        conv.FromPGTextOrEmpty[string](w.target.server.Name),
@@ -236,17 +258,17 @@ func sharedServerCount(sharing []uuid.UUID, target pinnableServer) int {
 	return n
 }
 
-func (s *Service) loadPinnableServer(ctx context.Context, logger *slog.Logger, projectID, mcpServerID uuid.UUID) (pinnableServer, error) {
-	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpServerID, ProjectID: projectID})
+func loadPinnableServer(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, projectID, mcpServerID uuid.UUID) (pinnableServer, error) {
+	server, err := mcpserversrepo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpServerID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return pinnableServer{}, oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
 	}
 	if err != nil {
 		return pinnableServer{}, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
-	resourceURL, err := remotesessionsrepo.New(s.db).GetRemoteURLForMcpServer(ctx, remotesessionsrepo.GetRemoteURLForMcpServerParams{McpServerID: mcpServerID, ProjectID: projectID})
+	resourceURL, err := remotesessionsrepo.New(db).GetRemoteURLForMcpServer(ctx, remotesessionsrepo.GetRemoteURLForMcpServerParams{McpServerID: mcpServerID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return pinnableServer{}, oops.E(oops.CodeNotFound, err, "mcp server is not backed by a remote mcp server").LogError(ctx, logger)
+		return pinnableServer{}, oops.E(oops.CodeNotFound, ErrNotRemoteBacked, "%s", ErrNotRemoteBacked.Error()).LogInfo(ctx, logger)
 	}
 	if err != nil {
 		return pinnableServer{}, oops.E(oops.CodeUnexpected, err, "get remote url for mcp server").LogError(ctx, logger)
@@ -254,13 +276,22 @@ func (s *Service) loadPinnableServer(ctx context.Context, logger *slog.Logger, p
 	return pinnableServer{server: server, resourceURL: resourceURL}, nil
 }
 
+// readServerScopes reads the cached resource row and resolves the view from it.
+func readServerScopes(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, organizationID string, projectID uuid.UUID, target pinnableServer, sharing []uuid.UUID, discover bool) (*gen.RemoteMcpServerScopes, error) {
+	cached, _, err := remotesessions.CachedResourceScopes(ctx, db, projectID, target.resourceURL, discover)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get protected resource").LogError(ctx, logger)
+	}
+	return serverScopes(ctx, db, logger, organizationID, projectID, target, sharedServerCount(sharing, target), cached)
+}
+
 // serverScopes resolves what a login through each bound client would request
 // now from the cached resource row, as the consent card does; it never probes.
-func (s *Service) serverScopes(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, target pinnableServer, sharedServers int, cached remotesessions.ResourceScopes) (*gen.RemoteMcpServerScopes, error) {
+func serverScopes(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, organizationID string, projectID uuid.UUID, target pinnableServer, sharedServers int, cached remotesessions.ResourceScopes) (*gen.RemoteMcpServerScopes, error) {
 	clients := []*gen.RemoteMcpServerClientScopes{}
 	if target.server.UserSessionIssuerID.Valid {
 		var err error
-		clients, err = s.clientScopes(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, target, cached)
+		clients, err = clientScopes(ctx, db, projectID, organizationID, target, cached)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve client scopes").LogError(ctx, logger)
 		}
@@ -278,10 +309,10 @@ func (s *Service) serverScopes(ctx context.Context, logger *slog.Logger, authCtx
 	}, nil
 }
 
-func (s *Service) clientScopes(ctx context.Context, projectID uuid.UUID, orgID string, target pinnableServer, cached remotesessions.ResourceScopes) ([]*gen.RemoteMcpServerClientScopes, error) {
+func clientScopes(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID, orgID string, target pinnableServer, cached remotesessions.ResourceScopes) ([]*gen.RemoteMcpServerClientScopes, error) {
 	discover := cached.UseDiscovered
 	issuerID := target.server.UserSessionIssuerID.UUID
-	rows, err := remotesessionsrepo.New(s.db).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
+	rows, err := remotesessionsrepo.New(db).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
 		UserSessionIssuerID: issuerID,
 		ProjectID:           conv.ToNullUUID(projectID),
 		OrganizationID:      conv.ToPGText(orgID),
@@ -295,7 +326,7 @@ func (s *Service) clientScopes(ctx context.Context, projectID uuid.UUID, orgID s
 		for _, r := range rows {
 			clientIDs = append(clientIDs, r.ClientID)
 		}
-		owners, err = remotesessions.ResourceOwnersAmong(ctx, s.db, orgID, clientIDs, target.resourceURL)
+		owners, err = remotesessions.ResourceOwnersAmong(ctx, db, orgID, clientIDs, target.resourceURL)
 		if err != nil {
 			return nil, fmt.Errorf("decide resource ownership: %w", err)
 		}

@@ -63,6 +63,14 @@ func testServerHealth() *gen.AdminMcpServerHealth {
 				testHealthClient(testHealthOtherID, "cimd"),
 			},
 		},
+		ResourceScopes: &gen.AdminMcpServerResourceScopes{
+			ResourceURL: "https://mcp.example.test/mcp", PinnedScopes: []string{"read"}, AdvertisedScopesKnown: true,
+			AdvertisedScopes: []string{"read", "write"}, ChallengeScopes: []string{}, SharedServerCount: 1,
+			Clients: []*gen.AdminMcpServerResourceScopeClient{{
+				ClientID: testHealthClientID, ScopeSource: "resource_pin", RequestedScopes: []string{"read"},
+				UnadvertisedPinnedScopes: []string{}, PinWouldDecide: true,
+			}},
+		},
 	}
 }
 
@@ -155,6 +163,14 @@ func TestDescribeMCPServerHealthExactTargetAndProjection(t *testing.T) {
 	require.Equal(t, "https://idp.example.test", client.Issuer.Issuer)
 	require.Equal(t, "2026-08-01T00:00:00Z", *client.Issuer.MetadataLastErrorAt)
 	require.Equal(t, MCPServerHealthOutcomes{Success: 90, Unauthorized: 5, ClientError: 2, ServerError: 1, Blocked: 1, Failed: 1}, *output.ToolCalls.Outcomes)
+	require.Equal(t, &MCPServerHealthResourceScopes{
+		ResourceURL: "https://mcp.example.test/mcp", PinnedScopes: []string{"read"}, AdvertisedScopesKnown: true,
+		AdvertisedScopes: []string{"read", "write"}, ChallengeScopes: []string{}, SharedServerCount: 1,
+		Clients: []MCPServerHealthResourceScopeClient{{
+			ClientID: testHealthClientID, ScopeSource: "resource_pin", RequestedScopes: []string{"read"},
+			UnadvertisedPinnedScopes: []string{}, PinWouldDecide: true,
+		}},
+	}, output.ResourceScopes)
 
 	// The daily series and bucket width are service-only.
 	require.NotContains(t, string(data), "daily")
@@ -217,6 +233,7 @@ func TestDescribeMCPServerHealthToolsetOnlyCorrelation(t *testing.T) {
 	reads := testServerHealthReads()
 	reads.health.Server.Source = "toolset_only"
 	reads.health.Correlation.McpServerID = nil
+	reads.health.ResourceScopes = nil
 	body, data, isError := callServerHealthTool(t, reads, nil, healthArgs(""))
 	require.False(t, isError, body)
 	var output MCPServerHealth
@@ -302,6 +319,20 @@ func TestDescribeMCPServerHealthFailsClosedOnMalformedResults(t *testing.T) {
 		"nil grant types":       func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer.RemoteSessionClients[0].GrantTypes = nil },
 		"nil validation counts": func(h *gen.AdminMcpServerHealth) {
 			h.UserSessionIssuer.RemoteSessionClients[0].Sessions.ValidationStatusCounts = nil
+		},
+		"scopes on toolset":    func(h *gen.AdminMcpServerHealth) { h.Server.Source = "toolset" },
+		"empty resource url":   func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.ResourceURL = "" },
+		"nil pinned scopes":    func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.PinnedScopes = nil },
+		"empty pinned scope":   func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.PinnedScopes = []string{""} },
+		"nil challenge scopes": func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.ChallengeScopes = nil },
+		"negative shared":      func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.SharedServerCount = -1 },
+		"unknown scope source": func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.Clients[0].ScopeSource = "guess" },
+		"inexact scope client": func(h *gen.AdminMcpServerHealth) { h.ResourceScopes.Clients[0].ClientID = "client" },
+		"nil scope client": func(h *gen.AdminMcpServerHealth) {
+			h.ResourceScopes.Clients = append(h.ResourceScopes.Clients, nil)
+		},
+		"too many pinned": func(h *gen.AdminMcpServerHealth) {
+			h.ResourceScopes.PinnedScopes = make([]string, maxHealthPinnedScopes+1)
 		},
 		"legacy with issuer":  func(h *gen.AdminMcpServerHealth) { h.LegacyAuth = new("gram_private") },
 		"unknown legacy":      func(h *gen.AdminMcpServerHealth) { h.UserSessionIssuer = nil; h.LegacyAuth = new("basic") },

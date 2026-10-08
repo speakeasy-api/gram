@@ -14090,6 +14090,241 @@ func DecodeDescribeMcpServerHealthResponse(decoder func(*http.Response) goahttp.
 	}
 }
 
+// BuildSetMcpServerScopePinRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "setMcpServerScopePin"
+// endpoint
+func (c *Client) BuildSetMcpServerScopePinRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetMcpServerScopePinAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "setMcpServerScopePin", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetMcpServerScopePinRequest returns an encoder for requests sent to
+// the admin setMcpServerScopePin server.
+func EncodeSetMcpServerScopePinRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.SetMcpServerScopePinPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "setMcpServerScopePin", "*admin.SetMcpServerScopePinPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewSetMcpServerScopePinRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "setMcpServerScopePin", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetMcpServerScopePinResponse returns a decoder for responses returned
+// by the admin setMcpServerScopePin endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeSetMcpServerScopePinResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetMcpServerScopePinResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetMcpServerScopePinResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setMcpServerScopePin", err)
+			}
+			err = ValidateSetMcpServerScopePinResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setMcpServerScopePin", err)
+			}
+			res := NewSetMcpServerScopePinAdminMcpServerResourceScopesOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetMcpServerScopePinUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setMcpServerScopePin", err)
+			}
+			err = ValidateSetMcpServerScopePinUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setMcpServerScopePin", err)
+			}
+			return nil, NewSetMcpServerScopePinUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetMcpServerScopePinForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setMcpServerScopePin", err)
+			}
+			err = ValidateSetMcpServerScopePinForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setMcpServerScopePin", err)
+			}
+			return nil, NewSetMcpServerScopePinForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetMcpServerScopePinBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setMcpServerScopePin", err)
+			}
+			err = ValidateSetMcpServerScopePinBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setMcpServerScopePin", err)
+			}
+			return nil, NewSetMcpServerScopePinBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetMcpServerScopePinNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setMcpServerScopePin", err)
+			}
+			err = ValidateSetMcpServerScopePinNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setMcpServerScopePin", err)
+			}
+			return nil, NewSetMcpServerScopePinNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetMcpServerScopePinConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setMcpServerScopePin", err)
+			}
+			err = ValidateSetMcpServerScopePinConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setMcpServerScopePin", err)
+			}
+			return nil, NewSetMcpServerScopePinConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetMcpServerScopePinUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setMcpServerScopePin", err)
+			}
+			err = ValidateSetMcpServerScopePinUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setMcpServerScopePin", err)
+			}
+			return nil, NewSetMcpServerScopePinUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetMcpServerScopePinInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setMcpServerScopePin", err)
+			}
+			err = ValidateSetMcpServerScopePinInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setMcpServerScopePin", err)
+			}
+			return nil, NewSetMcpServerScopePinInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetMcpServerScopePinInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setMcpServerScopePin", err)
+				}
+				err = ValidateSetMcpServerScopePinInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setMcpServerScopePin", err)
+				}
+				return nil, NewSetMcpServerScopePinInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetMcpServerScopePinUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setMcpServerScopePin", err)
+				}
+				err = ValidateSetMcpServerScopePinUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setMcpServerScopePin", err)
+				}
+				return nil, NewSetMcpServerScopePinUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "setMcpServerScopePin", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetMcpServerScopePinGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setMcpServerScopePin", err)
+			}
+			err = ValidateSetMcpServerScopePinGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setMcpServerScopePin", err)
+			}
+			return nil, NewSetMcpServerScopePinGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "setMcpServerScopePin", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetMcpServerToolCallsRequest instantiates a HTTP request object with
 // method and path set to call the "admin" service "getMcpServerToolCalls"
 // endpoint
@@ -21142,6 +21377,65 @@ func unmarshalAdminMcpServerHealthRemoteSessionsResponseBodyToAdminAdminMcpServe
 		tk := key
 		tv := val
 		res.ValidationStatusCounts[tk] = tv
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpServerResourceScopesResponseBodyToAdminAdminMcpServerResourceScopes
+// builds a value of type *admin.AdminMcpServerResourceScopes from a value of
+// type *AdminMcpServerResourceScopesResponseBody.
+func unmarshalAdminMcpServerResourceScopesResponseBodyToAdminAdminMcpServerResourceScopes(v *AdminMcpServerResourceScopesResponseBody) *admin.AdminMcpServerResourceScopes {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminMcpServerResourceScopes{
+		ResourceURL:           *v.ResourceURL,
+		AdvertisedScopesKnown: *v.AdvertisedScopesKnown,
+		SharedServerCount:     *v.SharedServerCount,
+	}
+	res.PinnedScopes = make([]string, len(v.PinnedScopes))
+	for i, val := range v.PinnedScopes {
+		res.PinnedScopes[i] = val
+	}
+	if v.AdvertisedScopes != nil {
+		res.AdvertisedScopes = make([]string, len(v.AdvertisedScopes))
+		for i, val := range v.AdvertisedScopes {
+			res.AdvertisedScopes[i] = val
+		}
+	}
+	res.ChallengeScopes = make([]string, len(v.ChallengeScopes))
+	for i, val := range v.ChallengeScopes {
+		res.ChallengeScopes[i] = val
+	}
+	res.Clients = make([]*admin.AdminMcpServerResourceScopeClient, len(v.Clients))
+	for i, val := range v.Clients {
+		if val == nil {
+			res.Clients[i] = nil
+			continue
+		}
+		res.Clients[i] = unmarshalAdminMcpServerResourceScopeClientResponseBodyToAdminAdminMcpServerResourceScopeClient(val)
+	}
+
+	return res
+}
+
+// unmarshalAdminMcpServerResourceScopeClientResponseBodyToAdminAdminMcpServerResourceScopeClient
+// builds a value of type *admin.AdminMcpServerResourceScopeClient from a value
+// of type *AdminMcpServerResourceScopeClientResponseBody.
+func unmarshalAdminMcpServerResourceScopeClientResponseBodyToAdminAdminMcpServerResourceScopeClient(v *AdminMcpServerResourceScopeClientResponseBody) *admin.AdminMcpServerResourceScopeClient {
+	res := &admin.AdminMcpServerResourceScopeClient{
+		ClientID:       *v.ClientID,
+		ScopeSource:    *v.ScopeSource,
+		PinWouldDecide: *v.PinWouldDecide,
+	}
+	res.RequestedScopes = make([]string, len(v.RequestedScopes))
+	for i, val := range v.RequestedScopes {
+		res.RequestedScopes[i] = val
+	}
+	res.UnadvertisedPinnedScopes = make([]string, len(v.UnadvertisedPinnedScopes))
+	for i, val := range v.UnadvertisedPinnedScopes {
+		res.UnadvertisedPinnedScopes[i] = val
 	}
 
 	return res

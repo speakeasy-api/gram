@@ -99,6 +99,7 @@ trackedFiles:
   src/funcs/adminSaveRegistryEntry.ts: {}
   src/funcs/adminServeImage.ts: {}
   src/funcs/adminSetInferenceKeyMonthlyLimit.ts: {}
+  src/funcs/adminSetMcpServerScopePin.ts: {}
   src/funcs/adminSetOrganizationChatAnalysisSettings.ts: {}
   src/funcs/adminSetOrganizationFeature.ts: {}
   src/funcs/adminSetOrganizationOnboardingStack.ts: {}
@@ -157,6 +158,8 @@ trackedFiles:
   src/models/components/adminmcpserverhealthtrustedremotesession.ts: {}
   src/models/components/adminmcpserverhealthusersessionissuer.ts: {}
   src/models/components/adminmcpserverhealthusersessions.ts: {}
+  src/models/components/adminmcpserverresourcescopeclient.ts: {}
+  src/models/components/adminmcpserverresourcescopes.ts: {}
   src/models/components/adminmcpservertoolcallbucket.ts: {}
   src/models/components/adminmcpservertoolcalloutcomes.ts: {}
   src/models/components/adminmcpservertoolcalls.ts: {}
@@ -239,6 +242,7 @@ trackedFiles:
   src/models/components/riskidrequestbody.ts: {}
   src/models/components/saveregistryentryrequestbody.ts: {}
   src/models/components/setinferencekeymonthlylimitrequestbody.ts: {}
+  src/models/components/setmcpserverscopepinrequestbody.ts: {}
   src/models/components/setorganizationchatanalysissettingsrequestbody.ts: {}
   src/models/components/setorganizationfeaturerequestbody.ts: {}
   src/models/components/setorganizationonboardingstackrequestbody.ts: {}
@@ -412,6 +416,7 @@ trackedFiles:
   src/react-query/adminServeImage.core.ts: {}
   src/react-query/adminServeImage.ts: {}
   src/react-query/adminSetInferenceKeyMonthlyLimit.ts: {}
+  src/react-query/adminSetMcpServerScopePin.ts: {}
   src/react-query/adminSetOrganizationChatAnalysisSettings.ts: {}
   src/react-query/adminSetRegistryEntryPublished.ts: {}
   src/react-query/adminSetStripeCustomer.ts: {}
@@ -1333,6 +1338,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminSetMcpServerScopePin:
+    speakeasy-default-admin-set-mcp-server-scope-pin:
+      requestBody:
+        application/json: {"mcp_server_id": "60bb21c9-6655-4e29-9ae9-07f52d6fb234", "organization_id": "<id>", "project_id": "512442e9-2aa4-4b26-8a1f-f17305158adb", "scopes": []}
+      responses:
+        "200":
+          application/json: {"advertised_scopes_known": true, "challenge_scopes": [], "clients": [], "pinned_scopes": ["<value 1>"], "resource_url": "https://hard-to-find-luck.com", "shared_server_count": 390525}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminSetOrganizationChatAnalysisSettings:
     speakeasy-default-admin-set-organization-chat-analysis-settings:
       requestBody:
