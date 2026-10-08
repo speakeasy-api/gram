@@ -1,0 +1,36 @@
+server/internal/mcp/serveendpoint.go
+  h_2620cc60cfd1e9 36,902-918
+server/internal/remotemcp/server_context.go
+  h_2620cc60cfd1e9 1-57
+server/internal/mcp/servepublic_tunneled_test.go
+  h_2620cc60cfd1e9 307-340
+server/internal/remotemcp/resources_read_usage_limits_interceptor.go
+  h_2620cc60cfd1e9 49,56-59,63,69,73,87
+server/internal/remotemcp/resources_read_usage_tracking_interceptor.go
+  h_2620cc60cfd1e9 7,28,63-65,98,100,107-108
+server/internal/remotemcp/server_context_internal_test.go
+  h_2620cc60cfd1e9 1-39
+server/internal/remotemcp/server_context_test.go
+  h_2620cc60cfd1e9 1-117
+server/internal/remotemcp/tools_call_clickhouse_log_interceptor.go
+  h_2620cc60cfd1e9 89,96-98,171-180,194,196,199
+server/internal/remotemcp/tools_call_clickhouse_log_interceptor_test.go
+  h_2620cc60cfd1e9 35-37,40,54-67,70,156-169
+server/internal/remotemcp/tools_call_usage_limits_interceptor.go
+  h_2620cc60cfd1e9 51,55-58,62,68,72,86
+server/internal/remotemcp/tools_call_usage_limits_interceptor_test.go
+  h_2620cc60cfd1e9 28,31-32
+server/internal/remotemcp/tools_call_usage_tracking_interceptor.go
+  h_2620cc60cfd1e9 7,25,65-67,90,92,99-100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f4c5bda9b7355233e886da5e9845b49ec977554d",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
