@@ -536,7 +536,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	// including anonymous, which early-returns below before AuthContext is
 	// stamped. Load failures fail closed: a policy-store outage must never
 	// widen a restrictive session to all tools.
-	toolSelection, err := s.loadSessionToolSelection(ctx, endpoint, session.JTI())
+	toolSelection, sessionRefreshable, err := s.loadSessionPolicy(ctx, endpoint, session.JTI())
 	if err != nil {
 		return ctx, nil, nil, false, fmt.Errorf("%w: %w", errToolSelectionLoad, err)
 	}
@@ -599,7 +599,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	// server, which validate against the issuer audience, and the
 	// resource-bound sessions of a shared one. ID-JAG and workload sessions are
 	// minted for the exact resource too, and have none.
-	refreshable := acceptedAudience != userSessionAudienceResource || sharedResourceSession
+	refreshable := acceptedAudience != userSessionAudienceResource || (sharedResourceSession && sessionRefreshable)
 	return newCtx, &subject, toolSelection, refreshable, nil
 }
 
@@ -1138,7 +1138,7 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	// Carried verbatim, NULL included; admission.ResolveMode is the one
 	// place that decides what an absent or unrecognized value means.
 	endpoint.CIMDAdmissionModeRaw = issuer.ClientIDMetadataAdmissionMode
-	endpoint.idJAGConfigured = !issuer.ProjectID.Valid && issuer.OrganizationID.Valid && issuer.TrustedRemoteSessionIssuerID.Valid
+	endpoint.idJAGConfigured = issuerIDJAGConfigured(issuer)
 	endpoint.useAuthenticationHost = issuer.UseAuthenticationHost
 	// A shared-mode issuer whose shared authorization server cannot be built
 	// keeps its MCP servers on their per-endpoint authorization servers, which

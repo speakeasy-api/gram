@@ -200,7 +200,7 @@ type Service struct {
 
 	// userSessionRefreshReplayCoordination elects the database rotation winner.
 	userSessionRefreshReplayCoordination cache.Cache
-	toolSelectionCache                   cache.TypedCacheObject[sessionToolSelectionEntry]
+	sessionPolicyCache                   cache.TypedCacheObject[sessionPolicyEntry]
 	// consentToolInventoryCache holds per-(state, attempt) tool inventory
 	// snapshots captured by the consent MCP transport.
 	consentToolInventoryCache cache.TypedCacheObject[consentToolInventory]
@@ -538,8 +538,8 @@ func NewService(
 			cache.SuffixNone,
 		),
 		userSessionRefreshReplayCoordination: cacheImpl,
-		toolSelectionCache: cache.NewTypedObjectCache[sessionToolSelectionEntry](
-			logger.With(attr.SlogCacheNamespace("session_tool_selection")),
+		sessionPolicyCache: cache.NewTypedObjectCache[sessionPolicyEntry](
+			logger.With(attr.SlogCacheNamespace("session_policy")),
 			cacheImpl,
 			cache.SuffixNone,
 		),
