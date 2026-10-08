@@ -339,6 +339,13 @@ func (p *Provisioner) provisionSecretClient(ctx context.Context, params Provisio
 		return nil, fmt.Errorf("create managed remote session client: %w", err)
 	}
 
+	// Managed clients are organization-level and bound to no user session
+	// issuer when they are created.
+	snapshot, err := mv.BuildRemoteSessionClientView(client, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build managed client view: %w", err)
+	}
+
 	if err := p.audit.LogRemoteSessionClientCreate(ctx, dbtx, audit.LogRemoteSessionClientCreateEvent{
 		OrganizationID:         params.OrganizationID,
 		ProjectID:              uuid.Nil,
@@ -347,7 +354,7 @@ func (p *Provisioner) provisionSecretClient(ctx context.Context, params Provisio
 		ActorSlug:              nil,
 		RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID),
 		ClientID:               client.ClientID,
-		SnapshotAfter:          nil,
+		SnapshotAfter:          snapshot,
 	}); err != nil {
 		return nil, fmt.Errorf("record managed client creation: %w", err)
 	}
@@ -482,6 +489,13 @@ func (p *Provisioner) provisionRows(ctx context.Context, params ProvisionClientP
 	if err := p.audit.LogJsonWebKeyPublish(ctx, dbtx, keyEvent(params.OrganizationID, key, nil, nil)); err != nil {
 		return nil, fmt.Errorf("record managed key publication: %w", err)
 	}
+	// Managed clients are organization-level and bound to no user session
+	// issuer when they are created.
+	snapshot, err := mv.BuildRemoteSessionClientView(client, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build managed client view: %w", err)
+	}
+
 	if err := p.audit.LogRemoteSessionClientCreate(ctx, dbtx, audit.LogRemoteSessionClientCreateEvent{
 		OrganizationID:         params.OrganizationID,
 		ProjectID:              uuid.Nil,
@@ -490,7 +504,7 @@ func (p *Provisioner) provisionRows(ctx context.Context, params ProvisionClientP
 		ActorSlug:              nil,
 		RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID),
 		ClientID:               client.ClientID,
-		SnapshotAfter:          nil,
+		SnapshotAfter:          snapshot,
 	}); err != nil {
 		return nil, fmt.Errorf("record managed client creation: %w", err)
 	}

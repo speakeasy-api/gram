@@ -327,9 +327,6 @@ func TestUpdateClient_SelfClientMustKeepAWorkingCredential(t *testing.T) {
 	_, err = ti.service.UpdateClient(ctx, update(new(oauthwire.AuthMethodNone), nil, nil))
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
-	_, err = ti.service.UpdateClient(withAdmin(t, ctx), update(nil, nil, new(true)))
-	requireOopsCode(t, err, oops.CodeBadRequest)
-
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientUpdate)
 	require.NoError(t, err)
 
@@ -341,6 +338,11 @@ func TestUpdateClient_SelfClientMustKeepAWorkingCredential(t *testing.T) {
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientUpdate)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
+
+	// Last, because withAdmin edits the auth context ctx shares, so every
+	// later call would also run as a platform admin.
+	_, err = ti.service.UpdateClient(withAdmin(t, ctx), update(nil, nil, new(true)))
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestUpdateClient_SelfClientLeavingPrivateKeyJWTRequiresSecret(t *testing.T) {
@@ -627,13 +629,15 @@ func TestUpdateRemoteSessionClient_SelfClientMustKeepAWorkingCredential(t *testi
 	_, err = ti.service.UpdateRemoteSessionClient(ctx, update(new(oauthwire.AuthMethodNone), nil))
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
-	_, err = ti.service.UpdateRemoteSessionClient(withAdmin(t, ctx), update(nil, new(true)))
-	requireOopsCode(t, err, oops.CodeBadRequest)
-
 	updated, err := ti.service.UpdateRemoteSessionClient(ctx, update(new(oauthwire.AuthMethodClientSecretPost), nil))
 	require.NoError(t, err)
 	require.Equal(t, oauthwire.AuthMethodClientSecretPost, *updated.TokenEndpointAuthMethod)
 	require.Nil(t, updated.CallbackURL)
+
+	// Last, because withAdmin edits the auth context ctx shares, so every
+	// later call would also run as a platform admin.
+	_, err = ti.service.UpdateRemoteSessionClient(withAdmin(t, ctx), update(nil, new(true)))
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestDetachClientKeySet_RefusedForSelfPrivateKeyJWTClient(t *testing.T) {

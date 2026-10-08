@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 
 	"github.com/google/uuid"
@@ -230,10 +231,16 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 		if !ok || auth == nil {
 			return nil, oops.C(oops.CodeUnauthorized)
 		}
+		// Identity-chaining clients bind through the preparation, not a user
+		// session issuer.
+		snapshot, err := mv.BuildRemoteSessionClientView(client, nil)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvariantViolation, err, "build preparation client view")
+		}
 		if err := s.auditLogger.LogRemoteSessionClientCreate(saveCtx, tx, audit.LogRemoteSessionClientCreateEvent{
 			OrganizationID: b.OrganizationID, ProjectID: b.ProjectID,
 			Actor: urn.NewPrincipal(urn.PrincipalTypeUser, auth.UserID), ActorDisplayName: auth.Email, ActorSlug: nil,
-			RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID), ClientID: client.ClientID, SnapshotAfter: nil,
+			RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID), ClientID: client.ClientID, SnapshotAfter: snapshot,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "audit preparation client creation")
 		}

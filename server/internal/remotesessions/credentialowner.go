@@ -126,7 +126,8 @@ func requireIssuerTokenEndpointForSelfClients(ctx context.Context, logger *slog.
 	}
 
 	if count > 0 {
-		return oops.E(oops.CodeConflict, nil, "%d client(s) with credential_owner self use this issuer's token_endpoint, so it cannot be removed", count).LogWarn(ctx, logger)
+		// The count spans tenants, so it stays out of the message.
+		return oops.E(oops.CodeConflict, nil, "clients with credential_owner self use this issuer's token_endpoint, so it cannot be removed").LogWarn(ctx, logger)
 	}
 
 	return nil
