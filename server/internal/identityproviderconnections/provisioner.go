@@ -332,6 +332,8 @@ func (p *Provisioner) provisionSecretClient(ctx context.Context, params Provisio
 		CallbackBaseUrl:                 pgtype.Text{String: "", Valid: false},
 		JsonWebKeySetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		IdentityProviderConnectionID:    conv.ToNullUUID(params.ConnectionID),
+		GrantTypes:                      nil,
+		CredentialOwner:                 pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create managed remote session client: %w", err)
@@ -345,6 +347,7 @@ func (p *Provisioner) provisionSecretClient(ctx context.Context, params Provisio
 		ActorSlug:              nil,
 		RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID),
 		ClientID:               client.ClientID,
+		SnapshotAfter:          nil,
 	}); err != nil {
 		return nil, fmt.Errorf("record managed client creation: %w", err)
 	}
@@ -458,6 +461,8 @@ func (p *Provisioner) provisionRows(ctx context.Context, params ProvisionClientP
 		// Connection clients authenticate with private_key_jwt and register no
 		// redirect_uri; their JWKS URL stays on the pinned outbound origin.
 		CallbackBaseUrl: pgtype.Text{String: "", Valid: false},
+		GrantTypes:      nil,
+		CredentialOwner: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create managed remote session client: %w", err)
@@ -485,6 +490,7 @@ func (p *Provisioner) provisionRows(ctx context.Context, params ProvisionClientP
 		ActorSlug:              nil,
 		RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID),
 		ClientID:               client.ClientID,
+		SnapshotAfter:          nil,
 	}); err != nil {
 		return nil, fmt.Errorf("record managed client creation: %w", err)
 	}

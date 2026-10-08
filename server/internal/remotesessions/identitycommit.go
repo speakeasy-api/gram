@@ -1215,6 +1215,8 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 		Audience:                     conv.PtrToPGText(credentials.Audience),
 		LegacyCallbackUrl:            false,
 		CallbackBaseUrl:              c.newClientBaseURL(),
+		GrantTypes:                   nil,
+		CredentialOwner:              pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return repo.RemoteSessionClient{}, fmt.Errorf("create client: %w", err)
@@ -1280,6 +1282,7 @@ func (c *IdentityCommit) auditClientCreate(ctx context.Context, tx *IdentityTx, 
 		ActorSlug:              nil,
 		RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID),
 		ClientID:               client.ClientID,
+		SnapshotAfter:          nil,
 	}); err != nil {
 		return fmt.Errorf("audit client creation: %w", err)
 	}

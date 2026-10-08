@@ -84,13 +84,12 @@ func interpretClientLock(ctx context.Context, logger *slog.Logger, err error) er
 // LockRemoteSessionClientForAuthMethodWrite on the client row first, which is
 // what actually makes the pair hold.
 //
-// existing is the set the client already holds. On a create that is always the
-// zero value, because a client is born without one: the link is attached
-// through attachKeySet after the fact, so declaring private_key_jwt up front is
-// always a refusal. On a global (platform-admin) client it is also always the
-// zero value, permanently — those rows carry a NULL organization_id by
-// construction and remote_session_clients_json_web_key_set_id_check forbids a
-// set without one.
+// existing is the set the client already holds. On a create it is the set the
+// create form names, already resolved by resolveCreateKeySet, so declaring
+// private_key_jwt without one is a refusal. On a global (platform-admin) client
+// it is always the zero value, permanently — those rows carry a NULL
+// organization_id by construction and
+// remote_session_clients_json_web_key_set_id_check forbids a set without one.
 func requirePrivateKeyJWTKeySet(method *string, existing uuid.NullUUID) error {
 	if method == nil || TokenEndpointAuthMethod(*method) != TokenEndpointAuthMethodPrivateKeyJWT {
 		return nil
@@ -100,5 +99,5 @@ func requirePrivateKeyJWTKeySet(method *string, existing uuid.NullUUID) error {
 		return nil
 	}
 
-	return oops.E(oops.CodeConflict, nil, "private_key_jwt requires an attached JSON Web Key Set; attach one before selecting this authentication method")
+	return oops.E(oops.CodeConflict, nil, "private_key_jwt requires a JSON Web Key Set; pass json_web_key_set_id on create, or attach one before selecting this authentication method")
 }

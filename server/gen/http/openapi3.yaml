@@ -90611,6 +90611,17 @@ components:
                     type: string
                     description: When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
                     format: date-time
+                credential_owner:
+                    type: string
+                    description: Who the upstream access credential belongs to, fixed at creation. subject (the default) means each caller connects their own upstream account through the client. self means the client obtains a credential for itself with the client_credentials grant and every caller shares it; it requires token_endpoint_auth_method client_secret_basic, client_secret_post (both with client_secret) or private_key_jwt (with json_web_key_set_id), and an issuer with a token_endpoint.
+                    default: subject
+                    enum:
+                        - subject
+                        - self
+                json_web_key_set_id:
+                    type: string
+                    description: Organization JSON Web Key Set to sign private_key_jwt assertions with. Required when token_endpoint_auth_method is private_key_jwt and optional otherwise, as with attachKeySet. Must belong to the caller's organization, which needs the customer-managed encryption keys entitlement.
+                    format: uuid
                 project_id:
                     type: string
                     description: Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project, or to create an organization-level client (no project, attachable by every project) under an organization-level issuer.
@@ -90928,6 +90939,17 @@ components:
                     type: string
                     description: When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
                     format: date-time
+                credential_owner:
+                    type: string
+                    description: Who the upstream access credential belongs to, fixed at creation. subject (the default) means each caller connects their own upstream account through the client. self means the client obtains a credential for itself with the client_credentials grant and every caller shares it; it requires token_endpoint_auth_method client_secret_basic, client_secret_post (both with client_secret) or private_key_jwt (with json_web_key_set_id), and an issuer with a token_endpoint.
+                    default: subject
+                    enum:
+                        - subject
+                        - self
+                json_web_key_set_id:
+                    type: string
+                    description: Organization JSON Web Key Set to sign private_key_jwt assertions with. Required when token_endpoint_auth_method is private_key_jwt and optional otherwise, as with attachKeySet. Must belong to the caller's organization, which needs the customer-managed encryption keys entitlement.
+                    format: uuid
                 remote_session_issuer_id:
                     type: string
                     description: The owning remote_session_issuer id.
@@ -105576,7 +105598,7 @@ components:
                     description: Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.
                 callback_url:
                     type: string
-                    description: The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients.
+                    description: The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients and on clients with credential_owner self, which have no callback.
                     format: uri
                 client_id:
                     type: string
@@ -105594,6 +105616,12 @@ components:
                 created_at:
                     type: string
                     format: date-time
+                credential_owner:
+                    type: string
+                    description: Who the upstream access credential belongs to. subject means each caller connects their own upstream account; self means the client holds one credential for itself, obtained with the client_credentials grant, that every caller shares.
+                    enum:
+                        - subject
+                        - self
                 grant_types:
                     type: array
                     items:
@@ -105605,7 +105633,7 @@ components:
                     format: uuid
                 json_web_key_set_id:
                     type: string
-                    description: The organization JSON Web Key Set attached to this client, managed through attachKeySet and detachKeySet. Null when no key set is attached.
+                    description: The organization JSON Web Key Set attached to this client, set on create or through attachKeySet and detachKeySet. Null when no key set is attached.
                     format: uuid
                 legacy_callback_url:
                     type: boolean
@@ -105661,6 +105689,7 @@ components:
                 - user_session_issuer_ids
                 - client_id
                 - legacy_callback_url
+                - credential_owner
                 - created_at
                 - updated_at
         RemoteSessionIssuer:
@@ -116635,7 +116664,7 @@ components:
                         - client_secret_post
                         - none
                         - private_key_jwt
-            description: Form for updating a remote_session_client. All non-id fields are optional patches.
+            description: Form for updating a remote_session_client. All non-id fields are optional patches. credential_owner is fixed at creation and cannot be changed.
             required:
                 - id
         UpdateRemoteSessionIssuerForm:

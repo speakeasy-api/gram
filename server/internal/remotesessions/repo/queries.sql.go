@@ -1115,6 +1115,25 @@ func (q *Queries) CountRemoteSessionSubjectsByClientID(ctx context.Context, arg 
 	return subjects, err
 }
 
+const countSelfRemoteSessionClientsByIssuerID = `-- name: CountSelfRemoteSessionClientsByIssuerID :one
+SELECT COUNT(*)
+FROM remote_session_clients
+WHERE remote_session_issuer_id = $1
+  AND credential_owner = 'self'
+  AND deleted IS FALSE
+`
+
+// Every non-deleted self client on an issuer, across every tenancy tier. The
+// issuer update guard uses this to keep the token endpoint those clients need:
+// like the delete guards, a count limited to the caller's tenant would let an
+// update strand clients the caller cannot see.
+func (q *Queries) CountSelfRemoteSessionClientsByIssuerID(ctx context.Context, remoteSessionIssuerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countSelfRemoteSessionClientsByIssuerID, remoteSessionIssuerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countTenantRemoteSessionClientsByIssuerID = `-- name: CountTenantRemoteSessionClientsByIssuerID :one
 SELECT COUNT(*)
 FROM remote_session_clients
@@ -1455,7 +1474,9 @@ INSERT INTO remote_session_clients (
     legacy_callback_url,
     json_web_key_set_id,
     identity_provider_connection_id,
-    callback_base_url
+    callback_base_url,
+    grant_types,
+    credential_owner
 )
 VALUES (
     $1,
@@ -1472,7 +1493,11 @@ VALUES (
     $12,
     $13,
     $14,
-    $15
+    $15,
+    $16::text[],
+    -- NULL creates a subject client, so callers that predate credential_owner
+    -- need not name it. Allowed values are validated in application code.
+    COALESCE($17::text, 'subject')
 )
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
 `
@@ -1493,6 +1518,8 @@ type CreateRemoteSessionClientParams struct {
 	JsonWebKeySetID                 uuid.NullUUID
 	IdentityProviderConnectionID    uuid.NullUUID
 	CallbackBaseUrl                 pgtype.Text
+	GrantTypes                      []string
+	CredentialOwner                 pgtype.Text
 }
 
 // Remote session clients — credentials Speakeasy uses when acting as an OAuth
@@ -1515,6 +1542,8 @@ func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemot
 		arg.JsonWebKeySetID,
 		arg.IdentityProviderConnectionID,
 		arg.CallbackBaseUrl,
+		arg.GrantTypes,
+		arg.CredentialOwner,
 	)
 	var i RemoteSessionClient
 	err := row.Scan(

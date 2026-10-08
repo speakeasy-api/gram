@@ -201,7 +201,7 @@ func BuildCreateClientPayload(organizationRemoteSessionClientsCreateClientBody s
 	{
 		err = json.Unmarshal([]byte(organizationRemoteSessionClientsCreateClientBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"credential_owner\": \"self\",\n      \"json_web_key_set_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
 		if body.ProjectID != nil {
@@ -217,6 +217,9 @@ func BuildCreateClientPayload(organizationRemoteSessionClientsCreateClientBody s
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_audience_format", *body.TokenEndpointAuthAudienceFormat, []any{"issuer", "token_endpoint"}))
 			}
 		}
+		if body.JSONWebKeySetID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+		}
 		for _, e := range body.Scope {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.scope[*]", e, "^[!#-[\\]-~]+$"))
 			if utf8.RuneCountInString(e) > 128 {
@@ -230,6 +233,9 @@ func BuildCreateClientPayload(organizationRemoteSessionClientsCreateClientBody s
 			if utf8.RuneCountInString(*body.Audience) > 512 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.audience", *body.Audience, utf8.RuneCountInString(*body.Audience), 512, false))
 			}
+		}
+		if !(body.CredentialOwner == "subject" || body.CredentialOwner == "self") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_owner", body.CredentialOwner, []any{"subject", "self"}))
 		}
 		if body.ClientIDIssuedAt != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
@@ -260,7 +266,9 @@ func BuildCreateClientPayload(organizationRemoteSessionClientsCreateClientBody s
 		ClientSecret:                    body.ClientSecret,
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
+		CredentialOwner:                 body.CredentialOwner,
 		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
 	}
@@ -268,6 +276,12 @@ func BuildCreateClientPayload(organizationRemoteSessionClientsCreateClientBody s
 		v.Scope = make([]string, len(body.Scope))
 		for i, val := range body.Scope {
 			v.Scope[i] = val
+		}
+	}
+	{
+		var zero string
+		if v.CredentialOwner == zero {
+			v.CredentialOwner = "subject"
 		}
 	}
 	v.SessionToken = sessionToken

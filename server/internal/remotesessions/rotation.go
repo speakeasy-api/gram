@@ -76,8 +76,10 @@ var (
 
 	// ErrClientNotRotatable reports a client whose registration is not the
 	// kind a dynamic registration produces: a CIMD-mode client, whose client_id
-	// is the metadata document URL, or a private_key_jwt client, whose
-	// registration is bound to a key set.
+	// is the metadata document URL, a private_key_jwt client, whose
+	// registration is bound to a key set, or a self client, which uses the
+	// client_credentials grant that the replacement registration does not
+	// request.
 	ErrClientNotRotatable = errors.New("remotesessions: client registration cannot be replaced by dynamic registration")
 
 	// ErrClientStillRecognized reports that the issuer's token endpoint still
@@ -380,8 +382,12 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return zero, err
 	}
 
-	// A managed client's registration belongs to its identity provider connection.
-	if current.ClientIDMetadataUri.Valid || current.IdentityProviderConnectionID.Valid || TokenEndpointAuthMethod(current.TokenEndpointAuthMethod.String) == TokenEndpointAuthMethodPrivateKeyJWT {
+	// Only a registration a dynamic registration could reproduce is replaced:
+	// a CIMD client's client_id is its document URL, a managed client's
+	// registration belongs to its identity provider connection, a
+	// private_key_jwt client's is bound to a key set, and a self client's uses
+	// a grant the replacement registration does not request.
+	if current.ClientIDMetadataUri.Valid || current.IdentityProviderConnectionID.Valid || TokenEndpointAuthMethod(current.TokenEndpointAuthMethod.String) == TokenEndpointAuthMethodPrivateKeyJWT || CredentialOwner(current.CredentialOwner) == CredentialOwnerSelf {
 		return zero, ErrClientNotRotatable
 	}
 	endpoint := strings.TrimSpace(row.IssuerRegistrationEndpoint.String)
