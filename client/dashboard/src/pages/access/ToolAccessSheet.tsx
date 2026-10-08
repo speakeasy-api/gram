@@ -304,8 +304,9 @@ function ToolChecklist({
     case "none":
       return (
         <Alert variant="default" alignTop className="text-sm">
-          This server resolves its tools when they&rsquo;re called, so it
-          can&rsquo;t be limited by tool. Limit it by annotation instead.
+          This server resolves its tools when they&rsquo;re called and none are
+          recorded, so it can&rsquo;t be limited by tool or by annotation. Allow
+          it as a whole, or leave it out.
         </Alert>
       );
     case "needs-connect":
@@ -315,7 +316,7 @@ function ToolChecklist({
         <InlineEmptyState
           icon="lock"
           heading="Setting tool-level permissions requires mcp:write"
-          description={`Someone with mcp:write on ${entry.server.name} can connect it to record its tools. Until then, limit it by annotation.`}
+          description={`Someone with mcp:write on ${entry.server.name} can connect it to record its tools. Until then, an annotation rule reaches none of its tools.`}
         />
       );
     case "ready":
