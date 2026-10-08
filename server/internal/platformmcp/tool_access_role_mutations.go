@@ -41,7 +41,7 @@ func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutati
 	meta := ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}
 	addTool(reg, &mcp.Tool{
 		Name: "create_mcp_access_role", Title: "Create MCP Access Role",
-		Description: "Create a custom role in one explicit project with only server-generated MCP access selectors. Requires explicit confirmation and an idempotency key. An exact replay returns the stored committed role snapshot; use list_access_roles for current state before a later update.",
+		Description: "Create a custom role in one explicit project with only server-generated MCP access selectors. An empty rules list creates a role with no grants. Requires explicit confirmation and an idempotency key. An exact replay returns the stored committed role snapshot; use list_access_roles for current state before a later update.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)},
 	}, meta, create)
 	addTool(reg, &mcp.Tool{
