@@ -33,7 +33,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -818,7 +817,7 @@ func (s *Service) prepareProxyBackendContext(
 	endpoint *mcpendpointsrepo.McpEndpoint,
 	mcpServer *mcpserversrepo.McpServer,
 ) (context.Context, string, error) {
-	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, endpoint.ProjectID)
+	projectWithOrganization, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, endpoint.ProjectID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, "", oops.E(oops.CodeNotFound, err, "mcp server project not found")
@@ -850,10 +849,10 @@ func (s *Service) prepareProxyBackendContext(
 				return nil, "", oops.C(oops.CodeUnauthorized)
 			}
 		} else {
-			if project.OrganizationID != authCtx.ActiveOrganizationID {
+			if projectWithOrganization.ID != authCtx.ActiveOrganizationID {
 				return nil, "", oops.C(oops.CodeUnauthorized)
 			}
-			ctx = setProxyBackendProjectContext(ctx, authCtx, project.ID, project.Slug)
+			ctx = setProxyBackendProjectContext(ctx, authCtx, projectWithOrganization.ProjectID, projectWithOrganization.ProjectSlug)
 		}
 	}
 	switch mcpServer.Visibility {
@@ -871,13 +870,13 @@ func (s *Service) prepareProxyBackendContext(
 			}
 
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
-			if !ok || authCtx == nil || project.OrganizationID != authCtx.ActiveOrganizationID {
+			if !ok || authCtx == nil || projectWithOrganization.ID != authCtx.ActiveOrganizationID {
 				return nil, "", oops.C(oops.CodeUnauthorized)
 			}
-			if err := requirePrincipalCredentialProject(ctx, project.ID); err != nil {
+			if err := requirePrincipalCredentialProject(ctx, projectWithOrganization.ProjectID); err != nil {
 				return nil, "", err
 			}
-			ctx = setProxyBackendProjectContext(ctx, authCtx, project.ID, project.Slug)
+			ctx = setProxyBackendProjectContext(ctx, authCtx, projectWithOrganization.ProjectID, projectWithOrganization.ProjectSlug)
 		}
 	case mcpservers.VisibilityPublic:
 		// Public, no OAuth: optionally probe Speakeasy identity if the
@@ -890,8 +889,8 @@ func (s *Service) prepareProxyBackendContext(
 				return nil, "", fmt.Errorf("public identity auth: %w", err)
 			}
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
-			if ok && authCtx != nil && authCtx.ProjectID == nil && project.OrganizationID == authCtx.ActiveOrganizationID {
-				ctx = setProxyBackendProjectContext(ctx, authCtx, project.ID, project.Slug)
+			if ok && authCtx != nil && authCtx.ProjectID == nil && projectWithOrganization.ID == authCtx.ActiveOrganizationID {
+				ctx = setProxyBackendProjectContext(ctx, authCtx, projectWithOrganization.ProjectID, projectWithOrganization.ProjectSlug)
 			}
 		}
 	default:
@@ -903,19 +902,14 @@ func (s *Service) prepareProxyBackendContext(
 		return nil, "", err
 	}
 
-	organization, err := organizationsrepo.New(s.db).GetOrganizationMetadata(ctx, project.OrganizationID)
-	if err != nil {
-		return nil, "", oops.E(oops.CodeUnexpected, err, "load mcp server organization").LogError(ctx, logger)
-	}
-
 	ctx = remotemcp.WithServerContext(ctx, remotemcp.ServerContext{
-		OrganizationID:   project.OrganizationID,
-		OrganizationSlug: organization.Slug,
-		ProjectID:        project.ID,
-		ProjectSlug:      project.Slug,
-		AccountType:      organization.GramAccountType,
+		OrganizationID:   projectWithOrganization.ID,
+		OrganizationSlug: projectWithOrganization.Slug,
+		ProjectID:        projectWithOrganization.ProjectID,
+		ProjectSlug:      projectWithOrganization.ProjectSlug,
+		AccountType:      projectWithOrganization.GramAccountType,
 	})
-	return ctx, project.OrganizationID, nil
+	return ctx, projectWithOrganization.ID, nil
 }
 
 // authorizeProxyBackendAccess runs the visibility-scoped RBAC gate for a
