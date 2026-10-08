@@ -110,10 +110,11 @@ setup:
         - type: text
           markdown: |
             In **Add authorization server to a bundle**, fill in each field below and tick it off as you go.
-        # TODO: the workload grant requires resource to be the MCP server's canonical URL, exactly as its protected resource metadata publishes it, so this should show that URL per MCP server rather than "Leave empty".
+        # TODO(AIM-495): leave Resource empty once the shared token endpoint accepts workload grants without one, so one connection reaches all of the issuer's MCP servers.
+        # TODO: show each MCP server's canonical URL, exactly as its protected resource metadata publishes it, rather than its format.
         - type: checklist_item
           label: Resource (optional)
-          markdown: Leave empty.
+          markdown: Fill this in even though Claude marks it optional. Enter the URL of the one MCP server Claude Tag should use, such as `https://<MCP host>/mcp/your-server`. Speakeasy refuses a token request without it, and the token works only for that server.
         - type: checklist_item
           label: Scope (optional)
           markdown: Leave empty.
@@ -122,7 +123,7 @@ setup:
         - type: checklist_item
           label: Allowed API hosts
           value: mcp_host
-          help: When the token endpoint above is on this same host, Claude asks for the API paths it may call too. List your MCP servers' paths, such as /mcp/your-server.
+          help: When the token endpoint above is on this same host, Claude asks for the API paths it may call too. List the path of the MCP server you entered as Resource, such as /mcp/your-server.
         - type: checklist_item
           label: Access bundle
           markdown: Choose the bundle assigned to the channels Claude Tag should work in, or create one with **New bundle**.
