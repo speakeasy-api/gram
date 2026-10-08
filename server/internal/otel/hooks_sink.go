@@ -68,6 +68,7 @@ func (s *Service) forwardMetricsToHooks(ctx context.Context, export *collectorme
 // trace and span ids as base64 where OTLP/JSON producers send hex; those are
 // rewritten so downstream id handling matches the hooks path.
 func hooksLogsPayload(export *collectorlogsv1.ExportLogsServiceRequest) (*hooksgen.LogsPayload, error) {
+	StripExternalHookProvenance(export)
 	var body hookssrv.LogsRequestBody
 	if err := transcodeToRequestBody(export, &body); err != nil {
 		return nil, err
@@ -96,6 +97,7 @@ func hooksLogsPayload(export *collectorlogsv1.ExportLogsServiceRequest) (*hooksg
 }
 
 func hooksMetricsPayload(export *collectormetricsv1.ExportMetricsServiceRequest) (*hooksgen.MetricsPayload, error) {
+	StripExternalHookProvenance(export)
 	var body hookssrv.MetricsRequestBody
 	if err := transcodeToRequestBody(export, &body); err != nil {
 		return nil, err

@@ -24,6 +24,7 @@ const (
 	ahpMaxContentBytes      = 64 << 10
 	ahpMaxEventContentBytes = 256 << 10
 	ahpContentTTL           = 10 * time.Minute
+	ahpMaxConcurrentUploads = 32
 	ahpMaxContentReferences = 128
 	ahpContentReadTimeout   = time.Second
 	ahpContentSlots         = 4096 // At most 256 MiB per authenticated scope per TTL.
@@ -54,6 +55,14 @@ func (s *Service) ahpUploadContent(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.cache == nil {
 		http.Error(w, "Content receiver unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	s.ahpUploadsOnce.Do(func() { s.ahpUploads = make(chan struct{}, ahpMaxConcurrentUploads) })
+	select {
+	case s.ahpUploads <- struct{}{}:
+		defer func() { <-s.ahpUploads }()
+	default:
+		http.Error(w, "Content receiver busy", http.StatusTooManyRequests)
 		return
 	}
 	upload, err := ahpserver.ParseUpload(r, ahpMaxContentBytes)

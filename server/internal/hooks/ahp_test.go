@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/stretchr/testify/require"
 	"goa.design/goa/v3/security"
@@ -108,19 +110,52 @@ func TestAHPNormalizationOutcomesAndUsage(t *testing.T) {
 }
 
 type ahpTestAuthorizer struct {
-	authCtx            *contextvalues.AuthContext
-	keys               []string
-	schemes            []string
-	rejectEmptyProject bool
+	authCtx        *contextvalues.AuthContext
+	keys           []string
+	schemes        []string
+	projects       map[string]uuid.UUID
+	boundProjectID *uuid.UUID
 }
 
 func (a *ahpTestAuthorizer) Authorize(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
 	a.keys = append(a.keys, key)
 	a.schemes = append(a.schemes, scheme.Name)
-	if len(a.keys) == 2 && key == "" && a.rejectEmptyProject {
-		return ctx, errors.New("project selection required")
+	if scheme.Name == constants.KeySecurityScheme {
+		if key != "example" {
+			return ctx, errors.New("invalid key")
+		}
+		authCopy := *a.authCtx
+		authCopy.ProjectID = nil
+		return contextvalues.SetAuthContext(ctx, &authCopy), nil
 	}
-	return contextvalues.SetAuthContext(ctx, a.authCtx), nil
+	if scheme.Name != constants.ProjectSlugSecuritySchema {
+		return ctx, errors.New("unexpected scheme")
+	}
+	projects := a.projects
+	if len(projects) == 0 {
+		projects = map[string]uuid.UUID{"chosen": *a.authCtx.ProjectID}
+	}
+	var project uuid.UUID
+	if key == "" {
+		if len(projects) != 1 {
+			return ctx, errors.New("project selection required")
+		}
+		for _, id := range projects {
+			project = id
+		}
+	} else {
+		var ok bool
+		project, ok = projects[key]
+		if !ok {
+			return ctx, errors.New("unknown project")
+		}
+	}
+	if a.boundProjectID != nil && project != *a.boundProjectID {
+		return ctx, errors.New("key project binding mismatch")
+	}
+	authCopy := *a.authCtx
+	authCopy.ProjectID = &project
+	return contextvalues.SetAuthContext(ctx, &authCopy), nil
 }
 
 func TestAHPHandlerAuthenticationCapabilitiesAndValidation(t *testing.T) {
@@ -129,12 +164,19 @@ func TestAHPHandlerAuthenticationCapabilitiesAndValidation(t *testing.T) {
 	auth := &contextvalues.AuthContext{ActiveOrganizationID: "org_example", ProjectID: &project}
 	for _, tc := range []struct {
 		name, key, bearer, project string
-		reject                     bool
+		multiple, bound            bool
 		status                     int
-	}{{"missing", "", "", "", false, 401}, {"bearer single project", "", "Bearer example", "", false, 200}, {"gram headers", "example", "", "chosen", false, 200}, {"multi project omitted", "example", "", "", true, 401}, {"conflict", "other", "Bearer example", "chosen", false, 401}} {
+	}{{"missing", "", "", "", false, false, 401}, {"bearer single project", "", "Bearer example", "", false, false, 200}, {"gram headers", "example", "", "chosen", false, false, 200}, {"multi project omitted", "example", "", "", true, false, 401}, {"conflict", "other", "Bearer example", "chosen", false, false, 401}, {"multi project chosen", "example", "", "chosen", true, false, 200}, {"bound key chosen", "example", "", "chosen", true, true, 200}, {"bound key other", "example", "", "other", true, true, 401}, {"unknown project", "example", "", "unknown", false, false, 401}} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			a := &ahpTestAuthorizer{authCtx: auth, rejectEmptyProject: tc.reject}
+			projects := map[string]uuid.UUID{"chosen": project}
+			if tc.multiple {
+				projects["other"] = uuid.New()
+			}
+			a := &ahpTestAuthorizer{authCtx: auth, projects: projects}
+			if tc.bound {
+				a.boundProjectID = &project
+			}
 			s := &Service{auth: a}
 			h, err := s.ahpHandler()
 			require.NoError(t, err)
@@ -301,23 +343,32 @@ func TestAHPPrincipalNamespaceAndMissingQuarantineCache(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, *first.Data.ToolCall.ID, *after.Data.ToolCall.ID)
 	ti.service.riskScanner = &recordingRiskScanner{}
-	original := ti.service.cache
-	ti.service.cache = nil
-	for _, open := range []bool{false, true} {
+	scoped, _, err := normalizeAHPEventWithContent(event, auth, "intercept", nil, ahpPrincipalIdentity(ctx, auth))
+	require.NoError(t, err)
+	ti.service.cache = mcpGetErrorCache{Cache: ti.service.cache, failKey: fmt.Sprintf("session:quarantine:%s:%s:%s", auth.ActiveOrganizationID, auth.ProjectID.String(), *scoped.Session.ID), err: errors.New("cache unavailable")}
+	for _, open := range []bool{true, false} {
 		ti.service.productFeatures = staticFeatures{failOpen: open}
-		tracked, failure := withAHPFailureTracker(context.WithValue(ctx, authenticatedIngestOptionsKey{}, AuthenticatedIngestOptions{AHPPolicy: true, CapabilitySpendGate: true, SourceAttributes: map[attr.Key]any{}}))
-		reason, _ := ti.service.evaluateCanonicalHook(tracked, first, auth, canonicalActor{UserID: auth.UserID}, ti.service.now())
-		require.NotEmpty(t, *failure)
-		if reason == "" && !ti.service.ahpFailOpen(tracked) {
-			reason = "unavailable"
-		}
+		features := productfeaturesrepo.New(ti.conn)
 		if open {
-			require.Empty(t, reason)
+			_, err = features.EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureHooksFailOpen)})
 		} else {
-			require.NotEmpty(t, reason)
+			_, err = features.DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureHooksFailOpen)})
 		}
+		require.NoError(t, err)
+		result, err := ti.service.ingestAHP(ctx, event, "intercept", true)
+		require.NoError(t, err)
+		if open {
+			require.Equal(t, "allow", result.Decision)
+		} else {
+			require.Equal(t, "deny", result.Decision)
+		}
+		attrs := map[attr.Key]any{}
+		tracked, failure := withAHPFailureTracker(context.WithValue(ctx, authenticatedIngestOptionsKey{}, AuthenticatedIngestOptions{AHPPolicy: true, SourceAttributes: attrs}))
+		ti.service.checkQuarantineGate(tracked, canonicalHookEvent(scoped, auth, canonicalActor{UserID: auth.UserID}, ti.service.now()))
+		require.Equal(t, "quarantine_gate_unavailable", *failure)
+		require.Equal(t, *failure, attrs[attr.Key("gram.hook.enforcement_gap")])
 	}
-	ti.service.cache = original
+
 }
 
 func TestAHPValidModelUsageAndErrorRedaction(t *testing.T) {

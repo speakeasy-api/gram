@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 
 	ahp "github.com/agenthooksprotocol/go-sdk"
 	ahpserver "github.com/agenthooksprotocol/go-sdk/server"
@@ -453,7 +454,7 @@ func ahpCapabilities() (ahp.CapabilitiesResponseResult, error) {
 		events = append(events, entry)
 	}
 	b, err := json.Marshal(map[string]any{"protocolVersion": "draft", "manifest": map[string]any{
-		"events": events, "gaps": []any{map[string]string{"path": "effects", "reason": "Only deny is supported; no human acknowledgement, modify, inject or flow effects"}, map[string]string{"path": "observe", "reason": "Evidence capture only; realtime enforcement evaluation is not run"}, map[string]string{"path": "events", "reason": "Unmapped events retain metadata only; no native payload or extensions are stored"}, map[string]string{"path": "content", "reason": "Only UTF-8 textual bodies up to 64 KiB are supported; unavailable content follows organization failure policy"}, map[string]string{"path": "content.retention", "reason": "Content is retained for 10 minutes; at most 4096 uploads per authenticated scope per retention window, with bounded admission probes; materialized event content is limited to 256 KiB and 128 distinct references, with a one-second cache-read budget"}},
+		"events": events, "gaps": []any{map[string]string{"path": "effects", "reason": "Only deny is supported; no human acknowledgement, modify, inject or flow effects"}, map[string]string{"path": "observe", "reason": "Evidence capture only; realtime enforcement evaluation is not run"}, map[string]string{"path": "events", "reason": "Unmapped events retain metadata only; no native payload or extensions are stored"}, map[string]string{"path": "content", "reason": "Only UTF-8 textual bodies up to 64 KiB are supported; unavailable content follows organization failure policy"}, map[string]string{"path": "content.retention", "reason": "At most 32 uploads may be read concurrently per service. Content is retained for 10 minutes; at most 4096 uploads per authenticated scope per retention window, with bounded admission probes; materialized event content is limited to 256 KiB and 128 distinct references, with a one-second cache-read budget"}},
 		"transports": []string{"http"}, "authentication": []string{"bearer"}, "toolPaths": []string{}, "contentCategories": []string{"text"}, "limits": map[string]any{"maxUploadBytes": ahpMaxContentBytes}, "managedPolicy": map[string]any{"scopes": []string{"project"}, "disableable": true}, "correlationIdentityFields": []string{"source", "id", "session.id", "turn.id", "call.id"},
 	}})
 	var result ahp.CapabilitiesResponseResult
@@ -514,7 +515,11 @@ func boundedAHPLabel(value string) string {
 		return r
 	}, value)
 	if len(value) > 256 {
-		return value[:220] + "#" + ahpIdentity(value)[:24]
+		end := 220
+		for end > 0 && !utf8.RuneStart(value[end]) {
+			end--
+		}
+		return value[:end] + "#" + ahpIdentity(value)[:24]
 	}
 	return value
 }

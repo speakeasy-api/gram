@@ -8,7 +8,7 @@ The hooks service supports three hook entry points:
 
 ## Unified Ingest
 
-`/rpc/hooks.ingest` is the stable backend contract for normalized hooks. Senders use `Gram-Key` and `Gram-Project` with the `hooks` key scope. Keyless requests are acknowledged without processing; invalid presented credentials are rejected. Actor attribution follows the shared hook processor's existing source-reported developer-email rules; that attribution is not proof of authenticated user identity. The hooks key authenticates tenant/project access, not the reported developer. AHP does not populate these source-reported developer fields: its `source` remains correlation metadata, and authenticated principal scoping is separate.
+`/rpc/hooks.ingest` is the stable backend contract for normalized hooks. Senders use `Gram-Key` and `Gram-Project` with the `hooks` key scope. Keyless requests are acknowledged without processing; this retained compatibility acknowledgement is not an evaluated policy approval. Invalid presented credentials are rejected. AHP does not use this optional-auth path: `/ahp` and `/ahp/content` reject missing credentials. Actor attribution follows the shared hook processor's existing source-reported developer-email rules; that attribution is not proof of authenticated user identity. The hooks key authenticates tenant/project access, not the reported developer. AHP does not populate these source-reported developer fields: its `source` remains correlation metadata, and authenticated principal scoping is separate.
 
 The payload is feature-first:
 
@@ -43,7 +43,7 @@ AHP is an additional transport into the shared hook processor, not a replacement
 - `hooks/observe`: observation without returned effects or a blocking decision. An observed proposal is not proof that an operation executed.
 - `hooks/capabilities`: endpoint capability discovery without creating a session or executing work.
 
-Harness identity and AHP transport provenance remain separate. A new harness does not need a server-side registration or an entry in a known-harness list to become observable. Events with equivalent canonical semantics use existing processing; other valid AHP events remain generic observations.
+Harness identity and AHP transport provenance remain separate. External OTLP ingestion strips the reserved `gram.hook.schema`, `gram.hook.canonical_event`, `gram.hook.transport`, and `gram.hook.usage_authority` markers before publishing or forwarding records; only trusted in-process hook processing can stamp canonical provenance. Historical source, event, and hostname metadata remain supported. A new harness does not need a server-side registration or an entry in a known-harness list to become observable. Events with equivalent canonical semantics use existing processing; other valid AHP events remain generic observations.
 
 ### Authentication and project selection
 
@@ -102,7 +102,7 @@ The following registration uses standard AHP fields and an organization with one
 
 Select intercept events only when the harness advertises that boundary and an enforceable denial. The example's failure policy is for a fail-closed organization; distribution must substitute the actual organization setting. Body selection does not grant content access: the harness must independently authorize disclosure. Keep native payloads and non-text bodies disabled unless their processing is explicitly supported.
 
-`/ahp/content` verifies upload framing, exact byte size, SHA-256, and completed reads before allocating an opaque reference. References are scoped to the authenticated organization, project, and principal. The receiver never fetches a URL supplied as a reference. Textual content is bounded to 64 KiB per upload and 256 KiB per event. Resolution allows at most 128 distinct references per event and a one-second aggregate cache-read budget; exceeding either limit makes the selected content unavailable rather than partially materializing it. References expire after 10 minutes; admission is limited to 4,096 uploads per authenticated scope within that window (at most 256 MiB of uploaded bodies). Expired or unavailable references produce a coverage gap rather than fabricated content.
+`/ahp/content` verifies upload framing, exact byte size, SHA-256, and completed reads before allocating an opaque reference. References are scoped to the authenticated organization, project, and principal. The receiver never fetches a URL supplied as a reference. Textual content is bounded to 64 KiB per upload and 256 KiB per event. Resolution allows at most 128 distinct references per event and a one-second aggregate cache-read budget; exceeding either limit makes the selected content unavailable rather than partially materializing it. At most 32 uploads can be read concurrently per service instance; excess requests receive HTTP 429 before body reads. References expire after 10 minutes; retained-content admission is limited to 4,096 uploads per authenticated scope within that window (at most 256 MiB of uploaded bodies). Expired or unavailable references produce a coverage gap rather than fabricated content.
 
 ### Failure policy and coverage
 

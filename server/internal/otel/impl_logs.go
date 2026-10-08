@@ -55,6 +55,7 @@ func unmarshalOTLPLogExport(raw []byte) (*collectorlogsv1.ExportLogsServiceReque
 }
 
 func inboundLogRecordsFromExport(request *collectorlogsv1.ExportLogsServiceRequest, provenance *otelv1.InboundLogRecord_Provenance) ([]*otelv1.InboundLogRecord, error) {
+	StripExternalHookProvenance(request)
 	records := make([]*otelv1.InboundLogRecord, 0)
 	for _, resourceLogs := range request.GetResourceLogs() {
 		if resourceLogs == nil {

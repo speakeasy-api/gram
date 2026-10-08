@@ -52,6 +52,9 @@ import (
 )
 
 type Service struct {
+	// Fixed per-service admission bounds upload readers before buffering bytes.
+	ahpUploadsOnce  sync.Once
+	ahpUploads      chan struct{}
 	tracer          trace.Tracer
 	metrics         *metrics
 	logger          *slog.Logger
@@ -282,6 +285,8 @@ func NewService(
 	riskRecorder *metering.RiskRecorder,
 ) *Service {
 	return &Service{
+		ahpUploadsOnce:     sync.Once{},
+		ahpUploads:         nil,
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
 		metrics:            newMetrics(meterProvider, logger),
 		logger:             logger.With(attr.SlogComponent("hooks")),

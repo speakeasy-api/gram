@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -688,7 +689,9 @@ func resourceAttributesMap(resource *gen.OTELResource) map[attr.Key]any {
 			continue
 		}
 		if value, ok := otelAttributeValue(a.Value); ok {
-			attrs[attribute.Key(a.Key)] = value
+			if sanitized, keep := otelsvc.SanitizeExternalHookAttribute(a.Key, value); keep {
+				attrs[attribute.Key(a.Key)] = sanitized
+			}
 		}
 	}
 	if resource.DroppedAttributesCount != nil {
@@ -704,7 +707,9 @@ func logAttributesMap(attributes []*gen.OTELAttribute) map[attr.Key]any {
 			continue
 		}
 		if value, ok := otelAttributeValue(a.Value); ok {
-			attrs[attribute.Key(a.Key)] = value
+			if sanitized, keep := otelsvc.SanitizeExternalHookAttribute(a.Key, value); keep {
+				attrs[attribute.Key(a.Key)] = sanitized
+			}
 		}
 	}
 	return attrs

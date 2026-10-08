@@ -7,11 +7,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	ahp "github.com/agenthooksprotocol/go-sdk"
 	ahpserver "github.com/agenthooksprotocol/go-sdk/server"
@@ -311,4 +315,108 @@ func TestAHPContentReadsAreMemoizedAndBounded(t *testing.T) {
 	require.True(t, gap)
 	require.Empty(t, r)
 	require.Equal(t, ahpMaxContentReferences, counter.reads, "no reads after distinct-reference admission limit")
+}
+
+type ahpSlowUploadBody struct {
+	reader  *bytes.Reader
+	started chan<- struct{}
+	release <-chan struct{}
+	once    sync.Once
+	reads   atomic.Int32
+}
+
+func (b *ahpSlowUploadBody) Read(p []byte) (int, error) {
+	b.reads.Add(1)
+	b.once.Do(func() { b.started <- struct{}{} })
+	<-b.release
+	n, err := b.reader.Read(p)
+	if errors.Is(err, io.EOF) {
+		return n, io.EOF
+	}
+	if err != nil {
+		return n, fmt.Errorf("read test upload: %w", err)
+	}
+	return n, nil
+}
+func (*ahpSlowUploadBody) Close() error { return nil }
+
+func TestAHPInFlightAdmissionPrecedesBodyReads(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	started := make(chan struct{}, ahpMaxConcurrentUploads+1)
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+	data := []byte("content")
+	request := func(body io.ReadCloser, digest string) *http.Request {
+		r := httptest.NewRequest("POST", "/ahp/content", nil).WithContext(ctx)
+		r.Body = body
+		r.ContentLength = int64(len(data))
+		r.Header.Set("Content-Type", "application/octet-stream")
+		r.Header.Set("Content-Length", fmt.Sprint(len(data)))
+		r.Header.Set("AHP-Content-SHA256", digest)
+		return r
+	}
+	completed := make(chan int, ahpMaxConcurrentUploads)
+	for range ahpMaxConcurrentUploads {
+		body := &ahpSlowUploadBody{reader: bytes.NewReader(data), started: started, release: release}
+		go func() {
+			w := httptest.NewRecorder()
+			ti.service.ahpUploadContent(w, request(body, strings.Repeat("0", 64)))
+			completed <- w.Code
+		}()
+	}
+	for range ahpMaxConcurrentUploads {
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			t.Fatal("admitted readers did not start")
+		}
+	}
+	overflow := &ahpSlowUploadBody{reader: bytes.NewReader(data), started: started, release: release}
+	refused := make(chan int, 1)
+	go func() {
+		w := httptest.NewRecorder()
+		ti.service.ahpUploadContent(w, request(overflow, strings.Repeat("0", 64)))
+		refused <- w.Code
+	}()
+	select {
+	case status := <-refused:
+		require.Equal(t, http.StatusTooManyRequests, status)
+	case <-time.After(5 * time.Second):
+		t.Fatal("overload waited for a body instead of refusing admission")
+	}
+	require.Zero(t, overflow.reads.Load())
+	releaseOnce.Do(func() { close(release) })
+	for range ahpMaxConcurrentUploads {
+		select {
+		case status := <-completed:
+			require.Equal(t, http.StatusBadRequest, status)
+		case <-time.After(5 * time.Second):
+			t.Fatal("failed upload did not release admission")
+		}
+	}
+	require.Empty(t, ti.service.ahpUploads)
+	// Malformed framing also releases the in-flight permit before publication.
+	malformed := request(io.NopCloser(bytes.NewReader(data)), strings.Repeat("0", 64))
+	malformed.Header.Set("Content-Type", "text/plain")
+	w := httptest.NewRecorder()
+	ti.service.ahpUploadContent(w, malformed)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Empty(t, ti.service.ahpUploads)
+	valid := request(io.NopCloser(bytes.NewReader(data)), fmt.Sprintf("%x", sha256.Sum256(data)))
+	w = httptest.NewRecorder()
+	ti.service.ahpUploadContent(w, valid)
+	require.Equal(t, http.StatusCreated, w.Code)
+	require.Empty(t, ti.service.ahpUploads)
+}
+
+func TestAHPBoundedLabelsPreserveUnicode(t *testing.T) {
+	t.Parallel()
+	for _, label := range []string{strings.Repeat("界", 100), strings.Repeat("a", 219) + strings.Repeat("🙂", 20), strings.Repeat("é", 130)} {
+		bounded := boundedAHPLabel(label)
+		require.True(t, utf8.ValidString(bounded))
+		require.LessOrEqual(t, len(bounded), 256)
+		require.True(t, strings.HasPrefix(label, strings.Split(bounded, "#")[0]))
+	}
 }

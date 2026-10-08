@@ -36,6 +36,7 @@ func decodeOTLPTraceExport(raw []byte, provenance *otelv1.InboundSpan_Provenance
 		return nil, fmt.Errorf("decode OTLP trace export: %w", err)
 	}
 
+	StripExternalHookProvenance(request)
 	spans := make([]*otelv1.InboundSpan, 0)
 	for _, resourceSpans := range request.GetResourceSpans() {
 		if resourceSpans == nil {
