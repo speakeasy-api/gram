@@ -15,10 +15,14 @@ import { useVerifyIdentityProviderConnectionMutation } from "@gram/client/react-
 import { STEP_AFFORDANCES } from "./checklistAffordances";
 import { ConnectionChecklist } from "./ConnectionChecklist";
 import { ConnectionSetupProgress } from "./ConnectionSetupProgress";
-import { ConnectionFacts, ConnectionScopes } from "./OktaConnectionDetails";
+import {
+  ConnectionFacts,
+  ConnectionScopes,
+  ReplaceClientSecretButton,
+} from "./OktaConnectionDetails";
 import {
   CreateConnectionForm,
-  ReplaceClientSecretForm,
+  SetupMethodChooser,
 } from "./OktaConnectionForms";
 import { RevokeConnectionButton } from "./RevokeConnectionButton";
 import {
@@ -223,10 +227,6 @@ function ConnectionCard({
         </SettingsSection.Body>
         <SettingsSection.Body className="border-t">
           <ConnectionScopes connection={connection} />
-          <ReplaceClientSecretForm
-            key={connection.id}
-            connection={connection}
-          />
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>
@@ -234,6 +234,9 @@ function ConnectionCard({
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RevokeConnectionButton connection={connection} />
+            {usesClientSecret(connection) && connection.clientIdSubmitted && (
+              <ReplaceClientSecretButton connection={connection} />
+            )}
             {step === "connected" && (
               <Button
                 variant="secondary"
@@ -282,6 +285,9 @@ export function OktaConnectionTab({
   return (
     <div className="flex flex-col gap-10">
       <ConnectionSetupProgress connection={connection} />
+      {connection.status === "pending" && !connection.clientIdSubmitted && (
+        <SetupMethodChooser connection={connection} />
+      )}
       <ChecklistSection connection={connection} />
       <ConnectionCard connection={connection} />
     </div>

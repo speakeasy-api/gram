@@ -56,7 +56,7 @@ import (
 )
 
 // EndpointRef is the cached-state addressing reference for an
-// in-flight Gram-as-AS authn challenge. It captures only what's needed
+// in-flight Speakeasy-as-AS authn challenge. It captures only what's needed
 // to re-resolve the originating endpoint when a handler resumes a
 // challenge from Redis (e.g. HandleIDPCallback after the IDP round-trip,
 // or HandleConsent on POST). Keeping this as a reference rather than a
@@ -126,7 +126,7 @@ type EndpointRef struct {
 	SharedAuthorizationServer bool `json:"shared_authorization_server,omitempty"`
 }
 
-// AuthnChallengeState is the in-flight context of a single Gram-as-AS authn
+// AuthnChallengeState is the in-flight context of a single Speakeasy-as-AS authn
 // challenge — the OAuth client's request, the issuer it's against, and the
 // subject once it has been resolved. Stored in Redis under
 // `authnChallenge:{ID}` for ~10 minutes — long enough for the user to
@@ -305,7 +305,7 @@ var errIssuerGateCallerProfile = errors.New("resolve caller assertion user profi
 // errCredentialRejected marks a rejection the presented credential itself
 // earned: a bad signature, the wrong audience, an expired or revoked token, a
 // session row that is gone, or a principal whose admission has been withdrawn.
-// It is what makes the invalid_token challenge opt-in. A failure on Gram's side
+// It is what makes the invalid_token challenge opt-in. A failure on Speakeasy's side
 // — an unreachable revocation store, a policy read that never returned, a
 // rollout gate that hides the endpoint — leaves it unset, so the client is told
 // to retry rather than to throw a live credential away.
@@ -536,7 +536,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	// including anonymous, which early-returns below before AuthContext is
 	// stamped. Load failures fail closed: a policy-store outage must never
 	// widen a restrictive session to all tools.
-	toolSelection, err := s.loadSessionToolSelection(ctx, endpoint, session.JTI())
+	toolSelection, sessionRefreshable, err := s.loadSessionPolicy(ctx, endpoint, session.JTI())
 	if err != nil {
 		return ctx, nil, nil, false, fmt.Errorf("%w: %w", errToolSelectionLoad, err)
 	}
@@ -599,7 +599,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	// server, which validate against the issuer audience, and the
 	// resource-bound sessions of a shared one. ID-JAG and workload sessions are
 	// minted for the exact resource too, and have none.
-	refreshable := acceptedAudience != userSessionAudienceResource || sharedResourceSession
+	refreshable := acceptedAudience != userSessionAudienceResource || (sharedResourceSession && sessionRefreshable)
 	return newCtx, &subject, toolSelection, refreshable, nil
 }
 
@@ -716,7 +716,7 @@ func (s *Service) contextForSessionSubject(
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
 		authCtx.UserID = subject.ID
-		// Resolve the validated Gram subject through the session manager's
+		// Resolve the validated Speakeasy subject through the session manager's
 		// cached database profile. Request-authentication profile values may
 		// belong to a different user.
 		needsProfile, err := s.endpointNeedsCallerProfile(ctx, endpoint)
@@ -843,7 +843,7 @@ type issuerGateAuthentication struct {
 	surface              mcpmetrics.Surface
 	subject              urn.SessionSubject
 
-	// refreshableUserSession reports that the bearer was a Gram-minted user
+	// refreshableUserSession reports that the bearer was a Speakeasy-minted user
 	// session from a refreshable grant, not an assistant-runtime token, an
 	// agent API key, or a resource-scoped session. Only such a client can
 	// act on invalid_token by refreshing and then reauthorizing.
@@ -971,7 +971,7 @@ func (s *Service) authenticateIssuerGate(
 	}, toolSelection, nil
 }
 
-// isWorkloadSessionBearer reports whether a rejected bearer was minted by Gram
+// isWorkloadSessionBearer reports whether a rejected bearer was minted by Speakeasy
 // for a workload principal. A workload holds no refresh token, so its only way
 // back is a fresh grant, and some clients keep replaying a token until the
 // challenge names it invalid_token.
@@ -996,7 +996,7 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 		return tokens, nil
 	}
 
-	// The Gram credential is valid in every rejection below; only the upstream
+	// The Speakeasy credential is valid in every rejection below; only the upstream
 	// remote session behind it is not. The specific broken upstream and the
 	// answer its token endpoint gave are logged by remotesessions.
 	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
@@ -1006,7 +1006,7 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 	return tokens, nil
 }
 
-// rejectRemoteSession answers a ResolveAccessTokens failure. The Gram
+// rejectRemoteSession answers a ResolveAccessTokens failure. The Speakeasy
 // credential is valid in every rejection; only an upstream remote session
 // behind it is not.
 func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication, err error) error {
@@ -1138,7 +1138,7 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	// Carried verbatim, NULL included; admission.ResolveMode is the one
 	// place that decides what an absent or unrecognized value means.
 	endpoint.CIMDAdmissionModeRaw = issuer.ClientIDMetadataAdmissionMode
-	endpoint.idJAGConfigured = !issuer.ProjectID.Valid && issuer.OrganizationID.Valid && issuer.TrustedRemoteSessionIssuerID.Valid
+	endpoint.idJAGConfigured = issuerIDJAGConfigured(issuer)
 	endpoint.useAuthenticationHost = issuer.UseAuthenticationHost
 	// A shared-mode issuer whose shared authorization server cannot be built
 	// keeps its MCP servers on their per-endpoint authorization servers, which

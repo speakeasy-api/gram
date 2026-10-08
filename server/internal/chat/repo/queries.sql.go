@@ -1342,6 +1342,39 @@ func (q *Queries) GetLatestChatUserPromptSource(ctx context.Context, arg GetLate
 	return source, err
 }
 
+const getLatestExternalChatMessageClient = `-- name: GetLatestExternalChatMessageClient :one
+SELECT source, user_agent, ip_address
+FROM chat_messages
+WHERE chat_id = $1
+  AND project_id = $2::uuid
+  AND external_message_id IS NOT NULL
+ORDER BY created_at DESC, seq DESC
+LIMIT 1
+`
+
+type GetLatestExternalChatMessageClientParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetLatestExternalChatMessageClientRow struct {
+	Source    pgtype.Text
+	UserAgent pgtype.Text
+	IpAddress pgtype.Text
+}
+
+// Imported chat messages carry the capturing client's identity (source, user
+// agent, ip address). A later import of the same chat that learns nothing
+// about the client inherits it from the newest stored message so one chat
+// does not split across sources. The chat_id/created_at index serves this
+// backward LIMIT 1 scan.
+func (q *Queries) GetLatestExternalChatMessageClient(ctx context.Context, arg GetLatestExternalChatMessageClientParams) (GetLatestExternalChatMessageClientRow, error) {
+	row := q.db.QueryRow(ctx, getLatestExternalChatMessageClient, arg.ChatID, arg.ProjectID)
+	var i GetLatestExternalChatMessageClientRow
+	err := row.Scan(&i.Source, &i.UserAgent, &i.IpAddress)
+	return i, err
+}
+
 const getMaxGenerationForChat = `-- name: GetMaxGenerationForChat :one
 SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages
 WHERE chat_id = $1 AND project_id = $2::uuid

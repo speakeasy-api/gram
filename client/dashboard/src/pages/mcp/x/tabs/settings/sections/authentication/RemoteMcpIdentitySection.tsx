@@ -475,7 +475,7 @@ export function RemoteMcpIdentitySectionBody({
               <Alert variant="warning" dismissible={false}>
                 A legacy pass-through Authorization header is still configured.
                 Remove it in Custom Headers before selecting Service Account or
-                relying on No Identity.
+                relying on Manual.
               </Alert>
             ) : null}
 

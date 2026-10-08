@@ -33,7 +33,7 @@ const (
 	stateReauthNeeded
 )
 
-// Relay translates coding-agent hook events into Gram ingest requests and
+// Relay translates coding-agent hook events into Speakeasy ingest requests and
 // enforces the server's verdict.
 type Relay struct {
 	cfg    Config
@@ -122,7 +122,7 @@ const brokenAuthMessage = "Speakeasy hooks are configured for this workspace but
 
 const reauthNeededMessage = "Speakeasy hooks need to reconnect. Run the Speakeasy hooks login command to reconnect."
 
-const envKeyRejectedMessage = "Speakeasy hooks rejected the API key configured in GRAM_HOOKS_API_KEY. Update or unset GRAM_HOOKS_API_KEY, then run the Speakeasy hooks login command to reconnect."
+const envKeyRejectedMessage = "Speakeasy hooks rejected the API key configured in SPEAKEASY_AI_HOOKS_API_KEY (or the deprecated GRAM_HOOKS_API_KEY). Update or unset it, then run the Speakeasy hooks login command to reconnect."
 
 // deliver relays one event to the server, returning the result and the
 // credential posture. It performs no work when the machine holds no credential
@@ -147,7 +147,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	if insecureServerURL(r.cfg.ServerURL) {
 		r.debugf("event=%s insecure-server-url server=%s", agenthooks.EventOf(typed).NativeName, r.cfg.ServerURL)
 		if authEstablished() {
-			msg := fmt.Sprintf("Speakeasy hooks refused insecure Gram server URL %q; use https:// (or an http://localhost dev server).", r.cfg.ServerURL)
+			msg := fmt.Sprintf("Speakeasy hooks refused insecure Speakeasy server URL %q; use https:// (or an http://localhost dev server).", r.cfg.ServerURL)
 			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateBroken
 		}
 		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateNeverAuthed
@@ -428,7 +428,7 @@ func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks
 // the browser from nagging.
 func (r *Relay) onSessionStart(ctx context.Context, e *agenthooks.SessionStartEvent) (agenthooks.SessionStartDecision, error) {
 	_, cached := readCachedAuth(r.cfg)
-	if r.cfg.BrowserLogin && strings.TrimSpace(os.Getenv("GRAM_HOOKS_API_KEY")) == "" && !cached {
+	if r.cfg.BrowserLogin && Env("HOOKS_API_KEY") == "" && !cached {
 		r.login.tryInteractive(ctx)
 	}
 	r.deliver(ctx, e)

@@ -13,7 +13,7 @@ var requiredIdentityProviderScopes = [...]string{"openid", "email"}
 
 var errTrustedIdentityProviderClientIneligible = errors.New("trusted identity-provider client is ineligible")
 
-// ValidateTrustedIdentityProviderClient checks the stored configuration Gram
+// ValidateTrustedIdentityProviderClient checks the stored configuration Speakeasy
 // will use as an OAuth client of a trusted identity provider. It deliberately
 // validates the client's explicit upstream scope allowlist, not the downstream
 // scopes requested by an MCP server.

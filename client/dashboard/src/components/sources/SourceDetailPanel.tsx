@@ -177,7 +177,7 @@ function SourceFact({
 }: {
   label: string;
   isPage: boolean;
-  /** Explains a label that names a Gram concept rather than a file fact. */
+  /** Explains a label that names a Speakeasy concept rather than a file fact. */
   tooltip?: string;
   children: React.ReactNode;
 }): React.JSX.Element {

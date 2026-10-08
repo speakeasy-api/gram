@@ -230,7 +230,7 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 	}
 
 	// The issuer-level off switch applies to this fetch surface like it does
-	// to /authorize: a `disabled` issuer must not have Gram fetch documents
+	// to /authorize: a `disabled` issuer must not have Speakeasy fetch documents
 	// on its behalf, refresh included. Only `disabled` blocks here — a
 	// presets catalog miss stays refreshable, mirroring the /token asymmetry
 	// where de-listing a client stops new authorize flows without breaking
@@ -314,7 +314,7 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 			// A spec/policy rejection of the document itself, with a
 			// client-safe description: the operator's fix is at the document
-			// host, not at Gram.
+			// host, not at Speakeasy.
 			return nil, oops.E(oops.CodeInvalid, err, "metadata document failed validation: %s; the cached copy was discarded and the document will be re-read on the client's next authorization", oauthErr.Description).LogError(ctx, logger)
 		}
 		// The message carries the post-purge state because the operator's
@@ -520,7 +520,7 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 	// Strictly after the jti pushes, and attempted even when some failed. This
 	// fan-out is synchronous, so running it first would hold every one of the
 	// client's already-issued access tokens valid for the length of the batch
-	// budget — a slow issuer would delay Gram's own security control. The two
+	// budget — a slow issuer would delay Speakeasy's own security control. The two
 	// are independent, so a cache outage must not also cost the upstream
 	// revocations.
 	s.revoker.RevokeAllDetached(ctx, revokedUpstream)

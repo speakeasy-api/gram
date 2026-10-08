@@ -69,7 +69,7 @@ function statusLabel(state: string): string {
   }
 }
 
-// Three states, no fourth. A tool Gram cannot recognise at the gateway reads
+// Three states, no fourth. A tool Speakeasy cannot recognise at the gateway reads
 // unreviewed, and the server already resolves it that way: blocking is
 // CIMD-only, so a tool publishing no document cannot be refused, and a cell
 // that said "blocked" about one would be untrue in the one place an admin

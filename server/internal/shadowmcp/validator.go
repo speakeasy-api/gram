@@ -20,17 +20,17 @@ import (
 // policies surface as findings via the batch scanner.
 const SourceShadowMCP = "shadow_mcp"
 
-// SourceDestructiveTool is the policy source value that flags Gram MCP tool
+// SourceDestructiveTool is the policy source value that flags Speakeasy MCP tool
 // calls whose resolved tool definition has a destructive annotation.
 const SourceDestructiveTool = "destructive_tool"
 
 // XGramToolsetIDField is the JSON-schema property the MCP server injects
-// into every Gram-hosted tool's input schema. Tool callers must echo this
+// into every Speakeasy-hosted tool's input schema. Tool callers must echo this
 // UUID back so the shadow-MCP validator can verify the call against its
 // toolset.
 const XGramToolsetIDField = "x-gram-toolset-id"
 
-// ResolvedToolCall is a recorded MCP tool call resolved back to the Gram
+// ResolvedToolCall is a recorded MCP tool call resolved back to the Speakeasy
 // toolset and tool definition that produced it.
 type ResolvedToolCall struct {
 	ToolsetID string
@@ -38,7 +38,7 @@ type ResolvedToolCall struct {
 	Tool      types.BaseToolAttributes
 }
 
-// ValidateToolsetCall enforces that a Gram-hosted tool call carries the
+// ValidateToolsetCall enforces that a Speakeasy-hosted tool call carries the
 // required x-gram-toolset-id property, that the referenced toolset exists in
 // the calling organization, and that the toolset contains a tool whose
 // post-variation name matches toolName. Returns (detail, true) when the call
@@ -58,7 +58,7 @@ func (c *Client) ValidateToolsetCall(
 	return detail, failed
 }
 
-// ResolveToolsetCall resolves a recorded Gram MCP tool call to its underlying
+// ResolveToolsetCall resolves a recorded Speakeasy MCP tool call to its underlying
 // tool definition. It returns ok=false for missing provenance, unknown
 // toolsets, and names that are not present in the resolved toolset.
 func (c *Client) ResolveToolsetCall(

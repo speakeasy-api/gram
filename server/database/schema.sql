@@ -2559,7 +2559,7 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   identity_provider_connection_id uuid,
 
   -- Who the upstream access credential belongs to. This describes the token
-  -- Gram presents to the upstream resource, not the client's own secret or
+  -- Speakeasy presents to the upstream resource, not the client's own secret or
   -- key material, which always belongs to the client.
   --
   --   subject  the credential belongs to a session subject (a user), obtained
@@ -7105,6 +7105,10 @@ CREATE TABLE IF NOT EXISTS plugin_assignments (
   plugin_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
   principal_urn TEXT NOT NULL,
+  -- How the device agent installs the plugin for this audience: 'required'
+  -- (on, can't be turned off), 'default' (on, user can turn it off) or
+  -- 'available' (off, user can turn it on). Validated in application code.
+  install_mode TEXT NOT NULL DEFAULT 'default',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

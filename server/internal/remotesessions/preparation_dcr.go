@@ -55,7 +55,7 @@ func (s *Service) submitPreparationDCRWithTunnel(ctx context.Context, in Prepara
 		AuthMethod string   `json:"token_endpoint_auth_method"`
 		Scope      string   `json:"scope,omitempty"`
 		ClientName string   `json:"client_name"`
-	}{[]string{oauthwire.GrantTypeJWTBearer}, method, strings.Join(in.Scopes, " "), "Gram identity chaining"})
+	}{[]string{oauthwire.GrantTypeJWTBearer}, method, strings.Join(in.Scopes, " "), "Speakeasy identity chaining"})
 	requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(body))

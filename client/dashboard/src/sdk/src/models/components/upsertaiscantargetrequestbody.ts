@@ -41,7 +41,7 @@ export type UpsertAiScanTargetRequestBody = {
    */
   displayName: string;
   /**
-   * How a target detected on a device is recognized again when the same tool calls Gram's MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Gram verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.
+   * How a target detected on a device is recognized again when the same tool calls Speakeasy's MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Speakeasy verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.
    */
   gatewayClient?: AiScanTargetGatewayClient | undefined;
   /**

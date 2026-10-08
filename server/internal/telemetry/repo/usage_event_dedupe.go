@@ -32,7 +32,7 @@ const ingestedEventHashChunk = 2000
 // rows from one set of importers over one time range, so the read stays on the
 // telemetry_logs primary index instead of scanning the project's whole history.
 type ListIngestedEventHashesParams struct {
-	// ProjectID is the Gram project whose rows are searched. Fingerprints are
+	// ProjectID is the Speakeasy project whose rows are searched. Fingerprints are
 	// only unique within a project, since two projects can legitimately import
 	// the same provider event.
 	ProjectID string

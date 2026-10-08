@@ -52,8 +52,8 @@ export function useCreateUnproxiedMcpSource(): UseMutationResult<
             // dashboard shows for the source.
             name: formatRemoteMcpDisplay(unproxiedMcpServer),
             unproxiedMcpServerId: unproxiedMcpServer.id,
-            // Unproxied servers have no Gram-hosted endpoint, so
-            // disabled/private/public gates nothing Gram actually serves —
+            // Unproxied servers have no Speakeasy-hosted endpoint, so
+            // disabled/private/public gates nothing Speakeasy actually serves —
             // the vendor's own server is reachable regardless. "public" is
             // the only value that isn't misleading.
             visibility: "public",

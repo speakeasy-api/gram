@@ -908,7 +908,7 @@ function buildAssistantTools(deps: ToolDeps) {
   const attach_mcp_server = defineFrontendTool<AttachMCPServerArgs, ToolResult>(
     {
       description:
-        "Attach an MCP server registered in this project (a remote external-SaaS MCP server) to the assistant so it can call those tools at runtime. Use this for MCP servers that are NOT backed by a Gram toolset — attach_toolset covers toolset-backed ones. Find the slug with list_mcp_servers; tunnelled or disabled servers are rejected. Pass environment_slug only when the server needs a specific environment's variables; most remote servers carry their own connection auth and need none. Replaces any prior reference to the same mcp_server_slug.",
+        "Attach an MCP server registered in this project (a remote external-SaaS MCP server) to the assistant so it can call those tools at runtime. Use this for MCP servers that are NOT backed by a Speakeasy toolset — attach_toolset covers toolset-backed ones. Find the slug with list_mcp_servers; tunnelled or disabled servers are rejected. Pass environment_slug only when the server needs a specific environment's variables; most remote servers carry their own connection auth and need none. Replaces any prior reference to the same mcp_server_slug.",
       parameters: z.object({
         mcp_server_slug: z.string(),
         environment_slug: z
@@ -1152,7 +1152,7 @@ function buildAssistantTools(deps: ToolDeps) {
   >(
     {
       description:
-        "List MCP servers registered in the current project — remote (external SaaS) and tunnelled servers as well as toolset-backed ones. Use this to find the slug for attach_mcp_server when the user asks to add an MCP server that is not a Gram toolset. Only enabled, non-tunnelled servers are attachable.",
+        "List MCP servers registered in the current project — remote (external SaaS) and tunnelled servers as well as toolset-backed ones. Use this to find the slug for attach_mcp_server when the user asks to add an MCP server that is not a Speakeasy toolset. Only enabled, non-tunnelled servers are attachable.",
       parameters: z.object({}),
       execute: async () => {
         try {
@@ -1662,7 +1662,7 @@ function buildAssistantTools(deps: ToolDeps) {
   const create_trigger = defineFrontendTool<CreateTriggerArgs, ToolResult>(
     {
       description:
-        "Create a trigger instance pointed at the current assistant. The assistant must already exist (call update_assistant first if needed). The trigger is bound to the assistant's shared environment by default — omit environment_id in almost all cases. For Slack triggers the env can be empty at creation time (Gram's webhook answers Slack's url_verification challenge without a signing secret), but SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET must be populated before real events fire. For cron triggers the config must include a 5-field cron string in 'schedule'. After creation: if SLACK_BOT_TOKEN is NOT yet populated on the assistant's env (check via list_environments → populated_entry_names), pass webhook_url to show_slack_app_guide so the manifest pre-fills event_subscriptions.request_url. Otherwise the bot already exists — skip the guide and use show_webhook_url (or nothing, if the trigger is just being reconfigured).",
+        "Create a trigger instance pointed at the current assistant. The assistant must already exist (call update_assistant first if needed). The trigger is bound to the assistant's shared environment by default — omit environment_id in almost all cases. For Slack triggers the env can be empty at creation time (Speakeasy's webhook answers Slack's url_verification challenge without a signing secret), but SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET must be populated before real events fire. For cron triggers the config must include a 5-field cron string in 'schedule'. After creation: if SLACK_BOT_TOKEN is NOT yet populated on the assistant's env (check via list_environments → populated_entry_names), pass webhook_url to show_slack_app_guide so the manifest pre-fills event_subscriptions.request_url. Otherwise the bot already exists — skip the guide and use show_webhook_url (or nothing, if the trigger is just being reconfigured).",
       parameters: z.object({
         name: z.string().min(1),
         definition_slug: z.string().describe("e.g. 'slack' or 'cron'."),
@@ -1935,7 +1935,7 @@ function buildAssistantTools(deps: ToolDeps) {
   >(
     {
       description:
-        "List Gram integrations (packaged toolsets) the user can install. Returns name, summary, keywords, and tool names. Use this to discover what an assistant could do.",
+        "List Speakeasy integrations (packaged toolsets) the user can install. Returns name, summary, keywords, and tool names. Use this to discover what an assistant could do.",
       parameters: z.object({
         keywords: z.array(z.string()).optional(),
       }),

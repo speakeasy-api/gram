@@ -149,7 +149,7 @@ function summaryEmail(summary: UserSummary): string {
 
 // groupSummariesByMember routes each usage summary to the org member it
 // belongs to. A member's telemetry can split across identity keys: their
-// opaque user_id (e.g. Gram MCP tool calls that carry no email), their
+// opaque user_id (e.g. Speakeasy MCP tool calls that carry no email), their
 // directory email (Claude/Cursor usage), and linked provider-account emails
 // (personal-account usage imports). Match all three — otherwise a token-less,
 // email-less id summary shadows the member's token-bearing email summaries,

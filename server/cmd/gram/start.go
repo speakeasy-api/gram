@@ -381,8 +381,8 @@ func mcpRuntimeFlags() []cli.Flag {
 			EnvVars:  []string{"GRAM_SITE_URL"},
 			Required: true,
 		},
-		&cli.StringFlag{Name: "slack-client-id", EnvVars: []string{"SLACK_CLIENT_ID"}, Usage: "OAuth client ID for the Gram Slack app"},
-		&cli.StringFlag{Name: "slack-client-secret", EnvVars: []string{"SLACK_CLIENT_SECRET"}, Usage: "OAuth client secret for the Gram Slack app"},
+		&cli.StringFlag{Name: "slack-client-id", EnvVars: []string{"SLACK_CLIENT_ID"}, Usage: "OAuth client ID for the Speakeasy Slack app"},
+		&cli.StringFlag{Name: "slack-client-secret", EnvVars: []string{"SLACK_CLIENT_SECRET"}, Usage: "OAuth client secret for the Speakeasy Slack app"},
 
 		&cli.StringFlag{
 			Name:     "database-url",
@@ -676,7 +676,7 @@ func newStartCommand() *cli.Command {
 
 	return &cli.Command{
 		Name:  "start",
-		Usage: "Start the Gram API server",
+		Usage: "Start the Speakeasy API server",
 		Flags: flags,
 		Action: func(c *cli.Context) error {
 			serviceName := "gram-server"
@@ -1335,6 +1335,7 @@ func newStartCommand() *cli.Command {
 			// handlers, tracing, or logging.
 			mux.Use(middleware.NetworkServingPolicyVersion)
 			mux.Use(middleware.StripPrivateIngressHeaders)
+			mux.Use(middleware.SpeakeasyAIHeaders(meterProvider))
 			mux.Use(func(h http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.Method == http.MethodGet && r.URL.Path == "/healthz" {
@@ -1393,7 +1394,7 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), platformOrigins(platformHosts), chatSessionsManager))
 			// Must stay below CORSMiddleware: chatSessionsCORS runs inside it and
 			// marks requests whose Origin matched the chat-session audience claim,
-			// which MCPSecurity reads to exempt Elements. The Gram first-party
+			// which MCPSecurity reads to exempt Elements. The Speakeasy first-party
 			// origins are trusted so the dashboard's MCP inspection tabs can reach a
 			// customer's custom domain, which is cross-site and cannot be rebased
 			// onto the platform host (mcp_endpoint rows resolve by slug + custom
@@ -1666,7 +1667,7 @@ func newStartCommand() *cli.Command {
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger, featureFlags))
 			// Hoisted so the services that authenticate as a customer's GCP identity
 			// share one identity: they then agree on which impersonation targets are
-			// refused, and probe for Gram's own service account once between them
+			// refused, and probe for Speakeasy's own service account once between them
 			// rather than once each.
 			externalcredentials.Attach(mux, externalcredentials.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, productFeatures, ratelimit.NewRedisStore(redisClient)))
 			externalkeys.Attach(mux, externalkeys.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, kmsSigningClients, productFeatures, ratelimit.NewRedisStore(redisClient)))

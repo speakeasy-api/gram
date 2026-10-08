@@ -520,7 +520,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       screen.getByRole("radio", { name: /Service Account/ }),
     ).toBeDefined();
-    expect(screen.getByRole("radio", { name: /No Identity/ })).toBeDefined();
+    expect(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    ).toBeDefined();
   });
 
   it("configures User Identity inline without OAuth vocabulary", async () => {
@@ -657,7 +662,10 @@ describe("RemoteMcpIdentitySectionBody", () => {
     ).toBe(true);
     expect(
       screen
-        .getByRole("radio", { name: /Manual/ })
+        .getByRole("radio", {
+          name: "Manual",
+          description: /client ID and secret/,
+        })
         .getAttribute("aria-checked"),
     ).toBe("true");
   });
@@ -891,7 +899,10 @@ describe("RemoteMcpIdentitySectionBody", () => {
     await waitFor(() =>
       expect(
         screen
-          .getByRole("radio", { name: /Manual/ })
+          .getByRole("radio", {
+            name: "Manual",
+            description: /client ID and secret/,
+          })
           .getAttribute("aria-checked"),
       ).toBe("true"),
     );
@@ -1152,7 +1163,8 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     // The choice is not a one-way door, and picking a card writes nothing.
     const none = screen.getByRole("radio", {
-      name: /No Identity/,
+      name: "Manual",
+      description: /static headers/,
     }) as HTMLButtonElement;
     expect(none.disabled).toBe(false);
     fireEvent.click(none);
@@ -1306,7 +1318,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     renderIdentity();
     fireEvent.click(screen.getByRole("button", { name: "Clear connection" }));
-    fireEvent.click(screen.getByRole("radio", { name: /Manual/ }));
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /client ID and secret/,
+      }),
+    );
     addCustomHeader("X-Team", "eng");
 
     const save = screen.getByRole("button", { name: "Save" });
@@ -1489,7 +1506,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
-    fireEvent.click(screen.getByRole("radio", { name: /Manual/ }));
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /client ID and secret/,
+      }),
+    );
     fireEvent.change(screen.getByLabelText("Client ID"), {
       target: { value: "manual-client" },
     });
@@ -1562,7 +1584,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
-    fireEvent.click(screen.getByRole("radio", { name: /Manual/ }));
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /client ID and secret/,
+      }),
+    );
     fireEvent.change(screen.getByLabelText("Client ID"), {
       target: { value: "manual-client" },
     });
@@ -1604,7 +1631,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
-    fireEvent.click(screen.getByRole("radio", { name: /Manual/ }));
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /client ID and secret/,
+      }),
+    );
     fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
     fireEvent.click(screen.getByRole("combobox", { name: "Scope" }));
     fireEvent.click(screen.getByRole("option", { name: /^admin,/ }));
@@ -1858,7 +1890,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
       screen.getByText(/Could not determine the current identity/i),
     ).toBeDefined();
     expect(screen.getByText("Identity is unavailable.")).toBeDefined();
-    expect(screen.queryByRole("radio", { name: /No Identity/ })).toBeNull();
+    expect(
+      screen.queryByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    ).toBeNull();
   });
 
   it("says why identity is locked when the issuer fails to load", () => {
@@ -1931,7 +1968,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    );
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(mocks.remove).not.toHaveBeenCalled();
 
@@ -1969,7 +2011,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     const dialog = screen.getByRole("dialog");
@@ -1989,7 +2036,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    );
     fireEvent.click(screen.getByText("Custom Headers"));
     fireEvent.click(
       screen.getByRole("button", { name: "Remove header Authorization" }),
@@ -2018,7 +2070,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
     mocks.remove.mockRejectedValue(new Error("delete refused"));
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    );
     fireEvent.click(screen.getByText("Custom Headers"));
     fireEvent.click(
       screen.getByRole("button", { name: "Remove header Authorization" }),

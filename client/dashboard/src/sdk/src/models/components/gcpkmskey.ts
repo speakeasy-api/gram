@@ -46,11 +46,11 @@ export type GcpKmsKey = {
    */
   createdAt: Date;
   /**
-   * The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+   * The Speakeasy identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
    */
   customerGrantReference?: string | undefined;
   /**
-   * The external credential Gram uses to authenticate to the key.
+   * The external credential Speakeasy uses to authenticate to the key.
    */
   externalCredentialId: string;
   /**

@@ -655,7 +655,7 @@ BEGIN
        ARRAY[]::text[]),
       ('engineer', 'Engineer',
        'Creates and configures MCP servers in this project.',
-       ARRAY['mcp:read', 'mcp:write'],
+       ARRAY['mcp:read', 'mcp:write', 'mcp:connect'],
        ARRAY['user_demo_priya', 'user_demo_mateo'],
        ARRAY[]::text[]),
       ('automation-agent', 'Automation Agent',
@@ -684,6 +684,11 @@ BEGIN
        'Outside contractors. Holds no access of its own; it blocks GitHub.',
        ARRAY[]::text[],
        ARRAY['user_demo_priya'],
+       ARRAY[]::text[]),
+      ('support-desk', 'Support Desk',
+       'Connects to Acme Support Tools with every tool, and to Slack for read-only tools only.',
+       ARRAY[]::text[],
+       ARRAY['user_demo_hana'],
        ARRAY[]::text[]),
       ('temporary-escalation', 'Temporary Escalation',
        'Elevated access granted for a fixed period and reviewed each quarter.',
@@ -957,7 +962,7 @@ BEGIN
   --     like the majority case;
   --   cursor, openclaw, aider, ollama and lmstudio are left without rows.
   --     Cursor and OpenClaw are the case worth seeing: they publish no CIMD
-  --     document, so Gram cannot recognize them at the gateway and refuses to
+  --     document, so Speakeasy cannot recognize them at the gateway and refuses to
   --     record any decision about them. They read unreviewed, and that is the
   --     honest answer rather than a block that enforces nothing.
   DELETE FROM ai_scan_targets WHERE organization_id = demo_org;
@@ -1189,7 +1194,7 @@ BEGIN
      'https://resource.example.com/mcp');
 
   -- Resolved from a Client ID Metadata Document, and the strongest posture
-  -- available: it signs an assertion with a key it publishes, so Gram holds no
+  -- available: it signs an assertion with a key it publishes, so Speakeasy holds no
   -- secret for it. This is the row the "Key-authenticated" badge appears on.
   INSERT INTO user_session_clients
     (id, project_id, organization_id, user_session_issuer_id, client_id, client_name,
@@ -1213,7 +1218,7 @@ BEGIN
     (usc_public, proj_a, demo_org, us_issuer, 'gram_demo_client_public', NULL,
      'Claude Code', ARRAY['http://127.0.0.1:41293/callback'],
      now() - interval '11 days', 'none'),
-    -- A confidential client presenting a secret Gram issued it.
+    -- A confidential client presenting a secret Speakeasy issued it.
     (usc_secret, proj_a, demo_org, us_issuer, 'gram_demo_client_secret', demo_secret_hash,
      'Acme Nightly Batch', ARRAY['https://batch.example.com/callback'],
      now() - interval '12 days', 'client_secret_basic'),
@@ -1439,7 +1444,7 @@ BEGIN
   ) AS roots(fixture, id, name);
 
   -- Inert display fixture: runtime provisioning uses GRAM_AUTHZ_ISSUER_URL and
-  -- the existing Gram JWKS endpoint; this example cannot sign or run work.
+  -- the existing Speakeasy JWKS endpoint; this example cannot sign or run work.
   INSERT INTO workload_issuers
     (id, organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission)
   VALUES (demo.det_uuid('gram-demo-assistant-platform-trust'), demo_org, proj_a,
@@ -1501,7 +1506,7 @@ BEGIN
     (demo.det_uuid('gram-demo-remotemcp-github'), proj_a, 'GitHub', 'github',
      'streamable-http', 'https://api.githubcopilot.com/mcp/');
 
-  -- Remote-backed servers must carry a Gram-as-AS issuer for their lifetime
+  -- Remote-backed servers must carry a Speakeasy-as-AS issuer for their lifetime
   -- (mcp_servers_issuer_required_check); the gateway gets its own so clients
   -- authenticate to it rather than to a member.
   -- session_duration must be a Microseconds-only interval: the user-session
@@ -1548,6 +1553,21 @@ BEGIN
   FROM organization_roles r
   WHERE r.organization_id = demo_org AND r.workos_slug = 'contractors';
 
+  -- Support Desk names its servers one by one, the MCP access tab's main
+  -- shape: Acme Support Tools with every tool (toolset-backed, so the grant
+  -- names the toolset), Slack only for tools annotated read-only.
+  INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+  SELECT demo_org, 'role:organization:' || r.id, 'mcp:connect', sel
+  FROM organization_roles r
+  CROSS JOIN (VALUES
+    (jsonb_build_object('resource_kind', 'mcp',
+       'resource_id', toolset_1::text)),
+    (jsonb_build_object('resource_kind', 'mcp',
+       'resource_id', demo.det_uuid('gram-demo-mcpserver-slack')::text,
+       'disposition', 'read_only'))
+  ) AS v(sel)
+  WHERE r.organization_id = demo_org AND r.workos_slug = 'support-desk';
+
   INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
   VALUES
     (demo.det_uuid('gram-demo-github-direct-grant'), demo_org,
@@ -1558,9 +1578,10 @@ BEGIN
      'user:' || demo_user_ids[4], 'mcp:connect',
      jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*'));
 
-  -- Distribute these servers to the seeded organization roles with Use access:
-  -- mcp:read and mcp:write imply mcp:connect, including disposition-limited
-  -- access. Store server identities, not legacy toolset memberships. Content
+  -- Distribute these servers to the seeded organization roles holding
+  -- mcp:connect, including disposition-limited connect. mcp:read and
+  -- mcp:write still allow connecting at the endpoint but do not deliver
+  -- servers. Store server identities, not legacy toolset memberships. Content
   -- has no manual/automatic distinction and never widens a plugin's audience.
   INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
   SELECT p.id, s.id, s.name
@@ -1574,13 +1595,13 @@ BEGIN
     AND EXISTS (
       SELECT 1 FROM principal_grants g
       WHERE g.organization_id = demo_org AND g.principal_urn = a.principal_urn
-        AND g.scope IN ('mcp:connect', 'mcp:read', 'mcp:write')
+        AND g.scope = 'mcp:connect'
         AND g.selectors->>'resource_kind' = 'mcp'
         AND g.selectors->>'resource_id' = '*');
 
   GET DIAGNOSTICS stray = ROW_COUNT;
-  IF stray <> 30 THEN
-    RAISE EXCEPTION 'demo seed: expected 30 role server memberships, found %', stray;
+  IF stray <> 25 THEN
+    RAISE EXCEPTION 'demo seed: expected 25 role server memberships, found %', stray;
   END IF;
 
   -- Leave instructions NULL so Settings starts with the editable built-in

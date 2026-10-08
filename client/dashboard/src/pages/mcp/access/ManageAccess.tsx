@@ -79,7 +79,7 @@ import {
   type AudienceWrite,
 } from "./accessWrites";
 import { PrincipalBadge } from "./PrincipalBadge";
-import { RoleLink } from "./RoleLink";
+import { RoleLink } from "@/components/role-link";
 import { isUnnarrowed, ownRules, LEVEL_VERB } from "./serverAudience";
 
 /** Narrowing the tool dialog is currently editing, and the row it belongs to. */

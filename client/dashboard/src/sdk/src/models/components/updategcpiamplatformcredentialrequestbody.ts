@@ -11,7 +11,7 @@ export type UpdateGcpIamPlatformCredentialRequestBody = {
    */
   id: string;
   /**
-   * The service account Gram impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
+   * The service account Speakeasy impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
    */
   impersonateServiceAccount?: string | undefined;
   /**

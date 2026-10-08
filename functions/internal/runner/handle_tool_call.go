@@ -43,7 +43,7 @@ var allowedHeaders = map[string]struct{}{
 	"x-ratelimit-reset":       {},
 }
 
-// CallToolPayload is the request body Gram POSTs to /tool-call. Mirrored by
+// CallToolPayload is the request body Speakeasy POSTs to /tool-call. Mirrored by
 // the server's own encode type in `server/internal/functions/auth.go` — the
 // two live in separate `internal` subtrees and cannot import one another, so
 // they must be changed together.

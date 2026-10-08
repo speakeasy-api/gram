@@ -90,3 +90,15 @@ export function oktaApplicationsUrl(
     oktaAdminConsoleUrl(normalized),
   ).toString();
 }
+
+/** Okta lists OIN API service integrations (Speakeasy's listing) on their own page. */
+export function oktaApiServiceIntegrationsUrl(
+  orgUrl: string,
+): string | undefined {
+  const normalized = normalizeOktaOrgUrl(orgUrl);
+  if (!normalized) return undefined;
+  return new URL(
+    "/admin/apps/api-service-integrations",
+    oktaAdminConsoleUrl(normalized),
+  ).toString();
+}

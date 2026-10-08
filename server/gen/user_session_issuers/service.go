@@ -15,7 +15,7 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Manage user_session_issuer records — Gram-side authorization-server
+// Manage user_session_issuer records — Speakeasy-side authorization-server
 // configuration that issues user sessions for an MCP server.
 type Service interface {
 	// Create a new user_session_issuer.
@@ -129,7 +129,7 @@ type UpdateUserSessionIssuerPayload struct {
 	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours *int
 	// Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits.
-	// 'presets' admits Gram's curated catalog plus this issuer's custom URLs;
+	// 'presets' admits Speakeasy's curated catalog plus this issuer's custom URLs;
 	// 'open' admits any spec-valid document; 'disabled' admits none and stops
 	// advertising CIMD support. Omit to leave unchanged.
 	ClientIDMetadataAdmissionMode *string

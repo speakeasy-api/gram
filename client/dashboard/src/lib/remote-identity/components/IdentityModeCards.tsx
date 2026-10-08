@@ -37,7 +37,7 @@ export function identityModeCards(upstreamName: string): IdentityModeCard[] {
     },
     {
       value: "none",
-      title: "No Identity",
+      title: "Manual",
       description:
         "Speakeasy will manage no identity and users will manage their own static headers.",
       icon: <CircleSlash aria-hidden="true" className="size-4" />,

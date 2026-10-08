@@ -57,7 +57,7 @@ export type CreateOrganizationRemoteSessionClientForm = {
    */
   clientIdIssuedAt?: Date | undefined;
   /**
-   * Optional client_secret supplied by the caller. Gram encrypts before persisting; the plaintext is never returned.
+   * Optional client_secret supplied by the caller. Speakeasy encrypts before persisting; the plaintext is never returned.
    */
   clientSecret?: string | undefined;
   /**

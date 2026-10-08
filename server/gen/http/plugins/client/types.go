@@ -39,10 +39,10 @@ type UpdatePluginRequestBody struct {
 // "addPluginServer" endpoint HTTP request body.
 type AddPluginServerRequestBody struct {
 	PluginID string `form:"plugin_id" json:"plugin_id" xml:"plugin_id"`
-	// Gram toolset ID. Provide exactly one of toolset_id, mcp_server_id, or
+	// Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or
 	// meta_mcp_server_id.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID. Provide exactly one backend ID.
+	// Speakeasy MCP server ID. Provide exactly one backend ID.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// MCP gateway ID. Provide exactly one backend ID.
 	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
@@ -228,9 +228,9 @@ type UpdatePluginResponseBody struct {
 type AddPluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram toolset ID. Exactly one backend ID is set.
+	// Speakeasy toolset ID. Exactly one backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID. Exactly one backend ID is set.
+	// Speakeasy MCP server ID. Exactly one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// MCP gateway ID. Exactly one backend ID is set.
 	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
@@ -248,9 +248,9 @@ type AddPluginServerResponseBody struct {
 type UpdatePluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram toolset ID. Exactly one backend ID is set.
+	// Speakeasy toolset ID. Exactly one backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID. Exactly one backend ID is set.
+	// Speakeasy MCP server ID. Exactly one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// MCP gateway ID. Exactly one backend ID is set.
 	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
@@ -4546,9 +4546,9 @@ type PluginResponseBody struct {
 type PluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Gram toolset ID. Exactly one backend ID is set.
+	// Speakeasy toolset ID. Exactly one backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID. Exactly one backend ID is set.
+	// Speakeasy MCP server ID. Exactly one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// MCP gateway ID. Exactly one backend ID is set.
 	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`

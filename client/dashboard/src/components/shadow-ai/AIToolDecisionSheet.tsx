@@ -158,9 +158,9 @@ function DecisionForm({
             <AlertTitle>No decision can be recorded for this tool</AlertTitle>
             <AlertDescription>
               {detection.displayName} publishes no client ID metadata document,
-              so Gram cannot recognise it at the gateway and has no way to allow
-              or refuse it. It stays unreviewed. Add a document to its scan
-              target to make a decision possible.
+              so Speakeasy cannot recognise it at the gateway and has no way to
+              allow or refuse it. It stays unreviewed. Add a document to its
+              scan target to make a decision possible.
             </AlertDescription>
           </Alert>
         ) : null}
