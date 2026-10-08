@@ -278,11 +278,26 @@ func TestDirectoryDeletionWaitsForAttributionTransaction(t *testing.T) {
 	require.NoError(t, err)
 	deletion := sourceLifecycleEvent(t, "dsync.deleted", "event_010", workosOrgID, "", "directory_1", "", at.Add(time.Hour))
 	stub.SetEventPages([][]events.Event{{deletion}})
-	blockedCtx, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
+	blockedCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	_, err = activity.Do(blockedCtx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
-	require.Error(t, err)
-	require.ErrorIs(t, blockedCtx.Err(), context.DeadlineExceeded)
+	finished := make(chan error, 1)
+	go func() {
+		_, err := activity.Do(blockedCtx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+		finished <- err
+	}()
+	observeCtx, stopObserving := context.WithTimeout(ctx, 5*time.Second)
+	defer stopObserving()
+	testenv.WaitForBackendsBlockedBy(t, observeCtx, conn, tx.Conn().PgConn().PID(), 1)
+	waiters, err := testrepo.New(conn).CountAdvisoryLockWaitersFixture(ctx, "workos-organization-sync:"+workosOrgID)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), waiters, "event transaction must be waiting on the attribution advisory lock")
+	cancel()
+	select {
+	case err := <-finished:
+		require.Error(t, err)
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "event transaction did not finish after cancellation")
+	}
 	_, _, _, deleted := getDirectoryGroupRow(t, ctx, conn, "attribution_group")
 	require.False(t, deleted, "worker must not mutate sources before acquiring the attribution lock")
 	require.NoError(t, tx.Commit(ctx))
