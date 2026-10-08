@@ -1,0 +1,18 @@
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleMappings.tsx
+  h_9630b74bdac540 2-5,142-147,158,188,190-196,220,278-282,319,349,352-354,356,371,378,406-408,456,458,461,463,499,552,575,581,599-618,623-625,629-634,663,682
+  h_9630b74bdac540 1,189,350-351,355,619-622,626-628
+client/dashboard/src/pages/org/identity-provider/DirectoryRoleMappings.test.tsx
+  h_9630b74bdac540 7-13,23-24,38-39,102-108,111-112,117-121,123,128,135,147,152,164,170,181-205,207-227,230-245
+  h_9630b74bdac540 3-6,109-110,206,228-229,246
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e1d542d63cbccbfddff59532e29fd4023c07c918",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

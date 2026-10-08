@@ -1,0 +1,20 @@
+server/cmd/directory-roles/README.md
+  h_9630b74bdac540 35-42,84-87,89
+  h_9630b74bdac540 43
+server/cmd/directory-roles/main_test.go
+  h_9630b74bdac540 17,19-25,29,32,50-82,87
+server/cmd/directory-roles/main.go
+  h_9630b74bdac540 8,15-16,19,83-84,86-88,92,98,121-160
+  h_9630b74bdac540 85,161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "822bdb3d5636b6282d518c0fd52214f1bc9ed4b6",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

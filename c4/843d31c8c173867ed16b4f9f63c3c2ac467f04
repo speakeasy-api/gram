@@ -1,0 +1,38 @@
+server/cmd/directory-id-backfill/main.go
+  h_9630b74bdac540 8-9,47-52,67,75-78,82-104
+  h_9630b74bdac540 105
+server/internal/thirdparty/workos/queries.sql
+  h_9630b74bdac540 1-8,19
+server/cmd/directory-id-backfill/main_test.go
+  h_9630b74bdac540 1-77
+server/internal/directory/attribution.go
+  h_9630b74bdac540 5,12,42-51,104-115,122-123,127-128,133-134,143-146,149-151,153-155,158-160,171-180
+  h_9630b74bdac540 147-148,156-157,181
+server/internal/directory/attribution_test.go
+  h_9630b74bdac540 16,26,38-40,56-95,146
+  h_9630b74bdac540 96-98
+server/cmd/directory-id-backfill/README.md
+  h_9630b74bdac540 9,17,21-22,25-26,31
+server/internal/directory/queries.sql
+  h_9630b74bdac540 468-475,481,509,513,516,520
+server/internal/background/activities/directory_source_lifecycle_test.go
+  h_9630b74bdac540 28,258-296,299-339
+  h_9630b74bdac540 297-298
+server/internal/background/activities/process_workos_org_events.go
+  h_9630b74bdac540 272-274
+server/internal/directory/repo/queries.sql.go
+  h_9630b74bdac540 15,19,23-26,29-30,37,41,45-48,51-52,1234-1241,1247
+server/internal/thirdparty/workos/repo/queries.sql.go
+  h_9630b74bdac540 28-46,60-68,74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c4843d31c8c173867ed16b4f9f63c3c2ac467f04",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
