@@ -1,4 +1,4 @@
-h1:4U97q6+2MgvPLO427+WKUT4gvuUcVLQ+Y+GsmnqX1BE=
+h1:DcNkJZHKhRhOKeQcpsGMmaLV2KrQLP3IwG+mRWJVHik=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -463,3 +463,4 @@ h1:4U97q6+2MgvPLO427+WKUT4gvuUcVLQ+Y+GsmnqX1BE=
 20261006195242_remote-protected-resources-scope-override.sql h1:0wBqBI5REay+3/BKsSHMIPCGCgPToZpAkCHdfvszAyg=
 20261007130946_remote-session-clients-add-credential-owner.sql h1:JWsIsEZsfvjCTT6Q967qBYWixlDEzlkxau/2dP9MagM=
 20261008003918_directory-role-set-indexes.sql h1:Si2pFjhv2ChQFTGsxDqE/K6bcHf2Zjz4mILGgrnsLXo=
+20261008012430_directory-role-set-index-removal.sql h1:PDE8UZ4nrpeAKZjrjiS2p8hTXVCvlfFYqctrNzjxZnc=
