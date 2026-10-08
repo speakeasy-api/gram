@@ -1,0 +1,16 @@
+server/internal/k8s/network_ingress_metrics_test.go
+  h_9630b74bdac540 1-171
+server/internal/k8s/network_ingress_metrics.go
+  h_9630b74bdac540 5,12,16-29,137-140,153-156,171-201,219-220,222-223,231-233
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2c98ee0a69e25b64b3211f0c35c67ff1114ccacf",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
