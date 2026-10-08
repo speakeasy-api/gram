@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -230,11 +231,11 @@ func newRunner(def Definition, config Config) (*runner, error) {
 	}
 	md, pd := def.Marker.ProtoReflect().Descriptor(), def.Payload.ProtoReflect().Descriptor()
 	opts, ok := declarations.StorageOptionsFromMessage(md)
-	if !ok || string(md.FullName()) != def.ProtoName || opts.GetTopic() != string(pd.FullName()) || opts.GetBucket() != def.Bucket || declarations.ResolveSubscriptionName(md, opts) != def.SubscriptionID {
+	if !ok || string(md.FullName()) != def.ProtoName || strings.TrimSpace(opts.GetTopic()) != string(pd.FullName()) || opts.GetBucket() != def.Bucket || declarations.ResolveSubscriptionName(md, opts) != def.SubscriptionID {
 		return nil, errors.New("storage definition disagrees with proto declaration; regenerate")
 	}
 	topic, ok := declarations.TopicOptionsFromMessage(pd)
-	if !ok || topic.GetName() != "" || declarations.ResolveTopicName(pd, topic) != def.TopicID {
+	if !ok || strings.TrimSpace(topic.GetName()) != "" || declarations.ResolveTopicName(pd, topic) != def.TopicID {
 		return nil, errors.New("storage topic definition is stale or has no attached schema; regenerate")
 	}
 	partitioning := opts.GetPartitioning()
@@ -251,7 +252,7 @@ func newRunner(def Definition, config Config) (*runner, error) {
 		return nil, errors.New("unsupported storage codec; regenerate")
 	}
 	bucket := config.Buckets[def.Bucket]
-	if !physicalBucket.MatchString(bucket) {
+	if !validPhysicalBucket(bucket) {
 		return nil, fmt.Errorf("missing or invalid physical bucket mapping for %q", def.Bucket)
 	}
 	if config.Logger == nil {
@@ -401,6 +402,9 @@ func (r *runner) writePartition(ctx context.Context, route string, messages []*d
 	var first parquet.Row
 	start := 0
 	for ; start < len(messages); start++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if row, ok := decode(messages[start]); ok {
 			first = row
 			break
@@ -413,7 +417,7 @@ func (r *runner) writePartition(ctx context.Context, route string, messages []*d
 	if err != nil {
 		return fmt.Errorf("allocate object identity: %w", err)
 	}
-	object := Object{Bucket: r.bucket, Name: r.def.ProtoName + "/" + route + "/" + id.String() + ".parquet", Metadata: map[string]string{"schema_fingerprint": r.def.Fingerprint, "mapping_version": MappingVersion, "subscription": r.def.ProtoName}}
+	object := Object{Bucket: r.bucket, Name: r.def.ProtoName + "/" + route + "/" + id.String() + ".parquet", Metadata: map[string]string{"schema_fingerprint": r.def.Fingerprint, "mapping_version": declarations.StorageMappingVersion, "subscription": r.def.ProtoName}}
 	var written []*delivery
 	err = r.config.Store.Write(ctx, object, func(out io.Writer) error {
 		tempDir, err := os.MkdirTemp(r.config.TempDir, "gram-parquet-*")
@@ -430,7 +434,7 @@ func (r *runner) writePartition(ctx context.Context, route string, messages []*d
 		// completed row groups stream directly to the object store.
 		w := parquet.NewWriter(out, r.def.Schema, parquet.Compression(&zstd.Codec{}), parquet.MaxRowsPerRowGroup(parquetRowGroupRows), parquet.PageBufferSize(parquetBufferBytes), parquet.WriteBufferSize(parquetBufferBytes),
 			parquet.ColumnPageBuffers(parquet.NewFileBufferPool(tempDir, "column-*")),
-			parquet.KeyValueMetadata("gram.mapping_version", MappingVersion), parquet.KeyValueMetadata("gram.schema_fingerprint", r.def.Fingerprint))
+			parquet.KeyValueMetadata("gram.mapping_version", declarations.StorageMappingVersion), parquet.KeyValueMetadata("gram.schema_fingerprint", r.def.Fingerprint))
 		// Reset releases open page files without flushing or completing a failed
 		// object. It runs before directory removal, even on cancellation/panic.
 		defer w.Reset(nil)

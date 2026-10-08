@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -49,7 +50,11 @@ func TestRun_GeneratedBindingThroughPubSub(t *testing.T) {
 	require.NoError(t, err)
 	client, err := pubsub.NewClient(t.Context(), "test-project", option.WithGRPCConn(conn))
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, client.Close()) })
+	t.Cleanup(func() {
+		require.NoError(t, client.Close())
+		// Pub/Sub owns and closes the connection supplied via WithGRPCConn.
+		require.Equal(t, connectivity.Shutdown, conn.GetState())
+	})
 	broker := gcp.NewEmulatedPubSub(slog.New(slog.DiscardHandler), "test-project", client, nil)
 	def := storagefixture.FixtureV1Archive()
 	// Reconciliation precedes publication; Run resolves the same resources.

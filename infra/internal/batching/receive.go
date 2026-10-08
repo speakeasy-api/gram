@@ -24,7 +24,7 @@ type Settings struct {
 	// MaxGroups bounds distinct routing keys per batch.
 	MaxGroups int
 
-	// OutstandingMessages counts buffered, processing and callback-waiting work.
+	// OutstandingMessages counts admitted work through settlement.
 	OutstandingMessages int
 
 	// OutstandingBytes budgets raw payloads through settlement. A larger single
@@ -45,6 +45,8 @@ type item[T any] struct {
 // batch. reject settles messages that cannot enter or outlive the receiver.
 // receive must join its callbacks before returning. handle must honor ctx and
 // settle every member before returning, including on cancellation and panic.
+// receive must also bound callback concurrency and bytes: callbacks waiting for
+// admission already own payloads, outside the admitted-input budget.
 func Run[T any](ctx context.Context, settings Settings,
 	receive func(context.Context, func(context.Context, T)) error,
 	measure func(T) (int, string), reject func(T), handle func(context.Context, []T),

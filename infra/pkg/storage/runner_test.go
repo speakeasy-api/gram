@@ -14,6 +14,7 @@ import (
 
 	"github.com/parquet-go/parquet-go"
 	pubsubv1 "github.com/speakeasy-api/gram/infra/gen/gcp/pubsub/v1"
+	declarations "github.com/speakeasy-api/gram/infra/internal/gcp"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -78,21 +79,70 @@ func testDelivery(data, route string, received time.Time) (*delivery, *settlemen
 func TestProcess_AckAfterDurableCommitAndFooter(t *testing.T) {
 	t.Parallel()
 	m, settled := testDelivery("payload", "part__year=2026/part__month=10/part__day=07", time.Now())
+	var object Object
+	var out bytes.Buffer
+	var encodeErr error
+	var acksBeforeCommit int32
 	r, _ := testRunner(t, storeFunc(func(ctx context.Context, o Object, encode func(io.Writer) error) error {
-		require.Equal(t, "123-event-archive", o.Bucket)
-		require.True(t, strings.HasPrefix(o.Name, "example.v1.Archive/part__year=2026/part__month=10/part__day=07/"))
-		require.Equal(t, MappingVersion, o.Metadata["mapping_version"])
-		var out bytes.Buffer
-		require.NoError(t, encode(&out))
-		file, err := parquet.OpenFile(bytes.NewReader(out.Bytes()), int64(out.Len()))
-		require.NoError(t, err)
-		require.Equal(t, int64(1), file.NumRows())
-		require.Zero(t, settled.acks.Load(), "encoding and writing the footer alone do not acknowledge")
-		return nil
+		object = o
+		encodeErr = encode(&out)
+		acksBeforeCommit = settled.acks.Load()
+		return encodeErr
 	}), false, Settings{})
 	r.process(t.Context(), []*delivery{m})
+	require.Equal(t, "123-event-archive", object.Bucket)
+	require.True(t, strings.HasPrefix(object.Name, "example.v1.Archive/part__year=2026/part__month=10/part__day=07/"))
+	require.Equal(t, declarations.StorageMappingVersion, object.Metadata["mapping_version"])
+	require.NoError(t, encodeErr)
+	file, err := parquet.OpenFile(bytes.NewReader(out.Bytes()), int64(out.Len()))
+	require.NoError(t, err)
+	require.Equal(t, int64(1), file.NumRows())
+	require.Zero(t, acksBeforeCommit, "encoding and writing the footer alone do not acknowledge")
 	require.Equal(t, int32(1), settled.acks.Load())
 	require.Zero(t, settled.nacks.Load())
+}
+
+func TestProcess_CancellationStopsPoisonScan(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	var writes, decodes int
+	r, _ := testRunner(t, storeFunc(func(context.Context, Object, func(io.Writer) error) error { writes++; return nil }), false, Settings{})
+	r.def.Decode = func([]byte, Metadata) (parquet.Row, error) {
+		decodes++
+		cancel()
+		return nil, errors.New("bad protobuf")
+	}
+	first, firstState := testDelivery("bad", "region=one", time.Now())
+	second, secondState := testDelivery("bad", "region=one", time.Now())
+	r.process(ctx, []*delivery{first, second})
+	require.Equal(t, 1, decodes)
+	require.Zero(t, writes)
+	for _, state := range []*settlement{firstState, secondState} {
+		require.Zero(t, state.acks.Load())
+		require.Equal(t, int32(1), state.nacks.Load())
+	}
+}
+
+func TestNewRunner_NormalizesTopicDeclarations(t *testing.T) {
+	t.Parallel()
+	def := testDefinition(t, false)
+	// The dynamic descriptors belong only to this test.
+	opts, ok := declarations.StorageOptionsFromMessage(def.Marker.ProtoReflect().Descriptor())
+	require.True(t, ok)
+	opts.SetTopic(" example.v1.Event \t")
+	topic, ok := declarations.TopicOptionsFromMessage(def.Payload.ProtoReflect().Descriptor())
+	require.True(t, ok)
+	topic.SetName(" \t")
+	_, err := newRunner(def, Config{Store: storeFunc(func(context.Context, Object, func(io.Writer) error) error { return nil }), Buckets: map[string]string{def.Bucket: "123-archive"}})
+	require.NoError(t, err)
+}
+
+func TestNewRunner_RejectsReservedPhysicalBucket(t *testing.T) {
+	t.Parallel()
+	def := testDefinition(t, false)
+	_, err := newRunner(def, Config{Store: storeFunc(func(context.Context, Object, func(io.Writer) error) error { return nil }), Buckets: map[string]string{def.Bucket: "123-g00gle-archive"}})
+	require.ErrorContains(t, err, "bucket mapping")
 }
 
 func TestProcess_FailedPartitionPreservesSuccessfulAcks(t *testing.T) {

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -23,22 +24,18 @@ func TestGCSStore_CreateOnlyAndDurableClose(t *testing.T) {
 		t.Run(fmt.Sprint(commitStatus), func(t *testing.T) {
 			t.Parallel()
 			var commits atomic.Int32
+			type upload struct {
+				generation, uploadType, contentType string
+				body                                []byte
+				err                                 error
+			}
+			observed := make(chan upload, 1)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch r.Method {
 				case http.MethodPost:
-					require.Equal(t, "0", r.URL.Query().Get("ifGenerationMatch"))
-					require.Equal(t, "multipart", r.URL.Query().Get("uploadType"))
-					_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-					require.NoError(t, err)
-					parts := multipart.NewReader(r.Body, params["boundary"])
-					_, err = parts.NextPart()
-					require.NoError(t, err)
-					body, err := parts.NextPart()
-					require.NoError(t, err)
 					commits.Add(1)
-					data, err := io.ReadAll(body)
-					require.NoError(t, err)
-					require.Equal(t, "complete parquet footer", string(data))
+					data, err := io.ReadAll(r.Body)
+					observed <- upload{r.URL.Query().Get("ifGenerationMatch"), r.URL.Query().Get("uploadType"), r.Header.Get("Content-Type"), data, err}
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(commitStatus)
 					if commitStatus == http.StatusOK {
@@ -62,6 +59,20 @@ func TestGCSStore_CreateOnlyAndDurableClose(t *testing.T) {
 				require.ErrorContains(t, err, "commit storage object")
 			}
 			require.Equal(t, int32(1), commits.Load())
+			got := <-observed
+			require.NoError(t, got.err)
+			require.Equal(t, "0", got.generation)
+			require.Equal(t, "multipart", got.uploadType)
+			_, params, err := mime.ParseMediaType(got.contentType)
+			require.NoError(t, err)
+			parts := multipart.NewReader(bytes.NewReader(got.body), params["boundary"])
+			_, err = parts.NextPart()
+			require.NoError(t, err)
+			body, err := parts.NextPart()
+			require.NoError(t, err)
+			data, err := io.ReadAll(body)
+			require.NoError(t, err)
+			require.Equal(t, "complete parquet footer", string(data))
 		})
 	}
 }

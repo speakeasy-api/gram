@@ -22,6 +22,9 @@ const (
 	// defaultBatchMaxLatency is the maximum time a partial batch waits before
 	// being flushed when BatchReceiveSettings.MaxLatency is unset.
 	defaultBatchMaxLatency = time.Second
+
+	// defaultBatchBufferedBytes reserves 64 MiB when a byte budget is omitted.
+	defaultBatchBufferedBytes = 64 << 20
 )
 
 // BatchReceiveSettings tunes how Subscriber.ReceiveBatch groups messages. A
@@ -62,10 +65,45 @@ type BatchReceiveSettings struct {
 	// deliveries unable to enter before cancellation are nacked.
 	MaxBufferedMessages int
 
-	// MaxBufferedBytes bounds raw input across callbacks, pending and processing
-	// batches. In bounded mode zero defaults to two MaxBytes-sized batches (or
-	// 64 MiB when byte flushing is disabled). Decoded allocations are additional.
+	// MaxBufferedBytes bounds admitted raw input through settlement. In bounded
+	// mode zero defaults to the greater of two MaxBytes-sized batches or 64 MiB.
+	// SDK callback flow control is separately capped at the same count/byte
+	// budgets (or tighter explicit limits), bounding callbacks waiting to enter.
+	// Those SDK buffers and decoded allocations add to the admitted-input budget.
 	MaxBufferedBytes int
+}
+
+func (s BatchReceiveSettings) bufferLimits() (messages, bytes int) {
+	messages = s.MaxBufferedMessages
+	if messages <= 0 {
+		size := s.MaxMessages
+		if size <= 0 {
+			size = defaultBatchMaxMessages
+		}
+		messages = 2 * size
+	}
+	bytes = s.MaxBufferedBytes
+	if bytes <= 0 {
+		bytes = max(2*s.MaxBytes, defaultBatchBufferedBytes)
+	}
+	return messages, bytes
+}
+
+// boundBatchReceiver also bounds payloads retained by callbacks waiting for an
+// application permit. Preserve any tighter flow-control limits from the caller.
+func (s *psSubscriber[M]) boundBatchReceiver(settings BatchReceiveSettings) {
+	if settings.MaxBufferedMessages <= 0 && settings.MaxBufferedBytes <= 0 {
+		return
+	}
+	messages, bytes := settings.bufferLimits()
+	if limit := s.sub.ReceiveSettings.MaxOutstandingMessages; limit > 0 {
+		messages = min(messages, limit)
+	}
+	if limit := s.sub.ReceiveSettings.MaxOutstandingBytes; limit > 0 {
+		bytes = min(bytes, limit)
+	}
+	s.sub.ReceiveSettings.MaxOutstandingMessages = messages
+	s.sub.ReceiveSettings.MaxOutstandingBytes = bytes
 }
 
 type SubscriberBroker interface {
@@ -276,6 +314,7 @@ func (s *psSubscriber[M]) handle(ctx context.Context, m incomingMessage, f func(
 // f returns an error (or panics) the whole batch is nacked. Messages that fail
 // to unmarshal are nacked individually and excluded from the batch handed to f.
 func (s *psSubscriber[M]) ReceiveBatch(ctx context.Context, settings BatchReceiveSettings, f func(context.Context, []M, []MessageMetadata) error) error {
+	s.boundBatchReceiver(settings)
 	return s.batchLoop(ctx, settings, func(ctx context.Context, deliver func(incomingMessage)) error {
 		return s.sub.Receive(ctx, func(_ context.Context, m *pubsub.Message) {
 			deliver(incomingMessage{
@@ -301,6 +340,7 @@ func (s *psSubscriber[M]) ReceiveBatch(ctx context.Context, settings BatchReceiv
 // whole batch. Messages that fail to unmarshal are nacked individually and
 // excluded from f.
 func (s *psSubscriber[M]) ReceiveBatchWithResult(ctx context.Context, settings BatchReceiveSettings, f func(context.Context, []BatchMessage[M]) error) error {
+	s.boundBatchReceiver(settings)
 	return s.batchLoopWithResult(ctx, settings, func(ctx context.Context, deliver func(incomingMessage)) error {
 		return s.sub.Receive(ctx, func(_ context.Context, m *pubsub.Message) {
 			deliver(incomingMessage{
@@ -365,20 +405,17 @@ func (s *psSubscriber[M]) batchLoopMessages(
 	// the only flush conditions.
 	maxBytes := settings.MaxBytes
 	if settings.MaxBufferedMessages > 0 || settings.MaxBufferedBytes > 0 {
-		messages := settings.MaxBufferedMessages
-		if messages <= 0 {
-			messages = 2 * size
-		}
-		bytes := settings.MaxBufferedBytes
-		if bytes <= 0 {
-			bytes = max(2*maxBytes, 64<<20)
-		}
-		return batching.Run(ctx, batching.Settings{
+		messages, bytes := settings.bufferLimits()
+		err := batching.Run(ctx, batching.Settings{
 			MaxMessages: size, MaxBytes: maxBytes, MaxLatency: latency,
 			OutstandingMessages: messages, OutstandingBytes: bytes,
 		}, func(ctx context.Context, deliver func(context.Context, incomingMessage)) error {
 			return receive(ctx, func(m incomingMessage) { deliver(ctx, m) })
 		}, func(m incomingMessage) (int, string) { return len(m.data), "" }, func(m incomingMessage) { m.nack() }, handle)
+		if err != nil {
+			return fmt.Errorf("receive batch: %w", err)
+		}
+		return nil
 	}
 
 	newBuf := func() []incomingMessage { return make([]incomingMessage, 0, size) }

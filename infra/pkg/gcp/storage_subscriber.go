@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"cloud.google.com/go/pubsub/v2"
 	pubsubv1 "github.com/speakeasy-api/gram/infra/gen/gcp/pubsub/v1"
@@ -48,7 +49,7 @@ func storageTransportOptions(payload, marker proto.Message) (*pubsubv1.StorageSu
 	if !ok {
 		return nil, nil, fmt.Errorf("message %s is not a storage subscription", md.FullName())
 	}
-	if opts.GetTopic() != string(pd.FullName()) {
+	if strings.TrimSpace(opts.GetTopic()) != string(pd.FullName()) {
 		return nil, nil, fmt.Errorf("storage subscription %s expects %s, got %s", md.FullName(), opts.GetTopic(), pd.FullName())
 	}
 	if _, ok := gcp.SubscriptionOptionsFromMessage(md); ok {
@@ -58,7 +59,7 @@ func storageTransportOptions(payload, marker proto.Message) (*pubsubv1.StorageSu
 		return nil, nil, fmt.Errorf("storage marker %s also declares a topic", md.FullName())
 	}
 	topicOpts, ok := gcp.TopicOptionsFromMessage(pd)
-	if !ok || topicOpts.GetName() != "" {
+	if !ok || strings.TrimSpace(topicOpts.GetName()) != "" {
 		return nil, nil, fmt.Errorf("storage payload %s must declare a schema-bound topic without a name override", pd.FullName())
 	}
 	return opts, topicOpts, nil
