@@ -4,6 +4,8 @@ declare const __GRAM_SERVER_URL__: string | undefined;
 declare const __PLAYGROUND_PROXY_URL__: string | undefined;
 declare const __GRAM_GIT_SHA__: string | undefined;
 declare const __GRAM_API_URL__: string | undefined;
+// Release version of the tunnel agent image, e.g. "0.2.0". See vite.config.ts.
+declare const __GRAM_TUNNEL_AGENT_VERSION__: string;
 
 // Dev-only: which worktree/branch this dev server is serving, for the sidebar
 // readout. Empty strings in production builds. See vite.config.ts.
