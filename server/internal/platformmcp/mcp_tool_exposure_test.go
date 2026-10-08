@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -56,16 +57,16 @@ func TestToolExposureVersionTracksListAndTarget(t *testing.T) {
 
 	projectID, mcpID, toolsetID := uuid.New(), uuid.New(), uuid.New()
 	urns := []string{"tools:function:orders:create_order", "tools:http:billing:get_invoice"}
-	base := toolExposureVersion(projectID, mcpID, toolsetID, 4, urns)
+	base := mv.ToolListVersionToken(projectID, mcpID, toolsetID, 4, urns)
 	require.Len(t, base, 64)
 
-	require.Equal(t, base, toolExposureVersion(projectID, mcpID, toolsetID, 4, []string{urns[1], urns[0]}),
+	require.Equal(t, base, mv.ToolListVersionToken(projectID, mcpID, toolsetID, 4, []string{urns[1], urns[0]}),
 		"the same committed list must yield the same token whatever order it is read in")
-	require.NotEqual(t, base, toolExposureVersion(projectID, mcpID, toolsetID, 5, urns))
-	require.NotEqual(t, base, toolExposureVersion(projectID, mcpID, toolsetID, 4, append([]string{"tools:function:orders:cancel_order"}, urns...)))
-	require.NotEqual(t, base, toolExposureVersion(projectID, mcpID, uuid.New(), 4, urns))
-	require.NotEqual(t, base, toolExposureVersion(projectID, uuid.New(), toolsetID, 4, urns))
-	require.NotEqual(t, base, toolExposureVersion(uuid.New(), mcpID, toolsetID, 4, urns))
+	require.NotEqual(t, base, mv.ToolListVersionToken(projectID, mcpID, toolsetID, 5, urns))
+	require.NotEqual(t, base, mv.ToolListVersionToken(projectID, mcpID, toolsetID, 4, append([]string{"tools:function:orders:cancel_order"}, urns...)))
+	require.NotEqual(t, base, mv.ToolListVersionToken(projectID, mcpID, uuid.New(), 4, urns))
+	require.NotEqual(t, base, mv.ToolListVersionToken(projectID, uuid.New(), toolsetID, 4, urns))
+	require.NotEqual(t, base, mv.ToolListVersionToken(uuid.New(), mcpID, toolsetID, 4, urns))
 }
 
 func TestToolExposureMutationRefusesUnsafeRequestsBeforeTouchingTheDatabase(t *testing.T) {

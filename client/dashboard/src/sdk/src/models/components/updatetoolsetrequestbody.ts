@@ -35,6 +35,10 @@ export type UpdateToolsetRequestBody = {
    */
   description?: string | undefined;
   /**
+   * The version_token from the toolset read this update was based on. When set, the update is refused with a conflict if the toolset's tools or resources have changed since that read. Omit it to apply the update unconditionally.
+   */
+  expectedVersionToken?: string | undefined;
+  /**
    * Whether the toolset is enabled for MCP
    */
   mcpEnabled?: boolean | undefined;
@@ -83,6 +87,7 @@ export type UpdateToolsetRequestBody$Outbound = {
   custom_domain_id?: string | undefined;
   default_environment_slug?: string | undefined;
   description?: string | undefined;
+  expected_version_token?: string | undefined;
   mcp_enabled?: boolean | undefined;
   mcp_is_public?: boolean | undefined;
   mcp_slug?: string | undefined;
@@ -103,6 +108,7 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodMiniType<
     customDomainId: z.optional(z.string()),
     defaultEnvironmentSlug: z.optional(z.string()),
     description: z.optional(z.string()),
+    expectedVersionToken: z.optional(z.string()),
     mcpEnabled: z.optional(z.boolean()),
     mcpIsPublic: z.optional(z.boolean()),
     mcpSlug: z.optional(z.string()),
@@ -119,6 +125,7 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       customDomainId: "custom_domain_id",
       defaultEnvironmentSlug: "default_environment_slug",
+      expectedVersionToken: "expected_version_token",
       mcpEnabled: "mcp_enabled",
       mcpIsPublic: "mcp_is_public",
       mcpSlug: "mcp_slug",

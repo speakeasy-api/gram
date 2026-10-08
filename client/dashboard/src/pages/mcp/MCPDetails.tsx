@@ -39,6 +39,7 @@ import { useProductTier } from "@/hooks/useProductTier";
 import { useCustomDomain, useMcpUrl } from "@/hooks/useToolsetUrl";
 import { DEFAULT_MODEL } from "@/lib/models";
 import { isNotFoundError } from "@/lib/route-errors";
+import { handleToolsetSaveError } from "@/lib/toolset-save-error";
 import { Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import { PromptsTabContent } from "@/pages/toolsets/PromptsTab";
@@ -67,7 +68,11 @@ import {
 } from "@gram/client/react-query/listToolsetToolFilters.js";
 import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useRemoveOAuthServerMutation } from "@gram/client/react-query/removeOAuthServer.js";
-import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
+import {
+  invalidateAllToolset,
+  setToolsetData,
+  type ToolsetQueryData,
+} from "@gram/client/react-query/toolset.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -958,11 +963,29 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
     (fullToolset?.toolUrns?.length ?? 0) > 0 &&
     fullToolset?.rawTools.length === 0;
 
-  const updateToolsetMutation = useUpdateToolsetMutation({
-    onSuccess: () => {
-      telemetry.capture("toolset_event", { action: "toolset_updated" });
-      void refetch();
+  // A tool-list save writes the whole array, computed from the list this page
+  // loaded. Sending the version_token of that read makes the server refuse the
+  // save if someone else changed the list in between, instead of silently
+  // overwriting their edit. The update returns the new toolset, so it goes
+  // straight into the cache: a second save made before a refetch lands must be
+  // based on this save's list and token, not the pre-save ones.
+  const applySavedToolset = useCallback(
+    (saved: ToolsetQueryData) => {
+      setToolsetData(queryClient, [{ slug: toolset.slug }], saved);
       void invalidateAllToolset(queryClient);
+    },
+    [queryClient, toolset.slug],
+  );
+
+  const reloadToolset = useCallback(() => {
+    void refetch();
+    void invalidateAllToolset(queryClient);
+  }, [refetch, queryClient]);
+
+  const updateToolsetMutation = useUpdateToolsetMutation({
+    onSuccess: (saved) => {
+      telemetry.capture("toolset_event", { action: "toolset_updated" });
+      applySavedToolset(saved);
     },
     onError: (error) => {
       telemetry.capture("toolset_event", {
@@ -985,6 +1008,7 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
             slug: toolset.slug,
             updateToolsetRequestBody: {
               toolUrns: updatedUrns,
+              expectedVersionToken: fullToolset?.versionToken,
             },
           },
         },
@@ -998,10 +1022,18 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
               `Removed ${removedUrns.length} tool${removedUrns.length !== 1 ? "s" : ""}`,
             );
           },
+          onError: (error) => handleToolsetSaveError(error, reloadToolset),
         },
       );
     },
-    [fullToolset?.toolUrns, toolset.slug, updateToolsetMutation, telemetry],
+    [
+      fullToolset?.toolUrns,
+      fullToolset?.versionToken,
+      toolset.slug,
+      updateToolsetMutation,
+      telemetry,
+      reloadToolset,
+    ],
   );
 
   const handleTestInPlayground = useCallback(() => {
@@ -1160,19 +1192,24 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
               const currentUrns = fullToolset.toolUrns || [];
               const newUrns = [...new Set([...currentUrns, ...toolUrns])];
 
-              await client.toolsets.updateBySlug({
-                slug: toolset.slug,
-                updateToolsetRequestBody: {
-                  toolUrns: newUrns,
-                },
-              });
+              let saved: ToolsetQueryData;
+              try {
+                saved = await client.toolsets.updateBySlug({
+                  slug: toolset.slug,
+                  updateToolsetRequestBody: {
+                    toolUrns: newUrns,
+                    expectedVersionToken: fullToolset.versionToken,
+                  },
+                });
+              } catch (error) {
+                handleToolsetSaveError(error, reloadToolset);
+                return;
+              }
 
               toast.success(
                 `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""} to ${toolset.name}`,
               );
-
-              await refetch();
-              void invalidateAllToolset(queryClient);
+              applySavedToolset(saved);
             })(toolUrns);
           }}
         />

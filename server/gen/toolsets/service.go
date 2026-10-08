@@ -315,7 +315,11 @@ type UpdateToolsetPayload struct {
 	CustomDomainID *string
 	// The mode to use for tool selection
 	ToolSelectionMode *string
-	ProjectSlugInput  *string
+	// The version_token from the toolset read this update was based on. When set,
+	// the update is refused with a conflict if the toolset's tools or resources
+	// have changed since that read. Omit it to apply the update unconditionally.
+	ExpectedVersionToken *string
+	ProjectSlugInput     *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

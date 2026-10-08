@@ -5,6 +5,9 @@ import { GramError } from "@gram/client/models/errors/gramerror.js";
 
 interface ErrorHandlerOptions {
   title?: string;
+  /** Toast body to show instead of the error's own message. The original
+   * error is still what gets logged. */
+  message?: string;
   persist?: boolean;
   customAction?: {
     label: string;
@@ -51,12 +54,13 @@ export function handleError(
   const {
     title = "Error",
     persist = false,
+    message,
     customAction,
     silent = false,
   } = options;
 
   const errorMessage =
-    typeof error === "string" ? error : toError(error).message;
+    message ?? (typeof error === "string" ? error : toError(error).message);
 
   // A 4xx from the API is the server answering a request it understood —
   // permission denied, not found, conflict — and the toast is the whole

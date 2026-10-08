@@ -82,6 +82,7 @@ var Toolset = Type("Toolset", func() {
 	Attribute("tools", ArrayOf(Tool), "The tools in this toolset")
 	Attribute("tool_urns", ArrayOf(String), "The tool URNs in this toolset")
 	Attribute("toolset_version", Int64, "The version of the toolset (will be 0 if none exists)")
+	Attribute("version_token", String, "Opaque token identifying the toolset version and tool list this read describes. It changes whenever the toolset's tools or resources change. Send it back as expected_version_token on toolsets.update to have the update refused with a conflict if either changed in between.")
 	Attribute("resources", ArrayOf(Resource), "The resources in this toolset")
 	Attribute("resource_urns", ArrayOf(String), "The resource URNs in this toolset")
 

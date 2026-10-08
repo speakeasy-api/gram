@@ -229,6 +229,13 @@ func (s *Service) triggerToolsetIndex(ctx context.Context, toolset *types.Toolse
 	_ = TriggerToolsetIndex(ctx, s.logger, s.db, s.temporalEnv, toolset)
 }
 
+// ErrToolsetVersionConflict is the cause of the conflict toolsets.update
+// returns when expected_version_token no longer matches the toolset's committed
+// version: someone else changed its tools or resources after the caller read it.
+var ErrToolsetVersionConflict = errors.New("toolset changed since it was read")
+
+const toolsetVersionConflictMessage = "expected_version_token is stale: the toolset's tools or resources changed since it was read; read the toolset again and retry with its version_token"
+
 // ErrToolsetIndexNotRequired reports that a toolset correctly needs no search
 // index, so a caller can tell that apart from a rebuild that failed to start.
 //
@@ -493,6 +500,15 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	existingView, err := mv.DescribeToolset(ctx, logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(existingToolset.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to describe existing toolset").LogError(ctx, logger)
+	}
+	// The tool and resource lists are written as whole arrays computed by the
+	// caller from an earlier read. A caller that names the read it was based on
+	// is refused here, under the toolset row lock, if the committed version has
+	// moved since —
+	// otherwise a concurrent edit would be silently overwritten. Callers that
+	// omit the token keep the unconditional last-write-wins behaviour.
+	if payload.ExpectedVersionToken != nil && *payload.ExpectedVersionToken != conv.PtrValOrEmpty(existingView.VersionToken, "") {
+		return nil, oops.E(oops.CodeConflict, ErrToolsetVersionConflict, toolsetVersionConflictMessage)
 	}
 
 	// Convert update params

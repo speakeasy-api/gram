@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -347,7 +348,7 @@ func toolExposureFromRow(projectID, mcpID uuid.UUID, row platformrepo.GetPlatfor
 	return MCPToolExposure{
 		ToolsetID:       row.ToolsetID.String(),
 		ToolsetSlug:     row.ToolsetSlug,
-		ExposureVersion: toolExposureVersion(projectID, mcpID, row.ToolsetID, row.ToolsetVersion, row.ToolUrns),
+		ExposureVersion: mv.ToolListVersionToken(projectID, mcpID, row.ToolsetID, row.ToolsetVersion, row.ToolUrns),
 		ToolCount:       len(row.ToolUrns),
 		ToolURNs:        slices.Clone(urns),
 		Truncated:       truncated,
@@ -510,7 +511,7 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 			// Compared against the version computed from the committed list
 			// rather than the public projection, which truncates the list it
 			// reports and would therefore be the wrong thing to hash.
-			committed := toolExposureVersion(project.ID, mcpID, row.ToolsetID, row.ToolsetVersion, row.ToolUrns)
+			committed := mv.ToolListVersionToken(project.ID, mcpID, row.ToolsetID, row.ToolsetVersion, row.ToolUrns)
 			if !hmac.Equal([]byte(committed), []byte(input.ExpectedVersion)) {
 				return toolExposureReceipt{}, toolExposureConflict()
 			}
@@ -994,41 +995,6 @@ func toolExposureUnavailable(cause error) error {
 		Message: "Changing which tools an MCP server exposes is temporarily unavailable.",
 		Cause:   errors.Join(ErrUnavailable, cause),
 	}
-}
-
-// toolExposureVersion binds the version token to the exact target and the
-// exact list. Two toolsets at the same version number never share a token, and
-// a list edited and reverted between reads yields the token it started with —
-// which is the honest answer, because the committed list is the same one.
-//
-// The digest is deliberately unkeyed, unlike this package's riskVersionCodec,
-// distributionVersionTokenCodec and shadowDecisionVersionCodec, and like its
-// nearest neighbour connection_settings.go. Those codecs sign state the caller
-// must not be able to synthesize — a decision id, an audience, a distribution
-// version — where minting a token would grant authority the caller does not
-// hold. This token's entire preimage is the committed list itself, so anyone
-// who can compute it already knows the state a read would have returned; there
-// is nothing left for a signature to prove. Its job is detecting that the
-// committed list moved between read and write, which an unkeyed digest does
-// exactly as well. Proof of confirmation is carried separately, by the
-// explicit Confirmed flag and the shipped skill, not by this token. If the
-// token ever starts carrying state the caller is not otherwise told — a
-// principal, an expiry, a decision — it must become a keyed codec.
-func toolExposureVersion(projectID, mcpServerID, toolsetID uuid.UUID, version int64, urns []string) string {
-	sorted := slices.Clone(urns)
-	slices.Sort(sorted)
-	payload, err := json.Marshal(struct {
-		ProjectID   string   `json:"project_id"`
-		MCPServerID string   `json:"mcp_server_id"`
-		ToolsetID   string   `json:"toolset_id"`
-		Version     int64    `json:"version"`
-		ToolURNs    []string `json:"tool_urns"`
-	}{projectID.String(), mcpServerID.String(), toolsetID.String(), version, sorted})
-	if err != nil {
-		return ""
-	}
-	digest := sha256.Sum256(payload)
-	return hex.EncodeToString(digest[:])
 }
 
 func toolURNStrings(tools []urn.Tool) []string {
