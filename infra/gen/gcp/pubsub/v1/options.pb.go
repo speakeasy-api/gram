@@ -665,7 +665,7 @@ type StorageSubscriptionOptions struct {
 	xxx_hidden_Filter              *string                `protobuf:"bytes,8,opt,name=filter"`
 	xxx_hidden_DeadLetter          *DeadLetterPolicy      `protobuf:"bytes,9,opt,name=dead_letter,json=deadLetter"`
 	xxx_hidden_Topic               *string                `protobuf:"bytes,10,opt,name=topic"`
-	xxx_hidden_Bucket              *string                `protobuf:"bytes,11,opt,name=bucket"`
+	xxx_hidden_Bucket              *string                `protobuf:"bytes,11,opt,name=bucket,def=lake"`
 	xxx_hidden_Codec               StorageCodec           `protobuf:"varint,12,opt,name=codec,enum=gcp.pubsub.v1.StorageCodec"`
 	xxx_hidden_Partitioning        StoragePartitioning    `protobuf:"varint,13,opt,name=partitioning,enum=gcp.pubsub.v1.StoragePartitioning"`
 	xxx_hidden_PartitionAttribute  *string                `protobuf:"bytes,14,opt,name=partition_attribute,json=partitionAttribute"`
@@ -675,6 +675,11 @@ type StorageSubscriptionOptions struct {
 	unknownFields                  protoimpl.UnknownFields
 	sizeCache                      protoimpl.SizeCache
 }
+
+// Default values for StorageSubscriptionOptions fields.
+const (
+	Default_StorageSubscriptionOptions_Bucket = string("lake")
+)
 
 func (x *StorageSubscriptionOptions) Reset() {
 	*x = StorageSubscriptionOptions{}
@@ -782,12 +787,14 @@ func (x *StorageSubscriptionOptions) GetTopic() string {
 
 func (x *StorageSubscriptionOptions) GetBucket() string {
 	if x != nil {
-		if x.xxx_hidden_Bucket != nil {
-			return *x.xxx_hidden_Bucket
+		if protoimpl.X.Present(&(x.XXX_presence[0]), 10) {
+			if x.xxx_hidden_Bucket != nil {
+				return *x.xxx_hidden_Bucket
+			}
+			return Default_StorageSubscriptionOptions_Bucket
 		}
-		return ""
 	}
-	return ""
+	return Default_StorageSubscriptionOptions_Bucket
 }
 
 func (x *StorageSubscriptionOptions) GetCodec() StorageCodec {
@@ -1026,7 +1033,6 @@ func (x *StorageSubscriptionOptions) ClearTopic() {
 
 func (x *StorageSubscriptionOptions) ClearBucket() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 10)
-	x.xxx_hidden_Bucket = nil
 }
 
 func (x *StorageSubscriptionOptions) ClearCodec() {
@@ -1060,8 +1066,9 @@ type StorageSubscriptionOptions_builder struct {
 	// Required. Full name of a topic-declaring message with an attached schema.
 	// Its payload must be self-contained and nonrecursive.
 	Topic *string
-	// Required logical bucket name. Deployment resolves the globally unique GCS
-	// name and supplies the same mapping to Config Connector and the Go runner.
+	// Optional logical bucket name, defaulting to "lake". Deployment resolves the
+	// globally unique GCS name and supplies the same mapping to Config Connector
+	// and the Go runner.
 	Bucket       *string
 	Codec        *StorageCodec
 	Partitioning *StoragePartitioning
@@ -1300,7 +1307,7 @@ const file_gcp_pubsub_v1_options_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x95\x01\n" +
 	"\vRetryPolicy\x12B\n" +
 	"\x0fminimum_backoff\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\x0eminimumBackoff\x12B\n" +
-	"\x0fmaximum_backoff\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x0emaximumBackoff\"\xc1\x06\n" +
+	"\x0fmaximum_backoff\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x0emaximumBackoff\"\xc7\x06\n" +
 	"\x1aStorageSubscriptionOptions\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x127\n" +
 	"\tretention\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\tretention\x122\n" +
@@ -1313,8 +1320,8 @@ const file_gcp_pubsub_v1_options_proto_rawDesc = "" +
 	"\vdead_letter\x18\t \x01(\v2\x1f.gcp.pubsub.v1.DeadLetterPolicyR\n" +
 	"deadLetter\x12\x14\n" +
 	"\x05topic\x18\n" +
-	" \x01(\tR\x05topic\x12\x16\n" +
-	"\x06bucket\x18\v \x01(\tR\x06bucket\x121\n" +
+	" \x01(\tR\x05topic\x12\x1c\n" +
+	"\x06bucket\x18\v \x01(\t:\x04lakeR\x06bucket\x121\n" +
 	"\x05codec\x18\f \x01(\x0e2\x1b.gcp.pubsub.v1.StorageCodecR\x05codec\x12F\n" +
 	"\fpartitioning\x18\r \x01(\x0e2\".gcp.pubsub.v1.StoragePartitioningR\fpartitioning\x12/\n" +
 	"\x13partition_attribute\x18\x0e \x01(\tR\x12partitionAttribute\x12%\n" +

@@ -47,6 +47,7 @@ func discoverStorageFixture(t *testing.T, set *descriptorpb.FileDescriptorSet) (
 func TestStorageSubscription_DefaultsAndTransport(t *testing.T) {
 	t.Parallel()
 	set, _, _, opts := storageFixture(t)
+	opts.ClearBucket()
 	opts.SetRetention(durationpb.New(24 * time.Hour))
 	opts.SetAckDeadline(durationpb.New(60 * time.Second))
 	opts.SetRetryPolicy(pubsubv1.RetryPolicy_builder{}.Build())
@@ -66,7 +67,8 @@ func TestStorageSubscription_DefaultsAndTransport(t *testing.T) {
 	require.Equal(t, int32(10), sub.MaxDeliveryAttempts)
 	require.Equal(t, pubsubv1.StorageCodec_STORAGE_CODEC_PARQUET, sub.Storage.Codec)
 	require.Equal(t, pubsubv1.StoragePartitioning_STORAGE_PARTITIONING_HIVE_DAILY, sub.Storage.Partitioning)
-	require.Equal(t, "event-archive", sub.Storage.Bucket)
+	require.Equal(t, "lake", sub.Storage.Bucket)
+	require.False(t, opts.HasBucket(), "discovery must not mutate the declaration")
 }
 
 func TestStorageSubscription_ExplicitModes(t *testing.T) {
@@ -329,6 +331,43 @@ func TestStorageBuckets_DeduplicatedPrivateAndPreserved(t *testing.T) {
 	withoutStorage, err := yaml.Marshal(buildPubSubValues(t.Context(), slog.New(slog.DiscardHandler), nil, nil, nil))
 	require.NoError(t, err)
 	require.NotContains(t, string(withoutStorage), "storage:")
+}
+
+func TestStorageBuckets_DefaultAndExplicitNames(t *testing.T) {
+	t.Parallel()
+	set, _, marker, opts := storageFixture(t)
+	opts.ClearBucket()
+	for _, tt := range []struct {
+		name   string
+		bucket *string
+	}{
+		{"AnotherDefault", nil},
+		{"ExplicitLake", new("lake")},
+		{"Override", new("event-archive")},
+	} {
+		other := proto.Clone(marker).(*descriptorpb.DescriptorProto)
+		other.Name = new(tt.name)
+		options := proto.Clone(opts).(*pubsubv1.StorageSubscriptionOptions)
+		if tt.bucket != nil {
+			options.SetBucket(*tt.bucket)
+		}
+		proto.SetExtension(other.Options, pubsubv1.E_StorageSubscription, options)
+		set.File[len(set.File)-1].MessageType = append(set.File[len(set.File)-1].MessageType, other)
+	}
+	_, subs, err := discoverStorageFixture(t, set)
+	require.NoError(t, err)
+	require.Len(t, subs, 4)
+	for _, sub := range subs {
+		want := "lake"
+		if sub.ProtoMessage == "test.storage.v1.Override" {
+			want = "event-archive"
+		}
+		require.Equal(t, want, sub.Storage.Bucket)
+	}
+	values := buildStorageValues(subs)
+	require.Len(t, values.Buckets, 2)
+	require.Equal(t, "event-archive", values.Buckets[0].Name)
+	require.Equal(t, "lake", values.Buckets[1].Name)
 }
 
 func TestStorageTopology_GenerateAndPreserveOutputOnError(t *testing.T) {

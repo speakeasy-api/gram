@@ -10,7 +10,6 @@ generated Parquet encoder and installable Go runner are subsequent layers.
 message EventArchive {
   option (gcp.pubsub.v1.storage_subscription) = {
     topic: "gram.events.v1.Event"
-    bucket: "event-archive"
     ack_deadline: { seconds: 60 }
     dead_letter: { max_delivery_attempts: 10 }
   };
@@ -81,9 +80,12 @@ finite-reason drop counter. Such deliveries do not retry or enter the DLQ.
 
 ## Bucket topology and deployment contract
 
-`bucket` is a **logical** name: 3–40 lowercase letters, digits or hyphens, starting
-with a letter and ending with a letter or digit. Multiple storage subscriptions
-referencing the same logical bucket produce one bucket fragment.
+`bucket` is optional and defaults to the **logical** name `lake`. Set it explicitly
+(for example, `bucket: "event-archive"`) to select a different logical bucket.
+Names must be 3–40 lowercase letters, digits or hyphens, starting with a letter
+and ending with a letter or digit. Multiple storage subscriptions using the
+default or explicitly selecting `lake` share one bucket fragment, with separate
+marker prefixes. An explicitly empty bucket name is invalid.
 
 The generated Helm values contain a `storage` section only when buckets exist:
 
@@ -92,7 +94,7 @@ storage:
   apis:
     - storage.googleapis.com
   buckets:
-    - name: event-archive
+    - name: lake
       annotations:
         cnrm.cloud.google.com/deletion-policy: abandon
         cnrm.cloud.google.com/force-destroy: "false"
