@@ -92,13 +92,13 @@ type Service interface {
 	// Record whether a detected AI tool may reach this organization's MCP gateway.
 	// The decision is organization-level and applies to every server: a blocked
 	// tool is refused when it authenticates, so its users see an error their
-	// client cannot recover from. Enforcement needs a credential Gram can verify,
-	// so a tool that carries no verifiable gateway matcher — one linked only by a
-	// self-reported client name, or by nothing at all — cannot be decided on: the
-	// request is rejected with bad_request, nothing is recorded, and no summary is
-	// returned. An id the organization's scan target catalog does not know is
-	// rejected with not_found. Requires an authenticated session authorized for
-	// org:admin on the active organization.
+	// client cannot recover from. Enforcement needs a credential Speakeasy can
+	// verify, so a tool that carries no verifiable gateway matcher — one linked
+	// only by a self-reported client name, or by nothing at all — cannot be
+	// decided on: the request is rejected with bad_request, nothing is recorded,
+	// and no summary is returned. An id the organization's scan target catalog
+	// does not know is rejected with not_found. Requires an authenticated session
+	// authorized for org:admin on the active organization.
 	SetAIToolDecision(context.Context, *SetAIToolDecisionPayload) (res *SetAIToolDecisionResult, err error)
 	// List who can reach one resource: the principals granted or blocked on it,
 	// and the organization-wide rules they inherit.
@@ -756,7 +756,7 @@ type ListGrantsPayload struct {
 // ListIdentityAccessPayload is the payload type of the access service
 // listIdentityAccess method.
 type ListIdentityAccessPayload struct {
-	// The Gram user ID to look up accessible resources for.
+	// The Speakeasy user ID to look up accessible resources for.
 	UserID       string
 	SessionToken *string
 }

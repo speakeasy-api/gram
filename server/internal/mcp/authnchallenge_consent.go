@@ -227,7 +227,7 @@ type remoteSessionCard struct {
 
 	// IssuerDisplay is the card's label: the resource's own name when the
 	// client carries one, else the issuer's operator-set display name, else the slug. Issuer
-	// branding is Gram-controlled and tenant-set, unlike the
+	// branding is Speakeasy-controlled and tenant-set, unlike the
 	// attacker-chosen CIMD client_name/logo_uri surfaced via
 	// ClientIDOrigin, so the two stay visually separate on the page.
 	IssuerDisplay string
@@ -291,7 +291,7 @@ type remoteSessionCard struct {
 	// ValidatedAt and ValidatedAgo describe when that validation ran.
 	ValidatedAt  string
 	ValidatedAgo string
-	// ValidationReason is the Gram-authored explanation of a non-valid verdict.
+	// ValidationReason is the Speakeasy-authored explanation of a non-valid verdict.
 	ValidationReason string
 	// ValidationNotice is fixed page copy about a verify that did not run.
 	ValidationNotice string
@@ -505,7 +505,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// DCR-registered client; the connect page is the dashboard linking the
 	// user's own upstream sessions. Skip the client lookup and label the page
 	// generically.
-	clientName := "Gram"
+	clientName := "Speakeasy"
 	clientIDOrigin := ""
 	loopbackRedirectWarning := false
 	var clientRowID uuid.UUID

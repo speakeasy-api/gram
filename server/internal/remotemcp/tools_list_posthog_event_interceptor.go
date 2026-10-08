@@ -32,7 +32,7 @@ const eventMCPServerToolsList = "mcp_server_tools_list"
 // The event is renamed from `/mcp`'s `mcp_server_count` because the property
 // schema differs — the toolset-shaped fields (`toolset_id`, `toolset_slug`,
 // etc.) are replaced with `remote_mcp_server_id` since `/x/mcp` proxies a
-// Remote MCP Server rather than wrapping a Gram-managed toolset. AGE-1902
+// Remote MCP Server rather than wrapping a Speakeasy-managed toolset. AGE-1902
 // tracks unifying the two runtimes onto this single event name.
 type ToolsListPostHogEventInterceptor struct {
 	posthog  *posthog.Posthog

@@ -9,14 +9,14 @@ import (
 )
 
 // The externalKeys service exposes organization-scoped CRUD over external_keys
-// (externally-managed KMS keys Gram signs with, backed by an external
+// (externally-managed KMS keys Speakeasy signs with, backed by an external
 // credential). Writes are per-provider and strongly typed; reads use a generic,
 // supertype-only list plus per-provider typed detail endpoints. Verification
 // against the cloud provider is per-provider too, and exists only for GCP: an
-// AWS key cannot be probed because Gram holds no AWS identity to assume a
+// AWS key cannot be probed because Speakeasy holds no AWS identity to assume a
 // customer role from.
 var _ = Service("externalKeys", func() {
-	Description("Manage organization-level external keys — externally-managed AWS or GCP KMS keys Gram signs with.")
+	Description("Manage organization-level external keys — externally-managed AWS or GCP KMS keys Speakeasy signs with.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
 
@@ -42,7 +42,7 @@ var _ = Service("externalKeys", func() {
 	})
 
 	Method("updateAwsKmsKey", func() {
-		Description("Update an AWS KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The key ARN and algorithm are immutable: an external key identifies exactly one signable key permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.")
+		Description("Update an AWS KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The key ARN and algorithm are immutable: an external key identifies exactly one signable key permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Speakeasy signs with.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the key to update.", func() {
@@ -92,7 +92,7 @@ var _ = Service("externalKeys", func() {
 	})
 
 	Method("updateGcpKmsKey", func() {
-		Description("Update a GCP KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The resource name and algorithm are immutable: an external key identifies exactly one signable crypto key version permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.")
+		Description("Update a GCP KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The resource name and algorithm are immutable: an external key identifies exactly one signable crypto key version permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Speakeasy signs with.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the key to update.", func() {
@@ -237,7 +237,7 @@ var _ = Service("externalKeys", func() {
 	})
 
 	Method("verifyGcpKmsKey", func() {
-		Description("Probe that Gram can reach a GCP KMS external key through its backing credential and use it to sign: read the key's public half, confirm its algorithm matches the one recorded, sign a probe digest, and verify that signature locally against the public half. Performs a real signing operation, which is billed to the key's owner and lands in their Cloud Audit Log. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.")
+		Description("Probe that Speakeasy can reach a GCP KMS external key through its backing credential and use it to sign: read the key's public half, confirm its algorithm matches the one recorded, sign a probe digest, and verify that signature locally against the public half. Performs a real signing operation, which is billed to the key's owner and lands in their Cloud Audit Log. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.")
 
 		// Declared here rather than in shared.DeclareErrorResponses because only the
 		// rate-limited endpoints can return it, and putting it in the shared set

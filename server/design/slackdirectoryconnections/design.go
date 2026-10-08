@@ -47,7 +47,7 @@ var Member = Type("SlackDirectoryMember", func() {
 	Attribute("workspace_name", String, "Workspace display name.")
 	Attribute("slack_user_id", String, "Slack workspace user ID.")
 	Attribute("display_name", String, "Optional observed display name.")
-	Attribute("email", String, "Observed email; never evidence of a confirmed Gram identity.")
+	Attribute("email", String, "Observed email; never evidence of a confirmed Speakeasy identity.")
 	Attribute("status", String, "Observed account state.", func() { Enum("active", "deactivated", "invited", "unknown") })
 	Attribute("member_type", String, "Observed account type.", func() { Enum("person", "guest", "single_channel_guest", "bot", "unknown") })
 	Attribute("last_seen_at", String, "Latest published observation.", func() { Format(FormatDateTime) })
@@ -152,10 +152,10 @@ var _ = Service("slackDirectoryConnections", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SlackDirectoryMembers"}`)
 	})
 	Method("listPersonAccounts", func() {
-		Description("Read mapped Slack accounts for an active organization person by exact Gram user ID. Browser session only; caller must be that person or an organization administrator. Does not infer associations from email or grant permissions.")
+		Description("Read mapped Slack accounts for an active organization person by exact Speakeasy user ID. Browser session only; caller must be that person or an organization administrator. Does not infer associations from email or grant permissions.")
 		Payload(func() {
 			security.SessionPayload()
-			Attribute("user_id", String, "Exact Gram user ID of the active organization person.", func() { MinLength(1) })
+			Attribute("user_id", String, "Exact Speakeasy user ID of the active organization person.", func() { MinLength(1) })
 			Attribute("cursor", String, "Continue after the last membership ID.", func() { Format(FormatUUID) })
 			Required("user_id")
 		})

@@ -181,7 +181,7 @@ func TestHandleRemoteLoginCallback_RejectsStateWhoseIssuerWasDeleted(t *testing.
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "no remote_sessions row is resurrected for the dead issuer")
 
-	require.Equal(t, []string{"cb-refresh"}, spy.revokedTokens(), "the pair Gram refused to store is handed back to the provider")
+	require.Equal(t, []string{"cb-refresh"}, spy.revokedTokens(), "the pair Speakeasy refused to store is handed back to the provider")
 }
 
 // The callback and the issuer delete take the client row and the issuer row in
@@ -292,5 +292,5 @@ func TestHandleRemoteLoginCallback_WaitsForIssuerMigrationThenRejectsRetiredIssu
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "no remote_sessions row lands on the retired issuer")
 
-	require.Equal(t, []string{"cb-refresh"}, spy.revokedTokens(), "the pair Gram refused to store is handed back to the provider")
+	require.Equal(t, []string{"cb-refresh"}, spy.revokedTokens(), "the pair Speakeasy refused to store is handed back to the provider")
 }

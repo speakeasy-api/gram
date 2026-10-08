@@ -448,10 +448,10 @@ type agentAttribution struct {
 // speakeasyAIAttributionHeaders maps each canonical LiteLLM attribution
 // header to the deprecated x-gram-* header it replaces.
 var speakeasyAIAttributionHeaders = map[string]string{
-	"x-speakeasy-ai-session-id":       "x-gram-session-id",
-	"x-speakeasy-ai-agent-session-id": "x-gram-agent-session-id",
-	"x-speakeasy-ai-agent-provider":   "x-gram-agent-provider",
-	"x-speakeasy-ai-agent-turn-id":    "x-gram-agent-turn-id",
+	"speakeasy-ai-session-id":       "x-gram-session-id",
+	"speakeasy-ai-agent-session-id": "x-gram-agent-session-id",
+	"speakeasy-ai-agent-provider":   "x-gram-agent-provider",
+	"speakeasy-ai-agent-turn-id":    "x-gram-agent-turn-id",
 }
 
 func agentAttributionFromHeaders(headers map[string]string) agentAttribution {
@@ -462,7 +462,7 @@ func agentAttributionFromHeaders(headers map[string]string) agentAttribution {
 			normalized[strings.ToLower(strings.TrimSpace(key))] = value
 		}
 	}
-	// The x-speakeasy-ai-* names are canonical; the x-gram-* names they
+	// The speakeasy-ai-* names are canonical; the x-gram-* names they
 	// replace stay accepted. The new name wins when a request sends both.
 	for name, legacy := range speakeasyAIAttributionHeaders {
 		if value := normalized[name]; value != "" {

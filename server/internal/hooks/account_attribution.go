@@ -27,7 +27,7 @@ const (
 
 	// accountTypeTeam is a company/enterprise AI account: it lives under a
 	// provider org already shared by resolved org members, or its session email
-	// resolves to a Gram org member (see classifyAccount).
+	// resolves to a Speakeasy org member (see classifyAccount).
 	accountTypeTeam = "team"
 	// accountTypePersonal is an individual AI account (e.g. Claude Max): its
 	// provider org is not a recognized enterprise org and its email does not
@@ -36,7 +36,7 @@ const (
 )
 
 // classifyAccountType labels a session's AI account from email resolution alone.
-// A session whose work email resolved to a Gram org member is a team/enterprise
+// A session whose work email resolved to a Speakeasy org member is a team/enterprise
 // account; anything else (a personal email that does not resolve, or no email)
 // is personal. Note this is deliberately independent of the device bridge: a
 // personal account can be attributed to an employee via their device without
@@ -222,9 +222,9 @@ func (s *Service) providerOrgBillingMode(ctx context.Context, meta *SessionMetad
 // The primary signal is deterministic and data-derived: a provider org already
 // shared by two or more distinct resolved employees is the company's real
 // enterprise org, so every account observed under it is team — including one
-// whose own email has not (yet) resolved to a Gram member. This is what lets a
+// whose own email has not (yet) resolved to a Speakeasy member. This is what lets a
 // genuine employee on the company Claude org be classified team before they are
-// provisioned in Gram (email resolution alone would call them personal).
+// provisioned in Speakeasy (email resolution alone would call them personal).
 //
 // When the session's org is not (yet) a shared enterprise org, classification
 // falls back to email resolution: a resolved work email is team, anything else
@@ -242,7 +242,7 @@ func (s *Service) providerOrgBillingMode(ctx context.Context, meta *SessionMetad
 // work email at a solo/low-adoption company stays labeled team, and an
 // unresolved account there stays personal even if it is a real employee. Closing
 // this deterministically needs an explicit admin-declared enterprise org id (a
-// separate follow-up); accepted because Gram is enterprise software.
+// separate follow-up); accepted because Speakeasy is enterprise software.
 func (s *Service) classifyAccount(ctx context.Context, meta *SessionMetadata) (string, error) {
 	// A Claude session with no provider account UUID is authenticated by company
 	// credentials — an API key, a gateway/proxy, Bedrock, or Vertex — not a
@@ -250,7 +250,7 @@ func (s *Service) classifyAccount(ctx context.Context, meta *SessionMetadata) (s
 	// and so always emits user.account_uuid (and organization.id); their absence
 	// means no personal account is behind the session, so it is a company (team)
 	// account. This holds even when the work email has not been provisioned in
-	// Gram yet — the whole population an email- or org-based signal would miss for
+	// Speakeasy yet — the whole population an email- or org-based signal would miss for
 	// an org that runs Claude Code entirely through a corporate gateway.
 	//
 	// KNOWN RESIDUAL GAP: user.account_uuid rides only on some event types, so a

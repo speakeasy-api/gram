@@ -47,7 +47,7 @@ var sessionSubjectKinds = map[SessionSubjectKind]struct{}{
 }
 
 // SessionSubject is the URN that may appear as the `sub` claim of a
-// Gram-issued session JWT. Format: `<kind>:<id>` where kind is exactly one of
+// Speakeasy-issued session JWT. Format: `<kind>:<id>` where kind is exactly one of
 // `user`, `apikey`, `agent`, `anonymous`, or `workload`.
 //
 // `role` is NOT a valid session subject — roles are not authentication

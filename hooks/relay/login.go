@@ -25,7 +25,7 @@ const (
 )
 
 // loginFlow runs the browser-based device sign-in: it serves a one-shot
-// localhost callback, opens the Gram dashboard pointed at it, and caches the
+// localhost callback, opens the Speakeasy dashboard pointed at it, and caches the
 // hooks key the dashboard returns. It replaces the legacy nc/mkfifo listener
 // with a net/http server so no external tools are required.
 type loginFlow struct {
@@ -72,7 +72,7 @@ func (l *loginFlow) Run(ctx context.Context, force bool) error {
 	// A key minted for a plaintext non-loopback server would be refused by
 	// every send; don't open a browser to it in the first place.
 	if insecureServerURL(l.cfg.ServerURL) {
-		return fmt.Errorf("refusing insecure Gram server URL %q; use https:// (or an http://localhost dev server)", l.cfg.ServerURL)
+		return fmt.Errorf("refusing insecure Speakeasy server URL %q; use https:// (or an http://localhost dev server)", l.cfg.ServerURL)
 	}
 	if !l.cfg.BrowserLogin {
 		return errors.New("browser sign-in is disabled for this organization; set SPEAKEASY_AI_HOOKS_API_KEY to a hooks-scoped key")
@@ -169,7 +169,7 @@ func (l *loginFlow) run(ctx context.Context, force bool) error {
 	}
 }
 
-// dashboardURL builds the Gram sign-in URL pointed at the localhost callback.
+// dashboardURL builds the Speakeasy sign-in URL pointed at the localhost callback.
 func (l *loginFlow) dashboardURL(port int, state string) string {
 	callback := fmt.Sprintf("http://127.0.0.1:%d/callback?state=%s", port, url.QueryEscape(state))
 	q := url.Values{}

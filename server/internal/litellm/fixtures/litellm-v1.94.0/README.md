@@ -10,7 +10,7 @@ The recorder uses only a local stdlib HTTP fake provider and callback endpoint. 
 
 ## Required production configuration
 
-`streaming_end_of_stream_only: true` is **REQUIRED**. Without it, LiteLLM's default streaming mode sends repeated cumulative response callbacks. Gram does not buffer or translate that mode. DNO-738 tracks production handling for the default behavior.
+`streaming_end_of_stream_only: true` is **REQUIRED**. Without it, LiteLLM's default streaming mode sends repeated cumulative response callbacks. Speakeasy does not buffer or translate that mode. DNO-738 tracks production handling for the default behavior.
 
 The canonical guardrail stanza is:
 
@@ -22,27 +22,27 @@ guardrails:
       mode: [pre_call, post_call]
       api_base: https://example.test/rpc/litellm.ingest
       headers:
-        X-Speakeasy-AI-Key: os.environ/SPEAKEASY_AI_LITELLM_INGEST_KEY
-        X-Speakeasy-AI-Project: os.environ/SPEAKEASY_AI_PROJECT
+        Speakeasy-AI-Key: os.environ/SPEAKEASY_AI_LITELLM_INGEST_KEY
+        Speakeasy-AI-Project: os.environ/SPEAKEASY_AI_PROJECT
       default_on: true
       streaming_end_of_stream_only: true
       extra_headers:
-        - x-speakeasy-ai-session-id
+        - speakeasy-ai-session-id
         - x-claude-code-session-id
         - session-id
         - thread-id
         - x-session-id
 ```
 
-`extra_headers` is required to forward the explicit `x-speakeasy-ai-session-id` header and native session headers from supported agent clients rather than LiteLLM's `[present]` placeholder. The recorded corpus predates that header name and carries the deprecated `x-gram-session-id` alias, which ingest still reads.
+`extra_headers` is required to forward the explicit `speakeasy-ai-session-id` header and native session headers from supported agent clients rather than LiteLLM's `[present]` placeholder. The recorded corpus predates that header name and carries the deprecated `x-gram-session-id` alias, which ingest still reads.
 
 ## Coverage
 
 - `openai-chat-tools.jsonl`: OpenAI Chat Completions, email-backed virtual key, tool definitions, historical tool calls, and output tool calls.
 - `openai-responses-tools.jsonl`: OpenAI Responses, email-less virtual key, tool definitions, historical tool calls, and output tool calls.
 - `anthropic-messages-tools.jsonl`: Anthropic Messages with the shared master key, Anthropic tool history, and output tool calls.
-- `passthrough-text.jsonl`: LiteLLM generic pass-through field targeting and text-only fallback. LiteLLM OSS requires an enterprise license to grant a virtual key access to a configured pass-through route, so this isolated route is intentionally unauthenticated; identity variants are recorded on standard routes. LiteLLM omits forwarded request headers on this route, so Gram falls back to the trace ID for session identity. Version 1.94.0 also drops the logging context before configured pass-through post-call dispatch, so the pinned image emits only the request callback; pass-through response capture is not supported by this version.
-- `streaming-chat.jsonl`: streaming request and the single end-of-stream cumulative response supported by Gram.
+- `passthrough-text.jsonl`: LiteLLM generic pass-through field targeting and text-only fallback. LiteLLM OSS requires an enterprise license to grant a virtual key access to a configured pass-through route, so this isolated route is intentionally unauthenticated; identity variants are recorded on standard routes. LiteLLM omits forwarded request headers on this route, so Speakeasy falls back to the trace ID for session identity. Version 1.94.0 also drops the logging context before configured pass-through post-call dispatch, so the pinned image emits only the request callback; pass-through response capture is not supported by this version.
+- `streaming-chat.jsonl`: streaming request and the single end-of-stream cumulative response supported by Speakeasy.
 - `end-user-identity.jsonl`: caller-controlled end-user ID on an email-less virtual key.
 - `shared-key-identity.jsonl`: virtual key with no bound user or email.
 
@@ -62,7 +62,7 @@ Docker must be running. Run the first-class local suite from the repository root
 mise run test:litellm-e2e
 ```
 
-The suite starts the exact image in `manifest.json` and uses a synthetic local inference provider with real Gram auth, hooks, risk enforcement, capture, Redis idempotency, Postgres persistence, and durable risk analysis. It does not use external provider credentials. It verifies:
+The suite starts the exact image in `manifest.json` and uses a synthetic local inference provider with real Speakeasy auth, hooks, risk enforcement, capture, Redis idempotency, Postgres persistence, and durable risk analysis. It does not use external provider credentials. It verifies:
 
 The test clones the canonical stanza with `default_on: false` only so each normal and outage posture can be selected independently; customer configuration keeps the documented `default_on: true`.
 

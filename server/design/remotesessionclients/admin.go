@@ -109,7 +109,7 @@ var CreateOrganizationRemoteSessionClientForm = Type("CreateOrganizationRemoteSe
 		Format(FormatUUID)
 	})
 	Attribute("client_id", String, "client_id supplied by the caller, e.g. from Dynamic Client Registration.")
-	Attribute("client_secret", String, "Optional client_secret supplied by the caller. Gram encrypts before persisting; the plaintext is never returned.")
+	Attribute("client_secret", String, "Optional client_secret supplied by the caller. Speakeasy encrypts before persisting; the plaintext is never returned.")
 	// Shares tokenEndpointAuthMethodEnum with the project-scoped forms rather
 	// than repeating the values, so a new method is a single-place change.
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
@@ -124,9 +124,9 @@ var CreateOrganizationRemoteSessionClientForm = Type("CreateOrganizationRemoteSe
 
 // CreateCimdOrganizationRemoteSessionClientForm registers a standalone client
 // in Client ID Metadata Document (CIMD) mode. The caller supplies no
-// credentials: Gram generates the client_id and hosts the metadata document.
+// credentials: Speakeasy generates the client_id and hosts the metadata document.
 var CreateCimdOrganizationRemoteSessionClientForm = Type("CreateCimdOrganizationRemoteSessionClientForm", func() {
-	Description("Form for an org admin to register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing issuer, with no user_session_issuer attachments. Gram generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported.")
+	Description("Form for an org admin to register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing issuer, with no user_session_issuer attachments. Speakeasy generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported.")
 
 	Attribute("remote_session_issuer_id", String, "The owning remote_session_issuer id; must belong to the caller's organization and advertise client_id_metadata_document_supported.", func() {
 		Format(FormatUUID)

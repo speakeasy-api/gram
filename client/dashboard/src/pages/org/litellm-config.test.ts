@@ -16,17 +16,17 @@ describe("LiteLLM configuration", () => {
       "api_base: https://api.getgram.ai/rpc/litellm.ingest",
     );
     expect(config).toContain(
-      "X-Speakeasy-AI-Key: os.environ/SPEAKEASY_AI_LITELLM_INGEST_KEY",
+      "Speakeasy-AI-Key: os.environ/SPEAKEASY_AI_LITELLM_INGEST_KEY",
     );
     expect(config).toContain(`      extra_headers:
-        - x-speakeasy-ai-session-id
+        - speakeasy-ai-session-id
         - x-claude-code-session-id
         - session-id
         - thread-id
         - x-session-id
-        - x-speakeasy-ai-agent-provider
-        - x-speakeasy-ai-agent-session-id
-        - x-speakeasy-ai-agent-turn-id
+        - speakeasy-ai-agent-provider
+        - speakeasy-ai-agent-session-id
+        - speakeasy-ai-agent-turn-id
         - x-codex-turn-metadata
         - x-opencode-session
         - x-opencode-request
@@ -59,7 +59,7 @@ describe("LiteLLM configuration", () => {
       'export OTEL_ENDPOINT="https://api.getgram.ai/rpc/hooks.otel"',
     );
     expect(environment).toContain(
-      'export OTEL_HEADERS="X-Speakeasy-AI-Key=${SPEAKEASY_AI_LITELLM_INGEST_KEY},X-Speakeasy-AI-Project=${SPEAKEASY_AI_PROJECT}"',
+      'export OTEL_HEADERS="Speakeasy-AI-Key=${SPEAKEASY_AI_LITELLM_INGEST_KEY},Speakeasy-AI-Project=${SPEAKEASY_AI_PROJECT}"',
     );
   });
 

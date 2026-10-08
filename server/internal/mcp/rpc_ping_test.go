@@ -25,7 +25,7 @@ func TestHandlePing_IncludesEmptyResultObject(t *testing.T) {
 	var decoded map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(bs, &decoded))
 	require.Contains(t, decoded, "result")
-	require.JSONEq(t, `{"resultType":"complete","_meta":{"io.modelcontextprotocol/serverInfo":{"name":"Gram","version":"0.0.0"}}}`, string(decoded["result"]))
+	require.JSONEq(t, `{"resultType":"complete","_meta":{"io.modelcontextprotocol/serverInfo":{"name":"Speakeasy","version":"0.0.0"}}}`, string(decoded["result"]))
 	require.JSONEq(t, `42`, string(decoded["id"]))
 	require.JSONEq(t, `"2.0"`, string(decoded["jsonrpc"]))
 }
@@ -41,5 +41,5 @@ func TestHandlePing_PlatformIdentity(t *testing.T) {
 
 	var decoded map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(bs, &decoded))
-	require.JSONEq(t, `{"resultType":"complete","_meta":{"io.modelcontextprotocol/serverInfo":{"name":"Gram Platform Toolset","version":"0.0.0"}}}`, string(decoded["result"]))
+	require.JSONEq(t, `{"resultType":"complete","_meta":{"io.modelcontextprotocol/serverInfo":{"name":"Speakeasy Platform Toolset","version":"0.0.0"}}}`, string(decoded["result"]))
 }

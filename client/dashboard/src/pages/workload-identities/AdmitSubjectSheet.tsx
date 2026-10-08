@@ -275,7 +275,7 @@ export function AdmitSubjectSheet({
           <SheetDescription>
             {isEditing
               ? "The subject is fixed once access is allowed. Changing the agent changes the whole policy this machine acts under."
-              : "Allowing access lets a machine sign in to Gram. The agent you choose supplies the whole policy that the machine acts under, so it is chosen at the same time."}
+              : "Allowing access lets a machine sign in to Speakeasy. The agent you choose supplies the whole policy that the machine acts under, so it is chosen at the same time."}
           </SheetDescription>
         </SheetHeader>
 

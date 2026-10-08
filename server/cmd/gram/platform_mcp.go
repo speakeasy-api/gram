@@ -122,7 +122,7 @@ type platformMCPConfig struct {
 	// RiskFalsePositiveFindings receives dismissal state copies. Nil makes
 	// the dismiss and restore tools fail rather than skip ClickHouse.
 	RiskFalsePositiveFindings risk.FalsePositiveFindingsStore
-	// Telemetry is the Gram-owned ClickHouse read model the diagnostics tools
+	// Telemetry is the Speakeasy-owned ClickHouse read model the diagnostics tools
 	// answer from. Nil disables them rather than serving an empty answer, which
 	// a caller would read as "nothing is wrong".
 	Telemetry platformmcp.DiagnosticsTelemetryReader

@@ -301,7 +301,7 @@ Evaluate the following AI-agent message for safety risks.
 Tool outcome: {outcome, "n/a" when none}
 ```
 
-How each Gram message kind fills the slots (`PromptInputFromJudgeMessage`):
+How each Speakeasy message kind fills the slots (`PromptInputFromJudgeMessage`):
 
 | Message                                   | `<content>`    | `<tool_calls>`                                                           | `Tool outcome:` |
 | ----------------------------------------- | -------------- | ------------------------------------------------------------------------ | --------------- |

@@ -60,7 +60,7 @@ export function parseScopes(raw: string): string[] {
 }
 
 // DCR callers leave private_key_jwt disabled because a newly registered client
-// cannot already have Gram's JWKS attached. Existing-client settings opt in
+// cannot already have Speakeasy's JWKS attached. Existing-client settings opt in
 // after the key set has been attached through its dedicated endpoint.
 export function narrowTokenEndpointAuthMethod(
   value: string | null | undefined,
@@ -140,7 +140,7 @@ export function deriveNameFromUrl(url: string): string | null {
 // UI-only choice that routes to the matching create endpoint: DCR proxies a
 // registration to obtain credentials, Manual takes caller-supplied
 // credentials, and CIMD (Client ID Metadata Document) creates a
-// credential-less client whose client_id is a Gram-hosted document URL.
+// credential-less client whose client_id is a Speakeasy-hosted document URL.
 export type ClientType = "dcr" | "manual" | "cimd";
 
 export const TUNNELED_DCR_PERMISSION_MESSAGE =

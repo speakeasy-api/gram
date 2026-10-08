@@ -501,7 +501,7 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 	mux := goahttp.NewMuxer()
 	mux.Use(middleware.NetworkServingPolicyVersion)
 	mux.Use(middleware.StripPrivateIngressHeaders)
-	mux.Use(middleware.SpeakeasyAIHeaders)
+	mux.Use(middleware.SpeakeasyAIHeaders(otel.GetMeterProvider()))
 	mux.Use(func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodGet && r.URL.Path == "/healthz" {

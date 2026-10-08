@@ -1158,7 +1158,7 @@ type MCPSetupGuideResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// One-line summary of what the guide covers
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
-	// How the server is meant to be added in Gram, when the guide states one
+	// How the server is meant to be added in Speakeasy, when the guide states one
 	// (e.g., 'catalog', 'custom-remote')
 	AddServerFlow *string `form:"add_server_flow,omitempty" json:"add_server_flow,omitempty" xml:"add_server_flow,omitempty"`
 	// Registry identifiers the guide is also published under
@@ -1175,7 +1175,7 @@ type MCPSetupGuideResponseBody struct {
 	// Markdown instructions for the setup work that happens in the upstream
 	// provider
 	ExternalMarkdown *string `form:"external_markdown,omitempty" json:"external_markdown,omitempty" xml:"external_markdown,omitempty"`
-	// Markdown instructions for the setup work that happens in Gram
+	// Markdown instructions for the setup work that happens in Speakeasy
 	SpeakeasyMarkdown *string `form:"speakeasy_markdown,omitempty" json:"speakeasy_markdown,omitempty" xml:"speakeasy_markdown,omitempty"`
 }
 

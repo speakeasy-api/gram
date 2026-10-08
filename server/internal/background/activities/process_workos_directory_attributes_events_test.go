@@ -383,7 +383,7 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationDeprovisionsAc
 	require.NoError(t, err)
 
 	// The seeded user's email matches the directory user payload so the
-	// deactivation can resolve the Gram user by email.
+	// deactivation can resolve the Speakeasy user by email.
 	email := userID + "@example.com"
 
 	workosClient := workos.NewStubClient()

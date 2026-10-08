@@ -412,7 +412,7 @@ WHERE id = ANY(@ids::text[])
 RETURNING id;
 
 -- name: AdminDisableOrganization :execrows
--- Operator-initiated disable. Keyed on the Gram organization id rather than
+-- Operator-initiated disable. Keyed on the Speakeasy organization id rather than
 -- workos_id so an organization that was never linked to WorkOS can still be
 -- disabled. Deliberately leaves workos_last_event_id alone: that column is the
 -- WorkOS webhook cursor and this is not a WorkOS event, so stamping it would

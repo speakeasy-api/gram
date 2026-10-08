@@ -20,7 +20,7 @@ const claudeCodeSettingsJSON = (origin: string) => `{
     "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
     "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
     "OTEL_EXPORTER_OTLP_ENDPOINT": "${origin}/otel",
-    "OTEL_EXPORTER_OTLP_HEADERS": "X-Speakeasy-AI-Project={{GRAM_PROJECT_SLUG}},X-Speakeasy-AI-Key={{GRAM_API_KEY}}",
+    "OTEL_EXPORTER_OTLP_HEADERS": "Speakeasy-AI-Project={{GRAM_PROJECT_SLUG}},Speakeasy-AI-Key={{GRAM_API_KEY}}",
     "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
     "OTEL_LOGS_EXPORTER": "otlp",
     "OTEL_METRICS_EXPORTER": "otlp",
@@ -264,7 +264,7 @@ const setupAgentPlatforms = (
           {
             label: "OTLP headers",
             value:
-              "X-Speakeasy-AI-Project=default,X-Speakeasy-AI-Key={{GRAM_API_KEY}}",
+              "Speakeasy-AI-Project=default,Speakeasy-AI-Key={{GRAM_API_KEY}}",
             requiresApiKey: true,
           },
         ],

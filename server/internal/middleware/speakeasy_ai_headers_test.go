@@ -7,13 +7,18 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func serveSpeakeasyAIHeaders(t *testing.T, header http.Header) http.Header {
 	t.Helper()
 
 	var got http.Header
-	handler := SpeakeasyAIHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := SpeakeasyAIHeaders(testenv.NewMeterProvider(t))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = r.Header.Clone()
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/rpc/x", nil)
@@ -94,7 +99,7 @@ func TestSpeakeasyAIHeaders_NamesAreCanonical(t *testing.T) {
 	t.Parallel()
 
 	for name, legacy := range SpeakeasyAIHeaderAliases {
-		require.True(t, strings.HasPrefix(name, "X-Speakeasy-AI-"), name)
+		require.True(t, strings.HasPrefix(name, "Speakeasy-AI-"), name)
 		require.Equal(t, http.CanonicalHeaderKey(legacy), legacy)
 	}
 }
@@ -111,4 +116,43 @@ func TestCORSMiddleware_AllowsSpeakeasyAIHeaders(t *testing.T) {
 	for name := range SpeakeasyAIHeaderAliases {
 		require.Contains(t, allowed, name)
 	}
+}
+
+func TestSpeakeasyAIHeaders_CountsWhichFormArrived(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	handler := SpeakeasyAIHeaders(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	for _, header := range []http.Header{
+		{"Speakeasy-Ai-Key": {"new"}},
+		{"Gram-Key": {"legacy"}},
+		{"Gram-Key": {"legacy"}},
+		{},
+	} {
+		req := httptest.NewRequest(http.MethodGet, "/rpc/x", nil)
+		req.Header = header
+		handler.ServeHTTP(httptest.NewRecorder(), req)
+	}
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &rm))
+	counts := map[string]int64{}
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != meterHeaderAlias {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			for _, dp := range sum.DataPoints {
+				name, _ := dp.Attributes.Value(attr.HTTPHeaderAliasNameKey)
+				form, _ := dp.Attributes.Value(attr.HTTPHeaderAliasFormKey)
+				counts[name.AsString()+"/"+form.AsString()] = dp.Value
+			}
+		}
+	}
+	require.Equal(t, map[string]int64{
+		"Speakeasy-AI-Key/speakeasy_ai": 1,
+		"Speakeasy-AI-Key/gram":         2,
+	}, counts)
 }

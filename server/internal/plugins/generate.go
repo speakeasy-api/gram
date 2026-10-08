@@ -34,16 +34,16 @@ type PluginServerInfo struct {
 	Policy      string
 	// Resolved MCP URL (e.g. https://app.getgram.ai/mcp/{slug}).
 	MCPURL string
-	// IsPublic indicates whether the toolset is publicly accessible (no Gram API key needed).
+	// IsPublic indicates whether the toolset is publicly accessible (no Speakeasy API key needed).
 	IsPublic bool
 	// IsOAuth indicates the toolset uses OAuth (proxy or external). OAuth servers are emitted
 	// as stdio mcp-remote entries instead of HTTP-with-headers entries.
 	IsOAuth bool
 	// IsUnproxied indicates the server is an unproxied MCP server: MCPURL
-	// points directly at the vendor, never through Gram's gateway. No
-	// Authorization header may be attached — the Gram API key would leak to
+	// points directly at the vendor, never through Speakeasy's gateway. No
+	// Authorization header may be attached — the Speakeasy API key would leak to
 	// the vendor's own server, which was never meant to receive it, and
-	// Gram has no way to inject vendor-specific credentials on its behalf.
+	// Speakeasy has no way to inject vendor-specific credentials on its behalf.
 	IsUnproxied bool
 	// EnvConfigs are user-facing environment variables for public servers.
 	EnvConfigs []ServerEnvConfig
@@ -80,13 +80,13 @@ type GenerateConfig struct {
 	OrgID string
 	// Base server URL (e.g. https://app.getgram.ai).
 	ServerURL string
-	// APIKey is the plaintext consumer-scoped Gram API key to inject into
+	// APIKey is the plaintext consumer-scoped Speakeasy API key to inject into
 	// MCP server configs. If empty, configs will use placeholder variables.
 	APIKey string
 	// HooksAPIKey controls whether the observability plugin is emitted.
 	HooksAPIKey string
 	// ProjectSlug is the publishing project's slug. The Cursor hooks endpoint
-	// requires it via the X-Speakeasy-AI-Project header, and it scopes the default
+	// requires it via the Speakeasy-AI-Project header, and it scopes the default
 	// marketplace name for non-default projects.
 	ProjectSlug string
 	// IsDefaultProject reports whether this is the org's default project (its
@@ -563,7 +563,7 @@ var CursorObservabilityHookEvents = []string{
 // event names. Copilot only invokes the hooks runtime for events listed here,
 // so an event missing from this list is silently dropped client-side. Copilot's
 // four remaining events (preCompact, errorOccurred, subagentStart,
-// userPromptTransformed) have no Gram canonical type and are deliberately
+// userPromptTransformed) have no Speakeasy canonical type and are deliberately
 // unregistered.
 var CopilotObservabilityHookEvents = []string{
 	"sessionStart",
@@ -1067,7 +1067,7 @@ func generateOpenCodePlugin(files map[string][]byte, p PluginInfo, cfg GenerateC
 }
 
 // codexAuthPolicy picks ON_INSTALL when the user will be prompted for a
-// secret (public server env vars or a Gram API key the published config
+// secret (public server env vars or a Speakeasy API key the published config
 // can't bake in) and ON_USE when nothing needs to be collected. A baked-in
 // APIKey plus all-public-no-env servers means the plugin is install-silent.
 func codexAuthPolicy(p PluginInfo, cfg GenerateConfig) string {
@@ -1158,7 +1158,7 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 
 		switch {
 		case s.IsUnproxied:
-			// Never attach the Gram API key: MCPURL points straight at the
+			// Never attach the Speakeasy API key: MCPURL points straight at the
 			// vendor's own server, which was never meant to receive it.
 		case s.IsOAuth:
 			// OAuth servers handle identity at the HTTP layer — no auth credential needed.
@@ -1277,7 +1277,7 @@ func hooksOptionalSubtreePrefixes(orgName string) []string {
 }
 
 // generateClaudeObservabilityPlugin emits the per-org observability plugin
-// containing Gram hooks for Claude Code. The generated runtime configuration
+// containing Speakeasy hooks for Claude Code. The generated runtime configuration
 // carries the org's hooks-scoped API key so no per-machine setup is required.
 func generateClaudeObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
 	return generateClaudeObservabilityPluginInDir(files, ClaudeObservabilitySlug(cfg), cfg)
@@ -1624,7 +1624,7 @@ func generateCopilotObservabilityPluginInDir(files map[string][]byte, subdir str
 // The NDJSON frame protocol (seq-tagged request/reply over stdio) is the
 // agenthooks serve-mode contract; the shim owns the per-hook timeout policy
 // OpenCode lacks. The body mirrors agenthooks' canonical opencode shim
-// (install/render_opencode.go), adding the x-speakeasy-ai-agent-* request
+// (install/render_opencode.go), adding the speakeasy-ai-agent-* request
 // headers. It also sends the deprecated x-gram-agent-* names, because a LiteLLM
 // proxy only forwards the headers its config lists and older configs list
 // those.
@@ -1758,9 +1758,9 @@ const legacy = async (ctx: any) => {
       const messageID = input?.message?.id
       if (messageID) output.headers = {
         ...output.headers,
-        "x-speakeasy-ai-agent-provider": "opencode",
-        "x-speakeasy-ai-agent-session-id": input.sessionID,
-        "x-speakeasy-ai-agent-turn-id": messageID,
+        "speakeasy-ai-agent-provider": "opencode",
+        "speakeasy-ai-agent-session-id": input.sessionID,
+        "speakeasy-ai-agent-turn-id": messageID,
         "x-gram-agent-provider": "opencode",
         "x-gram-agent-session-id": input.sessionID,
         "x-gram-agent-turn-id": messageID,
@@ -1895,9 +1895,9 @@ const setup = async (ctx: any) => {
   await ctx.session.hook("model.request", (ev: any) => {
     const messageID = turn.get(ev.sessionID)
     if (!messageID) return
-    ev.headers["x-speakeasy-ai-agent-provider"] = "opencode"
-    ev.headers["x-speakeasy-ai-agent-session-id"] = ev.sessionID
-    ev.headers["x-speakeasy-ai-agent-turn-id"] = messageID
+    ev.headers["speakeasy-ai-agent-provider"] = "opencode"
+    ev.headers["speakeasy-ai-agent-session-id"] = ev.sessionID
+    ev.headers["speakeasy-ai-agent-turn-id"] = messageID
     ev.headers["x-gram-agent-provider"] = "opencode"
     ev.headers["x-gram-agent-session-id"] = ev.sessionID
     ev.headers["x-gram-agent-turn-id"] = messageID
@@ -2448,7 +2448,7 @@ func codexHookCommandStringWindows(timeoutSeconds int, async, failOpen bool) str
 }
 
 // GenerateCodexInstallScript produces a bash install script that:
-//   - Registers the Gram marketplace with the Codex CLI
+//   - Registers the Speakeasy marketplace with the Codex CLI
 //   - Patches ~/.codex/config.toml with feature flags, plugin state, and OTLP export
 //   - Pre-approves all hook events so users skip the manual Settings → Hooks step
 //
@@ -2869,7 +2869,7 @@ if OTEL_ENDPOINT_BASE and OTEL_API_KEY:
     else:
         content = ensure_dotted_table_entry(content, "otel", "environment", '"prod"')
 
-    headers = '{ "X-Speakeasy-AI-Project" = ' + json.dumps(OTEL_PROJECT) + ', "X-Speakeasy-AI-Key" = ' + json.dumps(OTEL_API_KEY) + ' }'
+    headers = '{ "Speakeasy-AI-Project" = ' + json.dumps(OTEL_PROJECT) + ', "Speakeasy-AI-Key" = ' + json.dumps(OTEL_API_KEY) + ' }'
     for exporter_key, signal in [
         ("exporter", "logs"),
         ("trace_exporter", "traces"),
@@ -2913,7 +2913,7 @@ for state_key, trusted_hash, trusted_hash_windows in [
         content = content.rstrip('\n') + '\n' + entry
     else:
         # The hook command (and therefore its trusted_hash) changes between
-        # plugin versions. Refresh the hash on this Gram-managed entry so an
+        # plugin versions. Refresh the hash on this Speakeasy-managed entry so an
         # upgraded install does not get flagged as modified/untrusted.
         content = re.sub(
             re.escape(section) + r'([^\[]*?trusted_hash\s*=\s*")[^"]*(")',
@@ -3198,7 +3198,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	// Collect userConfig entries across all servers that need user-provided values.
 	userConfig := make(map[string]userConfigEntry)
 
-	// Determine if any private server needs a Gram API key prompt.
+	// Determine if any private server needs a Speakeasy API key prompt.
 	needsGramKeyPrompt := false
 	for _, s := range p.Servers {
 		if !s.IsUnproxied && !s.IsPublic && !s.IsOAuth && cfg.APIKey == "" {
@@ -3244,7 +3244,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 		var headers map[string]string
 
 		if s.IsUnproxied {
-			// Never attach the Gram API key: MCPURL points straight at the
+			// Never attach the Speakeasy API key: MCPURL points straight at the
 			// vendor's own server, which was never meant to receive it.
 		} else if s.IsOAuth {
 			// OAuth servers handle identity at the HTTP layer — no Authorization header needed.
@@ -3317,7 +3317,7 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		var headers map[string]string
 
 		if s.IsUnproxied {
-			// Never attach the Gram API key: MCPURL points straight at the
+			// Never attach the Speakeasy API key: MCPURL points straight at the
 			// vendor's own server, which was never meant to receive it.
 		} else if s.IsOAuth {
 			// OAuth servers handle identity at the HTTP layer — no Authorization header needed.
@@ -3370,7 +3370,7 @@ func generateOpenCodePluginInDir(files map[string][]byte, subdir string, p Plugi
 		var headers map[string]string
 
 		if s.IsUnproxied {
-			// Never attach the Gram API key: MCPURL points straight at the
+			// Never attach the Speakeasy API key: MCPURL points straight at the
 			// vendor's own server, which was never meant to receive it.
 		} else if s.IsOAuth {
 			// OpenCode auto-detects OAuth on remote servers and runs the

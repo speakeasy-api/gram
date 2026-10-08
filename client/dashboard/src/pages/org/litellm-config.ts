@@ -26,17 +26,17 @@ export function buildLiteLLMGuardrailConfig(
       mode: [pre_call, post_call]
       api_base: ${apiBase(serverURL)}/rpc/litellm.ingest
       headers:
-        X-Speakeasy-AI-Key: os.environ/SPEAKEASY_AI_LITELLM_INGEST_KEY
-        X-Speakeasy-AI-Project: os.environ/SPEAKEASY_AI_PROJECT
+        Speakeasy-AI-Key: os.environ/SPEAKEASY_AI_LITELLM_INGEST_KEY
+        Speakeasy-AI-Project: os.environ/SPEAKEASY_AI_PROJECT
       extra_headers:
-        - x-speakeasy-ai-session-id
+        - speakeasy-ai-session-id
         - x-claude-code-session-id
         - session-id
         - thread-id
         - x-session-id
-        - x-speakeasy-ai-agent-provider
-        - x-speakeasy-ai-agent-session-id
-        - x-speakeasy-ai-agent-turn-id
+        - speakeasy-ai-agent-provider
+        - speakeasy-ai-agent-session-id
+        - speakeasy-ai-agent-turn-id
         - x-codex-turn-metadata
         - x-opencode-session
         - x-opencode-request
@@ -60,7 +60,7 @@ export SPEAKEASY_AI_PROJECT="${projectSlug}"
 export LITELLM_OTEL_V2=true
 export OTEL_EXPORTER=otlp_http
 export OTEL_ENDPOINT="${apiBase(serverURL)}/rpc/hooks.otel"
-export OTEL_HEADERS="X-Speakeasy-AI-Key=\${SPEAKEASY_AI_LITELLM_INGEST_KEY},X-Speakeasy-AI-Project=\${SPEAKEASY_AI_PROJECT}"
+export OTEL_HEADERS="Speakeasy-AI-Key=\${SPEAKEASY_AI_LITELLM_INGEST_KEY},Speakeasy-AI-Project=\${SPEAKEASY_AI_PROJECT}"
 export OTEL_SERVICE_NAME=litellm
 export OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=no_content
 export LITELLM_OTEL_INTEGRATION_ENABLE_METRICS=true

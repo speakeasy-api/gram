@@ -370,6 +370,20 @@ WHERE chat_id = @chat_id
 ORDER BY created_at DESC, seq DESC
 LIMIT 1;
 
+-- name: GetLatestExternalChatMessageClient :one
+-- Imported chat messages carry the capturing client's identity (source, user
+-- agent, ip address). A later import of the same chat that learns nothing
+-- about the client inherits it from the newest stored message so one chat
+-- does not split across sources. The chat_id/created_at index serves this
+-- backward LIMIT 1 scan.
+SELECT source, user_agent, ip_address
+FROM chat_messages
+WHERE chat_id = @chat_id
+  AND project_id = @project_id::uuid
+  AND external_message_id IS NOT NULL
+ORDER BY created_at DESC, seq DESC
+LIMIT 1;
+
 -- name: MarkChatLiteLLMProxied :exec
 -- Flags a session as observed by the LiteLLM proxy. Set on every proxied
 -- ingest event rather than at chat creation because natively captured

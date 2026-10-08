@@ -276,7 +276,7 @@ func (f *ProxyManager) BuildTarget(
 	// have no grants to consult.
 	//
 	// The x-gram-toolset-id strip is attached unconditionally — public AND
-	// private — because the property is Gram's own envelope rather than
+	// private — because the property is Speakeasy's own envelope rather than
 	// anything scoped to an identity or a risk policy. It is a no-op for
 	// the arguments that don't carry it.
 	toolsCallPreForwardInterceptors := []proxy.ToolsCallRequestInterceptor(nil)

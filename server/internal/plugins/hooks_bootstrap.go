@@ -34,9 +34,9 @@ func hooksReleaseTargets(version string, sha256s map[string]string) map[string]h
 
 // hooksBinaryTargets is the UPSTREAM artifact set: the GitHub release URLs the
 // server itself fetches from (see HooksArtifactServer). Bootstrap scripts never
-// see these URLs — they download from the org's Gram server domain via
+// see these URLs — they download from the org's Speakeasy server domain via
 // hooksServedTargets, because customer environments (notably Claude Cowork's
-// sandbox) often cannot reach GitHub while the Gram domain is already
+// sandbox) often cannot reach GitHub while the Speakeasy domain is already
 // allowlisted for ingest.
 var hooksBinaryTargets = hooksReleaseTargets(hooksBinaryVersion, hooksBinarySHA256s)
 
@@ -63,7 +63,7 @@ func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 }
 
 // hooksServedTargets derives the download URLs baked into bootstrap scripts:
-// the pinned artifacts as served by the org's own Gram server (see
+// the pinned artifacts as served by the org's own Speakeasy server (see
 // HooksArtifactServer), keeping the checksums from the upstream pin.
 func hooksServedTargets(serverURL string) map[string]hooksBinaryTarget {
 	base := strings.TrimRight(serverURL, "/")

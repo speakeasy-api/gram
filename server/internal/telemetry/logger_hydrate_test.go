@@ -26,7 +26,7 @@ type directorySnapshotSeed struct {
 	userID string
 }
 
-// seedDirectorySnapshotData creates an organization, a Gram user, a linked
+// seedDirectorySnapshotData creates an organization, a Speakeasy user, a linked
 // directory user with custom attributes, a current group membership, and a
 // role assignment — the full directory state the telemetry logger hydrates.
 func seedDirectorySnapshotData(t *testing.T, ctx context.Context, conn *pgxpool.Pool, suffix string) directorySnapshotSeed {

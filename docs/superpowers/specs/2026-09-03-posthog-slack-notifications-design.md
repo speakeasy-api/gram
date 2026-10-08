@@ -2,9 +2,9 @@
 
 ## Context
 
-Gram's Slack notifications in `#ops-significant-events`, `#ops-aicp-events` and
+Speakeasy's Slack notifications in `#ops-significant-events`, `#ops-aicp-events` and
 `#ops-all-events` grew one destination at a time over eighteen months. Eleven
-PostHog destinations now post Gram events across those three channels, with
+PostHog destinations now post Speakeasy events across those three channels, with
 overlapping filters, three different message formats, and two different Slack
 workspace integrations.
 
@@ -14,7 +14,7 @@ server being deployed, a security policy being written, or a member joining an
 existing organization. Signup fires before we know whether the user was invited
 or arrived organically.
 
-Meanwhile every one of those mutations is already recorded by Gram's audit
+Meanwhile every one of those mutations is already recorded by Speakeasy's audit
 logger and published to Pub/Sub as an `audit_log.*_event_v1` outbox event. The
 `gram streams` process already consumes that stream. The signal exists; nothing
 forwards it to PostHog.
@@ -26,7 +26,7 @@ activity from the audit log.
 ## Goals
 
 - One PostHog event, `gram_activity`, describing everything notable that happens
-  in Gram, with a stable property shape.
+  in Speakeasy, with a stable property shape.
 - A significant-events channel that carries only the six moments Growth cares
   about, and a firehose channel that carries everything.
 - Distinguish invited signups from organic ones.
@@ -55,7 +55,7 @@ Base properties, present on every emission:
 | Property            | Meaning                                                |
 | ------------------- | ------------------------------------------------------ |
 | `activity`          | The taxonomy name, e.g. `project_created`              |
-| `organization_id`   | Gram organization id                                   |
+| `organization_id`   | Speakeasy organization id                              |
 | `organization_slug` | Organization slug                                      |
 | `organization_name` | Organization display name                              |
 | `project_id`        | Project id, when the activity is project-scoped        |
@@ -64,7 +64,7 @@ Base properties, present on every emission:
 | `actor_name`        | Acting user's display name                             |
 | `subject_name`      | Display name of the thing acted on                     |
 | `acting_surface`    | `dashboard`, `api_key`, `platform_mcp`, `assistant`, … |
-| `dashboard_url`     | Deep link to the subject in the Gram dashboard         |
+| `dashboard_url`     | Deep link to the subject in the Speakeasy dashboard    |
 | `audit_action`      | The raw audit action, e.g. `mcp-server:create`         |
 
 Deliberately absent: any "is this the first of its kind" flag. An earlier draft
@@ -256,21 +256,21 @@ internal email patterns.
 
 ### Teardown
 
-These eleven Gram destinations are disabled, verified quiet, then deleted:
+These eleven Speakeasy destinations are disabled, verified quiet, then deleted:
 
-| Destination                                        | Channel                                 |
-| -------------------------------------------------- | --------------------------------------- |
-| Gram - sign up -> sig-events                       | `#ops-significant-events`               |
-| Gram - first time functions -> sig-events          | `#ops-significant-events`               |
-| Gram - Subscription Changes -> Sig Events          | `#ops-significant-events`               |
-| Gram - feature request -> sig-events               | `#ops-significant-events`               |
-| Gram - enterprise gate viewed -> sig-events        | `#ops-significant-events`               |
-| Gram - Elements actions -> #ops-significant-events | `#ops-significant-events`               |
-| Gram - book demo page view -> sig-events           | `#ops-significant-events` (already off) |
-| Gram - overage reporting -> #significant-events    | `#ops-significant-events` (already off) |
-| Gram - all actions -> #gram-events                 | `#ops-aicp-events`                      |
-| Gram - Elements actions -> #gram-events            | `#ops-aicp-events`                      |
-| Gram - all actions -> #all-events                  | `#ops-all-events`                       |
+| Destination                                             | Channel                                 |
+| ------------------------------------------------------- | --------------------------------------- |
+| Speakeasy - sign up -> sig-events                       | `#ops-significant-events`               |
+| Speakeasy - first time functions -> sig-events          | `#ops-significant-events`               |
+| Speakeasy - Subscription Changes -> Sig Events          | `#ops-significant-events`               |
+| Speakeasy - feature request -> sig-events               | `#ops-significant-events`               |
+| Speakeasy - enterprise gate viewed -> sig-events        | `#ops-significant-events`               |
+| Speakeasy - Elements actions -> #ops-significant-events | `#ops-significant-events`               |
+| Speakeasy - book demo page view -> sig-events           | `#ops-significant-events` (already off) |
+| Speakeasy - overage reporting -> #significant-events    | `#ops-significant-events` (already off) |
+| Speakeasy - all actions -> #gram-events                 | `#ops-aicp-events`                      |
+| Speakeasy - Elements actions -> #gram-events            | `#ops-aicp-events`                      |
+| Speakeasy - all actions -> #all-events                  | `#ops-all-events`                       |
 
 `Gram - identity provider interest` is left alone: it is already disabled and
 points at a different channel.
@@ -281,13 +281,13 @@ All five are created on Slack workspace integration 57009, which already posts
 successfully to all three channels. Each is created disabled, tested with a
 sample invocation, then enabled.
 
-| Name                      | Channel                   | Fires on                                                                                                                                                                              |
-| ------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Gram significant          | `#ops-significant-events` | `gram_activity` where `activity` is one of `organization_created`, `user_signed_up`, `member_joined_organization`, `project_created`, `mcp_server_created`, `security_policy_created` |
-| Gram firehose             | `#ops-aicp-events`        | every `gram_activity`                                                                                                                                                                 |
-| Gram subscription changes | `#ops-significant-events` | `gram_subscription_changed`                                                                                                                                                           |
-| Gram feature requests     | `#ops-significant-events` | `feature_requested`                                                                                                                                                                   |
-| Gram enterprise gate      | `#ops-significant-events` | `enterprise_gate_viewed`                                                                                                                                                              |
+| Name                           | Channel                   | Fires on                                                                                                                                                                              |
+| ------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Speakeasy significant          | `#ops-significant-events` | `gram_activity` where `activity` is one of `organization_created`, `user_signed_up`, `member_joined_organization`, `project_created`, `mcp_server_created`, `security_policy_created` |
+| Speakeasy firehose             | `#ops-aicp-events`        | every `gram_activity`                                                                                                                                                                 |
+| Speakeasy subscription changes | `#ops-significant-events` | `gram_subscription_changed`                                                                                                                                                           |
+| Speakeasy feature requests     | `#ops-significant-events` | `feature_requested`                                                                                                                                                                   |
+| Speakeasy enterprise gate      | `#ops-significant-events` | `enterprise_gate_viewed`                                                                                                                                                              |
 
 Every MCP server creation reaches the significant channel, not only the first per
 project. MCP settings changes ride the firehose into `#ops-aicp-events` and get
@@ -300,7 +300,7 @@ recreated cleanly rather than folded into `gram_activity` because they are
 genuinely different events with different properties.
 
 All five share one message template: actor, activity, org and project, and a
-button linking to the subject in the Gram dashboard.
+button linking to the subject in the Speakeasy dashboard.
 
 ## Testing
 
@@ -341,7 +341,7 @@ button linking to the subject in the Gram dashboard.
 
 ## Appendix: the shared Slack message template
 
-All five destinations use one template, so every Gram notification reads the same
+All five destinations use one template, so every Speakeasy notification reads the same
 way regardless of channel. PostHog's Slack destination templates support hog
 expressions, including `??` and ternaries, which today's destinations already use.
 
@@ -376,7 +376,7 @@ Blocks:
     "elements": [
       {
         "type": "button",
-        "text": { "type": "plain_text", "text": "Open in Gram" },
+        "text": { "type": "plain_text", "text": "Open in Speakeasy" },
         "url": "{event.properties.dashboard_url}"
       },
       {
@@ -393,5 +393,5 @@ Blocks:
 is empty, which would fail the whole message. So `dashboard_url` must be present
 on _every_ `gram_activity` emission, never omitted. Where an activity has no
 natural subject page, it falls back to the organization's dashboard page, and
-where even the organization slug is unresolvable it falls back to the Gram site
+where even the organization slug is unresolvable it falls back to the Speakeasy site
 root. This is the one property exempt from the "omit empty properties" rule.

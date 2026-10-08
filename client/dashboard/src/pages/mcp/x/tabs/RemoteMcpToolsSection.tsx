@@ -29,7 +29,7 @@ import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { Link } from "react-router";
 
 type RemoteMcpToolsSectionProps = {
-  /** The Gram-proxied MCP URL to connect to; undefined while endpoints load. */
+  /** The Speakeasy-proxied MCP URL to connect to; undefined while endpoints load. */
   mcpUrl: string | undefined;
   /** True while the server address / endpoints are still resolving. */
   isResolvingUrl: boolean;
@@ -54,7 +54,7 @@ type RemoteMcpToolsSectionProps = {
    */
   authSettingsHref?: string;
   /**
-   * Gram-origin endpoint slug. Custom-domain slugs are a different namespace
+   * Speakeasy-origin endpoint slug. Custom-domain slugs are a different namespace
    * and must not be used to build the first-party connect URL.
    */
   platformSlug?: string;
@@ -65,13 +65,13 @@ type RemoteMcpToolsSectionProps = {
 
 /**
  * Lists the tools advertised by the remote MCP server, connecting through the
- * Gram-proxied `/mcp/<slug>` endpoint via the AI SDK MCP client.
+ * Speakeasy-proxied `/mcp/<slug>` endpoint via the AI SDK MCP client.
  *
  * For issuer-gated servers we mint a user-session JWT scoped to the mcp_server
  * and connect with it. When no upstream remote_session exists yet the gateway
  * 401s into `needsAuth`, and we surface a Connect button that opens the
  * first-party connect page in a new tab; returning focus re-attempts the list.
- * That page 404s unless the server is issuer-gated on a Gram-hosted address, so
+ * That page 404s unless the server is issuer-gated on a Speakeasy-hosted address, so
  * a 401 from any other server points at authentication settings instead.
  *
  * Expected fetch failures are rendered inline (see RemoteMcpToolsBody). The
@@ -365,7 +365,7 @@ function RemoteMcpToolsList({
  * A single tool row, styled to match the toolset Tools tab (see ToolList's
  * ToolRow): tool name on top with the description truncated to one line below,
  * and any annotation hints rendered as badges beside the name. Remote MCP tools
- * carry no Gram-side identity, so there are no method/variation badges or action
+ * carry no Speakeasy-side identity, so there are no method/variation badges or action
  * menus — selecting a row opens the details drawer instead.
  */
 function RemoteToolRow({

@@ -77,7 +77,7 @@ describe("copyable setup values", () => {
     expect(container.innerHTML).not.toContain("EXAMPLE_GENERATED_KEY");
     expect(
       screen.getByText(
-        "X-Speakeasy-AI-Project=default,X-Speakeasy-AI-Key=••••••••",
+        "Speakeasy-AI-Project=default,Speakeasy-AI-Key=••••••••",
       ),
     ).toBeTruthy();
     expect(
@@ -90,7 +90,7 @@ describe("copyable setup values", () => {
       ["protocol", "http/json"],
       [
         "headers",
-        "X-Speakeasy-AI-Project=default,X-Speakeasy-AI-Key=EXAMPLE_GENERATED_KEY",
+        "Speakeasy-AI-Project=default,Speakeasy-AI-Key=EXAMPLE_GENERATED_KEY",
       ],
     ] as const) {
       fireEvent.click(copy(label));
@@ -153,7 +153,7 @@ describe("copyable setup values", () => {
       fireEvent.click(copy("headers"));
       await waitFor(() =>
         expect(writeText).toHaveBeenLastCalledWith(
-          "X-Speakeasy-AI-Project=default,X-Speakeasy-AI-Key=EXAMPLE_RETRY_KEY",
+          "Speakeasy-AI-Project=default,Speakeasy-AI-Key=EXAMPLE_RETRY_KEY",
         ),
       );
     },

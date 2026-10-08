@@ -644,7 +644,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
 
   const frontendTools = config.tools?.frontendTools ?? {};
 
-  // Composer attachments upload to Gram as soon as they are picked; the
+  // Composer attachments upload to Speakeasy as soon as they are picked; the
   // transport turns the resulting assets into turn attachments. `false`
   // disables them (the composer also hides the button in that case).
   const attachmentsConfig = config.composer?.attachments ?? true;

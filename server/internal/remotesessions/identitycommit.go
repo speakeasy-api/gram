@@ -233,7 +233,7 @@ func ManualClient(credentials ClientCredentials) ClientChoice {
 	return ClientChoice{kind: clientManual, linkID: uuid.Nil, credentials: credentials, policy: RegistrationPolicy{}} //nolint:exhaustruct // Unused for a manual client.
 }
 
-// RegisterClient obtains a client from the provider: a Gram-hosted Client ID
+// RegisterClient obtains a client from the provider: a Speakeasy-hosted Client ID
 // Metadata Document when the policy allows one and the provider supports it,
 // otherwise dynamic client registration.
 func RegisterClient(policy RegistrationPolicy) ClientChoice {
@@ -1152,7 +1152,7 @@ func (c *IdentityCommit) linkClient(ctx context.Context, tx *IdentityTx) (repo.R
 	return existing.RemoteSessionClient, existing.UserSessionIssuerIds, nil
 }
 
-// createCIMDClient creates a client identified by a Gram-hosted Client ID
+// createCIMDClient creates a client identified by a Speakeasy-hosted Client ID
 // Metadata Document.
 func (c *IdentityCommit) createCIMDClient(ctx context.Context, tx *IdentityTx) (repo.RemoteSessionClient, error) {
 	// Generated here so the document URL, which embeds the id, can be the

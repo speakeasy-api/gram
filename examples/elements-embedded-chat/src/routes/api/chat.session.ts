@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 /**
  * Server-side session proxy. This route keeps the SPEAKEASY_AI_API_KEY secret by
- * making the upstream call to Gram's session API from the server, never
+ * making the upstream call to Speakeasy's session API from the server, never
  * exposing the key to the browser. The client calls this endpoint via
  * the `session` field in the ElementsConfig (see chat.tsx).
  */
@@ -14,15 +14,15 @@ export const Route = createFileRoute("/api/chat/session")({
           process.env.SPEAKEASY_AI_API_URL ?? "https://app.getgram.ai";
         const body = await request.json();
 
-        // Proxy the session creation request to Gram's API, attaching
+        // Proxy the session creation request to Speakeasy's API, attaching
         // server-only credentials (SPEAKEASY_AI_API_KEY) that the client can't see.
         const upstream = await fetch(base + "/rpc/chatSessions.create", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-Speakeasy-AI-Project":
+            "Speakeasy-AI-Project":
               process.env.VITE_SPEAKEASY_AI_PROJECT_SLUG ?? "",
-            "X-Speakeasy-AI-Key": process.env.SPEAKEASY_AI_API_KEY ?? "",
+            "Speakeasy-AI-Key": process.env.SPEAKEASY_AI_API_KEY ?? "",
           },
           body: JSON.stringify({
             embed_origin: body.embed_origin,

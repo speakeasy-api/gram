@@ -139,10 +139,10 @@ export default function IdentityActivity(): JSX.Element {
           footer={
             auditQuery.isError ? (
               <RefreshFailed onRetry={() => void auditQuery.refetch()} />
-            ) : // Audit logs key on the Gram user id, so a subject with no
+            ) : // Audit logs key on the Speakeasy user id, so a subject with no
             // directory row has nothing here even when it has telemetry.
             identity.userIds.length === 0 ? (
-              "This identity resolves to no Gram user, so no change is recorded under it."
+              "This identity resolves to no Speakeasy user, so no change is recorded under it."
             ) : (
               `Actor filtered to ${identity.displayName}`
             )

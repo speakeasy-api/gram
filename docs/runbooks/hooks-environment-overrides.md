@@ -30,7 +30,7 @@ path stays in use until the new file exists.
 
 | Variable                                    | Purpose                                                                                                                           |
 | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `SPEAKEASY_AI_HOOKS_SERVER_URL`             | Gram API base the events are posted to. Defaults to `https://app.getgram.ai`.                                                     |
+| `SPEAKEASY_AI_HOOKS_SERVER_URL`             | Speakeasy API base the events are posted to. Defaults to `https://app.getgram.ai`.                                                |
 | `SPEAKEASY_AI_HOOKS_SITE_URL`               | Dashboard origin browser sign-in opens, for deployments that serve the dashboard off the API domain (local dev).                  |
 | `SPEAKEASY_AI_HOOKS_PROJECT_SLUG`           | Project the events route to.                                                                                                      |
 | `SPEAKEASY_AI_HOOKS_ORG_ID`                 | Organization the cached credential is scoped to.                                                                                  |

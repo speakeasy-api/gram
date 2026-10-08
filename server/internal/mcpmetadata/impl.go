@@ -101,12 +101,12 @@ type securityInput struct {
 // speakeasyAIEnvironmentInput is the security input that selects the
 // environment of a Speakeasy-key MCP server. Its header keeps the "AI"
 // initialism that the generic title-casing in toolconfig.ToHTTPHeader drops.
-const speakeasyAIEnvironmentInput = "x_speakeasy_ai_environment"
+const speakeasyAIEnvironmentInput = "speakeasy_ai_environment"
 
 // HTTPHeader returns the HTTP header the input is sent as.
 func (i securityInput) HTTPHeader() string {
 	if i.SystemName == speakeasyAIEnvironmentInput {
-		return "X-Speakeasy-AI-Environment"
+		return "Speakeasy-AI-Environment"
 	}
 	return toolconfig.ToHTTPHeader(i.SystemName)
 }
@@ -1096,7 +1096,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 			attr.SlogError(metadataErr))
 	}
 
-	// Private installs must keep using the authenticated Gram-hosted renderer:
+	// Private installs must keep using the authenticated Speakeasy-hosted renderer:
 	// an external override cannot securely derive the live organization ingress.
 	if !privateNetworkInstall && metadataRecord != nil {
 		if overrideURL := conv.FromPGText[string](metadataRecord.InstallationOverrideUrl); overrideURL != nil && *overrideURL != "" {
@@ -1620,7 +1620,7 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 	tunneledPublic := mcpServer.TunneledMcpServerID.Valid && mcpServer.Visibility == mcpservers.VisibilityPublic
 
 	return s.writeInstallPage(ctx, w, hostedPageRenderInputs{
-		// Remote-MCP-backed installs don't expose Gram-side env vars or a tools
+		// Remote-MCP-backed installs don't expose Speakeasy-side env vars or a tools
 		// list yet: the page renders the URL + branding only.
 		MCPName:        conv.FromPGTextOrEmpty[string](mcpServer.Name),
 		MCPSlug:        endpoint.Slug,
@@ -1643,7 +1643,7 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 
 // renderMetaMcpInstallPage renders the install page for a gateway
 // (meta_mcp_servers) endpoint. Gateways carry no branding metadata and expose
-// no Gram-side env vars or tool list, so the page is the URL plus defaults.
+// no Speakeasy-side env vars or tool list, so the page is the URL plus defaults.
 func (s *Service) renderMetaMcpInstallPage(ctx context.Context, w http.ResponseWriter, ic *installContext) error {
 	metaServer := ic.metaServer
 	endpoint := ic.mcpEndpoint

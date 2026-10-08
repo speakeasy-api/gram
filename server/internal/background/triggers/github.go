@@ -198,7 +198,7 @@ func newGitHubDefinition() Definition {
 	vendor := WebhookVendor{
 		Slug:            DefinitionSlugGithub,
 		Title:           "GitHub",
-		Description:     "Receive GitHub webhooks and map them to Gram trigger events.",
+		Description:     "Receive GitHub webhooks and map them to Speakeasy trigger events.",
 		EventType:       reflect.TypeFor[githubTriggerEvent](),
 		EnvRequirements: []EnvRequirement{{Name: githubWebhookSecretEnv, Description: "GitHub webhook secret used to verify webhook signatures.", Required: true}},
 		SecretEnv:       githubWebhookSecretEnv,

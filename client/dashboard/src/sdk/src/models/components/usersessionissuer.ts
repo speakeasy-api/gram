@@ -59,7 +59,7 @@ export type UserSessionIssuer = {
    */
   slug: string;
   /**
-   * The organization-level remote_session_client Gram uses with the trusted issuer. Absent when enterprise-managed authorization is disabled.
+   * The organization-level remote_session_client Speakeasy uses with the trusted issuer. Absent when enterprise-managed authorization is disabled.
    */
   trustedRemoteSessionClientId?: string | undefined;
   /**

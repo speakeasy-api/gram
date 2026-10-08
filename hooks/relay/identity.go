@@ -291,7 +291,7 @@ func codexAppServerEmail(ctx context.Context) string {
 	}()
 
 	scanner := bufio.NewScanner(stdout)
-	if _, err := fmt.Fprintln(stdin, `{"id":71001,"method":"initialize","params":{"clientInfo":{"name":"gram_hooks","title":"Gram Hooks","version":"1.0.0"},"capabilities":{"optOutNotificationMethods":["remoteControl/status/changed"]}}}`); err != nil {
+	if _, err := fmt.Fprintln(stdin, `{"id":71001,"method":"initialize","params":{"clientInfo":{"name":"gram_hooks","title":"Speakeasy Hooks","version":"1.0.0"},"capabilities":{"optOutNotificationMethods":["remoteControl/status/changed"]}}}`); err != nil {
 		return ""
 	}
 	if codexResponse(scanner, 71001) == nil {
