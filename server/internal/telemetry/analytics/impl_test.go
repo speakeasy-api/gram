@@ -19,15 +19,11 @@ func TestDescribe(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Datasets, 3)
 
-	sessions := result.Datasets[0]
-	require.Equal(t, "sessions", sessions.Name)
+	sessions := datasetNamed(t, result.Datasets, "sessions")
 	require.Equal(t, "event", sessions.Kind)
 	require.NotEmpty(t, sessions.Grain)
 
-	byName := make(map[string]*gen.AnalyticsField, len(sessions.Fields))
-	for _, f := range sessions.Fields {
-		byName[f.Name] = f
-	}
+	byName := fieldsByName(sessions)
 	require.Equal(t, "dimension", byName["user"].Role)
 	require.Equal(t, []string{"equals", "in"}, byName["user"].Operators)
 	require.Equal(t, []string{"count_distinct"}, byName["user"].Aggregations, "describe advertises the one aggregation a dimension admits")
@@ -42,26 +38,18 @@ func TestDescribe(t *testing.T) {
 	require.False(t, byName["session"].Default)
 	require.False(t, byName["duration_seconds"].Default)
 
-	toolCalls := result.Datasets[1]
-	require.Equal(t, "tool_calls", toolCalls.Name)
+	toolCalls := datasetNamed(t, result.Datasets, "tool_calls")
 	require.Equal(t, []string{"tool_name"}, defaultFields(toolCalls), "one flagged dimension opens the tool calls view")
-	toolFields := make(map[string]*gen.AnalyticsField, len(toolCalls.Fields))
-	for _, f := range toolCalls.Fields {
-		toolFields[f.Name] = f
-	}
+	toolFields := fieldsByName(toolCalls)
 	require.NotContains(t, toolFields, "skill", "a Skill call is an ordinary call here; skills are their own dataset")
 	require.Nil(t, toolFields["tool_name"].Description, "a field with nothing to add has no description")
 	require.Nil(t, byName["user"].Description)
 
-	skills := result.Datasets[2]
-	require.Equal(t, "skills", skills.Name)
+	skills := datasetNamed(t, result.Datasets, "skills")
 	require.Equal(t, "skill invocation", skills.Grain)
 	require.Contains(t, skills.Description, "Claude Code", "describe carries the caveat on which producers report skills")
 	require.Equal(t, []string{"skill"}, defaultFields(skills), "the skills view opens broken down by skill")
-	skillFields := make(map[string]*gen.AnalyticsField, len(skills.Fields))
-	for _, f := range skills.Fields {
-		skillFields[f.Name] = f
-	}
+	skillFields := fieldsByName(skills)
 	require.Equal(t, []string{"count_distinct"}, skillFields["skill"].Aggregations, "skills used is a distinct count")
 	require.Equal(t, []string{"count_distinct"}, skillFields["user"].Aggregations)
 
@@ -257,6 +245,28 @@ func TestQuery(t *testing.T) {
 		})
 		requireOopsCode(t, err, oops.CodeUnauthorized)
 	})
+}
+
+// datasetNamed finds a described dataset by name, so the assertions do not
+// depend on the catalog's declaration order.
+func datasetNamed(t *testing.T, datasets []*gen.AnalyticsDataset, name string) *gen.AnalyticsDataset {
+	t.Helper()
+	for _, ds := range datasets {
+		if ds.Name == name {
+			return ds
+		}
+	}
+	require.Failf(t, "dataset not described", "no dataset named %q", name)
+	return nil
+}
+
+// fieldsByName indexes a described dataset's fields by name.
+func fieldsByName(ds *gen.AnalyticsDataset) map[string]*gen.AnalyticsField {
+	byName := make(map[string]*gen.AnalyticsField, len(ds.Fields))
+	for _, f := range ds.Fields {
+		byName[f.Name] = f
+	}
+	return byName
 }
 
 // defaultFields lists the names describe flags as default, in declaration
