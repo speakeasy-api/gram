@@ -1,7 +1,6 @@
 ---
 "server": minor
 "dashboard": minor
-"hooks": minor
 ---
 
 Rename the request headers and environment variables customers set to Speakeasy AI names. Every Gram name keeps working as a deprecated alias.
