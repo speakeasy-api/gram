@@ -41,6 +41,12 @@ export type RadioCardProps = RadioCardContent & {
    * Clicks inside it never change the selection.
    */
   detail?: React.ReactNode;
+  /**
+   * A control at the card's right edge, such as an edit menu for the option.
+   * Like `detail`, it is not part of the radio's label or description, and
+   * clicks inside it never change the selection.
+   */
+  trailing?: React.ReactNode;
   className?: string;
 };
 
@@ -102,6 +108,7 @@ export function RadioCard({
   onSelect,
   leading,
   detail,
+  trailing,
   className,
 }: RadioCardProps): React.JSX.Element {
   const id = React.useId();
@@ -140,7 +147,7 @@ export function RadioCard({
         const interactive =
           target instanceof Element
             ? target.closest(
-                `${INTERACTIVE_SELECTOR}, [data-slot=radio-card-detail]`,
+                `${INTERACTIVE_SELECTOR}, [data-slot=radio-card-detail], [data-slot=radio-card-trailing]`,
               )
             : null;
         if (interactive && event.currentTarget.contains(interactive)) return;
@@ -216,6 +223,14 @@ export function RadioCard({
           </div>
         ) : null}
       </div>
+      {hasLabelContent(trailing) ? (
+        <div
+          data-slot="radio-card-trailing"
+          className="flex shrink-0 cursor-auto items-center self-center"
+        >
+          {trailing}
+        </div>
+      ) : null}
     </div>
   );
 }

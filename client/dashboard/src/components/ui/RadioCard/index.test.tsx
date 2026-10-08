@@ -426,6 +426,26 @@ describe("RadioCard", () => {
     expect(onValueChange).not.toHaveBeenCalled();
   });
 
+  it("keeps trailing controls out of the label and the selection", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn<(value: string) => void>();
+    render(
+      <RadioCardGroup aria-label="Scope" onValueChange={onValueChange}>
+        <RadioCard
+          value="all"
+          title="All servers"
+          trailing={<button type="button">Edit</button>}
+        >
+          Every server
+        </RadioCard>
+      </RadioCardGroup>,
+    );
+
+    expect(screen.getByRole("radio", { name: "All servers" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
   it("renders a numeric zero detail", () => {
     render(
       <RadioCardGroup aria-label="Count">

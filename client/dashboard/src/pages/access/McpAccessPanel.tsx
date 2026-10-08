@@ -212,28 +212,29 @@ export function McpAccessPanel({
           </RadioCard>
           <RadioCard
             value="all"
-            title="All servers"
-            detail={
-              access.allServers && (
-                <span className="flex items-center gap-2">
-                  <span className="mr-auto">
-                    <ToolLimitBadges
-                      limit={access.allServers}
-                      onOpen={() =>
-                        setSheet({
-                          target: { kind: "all" },
-                          tab: "annotations",
-                        })
-                      }
-                    />
-                  </span>
-                  <ToolLimitMenu
-                    label="More options for all servers"
-                    current={access.allServers.kind}
-                    offerByTool={false}
-                    onPick={pickAllServersLimit}
+            title={
+              // The limit sits beside the name, as Recommended does on the
+              // other card, so choosing it never adds a row.
+              <span className="flex flex-wrap items-center gap-2">
+                All servers
+                {access.allServers && (
+                  <ToolLimitBadges
+                    limit={access.allServers}
+                    onOpen={() =>
+                      setSheet({ target: { kind: "all" }, tab: "annotations" })
+                    }
                   />
-                </span>
+                )}
+              </span>
+            }
+            trailing={
+              access.allServers && (
+                <ToolLimitMenu
+                  label="More options for all servers"
+                  current={access.allServers.kind}
+                  offerByTool={false}
+                  onPick={pickAllServersLimit}
+                />
               )
             }
           >
