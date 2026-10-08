@@ -182,7 +182,7 @@ group.Go(func() error {
 })
 ```
 
-Imports are `infra/pkg/storage` and `infra/pkg/storagebindings` under the Gram
+Imports are `infra/pkg/storage` and `infra/pkg/storagebindings` under the Speakeasy
 Go module. There is no application message handler. A missing bucket mapping,
 a binding whose topic, subscription, bucket or partition declaration no longer
 matches, or an invalid lease budget fails startup. The runner does not recompute
