@@ -259,6 +259,37 @@ func TestStdioBridgeServerInitiatedRequestUsesGetStream(t *testing.T) {
 	require.Contains(t, fmt.Sprint(result[0]["result"]), "accept")
 }
 
+func TestStdioBridgeKeepsSilentStreamsAlive(t *testing.T) {
+	t.Parallel()
+	srv, a := newStdioTestServer(t, 0)
+	a.stdio.keepalive = 20 * time.Millisecond
+	sid := initializeSession(t, srv)
+
+	// No GET stream, so the elicitation goes on the call's own stream, which then waits on the client.
+	call := mcpRequest(t, srv, http.MethodPost, sid, `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"elicit"}}`)
+	require.Equal(t, http.StatusOK, call.StatusCode)
+	body := bufio.NewReader(call.Body)
+
+	readUntil := func(prefix string) string {
+		for {
+			line, err := body.ReadString('\n')
+			require.NoError(t, err)
+			if strings.HasPrefix(line, prefix) {
+				return line
+			}
+		}
+	}
+	require.Contains(t, readUntil("data: "), "elicitation/create")
+	readUntil(": keepalive")
+	readUntil(": keepalive")
+
+	answered := mcpRequest(t, srv, http.MethodPost, sid, `{"jsonrpc":"2.0","id":"srv-1","result":{"action":"accept"}}`)
+	require.Equal(t, http.StatusAccepted, answered.StatusCode)
+	result := readUntil("data: ")
+	require.Contains(t, result, `"id":10`)
+	require.Contains(t, result, "accept")
+}
+
 func TestStdioBridgeProcessCrashEndsSession(t *testing.T) {
 	t.Parallel()
 	srv, _ := newStdioTestServer(t, 0)

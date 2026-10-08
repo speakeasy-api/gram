@@ -35,6 +35,8 @@ const (
 	stdioWriteTimeout         = 30 * time.Second
 	stdioPingQueue            = 8
 	stdioKillWait             = time.Second
+	// Under Speakeasy's 60s idle cutoff for a silent stream, e.g. one awaiting a user's elicitation answer.
+	stdioSSEKeepalive = 15 * time.Second
 
 	stdioMaxMessageBytes = 32 << 20
 	stdioStreamMaxBytes  = 64 << 20
@@ -61,6 +63,7 @@ type stdioBridge struct {
 	env         []string
 	maxSessions int
 	idleTimeout time.Duration
+	keepalive   time.Duration
 	logger      *slog.Logger
 
 	mu       sync.Mutex
@@ -80,6 +83,7 @@ func newStdioBridge(command string, maxSessions int, idleTimeout time.Duration, 
 		env:         childEnv(os.Environ()),
 		maxSessions: maxSessions,
 		idleTimeout: idleTimeout,
+		keepalive:   stdioSSEKeepalive,
 		logger:      logger,
 		sessions:    make(map[string]*stdioSession),
 		closed:      false,
@@ -175,7 +179,7 @@ func (b *stdioBridge) handlePost(w http.ResponseWriter, r *http.Request) {
 
 	if sse {
 		writeSSEHeaders(w, sid)
-		for msg := range stream.events(r.Context(), sess, len(requests)) {
+		for msg := range stream.events(r.Context(), sess, len(requests), b.keepalive) {
 			if err := writeSSEEvent(w, msg); err != nil {
 				return
 			}
@@ -189,7 +193,7 @@ func (b *stdioBridge) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responses := make([]json.RawMessage, 0, len(requests))
-	for msg := range stream.events(r.Context(), sess, len(requests)) {
+	for msg := range stream.events(r.Context(), sess, len(requests), 0) {
 		responses = append(responses, msg)
 	}
 	if r.Context().Err() != nil {
@@ -246,7 +250,7 @@ func (b *stdioBridge) handleInitialize(w http.ResponseWriter, r *http.Request, m
 	}
 
 	var response json.RawMessage
-	for msg := range stream.events(ctx, sess, 1) {
+	for msg := range stream.events(ctx, sess, 1, 0) {
 		response = msg
 	}
 	if response == nil {
@@ -291,7 +295,7 @@ func (b *stdioBridge) handleGet(w http.ResponseWriter, r *http.Request) {
 	defer sess.detachListener(listener)
 
 	writeSSEHeaders(w, sid)
-	for msg := range listener.events(r.Context(), sess, -1) {
+	for msg := range listener.events(r.Context(), sess, -1, b.keepalive) {
 		if err := writeSSEEvent(w, msg); err != nil {
 			return
 		}
@@ -906,8 +910,15 @@ func (s *rpcStream) close() {
 	s.goneOnce.Do(func() { close(s.gone) })
 }
 
-func (s *rpcStream) events(ctx context.Context, sess *stdioSession, wantResponses int) iter.Seq[json.RawMessage] {
+// A positive keepalive yields a nil message after that long without one.
+func (s *rpcStream) events(ctx context.Context, sess *stdioSession, wantResponses int, keepalive time.Duration) iter.Seq[json.RawMessage] {
 	return func(yield func(json.RawMessage) bool) {
+		var tick <-chan time.Time
+		if keepalive > 0 {
+			ticker := time.NewTicker(keepalive)
+			defer ticker.Stop()
+			tick = ticker.C
+		}
 		received := 0
 		for wantResponses < 0 || received < wantResponses {
 			if event, ok := s.pop(); ok {
@@ -921,6 +932,10 @@ func (s *rpcStream) events(ctx context.Context, sess *stdioSession, wantResponse
 			}
 			select {
 			case <-s.notify:
+			case <-tick:
+				if !yield(nil) {
+					return
+				}
 			case <-ctx.Done():
 				return
 			case <-s.gone:
@@ -1093,7 +1108,13 @@ func writeSSEHeaders(w http.ResponseWriter, sid string) {
 }
 
 func writeSSEEvent(w http.ResponseWriter, msg json.RawMessage) error {
-	if _, err := fmt.Fprintf(w, "event: message\ndata: %s\n\n", msg); err != nil {
+	var err error
+	if msg == nil {
+		_, err = io.WriteString(w, ": keepalive\n\n")
+	} else {
+		_, err = fmt.Fprintf(w, "event: message\ndata: %s\n\n", msg)
+	}
+	if err != nil {
 		return err
 	}
 	if f, ok := w.(http.Flusher); ok {
