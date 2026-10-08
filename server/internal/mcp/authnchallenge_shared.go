@@ -66,6 +66,16 @@ type sharedAuthorizationServer struct {
 	// It is also the `iss` of every token and authorization response the
 	// authorization server issues.
 	issuer string
+
+	// onAuthenticationHost reports whether the authorization server is served
+	// on the authentication host, which serves only its metadata, token, and
+	// revocation endpoints. Such a server accepts only the workload grant, and
+	// MCP clients keep using the per-endpoint authorization servers for
+	// browser sign-in.
+	//
+	// TODO(AIM-418): serve authorization, consent, and registration on the
+	// authentication host, and drop the restrictions this flag drives.
+	onAuthenticationHost bool
 }
 
 // origin is the scheme and host the authorization server is served on.
@@ -172,7 +182,8 @@ func (s *Service) sharedAuthorizationServerFor(issuer usersessions_repo.UserSess
 	if err != nil {
 		return nil, fmt.Errorf("derive shared issuer: %w", err)
 	}
-	return &sharedAuthorizationServer{issuerID: issuer.ID, issuer: issuerURL}, nil
+	onAuthenticationHost := s.authenticationHostBaseURL != "" && requestorigin.URLOrigin(issuerURL) == requestorigin.URLOrigin(s.authenticationHostBaseURL)
+	return &sharedAuthorizationServer{issuerID: issuer.ID, issuer: issuerURL, onAuthenticationHost: onAuthenticationHost}, nil
 }
 
 // sharedIssuer is the issuer-level state of a request to a shared
@@ -371,7 +382,13 @@ func (s *Service) resolveSharedResource(ctx context.Context, logger *slog.Logger
 // resource's host would carry: the request origin, and for a custom domain the
 // customdomains.Context, that the request middleware would stamp. It mirrors
 // customdomains.Middleware for the hosts it classifies.
+//
+// A resource is never on the authentication host, so the derived context drops
+// the request's arrival there. An issuer whose shared authorization server is
+// pinned to the authentication host then resolves its MCP servers whether or
+// not it also opts in to use_authentication_host.
 func (s *Service) sharedResourceContext(ctx context.Context, host string) (context.Context, requestorigin.Origin, sharedResourceRejection, error) {
+	ctx = withoutAuthenticationHost(ctx)
 	var noOrigin requestorigin.Origin
 	platform := func(baseURL string) (context.Context, requestorigin.Origin, sharedResourceRejection, error) {
 		origin := requestorigin.Origin{
