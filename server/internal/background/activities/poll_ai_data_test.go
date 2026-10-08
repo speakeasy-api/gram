@@ -248,7 +248,7 @@ func TestPollRejectedByProviderSeesThroughWrappedSyncErrors(t *testing.T) {
 	syncErr := &aiintegrations.SyncError{
 		Op: "sync anthropic compliance",
 		Stages: []aiintegrations.SyncStageError{{
-			Stage: "discover_activities",
+			Stage: "discover_chats",
 			Err:   fmt.Errorf("list anthropic compliance activities: %w", httpErr),
 		}},
 		Progress: aiintegrations.ComplianceSyncProgress{
@@ -275,7 +275,7 @@ func TestNewPollFailureErrorCarriesStageAndProgressDetails(t *testing.T) {
 	syncErr := &aiintegrations.SyncError{
 		Op: "sync anthropic compliance",
 		Stages: []aiintegrations.SyncStageError{{
-			Stage: "discover_activities",
+			Stage: "discover_chats",
 			Err:   discoverErr,
 		}},
 		Progress: aiintegrations.ComplianceSyncProgress{
@@ -300,7 +300,7 @@ func TestNewPollFailureErrorCarriesStageAndProgressDetails(t *testing.T) {
 	require.Contains(t, appErr.Message(), "provider=anthropic_compliance")
 	require.Contains(t, appErr.Message(), fmt.Sprintf("attempt=5/%d", PollUsageMaxAttempts))
 
-	require.Contains(t, appErr.Message(), "[discover_activities] list anthropic compliance activities: 503 Service Unavailable")
+	require.Contains(t, appErr.Message(), "[discover_chats] list anthropic compliance activities: 503 Service Unavailable")
 	require.Contains(t, appErr.Message(), "(progress:")
 
 	require.True(t, appErr.HasDetails())
@@ -310,7 +310,7 @@ func TestNewPollFailureErrorCarriesStageAndProgressDetails(t *testing.T) {
 	require.Equal(t, aiintegrations.ProviderAnthropicCompliance, details.Provider)
 	require.Equal(t, int32(5), details.Attempt)
 	require.Len(t, details.Stages, 1)
-	require.Equal(t, "discover_activities", details.Stages[0].Stage)
+	require.Equal(t, "discover_chats", details.Stages[0].Stage)
 	require.Contains(t, details.Stages[0].Error, "503 Service Unavailable")
 
 	// The original causes stay reachable for errors.Is/errors.As callers.

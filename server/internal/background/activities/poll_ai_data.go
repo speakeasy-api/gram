@@ -214,7 +214,7 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 		if cfg.Provider != aiintegrations.ProviderAnthropicCompliance {
 			return oops.E(oops.CodeInvalid, nil, "anthropic compliance schedule cannot run for provider %s", cfg.Provider)
 		}
-		nextCursor, err := p.anthropicComplianceImporter.SyncAnthropicCompliance(ctx, cfg)
+		nextCursor, err := p.anthropicComplianceImporter.SyncAnthropicCompliance(ctx, cfg, endTime)
 		if err != nil {
 			return fmt.Errorf("sync anthropic compliance data: %w", err)
 		}
