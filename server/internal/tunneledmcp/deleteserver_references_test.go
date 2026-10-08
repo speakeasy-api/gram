@@ -17,8 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 )
 
@@ -27,9 +27,7 @@ import (
 func createMCPServerOnTunnel(t *testing.T, ctx context.Context, conn *pgxpool.Pool, authCtx *contextvalues.AuthContext, tunnelID uuid.UUID, visibility string) mcpserversrepo.McpServer {
 	t.Helper()
 
-	tx, err := conn.Begin(ctx)
-	require.NoError(t, err)
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	tx := testenv.BeginTx(t, ctx, conn)
 
 	server, err := mcpservers.CreateProjectMCPServerInTransaction(ctx, tx, audit.NewLogger(), mcpservers.MCPServerTransactionInput{
 		OrganizationID:      authCtx.ActiveOrganizationID,
