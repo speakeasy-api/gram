@@ -2134,26 +2134,72 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect(screen.getByText("Sign-ins request these scopes.")).toBeDefined();
     });
 
-    it("summarises the saved request under the pin for a writer", () => {
+    it("names what sign-ins request in the pin status when the pin is not used", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({
+        data: serverScopes({
+          discoveryEnabled: false,
+          clients: [
+            {
+              clientId: "client-1",
+              scopeSource: "issuer_override",
+              requestedScopes: ["openid", "read"],
+              unadvertisedPinnedScopes: [],
+              pinWouldDecide: false,
+            },
+          ],
+        }),
+        isError: false,
+      });
+
+      renderIdentity();
+
+      expect(
+        screen.getByText(
+          "Not used: pinned scopes are not enabled for your organization. Sign-ins request read, set by the identity provider's override.",
+        ),
+      ).toBeDefined();
+      expect(screen.queryByText("Requested at sign-in")).toBeNull();
+      expect(
+        screen.queryByRole("list", { name: "Requested scopes" }),
+      ).toBeNull();
+    });
+
+    it("adds nothing to the pin status when the pin decides", () => {
       connectClient();
       mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
 
       renderIdentity();
 
-      const pin = screen.getByRole("combobox", { name: "Pinned scopes" });
-      const requested = screen.getByRole("list", { name: "Requested scopes" });
+      expect(screen.getByText("Sign-ins request these scopes.")).toBeDefined();
+      expect(screen.queryByText(/Sign-ins request read/)).toBeNull();
+      expect(screen.queryByText("Requested at sign-in")).toBeNull();
+    });
+
+    it("tells a writer when sign-ins request nothing", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({
+        data: serverScopes({
+          discoveryEnabled: false,
+          clients: [
+            {
+              clientId: "client-1",
+              scopeSource: "issuer_omitted",
+              requestedScopes: [],
+              unadvertisedPinnedScopes: [],
+              pinWouldDecide: false,
+            },
+          ],
+        }),
+        isError: false,
+      });
+
+      renderIdentity();
+
       expect(
-        pin.compareDocumentPosition(requested) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-      expect(
-        within(requested)
-          .getAllByRole("listitem")
-          .map((li) => li.textContent),
-      ).toEqual(["read"]);
-      expect(screen.getByText("Requested at sign-in")).toBeDefined();
-      expect(
-        screen.getByText("Pinned for this MCP server's URL."),
+        screen.getByText(
+          /Sign-ins request no scopes; .+ applies its defaults\.$/,
+        ),
       ).toBeDefined();
     });
 
@@ -2184,19 +2230,6 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect(screen.getByText("Requested at sign-in")).toBeDefined();
     });
 
-    it("shows a writer blocked from reading no summary", () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
-      mocks.hasScope.mockImplementation(
-        (scope: string, resourceId?: string) =>
-          scope === "mcp:write" && resourceId === "mcp-server-1",
-      );
-
-      renderIdentity();
-
-      expect(screen.queryByText("Requested at sign-in")).toBeNull();
-    });
-
     it("tells a reader when the requested scopes fail to load", () => {
       connectClient();
       mocks.scopes.mockReturnValue({ data: undefined, isError: true });
@@ -2210,23 +2243,42 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect(screen.getByText("Couldn't load requested scopes.")).toBeDefined();
     });
 
-    it("hides the summary while the pin has unsaved changes", () => {
+    it("drops the request sentence while the pin has unsaved changes", () => {
       connectClient();
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+      mocks.scopes.mockReturnValue({
+        data: serverScopes({
+          clients: [
+            {
+              clientId: "client-1",
+              scopeSource: "issuer_override",
+              requestedScopes: ["read"],
+              unadvertisedPinnedScopes: [],
+              pinWouldDecide: false,
+            },
+          ],
+        }),
+        isError: false,
+      });
 
       renderIdentity();
-      expect(screen.getByText("Requested at sign-in")).toBeDefined();
+      expect(
+        screen.getByText(
+          "Not used for this connection. Sign-ins request read, set by the identity provider's override.",
+        ),
+      ).toBeDefined();
       fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
       fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
 
-      expect(screen.queryByText("Requested at sign-in")).toBeNull();
-      expect(
-        screen.queryByRole("list", { name: "Requested scopes" }),
-      ).toBeNull();
+      expect(screen.getByText("Not used for this connection.")).toBeDefined();
+      expect(screen.queryByText(/Sign-ins request read/)).toBeNull();
     });
 
     it("shows only the connected client's request", () => {
       connectClient();
+      mocks.hasScope.mockImplementation(
+        (scope: string, resourceId?: string) =>
+          scope === "mcp:read" && resourceId === "mcp-server-1",
+      );
       mocks.scopes.mockReturnValue({
         data: serverScopes({
           clients: [
@@ -2275,7 +2327,6 @@ describe("RemoteMcpIdentitySectionBody", () => {
       mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
 
       renderIdentity();
-      expect(screen.getByText("Requested at sign-in")).toBeDefined();
       fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
 
       expect(screen.queryByText("Requested at sign-in")).toBeNull();

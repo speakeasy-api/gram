@@ -6,65 +6,19 @@ import {
 } from "@/components/ui/HoverCard";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
-import { issuerDisplayName } from "@/lib/remote-identity";
 import type { RemoteMcpServerClientScopes } from "@gram/client/models/components/remotemcpserverclientscopes.js";
 import type { RemoteMcpServerScopes } from "@gram/client/models/components/remotemcpserverscopes.js";
 import { Info } from "lucide-react";
 import type { ReactElement } from "react";
-
-// Identity scopes every login asks for; they say nothing about the server's access.
-const FEATURE_SCOPES = new Set([
-  "openid",
-  "email",
-  "profile",
-  "offline_access",
-]);
-
-const SOURCE_LINES: Record<
-  RemoteMcpServerClientScopes["scopeSource"],
-  string | null
-> = {
-  resource_pin: "Pinned for this MCP server's URL.",
-  client_scope: "Set on this connection.",
-  challenge_scope: "From the MCP server's last sign-in challenge.",
-  live_resource: "Advertised by the MCP server.",
-  cached_resource: "Advertised by the MCP server.",
-  issuer_override: "Set by the identity provider's override.",
-  issuer_catalogue: "Every scope the identity provider advertises.",
-  issuer_omitted: null,
-  none: null,
-};
-
-// Sources a live read of the MCP server can outrank at the next sign-in.
-const PROBE_CAN_CHANGE = new Set<RemoteMcpServerClientScopes["scopeSource"]>([
-  "cached_resource",
-  "issuer_override",
-  "issuer_catalogue",
-]);
-
-function shownScopes(client: RemoteMcpServerClientScopes): string[] {
-  return client.requestedScopes.filter((scope) => !FEATURE_SCOPES.has(scope));
-}
-
-function requestsNothing(client: RemoteMcpServerClientScopes): boolean {
-  return (
-    client.scopeSource === "issuer_omitted" ||
-    client.scopeSource === "none" ||
-    client.requestedScopes.length === 0
-  );
-}
+import {
+  issuerLabel,
+  requestsNothing,
+  shownScopes,
+  sourceLine,
+} from "./requestedScopes";
 
 function worthShowing(client: RemoteMcpServerClientScopes): boolean {
   return requestsNothing(client) || shownScopes(client).length > 0;
-}
-
-function issuerLabel(client: RemoteMcpServerClientScopes): string {
-  return (
-    issuerDisplayName({
-      name: client.issuerName,
-      issuer: client.issuerUrl ?? "",
-    }) || "the identity provider"
-  );
 }
 
 /** Read-only: what the connected client's sign-ins ask the identity provider for. */
@@ -84,22 +38,6 @@ export function RequestedScopesSummary({
       <ClientScopes client={client} scopes={scopes} />
     </div>
   );
-}
-
-function sourceLine(
-  client: RemoteMcpServerClientScopes,
-  scopes: RemoteMcpServerScopes,
-): string | null {
-  const parts = [SOURCE_LINES[client.scopeSource]];
-  if (
-    PROBE_CAN_CHANGE.has(client.scopeSource) &&
-    scopes.discoveryEnabled &&
-    !scopes.advertisedScopesKnown
-  ) {
-    parts.push("This may change once the MCP server is next contacted.");
-  }
-  const line = parts.filter(Boolean).join(" ");
-  return line || null;
 }
 
 function ClientScopes({

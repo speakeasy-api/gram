@@ -166,13 +166,15 @@ seeded, a "Clear pinned scopes" button is shown (clearing is allowed, adding is
 not), and logins request the issuer override. On (the demo org is enrolled),
 Linear's seeded client has no scopes of its own, so the pin decides and the
 panel reads "Sign-ins request these scopes." The advertised `read` and `write`
-are offered as picker options. Below the picker, a read-only "Requested at
-sign-in" summary lists what the connected client requests: with the flag on,
-the pinned `read` and "Pinned for this MCP server's URL."; with it off, the
-identity provider's override (also `read`) and "Set by the identity provider's
-override." Members with only `mcp:read` on the server see the summary without
-the picker. The summary hides while the pin has unsaved edits. Browser
-verification: `[~]`.
+are offered as picker options. When the pin does not decide, the picker's
+status line also names what sign-ins request: with the flag off it reads "Not
+used: pinned scopes are not enabled for your organization. Sign-ins request
+read, set by the identity provider's override." The extra sentence drops while
+the pin has unsaved edits. Members with only `mcp:read` on the server see no
+picker; instead a read-only "Requested at sign-in" summary lists what the
+connected client requests (`read`, with "Pinned for this MCP server's URL."
+with the flag on, or "Set by the identity provider's override." with it off).
+Browser verification: `[~]`.
 
 ### Upstream session validation outcomes
 

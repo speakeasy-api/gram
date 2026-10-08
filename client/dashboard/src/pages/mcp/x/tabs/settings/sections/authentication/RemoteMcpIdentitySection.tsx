@@ -232,12 +232,13 @@ export function RemoteMcpIdentitySectionBody({
     canWrite && selectedMode === "user" && userDraft.connected;
   const showScopePin = scopePinSlot && !!scopePin.data;
   const scopePinDirty = showScopePin && scopePin.dirty;
-  // Same query as the pin, so writers make one request. mcp:write satisfies
-  // mcp:read, but a read block applies independently.
+  // Readers only: writers get the same answer in the pin's status line.
+  // mcp:write satisfies mcp:read, but a read block applies independently.
   const canRead =
     !rbacLoading && hasScope("mcp:read", target.permissionResourceId);
   const showScopesSummary =
     canRead &&
+    !scopePinSlot &&
     identityResolved &&
     actualMode === "user" &&
     selectedMode === "user" &&
@@ -628,19 +629,14 @@ export function RemoteMcpIdentitySectionBody({
                   Loading pinned scopes…
                 </Text>
               ) : null}
-              {/* Shows the saved request, so an unsaved pin would contradict it. */}
-              {showScopesSummary &&
-              scopesSummaryQuery.data &&
-              !scopePin.dirty ? (
+              {showScopesSummary && scopesSummaryQuery.data ? (
                 <div className="mt-4 pl-[52px] empty:hidden">
                   <RequestedScopesSummary
                     scopes={scopesSummaryQuery.data}
                     connectedClientId={userDraft.connectedClientId}
                   />
                 </div>
-              ) : showScopesSummary &&
-                !scopePinSlot &&
-                scopesSummaryQuery.isError ? (
+              ) : showScopesSummary && scopesSummaryQuery.isError ? (
                 <Text muted small className="mt-4 block pl-[52px]">
                   Couldn't load requested scopes.
                 </Text>

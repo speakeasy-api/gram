@@ -9,6 +9,7 @@ import {
 import { useSetRemoteMcpServerScopePinMutation } from "@gram/client/react-query/setRemoteMcpServerScopePin.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { requestedSentence } from "./requestedScopes";
 
 export type ResourceScopePin = {
   data: RemoteMcpServerScopes | undefined;
@@ -144,6 +145,15 @@ export function scopePinStatus(
         lines.push("Not used for this connection.");
       }
       break;
+  }
+  // When the pin does not decide, say what does; a draft's lines already speak for it.
+  const entry = connectedEntry(scopes, connectedClientId);
+  if (draft === undefined && entry && entry.scopeSource !== "resource_pin") {
+    const sentence = requestedSentence(entry, scopes);
+    if (sentence) {
+      const last = lines.pop();
+      lines.push(last ? `${last} ${sentence}` : sentence);
+    }
   }
   return lines;
 }
