@@ -103,6 +103,24 @@ function headersResult(headers: RemoteMcpServerHeader[]) {
   };
 }
 
+let savedSequence = 0;
+
+/** Echoes a write back the way the server answers it: an id, secrets redacted. */
+async function echoSaved(args: {
+  request: Record<string, Record<string, unknown>>;
+}): Promise<RemoteMcpServerHeader> {
+  const form = Object.values(args.request)[0] ?? {};
+  savedSequence += 1;
+  return serverHeader({
+    id: (form.id as string | undefined) ?? `saved-${savedSequence}`,
+    name: form.name as string,
+    value: form.isSecret ? "***" : (form.value as string | undefined),
+    valueFromRequestHeader: form.valueFromRequestHeader as string | undefined,
+    isSecret: !!form.isSecret,
+    isRequired: !!form.isRequired,
+  });
+}
+
 beforeEach(() => {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -110,12 +128,12 @@ beforeEach(() => {
   mocks.headers.mockReturnValue(headersResult([]));
   mocks.tunneledHeaders.mockReturnValue(headersResult([]));
   mocks.tunneledInvalidate.mockResolvedValue(undefined);
-  mocks.tunneledCreate.mockResolvedValue(undefined);
-  mocks.tunneledUpdate.mockResolvedValue(undefined);
+  mocks.tunneledCreate.mockImplementation(echoSaved);
+  mocks.tunneledUpdate.mockImplementation(echoSaved);
   mocks.tunneledRemove.mockResolvedValue(undefined);
   mocks.invalidate.mockResolvedValue(undefined);
-  mocks.create.mockResolvedValue(undefined);
-  mocks.update.mockResolvedValue(undefined);
+  mocks.create.mockImplementation(echoSaved);
+  mocks.update.mockImplementation(echoSaved);
   mocks.remove.mockResolvedValue(undefined);
 });
 
@@ -614,5 +632,100 @@ describe("useHeaderDrafts for a tunneled source", () => {
     expect(result.current.drafts.map((draft) => draft.name)).toEqual([
       "X-Tenant",
     ]);
+  });
+});
+
+describe("useHeaderDrafts recovers from a partial save", () => {
+  function editRow(
+    result: { current: ReturnType<typeof useTunneledHeaderDrafts> },
+    index: number,
+    changes: Partial<
+      ReturnType<typeof useTunneledHeaderDrafts>["drafts"][number]
+    >,
+  ) {
+    act(() =>
+      result.current.replaceHeader(index, {
+        ...result.current.drafts[index]!,
+        ...changes,
+      }),
+    );
+  }
+
+  it("retries an update without repeating a delete that landed", async () => {
+    mocks.tunneledHeaders.mockReturnValue(
+      headersResult([
+        serverHeader({ id: "a", name: "X-A", value: "1" }),
+        serverHeader({ id: "b", name: "X-B", value: "1" }),
+      ]),
+    );
+    mocks.tunneledUpdate.mockRejectedValueOnce(new Error("unavailable"));
+    const { result } = renderTunneledDrafts();
+
+    act(() => result.current.removeHeader(0));
+    editRow(result, 0, { staticValue: "2" });
+    await act(async () => {
+      await expect(result.current.save()).rejects.toThrow("unavailable");
+    });
+    expect(mocks.tunneledRemove).toHaveBeenCalledTimes(1);
+    expect(mocks.tunneledInvalidate).toHaveBeenCalled();
+    expect(result.current.isDirty).toBe(true);
+
+    await act(async () => {
+      await result.current.save();
+    });
+    expect(mocks.tunneledRemove).toHaveBeenCalledTimes(1);
+    expect(mocks.tunneledUpdate).toHaveBeenCalledTimes(2);
+    expect(mocks.tunneledUpdate.mock.calls[1]?.[0]).toMatchObject({
+      request: { updateTunneledMcpServerHeaderForm: { id: "b", value: "2" } },
+    });
+  });
+
+  it("does not recreate a row that was created before a later failure", async () => {
+    mocks.tunneledCreate
+      .mockImplementationOnce(echoSaved)
+      .mockRejectedValueOnce(new Error("unavailable"));
+    const { result } = renderTunneledDrafts();
+
+    act(() => result.current.addHeader());
+    editRow(result, 0, { name: "X-Api-Key", staticValue: "synthetic-secret" });
+    act(() => result.current.addHeader());
+    editRow(result, 1, { name: "X-Tenant", staticValue: "t", isSecret: false });
+    await act(async () => {
+      await expect(result.current.save()).rejects.toThrow("unavailable");
+    });
+    // The secret that did land is shown redacted, with its server id.
+    expect(result.current.drafts[0]).toMatchObject({
+      id: expect.any(String),
+      staticValue: "***",
+    });
+
+    await act(async () => {
+      await result.current.save();
+    });
+    const createdNames = mocks.tunneledCreate.mock.calls.map(
+      (call) => call[0].request.createTunneledMcpServerHeaderForm.name,
+    );
+    expect(createdNames).toEqual(["X-Api-Key", "X-Tenant", "X-Tenant"]);
+  });
+
+  it("does not replay a create when the refresh after it failed", async () => {
+    mocks.tunneledHeaders.mockReturnValue({
+      data: { headers: [] },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn().mockResolvedValue({ isError: true, data: undefined }),
+    });
+    const { result } = renderTunneledDrafts();
+
+    act(() => result.current.addHeader());
+    editRow(result, 0, { name: "X-Tenant", staticValue: "t", isSecret: false });
+    await act(async () => {
+      await result.current.save();
+    });
+    await act(async () => {
+      await result.current.save();
+    });
+    expect(mocks.tunneledCreate).toHaveBeenCalledTimes(1);
+    expect(result.current.drafts[0]?.id).toBeDefined();
   });
 });

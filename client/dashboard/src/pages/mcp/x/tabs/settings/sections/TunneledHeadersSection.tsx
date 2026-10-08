@@ -57,16 +57,17 @@ export function TunneledHeadersSection({
 
   const save = async () => {
     try {
-      if (!(await drafts.save())) return;
+      if (await drafts.save()) toast.success("Headers saved");
+    } catch (error) {
+      toast.error(toError(error).message || "Failed to save headers");
+    } finally {
       // A pass-through header changes whether plugins backed by this tunnel
-      // can be distributed.
+      // can be distributed, and a failed save may still have written some
+      // rows.
       await Promise.all([
         invalidateAllPlugins(queryClient),
         invalidateAllPlugin(queryClient),
       ]);
-      toast.success("Headers saved");
-    } catch (error) {
-      toast.error(toError(error).message || "Failed to save headers");
     }
   };
 

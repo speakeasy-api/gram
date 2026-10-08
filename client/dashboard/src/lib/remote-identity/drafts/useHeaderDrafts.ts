@@ -48,8 +48,13 @@ type HeadersQuery = {
 
 /** How the rows are written to one source. */
 type HeaderWrites = {
-  readonly create: (fields: HeaderWriteFields) => Promise<unknown>;
-  readonly update: (id: string, fields: HeaderWriteFields) => Promise<unknown>;
+  /** Resolves with the saved row, secret values redacted. */
+  readonly create: (fields: HeaderWriteFields) => Promise<ServerHeader>;
+  /** Resolves with the saved row, secret values redacted. */
+  readonly update: (
+    id: string,
+    fields: HeaderWriteFields,
+  ) => Promise<ServerHeader>;
   readonly remove: (id: string) => Promise<unknown>;
   readonly invalidate: () => Promise<unknown>;
   /** Drops every mutation's retained request, which holds submitted secrets. */
@@ -279,13 +284,22 @@ function useHeaderDraftsFor({
   // background refetch (window refocus, concurrent change) can't silently
   // discard work in progress.
   const syncedRef = useRef(initialDrafts);
+  // The server snapshot last adopted into the rows. Only a newer one is
+  // adopted, so a save whose rows were reconciled write by write is not
+  // reverted to the stale pre-save snapshot when its own refresh fails.
+  const adoptedRef = useRef(initialDrafts);
 
   useEffect(() => {
     // Advance the baseline only when there is nothing to lose. Save measures
     // its deletions against this snapshot, so moving it under a dirty form
     // would make a row that appeared since — someone else's concurrent add —
     // look like a row the operator deleted, and the diff would remove it.
+    // A save reconciles rows one write at a time; the query still holds the
+    // pre-save list until the save's own refresh lands.
+    if (committingRef.current) return;
+    if (initialDrafts === adoptedRef.current) return;
     if (!draftsEqual(drafts, syncedRef.current)) return;
+    adoptedRef.current = initialDrafts;
     syncedRef.current = initialDrafts;
     setDrafts(initialDrafts);
   }, [drafts, initialDrafts]);
@@ -372,6 +386,22 @@ function useHeaderDraftsFor({
       drafts.flatMap((draft) => (draft.id ? [draft.id] : [])),
     );
 
+    // Each acknowledged write is folded into the baseline and the rows as it
+    // lands, so a save that fails part way leaves the form describing exactly
+    // what is still unsaved: a retry neither repeats a delete (which the
+    // server now answers with not found) nor recreates a row it already made.
+    const adopt = (key: string, saved: ServerHeader) => {
+      const adopted = headerDraftFromServer(saved);
+      syncedRef.current = [
+        ...syncedRef.current.filter((row) => row.id !== adopted.id),
+        adopted,
+      ];
+      setDrafts((current) =>
+        current.map((row) => (row.key === key ? adopted : row)),
+      );
+    };
+    let committed = false;
+
     setWriteError(null);
     try {
       for (const draft of baseline) {
@@ -381,6 +411,10 @@ function useHeaderDraftsFor({
         if (!draft.id || draft.id === managedHeaderId) continue;
         if (keptIds.has(draft.id)) continue;
         await writes.remove(draft.id);
+        committed = true;
+        syncedRef.current = syncedRef.current.filter(
+          (row) => row.id !== draft.id,
+        );
       }
 
       for (const draft of drafts) {
@@ -389,14 +423,16 @@ function useHeaderDraftsFor({
         if (draft.id && draft.id === managedHeaderId) continue;
         const fields = headerDraftToWriteFields(draft);
         if (!draft.id) {
-          await writes.create(fields);
+          adopt(draft.key, await writes.create(fields));
+          committed = true;
           continue;
         }
 
         const previous = baselineById.get(draft.id);
         if (previous && draftsEqual([draft], [previous])) continue;
 
-        await writes.update(draft.id, fields);
+        adopt(draft.key, await writes.update(draft.id, fields));
+        committed = true;
       }
     } catch (error) {
       setWriteError(toError(error));
@@ -407,9 +443,10 @@ function useHeaderDraftsFor({
       // long after the write — failed writes included. Nothing reads them
       // again, so drop them.
       writes.reset();
+      // Whatever did land is real, so every other reader of these headers
+      // must see it even when the save as a whole failed.
+      if (committed) await writes.invalidate();
     }
-
-    await writes.invalidate();
 
     // Adopt the canonical server state so the rows pick up server-assigned ids
     // and secret redaction. The sync effect preserves unsaved edits, so this
