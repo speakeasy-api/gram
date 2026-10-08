@@ -587,7 +587,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	agentSetupURL := ""
 	var agentOptions []consentAgentOption
 	if !challengeState.FirstParty && challengeState.AuthorizerUserID != "" {
-		if enabled, setupURL, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); enabled {
+		if enabled, setupURL, _ := s.agentAuthorizationRollout(ctx, logger, endpoint.OrganizationID); enabled {
 			options, aerr := s.eligibleConsentAgents(ctx, challengeState, endpoint)
 			if aerr != nil {
 				logger.WarnContext(ctx, "eligible agent selection unavailable", attr.SlogError(aerr))
@@ -815,7 +815,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeBadRequest, nil, "agent approval action and selection do not match").LogError(ctx, logger)
 	}
 	if selectedAgentID != "" {
-		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); !enabled {
+		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint.OrganizationID); !enabled {
 			return oops.E(oops.CodeForbidden, nil, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
 		selectedAgent, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID)
@@ -932,7 +932,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return oops.E(oops.CodeForbidden, ferr, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
-		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, finalEndpoint); !enabled {
+		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, finalEndpoint.OrganizationID); !enabled {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return oops.E(oops.CodeForbidden, nil, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
