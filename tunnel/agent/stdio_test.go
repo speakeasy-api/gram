@@ -31,7 +31,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// runStdioFixture is a minimal stdio MCP server driven by the tests below.
 func runStdioFixture() {
 	fmt.Fprintln(os.Stderr, "fixture server starting")
 	out := json.NewEncoder(os.Stdout)
@@ -63,7 +62,6 @@ func runStdioFixture() {
 		switch msg.Method {
 		case "initialize":
 			if msg.Params.ClientInfo.Name == "ping-first" {
-				// Ping and wait for the answer before completing initialize.
 				_ = out.Encode(map[string]any{"jsonrpc": "2.0", "id": "p0", "method": "ping"})
 				pong, err := reader.ReadBytes('\n')
 				if err != nil || !bytes.Contains(pong, []byte(`"p0"`)) {
@@ -89,7 +87,6 @@ func runStdioFixture() {
 				reply(map[string]any{"content": []any{map[string]any{"type": "text", "text": fmt.Sprint(msg.Params.Arguments["text"])}}})
 			}
 		case "":
-			// A response to our elicitation request.
 			if pendingElicit != nil {
 				_ = out.Encode(map[string]any{"jsonrpc": "2.0", "id": pendingElicit, "result": map[string]any{"content": []any{map[string]any{"type": "text", "text": string(msg.Result)}}}})
 				pendingElicit = nil
@@ -317,7 +314,7 @@ func TestStdioBridgeRejectsBadRequests(t *testing.T) {
 
 func TestStdioChildEnvDropsTunnelSettings(t *testing.T) {
 	t.Parallel()
-	env := childEnv([]string{"PATH=/bin", "TUNNEL_KEY=secret", "TUNNEL_GATEWAY_URL=wss://x", "API_TOKEN=keep"})
+	env := childEnv([]string{"PATH=/bin", "TUNNEL_KEY=secret", "tunnel_key=secret", "TUNNEL_GATEWAY_URL=wss://x", "API_TOKEN=keep"})
 	require.Equal(t, []string{"PATH=/bin", "API_TOKEN=keep"}, env)
 }
 
@@ -372,6 +369,16 @@ func TestCanonicalRPCIDComparesByValue(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestCanonicalRPCIDRejectsCostlyNumbers(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{`1e999999999`, `1e-999999999`, strings.Repeat("9", 65)} {
+		_, err := canonicalRPCID(json.RawMessage(raw))
+		require.Error(t, err, raw)
+	}
+	_, err := canonicalRPCID(json.RawMessage(`12345e3`))
+	require.NoError(t, err)
+}
+
 func TestReadFrameEnforcesLimit(t *testing.T) {
 	t.Parallel()
 	reader := bufio.NewReaderSize(strings.NewReader(strings.Repeat("x", 100)+"\nok\n"), 16)
@@ -384,7 +391,6 @@ func TestReadFrameEnforcesLimit(t *testing.T) {
 	require.Len(t, frame, 41)
 }
 
-// newRoutingSession builds a session with no process, for exercising route.
 func newRoutingSession() *stdioSession {
 	return &stdioSession{
 		id:           "test",

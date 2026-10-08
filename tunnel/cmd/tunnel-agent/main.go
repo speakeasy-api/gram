@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -51,7 +52,7 @@ func main() {
 			os.Exit(2)
 		}
 	}
-	if cfg.GatewayURL == "" || cfg.APIKey == "" || cfg.ServiceVersion == "" || (cfg.LocalMCPURL == "") == (cfg.LocalMCPCommand == "") {
+	if cfg.GatewayURL == "" || cfg.APIKey == "" || cfg.ServiceVersion == "" || (strings.TrimSpace(cfg.LocalMCPURL) == "") == (strings.TrimSpace(cfg.LocalMCPCommand) == "") {
 		logger.Error("tunnel-agent missing config; require TUNNEL_GATEWAY_URL, TUNNEL_KEY, TUNNEL_SERVICE_VERSION, and exactly one of TUNNEL_LOCAL_MCP_URL or TUNNEL_LOCAL_MCP_COMMAND")
 		os.Exit(2)
 	}
@@ -65,7 +66,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// The stdio command is not logged: it commonly carries credentials.
+	// Never log the command; it commonly carries credentials.
 	upstream := slog.String("local_mcp", cfg.LocalMCPURL)
 	if cfg.LocalMCPCommand != "" {
 		upstream = slog.String("local_mcp", "stdio")

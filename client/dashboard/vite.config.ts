@@ -117,8 +117,7 @@ function currentWorktree(): string {
   return root ? path.basename(root) : "";
 }
 
-// The release workflow tags the tunnel agent image with tunnel/package.json's
-// version, so setup snippets pin the image this dashboard build shipped with.
+// Release images are tagged with tunnel/package.json's version.
 function tunnelAgentVersion(): string {
   try {
     const manifest = JSON.parse(
