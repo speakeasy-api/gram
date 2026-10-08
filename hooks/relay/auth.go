@@ -34,11 +34,19 @@ type creds struct {
 // authFilePath returns the hooks credential cache location: the
 // SPEAKEASY_AI_HOOKS_AUTH_FILE override, else
 // $XDG_CONFIG_HOME/speakeasy-ai/hooks-auth.env. A cache an older release
-// wrote at $XDG_CONFIG_HOME/gram/hooks-auth.env stays in use while the new
-// file does not exist, so upgrading does not sign anyone out.
+// wrote under $XDG_CONFIG_HOME/gram stays in use while the new file does not
+// exist, so upgrading does not sign anyone out or drop its saved org settings.
 func authFilePath() string {
+	path, _ := authFilePaths()
+	return path
+}
+
+// authFilePaths returns the credential cache in use and, when the default
+// location applies, the other default location (legacy or current) that
+// forgetAuth must clear too. other is "" under an explicit override.
+func authFilePaths() (path, other string) {
 	if v := Env("HOOKS_AUTH_FILE"); v != "" {
-		return v
+		return v, ""
 	}
 	configHome := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME"))
 	if configHome == "" {
@@ -50,12 +58,15 @@ func authFilePath() string {
 	}
 	current := filepath.Join(configHome, "speakeasy-ai", "hooks-auth.env")
 	legacy := filepath.Join(configHome, "gram", "hooks-auth.env")
-	if _, err := os.Stat(current); err != nil {
-		if _, err := os.Stat(legacy); err == nil {
-			return legacy
-		}
+	if !fileExists(current) && (fileExists(legacy) || fileExists(legacy+".org-settings.json")) {
+		return legacy, current
 	}
-	return current
+	return current, legacy
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // readAuthFile parses the cache file into a key/value map. Missing files yield
@@ -123,7 +134,7 @@ func sameDeployment(gotURL, gotOrg, wantURL, wantOrg string) bool {
 }
 
 // resolveAuth returns the effective credential: an explicit env key wins over
-// the cache. Only SPEAKEASY_AI_HOOKS_API_KEY is honored — the generic SPEAKEASY_AI_API_KEY is
+// the cache. Only SPEAKEASY_AI_HOOKS_API_KEY (or its deprecated alias GRAM_HOOKS_API_KEY) is honored — the generic SPEAKEASY_AI_API_KEY and GRAM_API_KEY are
 // a different product surface (MCP access) and must not silently authenticate
 // hook telemetry. The second return is false when the machine holds no
 // credential.
@@ -203,7 +214,13 @@ func atomicWriteCacheFile(path string, body []byte) error {
 // forgetAuth removes the cached credential but leaves the established marker so
 // a forgotten or invalidated key cannot silently disable enforcement.
 func forgetAuth() {
-	_ = os.Remove(authFilePath())
+	path, other := authFilePaths()
+	_ = os.Remove(path)
+	if other != "" {
+		// Never let a stale key at the other default location take over once
+		// this one is forgotten.
+		_ = os.Remove(other)
+	}
 }
 
 // authEstablished reports whether this machine has ever cached hook

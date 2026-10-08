@@ -353,7 +353,7 @@ Cursor's hook events differ from Claude's — they use camelCase and Cursor-spec
 }
 ```
 
-Cursor's hook script posts to `/rpc/hooks.cursor` with an additional `Gram-Project` header (Cursor's endpoint requires it):
+Cursor's hook script posts to `/rpc/hooks.cursor` with an additional `X-Speakeasy-AI-Project` header (Cursor's endpoint requires it):
 
 ```bash
 #!/usr/bin/env bash

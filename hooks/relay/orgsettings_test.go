@@ -204,6 +204,7 @@ func TestCachedKeyRejectionRatchetUnchangedByFailOpen(t *testing.T) {
 	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	writeOrgSettings(cfg, true)
 

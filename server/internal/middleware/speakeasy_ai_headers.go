@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/deviceidentity"
@@ -26,13 +28,16 @@ var SpeakeasyAIHeaderAliases = map[string]string{
 
 // SpeakeasyAIHeaders copies each X-Speakeasy-AI-* request header onto the
 // Gram-* header it replaces, so everything downstream reads one name. When a
-// request sends both, the X-Speakeasy-AI-* value wins.
+// request sends both, a non-empty X-Speakeasy-AI-* value wins.
 func SpeakeasyAIHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for name, legacy := range SpeakeasyAIHeaderAliases {
-			if values := r.Header.Values(name); len(values) > 0 {
+			values := slices.DeleteFunc(slices.Clone(r.Header.Values(name)), func(v string) bool {
+				return strings.TrimSpace(v) == ""
+			})
+			r.Header.Del(name)
+			if len(values) > 0 {
 				r.Header[http.CanonicalHeaderKey(legacy)] = values
-				r.Header.Del(name)
 			}
 		}
 		next.ServeHTTP(w, r)

@@ -261,6 +261,7 @@ func TestDrainSkipsWithoutCredentials(t *testing.T) {
 	setSpoolStateHome(t)
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	fs := newFakeServer(t, nil)
 	seedSpoolEntry(t, fs.URL, time.Hour, "sess-1")
 
@@ -279,6 +280,7 @@ func TestDrainUsesConfigOrgKeyFallback(t *testing.T) {
 	setSpoolStateHome(t)
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	fs := newFakeServer(t, nil)
 
 	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
@@ -375,6 +377,7 @@ func TestDrainAuthenticatesFromDiskCache(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	fs := newFakeServer(t, nil)
 
 	// Cached credential for this deployment (format matches writeAuth).

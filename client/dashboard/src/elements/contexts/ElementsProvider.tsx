@@ -186,6 +186,8 @@ function cleanMessagesForModel(messages: UIMessage[]): UIMessage[] {
  * Delegates to either WithHistory or WithoutHistory based on config.
  */
 const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
+  // gramEnvironment is the deprecated name of environmentSlug.
+  const environmentSlug = config.environmentSlug || config.gramEnvironment;
   const apiUrl = getApiUrl(config);
   const auth = useAuth({
     auth: config.api,
@@ -257,7 +259,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     mcps: config.mcps,
     environment: config.environment ?? {},
     toolsToInclude: config.tools?.toolsToInclude,
-    gramEnvironment: config.environmentSlug ?? config.gramEnvironment,
+    gramEnvironment: environmentSlug,
   });
   // Treat auth-loading as "tools not yet resolved" too — the MCP query is
   // disabled (and so not "loading") until auth settles, so without this a
@@ -385,9 +387,8 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           "Gram-Chat-ID": chatId,
           "X-Gram-Source": "elements",
           ...config.api?.headers, // We do this after X-Gram-Source so the playground can override it
-          ...((config.environmentSlug ?? config.gramEnvironment) && {
-            "Gram-Environment":
-              config.environmentSlug ?? config.gramEnvironment,
+          ...(environmentSlug && {
+            "Gram-Environment": environmentSlug,
           }),
         };
 
@@ -554,8 +555,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       config.contextCompaction?.maxTokens,
       config.contextCompaction?.compactAtFraction,
       config.contextCompaction?.keepRecent,
-      config.environmentSlug,
-      config.gramEnvironment,
+      environmentSlug,
       config.api?.headers,
       model,
       mcpTools,

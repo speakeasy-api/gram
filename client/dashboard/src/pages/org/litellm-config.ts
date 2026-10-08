@@ -20,7 +20,7 @@ export function buildLiteLLMGuardrailConfig(
   failurePosture: LiteLLMInstanceFailurePosture,
 ): string {
   return `guardrails:
-  - guardrail_name: speakeasy-risk
+  - guardrail_name: gram-risk
     litellm_params:
       guardrail: generic_guardrail_api
       mode: [pre_call, post_call]
@@ -40,6 +40,11 @@ export function buildLiteLLMGuardrailConfig(
         - x-codex-turn-metadata
         - x-opencode-session
         - x-opencode-request
+        # Deprecated names that clients set up before the rename still send.
+        - x-gram-session-id
+        - x-gram-agent-provider
+        - x-gram-agent-session-id
+        - x-gram-agent-turn-id
       default_on: true
       streaming_end_of_stream_only: true
       fail_on_error: true

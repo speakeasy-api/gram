@@ -89,6 +89,7 @@ func TestDeviceAgentEmailSocketRescue(t *testing.T) {
 	t.Setenv("HOME", t.TempDir()) // no well-known installs
 	t.Setenv("PATH", t.TempDir()) // bare "speakeasyd" resolves nowhere
 	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
 
 	require.Equal(t, "socket@example.com", deviceAgentEmail(t.Context()))
 }
@@ -156,6 +157,7 @@ func TestDeviceAgentEmailFindsAgentOffPATH(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("PATH", t.TempDir()) // bare "speakeasyd" resolves nowhere
 	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
 	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_TIMEOUT_TENTHS", "20")
 
 	require.Contains(t, deviceAgentCommands(), agent)

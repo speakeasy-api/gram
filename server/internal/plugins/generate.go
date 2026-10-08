@@ -385,7 +385,7 @@ const platformMCPGeneratorVersion = "4"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "46"
+const hooksGeneratorVersion = "47"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -3424,12 +3424,6 @@ import { dirname, join } from "node:path"
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "__SLUG__")
 const SKILLS = join(ROOT, "skills")
 
-// SPEAKEASY_AI_* names fall back to the deprecated GRAM_* name they replace.
-const envValue = (name: string): string =>
-  process.env[name] ??
-  (name.startsWith("SPEAKEASY_AI_") ? process.env["GRAM_" + name.slice("SPEAKEASY_AI_".length)] : undefined) ??
-  ""
-
 const loadServers = (): Record<string, any> => {
   let mcp: Record<string, any> = {}
   try {
@@ -3441,7 +3435,7 @@ const loadServers = (): Record<string, any> => {
   for (const server of Object.values(mcp) as any[]) {
     if (!server.headers) continue
     for (const [name, value] of Object.entries(server.headers) as [string, string][]) {
-      const resolved = value.replace(/\$\{env:([A-Za-z0-9_]+)\}/g, (_m: string, v: string) => envValue(v))
+      const resolved = value.replace(/\$\{env:([A-Za-z0-9_]+)\}/g, (_m: string, v: string) => process.env[v] ?? "")
       if (resolved.trim() === "" || resolved.trim() === "Bearer") delete server.headers[name]
       else server.headers[name] = resolved
     }

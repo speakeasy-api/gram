@@ -75,8 +75,8 @@ func RunDrain(ctx context.Context, out io.Writer) int {
 // because both carry the same Idempotency-Key.
 func Drain(ctx context.Context) DrainSummary {
 	// The drain is its own process, invoked without the deployment flags the
-	// hook command carries, so SPEAKEASY_AI_HOOKS_DEBUG_LOG is the only way to turn
-	// its diagnostics on.
+	// hook command carries, so SPEAKEASY_AI_HOOKS_DEBUG_LOG (or its deprecated
+	// alias GRAM_HOOKS_DEBUG_LOG) is the only way to turn its diagnostics on.
 	debugLog := envDebugLog()
 	var s DrainSummary
 	dir := spoolDirPath()

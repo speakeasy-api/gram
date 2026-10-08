@@ -128,6 +128,11 @@ environment instead of the key baked into the download.
 Supplying these at run time keeps the key out of an image layer. Rotate by
 replacing `SPEAKEASY_AI_HOOKS_ORG_KEY` and restarting the gateway, with no reinstall.
 
+Each variable replaces a deprecated `GRAM_HOOKS_*` name with the same suffix.
+`speakeasy-hooks` releases older than the rename read only the `GRAM_HOOKS_*`
+names, so if you preinstall an older binary, set those instead. Current
+releases read both and prefer the `SPEAKEASY_AI_HOOKS_*` name.
+
 Sessions from a shared gateway attribute to the org, not to an individual.
 Per-user attribution on shared gateways is tracked separately in DNO-971.
 

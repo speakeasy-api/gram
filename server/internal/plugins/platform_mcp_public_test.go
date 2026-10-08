@@ -108,7 +108,7 @@ func TestPublicPlatformMCPFilesCarriesNoSecrets(t *testing.T) {
 
 	for path, content := range files {
 		body := string(content)
-		for _, forbidden := range []string{"gram_", "GRAM_API_KEY", "Gram-Project", "Authorization"} {
+		for _, forbidden := range []string{"gram_", "GRAM_API_KEY", "SPEAKEASY_AI_API_KEY", "Gram-Project", "X-Speakeasy-AI-Project", "Authorization"} {
 			require.NotContains(t, body, forbidden, "%s must not carry credentials", path)
 		}
 	}

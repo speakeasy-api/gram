@@ -122,7 +122,7 @@ const brokenAuthMessage = "Speakeasy hooks are configured for this workspace but
 
 const reauthNeededMessage = "Speakeasy hooks need to reconnect. Run the Speakeasy hooks login command to reconnect."
 
-const envKeyRejectedMessage = "Speakeasy hooks rejected the API key configured in SPEAKEASY_AI_HOOKS_API_KEY. Update or unset SPEAKEASY_AI_HOOKS_API_KEY, then run the Speakeasy hooks login command to reconnect."
+const envKeyRejectedMessage = "Speakeasy hooks rejected the API key configured in SPEAKEASY_AI_HOOKS_API_KEY (or the deprecated GRAM_HOOKS_API_KEY). Update or unset it, then run the Speakeasy hooks login command to reconnect."
 
 // deliver relays one event to the server, returning the result and the
 // credential posture. It performs no work when the machine holds no credential

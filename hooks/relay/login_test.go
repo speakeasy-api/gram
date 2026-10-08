@@ -48,6 +48,7 @@ func TestLoginRoundtrip(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("SPEAKEASY_AI_HOOKS_LOGIN_TIMEOUT_SECONDS", "10")
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	forceInteractiveEnv(t)
 
 	orig := openBrowser
@@ -96,6 +97,7 @@ func TestLoginLegacyGETRoundtrip(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("SPEAKEASY_AI_HOOKS_LOGIN_TIMEOUT_SECONDS", "10")
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	forceInteractiveEnv(t)
 
 	orig := openBrowser
@@ -130,6 +132,7 @@ func TestLoginLegacyGETRoundtrip(t *testing.T) {
 func TestLoginDisabledPointsToManualKey(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "org-key", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	err := NewRelay(cfg).Login(t.Context(), true)
 	require.ErrorContains(t, err, "SPEAKEASY_AI_HOOKS_API_KEY")
@@ -142,6 +145,7 @@ func TestLoginRejectsMismatchedState(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
 	t.Setenv("SPEAKEASY_AI_HOOKS_LOGIN_TIMEOUT_SECONDS", "2")
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	forceInteractiveEnv(t)
 
 	orig := openBrowser
@@ -176,6 +180,7 @@ func TestLoginRejectsMismatchedState(t *testing.T) {
 func TestLoginRefusesBrokenConfig(t *testing.T) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	forceInteractiveEnv(t)
 
 	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "/missing/speakeasy.json", ConfigError: "open /missing/speakeasy.json: no such file or directory"}

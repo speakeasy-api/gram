@@ -34,7 +34,7 @@ guardrails:
         - x-session-id
 ```
 
-`extra_headers` is required to forward Gram's explicit session header and native session headers from supported agent clients rather than LiteLLM's `[present]` placeholder.
+`extra_headers` is required to forward the explicit `x-speakeasy-ai-session-id` header and native session headers from supported agent clients rather than LiteLLM's `[present]` placeholder. The recorded corpus predates that header name and carries the deprecated `x-gram-session-id` alias, which ingest still reads.
 
 ## Coverage
 

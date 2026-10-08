@@ -72,6 +72,24 @@ func TestSpeakeasyAIHeaders_NewNameWins(t *testing.T) {
 	}
 }
 
+func TestSpeakeasyAIHeaders_EmptyNewNameKeepsLegacyValue(t *testing.T) {
+	t.Parallel()
+
+	for name, legacy := range SpeakeasyAIHeaderAliases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			header := http.Header{}
+			header.Set(legacy, "legacy-value")
+			header.Set(name, " ")
+			got := serveSpeakeasyAIHeaders(t, header)
+
+			require.Equal(t, []string{"legacy-value"}, got.Values(legacy))
+			require.Empty(t, got.Values(name))
+		})
+	}
+}
+
 func TestSpeakeasyAIHeaders_NamesAreCanonical(t *testing.T) {
 	t.Parallel()
 
@@ -90,7 +108,7 @@ func TestCORSMiddleware_AllowsSpeakeasyAIHeaders(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 
 	allowed := rec.Header().Get("Access-Control-Allow-Headers")
-	for _, name := range []string{"X-Speakeasy-AI-Key", "X-Speakeasy-AI-Project", "X-Speakeasy-AI-Session", "X-Speakeasy-AI-Chat-Session", "X-Speakeasy-AI-Environment", "X-Speakeasy-AI-Mode"} {
+	for name := range SpeakeasyAIHeaderAliases {
 		require.Contains(t, allowed, name)
 	}
 }
