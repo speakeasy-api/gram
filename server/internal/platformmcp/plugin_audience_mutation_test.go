@@ -104,7 +104,7 @@ func TestPluginAssignmentMutationInputHashCoversExactNormalizedWrite(t *testing.
 	references, err := normalizePluginAssignmentReferences([]string{" ref-b ", "ref-a", "ref-b"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"ref-a", "ref-b"}, references)
-	base := normalizedPluginAssignmentMutationInput(projectID, pluginID.String(), references, "version")
+	base := normalizedPluginAssignmentMutationInput(projectID, pluginID.String(), references, "version", nil)
 	first, err := pluginAssignmentMutationInputHash(base)
 	require.NoError(t, err)
 	second, err := pluginAssignmentMutationInputHash(base)
@@ -124,12 +124,14 @@ func TestPluginAssignmentMutationInputHashCoversExactNormalizedWrite(t *testing.
 func TestResolveMutationAssignmentsSkipsEmptyChoiceLookup(t *testing.T) {
 	t.Parallel()
 
-	principalURNs, summaries, err := (&PluginsService{}).resolveMutationAssignments(t.Context(), nil, Principal{}, ResolvedProject{}, nil)
+	principalURNs, summaries, summaryURNs, err := (&PluginsService{}).resolveMutationAssignments(t.Context(), nil, Principal{}, ResolvedProject{}, nil)
 	require.NoError(t, err)
 	require.NotNil(t, principalURNs)
 	require.Empty(t, principalURNs)
 	require.NotNil(t, summaries)
 	require.Empty(t, summaries)
+	require.NotNil(t, summaryURNs)
+	require.Empty(t, summaryURNs)
 }
 
 func TestPluginAssignmentMutationToolRequiresConfirmation(t *testing.T) {
@@ -151,4 +153,61 @@ func TestPluginAssignmentMutationToolRequiresConfirmation(t *testing.T) {
 	text, ok := refusal.Content[0].(*mcp.TextContent)
 	require.True(t, ok)
 	require.Contains(t, text.Text, "confirmation_required")
+}
+
+func TestNormalizePluginAssignmentInstallModes(t *testing.T) {
+	t.Parallel()
+
+	references := []string{"ref-a", "ref-b"}
+	padded := fmt.Sprintf(" %s ", "ref-a")
+	modes, err := normalizePluginAssignmentInstallModes(map[string]string{padded: "required", "ref-b": " available "}, references)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"ref-a": "required", "ref-b": "available"}, modes)
+
+	modes, err = normalizePluginAssignmentInstallModes(nil, references)
+	require.NoError(t, err)
+	require.Nil(t, modes)
+
+	_, err = normalizePluginAssignmentInstallModes(map[string]string{"ref-c": "required"}, references)
+	require.ErrorIs(t, err, ErrPluginAssignmentMutationInvalid, "a mode must name a selected reference")
+
+	_, err = normalizePluginAssignmentInstallModes(map[string]string{"ref-a": "mandatory"}, references)
+	require.ErrorIs(t, err, ErrPluginAssignmentMutationInvalid)
+
+	_, err = normalizePluginAssignmentInstallModes(map[string]string{"ref-a": "required", padded: "available"}, references)
+	require.ErrorIs(t, err, ErrPluginAssignmentMutationInvalid, "keys that trim to one reference must agree")
+}
+
+func TestPluginAssignmentMutationInputHashCoversInstallModes(t *testing.T) {
+	t.Parallel()
+
+	projectID, pluginID := uuid.New(), uuid.New()
+	references := []string{"ref-a"}
+	withoutModes, err := pluginAssignmentMutationInputHash(normalizedPluginAssignmentMutationInput(projectID, pluginID.String(), references, "version", nil))
+	require.NoError(t, err)
+	required, err := pluginAssignmentMutationInputHash(normalizedPluginAssignmentMutationInput(projectID, pluginID.String(), references, "version", map[string]string{"ref-a": "required"}))
+	require.NoError(t, err)
+	available, err := pluginAssignmentMutationInputHash(normalizedPluginAssignmentMutationInput(projectID, pluginID.String(), references, "version", map[string]string{"ref-a": "available"}))
+	require.NoError(t, err)
+
+	require.NotEqual(t, withoutModes, required)
+	require.NotEqual(t, required, available)
+}
+
+func TestPluginAssignmentMutationReceiptRejectsUnknownInstallMode(t *testing.T) {
+	t.Parallel()
+
+	result := SetPluginAssignmentsReceiptResult{
+		ProjectID: uuid.NewString(),
+		Plugin: PluginAssignmentMutationPlugin{
+			ID: uuid.NewString(), Name: "Shared", Slug: "shared", Assignments: PluginAssignmentSummary{AllMembers: true}, Publication: PluginPublicationPublished,
+		},
+		AssignmentVersion: "opaque",
+		Assignments:       []PluginAssignmentSummaryResult{{Kind: "everyone", DisplayName: "Everyone", InstallMode: "available"}},
+		ResultCategory:    "updated",
+	}
+	require.True(t, validPluginAssignmentReceiptResult(result))
+
+	result.Assignments[0].InstallMode = "mandatory"
+	require.False(t, validPluginAssignmentReceiptResult(result))
 }

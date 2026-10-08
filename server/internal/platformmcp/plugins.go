@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/publishstatus"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -102,6 +103,11 @@ type PluginAssignmentOption struct {
 	DisplayName string        `json:"display_name"`
 	MemberCount *SubjectCount `json:"member_count,omitempty"`
 	Reference   string        `json:"reference"`
+
+	// InstallMode is how the device agent installs the plugin for this
+	// audience: required, default or available. Set only on a plugin's current
+	// assignments in get_plugin.
+	InstallMode string `json:"install_mode,omitempty"`
 }
 
 // Plugin publication states.
@@ -581,7 +587,8 @@ func (s *PluginsService) ResolveAssignmentReferences(ctx context.Context, tx pgx
 	if !s.valid() {
 		return nil, nil, ErrUnavailable
 	}
-	return s.resolveMutationAssignments(ctx, tx, principal, project, references)
+	principalURNs, summaries, _, err := s.resolveMutationAssignments(ctx, tx, principal, project, references)
+	return principalURNs, summaries, err
 }
 
 func (s *PluginsService) valid() bool {
@@ -914,13 +921,19 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 		return GetPluginOutput{}, fmt.Errorf("list platform mcp plugin skills: %w", err)
 	}
 	skills, skillsTruncated := boundedRows(skills, maxPluginMembers)
-	assignments, err := q.ListPlatformMCPPluginAssignments(ctx, platformrepo.ListPlatformMCPPluginAssignmentsParams{
+	assignmentRows, err := q.ListPlatformMCPPluginAssignmentsWithModes(ctx, platformrepo.ListPlatformMCPPluginAssignmentsWithModesParams{
 		PluginID:       target.ID,
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      project.ID,
 	})
 	if err != nil {
 		return GetPluginOutput{}, fmt.Errorf("list platform mcp plugin assignments: %w", err)
+	}
+	assignments := make([]string, 0, len(assignmentRows))
+	assignmentModes := make(map[string]installmode.Mode, len(assignmentRows))
+	for _, row := range assignmentRows {
+		assignments = append(assignments, row.PrincipalUrn)
+		assignmentModes[canonicalPluginAssignmentURN(row.PrincipalUrn)] = installmode.FromStored(row.InstallMode)
 	}
 	availableAssignments := []resolvedPluginAssignment{}
 	expiresAt := time.Time{}
@@ -932,7 +945,10 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 		}
 	}
 	currentAssignments, detailsComplete := currentPluginAssignments(availableAssignments, assignments)
-	assignmentVersion := pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, assignments)
+	for index := range currentAssignments {
+		currentAssignments[index].option.InstallMode = string(assignmentModes[currentAssignments[index].principalURN])
+	}
+	assignmentVersion := pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, assignments, assignmentModes)
 	publicAssignments := publicAssignmentOptions(currentAssignments)
 
 	output := GetPluginOutput{
@@ -1148,20 +1164,33 @@ func currentPluginAssignments(available []resolvedPluginAssignment, assignments 
 	return current, len(assigned) == 0
 }
 
-func pluginAssignmentVersion(key []byte, projectID, pluginID uuid.UUID, assignments []string) string {
+// pluginAssignmentVersion covers the canonical assignment set and each
+// assignment's install mode, so a mode-only edit also invalidates the version.
+// A principal missing from modes counts as installmode.Default.
+func pluginAssignmentVersion(key []byte, projectID, pluginID uuid.UUID, assignments []string, modes map[string]installmode.Mode) string {
 	canonical := slices.Clone(assignments)
 	for index := range canonical {
 		canonical[index] = canonicalPluginAssignmentURN(canonical[index])
 	}
 	slices.Sort(canonical)
 	canonical = slices.Compact(canonical)
+	canonicalModes := make(map[string]installmode.Mode, len(modes))
+	for principalURN, mode := range modes {
+		canonicalModes[canonicalPluginAssignmentURN(principalURN)] = mode
+	}
 	mac := hmac.New(sha256.New, key)
 	_, _ = mac.Write([]byte(projectID.String()))
 	_, _ = mac.Write([]byte{0})
 	_, _ = mac.Write([]byte(pluginID.String()))
 	for _, principalURN := range canonical {
+		mode, ok := canonicalModes[principalURN]
+		if !ok {
+			mode = installmode.Default
+		}
 		_, _ = mac.Write([]byte{0})
 		_, _ = mac.Write([]byte(principalURN))
+		_, _ = mac.Write([]byte{1})
+		_, _ = mac.Write([]byte(mode))
 	}
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }

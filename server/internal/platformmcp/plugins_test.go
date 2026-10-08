@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/directory"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 )
 
@@ -216,12 +217,12 @@ func TestPluginAssignmentVersionCoversPluginAndCanonicalAssignmentSet(t *testing
 	projectID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	pluginID := uuid.MustParse("00000000-0000-0000-0000-0000000000a1")
 	assignments := []string{"role:global:00000000-0000-0000-0000-0000000000b2", "*"}
-	version := pluginAssignmentVersion(key, projectID, pluginID, assignments)
+	version := pluginAssignmentVersion(key, projectID, pluginID, assignments, nil)
 
-	require.Equal(t, version, pluginAssignmentVersion(key, projectID, pluginID, []string{"*", assignments[0], "*"}))
-	require.NotEqual(t, version, pluginAssignmentVersion(key, projectID, pluginID, []string{"*"}))
-	require.NotEqual(t, version, pluginAssignmentVersion(key, projectID, uuid.New(), assignments))
-	require.NotEqual(t, version, pluginAssignmentVersion(key, uuid.New(), pluginID, assignments))
+	require.Equal(t, version, pluginAssignmentVersion(key, projectID, pluginID, []string{"*", assignments[0], "*"}, nil))
+	require.NotEqual(t, version, pluginAssignmentVersion(key, projectID, pluginID, []string{"*"}, nil))
+	require.NotEqual(t, version, pluginAssignmentVersion(key, projectID, uuid.New(), assignments, nil))
+	require.NotEqual(t, version, pluginAssignmentVersion(key, uuid.New(), pluginID, assignments, nil))
 }
 
 func TestCurrentPluginAssignmentsCanonicalizesAndHidesUnreviewedAssignments(t *testing.T) {
@@ -255,8 +256,8 @@ func TestPluginAssignmentVersionCanonicalizesDirectoryPrincipals(t *testing.T) {
 	legacyCase := "directory_group:00000000-0000-0000-0000-0000000000B2"
 
 	require.Equal(t,
-		pluginAssignmentVersion(key, projectID, pluginID, []string{canonical}),
-		pluginAssignmentVersion(key, projectID, pluginID, []string{legacyCase}),
+		pluginAssignmentVersion(key, projectID, pluginID, []string{canonical}, nil),
+		pluginAssignmentVersion(key, projectID, pluginID, []string{legacyCase}, nil),
 	)
 }
 
@@ -330,4 +331,36 @@ func TestPluginCursorTreatsNoCursorAsTheFirstPage(t *testing.T) {
 	after, err := codec.Decode("", Principal{OrganizationID: "org_1"}, uuid.MustParse("00000000-0000-0000-0000-000000000001"))
 	require.NoError(t, err)
 	require.Equal(t, uuid.Nil, after)
+}
+
+func TestPluginAssignmentVersionCoversInstallModes(t *testing.T) {
+	t.Parallel()
+
+	key := []byte("version-key")
+	projectID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	pluginID := uuid.MustParse("00000000-0000-0000-0000-0000000000a1")
+	assignments := []string{"*"}
+	base := pluginAssignmentVersion(key, projectID, pluginID, assignments, nil)
+
+	require.Equal(t, base, pluginAssignmentVersion(key, projectID, pluginID, assignments, map[string]installmode.Mode{"*": installmode.Default}), "a missing mode counts as default")
+	require.NotEqual(t, base, pluginAssignmentVersion(key, projectID, pluginID, assignments, map[string]installmode.Mode{"*": installmode.Required}))
+	require.NotEqual(t,
+		pluginAssignmentVersion(key, projectID, pluginID, assignments, map[string]installmode.Mode{"*": installmode.Required}),
+		pluginAssignmentVersion(key, projectID, pluginID, assignments, map[string]installmode.Mode{"*": installmode.Available}),
+	)
+}
+
+func TestPluginAssignmentVersionCanonicalizesInstallModeKeys(t *testing.T) {
+	t.Parallel()
+
+	key := []byte("version-key")
+	projectID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	pluginID := uuid.MustParse("00000000-0000-0000-0000-0000000000a1")
+	canonical := directory.GroupPrincipal(uuid.MustParse("00000000-0000-0000-0000-0000000000b2"))
+	legacyCase := "directory_group:00000000-0000-0000-0000-0000000000B2"
+
+	require.Equal(t,
+		pluginAssignmentVersion(key, projectID, pluginID, []string{canonical}, map[string]installmode.Mode{canonical: installmode.Required}),
+		pluginAssignmentVersion(key, projectID, pluginID, []string{canonical}, map[string]installmode.Mode{legacyCase: installmode.Required}),
+	)
 }
