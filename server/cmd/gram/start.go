@@ -1335,6 +1335,7 @@ func newStartCommand() *cli.Command {
 			// handlers, tracing, or logging.
 			mux.Use(middleware.NetworkServingPolicyVersion)
 			mux.Use(middleware.StripPrivateIngressHeaders)
+			mux.Use(middleware.SpeakeasyAIHeaders)
 			mux.Use(func(h http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.Method == http.MethodGet && r.URL.Path == "/healthz" {

@@ -959,7 +959,7 @@
               <!-- prettier-ignore -->
               <code class="code-snippet language-sh" data-scope-url-text>claude mcp add --transport http "{{ .MCPSlug }}" \
     "{{ .MCPURL }}"{{- range .SecurityInputs }} \
-    --header '{{ .SystemName | asHTTPHeader }}:{{ printf "${%s}" (.DisplayName | asPosixName) }}'{{- end }}</code>            </div>
+    --header '{{ .HTTPHeader }}:{{ printf "${%s}" (.DisplayName | asPosixName) }}'{{- end }}</code>            </div>
           </li>
           {{- if .SecurityInputs }}
           <li class="instruction-item">
@@ -1028,7 +1028,7 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
       "serverUrl": "{{ .MCPURL }}"{{- if .SecurityInputs }},
       "headers": {
         {{- range $i, $input := .SecurityInputs }}{{- if $i }},{{ end }}
-        "{{ $input.SystemName | asHTTPHeader }}": "your-{{ $input.DisplayName | asPosixName }}-value"{{- end }}
+        "{{ $input.HTTPHeader }}": "your-{{ $input.DisplayName | asPosixName }}-value"{{- end }}
       }
       {{- end }}
     }
@@ -1156,7 +1156,7 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
         "mcp-remote@0.1.25",
         "{{ .MCPURL }}"{{- range .SecurityInputs }},
         "--header",
-        "{{ .SystemName | asHTTPHeader }}:${{ "{" }}{{ .DisplayName | asPosixName }}{{ "}" }}"{{- end }}
+        "{{ .HTTPHeader }}:${{ "{" }}{{ .DisplayName | asPosixName }}{{ "}" }}"{{- end }}
       ],
       "env": {
         {{- range $i, $input := .SecurityInputs }}{{- if $i }},{{ end }}
@@ -1293,11 +1293,11 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
           </li>
           {{- else if not .IsPublic }}
           <li class="instruction-item">
-            Set authentication to <strong>Token</strong> and paste your Gram
+            Set authentication to <strong>Token</strong> and paste your Speakeasy
             API key. ChatGPT sends it as an
             <code>Authorization: Bearer</code> header. ChatGPT cannot set
             additional custom HTTP headers, so extra headers such as
-            <code>Gram-Environment</code> are not sent.
+            <code>X-Speakeasy-AI-Environment</code> are not sent.
           </li>
           {{- else if .SecurityInputs }}
           <li class="instruction-item">
@@ -1410,7 +1410,7 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
                 </svg>
               </button>
               <!-- prettier-ignore -->
-              <code class="code-snippet language-toml">http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $input.SystemName | asHTTPHeader }}" = "your-{{ $input.DisplayName | asPosixName }}-value"{{- end }} }</code>
+              <code class="code-snippet language-toml">http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $input.HTTPHeader }}" = "your-{{ $input.DisplayName | asPosixName }}-value"{{- end }} }</code>
             </div>
           </li>
           <li class="instruction-item">
@@ -1437,7 +1437,7 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
                 </svg>
               </button>
               <!-- prettier-ignore -->
-              <code class="code-snippet language-toml">env_http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $input.SystemName | asHTTPHeader }}" = "{{ $input.DisplayName | asPosixName }}"{{- end }} }</code>
+              <code class="code-snippet language-toml">env_http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $input.HTTPHeader }}" = "{{ $input.DisplayName | asPosixName }}"{{- end }} }</code>
             </div>
           </li>
           {{- end }}
@@ -1483,7 +1483,7 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
       "url": "{{ .MCPURL }}"{{- if .SecurityInputs }},
       "headers": {
         {{- range $i, $input := .SecurityInputs }}{{- if $i }},{{ end }}
-        "{{ $input.SystemName | asHTTPHeader }}": "your-{{ $input.DisplayName | asPosixName }}-value"{{- end }}
+        "{{ $input.HTTPHeader }}": "your-{{ $input.DisplayName | asPosixName }}-value"{{- end }}
       }
       {{- end }}
     }

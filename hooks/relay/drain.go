@@ -75,7 +75,7 @@ func RunDrain(ctx context.Context, out io.Writer) int {
 // because both carry the same Idempotency-Key.
 func Drain(ctx context.Context) DrainSummary {
 	// The drain is its own process, invoked without the deployment flags the
-	// hook command carries, so GRAM_HOOKS_DEBUG_LOG is the only way to turn
+	// hook command carries, so SPEAKEASY_AI_HOOKS_DEBUG_LOG is the only way to turn
 	// its diagnostics on.
 	debugLog := envDebugLog()
 	var s DrainSummary
@@ -368,7 +368,7 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 		a.orgKey = cfg.HooksAPIKey
 		a.c, a.ok = resolveAuth(cfg)
 		if a.ok && a.c.Source == credEnv {
-			if envURL := strings.TrimRight(strings.TrimSpace(os.Getenv("GRAM_HOOKS_SERVER_URL")), "/"); envURL != "" && envURL != entry.ServerURL {
+			if envURL := strings.TrimRight(Env("HOOKS_SERVER_URL"), "/"); envURL != "" && envURL != entry.ServerURL {
 				// The env key belongs to the env-named deployment; resolve
 				// this entry from the cache or org key instead.
 				if cached, ok := readCachedAuth(cfg); ok {
@@ -382,7 +382,7 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 		}
 		if a.ok && entry.ProjectSlug != "" {
 			// The stored deployment identity is the replay routing truth: a
-			// GRAM_HOOKS_PROJECT_SLUG (or cached project) inherited from the
+			// SPEAKEASY_AI_HOOKS_PROJECT_SLUG (or cached project) inherited from the
 			// spawning session must not reroute another project's entries.
 			a.c.Project = entry.ProjectSlug
 		}

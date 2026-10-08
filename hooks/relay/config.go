@@ -50,7 +50,7 @@ type Config struct {
 	Nonblocking bool
 	// DebugLog, when set, appends one diagnostic line per event. It travels as
 	// a command flag (--debug-log=) so it survives providers that scrub the
-	// hook environment, and as GRAM_HOOKS_DEBUG_LOG for the providers that
+	// hook environment, and as SPEAKEASY_AI_HOOKS_DEBUG_LOG for the providers that
 	// pass the environment through, where a customer can turn diagnostics on
 	// without hand-editing a generated hook command. The flag wins when both
 	// name a path.
@@ -144,14 +144,14 @@ func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 	return cfg, rest
 }
 
-// envDebugLog returns the GRAM_HOOKS_DEBUG_LOG path, or "" when the override
+// envDebugLog returns the SPEAKEASY_AI_HOOKS_DEBUG_LOG path, or "" when the override
 // is unset. It is the environment half of the debug log: the flag remains the
 // only way to reach providers that scrub the hook environment, so this is a
 // fallback rather than a replacement, and every entrypoint that resolves a
 // config picks it up. Entrypoints that run without one (the drain process)
 // read it directly.
 func envDebugLog() string {
-	return strings.TrimSpace(os.Getenv("GRAM_HOOKS_DEBUG_LOG"))
+	return Env("HOOKS_DEBUG_LOG")
 }
 
 // readFileConfig loads a speakeasy.json. A missing or malformed file yields an
@@ -169,31 +169,31 @@ func readFileConfig(path string) (FileConfig, error) {
 }
 
 // LoadConfig resolves the effective config from the environment, layering the
-// GRAM_HOOKS_* overrides over the provided defaults.
+// SPEAKEASY_AI_HOOKS_* overrides over the provided defaults.
 func LoadConfig(defaults Config) Config {
 	cfg := defaults
-	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_SERVER_URL")); v != "" {
+	if v := Env("HOOKS_SERVER_URL"); v != "" {
 		cfg.ServerURL = v
 	}
 	if cfg.ServerURL == "" {
 		cfg.ServerURL = DefaultServerURL
 	}
-	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_SITE_URL")); v != "" {
+	if v := Env("HOOKS_SITE_URL"); v != "" {
 		cfg.SiteURL = v
 	}
-	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_PROJECT_SLUG")); v != "" {
+	if v := Env("HOOKS_PROJECT_SLUG"); v != "" {
 		cfg.ProjectSlug = v
 	}
-	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_ORG_ID")); v != "" {
+	if v := Env("HOOKS_ORG_ID"); v != "" {
 		cfg.OrgID = v
 	}
-	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_ORG_KEY")); v != "" {
+	if v := Env("HOOKS_ORG_KEY"); v != "" {
 		cfg.HooksAPIKey = v
 	}
-	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_BROWSER_LOGIN")); v != "" {
+	if v := Env("HOOKS_BROWSER_LOGIN"); v != "" {
 		cfg.BrowserLogin = v == "1" || strings.EqualFold(v, "true")
 	}
-	if os.Getenv("GRAM_HOOKS_NONBLOCKING") != "" || os.Getenv("GRAM_HOOKS_OBSERVABILITY_MODE") != "" {
+	if Env("HOOKS_NONBLOCKING") != "" || Env("HOOKS_OBSERVABILITY_MODE") != "" {
 		cfg.Nonblocking = true
 	}
 	if cfg.DebugLog == "" {

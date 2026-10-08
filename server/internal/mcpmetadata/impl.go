@@ -98,6 +98,19 @@ type securityInput struct {
 	Sensitive   bool
 }
 
+// speakeasyAIEnvironmentInput is the security input that selects the
+// environment of a Speakeasy-key MCP server. Its header keeps the "AI"
+// initialism that the generic title-casing in toolconfig.ToHTTPHeader drops.
+const speakeasyAIEnvironmentInput = "x_speakeasy_ai_environment"
+
+// HTTPHeader returns the HTTP header the input is sent as.
+func (i securityInput) HTTPHeader() string {
+	if i.SystemName == speakeasyAIEnvironmentInput {
+		return "X-Speakeasy-AI-Environment"
+	}
+	return toolconfig.ToHTTPHeader(i.SystemName)
+}
+
 type IDEInstallLinkConfig struct {
 	// Required for vscode, cursor
 	URL string `json:"url"`
@@ -675,7 +688,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	authHeaders := make([]*types.McpExportAuthHeader, 0, len(securityInputs))
 	for _, input := range securityInputs {
 		authHeaders = append(authHeaders, &types.McpExportAuthHeader{
-			Name:        toolconfig.ToHTTPHeader(input.SystemName),
+			Name:        input.HTTPHeader(),
 			DisplayName: input.DisplayName,
 		})
 	}
@@ -900,7 +913,7 @@ func buildCursorInstallURL(toolsetName, mcpURL string, inputs []securityInput) (
 	}
 
 	for _, input := range inputs {
-		headerKey := toolconfig.ToHTTPHeader(input.SystemName)
+		headerKey := input.HTTPHeader()
 		config.Headers[headerKey] = fmt.Sprintf("{{%s}}", input.DisplayName)
 	}
 
@@ -930,7 +943,7 @@ func buildVSCodeInstallURL(toolsetName, mcpURL string, inputs []securityInput) (
 	}
 
 	for _, input := range inputs {
-		headerKey := toolconfig.ToHTTPHeader(input.SystemName)
+		headerKey := input.HTTPHeader()
 		config.Headers[headerKey] = fmt.Sprintf("your-%s-value", input.DisplayName)
 	}
 
@@ -2001,7 +2014,7 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 // resolveSecurityMode determines the security mode based on toolset and
 // mcp_server configuration. OAuth wins regardless of public/private: when
 // OAuth applies, identity auth is delegated to the OAuth flow and the install
-// instructions must not ask the user for an Authorization/GRAM_KEY header.
+// instructions must not ask the user for an Authorization/SPEAKEASY_AI_API_KEY header.
 //
 // When an mcp_servers row is present (server non-nil) it governs: OAuth is
 // decided by the wrapper's user_session_issuer with the toolset's external
@@ -2043,13 +2056,13 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 	case securityModeGram:
 		return []securityInput{
 			{
-				SystemName:  "gram_environment",
-				DisplayName: "gram-environment",
+				SystemName:  speakeasyAIEnvironmentInput,
+				DisplayName: "speakeasy-ai-environment",
 				Sensitive:   false,
 			},
 			{
 				SystemName:  "authorization",
-				DisplayName: "gram-key",
+				DisplayName: "speakeasy-ai-api-key",
 				Sensitive:   true,
 			},
 		}

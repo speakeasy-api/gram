@@ -119,7 +119,7 @@ install_failure_exit=%d
 
 install_failure() {
   printf 'speakeasy-hooks: %%s\n' "$1" >&2
-  printf 'speakeasy-hooks: ask your administrator to allow downloads from %s, or preinstall the hooks binary (GRAM_HOOKS_HOME overrides the cache location)\n' >&2
+  printf 'speakeasy-hooks: ask your administrator to allow downloads from %s, or preinstall the hooks binary (SPEAKEASY_AI_HOOKS_HOME overrides the cache location)\n' >&2
   exit "$install_failure_exit"
 }
 
@@ -261,7 +261,10 @@ case "$target" in
 %s  *) install_failure "unsupported target ${target}" ;;
 esac
 
-if [ -n "${GRAM_HOOKS_HOME:-}" ]; then
+if [ -n "${SPEAKEASY_AI_HOOKS_HOME:-}" ]; then
+  cache_root=$SPEAKEASY_AI_HOOKS_HOME
+elif [ -n "${GRAM_HOOKS_HOME:-}" ]; then
+  # Deprecated name of SPEAKEASY_AI_HOOKS_HOME.
   cache_root=$GRAM_HOOKS_HOME
 elif [ "$os" = darwin ]; then
   cache_root="${HOME}/Library/Caches/Speakeasy/hooks"
@@ -418,7 +421,7 @@ $InstallFailureExit = %d
 
 function Exit-InstallFailure([string]$Message) {
     [Console]::Error.WriteLine("speakeasy-hooks: $Message")
-    [Console]::Error.WriteLine("speakeasy-hooks: ask your administrator to allow downloads from %s, or preinstall the hooks binary (GRAM_HOOKS_HOME overrides the cache location)")
+    [Console]::Error.WriteLine("speakeasy-hooks: ask your administrator to allow downloads from %s, or preinstall the hooks binary (SPEAKEASY_AI_HOOKS_HOME overrides the cache location)")
     exit $InstallFailureExit
 }
 
@@ -601,7 +604,10 @@ if (-not $Arch) { Exit-InstallFailure "unsupported architecture" }
 switch ($Arch) {
 %s}
 
-if ($env:GRAM_HOOKS_HOME) {
+if ($env:SPEAKEASY_AI_HOOKS_HOME) {
+    $CacheRoot = $env:SPEAKEASY_AI_HOOKS_HOME
+} elseif ($env:GRAM_HOOKS_HOME) {
+    # Deprecated name of SPEAKEASY_AI_HOOKS_HOME.
     $CacheRoot = $env:GRAM_HOOKS_HOME
 } else {
     $CacheRoot = Join-Path $env:LOCALAPPDATA "Speakeasy/hooks"

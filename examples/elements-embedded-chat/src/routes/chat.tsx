@@ -43,11 +43,11 @@ function ChatPage() {
   if (!username || !token) return null;
 
   const config: ElementsConfig = {
-    projectSlug: import.meta.env.VITE_GRAM_PROJECT_SLUG,
+    projectSlug: import.meta.env.VITE_SPEAKEASY_AI_PROJECT_SLUG,
 
     // session obtains a short-lived client token from our server-side proxy
     // (/api/chat/session), which in turn calls Gram's session API using our
-    // secret GRAM_API_KEY. This keeps the API key off the client.
+    // secret SPEAKEASY_AI_API_KEY. This keeps the API key off the client.
     api: {
       session: async () => {
         const request = new Request("/api/chat/session", {
@@ -73,7 +73,7 @@ function ChatPage() {
       },
     },
 
-    mcp: import.meta.env.VITE_GRAM_MCP_URL,
+    mcp: import.meta.env.VITE_SPEAKEASY_AI_MCP_URL,
 
     // 'standalone' renders a full-page chat UI (as opposed to 'widget' or 'sidecar').
     variant: "standalone",

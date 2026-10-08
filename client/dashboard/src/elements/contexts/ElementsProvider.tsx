@@ -257,7 +257,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     mcps: config.mcps,
     environment: config.environment ?? {},
     toolsToInclude: config.tools?.toolsToInclude,
-    gramEnvironment: config.gramEnvironment,
+    gramEnvironment: config.environmentSlug ?? config.gramEnvironment,
   });
   // Treat auth-loading as "tools not yet resolved" too — the MCP query is
   // disabled (and so not "loading") until auth settles, so without this a
@@ -385,8 +385,9 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           "Gram-Chat-ID": chatId,
           "X-Gram-Source": "elements",
           ...config.api?.headers, // We do this after X-Gram-Source so the playground can override it
-          ...(config.gramEnvironment && {
-            "Gram-Environment": config.gramEnvironment,
+          ...((config.environmentSlug ?? config.gramEnvironment) && {
+            "Gram-Environment":
+              config.environmentSlug ?? config.gramEnvironment,
           }),
         };
 
@@ -553,6 +554,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       config.contextCompaction?.maxTokens,
       config.contextCompaction?.compactAtFraction,
       config.contextCompaction?.keepRecent,
+      config.environmentSlug,
       config.gramEnvironment,
       config.api?.headers,
       model,

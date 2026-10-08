@@ -104,7 +104,7 @@ func TestSpoolSkipsWhenServerRejects4xx(t *testing.T) {
 // spool is a delivery buffer, not a credential bypass.
 func TestSpoolSkipsWithoutCredentials(t *testing.T) {
 	setSpoolStateHome(t)
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	cfg := Config{ServerURL: closedPortURL(t), ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 

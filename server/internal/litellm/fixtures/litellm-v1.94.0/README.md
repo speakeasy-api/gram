@@ -22,12 +22,12 @@ guardrails:
       mode: [pre_call, post_call]
       api_base: https://example.test/rpc/litellm.ingest
       headers:
-        Gram-Key: os.environ/GRAM_LITELLM_INGEST_KEY
-        Gram-Project: os.environ/GRAM_PROJECT_SLUG
+        X-Speakeasy-AI-Key: os.environ/SPEAKEASY_AI_LITELLM_INGEST_KEY
+        X-Speakeasy-AI-Project: os.environ/SPEAKEASY_AI_PROJECT
       default_on: true
       streaming_end_of_stream_only: true
       extra_headers:
-        - x-gram-session-id
+        - x-speakeasy-ai-session-id
         - x-claude-code-session-id
         - session-id
         - thread-id

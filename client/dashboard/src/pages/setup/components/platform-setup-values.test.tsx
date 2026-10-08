@@ -149,13 +149,13 @@ describe("usePlatformPlaceholders", () => {
     const { result } = renderHook(() => usePlatformPlaceholders());
     const keyed: PlatformSetupStep = {
       title: "keyed",
-      code: "Gram-Key={{GRAM_API_KEY}}",
+      code: "X-Speakeasy-AI-Key={{GRAM_API_KEY}}",
       requiresApiKey: true,
     };
 
     expect(result.current.snippetFor(keyed)).toBeUndefined();
     expect(result.current.snippetFor(keyed, "gram_live_x")).toBe(
-      "Gram-Key=gram_live_x",
+      "X-Speakeasy-AI-Key=gram_live_x",
     );
   });
 });

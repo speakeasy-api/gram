@@ -206,7 +206,7 @@ For public servers, headers are omitted and an env var reference is used for aut
       "type": "http",
       "url": "https://app.getgram.ai/mcp/<toolset-mcp-slug>",
       "headers": {
-        "Authorization": "Bearer ${GRAM_API_KEY}"
+        "Authorization": "Bearer ${SPEAKEASY_AI_API_KEY}"
       }
     }
   }
@@ -276,7 +276,7 @@ the long description retains line breaks and is capped at 4,000 characters.
     "Display Name": {
       "type": "http",
       "url": "https://app.getgram.ai/mcp/<toolset-mcp-slug>",
-      "bearer_token_env_var": "GRAM_API_KEY"
+      "bearer_token_env_var": "SPEAKEASY_AI_API_KEY"
     }
   }
 }
@@ -360,7 +360,7 @@ Cursor's hook script posts to `/rpc/hooks.cursor` with an additional `Gram-Proje
 curl -s -X POST \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <hooks-api-key>" \
-  -H "Gram-Project: <project-slug>" \
+  -H "X-Speakeasy-AI-Project: <project-slug>" \
   -d @- \
   "https://app.getgram.ai/rpc/hooks.cursor"
 ```

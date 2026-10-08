@@ -574,3 +574,22 @@ func TestHTTPRouteRequiresKeyAndExplicitProject(t *testing.T) {
 	require.Equal(t, "wire-team-alias", call.options.SourceAttributes[attr.LiteLLMTeamAliasKey])
 	require.Equal(t, "wire-end-user-id", call.options.SourceAttributes[attr.LiteLLMEndUserIDKey])
 }
+
+func TestAgentAttributionAcceptsSpeakeasyAIHeaders(t *testing.T) {
+	t.Parallel()
+
+	attribution := agentAttributionFromHeaders(map[string]string{
+		"X-Speakeasy-AI-Agent-Provider":   "opencode",
+		"X-Speakeasy-AI-Agent-Session-ID": "session-1",
+		"X-Speakeasy-AI-Agent-Turn-ID":    "turn-1",
+	})
+	require.Equal(t, agentAttribution{SessionID: "session-1", OriginatingClient: "opencode", TurnProvider: "opencode", TurnID: "turn-1"}, attribution)
+
+	require.Equal(t, "new-session", agentAttributionFromHeaders(map[string]string{"X-Speakeasy-AI-Session-ID": "new-session"}).SessionID)
+
+	// The canonical name wins over the deprecated x-gram-* name.
+	require.Equal(t, "new-session", agentAttributionFromHeaders(map[string]string{
+		"X-Gram-Session-ID":         "legacy-session",
+		"X-Speakeasy-AI-Session-ID": "new-session",
+	}).SessionID)
+}

@@ -42,8 +42,8 @@ export interface MCPServerEntry {
    */
   name?: string;
   /**
-   * Environment slug to bind this server's tools to. Sent as the
-   * `Gram-Environment` header on requests to this MCP server only.
+   * Environment slug to bind this server's tools to. It applies to requests
+   * to this MCP server only.
    */
   environment?: string;
 }
@@ -267,9 +267,14 @@ export interface ElementsConfig {
   environment?: Record<string, unknown>;
 
   /**
-   * The environment slug to use for resolving secrets.
-   * When specified, this is sent as the Gram-Environment header to select
-   * which environment's secrets to use for tool execution.
+   * The environment slug to use for resolving secrets. When specified, it
+   * selects which environment's secrets to use for tool execution.
+   */
+  environmentSlug?: string;
+
+  /**
+   * @deprecated Use {@link ElementsConfig.environmentSlug}. It is read only
+   * when `environmentSlug` is not set.
    */
   gramEnvironment?: string;
 

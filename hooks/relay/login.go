@@ -37,8 +37,8 @@ type loginFlow struct {
 func newLoginFlow(cfg Config) *loginFlow {
 	return &loginFlow{
 		cfg:      cfg,
-		timeout:  envDuration("GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS", defaultLoginTimeout),
-		cooldown: envDuration("GRAM_HOOKS_LOGIN_COOLDOWN_SECONDS", defaultLoginCooldown),
+		timeout:  envDuration("HOOKS_LOGIN_TIMEOUT_SECONDS", defaultLoginTimeout),
+		cooldown: envDuration("HOOKS_LOGIN_COOLDOWN_SECONDS", defaultLoginCooldown),
 	}
 }
 
@@ -75,7 +75,7 @@ func (l *loginFlow) Run(ctx context.Context, force bool) error {
 		return fmt.Errorf("refusing insecure Gram server URL %q; use https:// (or an http://localhost dev server)", l.cfg.ServerURL)
 	}
 	if !l.cfg.BrowserLogin {
-		return errors.New("browser sign-in is disabled for this organization; set GRAM_HOOKS_API_KEY to a hooks-scoped key")
+		return errors.New("browser sign-in is disabled for this organization; set SPEAKEASY_AI_HOOKS_API_KEY to a hooks-scoped key")
 	}
 	if ok, reason := loginViable(); !ok {
 		return fmt.Errorf("browser sign-in is unavailable: %s", reason)
@@ -240,11 +240,11 @@ func loginViable() (bool, string) {
 }
 
 func disableLocalAuth() bool {
-	return os.Getenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH") == "1"
+	return Env("HOOKS_DISABLE_LOCAL_AUTH") == "1"
 }
 
 func loginForced() bool {
-	return os.Getenv("GRAM_HOOKS_LOGIN_FORCE") == "1"
+	return Env("HOOKS_LOGIN_FORCE") == "1"
 }
 
 // openLoginURL opens the sign-in URL through a 0600 redirect file so the
@@ -298,7 +298,7 @@ func randomToken() (string, error) {
 }
 
 func envDuration(name string, fallback time.Duration) time.Duration {
-	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+	if v := Env(name); v != "" {
 		if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
 			return time.Duration(secs) * time.Second
 		}

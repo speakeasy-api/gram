@@ -37,7 +37,7 @@ describe("getAgentPlatforms", () => {
       CLAUDE_CODE_ENHANCED_TELEMETRY_BETA: "1",
       OTEL_EXPORTER_OTLP_ENDPOINT: "https://app.getgram.ai/otel",
       OTEL_EXPORTER_OTLP_HEADERS:
-        "Gram-Project={{GRAM_PROJECT_SLUG}},Gram-Key={{GRAM_API_KEY}}",
+        "X-Speakeasy-AI-Project={{GRAM_PROJECT_SLUG}},X-Speakeasy-AI-Key={{GRAM_API_KEY}}",
       OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf",
       OTEL_LOGS_EXPORTER: "otlp",
       OTEL_METRICS_EXPORTER: "otlp",
@@ -94,7 +94,8 @@ describe("getAgentPlatforms", () => {
         { label: "OTLP protocol", value: "http/json" },
         {
           label: "OTLP headers",
-          value: "Gram-Project=default,Gram-Key={{GRAM_API_KEY}}",
+          value:
+            "X-Speakeasy-AI-Project=default,X-Speakeasy-AI-Key={{GRAM_API_KEY}}",
           requiresApiKey: true,
         },
       ],

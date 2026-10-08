@@ -32,9 +32,12 @@ type creds struct {
 }
 
 // authFilePath returns the hooks credential cache location: the
-// GRAM_HOOKS_AUTH_FILE override, else $XDG_CONFIG_HOME/gram/hooks-auth.env.
+// SPEAKEASY_AI_HOOKS_AUTH_FILE override, else
+// $XDG_CONFIG_HOME/speakeasy-ai/hooks-auth.env. A cache an older release
+// wrote at $XDG_CONFIG_HOME/gram/hooks-auth.env stays in use while the new
+// file does not exist, so upgrading does not sign anyone out.
 func authFilePath() string {
-	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_AUTH_FILE")); v != "" {
+	if v := Env("HOOKS_AUTH_FILE"); v != "" {
 		return v
 	}
 	configHome := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME"))
@@ -45,7 +48,14 @@ func authFilePath() string {
 		}
 		configHome = filepath.Join(home, ".config")
 	}
-	return filepath.Join(configHome, "gram", "hooks-auth.env")
+	current := filepath.Join(configHome, "speakeasy-ai", "hooks-auth.env")
+	legacy := filepath.Join(configHome, "gram", "hooks-auth.env")
+	if _, err := os.Stat(current); err != nil {
+		if _, err := os.Stat(legacy); err == nil {
+			return legacy
+		}
+	}
+	return current
 }
 
 // readAuthFile parses the cache file into a key/value map. Missing files yield
@@ -113,15 +123,15 @@ func sameDeployment(gotURL, gotOrg, wantURL, wantOrg string) bool {
 }
 
 // resolveAuth returns the effective credential: an explicit env key wins over
-// the cache. Only GRAM_HOOKS_API_KEY is honored — the generic GRAM_API_KEY is
+// the cache. Only SPEAKEASY_AI_HOOKS_API_KEY is honored — the generic SPEAKEASY_AI_API_KEY is
 // a different product surface (MCP access) and must not silently authenticate
 // hook telemetry. The second return is false when the machine holds no
 // credential.
 func resolveAuth(cfg Config) (creds, bool) {
-	apiKey := strings.TrimSpace(os.Getenv("GRAM_HOOKS_API_KEY"))
+	apiKey := Env("HOOKS_API_KEY")
 	if apiKey != "" {
 		project := cfg.ProjectSlug
-		if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_PROJECT_SLUG")); v != "" {
+		if v := Env("HOOKS_PROJECT_SLUG"); v != "" {
 			project = v
 		}
 		return creds{

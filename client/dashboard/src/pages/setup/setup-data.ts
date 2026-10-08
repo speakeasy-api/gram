@@ -20,7 +20,7 @@ const claudeCodeSettingsJSON = (origin: string) => `{
     "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
     "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
     "OTEL_EXPORTER_OTLP_ENDPOINT": "${origin}/otel",
-    "OTEL_EXPORTER_OTLP_HEADERS": "Gram-Project={{GRAM_PROJECT_SLUG}},Gram-Key={{GRAM_API_KEY}}",
+    "OTEL_EXPORTER_OTLP_HEADERS": "X-Speakeasy-AI-Project={{GRAM_PROJECT_SLUG}},X-Speakeasy-AI-Key={{GRAM_API_KEY}}",
     "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
     "OTEL_LOGS_EXPORTER": "otlp",
     "OTEL_METRICS_EXPORTER": "otlp",
@@ -263,7 +263,8 @@ const setupAgentPlatforms = (
           { label: "OTLP protocol", value: "http/json" },
           {
             label: "OTLP headers",
-            value: "Gram-Project=default,Gram-Key={{GRAM_API_KEY}}",
+            value:
+              "X-Speakeasy-AI-Project=default,X-Speakeasy-AI-Key={{GRAM_API_KEY}}",
             requiresApiKey: true,
           },
         ],
@@ -408,7 +409,7 @@ const setupAgentPlatforms = (
         title: "Render the extension into your repo",
         description:
           "Run this from the repo you use Pi in. It writes .pi/extensions/speakeasy-observability/index.ts and speakeasy.json, which map Pi's lifecycle events to Speakeasy's dashboard. Pi loads project-local extensions only after you trust the project, so answer its trust prompt on first start.",
-        code: `GRAM_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
+        code: `SPEAKEASY_AI_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
 speakeasy-hooks install --provider=pi --dir=. --project={{GRAM_PROJECT_SLUG}}`,
         language: "bash",
         requiresApiKey: true,
@@ -429,7 +430,7 @@ speakeasy-hooks install --provider=pi --dir=. --project={{GRAM_PROJECT_SLUG}}`,
         title: "Render the plugin into your repo",
         description:
           "Run this from the repo you use opencode in. It writes .opencode/plugin/agenthooks.ts and speakeasy.json, which map opencode's events to Speakeasy's dashboard.",
-        code: `GRAM_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
+        code: `SPEAKEASY_AI_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
 speakeasy-hooks install --provider=opencode --dir=. --project={{GRAM_PROJECT_SLUG}}`,
         language: "bash",
         requiresApiKey: true,
