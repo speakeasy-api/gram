@@ -147,6 +147,7 @@ afterEach(cleanup);
 const connection = makeConnection({
   status: "verified",
   agentId: "agent-id",
+  clientId: "management-client-id",
   remoteSessionIssuerId: "remote-issuer-id",
 });
 
@@ -345,6 +346,46 @@ describe("OktaSignInSection", () => {
       screen.getByText(/2 organization sign-in clients use the agent ID/),
     ).toBeTruthy();
     expect(setUpButton().disabled).toBe(true);
+  });
+
+  it("reuses the previous agent's signing key set when setting up a new agent", async () => {
+    state.clients = loaded([
+      {
+        result: {
+          items: [
+            {
+              client: {
+                id: "managed",
+                clientId: "management-client-id",
+                projectId: "",
+                jsonWebKeySetId: "managed-set",
+              },
+            },
+            {
+              client: {
+                id: "previous-sign-in",
+                clientId: "previous-agent-id",
+                projectId: "",
+                jsonWebKeySetId: "set-1",
+              },
+            },
+          ],
+        },
+      },
+    ]);
+    renderSection();
+
+    expect(setUpButton().disabled).toBe(false);
+    fireEvent.click(setUpButton());
+    await waitFor(() =>
+      expect(state.setUp).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          agentId: "agent-id",
+          keySet: { kind: "existing", setId: "set-1" },
+        }),
+      ),
+    );
   });
 
   it("blocks setup without customer-managed keys", () => {

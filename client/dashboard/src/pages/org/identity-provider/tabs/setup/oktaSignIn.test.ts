@@ -50,10 +50,24 @@ function makeSet(id: string, externalKeyId: string): JSONWebKeySet {
 }
 
 describe("managedKeySetIds", () => {
-  it("collects sets on clients other than the sign-in client", () => {
+  it("only excludes the connection-managed client, retaining previous agents and other clients", () => {
     const ids = managedKeySetIds(
       [
-        makeClient({ id: "managed", jsonWebKeySetId: "managed-set" }),
+        makeClient({
+          id: "managed",
+          clientId: "management-client-id",
+          jsonWebKeySetId: "managed-set",
+        }),
+        makeClient({
+          id: "previous-sign-in",
+          clientId: "previous-agent-id",
+          jsonWebKeySetId: "previous-sign-in-set",
+        }),
+        makeClient({
+          id: "other",
+          clientId: "other-client-id",
+          jsonWebKeySetId: "other-set",
+        }),
         makeClient({
           id: "sign-in",
           clientId: AGENT_ID,
@@ -61,10 +75,19 @@ describe("managedKeySetIds", () => {
         }),
         makeClient({ id: "unsigned" }),
       ],
-      AGENT_ID,
+      "management-client-id",
     );
 
     expect([...ids]).toEqual(["managed-set"]);
+    expect([
+      ...managedExternalKeyIds(
+        [
+          makeSet("managed-set", "managed-key"),
+          makeSet("previous-sign-in-set", "own-key"),
+        ],
+        ids,
+      ),
+    ]).toEqual(["managed-key"]);
   });
 });
 
