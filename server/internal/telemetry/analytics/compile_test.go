@@ -233,10 +233,6 @@ func TestCompileAcceptsAWindowUpToTheDatasetRetention(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestReadExprFoldsThroughALookup: a field with a lookup reads as a transform
-// over its expression with the map's two arrays bound, in raw-value order
-// and never with an empty side, so one map renders one SQL string; a field
-// with no lookup, or no loaded map, reads as its expression alone.
 func TestReadExprFoldsThroughALookup(t *testing.T) {
 	t.Parallel()
 
@@ -257,10 +253,6 @@ func TestReadExprFoldsThroughALookup(t *testing.T) {
 	require.Equal(t, []any{[]string{"gh", "github-mcp"}, []string{"GitHub", "GitHub"}}, args, "raw values sorted, and never an empty side")
 }
 
-// TestCompileFoldsADimensionThroughItsLookup: the compiler applies the fold at
-// every place the dimension is read, so a group, a filter and a distinct
-// count all speak the mapped values, with the arrays bound ahead of the
-// tenant and the filter value last.
 func TestCompileFoldsADimensionThroughItsLookup(t *testing.T) {
 	t.Parallel()
 

@@ -89,9 +89,8 @@ type Request struct {
 	Ungrouped    bool
 }
 
-// Reads names the fields the request touches: its dimensions, the fields
-// its measures aggregate and the fields it filters on. A lookup is loaded
-// only for a field in this list.
+// Reads lists the fields the request touches, which is what LoadLookups
+// loads lookups for.
 func (r Request) Reads() []string {
 	reads := make([]string, 0, len(r.Dimensions)+len(r.Measures)+len(r.Filters))
 	reads = append(reads, r.Dimensions...)
@@ -143,8 +142,7 @@ var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 // Compile validates a request against the catalog and turns it into SQL.
 // Guardrails are enforced here, not in the transport, so a direct Go caller
-// is bound by them too. lookups are the tenant's maps for the dataset's
-// lookups, as LoadLookups returns them; nil folds nothing.
+// is bound by them too. lookups come from LoadLookups; nil folds nothing.
 func Compile(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Request) (*Plan, error) {
 	ds, ok := catalog.Dataset(req.Dataset)
 	if !ok {
@@ -332,8 +330,8 @@ func finish(plan *Plan, builder squirrel.SelectBuilder) (*Plan, error) {
 	return plan, nil
 }
 
-// measureExpr resolves a requested measure to its SQL, the arguments that
-// SQL binds, and its result alias.
+// measureExpr resolves a requested measure to its SQL, its binds and its
+// result alias.
 func measureExpr(ds *Dataset, qc QueryContext, measure Measure, position string) (string, []any, string, error) {
 	op := strings.ToLower(measure.Op)
 	alias := measure.Alias
@@ -418,12 +416,8 @@ func measureExpr(ds *Dataset, qc QueryContext, measure Measure, position string)
 	return expr, nil, alias, nil
 }
 
-// readExpr is how a field is read anywhere in a query: its expression, folded
-// through its lookup when the field declares one and the tenant's map was
-// loaded. ClickHouse transform maps each value with an entry to its target
-// and leaves the rest as they are. The arrays are bound as arguments, so one
-// map renders one SQL string, and a field with no lookup, or an empty map,
-// is the expression itself with nothing bound.
+// readExpr is a field's expression, folded through its lookup's map when one
+// was loaded; transform leaves a value with no entry as reported.
 func readExpr(qc QueryContext, field *Field) (string, []any) {
 	if field.Lookup == "" {
 		return field.Expr, nil

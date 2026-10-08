@@ -25,10 +25,8 @@ type Window struct {
 	ToUnixNano   int64
 }
 
-// QueryContext is what one query runs in: the tenant whose rows it reads,
-// the time window, and the per-request lookups the catalog declares, loaded
-// for that tenant. It is not called a scope, because that word is
-// authorization vocabulary here.
+// QueryContext is what one query runs in: its tenant, window and loaded
+// lookups.
 type QueryContext struct {
 	Tenant  Tenant
 	Window  Window

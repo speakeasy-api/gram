@@ -76,15 +76,12 @@ var Skills = &Dataset{
 	Source: skillsSource,
 }
 
-// mcpServerDescription says that mcp_server speaks the display names set
-// in Hooks settings, because a filter on a raw name that is overridden
-// matches nothing: the picker only offers display names.
+// A filter on an overridden raw name matches nothing, so the field says it
+// speaks display names.
 const mcpServerDescription = "MCP server the call went to, under the display name set in Hooks settings. A raw name with no override shows as reported."
 
-// MCPServerDisplayNamesLookup names the lookup mcp_server reads through:
-// the project's hook server-name overrides, raw name to display name, so
-// two reported names with one display name are one server wherever the
-// dimension is read. The service attaches its loader.
+// MCPServerDisplayNamesLookup names the lookup mcp_server reads through: the
+// project's hook server-name overrides, raw name to display name.
 const MCPServerDisplayNamesLookup = "mcp_server_display_names"
 
 // Lookups is every map a dimension of the v1 catalog reads through.
@@ -96,6 +93,5 @@ var Lookups = []*Lookup{
 	},
 }
 
-// Default is the v1 catalog: every dataset reads agent_events. Its lookups
-// carry no loaders; the service attaches them with WithLoaders.
+// Default is the v1 catalog: every dataset reads agent_events.
 var Default = MustCatalog(Lookups, Sessions, ToolCalls, Skills)

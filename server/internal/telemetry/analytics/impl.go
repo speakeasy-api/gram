@@ -41,10 +41,8 @@ var _ gen.Auther = (*Service)(nil)
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, ch Querier, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
 	logger = logger.With(attr.SlogComponent("analytics"))
-	// The catalog declares the lookups; the service is what can load them.
-	// A declared lookup without a loader is a programming error of the same
-	// kind as a half-declared dataset, so it fails here rather than reading
-	// raw values in production.
+	// A lookup without a loader is a programming error, so it panics like
+	// MustCatalog.
 	catalog, err := Default.WithLoaders(map[string]LookupLoader{
 		MCPServerDisplayNamesLookup: mcpServerDisplayNames(hooksRepo.New(db)),
 	})
@@ -61,10 +59,9 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 	}
 }
 
-// mcpServerDisplayNames loads a project's hook server-name overrides as the
-// map mcp_server reads through: raw name to display name. It is one indexed
-// Postgres read per request, since the overrides are mutable settings and
-// a query must speak the names the page shows now.
+// mcpServerDisplayNames loads a project's hook server-name overrides, raw
+// name to display name, on every request so a query speaks the names the
+// page shows now.
 func mcpServerDisplayNames(hooks *hooksRepo.Queries) LookupLoader {
 	return func(ctx context.Context, tenant Tenant) (map[string]string, error) {
 		projectID, err := uuid.Parse(tenant.ProjectID)
@@ -83,8 +80,7 @@ func mcpServerDisplayNames(hooks *hooksRepo.Queries) LookupLoader {
 	}
 }
 
-// loadLookups fetches the tenant's maps for the fields a request reads. A
-// load failure is unexpected, as the project overview treats it.
+// loadLookups is LoadLookups with a failure mapped to an unexpected error.
 func (s *Service) loadLookups(ctx context.Context, tenant Tenant, dataset string, reads []string) (LookupMaps, error) {
 	lookups, err := s.catalog.LoadLookups(ctx, tenant, dataset, reads)
 	if err != nil {

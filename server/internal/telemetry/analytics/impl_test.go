@@ -90,10 +90,6 @@ func TestDescribeDatasetsCarriesFieldDescriptions(t *testing.T) {
 	require.Nil(t, described[0].Fields[1].Description, "a field with nothing to add has no description")
 }
 
-// TestQueryReadsMCPServerThroughTheOverrideLookup: a query sees the project's
-// hook server-name overrides without naming them, so grouping, filtering and
-// counting servers all speak display names; with none set, raw names come
-// through.
 func TestQueryReadsMCPServerThroughTheOverrideLookup(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

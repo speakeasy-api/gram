@@ -149,9 +149,6 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 		require.ErrorContains(t, err, "declared twice")
 	})
 
-	// A dimension may read through a lookup only when the catalog declares
-	// it, so describe never names a map nothing can load, and a measure
-	// never reads through one, since a lookup maps dimension values.
 	t.Run("it rejects a dimension reading through an undeclared lookup", func(t *testing.T) {
 		t.Parallel()
 		ds := base()
@@ -185,9 +182,9 @@ func TestSourceQueriesDeduplicateBeforeAggregating(t *testing.T) {
 
 	qc := QueryContext{Tenant: Tenant{OrganizationID: "org", ProjectID: "proj"}, Window: Window{FromUnixNano: 1, ToUnixNano: 2}}
 
-	// What each dataset binds after the tenant and window: the whole list, so a dropped or
-	// reordered predicate fails here rather than passing unseen, and a new
-	// dataset has to declare its binds before it passes at all.
+	// What each dataset binds after the tenant and window: the whole list, so
+	// a dropped or reordered predicate fails here rather than passing unseen,
+	// and a new dataset has to declare its binds before it passes at all.
 	toolCallBinds := make([]any, 0, len(toolCallEventTypes)+1)
 	for _, eventType := range toolCallEventTypes {
 		toolCallBinds = append(toolCallBinds, eventType)

@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// lookupTestCatalog declares two lookups and a dataset whose two dimensions
-// read through the first, so loading can be watched per lookup.
+// lookupTestCatalog declares two lookups, one read by two dimensions and one
+// by none.
 func lookupTestCatalog(t *testing.T) *Catalog {
 	t.Helper()
 	catalog, err := NewCatalog(
@@ -35,9 +35,6 @@ func lookupTestCatalog(t *testing.T) *Catalog {
 	return catalog
 }
 
-// TestWithLoadersBindsEveryDeclaredLookup: the service must supply a loader
-// for every lookup the catalog declares and nothing else, and binding leaves
-// the declaration untouched.
 func TestWithLoadersBindsEveryDeclaredLookup(t *testing.T) {
 	t.Parallel()
 	catalog := lookupTestCatalog(t)
@@ -60,11 +57,6 @@ func TestWithLoadersBindsEveryDeclaredLookup(t *testing.T) {
 	require.Equal(t, catalog.Datasets(), bound.Datasets())
 }
 
-// TestLoadLookupsLoadsWhatTheRequestReads: one load per lookup the read
-// fields name, however many of them share it; a lookup read by no requested
-// field is not loaded, so a bare count neither pays for it nor can fail on
-// it; a declaration without a loader folds nothing; an unknown dataset loads
-// nothing and a failing loader fails the load.
 func TestLoadLookupsLoadsWhatTheRequestReads(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
@@ -119,9 +111,6 @@ func TestLoadLookupsLoadsWhatTheRequestReads(t *testing.T) {
 	require.NoError(t, err, "a failing store cannot fail a request that does not read through it")
 }
 
-// TestRequestReads: a request reads its dimensions, the fields its measures
-// aggregate and the fields it filters on, and a count with no field reads
-// nothing.
 func TestRequestReads(t *testing.T) {
 	t.Parallel()
 
@@ -143,8 +132,6 @@ func TestRequestReads(t *testing.T) {
 	require.Empty(t, count.Reads())
 }
 
-// TestDefaultCatalogLookups: every lookup the v1 catalog declares is read by
-// a field, and describe can find it by name.
 func TestDefaultCatalogLookups(t *testing.T) {
 	t.Parallel()
 

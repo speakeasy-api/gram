@@ -11,16 +11,11 @@ import (
 type LookupLoader func(ctx context.Context, tenant Tenant) (map[string]string, error)
 
 // Lookup is a per-tenant map a dimension reads through at query time: a
-// value with an entry becomes its target, the rest stay as reported. The
-// catalog declares a lookup the way it declares a field, so describe can
-// say which map a dimension reads through; the column itself stays the raw
-// fact, since the map is a mutable tenant setting applied per request.
+// value with an entry becomes its target, the rest stay as reported.
 type Lookup struct {
 	Name        string
 	Description string
-	// Load fetches the tenant's map. A declaration carries none: the service
-	// attaches loaders with WithLoaders, and a catalog without them folds
-	// nothing, which is what widget validation plans against.
+	// Load is nil on a declaration; WithLoaders binds one.
 	Load LookupLoader
 }
 
@@ -43,10 +38,8 @@ func (c *Catalog) Lookups() []*Lookup {
 	return slices.Clone(c.lookups)
 }
 
-// WithLoaders returns a catalog whose lookups load through the given
-// loaders, keyed by lookup name. Every declared lookup needs one and every
-// loader must name a declared lookup, so a dimension never silently reads
-// raw values because its loader was forgotten. The receiver is unchanged.
+// WithLoaders returns a copy of the catalog with a loader bound to each
+// lookup; every declared lookup needs one and every loader a declared lookup.
 func (c *Catalog) WithLoaders(loaders map[string]LookupLoader) (*Catalog, error) {
 	bound := make([]*Lookup, 0, len(c.lookups))
 	for _, l := range c.lookups {
@@ -64,12 +57,8 @@ func (c *Catalog) WithLoaders(loaders map[string]LookupLoader) (*Catalog, error)
 	return &Catalog{datasets: c.datasets, lookups: bound}, nil
 }
 
-// LoadLookups fetches the maps the fields a request reads go through, one
-// load per lookup however many of those fields share it. A field the request
-// does not read costs nothing and cannot fail it, so a bare count never
-// touches a lookup's store. A lookup without a loader is skipped, so the
-// field reads raw values. An unknown dataset loads nothing; the compiler
-// reports it.
+// LoadLookups fetches each lookup the read fields declare, once. A lookup
+// without a loader is skipped; an unknown dataset is left for the compiler.
 func (c *Catalog) LoadLookups(ctx context.Context, tenant Tenant, dataset string, reads []string) (LookupMaps, error) {
 	ds, ok := c.Dataset(dataset)
 	if !ok {
@@ -96,11 +85,9 @@ func (c *Catalog) LoadLookups(ctx context.Context, tenant Tenant, dataset string
 	return maps, nil
 }
 
-// lookupPairs lays a map out as the two parallel arrays ClickHouse transform
-// takes, in raw-value order, so one map always renders one SQL string with
-// one set of binds. An entry with an empty side is skipped: an empty raw
-// value matches nothing, and an empty target would fold a value into the one
-// the values picker never offers.
+// lookupPairs lays a map out as transform's two arrays, sorted for stable
+// binds. An entry with an empty side is skipped: an empty raw value matches
+// nothing, and an empty target would fold a value into the one never offered.
 func lookupPairs(m map[string]string) ([]string, []string) {
 	raws := make([]string, 0, len(m))
 	for raw, target := range m {

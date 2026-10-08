@@ -123,10 +123,8 @@ type Field struct {
 	// do not needs to say so, or a sparse breakdown reads as "none". It is
 	// shown by describe and the builder's pickers; most fields need none.
 	Description string
-	// Lookup names the catalog lookup this dimension reads through, when it
-	// reads through one: every read of the field, grouping, filtering, a
-	// distinct count and the values picker, sees Expr folded through the
-	// tenant's map. Empty for a field read as reported.
+	// Lookup names the lookup every read of this dimension folds Expr through;
+	// empty reads it as reported.
 	Lookup string
 }
 

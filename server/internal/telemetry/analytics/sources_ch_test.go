@@ -290,10 +290,6 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 	})
 }
 
-// TestLookupFoldsADimensionInClickHouse: with a loaded map, two raw server
-// names with one target are one value to the collapsed rows and the picker,
-// a raw name with no entry shows as reported, and an entry nothing reported
-// changes nothing. Without a map, every raw name is its own value.
 func TestLookupFoldsADimensionInClickHouse(t *testing.T) {
 	t.Parallel()
 

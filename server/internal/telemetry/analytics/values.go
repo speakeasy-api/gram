@@ -35,9 +35,9 @@ type DimensionValue struct {
 
 // CompileValues turns a values request into SQL. Values are resolved after
 // the dataset collapses its observations, so a caller never sees a value no
-// row would actually match, and the empty value is never offered.
-// CompileValues turns a values request into SQL, reading the dimension the
-// way a query does, so the picker offers the values a filter will match.
+// row would actually match, and the empty value is never offered. The
+// dimension is read through its lookup, so the picker offers what a filter
+// will match.
 func CompileValues(catalog *Catalog, tenant Tenant, lookups LookupMaps, req ValuesRequest) (*Plan, error) {
 	ds, ok := catalog.Dataset(req.Dataset)
 	if !ok {
