@@ -31,14 +31,14 @@ func TestSensorMatchExpressionLifecycle(t *testing.T) {
 func TestSensorMatchExpressionUTF8ByteLimit(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
-	expression := `message.role == "` + strings.Repeat("界", 1359) + `"`
-	require.Len(t, expression, matching.MaxExpressionBytes-1)
+	expression := `message.role == "` + strings.Repeat("界", 1359) + `a"`
+	require.Len(t, expression, matching.MaxExpressionBytes)
 
 	sensor, err := ti.service.CreateSensor(ctx, &gen.CreateSensorPayload{Name: "Unicode matching", Mode: "multi_label", MatchExpression: &expression})
 	require.NoError(t, err)
 	require.Equal(t, expression, sensor.MatchExpression)
 
-	expression += "  "
+	expression += " "
 	_, err = ti.service.CreateSensor(ctx, &gen.CreateSensorPayload{Name: "Oversized matching", Mode: "multi_label", MatchExpression: &expression})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
