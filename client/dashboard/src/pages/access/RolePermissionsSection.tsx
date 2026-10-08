@@ -1,3 +1,4 @@
+import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
@@ -34,10 +35,24 @@ export interface ScopeGroup {
 }
 
 /**
+ * MCP permissions for administering servers rather than using them. They sit
+ * under Platform access, but each still lets its holder connect to the servers
+ * it covers with every tool (scopeExpansions in server/internal/authz/scopes.go).
+ */
+export const MCP_ADMIN_SCOPES: ReadonlySet<string> = new Set([
+  "mcp:read",
+  "mcp:write",
+]);
+
+function isMcpAccessScope(scope: ScopeDefinition): boolean {
+  return scope.resourceType === "mcp" && !MCP_ADMIN_SCOPES.has(scope.slug);
+}
+
+/**
  * The permissions a role carries, as a list you build rather than a tree you
  * walk: pick permissions from one searchable menu, then narrow each one on its
- * own row. MCP permissions are separated from the rest because they are the
- * ones with something to narrow — a server, and inside it, particular tools.
+ * own row. Connecting to MCP servers is separated from the rest because it is
+ * the one with something to narrow — a server, and inside it, particular tools.
  */
 export function RolePermissionsSection({
   groups,
@@ -69,8 +84,14 @@ export function RolePermissionsSection({
   // A pick from the empty state waits here until the picker has closed.
   const pendingScope = useRef<Scope | null>(null);
 
-  const mcpGroups = groups.filter((group) => group.resourceType === "mcp");
-  const otherGroups = groups.filter((group) => group.resourceType !== "mcp");
+  // Split by permission, not by group: the MCP group's admin permissions
+  // belong with the platform ones.
+  const groupsWith = (keep: (scope: ScopeDefinition) => boolean) =>
+    groups
+      .map((group) => ({ ...group, scopes: group.scopes.filter(keep) }))
+      .filter((group) => group.scopes.length > 0);
+  const mcpGroups = groupsWith(isMcpAccessScope);
+  const otherGroups = groupsWith((scope) => !isMcpAccessScope(scope));
 
   const selectedIn = (list: ScopeGroup[]) =>
     list.flatMap((group) =>
@@ -195,7 +216,7 @@ export function RolePermissionsSection({
                 <Text muted small className="mt-1">
                   {tab === "mcp"
                     ? `Add a permission to let ${subjectLabel} reach MCP servers and their tools.`
-                    : `Add a permission to let ${subjectLabel} work with projects, environments and skills.`}
+                    : `Add a permission to let ${subjectLabel} work with projects, environments, skills and MCP servers.`}
                 </Text>
                 <div className="mt-4">{addButton}</div>
               </div>
@@ -233,6 +254,16 @@ export function RolePermissionsSection({
                           <div className="mt-2 flex flex-wrap items-center gap-1.5">
                             {rule}
                           </div>
+                        )}
+                        {MCP_ADMIN_SCOPES.has(scope.slug) && (
+                          <Alert
+                            iconName="lock"
+                            alignTop
+                            className="bg-muted mt-2 text-xs"
+                          >
+                            Also allows connecting to these servers with every
+                            tool.
+                          </Alert>
                         )}
                       </div>
                       <Button
