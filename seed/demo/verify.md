@@ -504,6 +504,17 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     **Read-only Tools**: All servers is chosen with a Read-Only Tools badge.
     Save stays disabled on each until something is edited.
 
+29. **Tunneled MCP upstream headers** — open the **JAMF** MCP server's
+    settings. Upstream Headers sits after Resource Identifier and shows the
+    always-on notice that the headers are stored on the tunnel and apply to
+    every MCP server on it, public ones included, plus the stdio note. Rows:
+    `X-Jamf-Tenant` (Static value `demo-tenant`, Required) and
+    `X-Jamf-Region` (From request header `X-Region`). The tunnel has never
+    connected and the section still renders from stored rows. In the shared
+    demo the controls are read-only; locally, saving a reserved name such as
+    `Gram-Key` is refused. Plugin compatibility for a plugin using JAMF is
+    false because of the request-derived row.
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
