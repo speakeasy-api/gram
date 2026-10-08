@@ -13,6 +13,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const checkDirectoryRoleInventoryOperator = `-- name: CheckDirectoryRoleInventoryOperator :one
+SELECT id FROM users
+WHERE id = $1 AND admin IS TRUE AND deleted_at IS NULL
+FOR SHARE
+`
+
+func (q *Queries) CheckDirectoryRoleInventoryOperator(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRow(ctx, checkDirectoryRoleInventoryOperator, id)
+	var id_2 string
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const createOrganizationRoleWithRequests = `-- name: CreateOrganizationRoleWithRequests :one
 WITH created AS (
 INSERT INTO organization_roles (
@@ -498,6 +511,19 @@ func (q *Queries) GetActiveOrganizationRoleBySlug(ctx context.Context, arg GetAc
 		&i.MemberCount,
 	)
 	return i, err
+}
+
+const getDirectoryRoleInventoryOrganization = `-- name: GetDirectoryRoleInventoryOrganization :one
+SELECT workos_id FROM organization_metadata
+WHERE id = $1 AND disabled_at IS NULL
+FOR SHARE
+`
+
+func (q *Queries) GetDirectoryRoleInventoryOrganization(ctx context.Context, id string) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getDirectoryRoleInventoryOrganization, id)
+	var workos_id pgtype.Text
+	err := row.Scan(&workos_id)
+	return workos_id, err
 }
 
 const getDirectoryRoleMapping = `-- name: GetDirectoryRoleMapping :one
@@ -1892,6 +1918,115 @@ func (q *Queries) ListDirectoryMappedRoleMemberCounts(ctx context.Context, arg L
 	for rows.Next() {
 		var i ListDirectoryMappedRoleMemberCountsRow
 		if err := rows.Scan(&i.RoleUrn, &i.MemberCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectoryRoleInventoryGroups = `-- name: ListDirectoryRoleInventoryGroups :many
+SELECT id, workos_directory_group_id
+FROM directory_groups
+WHERE organization_id = $1 AND deleted IS FALSE AND workos_deleted IS FALSE
+  AND workos_directory_group_id = ANY($2::text[])
+ORDER BY id
+`
+
+type ListDirectoryRoleInventoryGroupsParams struct {
+	OrganizationID string
+	WorkosGroupIds []string
+}
+
+type ListDirectoryRoleInventoryGroupsRow struct {
+	ID                     uuid.UUID
+	WorkosDirectoryGroupID string
+}
+
+func (q *Queries) ListDirectoryRoleInventoryGroups(ctx context.Context, arg ListDirectoryRoleInventoryGroupsParams) ([]ListDirectoryRoleInventoryGroupsRow, error) {
+	rows, err := q.db.Query(ctx, listDirectoryRoleInventoryGroups, arg.OrganizationID, arg.WorkosGroupIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectoryRoleInventoryGroupsRow
+	for rows.Next() {
+		var i ListDirectoryRoleInventoryGroupsRow
+		if err := rows.Scan(&i.ID, &i.WorkosDirectoryGroupID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectoryRoleInventoryMembers = `-- name: ListDirectoryRoleInventoryMembers :many
+SELECT u.id
+FROM organization_user_relationships AS m
+JOIN users AS u ON u.id = m.user_id AND u.deleted_at IS NULL
+WHERE m.organization_id = $1 AND m.deleted IS FALSE
+ORDER BY u.id
+`
+
+func (q *Queries) ListDirectoryRoleInventoryMembers(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listDirectoryRoleInventoryMembers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectoryRoleInventoryRoles = `-- name: ListDirectoryRoleInventoryRoles :many
+SELECT workos_slug::text AS role_slug, ('role:organization:' || id::text)::text AS role_urn
+FROM organization_roles
+WHERE organization_id = $1 AND deleted IS FALSE AND workos_deleted IS FALSE
+  AND workos_slug = ANY($2::text[])
+UNION ALL
+SELECT workos_slug::text AS role_slug, ('role:global:' || id::text)::text AS role_urn
+FROM global_roles
+WHERE deleted IS FALSE AND workos_deleted IS FALSE
+  AND workos_slug = ANY($2::text[])
+ORDER BY role_slug, role_urn
+`
+
+type ListDirectoryRoleInventoryRolesParams struct {
+	OrganizationID string
+	RoleSlugs      []string
+}
+
+type ListDirectoryRoleInventoryRolesRow struct {
+	RoleSlug string
+	RoleUrn  string
+}
+
+func (q *Queries) ListDirectoryRoleInventoryRoles(ctx context.Context, arg ListDirectoryRoleInventoryRolesParams) ([]ListDirectoryRoleInventoryRolesRow, error) {
+	rows, err := q.db.Query(ctx, listDirectoryRoleInventoryRoles, arg.OrganizationID, arg.RoleSlugs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectoryRoleInventoryRolesRow
+	for rows.Next() {
+		var i ListDirectoryRoleInventoryRolesRow
+		if err := rows.Scan(&i.RoleSlug, &i.RoleUrn); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
