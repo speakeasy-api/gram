@@ -655,7 +655,7 @@ BEGIN
        ARRAY[]::text[]),
       ('engineer', 'Engineer',
        'Creates and configures MCP servers in this project.',
-       ARRAY['mcp:read', 'mcp:write'],
+       ARRAY['mcp:read', 'mcp:write', 'mcp:connect'],
        ARRAY['user_demo_priya', 'user_demo_mateo'],
        ARRAY[]::text[]),
       ('automation-agent', 'Automation Agent',
@@ -1578,9 +1578,10 @@ BEGIN
      'user:' || demo_user_ids[4], 'mcp:connect',
      jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*'));
 
-  -- Distribute these servers to the seeded organization roles with Use access:
-  -- mcp:read and mcp:write imply mcp:connect, including disposition-limited
-  -- access. Store server identities, not legacy toolset memberships. Content
+  -- Distribute these servers to the seeded organization roles holding
+  -- mcp:connect, including disposition-limited connect. mcp:read and
+  -- mcp:write still allow connecting at the endpoint but do not deliver
+  -- servers. Store server identities, not legacy toolset memberships. Content
   -- has no manual/automatic distinction and never widens a plugin's audience.
   INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
   SELECT p.id, s.id, s.name
@@ -1594,13 +1595,13 @@ BEGIN
     AND EXISTS (
       SELECT 1 FROM principal_grants g
       WHERE g.organization_id = demo_org AND g.principal_urn = a.principal_urn
-        AND g.scope IN ('mcp:connect', 'mcp:read', 'mcp:write')
+        AND g.scope = 'mcp:connect'
         AND g.selectors->>'resource_kind' = 'mcp'
         AND g.selectors->>'resource_id' = '*');
 
   GET DIAGNOSTICS stray = ROW_COUNT;
-  IF stray <> 30 THEN
-    RAISE EXCEPTION 'demo seed: expected 30 role server memberships, found %', stray;
+  IF stray <> 25 THEN
+    RAISE EXCEPTION 'demo seed: expected 25 role server memberships, found %', stray;
   END IF;
 
   -- Leave instructions NULL so Settings starts with the editable built-in

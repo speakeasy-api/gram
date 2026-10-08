@@ -46,7 +46,7 @@ func registerAccessRoleMutationTools(reg *Registrar, mutations *AccessRoleMutati
 	}, meta, create)
 	addTool(reg, &mcp.Tool{
 		Name: "update_mcp_access_role", Title: "Update MCP Access Role",
-		Description: "Update a custom role through an opaque reference and expected version. Adds or removes exact MCP access rules while preserving every non-MCP grant. Changes to effective Use access can also add or remove servers in plugins assigned to this role and queue publication; another assigned role may retain access and distribution. Plugin-content edits do not grant or revoke server access. Requires explicit confirmation and an idempotency key.",
+		Description: "Update a custom role through an opaque reference and expected version. Adds or removes exact MCP access rules while preserving every non-MCP grant. Changes to connect rules can also add or remove servers in plugins assigned to this role and queue publication; read and write rules never change plugin contents; another assigned role may retain access and distribution. Plugin-content edits do not grant or revoke server access. Requires explicit confirmation and an idempotency key.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true)},
 	}, meta, update)
 	addTool(reg, &mcp.Tool{
