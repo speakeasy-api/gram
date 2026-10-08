@@ -108,7 +108,8 @@ export function computeDrift(
   return drift.sort((a, b) => a.toolName.localeCompare(b.toolName));
 }
 
-function advertisedToForm(
+/** The stored record a tool's advertised annotations amount to. */
+export function advertisedToForm(
   toolName: string,
   tool: ProxiedMcpTool,
 ): ToolMetadataForm {

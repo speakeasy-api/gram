@@ -17,7 +17,7 @@ const toolsetServer = (id: string, name = `toolset ${id}`): Server => ({
   mcpSlug: id,
   tools: [{ id: `${id}-tool`, name: "do_thing", type: "http" }],
   dynamicTools: false,
-  remoteBacked: false,
+  storedToolInventory: false,
 });
 
 const group = (projectId: string, servers: Server[]): ServerGroup => ({
@@ -90,22 +90,30 @@ describe("mergeMcpServersIntoGroups", () => {
     });
   });
 
-  it("marks remoteBacked only for rows with a remote_mcp_server_id", () => {
+  it("marks remote and tunneled rows as carrying a stored tool inventory", () => {
     const merged = mergeMcpServersIntoGroups(
       [],
       [
         row({ id: "remote-1", remoteMcpServerId: "rmt-1" }),
-        row({ id: "tunneled-1" }),
+        row({ id: "tunneled-1", tunneledMcpServerId: "tun-1" }),
+        row({ id: "unproxied-1" }),
       ],
       projectNames,
     );
     const servers = merged[0]!.servers;
-    // Remote-backed servers carry a metadata table; tunneled ones don't, so
-    // only the former should drive the metadata-backed tool picker.
+    // Both proxied backends store tool metadata, so both drive the
+    // metadata-backed tool picker; only the tunneled one names its source.
     expect(servers).toMatchObject([
-      { id: "remote-1", dynamicTools: true, remoteBacked: true },
-      { id: "tunneled-1", dynamicTools: true, remoteBacked: false },
+      { id: "remote-1", dynamicTools: true, storedToolInventory: true },
+      {
+        id: "tunneled-1",
+        dynamicTools: true,
+        storedToolInventory: true,
+        tunneledSourceId: "tun-1",
+      },
+      { id: "unproxied-1", dynamicTools: true, storedToolInventory: false },
     ]);
+    expect(servers[0]!.tunneledSourceId).toBeUndefined();
   });
 
   it("dedupes toolset-backed rows against the existing toolset entry", () => {
@@ -134,7 +142,7 @@ describe("mergeMcpServersIntoGroups", () => {
         mcpSlug: undefined,
         tools: [],
         dynamicTools: false,
-        remoteBacked: false,
+        storedToolInventory: false,
       },
     ]);
   });

@@ -8,12 +8,15 @@ import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { Loader2, RefreshCw } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import {
   type FieldChange,
   type MetadataField,
   type ToolDrift,
 } from "./toolMetadataSync";
+import type { ToolMetadataActions } from "./useSyncToolMetadata";
 
 const FIELD_LABELS: Record<MetadataField, string> = {
   title: "Title",
@@ -64,26 +67,76 @@ function formatValue(value: string | boolean | undefined): string {
  * Shows how Speakeasy's stored tool metadata differs from what the live MCP session
  * advertises, and offers to reconcile it.
  *
- * The session is authoritative, so every row reads as "what syncing would do".
- * Newly advertised tools are recorded automatically and never appear here; what
- * is left is the destructive half — overwriting hints that changed upstream and
- * removing tools the session stopped advertising — which only happens when the
- * user asks for it.
+ * With `onSync` (remote servers) the session is authoritative, so every row
+ * reads as "what syncing would do". Newly advertised tools are recorded
+ * automatically and never appear here; what is left is the destructive half —
+ * overwriting hints that changed upstream and removing tools the session
+ * stopped advertising — which only happens when the user asks for it.
+ *
+ * With `toolActions` (tunneled servers) the session is only what this viewer
+ * can see, so nothing is reconciled in bulk: each row offers one write to one
+ * tool, and a tool the session doesn't show is never presented as gone.
  */
 export function ToolMetadataDriftPanel({
   drift,
   mcpServerId,
   onSync,
   isSyncing,
+  toolActions,
 }: {
   drift: ToolDrift[];
   mcpServerId: string | undefined;
-  onSync: () => void;
+  onSync: (() => void) | undefined;
   isSyncing: boolean;
+  toolActions?: ToolMetadataActions;
 }): JSX.Element | null {
+  const [removing, setRemoving] = useState<string | null>(null);
   if (drift.length === 0) return null;
 
-  const removing = drift.filter((d) => d.kind === "removed").length;
+  if (toolActions) {
+    return (
+      <div className="border-border mb-5 border">
+        <div className="border-b px-4 py-2">
+          <Text small as="p" className="text-muted-foreground">
+            <span className="text-foreground font-medium">
+              {drift.length} {drift.length === 1 ? "tool" : "tools"}
+            </span>{" "}
+            {drift.length === 1 ? "differs" : "differ"} from what this server
+            listed for you. Other people may see different tools, so stored
+            annotations change one tool at a time.
+          </Text>
+        </div>
+        <ul className="divide-border divide-y">
+          {drift.map((entry) => (
+            <DriftRow
+              key={entry.toolName}
+              entry={entry}
+              action={
+                <DriftRowAction
+                  entry={entry}
+                  mcpServerId={mcpServerId}
+                  actions={toolActions}
+                  onRemove={() => setRemoving(entry.toolName)}
+                />
+              }
+            />
+          ))}
+        </ul>
+        {removing !== null ? (
+          <RemoveStoredToolDialog
+            toolName={removing}
+            onConfirm={() => {
+              toolActions.remove(removing);
+              setRemoving(null);
+            }}
+            onClose={() => setRemoving(null)}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
+  const removingCount = drift.filter((d) => d.kind === "removed").length;
 
   return (
     <div className="border-border mb-5 border">
@@ -94,49 +147,22 @@ export function ToolMetadataDriftPanel({
           </span>{" "}
           {drift.length === 1 ? "differs" : "differ"} from what this server
           advertises
-          {removing > 0 ? (
+          {removingCount > 0 ? (
             <>
               {" · "}
               <span className="text-destructive">
-                syncing removes {removing}
+                syncing removes {removingCount}
               </span>
             </>
           ) : null}
         </Text>
-        <RequireScope
-          scope="mcp:write"
-          resourceId={mcpServerId}
-          level="component"
-          reason="You need write access to this MCP server to sync tool metadata."
-        >
-          {({ disabled }) => (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  className="p-2"
-                  disabled={disabled || isSyncing}
-                  onClick={onSync}
-                >
-                  <Button.LeftIcon>
-                    {isSyncing ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="size-4" />
-                    )}
-                  </Button.LeftIcon>
-                  {/* The panel header already explains what syncing does, so
-                      the label is for screen readers and the tooltip. */}
-                  <Button.Text className="sr-only">
-                    {isSyncing ? "Syncing annotations" : "Sync annotations"}
-                  </Button.Text>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Sync annotations</TooltipContent>
-            </Tooltip>
-          )}
-        </RequireScope>
+        {onSync ? (
+          <SyncButton
+            mcpServerId={mcpServerId}
+            onSync={onSync}
+            isSyncing={isSyncing}
+          />
+        ) : null}
       </div>
 
       <ul className="divide-border divide-y">
@@ -148,15 +174,184 @@ export function ToolMetadataDriftPanel({
   );
 }
 
+function SyncButton({
+  mcpServerId,
+  onSync,
+  isSyncing,
+}: {
+  mcpServerId: string | undefined;
+  onSync: () => void;
+  isSyncing: boolean;
+}): JSX.Element {
+  return (
+    <RequireScope
+      scope="mcp:write"
+      resourceId={mcpServerId}
+      level="component"
+      reason="You need write access to this MCP server to sync tool metadata."
+    >
+      {({ disabled }) => (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="tertiary"
+              size="sm"
+              className="p-2"
+              disabled={disabled || isSyncing}
+              onClick={onSync}
+            >
+              <Button.LeftIcon>
+                {isSyncing ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-4" />
+                )}
+              </Button.LeftIcon>
+              {/* The panel header already explains what syncing does, so
+                  the label is for screen readers and the tooltip. */}
+              <Button.Text className="sr-only">
+                {isSyncing ? "Syncing annotations" : "Sync annotations"}
+              </Button.Text>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Sync annotations</TooltipContent>
+        </Tooltip>
+      )}
+    </RequireScope>
+  );
+}
+
+const DRIFT_ACTION_LABELS: Record<ToolDrift["kind"], string> = {
+  new: "Record",
+  changed: "Apply",
+  removed: "Remove",
+};
+
+/** The one write a tunneled server's drift row offers for its tool. */
+function DriftRowAction({
+  entry,
+  mcpServerId,
+  actions,
+  onRemove,
+}: {
+  entry: ToolDrift;
+  mcpServerId: string | undefined;
+  actions: ToolMetadataActions;
+  onRemove: () => void;
+}): JSX.Element {
+  const run = () => {
+    switch (entry.kind) {
+      case "new":
+        actions.record(entry.toolName);
+        return;
+      case "changed":
+        actions.apply(entry.toolName);
+        return;
+      case "removed":
+        onRemove();
+        return;
+    }
+  };
+  const label = DRIFT_ACTION_LABELS[entry.kind];
+
+  return (
+    <RequireScope
+      scope="mcp:write"
+      resourceId={mcpServerId}
+      level="component"
+      reason="You need write access to this MCP server to change its stored tool metadata."
+    >
+      {({ disabled }) => (
+        <Button
+          variant="tertiary"
+          size="xs"
+          disabled={disabled || actions.pendingTool !== undefined}
+          onClick={run}
+        >
+          <Button.Text>
+            {label}
+            <span className="sr-only"> {entry.toolName}</span>
+          </Button.Text>
+        </Button>
+      )}
+    </RequireScope>
+  );
+}
+
+/**
+ * Confirms removing one tool's stored metadata. The listing it came from is
+ * only one viewer's, so the copy says what is actually removed and who it
+ * affects.
+ */
+function RemoveStoredToolDialog({
+  toolName,
+  onConfirm,
+  onClose,
+}: {
+  toolName: string;
+  onConfirm: () => void;
+  onClose: () => void;
+}): JSX.Element {
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <Dialog.Content className="sm:max-w-md">
+        <Dialog.Header>
+          <Dialog.Title>Remove stored metadata for {toolName}?</Dialog.Title>
+          <Dialog.Description>
+            This removes Speakeasy&rsquo;s recorded annotations for this tool on
+            this server. The tool itself is unaffected.
+          </Dialog.Description>
+        </Dialog.Header>
+        <ul className="text-muted-foreground list-disc space-y-1 py-2 pl-5 text-sm">
+          <li>
+            It wasn&rsquo;t in your listing, but other people may still see it.
+          </li>
+          <li>
+            Annotation rules stop reaching it for everyone. Rules naming the
+            tool keep working.
+          </li>
+        </ul>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            <Button.Text>Cancel</Button.Text>
+          </Button>
+          <Button variant="destructive-primary" onClick={onConfirm}>
+            <Button.Text>Remove metadata</Button.Text>
+          </Button>
+        </div>
+      </Dialog.Content>
+    </Dialog>
+  );
+}
+
 /**
  * One tool per line: marker, name, then what syncing changes. The three columns
  * use the same track sizes on every row so they read as a table, and the detail
  * column scrolls rather than wrapping so a tool with several changed hints
  * still occupies a single line.
  */
-function DriftRow({ entry }: { entry: ToolDrift }): JSX.Element {
+function DriftRow({
+  entry,
+  action,
+}: {
+  entry: ToolDrift;
+  /** A per-row write, for servers whose drift is resolved one tool at a time. */
+  action?: ReactNode;
+}): JSX.Element {
   return (
-    <li className="hover:bg-muted/50 grid grid-cols-[0.75rem_minmax(0,14rem)_minmax(0,1fr)] items-baseline gap-x-3 px-4 py-1.5 transition-colors">
+    <li
+      className={cn(
+        "hover:bg-muted/50 grid items-baseline gap-x-3 px-4 py-1.5 transition-colors",
+        action
+          ? "grid-cols-[0.75rem_minmax(0,14rem)_minmax(0,1fr)_auto]"
+          : "grid-cols-[0.75rem_minmax(0,14rem)_minmax(0,1fr)]",
+      )}
+    >
       <DriftMarker kind={entry.kind} />
       <Text
         mono
@@ -166,7 +361,9 @@ function DriftRow({ entry }: { entry: ToolDrift }): JSX.Element {
           "truncate",
           // The name itself is struck through when the tool is going away, so
           // the row reads as a deletion without needing to spell it out.
-          entry.kind === "removed" && "text-muted-foreground line-through",
+          entry.kind === "removed" &&
+            !action &&
+            "text-muted-foreground line-through",
         )}
         title={entry.toolName}
       >
@@ -183,9 +380,15 @@ function DriftRow({ entry }: { entry: ToolDrift }): JSX.Element {
         // Worth saying, because it already happened without the user asking.
         // A removal needs no gloss — the marker is the whole story.
         <Text muted small as="span" className="truncate">
-          recorded automatically
+          {action ? "not recorded yet" : "recorded automatically"}
+        </Text>
+      ) : action ? (
+        // Only this viewer's listing lacks it, so it isn't shown as deleted.
+        <Text muted small as="span" className="truncate">
+          not in your listing
         </Text>
       ) : null}
+      {action}
     </li>
   );
 }
