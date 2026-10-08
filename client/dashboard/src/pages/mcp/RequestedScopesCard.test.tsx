@@ -1,7 +1,8 @@
 import type { RemoteMcpServerClientScopes } from "@gram/client/models/components/remotemcpserverclientscopes.js";
 import type { RemoteMcpServerScopes } from "@gram/client/models/components/remotemcpserverscopes.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
-import { cleanup, render, screen } from "@testing-library/react";
+import { TooltipProvider } from "@/components/ui/Tooltip";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MCPTeamAccessTab } from "./MCPTeamAccessTab";
@@ -76,11 +77,18 @@ function loaded(data: RemoteMcpServerScopes): void {
   });
 }
 
+async function expectDisclaimer(title: string): Promise<void> {
+  fireEvent.focus(screen.getByRole("button", { name: `About ${title}` }));
+  expect((await screen.findAllByText(DISCLAIMER)).length).toBeGreaterThan(0);
+}
+
 function renderCard(editHref: string | undefined = EDIT_HREF) {
   return render(
-    <MemoryRouter>
-      <RequestedScopesCard mcpServerId="mcp-server-1" editHref={editHref} />
-    </MemoryRouter>,
+    <TooltipProvider>
+      <MemoryRouter>
+        <RequestedScopesCard mcpServerId="mcp-server-1" editHref={editHref} />
+      </MemoryRouter>
+    </TooltipProvider>,
   );
 }
 
@@ -96,13 +104,15 @@ afterEach(() => {
 describe("MCPTeamAccessTab", () => {
   it("shows the requested scopes for a remote-backed server", () => {
     render(
-      <MemoryRouter>
-        <MCPTeamAccessTab
-          resourceId="mcp-server-1"
-          serverName="Linear"
-          requestedScopes={{ editScopesHref: EDIT_HREF }}
-        />
-      </MemoryRouter>,
+      <TooltipProvider>
+        <MemoryRouter>
+          <MCPTeamAccessTab
+            resourceId="mcp-server-1"
+            serverName="Linear"
+            requestedScopes={{ editScopesHref: EDIT_HREF }}
+          />
+        </MemoryRouter>
+      </TooltipProvider>,
     );
     expect(screen.getByText("Scopes requested from Acme SSO")).toBeTruthy();
     expect(mocks.scopes).toHaveBeenCalledWith(
@@ -114,9 +124,11 @@ describe("MCPTeamAccessTab", () => {
 
   it("neither fetches nor renders scopes for other servers", () => {
     render(
-      <MemoryRouter>
-        <MCPTeamAccessTab resourceId="mcp-server-1" serverName="Toolset" />
-      </MemoryRouter>,
+      <TooltipProvider>
+        <MemoryRouter>
+          <MCPTeamAccessTab resourceId="mcp-server-1" serverName="Toolset" />
+        </MemoryRouter>
+      </TooltipProvider>,
     );
     expect(screen.queryByText(/Scopes requested from/)).toBeNull();
     expect(mocks.scopes).not.toHaveBeenCalled();
@@ -124,7 +136,7 @@ describe("MCPTeamAccessTab", () => {
 });
 
 describe("RequestedScopesCard", () => {
-  it("lists requested scopes without the identity scopes", () => {
+  it("lists requested scopes without the identity scopes", async () => {
     loaded(
       scopes([
         client({
@@ -145,7 +157,7 @@ describe("RequestedScopesCard", () => {
     expect(
       Array.from(list.querySelectorAll("li")).map((li) => li.textContent),
     ).toEqual(["read", "write"]);
-    expect(screen.getByText(DISCLAIMER)).toBeTruthy();
+    await expectDisclaimer("Scopes requested from Acme SSO");
   });
 
   it("shows a client with a single non-identity scope", () => {
@@ -194,7 +206,7 @@ describe("RequestedScopesCard", () => {
       ).toBeTruthy();
       expect(screen.getByText("Acme SSO applies its defaults.")).toBeTruthy();
       expect(screen.queryByRole("list")).toBeNull();
-      expect(screen.queryByText(DISCLAIMER)).toBeNull();
+      expect(screen.queryByRole("button", { name: /^About / })).toBeNull();
     },
   );
 
@@ -252,11 +264,11 @@ describe("RequestedScopesCard", () => {
     ["cached_resource", "Advertised by the server."],
     ["issuer_override", "Set by the identity provider's override."],
     ["issuer_catalogue", "Every scope the identity provider advertises."],
-  ] as const)("explains the %s source", (scopeSource, line) => {
+  ] as const)("explains the %s source", async (scopeSource, line) => {
     loaded(scopes([client({ scopeSource })]));
     renderCard();
     expect(screen.getByText(line)).toBeTruthy();
-    expect(screen.getByText(DISCLAIMER)).toBeTruthy();
+    await expectDisclaimer("Scopes requested from Acme SSO");
   });
 
   it("shows one card for connections that make the same request", () => {

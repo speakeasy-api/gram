@@ -127,7 +127,7 @@ export function RequestedScopesCard({
   const labels = issuerLabels(clients);
 
   return (
-    <div className="space-y-4">
+    <div className="max-w-2xl space-y-3">
       {clients.map((client) => {
         const name = labels.get(client.clientId) ?? issuerLabel(client);
         const canEdit =
@@ -141,6 +141,13 @@ export function RequestedScopesCard({
                 : `Scopes requested from ${name}`
             }
             className="h-auto"
+            headerClassName="py-3"
+            bodyClassName="py-3"
+            tooltip={
+              requestsNothing(client)
+                ? undefined
+                : `Speakeasy requests these scopes; ${name} grants and enforces them. Existing connections keep their scopes until the next sign-in.`
+            }
             action={
               canEdit ? (
                 <Link
@@ -197,7 +204,7 @@ function ClientScopes({
   }
   const source = sourceLine(client, scopes);
   return (
-    <div className="space-y-3">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
       <ul className="flex flex-wrap gap-1.5" aria-label="Requested scopes">
         {shownScopes(client).map((scope) => (
           <li key={scope}>
@@ -212,13 +219,10 @@ function ClientScopes({
         ))}
       </ul>
       {source ? (
-        <Text muted small className="block">
+        <Text muted small>
           {source}
         </Text>
       ) : null}
-      <Text muted small className="block">
-        {`Speakeasy requests these scopes; ${name} grants and enforces them. Existing connections keep their scopes until the next sign-in.`}
-      </Text>
     </div>
   );
 }
