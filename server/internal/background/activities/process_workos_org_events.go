@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
@@ -268,6 +269,9 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := workosrepo.New(dbtx).LockOrganizationSync(ctx, workosOrgID); err != nil {
+		return "", fmt.Errorf("lock organization event sync: %w", err)
+	}
 	effects, err := handleOrganizationEvent(ctx, logger, dbtx, workosOrgID, event, p.newOrganizationDefaultHost)
 	if err != nil {
 		return "", err
@@ -871,6 +875,7 @@ func handleSSOConnectionChange(ctx context.Context, logger *slog.Logger, dbtx da
 
 // workosDSyncEventPayload is the relevant subset of a dsync.* event payload.
 type workosDSyncEventPayload struct {
+	ID             string `json:"id"`
 	OrganizationID string `json:"organization_id"`
 }
 
@@ -885,6 +890,9 @@ func handleDSyncChange(ctx context.Context, logger *slog.Logger, dbtx database.D
 	if payload.OrganizationID == "" {
 		logger.WarnContext(ctx, "skipping dsync event with empty organization_id")
 		return nil
+	}
+	if !enabled && payload.ID == "" {
+		return oops.Permanent(fmt.Errorf("directory deletion payload missing id"))
 	}
 
 	repo := orgrepo.New(dbtx)
@@ -907,6 +915,26 @@ func handleDSyncChange(ctx context.Context, logger *slog.Logger, dbtx database.D
 	}
 	if !ShouldProcessEvent(lastEventID, rowUpdatedAt, event.ID, event.CreatedAt) {
 		return nil
+	}
+
+	if !enabled {
+		dirQueries := directoryrepo.New(dbtx)
+		if _, err := dirQueries.DeleteDirectoryUsersByDirectoryID(ctx, directoryrepo.DeleteDirectoryUsersByDirectoryIDParams{
+			OrganizationID:    org.ID,
+			DirectoryID:       payload.ID,
+			WorkosDeletedAt:   conv.ToPGTimestamptz(event.CreatedAt),
+			WorkosLastEventID: conv.ToPGText(event.ID),
+		}); err != nil {
+			return fmt.Errorf("deactivate deleted directory users: %w", err)
+		}
+		if _, err := dirQueries.DeleteDirectoryGroupsByDirectoryID(ctx, directoryrepo.DeleteDirectoryGroupsByDirectoryIDParams{
+			OrganizationID:    org.ID,
+			DirectoryID:       payload.ID,
+			WorkosDeletedAt:   conv.ToPGTimestamptz(event.CreatedAt),
+			WorkosLastEventID: conv.ToPGText(event.ID),
+		}); err != nil {
+			return fmt.Errorf("deactivate deleted directory groups: %w", err)
+		}
 	}
 
 	if err := repo.SetSCIMEnabled(ctx, orgrepo.SetSCIMEnabledParams{

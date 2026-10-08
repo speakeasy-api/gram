@@ -64,29 +64,35 @@ type Directory struct {
 // ListDirectories fetches directory sync directories for an organization from WorkOS.
 // https://workos.com/docs/reference/directory-sync/directory#list-directories
 func (wc *Client) ListDirectories(ctx context.Context, organizationID string) ([]Directory, error) {
-	resp, err := wc.dsync.ListDirectories(ctx, directorysync.ListDirectoriesOpts{
-		OrganizationID: organizationID,
-		Search:         "",
-		Limit:          0,
-		Order:          "",
-		Before:         "",
-		After:          "",
-	})
-	if err != nil {
-		return nil, wrapSDKError(err, "list directories")
-	}
-
-	out := make([]Directory, 0, len(resp.Data))
-	for _, d := range resp.Data {
-		out = append(out, Directory{
-			ID:             d.ID,
-			OrganizationID: d.OrganizationID,
-			Type:           string(d.Type),
-			Name:           d.Name,
-			State:          string(d.State),
-			CreatedAt:      d.CreatedAt,
-			UpdatedAt:      d.UpdatedAt,
+	var out []Directory
+	after := ""
+	for {
+		resp, err := wc.dsync.ListDirectories(ctx, directorysync.ListDirectoriesOpts{
+			OrganizationID: organizationID,
+			Search:         "",
+			Limit:          100,
+			Order:          "",
+			Before:         "",
+			After:          after,
 		})
+		if err != nil {
+			return nil, wrapSDKError(err, "list directories")
+		}
+		for _, d := range resp.Data {
+			out = append(out, Directory{
+				ID:             d.ID,
+				OrganizationID: d.OrganizationID,
+				Type:           string(d.Type),
+				Name:           d.Name,
+				State:          string(d.State),
+				CreatedAt:      d.CreatedAt,
+				UpdatedAt:      d.UpdatedAt,
+			})
+		}
+		if resp.ListMetadata.After == "" {
+			break
+		}
+		after = resp.ListMetadata.After
 	}
 	return out, nil
 }

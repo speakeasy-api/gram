@@ -144,6 +144,7 @@ func (s *Service) SyncDirectoryGroups(ctx context.Context, _ *gen.SyncDirectoryG
 			if _, err := dirQueries.UpsertListedDirectoryGroup(ctx, directoryrepo.UpsertListedDirectoryGroupParams{
 				OrganizationID:         ac.ActiveOrganizationID,
 				WorkosDirectoryGroupID: group.ID,
+				DirectoryID:            conv.ToPGText(directory.ID),
 				Name:                   group.Name,
 				Attributes:             attributes,
 				WorkosCreatedAt:        conv.ToPGTimestamptz(workosTimeOrNow(group.CreatedAt)),

@@ -232,6 +232,7 @@ func TestGetPlugins_RefreshesDirectoryGroupMembership(t *testing.T) {
 	require.ElementsMatch(t, []string{wantObservability, "beta-tool", "gamma-tool"}, pluginSlugs(res))
 
 	_, err = directoryrepo.New(ti.conn).DeleteDirectoryGroupByWorkOSID(ctx, directoryrepo.DeleteDirectoryGroupByWorkOSIDParams{
+		OrganizationID:         ti.orgID,
 		WorkosDirectoryGroupID: "group-beta",
 		WorkosDeletedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosLastEventID:      conv.ToPGText("event-group-beta-deleted"),
@@ -242,6 +243,7 @@ func TestGetPlugins_RefreshesDirectoryGroupMembership(t *testing.T) {
 	require.ElementsMatch(t, []string{wantObservability, "gamma-tool"}, pluginSlugs(res))
 
 	_, err = directoryrepo.New(ti.conn).DeleteDirectoryUserByWorkOSID(ctx, directoryrepo.DeleteDirectoryUserByWorkOSIDParams{
+		OrganizationID:        ti.orgID,
 		WorkosDirectoryUserID: "user-gamma",
 		WorkosDeletedAt:       conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosLastEventID:     conv.ToPGText("event-user-gamma-deleted"),
