@@ -15,7 +15,7 @@ import (
 func TestCompileValues(t *testing.T) {
 	t.Parallel()
 
-	plan, err := CompileValues(Default, "org-1", "project-1", ValuesRequest{Dataset: "tool_calls", Dimension: "tool_name", FromUnixNano: testFrom, ToUnixNano: testTo, Limit: 0})
+	plan, err := CompileValues(Default, Tenant{OrganizationID: "org-1", ProjectID: "project-1"}, ValuesRequest{Dataset: "tool_calls", Dimension: "tool_name", FromUnixNano: testFrom, ToUnixNano: testTo, Limit: 0})
 	require.NoError(t, err)
 	require.Contains(t, plan.SQL, "SELECT tool_name AS value, count() AS n FROM (")
 	require.Contains(t, plan.SQL, "LIMIT 1 BY organization_id, project_id, record_id", "values come from the collapsed rows")
@@ -38,7 +38,7 @@ func TestCompileValues(t *testing.T) {
 	for _, tc := range cases {
 		t.Run("it rejects "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := CompileValues(Default, "org-1", "project-1", tc.req)
+			_, err := CompileValues(Default, Tenant{OrganizationID: "org-1", ProjectID: "project-1"}, tc.req)
 			var invalid *Error
 			require.ErrorAs(t, err, &invalid)
 			require.Equal(t, tc.code, invalid.Code)

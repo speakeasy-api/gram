@@ -146,11 +146,11 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 	}
 	require.NoError(t, chrepo.New(conn).InsertAgentEvents(t.Context(), rows))
 
-	scope := Scope{OrganizationID: orgID, ProjectID: "project-1", FromUnixNano: base - 1, ToUnixNano: base + int64(time.Hour)}
+	qc := QueryContext{Tenant: Tenant{OrganizationID: orgID, ProjectID: "project-1"}, Window: Window{FromUnixNano: base - 1, ToUnixNano: base + int64(time.Hour)}}
 
 	t.Run("sessions collapses to one row per session with identity-aware counts", func(t *testing.T) {
 		t.Parallel()
-		query, args, err := sessionsSource(scope).ToSql()
+		query, args, err := sessionsSource(qc).ToSql()
 		require.NoError(t, err)
 		result, err := conn.Query(t.Context(), query+" ORDER BY session_id", args...)
 		require.NoError(t, err)
@@ -185,7 +185,7 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 
 	t.Run("tool_calls resolves each call to its terminal observation", func(t *testing.T) {
 		t.Parallel()
-		query, args, err := toolCallsSource(scope).ToSql()
+		query, args, err := toolCallsSource(qc).ToSql()
 		require.NoError(t, err)
 		result, err := conn.Query(t.Context(), query+" ORDER BY tool_call_id", args...)
 		require.NoError(t, err)
@@ -273,7 +273,7 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		t.Parallel()
 		// Every measure above is idempotent under duplicates by design, so the
 		// collapse cannot be seen through them. Read the scan itself.
-		inner, args, err := dedupedAgentEvents(scope).ToSql()
+		inner, args, err := dedupedAgentEvents(qc).ToSql()
 		require.NoError(t, err)
 		result, err := conn.Query(t.Context(), "SELECT record_id, text FROM ("+inner+") WHERE record_id = 'r1'", args...)
 		require.NoError(t, err)

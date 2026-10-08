@@ -176,7 +176,7 @@ func validateQuery(catalog *analytics.Catalog, dataset string, query Query, now 
 
 	// Tenancy is bound as arguments and never reaches the plan, so any
 	// placeholder validates the shape.
-	if _, err := analytics.Compile(catalog, "validate", "validate", req); err != nil {
+	if _, err := analytics.Compile(catalog, analytics.Tenant{OrganizationID: "validate", ProjectID: "validate"}, req); err != nil {
 		if invalid, ok := errors.AsType[*analytics.Error](err); ok {
 			return invalid.Error(), nil
 		}

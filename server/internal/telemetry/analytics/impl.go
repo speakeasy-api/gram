@@ -85,7 +85,7 @@ func (s *Service) Query(ctx context.Context, payload *gen.QueryPayload) (*gen.An
 		return nil, err
 	}
 
-	plan, err := Compile(s.catalog, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), req)
+	plan, err := Compile(s.catalog, Tenant{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String()}, req)
 	if err != nil {
 		if invalid, ok := errors.AsType[*Error](err); ok {
 			return nil, oops.E(oops.CodeBadRequest, err, "%s", invalid.Error())

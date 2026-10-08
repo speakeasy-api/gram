@@ -127,7 +127,7 @@ var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 // Compile validates a request against the catalog and turns it into SQL.
 // Guardrails are enforced here, not in the transport, so a direct Go caller
 // is bound by them too.
-func Compile(catalog *Catalog, organizationID, projectID string, req Request) (*Plan, error) {
+func Compile(catalog *Catalog, tenant Tenant, req Request) (*Plan, error) {
 	ds, ok := catalog.Dataset(req.Dataset)
 	if !ok {
 		return nil, newError(ErrUnknownDataset, req.Dataset, "dataset", req.Dataset, fmt.Sprintf("dataset %q does not exist", req.Dataset))
@@ -177,8 +177,8 @@ func Compile(catalog *Catalog, organizationID, projectID string, req Request) (*
 		return nil, newError(ErrLimitExceeded, name, "limit", fmt.Sprint(req.Limit), fmt.Sprintf("limit must be between 1 and %d", MaxLimit))
 	}
 
-	scope := Scope{OrganizationID: organizationID, ProjectID: projectID, FromUnixNano: req.FromUnixNano, ToUnixNano: req.ToUnixNano}
-	builder := sq.Select().FromSelect(ds.Source(scope), "src")
+	qc := QueryContext{Tenant: tenant, Window: Window{FromUnixNano: req.FromUnixNano, ToUnixNano: req.ToUnixNano}}
+	builder := sq.Select().FromSelect(ds.Source(qc), "src")
 
 	// Filters apply to the collapsed rows, after the source query, so a
 	// filter on a dimension whose value settled on the last observation sees

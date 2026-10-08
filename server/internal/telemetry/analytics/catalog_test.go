@@ -153,9 +153,9 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 func TestSourceQueriesDeduplicateBeforeAggregating(t *testing.T) {
 	t.Parallel()
 
-	scope := Scope{OrganizationID: "org", ProjectID: "proj", FromUnixNano: 1, ToUnixNano: 2}
+	qc := QueryContext{Tenant: Tenant{OrganizationID: "org", ProjectID: "proj"}, Window: Window{FromUnixNano: 1, ToUnixNano: 2}}
 
-	// What each dataset binds after the scope: the whole list, so a dropped or
+	// What each dataset binds after the tenant and window: the whole list, so a dropped or
 	// reordered predicate fails here rather than passing unseen, and a new
 	// dataset has to declare its binds before it passes at all.
 	toolCallBinds := make([]any, 0, len(toolCallEventTypes)+1)
@@ -171,7 +171,7 @@ func TestSourceQueriesDeduplicateBeforeAggregating(t *testing.T) {
 	}
 
 	for _, ds := range Default.Datasets() {
-		query, args, err := ds.Source(scope).ToSql()
+		query, args, err := ds.Source(qc).ToSql()
 		require.NoError(t, err, ds.Name)
 		require.Contains(t, query, "LIMIT 1 BY organization_id, project_id, record_id", ds.Name)
 		require.Contains(t, query, "GROUP BY organization_id, project_id", ds.Name)
@@ -189,14 +189,14 @@ func TestSourceQueriesDeduplicateBeforeAggregating(t *testing.T) {
 func TestToolCallPredicatesShareOneVocabulary(t *testing.T) {
 	t.Parallel()
 
-	scope := Scope{OrganizationID: "org", ProjectID: "project", FromUnixNano: 1, ToUnixNano: 2}
+	qc := QueryContext{Tenant: Tenant{OrganizationID: "org", ProjectID: "project"}, Window: Window{FromUnixNano: 1, ToUnixNano: 2}}
 
-	sessions, _, err := sessionsSource(scope).ToSql()
+	sessions, _, err := sessionsSource(qc).ToSql()
 	require.NoError(t, err)
 	require.Contains(t, sessions, toolCallEventTypesSQL)
 	require.Equal(t, "event_type IN ('tool_call', 'tool_call_result', 'tool_decision')", toolCallEventTypesSQL)
 
-	_, args, err := toolCallsSource(scope).ToSql()
+	_, args, err := toolCallsSource(qc).ToSql()
 	require.NoError(t, err)
 	for _, eventType := range toolCallEventTypes {
 		require.Contains(t, args, eventType)

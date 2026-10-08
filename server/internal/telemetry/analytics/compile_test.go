@@ -20,7 +20,7 @@ func compileTest(t *testing.T, req Request) (*Plan, error) {
 	if req.ToUnixNano == 0 {
 		req.ToUnixNano = testTo
 	}
-	return Compile(Default, "org-1", "project-1", req)
+	return Compile(Default, Tenant{OrganizationID: "org-1", ProjectID: "project-1"}, req)
 }
 
 func TestCompileGrouped(t *testing.T) {
