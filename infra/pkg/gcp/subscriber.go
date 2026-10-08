@@ -42,10 +42,10 @@ type BatchReceiveSettings struct {
 	MaxMessages int
 	// MaxBytes is the combined size of buffered message payloads, in bytes, that
 	// triggers a flush. A value <= 0 disables byte-based flushing, leaving
-	// MaxMessages and MaxLatency as the only triggers. Like MaxMessages it is a
-	// trigger, not a hard cap: a single payload at or above MaxBytes flushes on
-	// its own, and a batch can overshoot MaxBytes by up to the size of the
-	// message that crossed the threshold. ReceiveSettings.MaxOutstandingBytes
+	// MaxMessages and MaxLatency as the only triggers. It is not a hard cap:
+	// unbounded mode can overshoot by the message crossing the threshold;
+	// bounded mode's queued bundles can grow up to the count and buffered-byte
+	// limits while another handler runs. ReceiveSettings.MaxOutstandingBytes
 	// limits outstanding payload bytes separately; decoded messages and handler
 	// allocations add to the process's memory usage.
 	MaxBytes int
@@ -61,8 +61,8 @@ type BatchReceiveSettings struct {
 	MaxLatency time.Duration
 
 	// MaxBufferedMessages opts into bounded batching and retains permits until
-	// settlement. Bounded mode holds one processing and one pending batch;
-	// deliveries unable to enter before cancellation are nacked.
+	// settlement. Bounded mode uses a serial bundler handler with a bounded
+	// queue; deliveries unable to enter before cancellation are nacked.
 	MaxBufferedMessages int
 
 	// MaxBufferedBytes bounds admitted raw input through settlement. In bounded
@@ -417,7 +417,7 @@ func (s *psSubscriber[M]) batchLoopMessages(
 			OutstandingMessages: messages, OutstandingBytes: bytes,
 		}, func(ctx context.Context, deliver func(context.Context, incomingMessage)) error {
 			return receive(ctx, func(m incomingMessage) { deliver(ctx, m) })
-		}, func(m incomingMessage) (int, string) { return len(m.data), "" }, func(m incomingMessage) { m.nack() }, handle)
+		}, func(m incomingMessage) int { return len(m.data) }, func(m incomingMessage) { m.nack() }, handle)
 		if err != nil {
 			return fmt.Errorf("receive batch: %w", err)
 		}

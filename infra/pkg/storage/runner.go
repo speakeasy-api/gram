@@ -32,7 +32,7 @@ const (
 	// defaultMaxMessages keeps a normal batch below the unsettled count budget.
 	defaultMaxMessages = 10_000
 
-	// defaultMaxBytes bounds raw batch input to 32 MiB; a crossing message may overshoot.
+	// defaultMaxBytes triggers flushing at 32 MiB; queued batches can grow further.
 	defaultMaxBytes = 32 << 20
 
 	// defaultMaxLatency flushes quiet subscriptions within thirty seconds.
@@ -47,7 +47,7 @@ const (
 	// defaultProcessTimeout budgets all partitions in one batch, including queued work.
 	defaultProcessTimeout = 2 * time.Minute
 
-	// defaultMaxExtension leaves room for admission, buffering and two processing windows.
+	// defaultMaxExtension leaves headroom for admission, queued batches and processing.
 	defaultMaxExtension = 10 * time.Minute
 
 	// defaultOutstandingMessages bounds admitted work until settlement.
@@ -76,13 +76,15 @@ type Settings struct {
 	// MaxMessages defaults to 10,000 messages per batch.
 	MaxMessages int
 
-	// MaxBytes defaults to 32 MiB of raw payloads per batch.
+	// MaxBytes defaults to a 32 MiB payload flush threshold, not a batch size cap.
+	// Queued batches may grow up to the count and outstanding byte limits.
 	MaxBytes int
 
 	// MaxLatency defaults to 30 seconds from the batch's first receipt.
 	MaxLatency time.Duration
 
-	// MaxPartitions defaults to 128 distinct routes; the next route starts a batch.
+	// MaxPartitions defaults to 128 distinct routes per processing window.
+	// Windows run sequentially within the same whole-batch processing deadline.
 	MaxPartitions int
 
 	// Concurrency defaults to four encode/upload workers within the active batch.
@@ -355,8 +357,10 @@ func defaultSettings(s Settings) (Settings, error) {
 		s.OutstandingBytes = defaultOutstandingBytes
 	}
 
+	// Require headroom for queueing, not a guarantee that the queue drains within
+	// the lease. Each batch's deadline is also capped by its oldest delivery.
 	if s.MaxExtension > time.Hour || s.ProcessTimeout >= (s.MaxExtension-s.MaxLatency)/2 {
-		return s, errors.New("storage lease must exceed two processing windows plus batch latency and be at most one hour")
+		return s, errors.New("storage lease must exceed twice the batch processing timeout plus batch latency and be at most one hour")
 	}
 
 	return s, nil
@@ -365,8 +369,8 @@ func defaultSettings(s Settings) (Settings, error) {
 func (r *runner) receive(ctx context.Context, receive func(context.Context, func(context.Context, *delivery)) error) error {
 	return batching.Run(ctx, batching.Settings{
 		MaxMessages: r.settings.MaxMessages, MaxBytes: r.settings.MaxBytes, MaxLatency: r.settings.MaxLatency,
-		MaxGroups: r.settings.MaxPartitions, OutstandingMessages: r.settings.OutstandingMessages, OutstandingBytes: r.settings.OutstandingBytes,
-	}, receive, func(m *delivery) (int, string) { return len(m.data), m.partition }, func(m *delivery) { m.settle(false) }, r.process)
+		OutstandingMessages: r.settings.OutstandingMessages, OutstandingBytes: r.settings.OutstandingBytes,
+	}, receive, func(m *delivery) int { return len(m.data) }, func(m *delivery) { m.settle(false) }, r.process)
 }
 
 func (r *runner) process(ctx context.Context, batch []*delivery) {
@@ -387,9 +391,23 @@ func (r *runner) process(ctx context.Context, batch []*delivery) {
 
 	groups := map[string][]*delivery{}
 	for _, m := range batch {
+		if ctx.Err() != nil {
+			return
+		}
+
+		if _, exists := groups[m.partition]; !exists && len(groups) == r.settings.MaxPartitions {
+			r.writePartitions(ctx, groups)
+			clear(groups)
+		}
 		groups[m.partition] = append(groups[m.partition], m)
 	}
 
+	r.writePartitions(ctx, groups)
+}
+
+// writePartitions bounds active writers within one partition window. All windows
+// share their parent batch's deadline and settle successful objects independently.
+func (r *runner) writePartitions(ctx context.Context, groups map[string][]*delivery) {
 	var group errgroup.Group
 	group.SetLimit(r.settings.Concurrency)
 	for route, messages := range groups {

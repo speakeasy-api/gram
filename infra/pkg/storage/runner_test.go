@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -29,6 +30,57 @@ type storeFunc func(context.Context, Object, func(io.Writer) error) error
 
 func (f storeFunc) Write(ctx context.Context, o Object, encode func(io.Writer) error) error {
 	return f(ctx, o, encode)
+}
+
+func TestProcess_PartitionWindowsShareDeadlineAndSettleIndependently(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		var mu sync.Mutex
+		var routes []string
+		var deadlines []time.Time
+		var goodCommitted atomic.Bool
+		var secondWindowAfterCommit bool
+		r, _ := testRunner(t, storeFunc(func(ctx context.Context, o Object, encode func(io.Writer) error) error {
+			deadline, _ := ctx.Deadline()
+			mu.Lock()
+			routes = append(routes, o.Name)
+			deadlines = append(deadlines, deadline)
+			mu.Unlock()
+
+			switch {
+			case strings.Contains(o.Name, "region=bad"):
+				return errors.New("upload failed")
+			case strings.Contains(o.Name, "region=later"):
+				secondWindowAfterCommit = goodCommitted.Load()
+				return encode(io.Discard)
+			default:
+				// Fake time makes any deadline reset in a subsequent window visible.
+				time.Sleep(time.Second)
+				if err := encode(io.Discard); err != nil {
+					return err
+				}
+				goodCommitted.Store(true)
+				return nil
+			}
+		}), false, Settings{MaxPartitions: 2, ProcessTimeout: 5 * time.Second})
+		good, goodState := testDelivery("ok", "region=good", time.Now())
+		bad, badState := testDelivery("ok", "region=bad", time.Now())
+		later, laterState := testDelivery("ok", "region=later", time.Now())
+
+		r.process(t.Context(), []*delivery{good, bad, later})
+
+		require.Len(t, routes, 3)
+		require.True(t, secondWindowAfterCommit, "a window must finish before the next window starts")
+		require.Equal(t, deadlines[0], deadlines[1])
+		require.Equal(t, deadlines[0], deadlines[2], "partition windows share the whole-batch deadline")
+		for _, state := range []*settlement{goodState, laterState} {
+			require.Equal(t, int32(1), state.acks.Load())
+			require.Zero(t, state.nacks.Load())
+		}
+		require.Zero(t, badState.acks.Load())
+		require.Equal(t, int32(1), badState.nacks.Load())
+	})
 }
 
 // testDefinition isolates settlement from mapping semantics, which are verified
@@ -140,6 +192,23 @@ func TestProcess_CancellationStopsPoisonScan(t *testing.T) {
 		require.Zero(t, state.acks.Load())
 		require.Equal(t, int32(1), state.nacks.Load())
 	}
+}
+
+func TestProcess_QueuedPastLeaseBudgetNacksWithoutWriting(t *testing.T) {
+	t.Parallel()
+
+	var writes int
+	r, _ := testRunner(t, storeFunc(func(context.Context, Object, func(io.Writer) error) error {
+		writes++
+		return nil
+	}), false, Settings{})
+	message, state := testDelivery("payload", "region=one", time.Now().Add(-r.settings.MaxExtension))
+
+	r.process(t.Context(), []*delivery{message})
+
+	require.Zero(t, writes)
+	require.Zero(t, state.acks.Load())
+	require.Equal(t, int32(1), state.nacks.Load())
 }
 
 func TestNewRunner_NormalizesTopicDeclarations(t *testing.T) {
