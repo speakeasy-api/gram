@@ -1566,10 +1566,10 @@ func runHooksBootstrapWithEnv(t *testing.T, script []byte, env []string, stdin s
 	}
 	cmd := exec.Command("bash", append([]string{path}, args...)...)
 	cmd.Stdin = strings.NewReader(stdin)
-	inherited := slices.DeleteFunc(os.Environ(), func(kv string) bool {
+	cmd.Env = slices.DeleteFunc(os.Environ(), func(kv string) bool {
 		return strings.HasPrefix(kv, "SPEAKEASY_AI_HOOKS_HOME=") || strings.HasPrefix(kv, "GRAM_HOOKS_HOME=")
 	})
-	cmd.Env = append(inherited, env...)
+	cmd.Env = append(cmd.Env, env...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return out, fmt.Errorf("run hooks bootstrap: %w", err)
