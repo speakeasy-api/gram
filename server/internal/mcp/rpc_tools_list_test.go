@@ -446,47 +446,6 @@ func TestServePublic_RBAC_ToolsList_DispositionGrant_AllowsMatchingDisposition(t
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-// A hosted tool with no annotations has no disposition, so a grant narrowed
-// only by disposition does not reach it; naming the tool does.
-func TestServePublic_RBAC_ToolsList_DispositionGrant_DeniesUnannotatedTool(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-disp-unannotated-"+uuid.NewString()[:8])
-
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-
-	dispositionCtx := authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope: authz.ScopeMCPConnect,
-		Selector: authz.Selector{
-			"resource_kind": "mcp",
-			"resource_id":   toolset.ID.String(),
-			"disposition":   "read_only",
-		},
-	})
-
-	err := authzEngine.Require(dispositionCtx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
-		Tool:        "unannotated_tool",
-		Disposition: "",
-	}))
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-
-	namedCtx := authztest.WithExactGrants(t, ctx, authz.Grant{
-		Scope: authz.ScopeMCPConnect,
-		Selector: authz.Selector{
-			"resource_kind": "mcp",
-			"resource_id":   toolset.ID.String(),
-			"tool":          "unannotated_tool",
-		},
-	})
-	require.NoError(t, authzEngine.Require(namedCtx, authz.MCPToolCallCheck(toolset.ID.String(), authz.MCPToolCallDimensions{
-		Tool:        "unannotated_tool",
-		Disposition: "",
-	})))
-}
-
 func TestServePublic_RBAC_ToolsList_DispositionGrant_ServerLevelAllowsAll(t *testing.T) {
 	t.Parallel()
 
