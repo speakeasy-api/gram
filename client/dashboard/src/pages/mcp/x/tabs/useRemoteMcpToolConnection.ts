@@ -131,12 +131,13 @@ export function useRemoteMcpToolConnection({
   // isn't dropped on a cross-origin hop. No-op in prod / for custom domains.
   const connectUrl = useMemo(() => mcpConnectionUrl(mcpUrl), [mcpUrl]);
 
-  const { tools, isLoading, needsAuth, isError, refetch } = useProxiedMcpTools(
-    connectUrl,
-    // Every failure stays inline as `isError`, so each consumer can offer its
-    // own retry instead of an error boundary.
-    { headers, enabled: connectionEnabled, throwOnError: false },
-  );
+  const { tools, isLoading, needsAuth, isError, listedAt, refetch } =
+    useProxiedMcpTools(
+      connectUrl,
+      // Every failure stays inline as `isError`, so each consumer can offer its
+      // own retry instead of an error boundary.
+      { headers, enabled: connectionEnabled, throwOnError: false },
+    );
 
   // The first-party connect page is opened as a top-level new tab, so it rides
   // the gram_session cookie on the backend origin (not the dev proxy). Built
@@ -165,6 +166,7 @@ export function useRemoteMcpToolConnection({
   const { sync, isSyncing, toolActions } = useSyncToolMetadata({
     mcpServerId,
     live: listed ? tools : undefined,
+    listedAt,
     stored: metadataByTool,
     enabled: tracksMetadata && !loading && listed,
     mode: tunneledMcpServerId ? "additive" : "mirror",
