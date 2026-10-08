@@ -225,7 +225,7 @@ func TestClient_CompleteHappyPath(t *testing.T) {
 	require.Equal(t, "application/json", req.contentType)
 	require.Equal(t, testModel, req.body["model"])
 	require.InDelta(t, 0, req.body["temperature"], 0)
-	require.InDelta(t, llmanalyzer.DefaultMaxTokens, req.body["max_tokens"], 0)
+	require.NotContains(t, req.body, "max_tokens", "no cap by default: the reply is parsed at whatever length it comes")
 	require.Equal(t, map[string]any{"enable_thinking": false}, req.body["chat_template_kwargs"])
 	require.Equal(t, []any{
 		map[string]any{"role": "system", "content": llmanalyzer.SystemPrompt},

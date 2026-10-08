@@ -634,6 +634,7 @@ const (
 	RiskLLMModelKey                = attribute.Key("gram.risk.llm.model")
 	RiskLLMFindingCountKey         = attribute.Key("gram.risk.llm.finding_count")
 	RiskLLMPublishFailedCountKey   = attribute.Key("gram.risk.llm.publish_failed_count")
+	RiskLLMCompletionKey           = attribute.Key("gram.risk.llm.completion")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
@@ -2644,6 +2645,10 @@ func SlogRiskLLMFindingCount(v int) slog.Attr      { return slog.Int(string(Risk
 func SlogRiskLLMPublishFailedCount(v int) slog.Attr {
 	return slog.Int(string(RiskLLMPublishFailedCountKey), v)
 }
+
+// SlogRiskLLMCompletion is the raw reply text of a risk model call, logged
+// only when it could not be parsed as a verdict.
+func SlogRiskLLMCompletion(v string) slog.Attr { return slog.String(string(RiskLLMCompletionKey), v) }
 
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }
