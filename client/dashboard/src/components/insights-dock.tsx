@@ -1758,10 +1758,10 @@ export function InsightsProvider({
     <div className="relative flex w-full flex-1 flex-col">
       {children}
 
-      {/* Backdrop overlay - closes the chat panel when clicked. A page that
-          hides the dock hides the panel with it, so the backdrop goes too:
-          left behind, it would swallow clicks on that page. */}
-      {isExpanded && !hideTrigger && (
+      {/* Backdrop overlay - closes the chat panel when clicked. The panel
+          only renders with assistant access, so the backdrop follows it:
+          left behind, it would swallow clicks on the page. */}
+      {isExpanded && assistantAllowed && (
         <div
           className="fixed inset-0 z-20"
           onClick={() => setIsExpanded(false)}
