@@ -264,7 +264,7 @@ func TestDescribeAnalyticsCatalogServesTheCatalog(t *testing.T) {
 
 	require.Equal(t, AnalyticsProject{ID: h.project.ID.String(), Name: "Project", Slug: "project"}, output.Project)
 	require.Equal(t, []string{"none", "hour", "day", "week", "month"}, output.Grains)
-	require.Equal(t, AnalyticsLimits{MaxDimensions: 3, MaxFilterValues: 100, DefaultLimit: 100, MaxLimit: 1000, DefaultValuesLimit: 50, MaxValuesLimit: 200}, output.Limits)
+	require.Equal(t, AnalyticsLimits{MaxDimensions: 3, MaxFilterValues: 100, DefaultLimit: 100, MaxLimit: 1000, MaxRowsLimit: 200, DefaultValuesLimit: 50, MaxValuesLimit: 200}, output.Limits)
 
 	declared := make([]string, 0, len(analytics.Default.Datasets()))
 	for _, ds := range analytics.Default.Datasets() {

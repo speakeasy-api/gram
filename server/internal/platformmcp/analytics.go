@@ -122,6 +122,7 @@ type AnalyticsLimits struct {
 	MaxFilterValues    int `json:"max_filter_values"`
 	DefaultLimit       int `json:"default_limit"`
 	MaxLimit           int `json:"max_limit"`
+	MaxRowsLimit       int `json:"max_rows_limit"`
 	DefaultValuesLimit int `json:"default_values_limit"`
 	MaxValuesLimit     int `json:"max_values_limit"`
 }
@@ -155,6 +156,7 @@ func describeAnalyticsCatalog(project ResolvedProject, catalog *analytics.Catalo
 			MaxFilterValues:    analytics.MaxFilterValues,
 			DefaultLimit:       analytics.DefaultLimit,
 			MaxLimit:           analytics.MaxLimit,
+			MaxRowsLimit:       analytics.MaxRowsLimit,
 			DefaultValuesLimit: analytics.DefaultValuesLimit,
 			MaxValuesLimit:     analytics.MaxValuesLimit,
 		},

@@ -213,6 +213,7 @@ describe("measure and filter drafts", () => {
     expect(parseLimit("2.5")).toBe(0);
     expect(parseLimit("50")).toBe(50);
     expect(parseLimit("5000")).toBe(1000);
+    expect(parseLimit("5000", true)).toBe(200);
   });
 });
 

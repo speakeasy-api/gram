@@ -189,8 +189,12 @@ func Compile(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Request) (
 	if limit == 0 {
 		limit = DefaultLimit
 	}
-	if limit < 0 || limit > MaxLimit {
-		return nil, newError(ErrLimitExceeded, name, "limit", fmt.Sprint(req.Limit), fmt.Sprintf("limit must be between 1 and %d", MaxLimit))
+	maxLimit := MaxLimit
+	if req.Ungrouped {
+		maxLimit = MaxRowsLimit
+	}
+	if limit < 0 || limit > maxLimit {
+		return nil, newError(ErrLimitExceeded, name, "limit", fmt.Sprint(req.Limit), fmt.Sprintf("limit must be between 1 and %d", maxLimit))
 	}
 
 	qc := QueryContext{Tenant: tenant, Window: Window{FromUnixNano: req.FromUnixNano, ToUnixNano: req.ToUnixNano}, Lookups: lookups}

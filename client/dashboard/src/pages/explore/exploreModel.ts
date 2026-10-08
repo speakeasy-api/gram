@@ -28,6 +28,8 @@ export type ResultRow = AnalyticsQueryResult["rows"][number];
 export const MAX_DIMENSIONS = 3;
 export const DEFAULT_LIMIT = 100;
 export const MAX_LIMIT = 1000;
+// Rows at the dataset's grain are capped lower than a grouped result.
+export const MAX_ROWS_LIMIT = 200;
 
 // Result columns the server adds beside the requested ones: the bucket start
 // of a grouped, bucketed query and the event time of a row.
@@ -524,11 +526,14 @@ export function specProblem(
   return "";
 }
 
-/** Parse the LIMIT control's text into a spec limit (0 = server default). */
-export function parseLimit(raw: string): number {
+/**
+ * Parse the LIMIT control's text into a spec limit (0 = server default),
+ * capped at what the server allows for rows or for a grouped result.
+ */
+export function parseLimit(raw: string, rows = false): number {
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed <= 0) return 0;
-  return Math.min(parsed, MAX_LIMIT);
+  return Math.min(parsed, rows ? MAX_ROWS_LIMIT : MAX_LIMIT);
 }
 
 /**

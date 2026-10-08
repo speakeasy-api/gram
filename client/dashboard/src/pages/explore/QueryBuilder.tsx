@@ -26,8 +26,10 @@ import {
   dimensionFields,
   findDataset,
   hasChartShape,
+  isRowsMode,
   MAX_DIMENSIONS,
   MAX_LIMIT,
+  MAX_ROWS_LIMIT,
   measureAlias,
   measureLabel,
   parseLimit,
@@ -315,9 +317,11 @@ export function QueryBuilder({
               <Input
                 type="number"
                 min={1}
-                max={MAX_LIMIT}
+                max={isRowsMode(spec) ? MAX_ROWS_LIMIT : MAX_LIMIT}
                 value={spec.limit === 0 ? "" : String(spec.limit)}
-                onChange={(raw) => patch({ limit: parseLimit(raw) })}
+                onChange={(raw) =>
+                  patch({ limit: parseLimit(raw, isRowsMode(spec)) })
+                }
                 placeholder={`${DEFAULT_LIMIT} rows`}
                 aria-label="Limit"
                 className="w-32"

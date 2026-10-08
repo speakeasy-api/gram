@@ -87,7 +87,11 @@ const (
 	MaxDimensions   = 3
 	MaxFilterValues = 100
 	DefaultLimit    = 100
-	MaxLimit        = 1000
+	// MaxLimit caps a grouped result, which is bounded by its groups and
+	// time buckets. MaxRowsLimit caps ungrouped rows at the dataset's grain,
+	// which go straight into a table or an agent's context.
+	MaxLimit     = 1000
+	MaxRowsLimit = 200
 
 	// How long each kind's table keeps a row, from server/clickhouse/schema.sql:
 	// agent_events 90 days, agent_metrics 730 so billing can read historical

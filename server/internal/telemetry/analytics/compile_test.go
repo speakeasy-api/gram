@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"fmt"
 	"math"
 	"testing"
 
@@ -202,6 +203,7 @@ func TestCompileRejects(t *testing.T) {
 		{name: "grain on ungrouped rows", req: Request{Dataset: "sessions", Ungrouped: true, Grain: TimeGrainDay}, code: ErrUnsatisfiable, field: "grain"},
 		{name: "unknown grain", req: Request{Dataset: "sessions", Measures: count, Grain: "minute"}, code: ErrUnsupportedGrain, field: "grain"},
 		{name: "limit above the maximum", req: Request{Dataset: "sessions", Measures: count, Limit: MaxLimit + 1}, code: ErrLimitExceeded, field: "limit"},
+		{name: "rows above the rows maximum", req: Request{Dataset: "sessions", Ungrouped: true, Limit: MaxRowsLimit + 1}, code: ErrLimitExceeded, field: "limit"},
 		{name: "to before from", req: Request{Dataset: "sessions", Measures: count, FromUnixNano: testTo, ToUnixNano: testFrom}, code: ErrInvalidTimeRange, field: "to"},
 		{name: "range beyond the dataset's retention", req: Request{Dataset: "sessions", Measures: count, FromUnixNano: testFrom, ToUnixNano: testFrom + Sessions.MaxTimeRangeNanos() + 1}, code: ErrInvalidTimeRange, field: "to"},
 		{name: "range whose signed span wraps", req: Request{Dataset: "sessions", Measures: count, FromUnixNano: math.MinInt64, ToUnixNano: math.MaxInt64}, code: ErrInvalidTimeRange, field: "to"},
@@ -345,4 +347,17 @@ func TestCompileFoldsAFilterValueThroughItsLookup(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, plain.SQL, "WHERE mcp_server_name = ?")
 	require.Equal(t, "gh", plain.Args[len(plain.Args)-1], "no loaded map, the value is read as given")
+}
+
+func TestCompileCapsRowsBelowGroupedResults(t *testing.T) {
+	t.Parallel()
+
+	count := []Measure{{Op: "count", Field: "", Alias: ""}}
+	plan, err := compileTest(t, Request{Dataset: "sessions", Measures: count, Dimensions: []string{"user"}, Limit: MaxRowsLimit + 1})
+	require.NoError(t, err, "a grouped result is bounded by its groups and buckets, so it keeps the higher ceiling")
+	require.Contains(t, plan.SQL, fmt.Sprintf("LIMIT %d", MaxRowsLimit+1))
+
+	rows, err := compileTest(t, Request{Dataset: "sessions", Ungrouped: true, Limit: MaxRowsLimit})
+	require.NoError(t, err)
+	require.Contains(t, rows.SQL, fmt.Sprintf("LIMIT %d", MaxRowsLimit))
 }

@@ -211,7 +211,7 @@ func runAnalyticsQuerySchema() *jsonschema.Schema {
 		"measures":   described(arraySchema(measure, 0, false), "Composed measures. Required when grouped, forbidden when ungrouped."),
 		"filters":    described(arraySchema(filter, 0, false), fmt.Sprintf("Filters, ANDed. At most %d values per filter.", analytics.MaxFilterValues)),
 		"order_by":   described(arraySchema(order, 0, false), "Sort for a grouped result, by measure alias. Ungrouped rows are always newest first."),
-		"limit":      {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(analytics.MaxLimit)), Description: fmt.Sprintf("Maximum rows; defaults to %d and cannot exceed %d.", analytics.DefaultLimit, analytics.MaxLimit)},
+		"limit":      {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(analytics.MaxLimit)), Description: fmt.Sprintf("Maximum rows; defaults to %d, at most %d for a grouped result and %d for ungrouped rows. Narrow the window or filter rather than raising it.", analytics.DefaultLimit, analytics.MaxLimit, analytics.MaxRowsLimit)},
 		"ungrouped":  {Type: "boolean", Description: "Return rows at the dataset's grain instead of aggregating. Defaults to false."},
 	}, []string{"project_id", "dataset", "from", "to"})
 }

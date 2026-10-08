@@ -79135,7 +79135,7 @@ components:
             - month
         limit:
           type: integer
-          description: Maximum rows. Defaults to 100, at most 1000.
+          description: Maximum rows. Defaults to 100; at most 1000 for a grouped result and 200 for ungrouped rows.
           default: 100
           format: int64
           minimum: 1
