@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-#MISE description="Test the Gram hooks Claude plugin locally (from marketplace)"
+#MISE description="Test the Speakeasy hooks Claude plugin locally (from marketplace)"
 #MISE dir="{{ config_root }}"
-#USAGE flag "--rm" help="Remove the local Gram hooks Claude plugin from the marketplace after testing"
+#USAGE flag "--rm" help="Remove the local Speakeasy hooks Claude plugin from the marketplace after testing"
 #USAGE flag "--scope <scope>" {
 #USAGE   help "Scope for the marketplace and plugin commands"
 #USAGE   default "local"

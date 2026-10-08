@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#MISE description="Test the Gram hooks plugin locally against a coding agent"
+#MISE description="Test the Speakeasy hooks plugin locally against a coding agent"
 #MISE dir="{{ config_root }}"
 
 #USAGE flag "--local" help="Always use local plugin directory instead of published plugin"
@@ -194,7 +194,7 @@ if [ "${usage_agent:-claude}" = "opencode" ]; then
     # failed attempt leaves a cooldown marker that silently suppresses the
     # browser prompt, which reads as "hooks broken, no popup". --force
     # bypasses the cooldown and re-prompts even with a cached credential.
-    echo "Complete the Gram sign-in in your browser (pick the org to attribute sessions to)..."
+    echo "Complete the Speakeasy sign-in in your browser (pick the org to attribute sessions to)..."
     "$hooks_binary" login --force --config="${plugin_out}/speakeasy.json"
   else
     echo "Rendering local plugin into: ${plugin_out}"

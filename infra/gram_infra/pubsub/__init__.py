@@ -1,4 +1,4 @@
-"""Gram Pub/Sub convenience layer.
+"""Speakeasy Pub/Sub convenience layer.
 
 A type-safe publisher/subscriber over ``google-cloud-pubsub`` that resolves
 topic and subscription names from protobuf message options, mirroring the Go

@@ -40,7 +40,7 @@ import {
 } from "@/pages/security/server-guardrails/useNewServerGuardrail";
 
 // Both backends are, to the administrator, the same thing: a server that lives
-// at a URL somewhere else. The only difference is whether Gram sits in the
+// at a URL somewhere else. The only difference is whether Speakeasy sits in the
 // request path, so that is the one question the form asks — and only of staff,
 // since unproxied servers are staff-only today.
 type ProxyMode = "proxied" | "unproxied";

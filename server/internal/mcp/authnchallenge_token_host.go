@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
-	"net/url"
-	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -71,28 +68,9 @@ func (s *Service) checkPerEndpointTokenHost(ctx context.Context, session session
 // mapping the authentication host to the server URL it stands in for. It
 // returns "" for a value that is not an absolute URL.
 func (s *Service) tokenMintOrigin(issuer string) string {
-	minted := urlOrigin(issuer)
-	if minted != "" && s.authenticationHostBaseURL != "" && minted == urlOrigin(s.authenticationHostBaseURL) {
-		return urlOrigin(s.serverURL.String())
+	minted := requestorigin.URLOrigin(issuer)
+	if minted != "" && s.authenticationHostBaseURL != "" && minted == requestorigin.URLOrigin(s.authenticationHostBaseURL) {
+		return requestorigin.URLOrigin(s.serverURL.String())
 	}
 	return minted
-}
-
-// urlOrigin is the lowercased scheme://host[:port] of raw, with the scheme's
-// default port dropped, or "" when raw is not an absolute URL or carries
-// userinfo.
-func urlOrigin(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme == "" || u.Host == "" || u.User != nil {
-		return ""
-	}
-	scheme := strings.ToLower(u.Scheme)
-	host := strings.ToLower(u.Hostname())
-	if port := u.Port(); port != "" && (scheme != "https" || port != "443") && (scheme != "http" || port != "80") {
-		return scheme + "://" + net.JoinHostPort(host, port)
-	}
-	if strings.Contains(host, ":") {
-		host = "[" + host + "]"
-	}
-	return scheme + "://" + host
 }

@@ -25,14 +25,14 @@ export type AdminMcpServerHealthRemoteSessionIssuerAttachmentScope = ClosedEnum<
 >;
 
 /**
- * Whether Gram reaches the issuer over the public internet or a tunnel.
+ * Whether Speakeasy reaches the issuer over the public internet or a tunnel.
  */
 export const Networking = {
   Public: "public",
   Tunneled: "tunneled",
 } as const;
 /**
- * Whether Gram reaches the issuer over the public internet or a tunnel.
+ * Whether Speakeasy reaches the issuer over the public internet or a tunnel.
  */
 export type Networking = ClosedEnum<typeof Networking>;
 
@@ -87,7 +87,7 @@ export type AdminMcpServerHealthRemoteSessionIssuer = {
    */
   name?: string | undefined;
   /**
-   * Whether Gram reaches the issuer over the public internet or a tunnel.
+   * Whether Speakeasy reaches the issuer over the public internet or a tunnel.
    */
   networking: Networking;
   /**

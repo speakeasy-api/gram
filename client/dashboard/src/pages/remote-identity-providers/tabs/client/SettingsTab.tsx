@@ -293,7 +293,7 @@ export function SettingsTab({
 }
 
 // RegistrationStatus explains what a rotation would do for this client: whether
-// the identity provider publishes a registration endpoint Gram can re-register
+// the identity provider publishes a registration endpoint Speakeasy can re-register
 // it at, whether the provider has already stopped recognizing it, and when its
 // secret expires.
 function RegistrationStatus({
@@ -307,7 +307,7 @@ function RegistrationStatus({
     return (
       <Text small muted>
         {client.clientIdMetadataUri
-          ? "This client uses a client ID metadata document hosted by Gram. It is never registered with the identity provider, so it cannot expire and has nothing to rotate."
+          ? "This client uses a client ID metadata document hosted by Speakeasy. It is never registered with the identity provider, so it cannot expire and has nothing to rotate."
           : "This client authenticates with a signed assertion bound to a key set, which dynamic registration cannot reproduce. Manage its key set instead of rotating it."}
       </Text>
     );
@@ -329,17 +329,17 @@ function RegistrationStatus({
   if (issuerRegistrationEndpoint) {
     return (
       <Text small muted>
-        Gram re-registers this client at {issuerRegistrationEndpoint} if the
-        identity provider stops recognizing it or its secret expires; rotate now
-        to replace it ahead of time.{expiryNote}
+        Speakeasy re-registers this client at {issuerRegistrationEndpoint} if
+        the identity provider stops recognizing it or its secret expires; rotate
+        now to replace it ahead of time.{expiryNote}
       </Text>
     );
   }
   return (
     <Text small muted>
-      The identity provider publishes no registration endpoint, so Gram cannot
-      re-register this client; replace its credentials by hand if the provider
-      stops recognizing them.{expiryNote}
+      The identity provider publishes no registration endpoint, so Speakeasy
+      cannot re-register this client; replace its credentials by hand if the
+      provider stops recognizing them.{expiryNote}
     </Text>
   );
 }

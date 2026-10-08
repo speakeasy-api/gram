@@ -81,7 +81,7 @@ type Config struct {
 	ExternalURL string
 
 	// LoginClientID is the statically provisioned first-party client the
-	// Gram server logs in with (GRAM_IDP_CLIENT_ID). It never goes through
+	// Speakeasy server logs in with (GRAM_IDP_CLIENT_ID). It never goes through
 	// dynamic client registration, so /authorize skips the registered-client
 	// and redirect_uri allowlist checks for it -- the server's callback URL
 	// varies with the local port and scheme. Empty disables the exemption.
@@ -349,7 +349,7 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case h.cfg.LoginClientID != "" && clientID == h.cfg.LoginClientID:
 		// Statically provisioned first-party client: nothing to look up and
-		// no registered redirect_uri to match against. The Gram server's
+		// no registered redirect_uri to match against. The Speakeasy server's
 		// callback host and port vary per worktree, so there is no stable
 		// value to pin. This accepts any redirect_uri for this one client id,
 		// which in a production AS would be an open redirect -- acceptable

@@ -4,7 +4,7 @@ import { useGcpSetupInfo } from "@gram/client/react-query/gcpSetupInfo";
 import { Stack } from "@/components/ui/Stack";
 
 // GcpGrantInstructions shows the grant a customer has to make in their own GCP
-// project before Gram can impersonate a service account there. It is rendered
+// project before Speakeasy can impersonate a service account there. It is rendered
 // both while creating a credential and on an existing credential's Overview,
 // because the grant is a prerequisite of creating one and the most likely reason
 // verification fails afterwards.

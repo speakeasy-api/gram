@@ -63,6 +63,18 @@ func seedToolsetBackedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool
 
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
+	return seedToolsetBackedMcpServerWithID(t, ctx, conn, projectID, toolsetID, mcpServerID)
+}
+
+// seedCanonicalToolsetWrapper creates the toolset's canonical wrapper, whose id is the toolset id.
+func seedCanonicalToolsetWrapper(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, toolsetID uuid.UUID) uuid.UUID {
+	t.Helper()
+	return seedToolsetBackedMcpServerWithID(t, ctx, conn, projectID, toolsetID, toolsetID)
+}
+
+func seedToolsetBackedMcpServerWithID(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, toolsetID, mcpServerID uuid.UUID) uuid.UUID {
+	t.Helper()
+
 	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  mcpServerID,
 		ProjectID:           projectID,
@@ -257,6 +269,64 @@ func TestHasPluginMembershipForMCPServer_LegacyToolsetWrapper(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.False(t, attached)
+}
+
+func TestHasPluginMembershipForMCPServer_CanonicalWrapperOwnsLegacyMembership(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.OrganizationSlug+"-canonical")
+	memberID := seedToolsetBackedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
+	canonicalID := seedCanonicalToolsetWrapper(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
+	pluginsQueries := pluginsrepo.New(ti.conn)
+	plugin, err := pluginsQueries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	_, err = pluginsQueries.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+		PluginID: plugin.ID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		DisplayName: "Legacy wrapper", Policy: "required",
+	})
+	require.NoError(t, err)
+
+	attached, err := pluginsQueries.HasPluginMembershipForMCPServer(ctx, pluginsrepo.HasPluginMembershipForMCPServerParams{
+		ProjectID: *authCtx.ProjectID, McpServerID: canonicalID,
+	})
+	require.NoError(t, err)
+	require.True(t, attached, "the canonical wrapper carries the toolset's plugin membership")
+
+	attached, err = pluginsQueries.HasPluginMembershipForMCPServer(ctx, pluginsrepo.HasPluginMembershipForMCPServerParams{
+		ProjectID: *authCtx.ProjectID, McpServerID: memberID,
+	})
+	require.NoError(t, err)
+	require.False(t, attached, "another server over the toolset is not its hosting wrapper")
+}
+
+func TestToolsetWrapperLookups_PreferCanonicalWrapper(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.OrganizationSlug+"-lookup")
+	servers := mcpserversrepo.New(ti.conn)
+
+	memberID := seedToolsetBackedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
+	got, err := servers.GetMCPServerByToolsetID(ctx, mcpserversrepo.GetMCPServerByToolsetIDParams{ToolsetID: toolset.ID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, memberID, got.ID, "without a canonical wrapper the oldest server is returned")
+
+	canonicalID := seedCanonicalToolsetWrapper(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
+	got, err = servers.GetMCPServerByToolsetID(ctx, mcpserversrepo.GetMCPServerByToolsetIDParams{ToolsetID: toolset.ID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, canonicalID, got.ID)
+
+	enabled, err := servers.ListEnabledMCPServersByToolsetID(ctx, mcpserversrepo.ListEnabledMCPServersByToolsetIDParams{ToolsetID: toolset.ID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Len(t, enabled, 1, "a canonical wrapper makes legacy attribution unambiguous")
+	require.Equal(t, canonicalID, enabled[0].ID)
 }
 
 func TestCheckSlugAvailable_OwnerExclusionMcpServer(t *testing.T) {

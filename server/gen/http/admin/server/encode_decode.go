@@ -17860,6 +17860,227 @@ func EncodeSetStripeSubscriptionError(encoder func(context.Context, http.Respons
 	}
 }
 
+// EncodeListCustomerUsageResponse returns an encoder for responses returned by
+// the admin listCustomerUsage endpoint.
+func EncodeListCustomerUsageResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*admin.AdminCustomerUsageResponse)
+		enc := encoder(ctx, w)
+		body := NewListCustomerUsageResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListCustomerUsageRequest returns a decoder for requests sent to the
+// admin listCustomerUsage endpoint.
+func DecodeListCustomerUsageRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.ListCustomerUsagePayload, error) {
+	return func(r *http.Request) (*admin.ListCustomerUsagePayload, error) {
+		var payload *admin.ListCustomerUsagePayload
+		var (
+			interval          string
+			adminSessionToken *string
+			err               error
+		)
+		intervalRaw := r.URL.Query().Get("interval")
+		if intervalRaw != "" {
+			interval = intervalRaw
+		} else {
+			interval = "monthly"
+		}
+		if !(interval == "daily" || interval == "weekly" || interval == "monthly") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("interval", interval, []any{"daily", "weekly", "monthly"}))
+		}
+		adminSessionTokenRaw := r.Header.Get("Authorization")
+		if adminSessionTokenRaw != "" {
+			adminSessionToken = &adminSessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListCustomerUsagePayload(interval, adminSessionToken)
+		if payload.AdminSessionToken != nil {
+			if strings.Contains(*payload.AdminSessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.AdminSessionToken, " ", 2)[1]
+				payload.AdminSessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListCustomerUsageError returns an encoder for errors returned by the
+// listCustomerUsage admin endpoint.
+func EncodeListCustomerUsageError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListCustomerUsageUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListCustomerUsageUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListCustomerUsageForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListCustomerUsageBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListCustomerUsageNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListCustomerUsageConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListCustomerUsageUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListCustomerUsageInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListCustomerUsageInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListCustomerUsageUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListCustomerUsageGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // marshalAdminAdminOrganizationMemberToAdminOrganizationMemberResponseBody
 // builds a value of type *AdminOrganizationMemberResponseBody from a value of
 // type *admin.AdminOrganizationMember.
@@ -19063,6 +19284,67 @@ func marshalAdminAdminOnboardingStepApplicabilityToAdminOnboardingStepApplicabil
 		Title:   v.Title,
 		Applies: v.Applies,
 		Reason:  v.Reason,
+	}
+
+	return res
+}
+
+// marshalAdminAdminCustomerUsageToAdminCustomerUsageResponseBody builds a
+// value of type *AdminCustomerUsageResponseBody from a value of type
+// *admin.AdminCustomerUsage.
+func marshalAdminAdminCustomerUsageToAdminCustomerUsageResponseBody(v *admin.AdminCustomerUsage) *AdminCustomerUsageResponseBody {
+	res := &AdminCustomerUsageResponseBody{
+		OrganizationID: v.OrganizationID,
+		Name:           v.Name,
+		Slug:           v.Slug,
+		AccountType:    v.AccountType,
+		TrialState:     v.TrialState,
+		Error:          v.Error,
+	}
+	if v.CurrentCycle != nil {
+		res.CurrentCycle = marshalAdminMeterUsageWindowToMeterUsageWindowResponseBody(v.CurrentCycle)
+	}
+	if v.Window != nil {
+		res.Window = marshalAdminMeterUsageWindowToMeterUsageWindowResponseBody(v.Window)
+	}
+	if v.Products != nil {
+		res.Products = make([]*SpendProductResponseBody, len(v.Products))
+		for i, val := range v.Products {
+			if val == nil {
+				res.Products[i] = nil
+				continue
+			}
+			res.Products[i] = marshalAdminSpendProductToSpendProductResponseBody(val)
+		}
+	} else {
+		res.Products = []*SpendProductResponseBody{}
+	}
+	if v.PreviousPeriod != nil {
+		res.PreviousPeriod = marshalAdminMeterUsageWindowToMeterUsageWindowResponseBody(v.PreviousPeriod)
+	}
+	if v.PreviousPeriodCosts != nil {
+		res.PreviousPeriodCosts = make([]*AdminCustomerUsageProductCostResponseBody, len(v.PreviousPeriodCosts))
+		for i, val := range v.PreviousPeriodCosts {
+			if val == nil {
+				res.PreviousPeriodCosts[i] = nil
+				continue
+			}
+			res.PreviousPeriodCosts[i] = marshalAdminAdminCustomerUsageProductCostToAdminCustomerUsageProductCostResponseBody(val)
+		}
+	} else {
+		res.PreviousPeriodCosts = []*AdminCustomerUsageProductCostResponseBody{}
+	}
+
+	return res
+}
+
+// marshalAdminAdminCustomerUsageProductCostToAdminCustomerUsageProductCostResponseBody
+// builds a value of type *AdminCustomerUsageProductCostResponseBody from a
+// value of type *admin.AdminCustomerUsageProductCost.
+func marshalAdminAdminCustomerUsageProductCostToAdminCustomerUsageProductCostResponseBody(v *admin.AdminCustomerUsageProductCost) *AdminCustomerUsageProductCostResponseBody {
+	res := &AdminCustomerUsageProductCostResponseBody{
+		ProductID: v.ProductID,
+		CostUsd:   v.CostUsd,
 	}
 
 	return res

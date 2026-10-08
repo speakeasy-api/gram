@@ -2454,6 +2454,7 @@ type PluginAssignment struct {
 	PluginID       uuid.UUID
 	OrganizationID string
 	PrincipalUrn   string
+	InstallMode    string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }
@@ -2744,6 +2745,7 @@ type RemoteSessionClient struct {
 	ResourceTosUri                  pgtype.Text
 	UpstreamRejectedAt              pgtype.Timestamptz
 	IdentityProviderConnectionID    uuid.NullUUID
+	CredentialOwner                 string
 	CreatedAt                       pgtype.Timestamptz
 	UpdatedAt                       pgtype.Timestamptz
 	DeletedAt                       pgtype.Timestamptz

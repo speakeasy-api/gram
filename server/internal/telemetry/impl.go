@@ -460,7 +460,7 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		canonicalOrg = params.organizationID
 	}
 
-	// Gram-hosted inference is excluded only for internal (employee)
+	// Speakeasy-hosted inference is excluded only for internal (employee)
 	// grouping. External users are the opposite case: their hosted-chat
 	// completions ARE their usage — and their only token-bearing rows, so
 	// excluding them would zero the external surfaces entirely.
@@ -494,7 +494,7 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		Cursor:              params.cursor,
 		// The dashboard's cursor is the group key alone, so the repository
 		// re-derives its boundary timestamp. That lookup ignores this query's
-		// window and its Gram-hosted exclusion, which can repeat a person
+		// window and its Speakeasy-hosted exclusion, which can repeat a person
 		// across pages — tracked separately rather than changed here, because
 		// sealing the boundary is a cursor format change for a shipped surface.
 		CursorLastSeenUnixNano: 0,
@@ -731,7 +731,7 @@ func (s *Service) assembleUserSummaries(ctx context.Context, userType string, it
 	return users
 }
 
-// resolveSummaryOwnerIDs maps summary group keys to the Gram user id each key
+// resolveSummaryOwnerIDs maps summary group keys to the Speakeasy user id each key
 // authoritatively identifies. SearchUsers keys internal summaries email-first,
 // so an email-shaped key is resolved through the org's user directory; a
 // non-email key is already a raw gram user id and identifies itself. Keys that
@@ -1452,7 +1452,7 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 		return nil, err
 	}
 
-	// An employee's page never counts Gram-hosted inference (risk-analysis
+	// An employee's page never counts Speakeasy-hosted inference (risk-analysis
 	// judges and friends) as their usage. An external user is the opposite
 	// case: their hosted-chat completions ARE their usage — and their only
 	// token-bearing rows, so the exclusion would zero their page.
@@ -2097,7 +2097,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	// the same set of identities.
 	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
 
-	// Employee-scoped views exclude Gram-hosted inference (risk-analysis
+	// Employee-scoped views exclude Speakeasy-hosted inference (risk-analysis
 	// judges and friends): those completions log under the session owner's
 	// identity but are the platform's spend, not the employee's usage —
 	// counting them made one employee's page show 60M+ judge tokens as their
@@ -2252,8 +2252,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 // GetUnproxiedMcpServerUsage returns a best-effort daily tool-call count for
 // an unproxied MCP server, sourced from Shadow MCP's hook-reported traces
 // (trace_summaries) matched by canonicalized URL. Unlike GetObservabilityOverview,
-// this data isn't written by Gram's own proxy — an unproxied server's traffic
-// never passes through Gram — so coverage depends entirely on whether any
+// this data isn't written by Speakeasy's own proxy — an unproxied server's traffic
+// never passes through Speakeasy — so coverage depends entirely on whether any
 // hook-instrumented session in this project has called this exact URL.
 func (s *Service) GetUnproxiedMcpServerUsage(ctx context.Context, payload *telem_gen.GetUnproxiedMcpServerUsagePayload) (*telem_gen.GetUnproxiedMcpServerUsageResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

@@ -9,19 +9,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// workloadIdentityFixture is one workload plus the endpoint and issuer it was
+// workloadIdentityFixture is one workload plus the tenancy and issuer it was
 // admitted against, so a test can vary exactly one part of the key.
 type workloadIdentityFixture struct {
-	endpoint *ResolvedMcpEndpoint
+	tenancy  workloadTenancy
 	issuerID uuid.UUID
 	subject  string
 }
 
 func newWorkloadIdentityFixture() workloadIdentityFixture {
 	return workloadIdentityFixture{
-		endpoint: &ResolvedMcpEndpoint{
-			OrganizationID: uuid.NewString(),
-			ProjectID:      uuid.New(),
+		tenancy: workloadTenancy{
+			OrganizationID:      uuid.NewString(),
+			ProjectID:           uuid.New(),
+			UserSessionIssuerID: uuid.New(),
 		},
 		issuerID: uuid.New(),
 		subject:  "repo:acme/payments-api:ref:refs/heads/main",
@@ -31,7 +32,7 @@ func newWorkloadIdentityFixture() workloadIdentityFixture {
 // organizationTier is this fixture's admission, held above every project.
 func (f workloadIdentityFixture) organizationTier() workloadAdmission {
 	return workloadAdmission{
-		OrganizationID:   f.endpoint.OrganizationID,
+		OrganizationID:   f.tenancy.OrganizationID,
 		ProjectID:        uuid.NullUUID{},
 		WorkloadIssuerID: f.issuerID,
 		ExternalSubject:  f.subject,
@@ -49,7 +50,7 @@ func (f workloadIdentityFixture) projectTier(projectID uuid.UUID) workloadAdmiss
 // admit runs the admission this fixture describes against lookup.
 func (f workloadIdentityFixture) admit(t *testing.T, lookup workloadIdentityLookup) error {
 	t.Helper()
-	return admitWorkloadIdentity(t.Context(), lookup, f.endpoint, f.issuerID, f.subject)
+	return admitWorkloadIdentity(t.Context(), lookup, f.tenancy, f.issuerID, f.subject)
 }
 
 // A static policy naming exactly one subject admits that subject.
@@ -70,7 +71,7 @@ func TestAdmitWorkloadIdentity_VerifiedButUnadmittedSubjectIsRejected(t *testing
 	fixture := newWorkloadIdentityFixture()
 	// Somebody else's job on the same trusted issuer.
 	lookup := newStaticWorkloadIdentityLookup(workloadAdmission{
-		OrganizationID:   fixture.endpoint.OrganizationID,
+		OrganizationID:   fixture.tenancy.OrganizationID,
 		WorkloadIssuerID: fixture.issuerID,
 		ExternalSubject:  "repo:someone-else/their-api:ref:refs/heads/main",
 	})
@@ -146,7 +147,7 @@ func TestAdmitWorkloadIdentity_OneSubjectFromTwoIssuersDoesNotShareAnAdmission(t
 	// controls every claim in it — asserting a byte-identical subject.
 	staging := uuid.New()
 
-	err := admitWorkloadIdentity(t.Context(), lookup, fixture.endpoint, staging, fixture.subject)
+	err := admitWorkloadIdentity(t.Context(), lookup, fixture.tenancy, staging, fixture.subject)
 
 	require.ErrorIs(t, err, errWorkloadNotAdmitted, "an identical sub from another issuer is another workload")
 }
@@ -162,7 +163,7 @@ func TestAdmitWorkloadIdentity_EmptySubjectIsNeverAdmitted(t *testing.T) {
 	// Even with the empty subject explicitly in the policy.
 	lookup := newStaticWorkloadIdentityLookup(empty)
 
-	err := admitWorkloadIdentity(t.Context(), lookup, fixture.endpoint, fixture.issuerID, "")
+	err := admitWorkloadIdentity(t.Context(), lookup, fixture.tenancy, fixture.issuerID, "")
 
 	require.ErrorIs(t, err, errWorkloadNotAdmitted)
 }
@@ -195,8 +196,8 @@ func TestAdmitWorkloadIdentity_MissingTenancyOrIssuerAdmitsNothing(t *testing.T)
 		return true, nil
 	}
 
-	require.ErrorIs(t, admitWorkloadIdentity(t.Context(), lookup, nil, fixture.issuerID, fixture.subject), errWorkloadNotAdmitted)
-	require.ErrorIs(t, admitWorkloadIdentity(t.Context(), lookup, fixture.endpoint, uuid.Nil, fixture.subject), errWorkloadNotAdmitted)
+	require.ErrorIs(t, admitWorkloadIdentity(t.Context(), lookup, workloadTenancy{OrganizationID: "", ProjectID: fixture.tenancy.ProjectID, UserSessionIssuerID: fixture.tenancy.UserSessionIssuerID}, fixture.issuerID, fixture.subject), errWorkloadNotAdmitted)
+	require.ErrorIs(t, admitWorkloadIdentity(t.Context(), lookup, fixture.tenancy, uuid.Nil, fixture.subject), errWorkloadNotAdmitted)
 	require.False(t, consulted, "an unbuildable key must never reach the lookup")
 }
 
@@ -208,7 +209,7 @@ func TestAdmitWorkloadIdentity_OrganizationTierAdmitsAnyProjectInIt(t *testing.T
 	lookup := newStaticWorkloadIdentityLookup(fixture.organizationTier())
 
 	// A second server in the same organization, in a different project.
-	elsewhere := &ResolvedMcpEndpoint{OrganizationID: fixture.endpoint.OrganizationID, ProjectID: uuid.New()}
+	elsewhere := workloadTenancy{OrganizationID: fixture.tenancy.OrganizationID, ProjectID: uuid.New(), UserSessionIssuerID: uuid.New()}
 
 	require.NoError(t, admitWorkloadIdentity(t.Context(), lookup, elsewhere, fixture.issuerID, fixture.subject))
 }
@@ -218,7 +219,7 @@ func TestAdmitWorkloadIdentity_ProjectTierAdmitsItsOwnProject(t *testing.T) {
 	t.Parallel()
 
 	fixture := newWorkloadIdentityFixture()
-	lookup := newStaticWorkloadIdentityLookup(fixture.projectTier(fixture.endpoint.ProjectID))
+	lookup := newStaticWorkloadIdentityLookup(fixture.projectTier(fixture.tenancy.ProjectID))
 
 	require.NoError(t, fixture.admit(t, lookup))
 }
@@ -241,10 +242,10 @@ func TestAdmitWorkloadIdentity_AnOrganizationScopedCallerSeesOnlyTheOrganization
 	t.Parallel()
 
 	fixture := newWorkloadIdentityFixture()
-	// An endpoint naming no project asks as the organization.
-	organizationScoped := &ResolvedMcpEndpoint{OrganizationID: fixture.endpoint.OrganizationID}
+	// A tenancy naming no project asks as the organization.
+	organizationScoped := workloadTenancy{OrganizationID: fixture.tenancy.OrganizationID, ProjectID: uuid.Nil, UserSessionIssuerID: uuid.New()}
 
-	projectTier := newStaticWorkloadIdentityLookup(fixture.projectTier(fixture.endpoint.ProjectID))
+	projectTier := newStaticWorkloadIdentityLookup(fixture.projectTier(fixture.tenancy.ProjectID))
 	require.ErrorIs(t,
 		admitWorkloadIdentity(t.Context(), projectTier, organizationScoped, fixture.issuerID, fixture.subject),
 		errWorkloadNotAdmitted,
@@ -266,7 +267,7 @@ func TestAdmitWorkloadIdentity_AZeroProjectTierRowAnswersNobody(t *testing.T) {
 	malformed.ProjectID = uuid.NullUUID{UUID: uuid.Nil, Valid: true}
 	lookup := newStaticWorkloadIdentityLookup(malformed)
 
-	organizationScoped := &ResolvedMcpEndpoint{OrganizationID: fixture.endpoint.OrganizationID}
+	organizationScoped := workloadTenancy{OrganizationID: fixture.tenancy.OrganizationID, ProjectID: uuid.Nil, UserSessionIssuerID: uuid.New()}
 
 	require.ErrorIs(t,
 		admitWorkloadIdentity(t.Context(), lookup, organizationScoped, fixture.issuerID, fixture.subject),

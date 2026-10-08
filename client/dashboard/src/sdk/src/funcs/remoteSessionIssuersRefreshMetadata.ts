@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * refreshRemoteSessionIssuerMetadata remoteSessionIssuers
  *
  * @remarks
- * Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.
+ * Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.
  */
 export function remoteSessionIssuersRefreshMetadata(
   client: GramCore,

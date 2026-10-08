@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * uploadOpenAPIv3 assets
  *
  * @remarks
- * Upload an OpenAPI v3 document to Gram.
+ * Upload an OpenAPI v3 document to Speakeasy.
  */
 export function assetsUploadOpenAPIv3(
   client: GramCore,

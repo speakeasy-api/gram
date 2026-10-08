@@ -18,6 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // memberSessionCloseTimeout bounds best-effort legacy session cleanup after a call.
@@ -254,12 +255,15 @@ func upstreamStatusOK(status int) bool {
 // the distinction between an absent credential and a rejected routed credential.
 // Failures it cannot attribute to the member are logged, since they may be ours.
 func memberClientFailure(ctx context.Context, logger *slog.Logger, rt *memberRoundTripper, dial memberDial, member metaMember, err error) error {
-	if _, rejected := rt.rejection(); rejected {
-		return memberAuthFailure(member, dial.anonymous)
-	}
-	// The SDK does not promise to wrap transport errors, so the round tripper's
-	// record of the latest exchange is checked alongside err.
+	// The SDK need not wrap a transport error, so consult the recorded
+	// exchange before reducing a credential failure to an upstream status.
 	exchangeErr := rt.failure()
+	if errors.Is(exchangeErr, remotesessions.ErrClientCredentialUnavailable) || errors.Is(exchangeErr, remotesessions.ErrClientCredentialMisconfigured) {
+		return metaMemberClientCredentialError(member, exchangeErr)
+	}
+	if _, rejected := rt.rejection(); rejected {
+		return memberAuthFailure(member, dial)
+	}
 	switch {
 	case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
 		return &metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}

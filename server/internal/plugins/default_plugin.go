@@ -418,6 +418,13 @@ func AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx context.Context, dbtx p
 	if err := admission.LockProject(ctx, dbtx, params.ProjectID); err != nil {
 		return DefaultPluginAttachOutcome{}, fmt.Errorf("lock eligible server admission: %w", err)
 	}
+	containsPlatform, err := roledelivery.ContainsPlatformTools(ctx, dbtx, params.OrganizationID, params.ProjectID, params.ToolsetID, params.McpServerID)
+	if err != nil {
+		return DefaultPluginAttachOutcome{}, fmt.Errorf("classify automatic plugin attachment: %w", err)
+	}
+	if containsPlatform {
+		return DefaultPluginAttachOutcome{Attached: false, PluginCreated: false}, nil
+	}
 	outcome, err := AttachToDefaultPluginAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, params)
 	if err != nil {
 		return DefaultPluginAttachOutcome{}, err

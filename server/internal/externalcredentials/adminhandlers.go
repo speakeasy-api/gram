@@ -80,8 +80,8 @@ func requireNoLiveManagedKeys(ctx context.Context, logger *slog.Logger, q *repo.
 }
 
 // platformOwnProjectExemption records the own-project exemption on a platform
-// credential whose target is a service account in Gram's own project. Platform
-// rows back Gram's own signing keys, so that is the expected shape; the
+// credential whose target is a service account in Speakeasy's own project. Platform
+// rows back Speakeasy's own signing keys, so that is the expected shape; the
 // provisioner screens the stored row at use and would refuse it otherwise.
 func (s *Service) platformOwnProjectExemption(ctx context.Context, logger *slog.Logger, target pgtype.Text) (bool, error) {
 	if !target.Valid || strings.TrimSpace(target.String) == "" {

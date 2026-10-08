@@ -2,7 +2,7 @@ import type { CreateGcpKmsKeyFormAlgorithm } from "@gram/client/models/component
 
 // The KMS providers an organization admin can create a key for today. The
 // organization API also supports AWS KMS, but a key is only as reachable as the
-// credential behind it, and the credentials page is GCP-only because Gram has no
+// credential behind it, and the credentials page is GCP-only because Speakeasy has no
 // AWS identity to assume a customer role from. An AWS key would therefore have
 // no credential to pick, no detail page to link to, and no way to verify — so
 // the selector stays GCP-only until that changes.

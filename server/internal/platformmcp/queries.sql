@@ -3030,7 +3030,7 @@ LIMIT 2;
 -- name: GetPlatformMCPInstallTarget :one
 -- Tenant-scoped exact MCP target plus its canonical public endpoint. Disabled
 -- and unproxied servers deliberately expose no endpoint even if an endpoint row
--- remains, because neither can be dispatched through Gram's public MCP route.
+-- remains, because neither can be dispatched through Speakeasy's public MCP route.
 SELECT
     m.name,
     m.slug,
@@ -3708,9 +3708,9 @@ WHERE htd.deployment_id IN (SELECT id FROM all_deployment_ids)
 -- Takes the toolset row lock, and must run BEFORE the server row is locked.
 --
 -- The order is the constraint, not the lock. toolsets.UpdateToolset holds this
--- same row (via GetToolsetForUpdate) and then, inside reconcileHostedNetworkAccess,
--- updates the hosted mcp_servers row — an exclusive row lock taken by a plain
--- UPDATE rather than an explicit FOR UPDATE. For a hosted server both ids are
+-- same row (via GetToolsetForUpdate) and then, inside hostedmcp.Sync, locks
+-- the hosted mcp_servers row FOR UPDATE (LockMCPServerByIDAndProjectID) before
+-- writing it. For a hosted server both ids are
 -- the toolset id, so it is the same pair of rows this path touches. Locking the
 -- server first here and the toolset first there is an ABBA cycle that
 -- PostgreSQL resolves by aborting one side with deadlock_detected, so both
@@ -3761,8 +3761,8 @@ FOR UPDATE OF m;
 
 -- name: GetPlatformMCPServerToolExposure :one
 -- The tool list one hosted MCP server exposes, read through its modern server
--- record. A server whose backend is not a Gram toolset, or a bare toolset with
--- no server record, deliberately returns no row: its tool list is not Gram's
+-- record. A server whose backend is not a Speakeasy toolset, or a bare toolset with
+-- no server record, deliberately returns no row: its tool list is not Speakeasy's
 -- to change from here.
 -- The columns this returns are only the ones the caller cannot already supply:
 -- the organization, project and MCP server ids are query inputs, so echoing

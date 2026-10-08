@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/url"
@@ -30,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientcredentials"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -122,6 +124,36 @@ type testInstance struct {
 	// variant) with SetFlagVariant.
 	features         *feature.InMemory
 	efficacySignaler *background.ThrottledSignaler
+	// clientCredentials serves self clients from the production minter;
+	// tests replace it to control the upstream credential.
+	clientCredentials *testClientCredentials
+}
+
+// testClientCredentials is the challenge manager's client credential source.
+// It delegates to the production minter until a test replaces the source.
+type testClientCredentials struct {
+	mu     sync.Mutex
+	source remotesessions.ClientCredentialSource
+}
+
+func (c *testClientCredentials) Credential(ctx context.Context, req remotesessions.ClientCredentialRequest) (remotesessions.ClientCredential, error) {
+	c.mu.Lock()
+	source := c.source
+	c.mu.Unlock()
+
+	cred, err := source.Credential(ctx, req)
+	if err != nil {
+		return cred, fmt.Errorf("test client credential source: %w", err)
+	}
+	return cred, nil
+}
+
+// use replaces the source for the rest of the test.
+func (c *testClientCredentials) use(source remotesessions.ClientCredentialSource) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.source = source
 }
 
 // newTestMCPService wires a permissive identity resolver. Tests asserting
@@ -460,7 +492,12 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	features := &feature.InMemory{}
 	// One prober shared by login and proxy, as in production.
 	protectedResources := protectedresource.NewProber(conn, guardianPolicy)
+	clientCredentials := &testClientCredentials{}
 	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, conn, enc, guardianPolicy, nil, cacheAdapter, serverURL,
+		remotesessions.WithClientCredentialSource(func(m *remotesessions.ChallengeManager) remotesessions.ClientCredentialSource {
+			clientCredentials.use(clientcredentials.New(logger, conn, enc, m, cacheAdapter))
+			return clientCredentials
+		}),
 		remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(idTokenKeys)),
 		remotesessions.WithFeatureFlags(features),
 		remotesessions.WithProtectedResourceProber(protectedResources),
@@ -522,6 +559,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 		tunnelRoutes:         tunnelRoutes,
 		features:             features,
 		efficacySignaler:     efficacySignaler,
+		clientCredentials:    clientCredentials,
 	}
 }
 

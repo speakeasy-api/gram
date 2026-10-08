@@ -36,7 +36,7 @@ export function AnnotationBadges({ tool }: { tool: Tool }): JSX.Element | null {
 }
 
 /**
- * Presentational annotation-hint labels, decoupled from the Gram `Tool` model so
+ * Presentational annotation-hint labels, decoupled from the Speakeasy `Tool` model so
  * they render from already-resolved hints. Returns null when no hint is set.
  *
  * Renders the same text labels and variants as the Connect → Catalog → MCP tool

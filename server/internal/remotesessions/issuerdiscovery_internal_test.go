@@ -37,7 +37,7 @@ func TestDiscoveryErrorTransient(t *testing.T) {
 		require.Equal(t, want, (&discoveryError{WellKnownURL: "", Status: status, cause: nil, definitive: false}).transient(), "status %d", status)
 	}
 	refused := &discoveryError{WellKnownURL: "", Status: 0, cause: errDiscoveryRedirectRefused, definitive: true}
-	require.False(t, refused.transient(), "a refusal Gram made is not an outage")
+	require.False(t, refused.transient(), "a refusal Speakeasy made is not an outage")
 }
 
 func TestDiscoveryFailureMessageIsPublicSafe(t *testing.T) {

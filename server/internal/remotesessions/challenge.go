@@ -229,7 +229,7 @@ type ChallengeManager struct {
 
 	// revoker pushes RFC 7009 revocations upstream when the consent screen
 	// disconnects a remote session, so the provider drops the tokens rather
-	// than only Gram forgetting them.
+	// than only Speakeasy forgetting them.
 	revoker *UpstreamRevoker
 
 	// authorizeInterceptors adapt the outgoing upstream authorize request to
@@ -275,6 +275,14 @@ type ChallengeManager struct {
 	// rotator replaces a client registration the issuer no longer recognizes
 	// before the authorize redirect is minted.
 	rotator *ClientRotator
+
+	// clientCredentials obtains the upstream credential a self client holds
+	// for itself.
+	clientCredentials ClientCredentialSource
+
+	// clientCredentialBuilder builds clientCredentials once the manager is
+	// constructed; nil leaves self clients unsupported.
+	clientCredentialBuilder func(*ChallengeManager) ClientCredentialSource
 }
 
 // RemoteGrant is a grant the remote login callback committed, keyed to the
@@ -401,6 +409,8 @@ func NewChallengeManager(
 		auditLogger:               audit.NewLogger(),
 		rotator:                   nil,
 		assertions:                unavailableTokenEndpointAssertionSigner{},
+		clientCredentials:         unconfiguredClientCredentialSource{},
+		clientCredentialBuilder:   nil,
 	}
 	for _, option := range options {
 		option(manager)
@@ -413,6 +423,9 @@ func NewChallengeManager(
 	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions))
 	manager.rotator = NewClientRotator(logger, db, enc, policy, tunnels, cacheImpl, serverURL, manager.revoker, manager.auditLogger, manager.registrationTelemetry)
 	manager.rotator.origins = manager.origins
+	if manager.clientCredentialBuilder != nil {
+		manager.clientCredentials = manager.clientCredentialBuilder(manager)
+	}
 	return manager
 }
 
@@ -508,7 +521,7 @@ type Client struct {
 	// IssuerRegistrationEndpoint is the RFC 7591 registration endpoint the
 	// client's issuer publishes, as discovery last refreshed it; empty when
 	// the issuer publishes none. A client whose issuer publishes no endpoint
-	// is never re-registered automatically, since Gram has nowhere to do it.
+	// is never re-registered automatically, since Speakeasy has nowhere to do it.
 	IssuerRegistrationEndpoint string
 
 	// ClientSecretExpiresAt is when the issuer said the client secret expires,
@@ -519,15 +532,22 @@ type Client struct {
 	// invalid_client for this client_id, nil while the registration is in good
 	// standing.
 	UpstreamRejectedAt *time.Time
+
+	// CredentialOwner is who the client's upstream credential belongs to. A
+	// CredentialOwnerSelf client is never connected by a subject: it has no
+	// consent card, connect step or authorize redirect.
+	CredentialOwner CredentialOwner
 }
 
 // needsRegistrationRotation reports whether the client's upstream registration
 // should be replaced before sending a user to the authorize endpoint: the
 // issuer has rejected the client_id, or the secret it issued has expired. A
 // client whose issuer publishes no registration endpoint is never rotated
-// here, since Gram has nowhere to re-register it.
+// here, since Speakeasy has nowhere to re-register it. Neither is a self
+// client, which an administrator provisioned and nobody sends to the
+// authorize endpoint.
 func (c Client) needsRegistrationRotation(now time.Time) (RotationTrigger, bool) {
-	if c.IssuerRegistrationEndpoint == "" {
+	if c.IssuerRegistrationEndpoint == "" || c.CredentialOwner == CredentialOwnerSelf {
 		return "", false
 	}
 	switch {
@@ -698,20 +718,40 @@ func (m *ChallengeManager) CachedResourceScopesForServer(ctx context.Context, pr
 		}
 		return none, "", false
 	}
-	row, err := remotemcprepo.New(m.db).GetRemoteProtectedResource(ctx, remotemcprepo.GetRemoteProtectedResourceParams{ProjectID: projectID, ResourceIdentifier: resourceURL})
+	scopes, found, err := CachedResourceScopes(ctx, m.db, projectID, resourceURL, useDiscovered)
 	if err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
-			m.logger.ErrorContext(ctx, "get remote protected resource for mcp server", attr.SlogError(err), attr.SlogProjectID(projectID.String()))
-		}
+		m.logger.ErrorContext(ctx, "get remote protected resource for mcp server", attr.SlogError(err), attr.SlogProjectID(projectID.String()))
 		return none, resourceURL, false
+	}
+	return scopes, resourceURL, found
+}
+
+// CachedResourceScopes is the protected resource row at resourceURL as it
+// stands, never probed. found is false when the resource has no row.
+func CachedResourceScopes(ctx context.Context, db remotemcprepo.DBTX, projectID uuid.UUID, resourceURL string, useDiscovered bool) (scopes ResourceScopes, found bool, err error) {
+	row, err := remotemcprepo.New(db).GetRemoteProtectedResource(ctx, remotemcprepo.GetRemoteProtectedResourceParams{ProjectID: projectID, ResourceIdentifier: resourceURL})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ResourceScopesFromRow(nil, useDiscovered), false, nil
+	}
+	if err != nil {
+		return ResourceScopesFromRow(nil, useDiscovered), false, fmt.Errorf("get remote protected resource: %w", err)
+	}
+	return ResourceScopesFromRow(&row, useDiscovered), true, nil
+}
+
+// ResourceScopesFromRow is what a login reads from a protected resource row
+// without probing; a nil row is a resource never read.
+func ResourceScopesFromRow(row *remotemcprepo.RemoteProtectedResource, useDiscovered bool) ResourceScopes {
+	if row == nil {
+		return ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: useDiscovered}
 	}
 	return ResourceScopes{
 		Pin:             row.ScopeOverride,
 		ChallengeScopes: row.ChallengeScopes,
-		ScopesSupported: protectedresource.LastGoodScopes(&row, time.Now()),
+		ScopesSupported: protectedresource.LastGoodScopes(row, time.Now()),
 		Live:            false,
 		UseDiscovered:   useDiscovered,
-	}, resourceURL, true
+	}
 }
 
 // ResourceAppliesToClient reports whether the protected resource at
@@ -871,6 +911,7 @@ func (m *ChallengeManager) ListClients(
 			IssuerRegistrationEndpoint:                       conv.FromPGTextOrEmpty[string](r.IssuerRegistrationEndpoint),
 			ClientSecretExpiresAt:                            timestampPtr(r.ClientSecretExpiresAt),
 			UpstreamRejectedAt:                               timestampPtr(r.UpstreamRejectedAt),
+			CredentialOwner:                                  CredentialOwner(r.CredentialOwner),
 		})
 	}
 	return out, nil
@@ -933,7 +974,7 @@ type RemoteSessionState struct {
 	LastValidatedAt *time.Time
 	// ValidationStatus is that probe's verdict, empty when never validated.
 	ValidationStatus ValidationOutcome
-	// ValidationReason is the Gram-authored explanation of a non-valid verdict.
+	// ValidationReason is the Speakeasy-authored explanation of a non-valid verdict.
 	ValidationReason string
 }
 
@@ -1083,7 +1124,7 @@ func (m *ChallengeManager) ResourceForClientAtUpstream(ctx context.Context, orga
 //
 // The user asked to disconnect a provider, so leaving a live refresh token at
 // that provider would defeat the action; the upstream revocation is what makes
-// the disconnect mean something outside Gram. It is best-effort in exactly the
+// the disconnect mean something outside Speakeasy. It is best-effort in exactly the
 // way the other revoke paths are: the soft delete has already committed by the
 // time it runs, and a provider that is unreachable or refuses is recorded
 // rather than surfaced, because the local disconnect succeeded either way.
@@ -1141,6 +1182,9 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	parent ParentChallenge,
 	client Client,
 ) (string, error) {
+	if client.CredentialOwner == CredentialOwnerSelf {
+		return "", ErrSelfCredentialClient
+	}
 	// Evaluated once per login; the retry leg reuses the scopes it chose.
 	discover := m.ResourceScopeDiscoveryEnabled(ctx, parent.OrganizationID)
 	return m.mintAuthorization(ctx, parent, client, nil, discover)
@@ -1514,7 +1558,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	if err != nil && authMethod == TokenEndpointAuthMethodPrivateKeyJWT {
 		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client's assertion audience is misconfigured").LogError(ctx, logger)
 	}
-	tok, err := m.exchangeCode(ctx, doer, state, tokenEndpointClientAuth{
+	tok, err := m.exchangeCode(ctx, doer, state, TokenEndpointClientAuth{
 		Method:                authMethod,
 		RemoteSessionClientID: client.ID,
 		OrganizationID:        client.OrganizationID.String,
@@ -1533,7 +1577,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
 	}
 	// The pair is live upstream from this line on, and every path out of here
-	// that does not store it strands it: unreachable through Gram, and outside
+	// that does not store it strands it: unreachable through Speakeasy, and outside
 	// the reach of every revoke path since no row points at it. So arm the
 	// revocation on the exchange rather than on the first thing done with the
 	// result — encrypting it can fail too — and disarm it once the row is
@@ -1621,7 +1665,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}
 
 	// The upstream exchange has already happened, so the token pair exists
-	// either way; this transaction decides whether Gram stores it. The
+	// either way; this transaction decides whether Speakeasy stores it. The
 	// client-row lock serializes the write against the issuer-delete orphan
 	// cascade, which locks the same row before sweeping the client's
 	// sessions: a callback that acquires the lock after that cascade
@@ -1846,7 +1890,7 @@ func (m *ChallengeManager) exchangeCode(
 	ctx context.Context,
 	doer httpDoer,
 	state RemoteLoginState,
-	clientAuth tokenEndpointClientAuth,
+	clientAuth TokenEndpointClientAuth,
 	audience string,
 	code string,
 ) (tokenResponse, error) {
@@ -1862,7 +1906,7 @@ func (m *ChallengeManager) exchangeCode(
 		form.Set("resource", state.Resource)
 	}
 
-	req, err := newTokenEndpointRequest(ctx, state.TokenEndpoint, form, clientAuth)
+	req, err := NewTokenEndpointRequest(ctx, state.TokenEndpoint, form, clientAuth)
 	if err != nil {
 		return tokenResponse{}, fmt.Errorf("new token request: %w", err)
 	}

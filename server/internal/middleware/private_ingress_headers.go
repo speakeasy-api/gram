@@ -9,7 +9,7 @@ import (
 // isolated private listener. Public requests must never be able to supply it.
 const PrivateIngressAttestationHeader = "X-Gram-Network-Ingress-Attestation"
 
-// StripPrivateIngressHeaders removes provider identity and Gram attestation
+// StripPrivateIngressHeaders removes provider identity and Speakeasy attestation
 // headers from the public listener before tracing, logging, or context
 // extraction. Header names are case-insensitive under net/http.
 func StripPrivateIngressHeaders(next http.Handler) http.Handler {

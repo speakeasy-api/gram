@@ -34,16 +34,20 @@ SELECT
   , c.organization_id
   , c.status
   , o.org_url
+  , o.dpop_required
   , rc.id AS remote_session_client_id
   , rc.client_id
   , rc.json_web_key_set_id
+  , rc.token_endpoint_auth_method
+  , rc.client_secret_encrypted
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
  AND o.organization_id = c.organization_id
  AND o.deleted IS FALSE
 JOIN remote_session_clients AS rc
-  ON rc.organization_id = c.organization_id
+  ON rc.id = o.remote_session_client_id
+ AND rc.organization_id = c.organization_id
  AND rc.project_id IS NULL
  AND rc.identity_provider_connection_id = c.id
  AND rc.deleted IS FALSE
