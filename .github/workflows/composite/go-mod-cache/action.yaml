@@ -1,15 +1,11 @@
 name: "Go module cache"
 description: "Restore the Go module cache saved by the go-module-cache job in pr.yaml. Requires Go on PATH."
 
-# Blacksmith's Go build caching (GOCACHEPROG) covers compiled output, so only
-# the module cache is cached here.
+# Compiled output is cached by Blacksmith's Go build caching (GOCACHEPROG),
+# so only modules are cached here.
 #
-# Restore only: the go-module-cache job is the single writer. When jobs raced
-# to save a shared key, the first one to finish won, and if it never built the
-# custom golangci-lint binary the entry lacked the linter's modules, so every
-# server-build-lint run downloaded them again until go.sum next changed. An
-# exact miss (go.sum changed in this run) falls back to the newest entry and
-# downloads the difference.
+# Restore only: the go-module-cache job is the single writer. Without an exact
+# match, the newest entry is restored and the job downloads the difference.
 
 inputs:
   lookup-only:
@@ -34,8 +30,7 @@ runs:
       shell: bash
       run: echo "path=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
 
-    # .custom-gcl.yml pins the golangci-lint version, whose own dependencies
-    # the go-module-cache job downloads, so it busts the key too.
+    # .custom-gcl.yml pins golangci-lint, whose dependencies are cached too.
     - id: restore
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:

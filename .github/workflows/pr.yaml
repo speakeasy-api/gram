@@ -236,10 +236,8 @@ jobs:
           [[ "$PYSTREAMS" == "true" ]] || add gram-pystreams pystreams
           echo "components=$components" >> "$GITHUB_OUTPUT"
 
-  # The only job that saves the Go module cache (see the go-mod-cache composite
-  # action). Nothing depends on it: Go jobs that start before it finishes fall
-  # back to the newest partial entry, and when the exact entry already exists
-  # it exits after the lookup.
+  # The single writer of the Go module cache (see the go-mod-cache composite
+  # action). No job depends on it.
   go-module-cache:
     name: Populate Go module cache
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -263,11 +261,9 @@ jobs:
         with:
           lookup-only: true
 
-      # Starts from an empty module cache so the entry holds only what the
-      # current go.sum files need. `go mod tidy` also loads the tests of
-      # dependencies, which `go mod download` skips but the go:tidy check in
-      # the lint jobs needs. `golangci-lint custom` has no download-only mode,
-      # so building the linter is how its modules get fetched.
+      # Fetches every module the Go jobs need, including the test dependencies
+      # `go mod tidy` loads and the custom golangci-lint build's dependencies
+      # (it has no download-only mode).
       - name: Download Go modules
         if: steps.lookup.outputs.cache-hit != 'true'
         run: |
