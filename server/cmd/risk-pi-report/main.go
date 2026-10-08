@@ -1115,8 +1115,8 @@ func loadFloors(dir string) (floors, error) {
 // model's raw accuracy on every case rather than a throttled subset.
 func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase) (modeSummary, [][]scanners.Finding, error) {
 	apiKey := firstEnv("OPENROUTER_DEV_KEY", "OPENROUTER_API_KEY")
-	if apiKey == "" || apiKey == "unset" {
-		return modeSummary{}, nil, fmt.Errorf("OPENROUTER_DEV_KEY not set")
+	if apiKey == "" {
+		return modeSummary{}, nil, fmt.Errorf("set OPENROUTER_DEV_KEY or OPENROUTER_API_KEY")
 	}
 
 	fmt.Fprintf(os.Stderr, "judging %d cases with %s (concurrency=%d)\n", len(corpus), opts.judgeModel, opts.judgeConcurrency)
@@ -1554,9 +1554,16 @@ func highestConfidenceFinding(findings []scanners.Finding) scanners.Finding {
 	return out
 }
 
+// unsetEnvPlaceholder is mise.toml's OPENROUTER_DEV_KEY. Under mise it
+// overrides the process environment, so CI passes its key as
+// OPENROUTER_API_KEY and the placeholder must not shadow it.
+const unsetEnvPlaceholder = "unset"
+
+// firstEnv returns the first variable set to a value other than empty or
+// the mise placeholder.
 func firstEnv(keys ...string) string {
 	for _, k := range keys {
-		if v := os.Getenv(k); v != "" {
+		if v := os.Getenv(k); v != "" && v != unsetEnvPlaceholder {
 			return v
 		}
 	}

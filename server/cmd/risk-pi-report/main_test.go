@@ -318,3 +318,9 @@ func TestDeepsetOnlyCannotPassValidationFloors(t *testing.T) {
 	err := run(t.Context(), options{corpusDir: corpusDir, sources: "deepset", repeats: 1, samples: 1, checkFloors: true})
 	require.ErrorContains(t, err, "no validation cases")
 }
+
+func TestFirstEnvSkipsMisePlaceholder(t *testing.T) {
+	t.Setenv("RISK_PI_REPORT_TEST_DEV_KEY", unsetEnvPlaceholder)
+	t.Setenv("RISK_PI_REPORT_TEST_API_KEY", "ci-key")
+	require.Equal(t, "ci-key", firstEnv("RISK_PI_REPORT_TEST_DEV_KEY", "RISK_PI_REPORT_TEST_API_KEY"))
+}
