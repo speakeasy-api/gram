@@ -2037,7 +2037,7 @@ type SpendRuleActorUsageResponseBody struct {
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 	// Actor display name, when known.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
-	// Gram user ID of the actor, when linked.
+	// Speakeasy user ID of the actor, when linked.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// Actor spend in USD within the current window.
 	SpendUsd *float64 `form:"spend_usd,omitempty" json:"spend_usd,omitempty" xml:"spend_usd,omitempty"`
@@ -2061,7 +2061,7 @@ type SpendRuleEventResponseBody struct {
 	RuleName *string `form:"rule_name,omitempty" json:"rule_name,omitempty" xml:"rule_name,omitempty"`
 	// Event type.
 	EventType *string `form:"event_type,omitempty" json:"event_type,omitempty" xml:"event_type,omitempty"`
-	// Gram user ID of the actor, when linked.
+	// Speakeasy user ID of the actor, when linked.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// Actor email.
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`

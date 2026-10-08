@@ -41,7 +41,7 @@ import { Tool, Tool$inboundSchema } from "./tool.js";
 import { ToolsetOrigin, ToolsetOrigin$inboundSchema } from "./toolsetorigin.js";
 
 /**
- * The network surfaces through which a Gram-hosted MCP server may be reached.
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
 export const ToolsetNetworkAccessMode = {
   PublicOnly: "public_only",
@@ -49,7 +49,7 @@ export const ToolsetNetworkAccessMode = {
   PrivateOnly: "private_only",
 } as const;
 /**
- * The network surfaces through which a Gram-hosted MCP server may be reached.
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
 export type ToolsetNetworkAccessMode = ClosedEnum<
   typeof ToolsetNetworkAccessMode
@@ -106,7 +106,7 @@ export type Toolset = {
    */
   name: string;
   /**
-   * The network surfaces through which a Gram-hosted MCP server may be reached.
+   * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
    */
   networkAccessMode?: ToolsetNetworkAccessMode | undefined;
   oauthEnablementMetadata: OAuthEnablementMetadata;

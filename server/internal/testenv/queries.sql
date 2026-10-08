@@ -1125,6 +1125,14 @@ RETURNING id;
 INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject)
 VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject);
 
+-- name: CreateWorkloadIdentityRuleFixture :exec
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind)
+VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject, @match_kind);
+
+-- name: CreateWorkloadAgentAssignmentFixture :exec
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, match_kind, agent_id)
+VALUES (@organization_id, @workload_issuer_id, @subject, @match_kind, @agent_id);
+
 -- name: SoftDeleteWorkloadIssuerFixture :execrows
 UPDATE workload_issuers
 SET deleted_at = clock_timestamp()
@@ -1487,6 +1495,21 @@ WHERE id = @id
 UPDATE remote_session_clients
 SET client_secret_expires_at = sqlc.narg('client_secret_expires_at'),
     upstream_rejected_at = sqlc.narg('upstream_rejected_at'),
+    updated_at = clock_timestamp()
+WHERE remote_session_clients.id = @id
+  AND remote_session_clients.deleted IS FALSE
+  AND remote_session_clients.project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
+  AND (remote_session_clients.organization_id IS NULL OR remote_session_clients.organization_id = @organization_id)
+  AND (remote_session_clients.organization_id = @organization_id AND remote_session_clients.project_id IS NULL
+    OR EXISTS (SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id AND p.organization_id = @organization_id));
+
+-- name: ForceRemoteSessionClientCredentialOwnerFixture :execrows
+-- Test fixture: sets who owns a client's upstream credential, which no
+-- application query changes after creation. A 'self' owner must satisfy
+-- remote_session_clients_credential_owner_check, so the client needs a
+-- confidential token endpoint auth method first.
+UPDATE remote_session_clients
+SET credential_owner = @credential_owner,
     updated_at = clock_timestamp()
 WHERE remote_session_clients.id = @id
   AND remote_session_clients.deleted IS FALSE

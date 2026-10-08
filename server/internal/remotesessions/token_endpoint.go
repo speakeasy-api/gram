@@ -31,7 +31,7 @@ type TokenEndpoint struct {
 	issuer   string
 	issuerID uuid.UUID
 	doer     httpDoer
-	auth     tokenEndpointClientAuth
+	auth     TokenEndpointClientAuth
 }
 
 // Issuer is the authorization server's issuer identifier.
@@ -56,7 +56,7 @@ func (e *TokenEndpoint) LogValue() slog.Value         { return slog.StringValue(
 // failures and signing failures are *TokenEndpointError; it never retries.
 func (e *TokenEndpoint) Post(ctx context.Context, form url.Values) (TokenResponse, error) {
 	var none TokenResponse
-	req, err := newTokenEndpointRequest(ctx, e.endpoint, form, e.auth)
+	req, err := NewTokenEndpointRequest(ctx, e.endpoint, form, e.auth)
 	if err != nil {
 		if _, ok := errors.AsType[*tokenEndpointSigningError](err); ok {
 			return none, &TokenEndpointError{StatusCode: 0, Code: "", Transport: false, Signing: true}
@@ -159,7 +159,7 @@ func (m *ChallengeManager) BindTokenEndpoint(reg TokenEndpointRegistration) (*To
 		issuer:   reg.IssuerURL,
 		issuerID: reg.IssuerID,
 		doer:     doer,
-		auth: tokenEndpointClientAuth{
+		auth: TokenEndpointClientAuth{
 			Method:                method,
 			RemoteSessionClientID: reg.ClientID,
 			OrganizationID:        reg.OrganizationID,

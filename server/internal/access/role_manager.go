@@ -536,7 +536,7 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 
 	// Grants live in the per-org grant store and are patched the same way for
 	// custom and system roles. WorkOS only tracks role identity/membership, not
-	// Gram scopes, so no grant sync to WorkOS is needed.
+	// Speakeasy scopes, so no grant sync to WorkOS is needed.
 	if payload.AddGrants != nil || payload.RemoveGrants != nil {
 		before, err := roledelivery.Snapshot(ctx, tx, gramOrgID, currentRole.PrincipalURN)
 		if err != nil {
@@ -1273,7 +1273,7 @@ func (r *RoleManager) MemberRolePrincipals(ctx context.Context, gramOrgID, worko
 	return rows, nil
 }
 
-// getLocalRoleByID loads one local role record by Gram role ID.
+// getLocalRoleByID loads one local role record by Speakeasy role ID.
 func (r *RoleManager) getLocalRoleByID(ctx context.Context, gramOrgID, id string) (localRole, error) {
 	return r.getLocalRoleByIDTx(ctx, r.db, gramOrgID, id)
 }
@@ -1775,7 +1775,7 @@ func workosTimeOrNow(value string) time.Time {
 	return t.UTC()
 }
 
-// slugify validates a role name and turns it into Gram's WorkOS role slug format.
+// slugify validates a role name and turns it into Speakeasy's WorkOS role slug format.
 func slugify(name string) (string, error) {
 	slug := conv.ToSlug(strings.ReplaceAll(name, "_", " "))
 	if slug == "" {

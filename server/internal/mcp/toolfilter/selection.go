@@ -169,7 +169,7 @@ func NewSessionSelection(resource string, grantID uuid.UUID, entries []AllowEntr
 }
 
 // ParseSessionSelection decodes and validates a stored tool_selection
-// document. Gram is the document's only writer, so any malformation is
+// document. Speakeasy is the document's only writer, so any malformation is
 // corruption and rejects the whole document — callers fail closed into
 // reauthorization, never into a wider session.
 func ParseSessionSelection(raw []byte) (*SessionSelection, error) {

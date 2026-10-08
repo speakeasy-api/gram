@@ -37,7 +37,7 @@ func TestVerifySigningKey_ES256(t *testing.T) {
 	require.Empty(t, result.Detail)
 }
 
-// The stored algorithm drives how Gram advertises the key, so a healthy key
+// The stored algorithm drives how Speakeasy advertises the key, so a healthy key
 // configured as the wrong algorithm must fail loudly and report what it is.
 func TestVerifySigningKey_ReportsAlgorithmMismatch(t *testing.T) {
 	t.Parallel()

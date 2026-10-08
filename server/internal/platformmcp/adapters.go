@@ -381,6 +381,7 @@ type PostgresReader struct {
 	reviewLinks               ShadowMCPReviewLinker
 	toolExposure              *MCPToolExposureService
 	projectLifecycle          *ProjectLifecycleService
+	analytics                 *AnalyticsService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -413,6 +414,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
 		toolExposure:              nil,
 		projectLifecycle:          nil,
+		analytics:                 nil,
 	}
 }
 
@@ -547,6 +549,15 @@ func (r *PostgresReader) WithRiskAnalysisStatus(service *RiskAnalysisStatusServi
 func (r *PostgresReader) WithRiskFindings(service *RiskFindingsService, budget OperationBudget) *PostgresReader {
 	if r != nil && service.valid() {
 		r.riskFindings = &budgetedRiskFindings{service: service, budget: budget}
+	}
+	return r
+}
+
+// WithAnalytics attaches the analytics reads. A nil or incomplete service
+// leaves the three tools served as stubs.
+func (r *PostgresReader) WithAnalytics(service *AnalyticsService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.analytics = service
 	}
 	return r
 }

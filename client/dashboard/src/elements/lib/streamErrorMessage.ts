@@ -5,7 +5,7 @@ export const CREDITS_EXHAUSTED_MESSAGE =
   'You\'ve reached the chat credit limit for this account. Click the "Get Support" button at the top of the page to reach out about upgrading.';
 
 // Lowercase substrings that identify credit exhaustion across providers:
-// Gram goa ServiceError ("insufficient_credits", "token balance exhausted"),
+// Speakeasy goa ServiceError ("insufficient_credits", "token balance exhausted"),
 // OpenRouter ("requires more credits"), and casual-prose variants.
 const CREDIT_HINTS = [
   "insufficient_credits",

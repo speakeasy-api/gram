@@ -1,10 +1,10 @@
 // Package destructivetool is the single home for the destructive-tool-annotation
-// scanner. It flags recorded Gram MCP tool calls whose resolved tool definition
+// scanner. It flags recorded Speakeasy MCP tool calls whose resolved tool definition
 // carries a destructive annotation (the MCP `destructiveHint`), converting each
 // into the shared scanners.Finding domain type.
 //
 // Unlike clidestructive, which is content-driven, this scanner is
-// annotation-driven: it resolves each MCP-routed call back to the Gram tool
+// annotation-driven: it resolves each MCP-routed call back to the Speakeasy tool
 // that produced it (via a Resolver, satisfied by *shadowmcp.Client) and reports
 // a finding when that tool's server-declared annotations mark it destructive.
 package destructivetool
@@ -26,7 +26,7 @@ const Source = shadowmcp.SourceDestructiveTool
 // Rule is the canonical rule id emitted for every destructive_tool finding.
 const Rule = "destructive.tool"
 
-// Resolver resolves a recorded Gram MCP tool call back to its underlying tool
+// Resolver resolves a recorded Speakeasy MCP tool call back to its underlying tool
 // definition. *shadowmcp.Client satisfies it. ok is false for missing
 // provenance, unknown toolsets, and names not present in the resolved toolset.
 type Resolver interface {

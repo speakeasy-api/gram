@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,10 +36,12 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -48,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -216,7 +220,7 @@ type assistantToolsetRow struct {
 }
 
 // assistantMCPServerRow is the hydrated view of a row in assistant_mcp_servers
-// joined with mcp_servers + its Gram-hosted endpoint + environments. Like
+// joined with mcp_servers + its Speakeasy-hosted endpoint + environments. Like
 // assistantToolsetRow, everything dispatch needs to build the MCP server URL
 // comes from one read; ServerSlug is the display/runtime ID and EndpointSlug is
 // the public /mcp/{slug} path segment the runner connects to.
@@ -680,7 +684,7 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	// until the assistant is deleted. The local reconciliation below is the
 	// narrow exception for a row whose container no longer exists.
 	queries := assistantrepo.New(s.db)
-	// Local containers can be removed outside Gram (docker rm, daemon reset,
+	// Local containers can be removed outside Speakeasy (docker rm, daemon reset,
 	// pruning). Reconcile those rows before the age-based SQL sweep: unlike a
 	// healthy idle runtime, a definitively missing container can never make
 	// progress. Stop only the row; the next admission recreates the container
@@ -990,14 +994,14 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 		// Reject servers the runtime cannot reach so a bad attach fails the
 		// write instead of silently vanishing from reads and dispatch:
 		// tunnelled backends have no /mcp serving path, disabled servers 404
-		// there, and without a Gram-hosted endpoint there is no URL to build.
+		// there, and without a Speakeasy-hosted endpoint there is no URL to build.
 		switch {
 		case row.Tunneled:
 			return nil, assistantValidationError("mcp server %q is tunnel-backed and cannot be attached to an assistant", row.Slug.String)
 		case row.Visibility == visibility.Disabled:
 			return nil, assistantValidationError("mcp server %q is disabled", row.Slug.String)
 		case !row.HasGramEndpoint:
-			return nil, assistantValidationError("mcp server %q has no Gram-hosted MCP endpoint", row.Slug.String)
+			return nil, assistantValidationError("mcp server %q has no Speakeasy-hosted MCP endpoint", row.Slug.String)
 		}
 		serverIDs[row.Slug.String] = row.ID
 	}
@@ -1076,7 +1080,7 @@ func (s *ServiceCore) loadAssistantToolsets(ctx context.Context, projectID uuid.
 
 // loadAssistantMcpServers pulls the hydrated mcp_servers attachments for one or
 // more assistants in a single query, mirroring loadAssistantToolsets. Rows
-// whose server has no Gram-hosted endpoint (empty EndpointSlug) are kept so
+// whose server has no Speakeasy-hosted endpoint (empty EndpointSlug) are kept so
 // the attachment stays visible and detachable on API reads;
 // resolveAssistantMCPServers skips them at dispatch.
 func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uuid.UUID, assistantIDs []uuid.UUID) (map[uuid.UUID][]assistantMCPServerRow, error) {
@@ -1163,6 +1167,8 @@ func (s *ServiceCore) hydrateAssistantSkills(ctx context.Context, projectID uuid
 func writeAssistantToolsets(
 	ctx context.Context,
 	tx pgx.Tx,
+	auditLogger *audit.Logger,
+	actor hostedmcp.Actor,
 	assistantID, projectID uuid.UUID,
 	resolved []resolvedToolsetInsert,
 ) error {
@@ -1194,24 +1200,23 @@ func writeAssistantToolsets(
 	// to be MCP-reachable; assistants address tools via the MCP server.
 	// Auto-enable on attach so the user doesn't have to toggle it
 	// separately on each toolset.
-	if err := queries.EnableMCPForToolsets(ctx, assistantrepo.EnableMCPForToolsetsParams{
+	enabled, err := queries.EnableMCPForToolsets(ctx, assistantrepo.EnableMCPForToolsetsParams{
 		ToolsetIds: toolsetIDs,
 		ProjectID:  projectID,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("enable mcp for assistant toolsets: %w", err)
 	}
-	// A hosted MCP wrapper mirrors the toolset's enabled state. Assistant
-	// attachment can enable the toolset outside the toolset update API.
-	if _, err := tx.Exec(ctx, `UPDATE mcp_servers AS server
-		SET visibility = CASE WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END,
-			updated_at = clock_timestamp()
-		FROM toolsets AS toolset
-		WHERE server.id = toolset.id AND server.toolset_id = toolset.id
-			AND server.project_id = $2 AND toolset.project_id = $2
-			AND toolset.id = ANY($1::uuid[]) AND toolset.mcp_enabled IS TRUE
-			AND toolset.deleted IS FALSE AND server.deleted IS FALSE
-			AND server.visibility = 'disabled'`, toolsetIDs, projectID); err != nil {
-		return fmt.Errorf("enable hosted mcp wrappers for assistant toolsets: %w", err)
+	// Toolset rows are already locked FOR NO KEY UPDATE, in id order.
+	slices.SortFunc(enabled, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
+	for _, id := range enabled {
+		toolset, err := toolsetsrepo.New(tx).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: id, ProjectID: projectID})
+		if err != nil {
+			return fmt.Errorf("load enabled assistant toolset: %w", err)
+		}
+		if _, err := hostedmcp.Sync(ctx, tx, auditLogger, actor, toolset, nil); err != nil {
+			return fmt.Errorf("sync hosted mcp for assistant toolset: %w", err)
+		}
 	}
 	return nil
 }
@@ -1341,11 +1346,6 @@ func (s *ServiceCore) CreateAssistant(
 	if err != nil {
 		return assistantRecord{}, err
 	}
-	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
-	if err != nil {
-		return assistantRecord{}, err
-	}
-
 	queries := assistantrepo.New(tx)
 	created, err := queries.CreateAssistant(ctx, assistantrepo.CreateAssistantParams{
 		ProjectID:       projectID,
@@ -1363,7 +1363,12 @@ func (s *ServiceCore) CreateAssistant(
 	}
 	record := assistantRecordFromCreateRow(created)
 
-	if err := writeAssistantToolsets(ctx, tx, record.ID, projectID, resolved); err != nil {
+	if err := writeAssistantToolsets(ctx, tx, s.audit, assistantActor(ctx, createdByUserID), record.ID, projectID, resolved); err != nil {
+		return assistantRecord{}, err
+	}
+	// Server rows lock after the hosted sync's domain -> endpoint -> server locks.
+	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
+	if err != nil {
 		return assistantRecord{}, err
 	}
 	if err := writeAssistantMcpServers(ctx, tx, record.ID, projectID, resolvedMcpServers); err != nil {
@@ -1485,15 +1490,6 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 		resolved = r
 	}
-	var resolvedMcpServers []resolvedMcpServerInsert
-	if mcpServers != nil {
-		r, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
-		if err != nil {
-			return assistantRecord{}, err
-		}
-		resolvedMcpServers = r
-	}
-
 	queries := assistantrepo.New(tx)
 	updated, err := queries.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
 		Name:           conv.PtrToPGText(name),
@@ -1511,11 +1507,16 @@ func (s *ServiceCore) UpdateAssistant(
 	record := assistantRecordFromUpdateRow(updated)
 
 	if toolsets != nil {
-		if err := writeAssistantToolsets(ctx, tx, record.ID, projectID, resolved); err != nil {
+		if err := writeAssistantToolsets(ctx, tx, s.audit, assistantActor(ctx, record.CreatedByUserID), record.ID, projectID, resolved); err != nil {
 			return assistantRecord{}, err
 		}
 	}
 	if mcpServers != nil {
+		// Server rows lock after the hosted sync's domain -> endpoint -> server locks.
+		resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
+		if err != nil {
+			return assistantRecord{}, err
+		}
 		if err := writeAssistantMcpServers(ctx, tx, record.ID, projectID, resolvedMcpServers); err != nil {
 			return assistantRecord{}, err
 		}
@@ -2109,7 +2110,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 	}, nil
 }
 
-// dashboardChatUserID extracts the Gram user id from a dashboard turn payload
+// dashboardChatUserID extracts the Speakeasy user id from a dashboard turn payload
 // so UpsertAssistantChat can stamp it on the chats row. External-source turns
 // return empty — see assistantChatOwnerID for who owns those.
 func dashboardChatUserID(sourceKind string, normalizedPayloadJSON []byte) string {
@@ -3369,7 +3370,7 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 	// uniformly as an MCP endpoint to connect to, so these need only the same
 	// {ID, URL, Headers} shape: the public /mcp/{endpoint} path that
 	// serveRemoteBackend already proxies, plus an optional bound environment.
-	// Rows without a Gram-hosted endpoint (deleted after attach) are skipped
+	// Rows without a Speakeasy-hosted endpoint (deleted after attach) are skipped
 	// so dispatch never builds a slugless MCP URL; the attachment stays
 	// visible on reads. ServerSlug is the runtime ID (agentkit namespaces
 	// tool names by it, 64-char cap). Disabled servers 404 at the /mcp
@@ -3973,4 +3974,13 @@ func (s *ServiceCore) stopRuntimeRecord(ctx context.Context, projectID, runtimeI
 		return fmt.Errorf("stop assistant runtime: %w", err)
 	}
 	return nil
+}
+
+// assistantActor attributes hosted MCP changes made by an assistant write.
+func assistantActor(ctx context.Context, fallbackUserID string) hostedmcp.Actor {
+	actor := hostedmcp.Actor{UserID: fallbackUserID, Email: nil, System: ""}
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.UserID != "" {
+		actor.UserID, actor.Email = authCtx.UserID, authCtx.Email
+	}
+	return actor
 }

@@ -28,6 +28,9 @@ import type { AdminGetMeterUsageRequest } from "@gram/admin-client/models/operat
 import type { AdminSpendBreakdownResponse } from "@gram/admin-client/models/components/adminspendbreakdownresponse";
 import { buildAdminGetSpendBreakdownQuery } from "@gram/admin-client/react-query/adminGetSpendBreakdown.core";
 import type { AdminGetSpendBreakdownRequest } from "@gram/admin-client/models/operations/admingetspendbreakdown";
+import type { AdminCustomerUsageResponse } from "@gram/admin-client/models/components/admincustomerusageresponse";
+import { buildAdminListCustomerUsageQuery } from "@gram/admin-client/react-query/adminListCustomerUsage.core";
+import type { AdminListCustomerUsageRequest } from "@gram/admin-client/models/operations/adminlistcustomerusage";
 import { buildAdminDescribeMcpServerHealthQuery } from "@gram/admin-client/react-query/adminDescribeMcpServerHealth.core";
 import { buildAdminGetMcpServerToolCallsQuery } from "@gram/admin-client/react-query/adminGetMcpServerToolCalls.core";
 import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
@@ -186,6 +189,19 @@ export function organizationMeterUsageQuery(
   request: AdminGetMeterUsageRequest,
 ): UseQueryOptions<AdminMeterUsageResponse> {
   const generated = buildAdminGetMeterUsageQuery(redirectingClient, request);
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    staleTime: 30_000,
+  });
+}
+export function customerUsageQuery(
+  request: AdminListCustomerUsageRequest,
+): UseQueryOptions<AdminCustomerUsageResponse> {
+  const generated = buildAdminListCustomerUsageQuery(
+    redirectingClient,
+    request,
+  );
   return queryOptions({
     ...generated,
     queryFn: (context) => redirecting(generated.queryFn(context)),

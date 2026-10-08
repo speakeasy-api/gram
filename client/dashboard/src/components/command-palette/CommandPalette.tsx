@@ -36,7 +36,7 @@ import { useLauncherJudge } from "./useLauncherJudge";
 
 // Speakeasy brand spectrum — the same brand-language gradient the Project
 // Assistant uses. Rendered as a thin hairline at the top of the palette so the
-// surface reads as Gram without leaning on display type or heavy chrome.
+// surface reads as Speakeasy without leaning on display type or heavy chrome.
 const BRAND_GRADIENT =
   "linear-gradient(90deg, #320F1E 0%, #C83228 12.5%, #FB873F 25%, #D2DC91 37.5%, #5A8250 50%, #002314 62%, #00143C 74%, #2873D7 86%, #9BC3FF 100%)";
 

@@ -2,7 +2,7 @@
 // its default organization and the rule that derives a developer's user id
 // from their git committer email.
 //
-// It lives under pkg/ rather than dev-idp/internal/ because the Gram server's
+// It lives under pkg/ rather than dev-idp/internal/ because the Speakeasy server's
 // local seed needs the same values: the seed provisions data for the org the
 // dev-idp will log you into, so both sides must agree on the org id, the slug,
 // and how an email becomes a user id. A copied constant would drift silently
@@ -30,7 +30,7 @@ const (
 // userIDNamespace is a fixed UUID v5 namespace used to derive deterministic
 // user IDs from email addresses. This ensures the same email always maps to
 // the same UUID, surviving dev-idp SQLite resets without colliding with the
-// Gram server's users_email_key unique constraint.
+// Speakeasy server's users_email_key unique constraint.
 var userIDNamespace = uuid.MustParse("a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d")
 
 // DeterministicUserID returns a stable UUID v5 derived from the given email.

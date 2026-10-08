@@ -1944,6 +1944,7 @@ func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.R
 		JSONWebKeySetID:                 v.JSONWebKeySetID,
 		Audience:                        v.Audience,
 		LegacyCallbackURL:               v.LegacyCallbackURL,
+		CredentialOwner:                 v.CredentialOwner,
 		CallbackURL:                     v.CallbackURL,
 		CreatedAt:                       v.CreatedAt,
 		UpdatedAt:                       v.UpdatedAt,

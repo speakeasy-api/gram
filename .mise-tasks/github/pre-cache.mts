@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-//MISE description="Generate caching information for Go to use in GitHub Actions"
+//MISE description="Generate uv and aube caching information to use in GitHub Actions"
 //MISE hide=true
 
 // 💡 It's not possible to use anything other than the Node.js standard library
@@ -41,39 +41,6 @@ if (!/^[A-Za-z0-9._-]+$/.test(cacheNamespace)) {
     "CACHE_NAMESPACE may only contain letters, numbers, dots, underscores, and hyphens",
   );
   process.exit(1);
-}
-
-async function setupGoCaching() {
-  const goBuildCache = execSync("go env GOCACHE", { encoding: "utf8" }).trim();
-  const goModCache = execSync("go env GOMODCACHE", { encoding: "utf8" }).trim();
-  const goVersion = execSync("go env GOVERSION", { encoding: "utf8" }).trim();
-
-  await fs.appendFile(env, `GOCACHE=${goBuildCache}\n`);
-  await fs.appendFile(env, `GOMODCACHE=${goModCache}\n`);
-
-  const os = process.platform;
-  const arch = process.arch;
-
-  const hash = crypto.createHash("sha256");
-
-  for (const entry of ["go.mod", "go.sum", "glint/go.mod", "glint/go.sum"]) {
-    console.log("Hashing:", entry);
-    const goMod = await fs.readFile(entry);
-    hash.update(goMod);
-  }
-
-  const goModHash = hash.digest("hex");
-
-  const version = 1; // Increment this to bust the Go cache
-  const cacheKey = `${cacheNamespace}-${version}-${os}-${arch}-${goVersion}-${goModHash}`;
-  const partialKey = `${cacheNamespace}-${version}-${os}-${arch}-${goVersion}-`;
-  await fs.appendFile(env, `GH_CACHE_GO_KEY=go-${cacheKey}\n`);
-  await fs.appendFile(env, `GH_CACHE_GO_KEY_PARTIAL=go-${partialKey}\n`);
-
-  console.log(`Go cache: ${goBuildCache}`);
-  console.log(`Go module cache: ${goModCache}`);
-  console.log(`GitHub Go cache key: ${cacheKey}`);
-  console.log(`GitHub Go partial cache key: ${partialKey}`);
 }
 
 async function setupUVCaching() {
@@ -144,6 +111,5 @@ async function setupAubeCaching() {
   console.log(`GitHub aube partial cache key: ${partialKey}`);
 }
 
-await setupGoCaching();
 await setupUVCaching();
 await setupAubeCaching();

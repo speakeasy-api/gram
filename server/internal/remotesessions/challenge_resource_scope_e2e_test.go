@@ -89,9 +89,9 @@ func seedProtectedResource(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	require.NoError(t, err)
 	require.EqualValues(t, 1, rows)
 	if seed.pin != nil {
-		rows, err = q.SetRemoteProtectedResourceScopeOverride(ctx, remotemcprepo.SetRemoteProtectedResourceScopeOverrideParams{ScopeOverride: seed.pin, ProjectID: projectID, ResourceIdentifier: resourceURL})
+		pinned, err := q.UpsertRemoteProtectedResourceScopeOverride(ctx, remotemcprepo.UpsertRemoteProtectedResourceScopeOverrideParams{ScopeOverride: seed.pin, ProjectID: projectID, OrganizationID: organizationID, ResourceIdentifier: resourceURL})
 		require.NoError(t, err)
-		require.EqualValues(t, 1, rows)
+		require.Equal(t, seed.pin, pinned.ScopeOverride)
 	}
 	if seed.challengeScopes != nil {
 		rows, err = q.RecordRemoteProtectedResourceChallengeScopes(ctx, remotemcprepo.RecordRemoteProtectedResourceChallengeScopesParams{ChallengeScopes: seed.challengeScopes, ProjectID: projectID, ResourceIdentifier: resourceURL})

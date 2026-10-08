@@ -191,7 +191,7 @@ func TestGenerateClaudeMCPConfigAlwaysHasAuthHeaders(t *testing.T) {
 	require.NoError(t, err)
 
 	for name, server := range mcpConfig.MCPServers {
-		require.Equal(t, "Bearer ${user_config.GRAM_API_KEY}", server.Headers["Authorization"], "server %s missing auth header", name)
+		require.Equal(t, "Bearer ${user_config.SPEAKEASY_AI_API_KEY}", server.Headers["Authorization"], "server %s missing auth header", name)
 	}
 }
 
@@ -219,7 +219,7 @@ func TestGenerateCursorMCPConfigUsesEnvSyntax(t *testing.T) {
 	require.NoError(t, err)
 
 	server := mcpConfig.MCPServers["gram-server"]
-	require.Equal(t, "Bearer ${env:GRAM_API_KEY}", server.Headers["Authorization"])
+	require.Equal(t, "Bearer ${env:SPEAKEASY_AI_API_KEY}", server.Headers["Authorization"])
 }
 
 func TestGenerateClaudeOAuthServerEmitsStdioEntry(t *testing.T) {
@@ -248,11 +248,11 @@ func TestGenerateClaudeOAuthServerEmitsStdioEntry(t *testing.T) {
 	require.Equal(t, "https://mcp.example.com/oauth-tool", server.URL)
 	require.Empty(t, server.Headers, "OAuth server must not emit any auth headers")
 
-	// plugin.json must not include a GRAM_API_KEY userConfig entry for OAuth-only plugins.
+	// plugin.json must not include a SPEAKEASY_AI_API_KEY userConfig entry for OAuth-only plugins.
 	var pluginMeta claudePluginMeta
 	err = json.Unmarshal(files["test/.claude-plugin/plugin.json"], &pluginMeta)
 	require.NoError(t, err)
-	require.NotContains(t, pluginMeta.UserConfig, "GRAM_API_KEY", "OAuth-only plugin must not prompt for GRAM_API_KEY")
+	require.NotContains(t, pluginMeta.UserConfig, "SPEAKEASY_AI_API_KEY", "OAuth-only plugin must not prompt for SPEAKEASY_AI_API_KEY")
 }
 
 func TestGenerateCursorOAuthServerEmitsURLWithNoHeaders(t *testing.T) {
@@ -343,16 +343,16 @@ func TestGenerateClaudeMixedOAuthAndHTTPServers(t *testing.T) {
 	privateServer := mcpConfig.MCPServers["private-server"]
 	require.Contains(t, privateServer.Headers, "Authorization")
 
-	// plugin.json must still prompt for GRAM_API_KEY because the private HTTP server needs it.
+	// plugin.json must still prompt for SPEAKEASY_AI_API_KEY because the private HTTP server needs it.
 	var pluginMeta claudePluginMeta
 	err = json.Unmarshal(files["test/.claude-plugin/plugin.json"], &pluginMeta)
 	require.NoError(t, err)
-	require.Contains(t, pluginMeta.UserConfig, "GRAM_API_KEY")
+	require.Contains(t, pluginMeta.UserConfig, "SPEAKEASY_AI_API_KEY")
 }
 
 // TestGenerateUnproxiedServerNeverGetsGramCredential guards against
 // reintroducing the leak fixed alongside this test: an unproxied server's
-// MCPURL points straight at the vendor, so no format may attach a Gram
+// MCPURL points straight at the vendor, so no format may attach a Speakeasy
 // credential (static header, env-header, or bearer-token-env-var) to it —
 // checked across all four generated formats, and with cfg.APIKey both set
 // and unset, since the leak only reproduced with a baked key present.
@@ -380,26 +380,26 @@ func TestGenerateUnproxiedServerNeverGetsGramCredential(t *testing.T) {
 		require.NoError(t, json.Unmarshal(files["test/.mcp.json"], &claudeConfig))
 		claudeServer := claudeConfig.MCPServers["vendor-widget"]
 		require.Equal(t, "https://vendor.example.com/mcp", claudeServer.URL)
-		require.Empty(t, claudeServer.Headers, "Claude must not attach a Gram credential to an unproxied server")
+		require.Empty(t, claudeServer.Headers, "Claude must not attach a Speakeasy credential to an unproxied server")
 
 		var cursorConfig cursorMCPConfig
 		require.NoError(t, json.Unmarshal(files["cursor-plugins/test-cursor/mcp.json"], &cursorConfig))
 		cursorServer := cursorConfig.MCPServers["vendor-widget"]
 		require.Equal(t, "https://vendor.example.com/mcp", cursorServer.URL)
-		require.Empty(t, cursorServer.Headers, "Cursor must not attach a Gram credential to an unproxied server")
+		require.Empty(t, cursorServer.Headers, "Cursor must not attach a Speakeasy credential to an unproxied server")
 
 		var codexConfig codexMCPConfig
 		require.NoError(t, json.Unmarshal(files["test-codex/.mcp.json"], &codexConfig))
 		codexServer := codexConfig.MCPServers["vendor-widget"]
 		require.Equal(t, "https://vendor.example.com/mcp", codexServer.URL)
-		require.Empty(t, codexServer.HTTPHeaders, "Codex must not attach a Gram credential to an unproxied server")
+		require.Empty(t, codexServer.HTTPHeaders, "Codex must not attach a Speakeasy credential to an unproxied server")
 		require.Empty(t, codexServer.BearerTokenEnvVar, "Codex must not set a bearer_token_env_var for an unproxied server")
 
 		var opencodeConfig opencodeMCPConfig
 		require.NoError(t, json.Unmarshal(files["opencode-plugins/test/test/mcp.json"], &opencodeConfig))
 		opencodeServer := opencodeConfig.MCP["vendor-widget"]
 		require.Equal(t, "https://vendor.example.com/mcp", opencodeServer.URL)
-		require.Empty(t, opencodeServer.Headers, "OpenCode must not attach a Gram credential to an unproxied server")
+		require.Empty(t, opencodeServer.Headers, "OpenCode must not attach a Speakeasy credential to an unproxied server")
 
 		require.Equal(t, "ON_USE", codexAuthPolicy(plugins[0], cfg),
 			"an all-unproxied plugin needs no install-time secret prompt")
@@ -408,7 +408,7 @@ func TestGenerateUnproxiedServerNeverGetsGramCredential(t *testing.T) {
 
 // TestGenerateClaudeUnproxiedDoesNotForcePrompt mirrors
 // TestGenerateClaudeMixedOAuthAndHTTPServers: a private HTTP server still
-// forces the GRAM_API_KEY prompt, but an unproxied server standing alone
+// forces the SPEAKEASY_AI_API_KEY prompt, but an unproxied server standing alone
 // must not — needsGramKeyPrompt has the same IsOAuth/IsPublic-only gap the
 // header-attachment branches had.
 func TestGenerateClaudeUnproxiedDoesNotForcePrompt(t *testing.T) {
@@ -432,8 +432,8 @@ func TestGenerateClaudeUnproxiedDoesNotForcePrompt(t *testing.T) {
 	var pluginMeta claudePluginMeta
 	err = json.Unmarshal(files["test/.claude-plugin/plugin.json"], &pluginMeta)
 	require.NoError(t, err)
-	require.NotContains(t, pluginMeta.UserConfig, "GRAM_API_KEY",
-		"a plugin with only an unproxied server needs no Gram API key prompt")
+	require.NotContains(t, pluginMeta.UserConfig, "SPEAKEASY_AI_API_KEY",
+		"a plugin with only an unproxied server needs no Speakeasy API key prompt")
 }
 
 func TestGenerateCodexMCPConfigUsesBearerTokenEnvVar(t *testing.T) {
@@ -460,7 +460,7 @@ func TestGenerateCodexMCPConfigUsesBearerTokenEnvVar(t *testing.T) {
 	require.NoError(t, err)
 
 	for name, server := range mcpConfig.MCPServers {
-		require.Equal(t, "GRAM_API_KEY", server.BearerTokenEnvVar, "server %s missing bearer_token_env_var", name)
+		require.Equal(t, "SPEAKEASY_AI_API_KEY", server.BearerTokenEnvVar, "server %s missing bearer_token_env_var", name)
 		require.Empty(t, server.HTTPHeaders, "server %s should not bake headers when no APIKey is set", name)
 		require.Empty(t, server.EnvHTTPHeaders, "server %s is private; env_http_headers is for public servers", name)
 	}
@@ -1554,6 +1554,11 @@ func currentHooksBootstrapTarget(t *testing.T) string {
 
 func runHooksBootstrap(t *testing.T, script []byte, cache, stdin string, args ...string) ([]byte, error) {
 	t.Helper()
+	return runHooksBootstrapWithEnv(t, script, []string{"SPEAKEASY_AI_HOOKS_HOME=" + cache}, stdin, args...)
+}
+
+func runHooksBootstrapWithEnv(t *testing.T, script []byte, env []string, stdin string, args ...string) ([]byte, error) {
+	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "bootstrap.sh")
 	if err := os.WriteFile(path, script, 0o755); err != nil {
@@ -1561,7 +1566,10 @@ func runHooksBootstrap(t *testing.T, script []byte, cache, stdin string, args ..
 	}
 	cmd := exec.Command("bash", append([]string{path}, args...)...)
 	cmd.Stdin = strings.NewReader(stdin)
-	cmd.Env = append(os.Environ(), "GRAM_HOOKS_HOME="+cache)
+	cmd.Env = slices.DeleteFunc(os.Environ(), func(kv string) bool {
+		return strings.HasPrefix(kv, "SPEAKEASY_AI_HOOKS_HOME=") || strings.HasPrefix(kv, "GRAM_HOOKS_HOME=")
+	})
+	cmd.Env = append(cmd.Env, env...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return out, fmt.Errorf("run hooks bootstrap: %w", err)
@@ -1609,6 +1617,37 @@ func TestHooksBootstrapColdAndWarmPathsPreserveInput(t *testing.T) {
 	}
 }
 
+// TestHooksBootstrapHonorsHooksHomeNames checks the bootstrap caches the
+// binary under SPEAKEASY_AI_HOOKS_HOME, still honors the deprecated
+// GRAM_HOOKS_HOME, and prefers the new name when both are set.
+func TestHooksBootstrapHonorsHooksHomeNames(t *testing.T) {
+	t.Parallel()
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\nprintf 'ok\\n'\n"))
+	sum := sha256.Sum256(archive)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(archive)
+	}))
+	t.Cleanup(server.Close)
+	script := renderHooksBootstrapForRelease("test-version", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
+	}, false, "releases.test")
+	marker := func(cache string) string {
+		return filepath.Join(cache, "test-version", target, "archive.sha256")
+	}
+
+	legacyCache := t.TempDir()
+	out, err := runHooksBootstrapWithEnv(t, script, []string{"GRAM_HOOKS_HOME=" + legacyCache}, "")
+	require.NoError(t, err, string(out))
+	require.FileExists(t, marker(legacyCache))
+
+	newCache, ignoredCache := t.TempDir(), t.TempDir()
+	out, err = runHooksBootstrapWithEnv(t, script, []string{"SPEAKEASY_AI_HOOKS_HOME=" + newCache, "GRAM_HOOKS_HOME=" + ignoredCache}, "")
+	require.NoError(t, err, string(out))
+	require.FileExists(t, marker(newCache))
+	require.NoFileExists(t, marker(ignoredCache))
+}
+
 func TestCodexBootstrapPersistsCompletePayloadBeforeRelayExecution(t *testing.T) {
 	t.Parallel()
 	target := currentHooksBootstrapTarget(t)
@@ -1633,7 +1672,7 @@ func TestCodexBootstrapPersistsCompletePayloadBeforeRelayExecution(t *testing.T)
 	cache := filepath.Join(base, "hooks-binary-cache")
 	command := codexHookCommandString(60, false, false)
 
-	stdout, stderr, code := codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
+	stdout, stderr, code := codexHookCommandProbe(t, command, root, data, "SPEAKEASY_AI_HOOKS_HOME="+cache)
 	require.Equal(t, 0, code, "stderr: %s", stderr)
 	stable := filepath.Join(data, filepath.FromSlash(codexHooksStablePayloadSubdir))
 	currentGeneration := strings.TrimSpace(string(requireFileBytes(t, filepath.Join(stable, ".unix-current"))))
@@ -1656,7 +1695,7 @@ func TestCodexBootstrapPersistsCompletePayloadBeforeRelayExecution(t *testing.T)
 	require.NoError(t, os.WriteFile(filepath.Join(persistLock, "pid"), fmt.Appendf(nil, "%d\n", os.Getpid()), 0o600))
 	old := time.Now().Add(-10 * time.Minute)
 	require.NoError(t, os.Chtimes(persistLock, old, old))
-	stdout, stderr, code = codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
+	stdout, stderr, code = codexHookCommandProbe(t, command, root, data, "SPEAKEASY_AI_HOOKS_HOME="+cache)
 	require.Equal(t, 0, code, "stderr: %s", stderr)
 	require.Contains(t, stderr, "refreshed-bootstrap",
 		"the hook that refreshes the bundle must immediately execute the new bootstrap")
@@ -1675,7 +1714,7 @@ func TestCodexBootstrapPersistsCompletePayloadBeforeRelayExecution(t *testing.T)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "speakeasy.json"), newestConfig, 0o600))
 	require.NoError(t, os.Mkdir(persistLock, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(persistLock, "pid"), []byte("99999999\n"), 0o600))
-	stdout, stderr, code = codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
+	stdout, stderr, code = codexHookCommandProbe(t, command, root, data, "SPEAKEASY_AI_HOOKS_HOME="+cache)
 	require.Equal(t, 0, code, "stderr: %s", stderr)
 	currentGeneration = strings.TrimSpace(string(requireFileBytes(t, filepath.Join(stable, ".unix-current"))))
 	stableGeneration = filepath.Join(stable, "generations", currentGeneration)
@@ -1687,7 +1726,7 @@ func TestCodexBootstrapPersistsCompletePayloadBeforeRelayExecution(t *testing.T)
 
 	require.NoError(t, os.RemoveAll(filepath.Dir(filepath.Dir(root))))
 	server.Close()
-	stdout, stderr, code = codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
+	stdout, stderr, code = codexHookCommandProbe(t, command, root, data, "SPEAKEASY_AI_HOOKS_HOME="+cache)
 	require.Equal(t, 0, code, "stderr: %s", stderr)
 	require.Contains(t, stdout, "--config="+stableConfig)
 	require.Equal(t, int64(1), downloads.Load(), "stable fallback must reuse the verified binary cache")
@@ -2017,7 +2056,7 @@ func TestHooksBootstrapEmbedsPinnedReleaseMetadata(t *testing.T) {
 		require.Contains(t, script, asset.URL)
 		require.Contains(t, script, asset.SHA256)
 		// Upstream (server-side fetch) stays pinned to the immutable GitHub
-		// release; only the client-facing URLs point at the Gram domain.
+		// release; only the client-facing URLs point at the Speakeasy domain.
 		require.Contains(t, hooksBinaryTargets[target].URL, "https://github.com/speakeasy-api/gram/releases/download/hooks%40"+hooksBinaryVersion+"/")
 		require.Equal(t, hooksBinaryTargets[target].SHA256, asset.SHA256)
 	}
@@ -2112,6 +2151,9 @@ func TestGenerateOpenCodeObservabilityPluginPackage(t *testing.T) {
 	require.Contains(t, string(shim), "--provider=opencode")
 	require.Contains(t, string(shim), "speakeasy.json")
 	require.Contains(t, string(shim), "bootstrap.sh")
+	require.Contains(t, string(shim), `"speakeasy-ai-agent-provider": "opencode"`)
+	require.Contains(t, string(shim), `"speakeasy-ai-agent-turn-id": messageID`)
+	require.Contains(t, string(shim), `ev.headers["speakeasy-ai-agent-turn-id"] = messageID`)
 	require.Contains(t, string(shim), `"x-gram-agent-provider": "opencode"`)
 	require.Contains(t, string(shim), `"x-gram-agent-turn-id": messageID`)
 	require.Contains(t, string(shim), `export default { id: "speakeasy.observability", setup, server: legacy }`)
@@ -2288,8 +2330,8 @@ func TestGenerateCodexInstallScriptConfiguresOTELSignals(t *testing.T) {
 		require.Equal(t, "https://app.getgram.ai/otel/v1/"+signal, exporter.Endpoint)
 		require.Equal(t, "binary", exporter.Protocol)
 		require.Equal(t, map[string]string{
-			"Gram-Key":     cfg.HooksAPIKey,
-			"Gram-Project": cfg.ProjectSlug,
+			"Speakeasy-AI-Key":     cfg.HooksAPIKey,
+			"Speakeasy-AI-Project": cfg.ProjectSlug,
 		}, exporter.Headers)
 	}
 }
@@ -3912,6 +3954,13 @@ func TestGeneratePlatformMCPPackageEmitsToolExposureWorkflow(t *testing.T) {
 		"the exposure version from the read it was based on",
 		"`tool_exposure.exposure_version`",
 		"the `exposure_version` from the step-4 read",
+		"`removed_plugin_ids`",
+		"even when the edit only adds ordinary tools",
+		"while preserving prior removal history",
+		"people holding the listed plugins lose the removed tools",
+		"locally installed ZIPs require replacement",
+		"stop before requesting confirmation or calling a mutation, and hand off to the AICP dashboard",
+		"Do not infer platform-tool absence, automatic-membership changes, or restored eligibility from a partial list.",
 		"Never reuse the old exposure version",
 		"refused to avoid overwriting somebody else's edit",
 		// A shared tool list is structural, so the workflow must not send the

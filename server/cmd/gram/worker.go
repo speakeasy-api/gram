@@ -141,9 +141,9 @@ func newWorkerCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 
 	flags := append(workerRuntimeFlags(),
-		&cli.StringFlag{Name: "authz-issuer-url", EnvVars: []string{"GRAM_AUTHZ_ISSUER_URL"}, Usage: "Gram platform signing issuer origin"},
-		&cli.StringFlag{Name: "authz-private-key", EnvVars: []string{"GRAM_AUTHZ_PRIVATE_KEY"}, Usage: "Gram platform signing key for principal credentials"},
-		&cli.StringFlag{Name: "authz-public-keys", EnvVars: []string{"GRAM_AUTHZ_PUBLIC_KEYS"}, Usage: "Gram platform verification keys for principal credentials"},
+		&cli.StringFlag{Name: "authz-issuer-url", EnvVars: []string{"GRAM_AUTHZ_ISSUER_URL"}, Usage: "Speakeasy platform signing issuer origin"},
+		&cli.StringFlag{Name: "authz-private-key", EnvVars: []string{"GRAM_AUTHZ_PRIVATE_KEY"}, Usage: "Speakeasy platform signing key for principal credentials"},
+		&cli.StringFlag{Name: "authz-public-keys", EnvVars: []string{"GRAM_AUTHZ_PUBLIC_KEYS"}, Usage: "Speakeasy platform verification keys for principal credentials"},
 		&cli.StringFlag{
 			Name:     "server-url",
 			Usage:    "The public URL of the server",

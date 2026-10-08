@@ -1,5 +1,11 @@
 # cli
 
+## 0.19.1
+
+### Patch Changes
+
+- 35b67b5: User-facing text now names the product Speakeasy instead of Gram across the dashboard, admin dashboard, CLI help and output, server error messages, consent pages, MCP server info, and API descriptions. HTTP header names, environment variables, package names, and code identifiers are unchanged.
+
 ## 0.19.0
 
 ### Minor Changes

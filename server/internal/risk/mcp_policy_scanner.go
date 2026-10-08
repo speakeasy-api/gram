@@ -172,7 +172,7 @@ func (s *MCPPolicyScanner) ScanMCPPolicy(ctx context.Context, policy policycore.
 			detected := s.destructiveTool.Scan(ctx, policy.OrganizationID, []destructivetool.ToolCall{{Name: "MCP:" + request.ToolName, Arguments: arguments}})
 			findings = append(findings, filter(source, detected)...)
 		case shadowmcp.SourceShadowMCP:
-			// Mediation itself proves the server is registered with Gram.
+			// Mediation itself proves the server is registered with Speakeasy.
 			continue
 		case risk_analysis.SourceAccountIdentity:
 			// Account identity is evaluated over session attribution, not one MCP request.

@@ -3,7 +3,7 @@
 // Harnesses report the signed-in account as the log attribute `user.email`
 // and offer no override. They do honour OTEL_RESOURCE_ATTRIBUTES, so the
 // demo task marks each run with `gram.demo.user_email` on the resource.
-// Gram's hooks ingest reads the log attribute, not that resource key.
+// Speakeasy's hooks ingest reads the log attribute, not that resource key.
 // Copying the resource value inside the server would let any API-key holder
 // spoof attribution, so the copy happens only in this process, which the
 // demo task starts for one run and points only the demo harnesses at.

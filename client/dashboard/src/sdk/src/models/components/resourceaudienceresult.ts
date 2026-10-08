@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -10,12 +11,20 @@ import {
   ResourceAudienceEntry,
   ResourceAudienceEntry$inboundSchema,
 } from "./resourceaudienceentry.js";
+import {
+  ResourceAudienceRolePlugin,
+  ResourceAudienceRolePlugin$inboundSchema,
+} from "./resourceaudienceroleplugin.js";
 
 export type ResourceAudienceResult = {
   /**
    * Rules deciding access to this resource, widest first.
    */
   entries: Array<ResourceAudienceEntry>;
+  /**
+   * Live plugins containing this resource and assigned to an exact audience role. Omitted without plugin read and administrator access; not evidence of authorization or installation.
+   */
+  rolePlugins?: Array<ResourceAudienceRolePlugin> | undefined;
   /**
    * Fingerprint of the rules naming this resource. Send it back when saving so a change made elsewhere is a conflict rather than a silent overwrite.
    */
@@ -26,10 +35,18 @@ export type ResourceAudienceResult = {
 export const ResourceAudienceResult$inboundSchema: z.ZodMiniType<
   ResourceAudienceResult,
   unknown
-> = z.object({
-  entries: z.array(ResourceAudienceEntry$inboundSchema),
-  version: z.string(),
-});
+> = z.pipe(
+  z.object({
+    entries: z.array(ResourceAudienceEntry$inboundSchema),
+    role_plugins: z.optional(z.array(ResourceAudienceRolePlugin$inboundSchema)),
+    version: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "role_plugins": "rolePlugins",
+    });
+  }),
+);
 
 export function resourceAudienceResultFromJSON(
   jsonString: string,

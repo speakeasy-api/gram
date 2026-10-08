@@ -26,6 +26,7 @@ import { DashboardPage } from "./DashboardPage";
 import { DASHBOARD_PARAM, encodeSpec, TAB_PARAM } from "./exploreUrl";
 import { ExploreResults } from "./ExploreResults";
 import { QueryBuilder } from "./QueryBuilder";
+import { clearPageFilterParams } from "./usePageFilters";
 import { useQueryUrl } from "./useQueryUrl";
 import { WidgetBar } from "./WidgetBar";
 import { DiscardChangesDialog } from "./WidgetDialogs";
@@ -277,6 +278,7 @@ function ExploreWorkbench({
           <DashboardPage
             id={tab.dashboardId}
             widgets={widgets}
+            widgetsLoaded={list.data !== undefined}
             widgetsFailed={list.isError && list.data === undefined}
             onRetryWidgets={() => void list.refetch()}
             backHref={tab.href("dashboards")}
@@ -472,6 +474,11 @@ function useTab(): {
     else out.set(TAB_PARAM, to);
     if (to === "dashboards" && dashboard) out.set(DASHBOARD_PARAM, dashboard);
     else out.delete(DASHBOARD_PARAM);
+    // A dashboard's filter bar is its own: it opens on its saved filters,
+    // and what was picked on it stays behind.
+    if (to === "dashboards" || current === "dashboards") {
+      clearPageFilterParams(out);
+    }
     const search = out.toString();
     return search === "" ? location.pathname : `?${search}`;
   };

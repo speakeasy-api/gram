@@ -144,7 +144,7 @@ func classifyAgentPlugin(p PluginInfo) agentPluginCompatibility {
 		}
 		seenServers[server.DisplayName] = struct{}{}
 		if !server.IsUnproxied && !server.IsPublic && !server.IsOAuth {
-			reasons = append(reasons, "server requires a Gram credential")
+			reasons = append(reasons, "server requires a Speakeasy credential")
 		}
 		if len(server.EnvConfigs) > 0 {
 			reasons = append(reasons, "server requires environment-backed headers")

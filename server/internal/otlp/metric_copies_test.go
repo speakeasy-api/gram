@@ -6,7 +6,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-// metricCopy describes one self-contained Gram copy of the OTLP metric schema.
+// metricCopy describes one self-contained Speakeasy copy of the OTLP metric schema.
 type metricCopy struct {
 	name                        string
 	newMetric                   func() proto.Message

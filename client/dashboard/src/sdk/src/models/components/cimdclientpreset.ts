@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * An entry in Gram's curated CIMD preset catalog.
+ * An entry in Speakeasy's curated CIMD preset catalog.
  */
 export type CimdClientPreset = {
   /**
@@ -21,7 +21,7 @@ export type CimdClientPreset = {
    */
   displayName: string;
   /**
-   * Whether presets-mode issuers currently admit this entry. Disabled entries are listed so operators can see that Gram knows about the vendor.
+   * Whether presets-mode issuers currently admit this entry. Disabled entries are listed so operators can see that Speakeasy knows about the vendor.
    */
   enabled: boolean;
   /**

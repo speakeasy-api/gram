@@ -11,6 +11,7 @@ const {
   useRemoteSessionIssuersByIds,
   useUserSessionIssuer,
   useEffectiveUserSessionIssuers,
+  useGetRemoteMcpServerScopes,
 } = vi.hoisted(() => ({
   attachSheet: vi.fn(),
   remoteIdentitySection: vi.fn(),
@@ -18,6 +19,13 @@ const {
   useRemoteSessionIssuersByIds: vi.fn(),
   useUserSessionIssuer: vi.fn(),
   useEffectiveUserSessionIssuers: vi.fn(),
+  useGetRemoteMcpServerScopes: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/getRemoteMcpServerScopes.js", () => ({
+  useGetRemoteMcpServerScopes: (...args: unknown[]) =>
+    useGetRemoteMcpServerScopes(...args),
+  invalidateAllGetRemoteMcpServerScopes: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
@@ -216,6 +224,9 @@ describe("AuthenticationSectionBody", () => {
       { enabled: true },
     );
     expect(screen.getByText("attached-issuer-far")).toBeDefined();
+    // The scope pin is a Remote MCP control only.
+    expect(useGetRemoteMcpServerScopes).not.toHaveBeenCalled();
+    expect(screen.queryByText("Pinned scopes")).toBeNull();
   });
 
   it("reports a failed provider lookup instead of an empty provider list", () => {

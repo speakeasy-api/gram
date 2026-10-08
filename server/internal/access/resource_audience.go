@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/audience"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
@@ -146,7 +147,24 @@ func (s *Service) ListResourceAudience(ctx context.Context, payload *gen.ListRes
 		return nil, err
 	}
 
-	return &gen.ResourceAudienceResult{Entries: entries, Version: version}, nil
+	principals := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Kind == "role" {
+			principals = append(principals, entry.PrincipalUrn)
+		}
+	}
+	matches, err := plugins.RolePluginsForResource(ctx, s.db, s.authz, ac.ActiveOrganizationID, uuid.MustParse(projectID), uuid.MustParse(payload.ResourceID), principals)
+	if err != nil {
+		return nil, fmt.Errorf("read audience role plugins: %w", err)
+	}
+	var rolePlugins []*gen.ResourceAudienceRolePlugin
+	if matches != nil {
+		rolePlugins = make([]*gen.ResourceAudienceRolePlugin, 0, len(matches))
+	}
+	for _, match := range matches {
+		rolePlugins = append(rolePlugins, &gen.ResourceAudienceRolePlugin{PrincipalUrn: match.PrincipalUrn, PluginID: match.PluginID.String(), Name: match.Name, Slug: match.Slug})
+	}
+	return &gen.ResourceAudienceResult{Entries: entries, Version: version, RolePlugins: rolePlugins}, nil
 }
 
 // SetResourceAudience replaces the rules that name one resource. Rules that
@@ -417,7 +435,7 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		return nil, err
 	}
 
-	return &gen.ResourceAudienceResult{Entries: entries, Version: version}, nil
+	return &gen.ResourceAudienceResult{Entries: entries, Version: version, RolePlugins: nil}, nil
 }
 
 // lockAudienceRoleDeliveryProjects follows RoleChanged's project ordering across

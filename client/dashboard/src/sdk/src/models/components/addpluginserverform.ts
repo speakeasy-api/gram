@@ -18,7 +18,7 @@ export type AddPluginServerForm = {
    */
   displayName?: string | undefined;
   /**
-   * Gram MCP server ID. Provide exactly one backend ID.
+   * Speakeasy MCP server ID. Provide exactly one backend ID.
    */
   mcpServerId?: string | undefined;
   /**
@@ -29,7 +29,7 @@ export type AddPluginServerForm = {
   policy?: Policy | undefined;
   sortOrder?: number | undefined;
   /**
-   * Gram toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id.
+   * Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id.
    */
   toolsetId?: string | undefined;
 };

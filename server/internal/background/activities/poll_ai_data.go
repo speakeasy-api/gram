@@ -214,7 +214,7 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 		if cfg.Provider != aiintegrations.ProviderAnthropicCompliance {
 			return oops.E(oops.CodeInvalid, nil, "anthropic compliance schedule cannot run for provider %s", cfg.Provider)
 		}
-		nextCursor, err := p.anthropicComplianceImporter.SyncAnthropicCompliance(ctx, cfg)
+		nextCursor, err := p.anthropicComplianceImporter.SyncAnthropicCompliance(ctx, cfg, endTime)
 		if err != nil {
 			return fmt.Errorf("sync anthropic compliance data: %w", err)
 		}
@@ -477,7 +477,7 @@ func pollUnavailableHTTPStatus(err error) int {
 // schedule returns nil. It is durable in Postgres and shown in the dashboard,
 // the schedule owns the retry cadence, and re-running cannot change the
 // provider's answer. Failing the activity too would put one misconfigured
-// integration into activity-failure alerting, which exists for Gram's own
+// integration into activity-failure alerting, which exists for Speakeasy's own
 // unexpected errors.
 //
 // Everything else still fails: an unrecorded failure the user would otherwise

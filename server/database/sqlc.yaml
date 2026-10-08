@@ -423,6 +423,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../cmd/tools/migrations/hostedmcpbackfill/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "hostedmcpbackfill"
+        out: "../cmd/tools/migrations/hostedmcpbackfill"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../cmd/tools/migrations/openrouterdisablecauses/queries.sql
     engine: postgresql
     gen:

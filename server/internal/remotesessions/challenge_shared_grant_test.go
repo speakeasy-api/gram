@@ -369,7 +369,7 @@ func TestSoftDeleteSubjectSessions_FindsGrantAfterMintingIssuerSoftDeleted(t *te
 	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)
 
 	// The revoke runs through the live sibling issuer: the minting issuer is
-	// gone, so it is never the one a Gram session revoke arrives on.
+	// gone, so it is never the one a Speakeasy session revoke arrives on.
 	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.issuerB, fx.projectID, fx.organizationID)
 	require.NoError(t, err)
 	require.Len(t, creds, 1)

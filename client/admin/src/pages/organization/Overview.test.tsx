@@ -1480,7 +1480,7 @@ describe("Overview", () => {
     [
       "enabled",
       ORG,
-      "Every member loses access to Gram until the organization is re-enabled.",
+      "Every member loses access to Speakeasy until the organization is re-enabled.",
       "Sessions end immediately; nothing is deleted.",
     ],
     [

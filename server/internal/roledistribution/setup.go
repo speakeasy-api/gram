@@ -149,7 +149,7 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 	}
 	auditLogger := audit.NewLogger()
 	actor := urn.NewPrincipal(urn.PrincipalTypeSystem, "automatic-role-distribution")
-	actorDisplayName := "Gram"
+	actorDisplayName := "Speakeasy"
 	if created {
 		if err := auditLogger.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{OrganizationID: organizationID, ProjectID: projectID, Actor: actor, ActorDisplayName: &actorDisplayName, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug}); err != nil {
 			return false, fmt.Errorf("audit role plugin creation: %w", err)
