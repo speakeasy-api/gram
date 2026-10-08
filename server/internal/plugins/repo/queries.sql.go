@@ -2577,16 +2577,27 @@ SELECT m.id, m.project_id, COALESCE(NULLIF(m.name, ''), NULLIF(m.slug, ''), m.id
   'mcp_server'::text AS backend_kind, COALESCE(m.toolset_id, m.id)::uuid AS resource_id, m.toolset_id AS legacy_toolset_id,
   (m.visibility <> 'disabled' AND (m.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
     SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = m.id AND e.project_id = p.id AND e.deleted IS FALSE
-  )))::boolean AS eligible
+  )))::boolean AS eligible, latest.tool_urns
 FROM mcp_servers m JOIN projects p ON p.id = m.project_id
+LEFT JOIN toolsets backing ON backing.id = m.toolset_id AND backing.project_id = p.id AND backing.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT v.tool_urns FROM toolset_versions v
+  WHERE v.toolset_id = backing.id AND v.deleted IS FALSE
+  ORDER BY v.version DESC LIMIT 1
+) latest ON true
 WHERE p.organization_id = $1 AND p.id = $2
   AND p.deleted IS FALSE AND m.deleted IS FALSE
 UNION ALL
 SELECT t.id, t.project_id, t.name, 'toolset'::text, t.id, t.id,
   (t.mcp_enabled AND COALESCE(t.mcp_slug, '') <> '' AND NOT EXISTS (
     SELECT 1 FROM mcp_servers m WHERE m.toolset_id = t.id AND m.project_id = p.id AND m.deleted IS FALSE
-  ))::boolean
+  ))::boolean, latest.tool_urns
 FROM toolsets t JOIN projects p ON p.id = t.project_id
+LEFT JOIN LATERAL (
+  SELECT v.tool_urns FROM toolset_versions v
+  WHERE v.toolset_id = t.id AND v.deleted IS FALSE
+  ORDER BY v.version DESC LIMIT 1
+) latest ON true
 WHERE p.organization_id = $1 AND p.id = $2
   AND p.deleted IS FALSE AND t.deleted IS FALSE
 ORDER BY id
@@ -2605,9 +2616,11 @@ type ListRoleDeliveryServersRow struct {
 	ResourceID      uuid.UUID
 	LegacyToolsetID uuid.NullUUID
 	Eligible        bool
+	ToolUrns        []urn.Tool
 }
 
 // Keep ineligible live backends as removal candidates. Only additions require eligibility.
+// Load latest live contents with the inventory for typed platform classification.
 func (q *Queries) ListRoleDeliveryServers(ctx context.Context, arg ListRoleDeliveryServersParams) ([]ListRoleDeliveryServersRow, error) {
 	rows, err := q.db.Query(ctx, listRoleDeliveryServers, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
@@ -2625,6 +2638,7 @@ func (q *Queries) ListRoleDeliveryServers(ctx context.Context, arg ListRoleDeliv
 			&i.ResourceID,
 			&i.LegacyToolsetID,
 			&i.Eligible,
+			&i.ToolUrns,
 		); err != nil {
 			return nil, err
 		}

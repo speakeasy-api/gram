@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -67,6 +68,29 @@ func TestPlatformToolsetAutomaticDistribution(t *testing.T) {
 						_, err := ti.conn.Exec(ctx, "UPDATE toolset_versions SET deleted_at = clock_timestamp() WHERE toolset_id = $1 AND version = $2", toolsetID, len(tc.versions))
 						require.NoError(t, err)
 					}
+					inventory, err := pluginsrepo.New(ti.conn).ListRoleDeliveryServers(ctx, pluginsrepo.ListRoleDeliveryServersParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
+					require.NoError(t, err)
+					targetID := toolsetID
+					if wrapped {
+						targetID = params.McpServerID.UUID
+					}
+					var expectedTools []urn.Tool
+					latest := len(tc.versions) - 1
+					if tc.deleteHighest {
+						latest--
+					}
+					if latest >= 0 {
+						expectedTools = tc.versions[latest]
+					}
+					found := false
+					for _, candidate := range inventory {
+						if candidate.ID != targetID {
+							continue
+						}
+						found = true
+						require.ElementsMatch(t, expectedTools, candidate.ToolUrns, "inventory loads latest live contents without a per-candidate query")
+					}
+					require.True(t, found, "platform-containing rows remain available for removal reconciliation")
 					slug := "distribution"
 					plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Distribution", Slug: &slug})
 					require.NoError(t, err)
