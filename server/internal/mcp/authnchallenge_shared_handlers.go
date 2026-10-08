@@ -346,8 +346,10 @@ func (s *Service) sharedChallengeEndpoint(ctx context.Context, issuer *sharedIss
 
 // HandleSharedToken serves the token endpoint of a shared authorization
 // server. Code and refresh grants resolve their resource from stored state.
-// Assertion grants require exactly one explicit resource before dispatch to
-// the resource's client-authenticated ID-JAG or clientless workload handler.
+// Assertion grants naming exactly one resource dispatch to that resource's
+// client-authenticated ID-JAG or clientless workload handler. A clientless
+// workload grant naming no resource is served for all of the issuer's MCP
+// servers; an ID-JAG exchange must still name one.
 // On the authentication host, which serves no authorization endpoint, only
 // assertion grants are accepted, and the ID-JAG exchange is refused there by
 // the dispatch it shares with per-endpoint token endpoints.
@@ -374,6 +376,9 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 		endpoint, err = s.sharedRefreshTokenEndpoint(ctx, w, logger, issuer.authorizationServer, r.PostForm.Get(oauthwire.ParamRefreshToken))
 	case grantType == oauthwire.GrantTypeJWTBearer:
 		resources := r.PostForm[oauthwire.ParamResource]
+		if len(resources) == 0 && extractClientCredentials(r).clientless(r) {
+			return s.handleIssuerWorkloadAssertionGrant(ctx, w, r, issuer)
+		}
 		var rejection sharedResourceRejection
 		endpoint, rejection, err = s.resolveSharedResourceIndicators(ctx, logger, issuer.authorizationServer, resources)
 		if err != nil {

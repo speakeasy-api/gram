@@ -65,7 +65,7 @@ var QueryPayload = Type("AnalyticsQueryPayload", func() {
 	Attribute("measures", ArrayOf(Measure), "Composed measures. Required when grouped, forbidden when ungrouped.")
 	Attribute("filters", ArrayOf(Filter), "Filters, ANDed. At most 100 values per filter.")
 	Attribute("order_by", ArrayOf(OrderBy), "Sort for a grouped result, by measure alias. Ungrouped rows are always newest first.")
-	Attribute("limit", Int, "Maximum rows. Defaults to 100, at most 1000.", func() {
+	Attribute("limit", Int, "Maximum rows. Defaults to 100; at most 1000 for a grouped result and 200 for ungrouped rows.", func() {
 		Default(100)
 		Minimum(1)
 		Maximum(1000)

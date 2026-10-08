@@ -293,7 +293,7 @@
             },
             {
               "type": "checklist_item",
-              "markdown": "Fill this in even though Claude marks it optional. Enter the URL of the one MCP server Claude Tag should use, such as `https://\u003cMCP host\u003e/mcp/your-server`. Speakeasy refuses a token request without it, and the token works only for that server.",
+              "markdown": "Leave empty. Claude Tag's token then works at every MCP server of this authorization server that the agent assigned to Claude Tag may connect to.",
               "src": "",
               "alt": "",
               "caption": "",
@@ -325,7 +325,7 @@
               "label": "Allowed API hosts",
               "variable": "",
               "value": "mcp_host",
-              "help": "When the token endpoint above is on this same host, Claude asks for the API paths it may call too. List the path of the MCP server you entered as Resource, such as /mcp/your-server."
+              "help": "When the token endpoint above is on this same host, Claude asks for the API paths it may call too. List the paths of the MCP servers Claude Tag should use, such as /mcp/your-server."
             },
             {
               "type": "checklist_item",

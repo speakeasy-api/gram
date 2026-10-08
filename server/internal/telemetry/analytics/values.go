@@ -2,13 +2,10 @@ package analytics
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
-	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/analytics"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // Dimension value listing guardrails.
@@ -113,48 +110,27 @@ func (s *Service) DimensionValues(ctx context.Context, payload *gen.DimensionVal
 		return nil, err
 	}
 
-	from, err := time.Parse(time.RFC3339Nano, payload.From)
+	from, to, err := ParseWindow(payload.From, payload.To)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid_time_range: from is not an RFC 3339 time")
-	}
-	to, err := time.Parse(time.RFC3339Nano, payload.To)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid_time_range: to is not an RFC 3339 time")
-	}
-	if !representable(from) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid_time_range: from is outside the years 1678 to 2262")
-	}
-	if !representable(to) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid_time_range: to is outside the years 1678 to 2262")
+		return nil, s.failure(ctx, err, "failed to read dimension values request")
 	}
 	req := ValuesRequest{
 		Dataset:      payload.Dataset,
 		Dimension:    payload.Dimension,
-		FromUnixNano: from.UnixNano(),
-		ToUnixNano:   to.UnixNano(),
+		FromUnixNano: from,
+		ToUnixNano:   to,
 		Limit:        payload.Limit,
 	}
 
 	tenant := Tenant{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String()}
-	lookups, err := s.loadLookups(ctx, tenant, req.Dataset, []string{req.Dimension})
+	values, err := s.engine.Values(ctx, tenant, req)
 	if err != nil {
-		return nil, err
-	}
-	plan, err := CompileValues(s.catalog, tenant, lookups, req)
-	if err != nil {
-		if invalid, ok := errors.AsType[*Error](err); ok {
-			return nil, oops.E(oops.CodeBadRequest, err, "%s", invalid.Error())
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to compile dimension values query").LogError(ctx, s.logger)
-	}
-	values, err := plan.RunValues(ctx, s.ch)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list dimension values").LogError(ctx, s.logger)
+		return nil, s.failure(ctx, err, "failed to list dimension values")
 	}
 
 	out := make([]*gen.AnalyticsDimensionValue, 0, len(values))
 	for _, v := range values {
 		out = append(out, &gen.AnalyticsDimensionValue{Value: v.Value, Count: v.Count})
 	}
-	return &gen.AnalyticsDimensionValuesResult{Dataset: plan.Dataset, Dimension: req.Dimension, Values: out}, nil
+	return &gen.AnalyticsDimensionValuesResult{Dataset: req.Dataset, Dimension: req.Dimension, Values: out}, nil
 }

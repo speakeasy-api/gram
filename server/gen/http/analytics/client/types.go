@@ -32,7 +32,8 @@ type QueryRequestBody struct {
 	// Sort for a grouped result, by measure alias. Ungrouped rows are always
 	// newest first.
 	OrderBy []*AnalyticsOrderByRequestBody `form:"order_by,omitempty" json:"order_by,omitempty" xml:"order_by,omitempty"`
-	// Maximum rows. Defaults to 100, at most 1000.
+	// Maximum rows. Defaults to 100; at most 1000 for a grouped result and 200 for
+	// ungrouped rows.
 	Limit int `form:"limit" json:"limit" xml:"limit"`
 	// Return rows at the dataset's grain instead of aggregating.
 	Ungrouped bool `form:"ungrouped" json:"ungrouped" xml:"ungrouped"`

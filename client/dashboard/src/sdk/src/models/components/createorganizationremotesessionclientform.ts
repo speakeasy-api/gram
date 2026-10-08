@@ -7,6 +7,19 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
+ * Who the upstream access credential belongs to, fixed at creation. subject (the default) means each caller connects their own upstream account through the client. self means the client obtains a credential for itself with the client_credentials grant and every caller shares it; it requires token_endpoint_auth_method client_secret_basic, client_secret_post (both with client_secret) or private_key_jwt (with json_web_key_set_id), and an issuer with a token_endpoint.
+ */
+export const CreateOrganizationRemoteSessionClientFormCredentialOwner = {
+  Subject: "subject",
+  Self: "self",
+} as const;
+/**
+ * Who the upstream access credential belongs to, fixed at creation. subject (the default) means each caller connects their own upstream account through the client. self means the client obtains a credential for itself with the client_credentials grant and every caller shares it; it requires token_endpoint_auth_method client_secret_basic, client_secret_post (both with client_secret) or private_key_jwt (with json_web_key_set_id), and an issuer with a token_endpoint.
+ */
+export type CreateOrganizationRemoteSessionClientFormCredentialOwner =
+  ClosedEnum<typeof CreateOrganizationRemoteSessionClientFormCredentialOwner>;
+
+/**
  * Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
  */
 export const CreateOrganizationRemoteSessionClientFormTokenEndpointAuthAudienceFormat =
@@ -65,6 +78,16 @@ export type CreateOrganizationRemoteSessionClientForm = {
    */
   clientSecretExpiresAt?: Date | undefined;
   /**
+   * Who the upstream access credential belongs to, fixed at creation. subject (the default) means each caller connects their own upstream account through the client. self means the client obtains a credential for itself with the client_credentials grant and every caller shares it; it requires token_endpoint_auth_method client_secret_basic, client_secret_post (both with client_secret) or private_key_jwt (with json_web_key_set_id), and an issuer with a token_endpoint.
+   */
+  credentialOwner?:
+    | CreateOrganizationRemoteSessionClientFormCredentialOwner
+    | undefined;
+  /**
+   * Organization JSON Web Key Set to sign private_key_jwt assertions with. Required when token_endpoint_auth_method is private_key_jwt and optional otherwise, as with attachKeySet. Must belong to the caller's organization, which needs the customer-managed encryption keys entitlement.
+   */
+  jsonWebKeySetId?: string | undefined;
+  /**
    * Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project, or to create an organization-level client (no project, attachable by every project) under an organization-level issuer.
    */
   projectId?: string | undefined;
@@ -91,6 +114,12 @@ export type CreateOrganizationRemoteSessionClientForm = {
 };
 
 /** @internal */
+export const CreateOrganizationRemoteSessionClientFormCredentialOwner$outboundSchema:
+  z.ZodMiniEnum<
+    typeof CreateOrganizationRemoteSessionClientFormCredentialOwner
+  > = z.enum(CreateOrganizationRemoteSessionClientFormCredentialOwner);
+
+/** @internal */
 export const CreateOrganizationRemoteSessionClientFormTokenEndpointAuthAudienceFormat$outboundSchema:
   z.ZodMiniEnum<
     typeof CreateOrganizationRemoteSessionClientFormTokenEndpointAuthAudienceFormat
@@ -111,6 +140,8 @@ export type CreateOrganizationRemoteSessionClientForm$Outbound = {
   client_id_issued_at?: string | undefined;
   client_secret?: string | undefined;
   client_secret_expires_at?: string | undefined;
+  credential_owner: string;
+  json_web_key_set_id?: string | undefined;
   project_id?: string | undefined;
   remote_session_issuer_id: string;
   scope?: Array<string> | undefined;
@@ -134,6 +165,11 @@ export const CreateOrganizationRemoteSessionClientForm$outboundSchema:
       clientSecretExpiresAt: z.optional(
         z.pipe(z.date(), z.transform(v => v.toISOString())),
       ),
+      credentialOwner: z._default(
+        CreateOrganizationRemoteSessionClientFormCredentialOwner$outboundSchema,
+        "subject",
+      ),
+      jsonWebKeySetId: z.optional(z.string()),
       projectId: z.optional(z.string()),
       remoteSessionIssuerId: z.string(),
       scope: z.optional(z.array(z.string())),
@@ -150,6 +186,8 @@ export const CreateOrganizationRemoteSessionClientForm$outboundSchema:
         clientIdIssuedAt: "client_id_issued_at",
         clientSecret: "client_secret",
         clientSecretExpiresAt: "client_secret_expires_at",
+        credentialOwner: "credential_owner",
+        jsonWebKeySetId: "json_web_key_set_id",
         projectId: "project_id",
         remoteSessionIssuerId: "remote_session_issuer_id",
         tokenEndpointAuthAudienceFormat: "token_endpoint_auth_audience_format",
