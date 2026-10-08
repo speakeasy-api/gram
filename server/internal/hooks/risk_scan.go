@@ -68,7 +68,7 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 	defer span.End()
 
 	if s.riskScanner == nil {
-		return nil
+		return s.ahpScanResult(ctx, nil, fmt.Errorf("risk scanner unavailable"))
 	}
 
 	// Empty body + tool attribution still matters for tool-scoped policies; only
@@ -92,7 +92,7 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 	}
 	// Capture runs independently of enforcement; resolving a canonical message
 	// here would add a database round trip before the safety decision.
-	result, err := s.riskScanner.ScanForEnforcement(ctx, risk.RealtimeScanRequest{
+	request := risk.RealtimeScanRequest{
 		Provenance: metering.RiskProvenance{
 			OrganizationID:         ev.Context.OrganizationID,
 			ProjectID:              ev.Context.ProjectID,
@@ -119,7 +119,23 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 		MessageType: messageType,
 		ToolName:    toolName,
 		ToolCallID:  toolCallID,
-	})
+	}
+	var result *risk.ScanResult
+	var err error
+	if scanner, ok := s.riskScanner.(interface {
+		ScanForInferenceEnforcement(context.Context, risk.RealtimeScanRequest) (*risk.InferenceScanOutcome, error)
+	}); ok && authenticatedIngestOptions(ctx).AHPPolicy {
+		var outcome *risk.InferenceScanOutcome
+		outcome, err = scanner.ScanForInferenceEnforcement(ctx, request)
+		if outcome != nil {
+			result = outcome.Result
+			if !outcome.Complete {
+				markAHPFailure(ctx, "risk_scan_incomplete")
+			}
+		}
+	} else {
+		result, err = s.riskScanner.ScanForEnforcement(ctx, request)
+	}
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for hook event",
 			attr.SlogError(err),
@@ -127,10 +143,10 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 			attr.SlogHookSource(string(ev.Provider)),
 			attr.SlogHookEvent(ev.RawEventType),
 		)
-		return nil
+		return s.ahpScanResult(ctx, nil, err)
 	}
 
-	return result
+	return s.ahpScanResult(ctx, result, nil)
 }
 func hookRiskOperationID(ev hookevents.Event, messageType message.Type, toolName string) string {
 	var token string
@@ -365,4 +381,21 @@ func truncateForWarn(v string) string {
 		return v
 	}
 	return string([]rune(v)[:warnMatchMaxLen]) + "…"
+}
+
+// ahpScanResult preserves explicit policy matches while translating inability
+// and unsupported human acknowledgement through the organization fail policy.
+// Legacy callers keep their existing scanner semantics.
+func (s *Service) ahpScanResult(ctx context.Context, result *risk.ScanResult, err error) *risk.ScanResult {
+	if !authenticatedIngestOptions(ctx).AHPPolicy {
+		return result
+	}
+	if err != nil || result != nil && (result.AnalysisUnavailable() || result.IsWarnChallenge()) {
+		markAHPFailure(ctx, "risk_evaluation_unavailable_or_acknowledgement_unsupported")
+		if s.ahpFailOpen(ctx) {
+			return nil
+		}
+		return &risk.ScanResult{Action: "block", PolicyName: "evaluation unavailable or acknowledgement unsupported", PolicyID: "", Source: "", MessageType: "", RuleID: "", Description: "", UserMessage: nil, MatchedValue: "", Entity: "", CallFingerprint: "", DeadLetterReason: ""}
+	}
+	return result
 }

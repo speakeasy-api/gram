@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -43,6 +44,13 @@ type authenticatedIngestOptionsKey struct{}
 
 // AuthenticatedIngestOptions controls trusted in-process ingestion behavior.
 type AuthenticatedIngestOptions struct {
+	// ObserveOnly records evidence without enforcement side effects.
+	ObserveOnly         bool
+	EvidenceUnavailable bool
+	// CapabilitySpendGate enables spend enforcement for a capable in-process adapter.
+	CapabilitySpendGate bool
+	// AHPPolicy selects transport-safe evaluation (no human challenges or block pages).
+	AHPPolicy                    bool
 	AllowWarnAcknowledgement     bool
 	AllowSessionIdentityFallback bool
 	SourceAttributes             map[attr.Key]any
@@ -65,7 +73,7 @@ type AuthenticatedIngestResult struct {
 
 func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 	return AuthenticatedIngestOptions{
-		AllowWarnAcknowledgement:     true,
+		ObserveOnly: false, EvidenceUnavailable: false, CapabilitySpendGate: false, AHPPolicy: false, AllowWarnAcknowledgement: true,
 		AllowSessionIdentityFallback: true,
 		SourceAttributes:             nil,
 		OutputToolCalls:              nil,
@@ -165,6 +173,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	outcome := hookMetricOutcomeAccepted
 	ctx, riskScanned := withRiskScanTracker(ctx)
 	ctx, blockEffects := withBlockEffectCollector(ctx)
+	ctx, ahpFailure := withAHPFailureTracker(ctx)
 	defer func() {
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
@@ -238,6 +247,9 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	}
 
 	blockReason, userReason := s.evaluateCanonicalHook(ctx, payload, authCtx, actor, timestamp)
+	if blockReason == "" && *ahpFailure != "" && !s.ahpFailOpen(ctx) {
+		blockReason, userReason = "Hook evaluation unavailable: "+*ahpFailure, "Hook evaluation unavailable"
+	}
 	skillCapture, observed, observationErr := s.recordSkillActivation(ctx, payload, authCtx, actor, timestamp, blockReason)
 	if observationErr != nil {
 		logger.WarnContext(ctx, "failed to record skill activation",
@@ -574,6 +586,9 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	ctx, span := s.tracer.Start(ctx, "hooks.evaluateCanonicalHook")
 	defer span.End()
 
+	if authenticatedIngestOptions(ctx).ObserveOnly {
+		return "", ""
+	}
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
 	eventType := strings.TrimSpace(payload.Event.Type)
 
@@ -594,7 +609,7 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	// lowercased value so a case variant cannot dodge the gate. opencode
 	// still passes through untouched pending a product decision on its
 	// enforcement surface.
-	if spendGatedAdapter(payload.Source.Adapter) && (eventType == "prompt.submitted" || eventType == "tool.requested") {
+	if (spendGatedAdapter(payload.Source.Adapter) || authenticatedIngestOptions(ctx).CapabilitySpendGate) && (eventType == "prompt.submitted" || eventType == "tool.requested") {
 		if block := s.checkSpendGate(ctx, event); block != nil {
 			if eventType == "tool.requested" {
 				kind := "tool call"
@@ -612,12 +627,34 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 		}
 	}
 
+	if authenticatedIngestOptions(ctx).AHPPolicy && (authenticatedIngestOptions(ctx).EvidenceUnavailable || ((eventType == "prompt.submitted" && (payload.Data == nil || payload.Data.Prompt == nil || payload.Data.Prompt.Text == nil)) || (eventType == "tool.requested" && canonicalToolInput(payload) == nil))) {
+		markAHPFailure(ctx, "request_content_unavailable")
+		if s.ahpFailOpen(ctx) {
+			// Failure-open for content does not waive independently enforceable
+			// MCP destination policy. Unknown inventory remains unknown.
+			toolName := canonicalToolName(payload)
+			if eventType == "tool.requested" && (canonicalMCPData(payload) != nil || toolref.IsMCPToolName(toolName)) {
+				return s.evaluateCanonicalShadowMCP(ctx, authCtx, actor, payload, toolName, canonicalToolInput(payload))
+			}
+			return "", ""
+		}
+		return "Hook request content unavailable", "Hook request content unavailable"
+	}
+
 	switch eventType {
 	case "prompt.submitted":
 		ev := hookevents.NewUserPromptSubmit(event, hookevents.UserPromptSubmitParams{
 			Prompt: canonicalPromptText(payload),
 		})
 		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
+			if authenticatedIngestOptions(ctx).AHPPolicy {
+				reason := fmt.Sprintf("Hook policy %q denied this operation", scanResult.PolicyName)
+				if scanResult.Action == "quarantine" {
+					s.openSessionQuarantine(ctx, ev.Event, scanResult, reason)
+				}
+				return reason, reason
+			}
+
 			if scanResult.Action == "quarantine" {
 				auditReason := quarantineAuditReason("prompt", scanResult)
 				s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
@@ -650,7 +687,15 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			// So exclude acknowledged warns from the block condition rather than
 			// returning early on them.
 			if scanResult := s.scanPermissionRequestForEnforcement(ctx, ev); scanResult != nil &&
-				(!scanResult.IsWarnChallenge() || !s.warnAcknowledged(ctx, ev.Event, scanResult, toolName)) {
+				(!scanResult.IsWarnChallenge() || !authenticatedIngestOptions(ctx).AllowWarnAcknowledgement || !s.warnAcknowledged(ctx, ev.Event, scanResult, toolName)) {
+				if authenticatedIngestOptions(ctx).AHPPolicy {
+					reason := fmt.Sprintf("Hook policy %q denied this operation", scanResult.PolicyName)
+					if scanResult.Action == "quarantine" {
+						s.openSessionQuarantine(ctx, ev.Event, scanResult, reason)
+					}
+					return reason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, reason, toolName, scanResult.PolicyID, reason)
+				}
+
 				if scanResult.Action == "quarantine" {
 					auditReason := quarantineAuditReason("permission request", scanResult)
 					s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
@@ -673,6 +718,14 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 				ToolInput: toolInput,
 			})
 			if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil {
+				if authenticatedIngestOptions(ctx).AHPPolicy {
+					reason := fmt.Sprintf("Hook policy %q denied this operation", scanResult.PolicyName)
+					if scanResult.Action == "quarantine" {
+						s.openSessionQuarantine(ctx, ev.Event, scanResult, reason)
+					}
+					return reason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, reason, toolName, scanResult.PolicyID, reason)
+				}
+
 				if scanResult.Action == "quarantine" {
 					auditReason := quarantineAuditReason("tool call", scanResult)
 					s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
@@ -698,6 +751,14 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 			ToolInput: toolInput,
 		})
 		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
+			if authenticatedIngestOptions(ctx).AHPPolicy {
+				reason := fmt.Sprintf("Hook policy %q denied this operation", scanResult.PolicyName)
+				if scanResult.Action == "quarantine" {
+					s.openSessionQuarantine(ctx, ev.Event, scanResult, reason)
+				}
+				return reason, s.appendCanonicalBlockURL(ctx, authCtx, actor, payload, reason, toolName, scanResult.PolicyID, reason)
+			}
+
 			if scanResult.Action == "quarantine" {
 				auditReason := quarantineAuditReason("tool call", scanResult)
 				s.openSessionQuarantine(ctx, ev.Event, scanResult, auditReason)
@@ -743,7 +804,7 @@ func (s *Service) appendCanonicalBlockURL(ctx context.Context, authCtx *contextv
 		ChatID:         chatIDForBlock(canonicalSessionID(payload)),
 		ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
-	if bURL == "" {
+	if authenticatedIngestOptions(ctx).AHPPolicy || bURL == "" {
 		return userReason
 	}
 	return appendBlockURL(userReason, bURL)
@@ -813,7 +874,19 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 	ctx, span := s.tracer.Start(ctx, "hooks.evaluateCanonicalShadowMCP")
 	defer span.End()
 
-	policy := s.lookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID)
+	var policy *risk.ShadowMCPPolicy
+	if authenticatedIngestOptions(ctx).AHPPolicy && s.riskScanner != nil {
+		var err error
+		policy, err = s.riskScanner.LookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, actor.UserID)
+		if err != nil {
+			markAHPFailure(ctx, "mcp_policy_evaluation_unavailable")
+			if !s.ahpFailOpen(ctx) {
+				return "MCP policy evaluation unavailable", "MCP policy evaluation unavailable"
+			}
+		}
+	} else {
+		policy = s.lookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID)
+	}
 	if policy == nil {
 		return "", ""
 	}
@@ -1365,14 +1438,16 @@ func mergeSourceAttributes(base, source map[attr.Key]any) {
 // trace id is payload-derived so sibling rows stay on one trace.
 func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, hookEventName string, hookSource string) map[attr.Key]any {
 	attrs := map[attr.Key]any{
-		attr.EventSourceKey:    string(telemetry.EventSourceHook),
-		attr.HookEventKey:      hookEventName,
-		attr.HookSourceKey:     hookSource,
-		attr.ProjectIDKey:      authCtx.ProjectID.String(),
-		attr.OrganizationIDKey: authCtx.ActiveOrganizationID,
-		attr.SpanIDKey:         generateSpanID(),
-		attr.TraceIDKey:        canonicalTraceID(payload),
-		attr.LogBodyKey:        "Hook: " + hookEventName,
+		attr.Key("gram.hook.schema"):          hookIngestSchemaV1,
+		attr.Key("gram.hook.canonical_event"): strings.TrimSpace(payload.Event.Type),
+		attr.EventSourceKey:                   string(telemetry.EventSourceHook),
+		attr.HookEventKey:                     hookEventName,
+		attr.HookSourceKey:                    hookSource,
+		attr.ProjectIDKey:                     authCtx.ProjectID.String(),
+		attr.OrganizationIDKey:                authCtx.ActiveOrganizationID,
+		attr.SpanIDKey:                        generateSpanID(),
+		attr.TraceIDKey:                       canonicalTraceID(payload),
+		attr.LogBodyKey:                       "Hook: " + hookEventName,
 	}
 	// Stamp the resolved chat id, not the raw agent session id: every consumer
 	// treats gen_ai.conversation.id (materialized as telemetry_logs.chat_id) as

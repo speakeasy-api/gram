@@ -22,14 +22,17 @@ func (s *Service) checkSpendGate(ctx context.Context, ev hookevents.Event) *spen
 	defer span.End()
 
 	if s.spendGate == nil {
+		markAHPFailure(ctx, "spend_gate_unavailable")
 		return nil
 	}
 	if ev.Context.OrganizationID == "" || ev.Context.User.ID == "" {
+		markAHPFailure(ctx, "spend_actor_unresolved")
 		return nil
 	}
 
 	block, err := s.spendGate.CheckBlocked(ctx, ev.Context.OrganizationID, ev.Context.User.ID)
 	if err != nil {
+		markAHPFailure(ctx, "spend_gate_unavailable")
 		s.logger.WarnContext(ctx, "spend gate check failed; failing open",
 			attr.SlogError(err),
 			attr.SlogEvent("spend_gate_error"),

@@ -2568,6 +2568,113 @@ FROM (
     ] AS server_id
 );
 
+-- Fictional, previously unknown harness using /ahp observe mode. One turn,
+-- two actual tool outcomes (one failure), and one model-attempt usage sample.
+-- AHP model.response.after becomes usage.reported, while the outbound assistant
+-- presentation carries no usage and cannot double-count the model attempt.
+-- Each event has its own trace so trace_summaries cannot collapse outcomes.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id)
+SELECT
+  nano + toInt64(e.1) * 1000000000,
+  nano + toInt64(e.1) * 1000000000,
+  if(e.2 = 'tool.failed', 'ERROR', 'INFO'),
+  concat('AHP observe: ', e.2, ' ', e.4),
+  lower(hex(MD5(concat('gram-demo-workshop-trace-', e.2)))),
+  concat(
+    '{"gram.event.source":"hook","gram.hook.source":"workshop-agent"',
+    ',"gram.hook.schema":"hook.ingest.v1","gram.hook.transport":"ahp","gram.hook.mode":"observe"',
+    ',"gram.hook.canonical_event":"', e.2, '","gram.hook.event":"', e.3, '"',
+    ',"gen_ai.conversation.id":"', chat_id, '","session.id":"', chat_id, '"',
+    ',"prompt.id":"gram-demo-workshop-turn-1","gen_ai.request.model":"claude-sonnet-4-6","gen_ai.response.model":"claude-sonnet-4-6","gram.provider":"anthropic"',
+    ',"gram.project.id":"dec0de00-0000-4000-a000-000000000001"',
+    ',"user.id":"user_demo_priya","user.email":"priya@demo.getgram.ai"',
+    ',"gram.hook.hostname":"gram-demo-workshop-device"',
+    if(e.4 != '', concat(',"gram.tool.name":"', e.4, '","gen_ai.tool.call.id":"', e.5, '","gram.tool_call.duration":0.25'), ''),
+    if(e.2 = 'tool.completed', ',"gen_ai.tool.call.result":"Checklist read successfully"', ''),
+    if(e.2 = 'tool.failed', ',"gram.hook.error":"fictional test runner unavailable"', ''),
+    if(e.2 = 'usage.reported', ',"gram.hook.usage_authority":"model_attempt","gen_ai.usage.input_tokens":1200,"gen_ai.usage.output_tokens":240,"gen_ai.usage.cache_read.input_tokens":100,"gen_ai.usage.cache_creation.input_tokens":0,"gen_ai.usage.cost":0.00723', ''),
+    '}'),
+  '{"gram.deployment.id":"demo-seed"}',
+  'dec0de00-0000-4000-a000-000000000001', '', 'workshop-agent', chat_id
+FROM (
+  SELECT toUnixTimestamp64Nano(now64(9) - INTERVAL 15 MINUTE) AS nano,
+    lower(hex(MD5('gram-demo-workshop-chat'))) AS h,
+    concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
+           substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
+    arrayJoin([
+      (0, 'prompt.submitted', 'UserPromptSubmit', '', ''),
+      (20, 'tool.completed', 'PostToolUse', 'read_file', 'gram-demo-workshop-read'),
+      (30, 'tool.failed', 'PostToolUseFailure', 'run_tests', 'gram-demo-workshop-test'),
+      (60, 'assistant.responded', 'AfterAgentResponse', '', ''),
+      (61, 'usage.reported', 'usage.reported', '', '')
+    ]) AS e
+);
+
+-- Normalized observations expose the same session in Explore datasets without
+-- relying on a known-harness dialect. Usage appears on only the API request.
+INSERT INTO agent_events
+  (organization_id, project_id, occurred_at_unix_nano, observed_at_unix_nano,
+   record_id, session_id, turn_id, event_id, event_type, raw_event_name,
+   source, provider, surface, user_id, user_email, model, tool_name, text,
+   outcome, outcome_message, duration_nano, input_tokens, output_tokens,
+   cache_read_tokens, cost_usd, attributes, resource_attributes, scope_attributes)
+SELECT 'org_gram_demo_workspace', 'dec0de00-0000-4000-a000-000000000001',
+  nano + toInt64(e.1) * 1000000000, nano + toInt64(e.1) * 1000000000,
+  concat('gram-demo-workshop-event-', e.2), chat_id, 'gram-demo-workshop-turn-1',
+  if(e.4 != '', e.4, concat('gram-demo-workshop-', e.2)), e.3,
+  if(e.2 = 'usage.reported', 'model.response.after', e.2),
+  'workshop-agent', 'anthropic', 'workshop-agent', 'user_demo_priya', 'priya@demo.getgram.ai',
+  'claude-sonnet-4-6', e.5, e.6,
+  multiIf(e.2 = 'tool.failed', 'error', e.3 = 'tool_call_result', 'ok', ''),
+  if(e.2 = 'tool.failed', 'fictional test runner unavailable', ''),
+  if(e.3 = 'tool_call_result', 250000000, 0),
+  if(e.2 = 'usage.reported', 1200, 0), if(e.2 = 'usage.reported', 240, 0),
+  if(e.2 = 'usage.reported', 100, 0), if(e.2 = 'usage.reported', 0.00723, 0),
+  concat('{"gram.hook.schema":"hook.ingest.v1","gram.hook.transport":"ahp","gram.hook.mode":"observe","gram.hook.canonical_event":"', e.2, '"',
+    if(e.2 = 'usage.reported', ',"gram.hook.usage_authority":"model_attempt"', ''), '}'),
+  '{"gram.deployment.id":"demo-seed"}', '{}'
+FROM (
+  SELECT toUnixTimestamp64Nano(now64(9) - INTERVAL 15 MINUTE) AS nano,
+    lower(hex(MD5('gram-demo-workshop-chat'))) AS h,
+    concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3), '-8',
+           substring(h, 18, 3), '-', substring(h, 21, 12)) AS chat_id,
+    arrayJoin([
+      (0, 'prompt.submitted', 'prompt', '', '', 'Check the fictional workshop release checklist and run its tests.'),
+      (20, 'tool.completed', 'tool_call_result', 'gram-demo-workshop-read', 'read_file', ''),
+      (30, 'tool.failed', 'tool_call_result', 'gram-demo-workshop-test', 'run_tests', ''),
+      (60, 'assistant.responded', 'api_response', '', '', 'The checklist is ready. Tests could not run because the fictional runner was unavailable.'),
+      (61, 'usage.reported', 'api_request', '', '', '')
+    ]) AS e
+);
+
+SELECT throwIf(
+  (SELECT count() FROM telemetry_logs
+   WHERE gram_project_id = 'dec0de00-0000-4000-a000-000000000001'
+     AND toString(attributes.gram.hook.source) = 'workshop-agent') != 5
+  OR (SELECT count() FROM telemetry_logs
+      WHERE gram_project_id = 'dec0de00-0000-4000-a000-000000000001'
+        AND toString(attributes.gram.hook.source) = 'workshop-agent'
+        AND toString(attributes.gram.hook.canonical_event) = 'usage.reported'
+        AND toString(attributes.gram.hook.usage_authority) = 'model_attempt'
+        AND toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) = 1200
+        AND toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)) = 240) != 1
+  OR (SELECT count() FROM telemetry_logs
+      WHERE gram_project_id = 'dec0de00-0000-4000-a000-000000000001'
+        AND toString(attributes.gram.hook.source) = 'workshop-agent'
+        AND toString(attributes.gram.hook.canonical_event) = 'assistant.responded'
+        AND toString(attributes.gen_ai.usage.input_tokens) != '') != 0
+  OR (SELECT count() FROM agent_events
+      WHERE organization_id = 'org_gram_demo_workspace' AND surface = 'workshop-agent') != 5
+  OR (SELECT countIf(input_tokens > 0) FROM agent_events
+      WHERE organization_id = 'org_gram_demo_workspace' AND surface = 'workshop-agent') != 1
+  OR (SELECT countIf(event_type = 'tool_call_result') FROM agent_events
+      WHERE organization_id = 'org_gram_demo_workspace' AND surface = 'workshop-agent') != 2
+  OR (SELECT countIf(outcome = 'error') FROM agent_events
+      WHERE organization_id = 'org_gram_demo_workspace' AND surface = 'workshop-agent') != 1,
+  'demo seed postflight: expected five workshop AHP events and one usage authority');
+
 -- Postflight: the Explore datasets have sessions and tool calls to collapse,
 -- every demo user and both harnesses are represented, and cost is only ever
 -- stated where the provider states it.
@@ -2580,8 +2687,8 @@ SELECT throwIf(
   (SELECT uniqExact(user_email) FROM agent_events
    WHERE organization_id = 'org_gram_demo_workspace') != 6
   OR (SELECT uniqExact(surface) FROM agent_events
-      WHERE organization_id = 'org_gram_demo_workspace') != 3,
-  'demo seed postflight: demo agent events must cover all six users, both harnesses, and inference capture');
+      WHERE organization_id = 'org_gram_demo_workspace') != 4,
+  'demo seed postflight: demo agent events must cover all six users, known harnesses, workshop-agent, and inference capture');
 
 SELECT throwIf(
   (SELECT countIf(cost_usd > 0) FROM agent_events

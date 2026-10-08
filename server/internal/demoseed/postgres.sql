@@ -2665,6 +2665,36 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      '[{"type":"text","text":"Which checks remain before rollout?"}]'::jsonb,
      'claude-chat', 'claude-sonnet-4-6', now() - interval '18 minutes', now());
 
+  -- An intentionally unrecognized AHP harness demonstrates observe-only ingestion.
+  -- No provider adapter, policy interception, or historical backfill is needed.
+  chat_id := demo.det_uuid('gram-demo-workshop-chat');
+  INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
+  VALUES (chat_id, proj_a, demo_org, demo_user_ids[3], demo_user_emails[3], 'Workshop agent release checklist',
+          now() - interval '15 minutes', now() - interval '14 minutes');
+  INSERT INTO chat_messages (id, chat_id, project_id, role, content, content_raw, tool_calls,
+                             tool_call_id, source, model, created_at, risk_analyzed_at)
+  VALUES
+    (demo.det_uuid('gram-demo-workshop-prompt'), chat_id, proj_a, 'user',
+     'Check the fictional workshop release checklist and run its tests.', '{"type": "text", "text": "Check the fictional workshop release checklist and run its tests."}'::jsonb,
+     NULL, NULL, 'workshop-agent', 'claude-sonnet-4-6',
+     now() - interval '15 minutes' + interval '0 seconds', now()),
+    (demo.det_uuid('gram-demo-workshop-calls'), chat_id, proj_a, 'assistant',
+     'I will read the checklist and run the test suite.', '{"type": "text", "text": "I will read the checklist and run the test suite."}'::jsonb,
+     '[{"id": "gram-demo-workshop-read", "type": "function", "function": {"name": "read_file", "arguments": "{\"path\": \"RELEASE_CHECKLIST.md\"}"}}, {"id": "gram-demo-workshop-test", "type": "function", "function": {"name": "run_tests", "arguments": "{}"}}]'::jsonb, NULL, 'workshop-agent', 'claude-sonnet-4-6',
+     now() - interval '15 minutes' + interval '10 seconds', now()),
+    (demo.det_uuid('gram-demo-workshop-read-result'), chat_id, proj_a, 'tool',
+     'Checklist: tests, rollout, rollback readiness.', '{"result": "Checklist: tests, rollout, rollback readiness.", "is_error": false}'::jsonb,
+     NULL, 'gram-demo-workshop-read', 'workshop-agent', 'claude-sonnet-4-6',
+     now() - interval '15 minutes' + interval '20 seconds', now()),
+    (demo.det_uuid('gram-demo-workshop-test-result'), chat_id, proj_a, 'tool',
+     'Test execution failed: fictional test runner unavailable.', '{"result": "Test execution failed: fictional test runner unavailable.", "is_error": true}'::jsonb,
+     NULL, 'gram-demo-workshop-test', 'workshop-agent', 'claude-sonnet-4-6',
+     now() - interval '15 minutes' + interval '30 seconds', now()),
+    (demo.det_uuid('gram-demo-workshop-reply'), chat_id, proj_a, 'assistant',
+     'The checklist is ready. Tests could not run because the fictional runner was unavailable.', '{"type": "text", "text": "The checklist is ready. Tests could not run because the fictional runner was unavailable."}'::jsonb,
+     NULL, NULL, 'workshop-agent', 'claude-sonnet-4-6',
+     now() - interval '15 minutes' + interval '60 seconds', now());
+
   -- Claude Tag preserves the wake/tool transcript for the Raw view toggle.
   chat_id := demo.det_uuid('gram-demo-claude-tag-chat');
   INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
@@ -2938,6 +2968,12 @@ Channel context stays in the Raw view.
     AND source = 'claude-chat';
   IF stray <> 3 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 3 inference hook messages, found %', stray;
+  END IF;
+  SELECT count(*) INTO stray FROM chat_messages
+  WHERE project_id = proj_a AND chat_messages.chat_id = demo.det_uuid('gram-demo-workshop-chat')
+    AND source = 'workshop-agent';
+  IF stray <> 5 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 5 workshop AHP messages, found %', stray;
   END IF;
   SELECT count(*) INTO chat_count FROM chats WHERE organization_id = demo_org;
   SELECT count(*) INTO finding_count

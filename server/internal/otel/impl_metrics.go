@@ -62,6 +62,7 @@ func decodeOTLPMetricExport(raw []byte, provenance *otelv1.InboundMetric_Provena
 }
 
 func inboundMetricsFromExport(request *collectormetricsv1.ExportMetricsServiceRequest, provenance *otelv1.InboundMetric_Provenance) ([]*otelv1.InboundMetric, error) {
+	StripExternalHookProvenance(request)
 	metrics := make([]*otelv1.InboundMetric, 0)
 	normalizedSize := 0
 	for _, resourceMetrics := range request.GetResourceMetrics() {

@@ -241,6 +241,9 @@ func inboundLogKeyValues(attrs []*gen.OTELAttribute) []*otelv1.InboundLogRecord_
 		if item == nil || item.Value == nil {
 			continue
 		}
+		if !sanitizeExternalHookOTLPAttribute(item.Key, item.Value) {
+			continue
+		}
 		value := inboundAnyValue(item.Value, 0)
 		if value == nil {
 			continue
@@ -260,6 +263,9 @@ func inboundResourceKeyValues(attrs []*gen.OTELResourceAttribute) []*otelv1.Inbo
 	out := make([]*otelv1.InboundLogRecord_KeyValue, 0, len(attrs))
 	for _, item := range attrs {
 		if item == nil || item.Value == nil {
+			continue
+		}
+		if !sanitizeExternalHookOTLPAttribute(item.Key, item.Value) {
 			continue
 		}
 		value := inboundAnyValue(item.Value, 0)
@@ -419,4 +425,15 @@ func jsonFallbackAnyValue(value any) *otelv1.InboundLogRecord_AnyValue {
 	}
 	s := string(encoded)
 	return (&otelv1.InboundLogRecord_AnyValue_builder{StringValue: &s}).Build()
+}
+
+// Sanitize raw producer attributes before the event-feed tee. Trusted canonical
+// ingestion does not use these OTLP conversion helpers.
+func sanitizeExternalHookOTLPAttribute(key string, value *gen.OTELAttributeValue) bool {
+	if otelsvc.ReservedHookProvenanceKey(key) {
+		return false
+	}
+	value.KvlistValue, _ = otelsvc.SanitizeExternalHookAttribute(key, value.KvlistValue)
+	value.ArrayValue, _ = otelsvc.SanitizeExternalHookAttribute(key, value.ArrayValue)
+	return true
 }

@@ -279,3 +279,18 @@ The Default project contains its Everyone Default plugin and an empty role-only 
 ### [~] Assistants: workload identity bindings
 
 AIM-409 assistant fixtures use one ordinary project-pinned trust registration (nonempty illustrative platform issuer/JWKS URLs, no wildcard admission), exact root admission/assignment, and complete generation-1 binding mirror tuples. The fifth managed agent belongs only to the bound assistant and has no grants or upstream credentials. Dashboard roots are durable, not per-wake. The demo trust URLs are inert display fixtures; runtime creation instead uses the deployment's configured Gram issuer and existing JWKS. Browser verification pending.
+
+`[~]` Arbitrary AHP harness: Agent Sessions includes **Workshop agent release checklist**
+(source `workshop-agent`, deliberately absent from the known-harness lists), owned by
+Priya. The readable and Raw views retain five messages: prompt, assistant tool calls,
+successful `read_file`, failed `run_tests`, and assistant summary. The correlated
+session is det_uuid(`gram-demo-workshop-chat`) (locally `gram-locl-workshop-chat`).
+Telemetry has five `/ahp` observe-mode events stamped `hook.ingest.v1`, including
+canonical `tool.completed`, `tool.failed`, and one `usage.reported` sample from AHP
+`model.response.after`, stamped `gram.hook.usage_authority=model_attempt`, for
+`gram-demo-workshop-turn-1`. The outbound `assistant.responded` presentation has
+no usage payload, preventing double counting. Harness-filtered stats should show one session,
+two actual tool calls, one failure, 1,200 input / 240 output tokens, 100 cache-read
+tokens, zero cache-write tokens, and $0.00723 reported cost. Explore session and
+tool datasets include the same session. This fixture does not seed interception,
+blocked decisions, adapter registration, or historical backfill.
