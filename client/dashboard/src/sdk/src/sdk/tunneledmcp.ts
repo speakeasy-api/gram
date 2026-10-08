@@ -69,7 +69,7 @@ export class TunneledMcp extends ClientSDK {
    * deleteServer tunneledMcp
    *
    * @remarks
-   * Delete a tunneled MCP server source
+   * Delete a tunneled MCP server source. Refused with a conflict while any MCP server still uses the tunnel: delete those MCP servers first. Deleting a tunnel that does not exist or is already deleted succeeds without changing anything.
    */
   async deleteServer(
     request: DeleteTunneledMcpServerRequest,
