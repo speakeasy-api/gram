@@ -447,7 +447,7 @@ func TestWriteMessagePagesAdvancesChatsCursor(t *testing.T) {
 	require.NoError(t, svc.writeMessagePages(ctx, cfg, in, progress))
 
 	require.Equal(t, 3, progress.MessagePagesWritten)
-	require.Equal(t, "cur_200", progress.CursorPersisted)
+	require.Equal(t, "chats:cur_200", progress.CursorPersisted)
 
 	// The persisted cursor must be visible through the same read PollAIData
 	// performs at the start of each retry attempt, in the stored form the

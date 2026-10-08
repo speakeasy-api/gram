@@ -258,7 +258,7 @@ func TestImportDiscoveredChatsKeepsClientAcrossListRevisits(t *testing.T) {
 	)
 	require.Equal(t, 2, progress.ChatsImported)
 	require.Equal(t, 2, progress.MessagePagesWritten)
-	require.Equal(t, "list_cur_1", progress.CursorPersisted)
+	require.Equal(t, "chats:list_cur_1", progress.CursorPersisted)
 
 	desktopChatID := importedChatID(ctx, t, svc, cfg, "chat_desktop")
 	desktopChat, err := chatrepo.New(svc.db).GetChat(ctx, chatrepo.GetChatParams{ID: desktopChatID, ProjectID: projectID})
@@ -295,7 +295,7 @@ func TestImportDiscoveredChatsKeepsClientAcrossListRevisits(t *testing.T) {
 	)
 	require.Equal(t, 1, progress.ChatsImported)
 	require.Equal(t, 1, progress.MessagePagesFetched)
-	require.Equal(t, "list_cur_2", progress.CursorPersisted)
+	require.Equal(t, "chats:list_cur_2", progress.CursorPersisted)
 
 	messages, err = chatrepo.New(svc.db).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: desktopChatID, ProjectID: projectID})
 	require.NoError(t, err)
@@ -312,6 +312,52 @@ func TestImportDiscoveredChatsKeepsClientAcrossListRevisits(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "msg_cur_3", messagesCursor.String)
+}
+
+func TestImportDiscoveredChatsKeepsFeedClientForSameRunListRevisit(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, _, cfg, _, _ := complianceImportFixture(t)
+
+	const desktopUA = "Mozilla/5.0 Claude/1.2.3 Electron/39.0.0"
+	server := complianceMessagesServer(t, map[string]map[string]anthropicapi.ChatMessagesPage{
+		"chat_desktop": {
+			"": complianceMessagesPage("chat_desktop", "Desktop chat", "msg_cur_1",
+				complianceMessage("msg_1", "user", "hello", "2026-07-14T09:01:00Z"),
+			),
+		},
+	})
+	client := anthropicapi.New(svc.guardianPolicy, anthropicapi.WithBaseURL(server.URL), anthropicapi.WithAPIKey("anthropic-key"))
+
+	// The list revisit arrives while the feed's rows are still queued for
+	// the writer: nothing is stored yet, so only the run's own memory of
+	// the feed discovery can keep the desktop identity.
+	in := make(chan discoveredChat, 2)
+	in <- complianceFeedDiscovery("chat_desktop", desktopUA)
+	in <- complianceListDiscovery("chat_desktop", "Desktop chat", "list_cur_1")
+	close(in)
+
+	out := make(chan messagePageBatch, 4)
+	var batches []messagePageBatch
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for batch := range out {
+			batches = append(batches, batch)
+		}
+	}()
+	err := svc.importDiscoveredChats(ctx, client, cfg, in, out, complianceDiscoveryProgress(false))
+	close(out)
+	<-drained
+	require.NoError(t, err)
+
+	require.Len(t, batches, 2)
+	for _, batch := range batches {
+		require.Len(t, batch.rows, 1)
+		require.Equal(t, "claude", batch.rows[0].Params.Source.String)
+		require.Equal(t, desktopUA, batch.rows[0].Params.UserAgent.String)
+		require.Equal(t, "203.0.113.9", batch.rows[0].Params.IpAddress.String)
+	}
 }
 
 func TestConnectedUserResolverMatchesMixedCaseStoredEmail(t *testing.T) {

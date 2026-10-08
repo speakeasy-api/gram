@@ -125,12 +125,14 @@ type ComplianceSyncProgress struct {
 	// MessagePagesWritten counts message pages durably written.
 	MessagePagesWritten int `json:"message_pages_written"`
 
-	// CursorReached is the chat-list cursor discovery got to; it shows how
-	// far the list walk progressed regardless of durability.
+	// CursorReached is the chat-list cursor discovery got to, in the stored
+	// form last_cursor_id holds; it shows how far the list walk progressed
+	// regardless of durability.
 	CursorReached string `json:"cursor_reached,omitempty"`
 
 	// CursorPersisted is the last chat-list cursor durably written to the
-	// sync state during the run; retries resume from it.
+	// sync state during the run, in the stored form last_cursor_id holds;
+	// retries resume from it.
 	CursorPersisted string `json:"cursor_persisted,omitempty"`
 }
 

@@ -153,9 +153,9 @@ func NewComplianceImportService(logger *slog.Logger, db *pgxpool.Pool, guardianP
 //
 //   - The activity feed, window-polled for claude_chat_created between the
 //     schedule watermark and endTime. A created activity carries the actor's
-//     user agent and ip address, which classify the chat as Claude web or
-//     desktop and are stamped on its messages, so a new chat is imported from
-//     here first.
+//     user agent, which classifies the chat as Claude web or desktop, and ip
+//     address; both are stamped on its messages, so a new chat is imported
+//     from here first.
 //   - The chat list ordered by updated_at, walked forward from the stored
 //     cursor. It is the only feed that reports a chat receiving new messages:
 //     the activity feed has no message-level activity. Each chat it yields
@@ -231,7 +231,7 @@ func (s *ComplianceImportService) SyncAnthropicCompliance(ctx context.Context, c
 	})
 
 	if err := g.Wait(); err != nil {
-		progress.CursorReached = nextCursor
+		progress.CursorReached = storedChatsCursor(nextCursor)
 		return "", newSyncError("sync anthropic compliance", *progress,
 			SyncStageError{Stage: "discover_chats", Err: discoverErr},
 			SyncStageError{Stage: "import_chats", Err: importErr},
@@ -452,6 +452,12 @@ func (s *ComplianceImportService) emitPageChats(ctx context.Context, page *anthr
 // messages past the chat's persisted cursor.
 func (s *ComplianceImportService) importDiscoveredChats(ctx context.Context, client *anthropicapi.Client, cfg Config, in <-chan discoveredChat, out chan<- messagePageBatch, progress *ComplianceSyncProgress) error {
 	users := newConnectedUserResolver(s.db, cfg.OrganizationID)
+	// clientsByChat remembers the client identity resolved for each chat
+	// this run, keyed by external chat id. A list revisit of a chat can
+	// arrive before the writer has committed the feed's rows for it, when
+	// the stored-message lookup would still find nothing and fall back to
+	// web; the feed discovery's identity wins instead.
+	clientsByChat := map[string]chatClient{}
 	for found := range in {
 		if found.cursorOnly {
 			// A page with nothing importable has no chats to import; forward
@@ -472,13 +478,17 @@ func (s *ComplianceImportService) importDiscoveredChats(ctx context.Context, cli
 		}
 		progress.ChatsImported++
 
-		capturedBy := found.client
-		if !found.hasClient {
+		capturedBy, known := clientsByChat[found.externalChatID]
+		if found.hasClient {
+			capturedBy, known = found.client, true
+		}
+		if !known {
 			capturedBy, err = s.storedChatClient(ctx, cfg, chatID)
 			if err != nil {
 				return err
 			}
 		}
+		clientsByChat[found.externalChatID] = capturedBy
 
 		if err := s.fetchChatMessages(ctx, client, cfg, chatID, found.externalChatID, capturedBy, messagesCursor, found.chatsCursor, users, out, progress); err != nil {
 			return err
@@ -524,7 +534,7 @@ func (s *ComplianceImportService) writeMessagePages(ctx context.Context, cfg Con
 			}); err != nil {
 				return fmt.Errorf("advance anthropic compliance chats cursor: %w", err)
 			}
-			progress.CursorPersisted = batch.chatsCursor
+			progress.CursorPersisted = storedChatsCursor(batch.chatsCursor)
 		}
 	}
 	return nil
