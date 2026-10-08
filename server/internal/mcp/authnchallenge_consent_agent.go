@@ -89,7 +89,7 @@ func (t AgentAuthorizationTarget) connectCheck() authz.Check {
 }
 
 // agentAuthorizationRollout reports whether agent authorization is switched on
-// for the endpoint's organization. Every caller hides the feature when it is
+// for an organization. Every caller hides the feature when it is
 // off, so the boolean is false whenever the answer is not a confident yes.
 //
 // The error separates "off" from "unknown". An organization row or flag

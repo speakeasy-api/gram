@@ -23,8 +23,11 @@ type workloadTenancy struct {
 	// OrganizationID scopes every issuer and admission that could answer.
 	OrganizationID string
 
-	// ProjectID is the project asking, or uuid.Nil for an organization-scoped
-	// caller, which sees only organization-tier issuers and admissions.
+	// ProjectID is the project trust resolves in, or uuid.Nil for an
+	// organization-scoped caller, which sees only organization-tier issuers
+	// and admissions. A grant naming a resource asks as that MCP server's
+	// project; a grant naming none asks as its issuer's project, or as the
+	// organization for an organization issuer.
 	ProjectID uuid.UUID
 
 	// UserSessionIssuerID names the authorization server the grant is served

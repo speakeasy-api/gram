@@ -133,6 +133,19 @@ func TestLoadIssuerWorkloadSessionCredential_RejectsAnyOtherCeiling(t *testing.T
 	}
 }
 
+// An organization issuer's ceiling spans its organization, with no project:
+// that ceiling is accepted, and one scoped to any single project is not.
+func TestLoadIssuerWorkloadSessionCredential_OrganizationIssuer(t *testing.T) {
+	t.Parallel()
+
+	f := newWorkloadSessionCeilingFixture()
+	_, err := loadIssuerWorkloadSessionCredential(f.endpoint.OrganizationID, uuid.Nil, f.subject, f.subject, f.organization(), f.issuerCeiling(t, uuid.Nil), f.storedVersion())
+	require.NoError(t, err)
+
+	_, err = loadIssuerWorkloadSessionCredential(f.endpoint.OrganizationID, uuid.Nil, f.subject, f.subject, f.organization(), f.issuerCeiling(t, f.endpoint.ProjectID), f.storedVersion())
+	require.Error(t, err)
+}
+
 // A session minted for one server never carries the issuer-wide ceiling, so a
 // row edited to widen it authorizes nothing.
 func TestLoadWorkloadSessionCredential_RejectsIssuerWideCeiling(t *testing.T) {

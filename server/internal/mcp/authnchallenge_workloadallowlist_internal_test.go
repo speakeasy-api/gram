@@ -19,7 +19,7 @@ import (
 	workloadidentity_repo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
-// workloadTenantEndpoint names the tenancy an admission resolves under, which
+// newWorkloadTestTenancy names the tenancy an admission resolves under, which
 // is what the flight key is built from.
 func newWorkloadTestTenancy(organizationID string, projectID, issuerID uuid.UUID) workloadTenancy {
 	return workloadTenancy{

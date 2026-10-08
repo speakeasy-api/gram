@@ -52,9 +52,10 @@ func (c presentedClientCredentials) presented() bool {
 // clientless reports whether a token request presents no client
 // authentication at all, in its form or an Authorization header. Of the JWT
 // bearer requests, only a clientless one is the workload grant; any other is
-// the ID-JAG exchange.
+// the ID-JAG exchange. An Authorization header counts by its presence, so an
+// empty or repeated one is never read as no client.
 func (c presentedClientCredentials) clientless(r *http.Request) bool {
-	return !c.presented() && r.Header.Get("Authorization") == ""
+	return !c.presented() && len(r.Header.Values("Authorization")) == 0
 }
 
 // extractClientCredentials reads every client authentication parameter a
