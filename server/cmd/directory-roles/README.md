@@ -82,9 +82,10 @@ mise exec -- go run ./server/cmd/directory-roles shadow < /private/path/inventor
 ```
 
 Redirect stdout to a restricted private file when retaining a report. Import
-fails without committing any mappings if any group or role is absent, deleted,
-ambiguous, or outside the target organisation. Missing roles are reported, never
-created. After inventoried roles and groups resolve, any preserved mapping that
+fails without committing any mappings if any group or role is absent, deleted or
+ambiguous, or if a group or organisation-specific role belongs to another
+organisation. Live built-in (global) roles are valid targets. Missing roles are
+reported, never created. After inventoried roles and groups resolve, any preserved mapping that
 points to a missing or deleted role blocks import and is listed in
 `stale_mappings`. If that role is itself inventoried, the earlier
 `missing_role_slugs` report blocks import first. Resolve the stale mapping through

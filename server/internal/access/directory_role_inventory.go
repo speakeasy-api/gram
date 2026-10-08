@@ -353,14 +353,16 @@ func RunDirectoryRoleInventory(ctx context.Context, logger *slog.Logger, db *pgx
 	return report, nil
 }
 
-// resolveDirectoryRoleInventoryDefaultChange resolves the current and target
-// default roles for the shadow report. It returns nil when no different target
-// was supplied. Unresolved default roles block the report like inventoried roles.
+// resolveDirectoryRoleInventoryDefaultChange resolves the current default role,
+// and the target default when it differs, for the shadow report. Unresolved
+// default roles block the report like inventoried roles. The change is nil when
+// no different target was supplied.
 func resolveDirectoryRoleInventoryDefaultChange(ctx context.Context, queries *repo.Queries, organizationID string, inventory DirectoryRoleInventory, report *DirectoryRoleInventoryReport) (*DirectoryRoleInventoryDefaultRoleChange, error) {
-	if inventory.TargetDefaultRoleSlug == "" || inventory.TargetDefaultRoleSlug == inventory.DefaultRoleSlug {
-		return nil, nil
+	changes := inventory.TargetDefaultRoleSlug != "" && inventory.TargetDefaultRoleSlug != inventory.DefaultRoleSlug
+	slugs := []string{inventory.DefaultRoleSlug}
+	if changes {
+		slugs = append(slugs, inventory.TargetDefaultRoleSlug)
 	}
-	slugs := []string{inventory.DefaultRoleSlug, inventory.TargetDefaultRoleSlug}
 	roles, err := queries.ListDirectoryRoleInventoryRoles(ctx, repo.ListDirectoryRoleInventoryRolesParams{OrganizationID: organizationID, RoleSlugs: slugs})
 	if err != nil {
 		return nil, fmt.Errorf("resolve default roles: %w", err)
@@ -379,6 +381,9 @@ func resolveDirectoryRoleInventoryDefaultChange(ctx context.Context, queries *re
 	}
 	if len(report.MissingRoleSlugs)+len(report.AmbiguousRoleSlugs) > 0 {
 		return nil, errors.New("default roles cannot be resolved; no report produced")
+	}
+	if !changes {
+		return nil, nil
 	}
 	return &DirectoryRoleInventoryDefaultRoleChange{FromRoleURN: roleURNs[inventory.DefaultRoleSlug], ToRoleURN: roleURNs[inventory.TargetDefaultRoleSlug]}, nil
 }
