@@ -108,7 +108,7 @@ export function useOrgMcpServers(enabled: boolean): OrgMcpServers {
         mcpSlug: t.mcpSlug ?? undefined,
         tools,
         dynamicTools: false,
-        remoteBacked: false,
+        storedToolInventory: false,
       });
     }
     // Fold in mcp_servers rows (remote/tunneled and toolset-backed servers

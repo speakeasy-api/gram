@@ -872,8 +872,8 @@ interface RemoteToolsState {
 }
 
 /**
- * Fetches stored remote-MCP tool metadata for one server and reports it
- * upward. Mounted per remote-backed server so the picker issues at most one
+ * Fetches stored tool metadata for one remote or tunneled server and reports
+ * it upward. Mounted per such server so the picker issues at most one
  * metadata request per expanded server; `enabled` gates the fetch to rows the
  * admin actually opens.
  */
@@ -1032,21 +1032,21 @@ function RoleToolSelectionPanel({
     (): ToolSelectionServer[] =>
       allServers.map((server) => {
         const namePrefix = `${server.projectName.toLowerCase()}/`;
-        const isRemoteBacked = server.dynamicTools && server.remoteBacked;
-        const isTunneled = server.dynamicTools && !server.remoteBacked;
-        if (isTunneled) {
+        const hasStoredInventory =
+          server.dynamicTools && server.storedToolInventory;
+        if (server.dynamicTools && !server.storedToolInventory) {
           return {
             id: server.id,
             name: server.name,
             namePrefix,
             tools: [],
             status: "unavailable",
-            unavailableLabel: "dynamic tools",
+            unavailableLabel: "not proxied",
             unavailableTooltip:
-              "Tools are dynamically resolved for this server and cannot be individually permissioned.",
+              "Speakeasy doesn't proxy this server's traffic, so its tools can't be permissioned individually.",
           };
         }
-        if (isRemoteBacked) {
+        if (hasStoredInventory) {
           const state = remoteTools[server.id];
           const status = remoteServerStatus(state);
           return {
@@ -1178,13 +1178,13 @@ function RoleToolSelectionPanel({
     }
   };
 
-  const remoteBackedServers = allServers.filter(
-    (s) => s.dynamicTools && s.remoteBacked,
+  const storedInventoryServers = allServers.filter(
+    (s) => s.dynamicTools && s.storedToolInventory,
   );
 
   return (
     <>
-      {remoteBackedServers.map((server) => (
+      {storedInventoryServers.map((server) => (
         <RemoteToolMetadataLoader
           key={server.id}
           serverId={server.id}

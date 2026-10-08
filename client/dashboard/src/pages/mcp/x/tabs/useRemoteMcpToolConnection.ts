@@ -15,7 +15,10 @@ import {
 } from "@/lib/utils";
 import { useEffect, useMemo } from "react";
 
-import { useSyncToolMetadata } from "./useSyncToolMetadata";
+import {
+  useSyncToolMetadata,
+  type ToolMetadataActions,
+} from "./useSyncToolMetadata";
 
 export interface RemoteMcpToolConnectionOptions {
   /** The Speakeasy-proxied MCP URL to connect to; undefined while it resolves. */
@@ -24,10 +27,11 @@ export interface RemoteMcpToolConnectionOptions {
   mcpServerId: string | undefined;
   /** The server's user_session_issuer id; also the issuer-gated flag. */
   userSessionIssuerId: string | undefined;
-  /** Only remote-backed servers carry stored tool metadata. */
+  /** Set for remote-backed servers, which carry stored tool metadata. */
   remoteMcpServerId: string | undefined;
   /** Speakeasy-origin endpoint slug, for the first-party connect page. */
   platformSlug: string | undefined;
+  /** Set for tunneled servers, which also carry stored tool metadata. */
   tunneledMcpServerId: string | undefined;
   visibility: string | undefined;
   /**
@@ -42,6 +46,13 @@ export interface RemoteMcpToolConnectionOptions {
 export interface RemoteMcpToolConnection {
   /** What the live session advertises; undefined until it has listed. */
   tools: Record<string, ProxiedMcpTool> | undefined;
+  /**
+   * The latest listing succeeded. After a failed refetch `tools` still holds
+   * the earlier listing, which says nothing about the server now.
+   */
+  listed: boolean;
+  /** The server stores tool metadata (it is remote- or tunneled-backed). */
+  tracksMetadata: boolean;
   /** Speakeasy's stored annotations for the server's tools. */
   metadataByTool: ToolMetadataByName;
   loading: boolean;
@@ -55,13 +66,18 @@ export interface RemoteMcpToolConnection {
    * lists the tools again. Undefined when the server has no connect page.
    */
   connect: (() => void) | undefined;
-  /** Make the stored tool metadata mirror the session. */
-  sync: () => void;
+  /**
+   * Make the stored tool metadata mirror the session. Undefined for tunneled
+   * servers, where one caller's listing is never the whole inventory.
+   */
+  sync: (() => void) | undefined;
   isSyncing: boolean;
+  /** Per-tool metadata writes for tunneled servers; see useSyncToolMetadata. */
+  toolActions: ToolMetadataActions | undefined;
 }
 
 /**
- * Connects to a remote MCP server through Speakeasy to list its tools, and records
+ * Connects to a remote or tunneled MCP server through Speakeasy to list its tools, and records
  * the tools it sees for the first time so they can be permissioned by name.
  *
  * Issuer-gated servers connect with a minted user-session JWT. With no
@@ -95,9 +111,10 @@ export function useRemoteMcpToolConnection({
   });
 
   // Toolset-backed servers carry no stored metadata, so skip the request.
+  const tracksMetadata = !!remoteMcpServerId || !!tunneledMcpServerId;
   const { metadataByTool, isLoading: isMetadataLoading } = useToolMetadata(
     mcpServerId,
-    { enabled: enabled && !!remoteMcpServerId, projectSlug: project?.slug },
+    { enabled: enabled && tracksMetadata, projectSlug: project?.slug },
   );
 
   // Issuer-gated servers must wait for the JWT before connecting, otherwise the
@@ -140,18 +157,24 @@ export function useRemoteMcpToolConnection({
 
   const loading = !enabled || isTokenLoading || isLoading || isMetadataLoading;
 
-  // Only remote-backed servers carry tool metadata, and there is nothing to
-  // reconcile until both the session and the stored set have loaded.
-  const { sync, isSyncing } = useSyncToolMetadata({
+  // Only proxied servers carry tool metadata, and there is nothing to
+  // reconcile until both the session and the stored set have loaded. A tunnel
+  // may answer each caller with a different listing, so its listing only ever
+  // adds to the stored set.
+  const listed = !!tools && !isError;
+  const { sync, isSyncing, toolActions } = useSyncToolMetadata({
     mcpServerId,
-    live: tools,
+    live: listed ? tools : undefined,
     stored: metadataByTool,
-    enabled: !!remoteMcpServerId && !loading && !!tools,
+    enabled: tracksMetadata && !loading && listed,
+    mode: tunneledMcpServerId ? "additive" : "mirror",
     project,
   });
 
   return {
     tools,
+    listed,
+    tracksMetadata,
     metadataByTool,
     loading,
     needsAuth,
@@ -163,5 +186,6 @@ export function useRemoteMcpToolConnection({
       : undefined,
     sync,
     isSyncing,
+    toolActions,
   };
 }

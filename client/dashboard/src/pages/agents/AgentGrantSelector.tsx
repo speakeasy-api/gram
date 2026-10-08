@@ -278,8 +278,8 @@ function GrantRow({
 
 /**
  * The tool dimension of an mcp grant. Toolset-backed servers enumerate their
- * tools at deploy time; remote-MCP-backed ones only have the metadata the
- * Inspect tab materialized, so they are fetched per server. Anything that
+ * tools at deploy time; remote- and tunneled-MCP-backed ones only have the
+ * metadata the Inspect tab materialized, so they are fetched per server. Anything that
  * cannot be enumerated offers no tool choice at all rather than a free-text
  * name the server would have to reject.
  */
@@ -297,9 +297,10 @@ function ToolNarrowing({
   onChange: (value: GrantNarrowing) => void;
 }): JSX.Element {
   const server = entry?.server;
-  const remoteBacked = server?.dynamicTools === true && server.remoteBacked;
-  const metadata = useToolMetadata(remoteBacked ? server.id : undefined, {
-    enabled: remoteBacked,
+  const storedInventory =
+    server?.dynamicTools === true && server.storedToolInventory;
+  const metadata = useToolMetadata(storedInventory ? server.id : undefined, {
+    enabled: storedInventory,
     projectSlug: entry?.projectSlug,
   });
   const remoteTools = useMemo(
@@ -311,7 +312,7 @@ function ToolNarrowing({
     [server?.id, metadata.metadataByTool],
   );
   const open = new Set(openDimensions(grant));
-  const tools = remoteBacked ? remoteTools : (server?.tools ?? []);
+  const tools = storedInventory ? remoteTools : (server?.tools ?? []);
   const panelServers: ToolSelectionServer[] =
     server && open.has("tool")
       ? [
@@ -329,7 +330,7 @@ function ToolNarrowing({
                 annotations.push("open_world");
               return { name: tool.name, annotations };
             }),
-            status: remoteBacked
+            status: storedInventory
               ? metadata.isLoading
                 ? "loading"
                 : metadata.isError
