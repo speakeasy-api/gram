@@ -18,6 +18,7 @@ import (
 type Client struct {
 	ListEndpoint               goa.Endpoint
 	ListPlatformsEndpoint      goa.Endpoint
+	GetCustomFlowsEndpoint     goa.Endpoint
 	ListTokenEndpointsEndpoint goa.Endpoint
 	RegisterIssuerEndpoint     goa.Endpoint
 	UpdateIssuerEndpoint       goa.Endpoint
@@ -29,10 +30,11 @@ type Client struct {
 
 // NewClient initializes a "workloadIdentities" service client given the
 // endpoints.
-func NewClient(list, listPlatforms, listTokenEndpoints, registerIssuer, updateIssuer, withdrawIssuer, admitSubject, updateSubject, withdrawSubject goa.Endpoint) *Client {
+func NewClient(list, listPlatforms, getCustomFlows, listTokenEndpoints, registerIssuer, updateIssuer, withdrawIssuer, admitSubject, updateSubject, withdrawSubject goa.Endpoint) *Client {
 	return &Client{
 		ListEndpoint:               list,
 		ListPlatformsEndpoint:      listPlatforms,
+		GetCustomFlowsEndpoint:     getCustomFlows,
 		ListTokenEndpointsEndpoint: listTokenEndpoints,
 		RegisterIssuerEndpoint:     registerIssuer,
 		UpdateIssuerEndpoint:       updateIssuer,
@@ -86,6 +88,29 @@ func (c *Client) ListPlatforms(ctx context.Context, p *ListPlatformsPayload) (re
 		return
 	}
 	return ires.(*WorkloadPlatformCatalog), nil
+}
+
+// GetCustomFlows calls the "getCustomFlows" endpoint of the
+// "workloadIdentities" service.
+// GetCustomFlows may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetCustomFlows(ctx context.Context, p *GetCustomFlowsPayload) (res *WorkloadCustomFlows, err error) {
+	var ires any
+	ires, err = c.GetCustomFlowsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*WorkloadCustomFlows), nil
 }
 
 // ListTokenEndpoints calls the "listTokenEndpoints" endpoint of the

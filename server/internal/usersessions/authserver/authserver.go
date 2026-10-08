@@ -113,16 +113,17 @@ func SharedTokenEndpoint(issuerURL string) (string, error) {
 }
 
 // ServesSharedOn reports whether the shared authorization
-// server routes are served on origin: the server URL's or an extra platform
-// host's. Comparing whole origins also pins the scheme, so a pinned issuer is
-// https wherever the deployment is.
-//
-// TODO(AIM-415): include the authentication host once it serves them.
+// server routes are served on origin: the server URL's, the authentication
+// host's, or an extra platform host's. Comparing whole origins also pins the
+// scheme, so a pinned issuer is https wherever the deployment is.
 func (h Hosts) ServesSharedOn(origin string) bool {
 	if origin == "" {
 		return false
 	}
 	if origin == requestorigin.URLOrigin(h.ServerURL) {
+		return true
+	}
+	if h.AuthenticationHostBaseURL != "" && origin == requestorigin.URLOrigin(h.AuthenticationHostBaseURL) {
 		return true
 	}
 	for _, baseURL := range h.PlatformHosts {

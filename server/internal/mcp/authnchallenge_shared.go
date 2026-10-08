@@ -2,7 +2,9 @@
 // session issuer in shared mode, served at <origin>/oauth/usi/{id} for every
 // MCP server attached to the issuer. Clients name the MCP server they want with
 // an RFC 8707 resource indicator, and each access token is bound to that one
-// server.
+// server. A workload grant naming no resource receives a token for all of the
+// issuer's MCP servers instead, each of which checks the workload's assigned
+// agent may connect to it.
 
 package mcp
 
@@ -27,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -48,6 +51,15 @@ const sharedResourceLogMaxBytes = 512
 // in shared mode named an authorization server other than that issuer's.
 var errSharedTokenIssuerMismatch = errors.New("resource-bound token names another authorization server")
 
+// errIssuerMCPServersSessionSubject: a token on the audience naming all of an
+// issuer's MCP servers was minted for something other than a workload.
+var errIssuerMCPServersSessionSubject = errors.New("issuer-wide token is not a workload session")
+
+// errIssuerMCPServersSessionNotShared: a token on the audience naming all of
+// an issuer's MCP servers was presented while the issuer serves no shared
+// authorization server.
+var errIssuerMCPServersSessionNotShared = errors.New("issuer-wide token presented to an issuer not in shared mode")
+
 // errIssuerGateIssuerLookup marks an operational failure to load the issuer a
 // resource-bound token is checked against, after the token itself validated,
 // so the rejection is not labeled a bad credential.
@@ -66,6 +78,21 @@ type sharedAuthorizationServer struct {
 	// It is also the `iss` of every token and authorization response the
 	// authorization server issues.
 	issuer string
+
+	// onAuthenticationHost reports whether the authorization server is served
+	// on the authentication host, which serves only its metadata, token, and
+	// revocation endpoints. Such a server accepts only the workload grant, and
+	// MCP clients keep using the per-endpoint authorization servers for
+	// browser sign-in.
+	//
+	// TODO(AIM-418): serve authorization, consent, and registration on the
+	// authentication host, and drop the restrictions this flag drives.
+	onAuthenticationHost bool
+
+	// projectID is the project of a project issuer, or uuid.Nil for an
+	// organization issuer. A session minted for all of the issuer's MCP
+	// servers resolves workload trust in, and is bounded to, this scope.
+	projectID uuid.UUID
 }
 
 // origin is the scheme and host the authorization server is served on.
@@ -172,7 +199,13 @@ func (s *Service) sharedAuthorizationServerFor(issuer usersessions_repo.UserSess
 	if err != nil {
 		return nil, fmt.Errorf("derive shared issuer: %w", err)
 	}
-	return &sharedAuthorizationServer{issuerID: issuer.ID, issuer: issuerURL}, nil
+	onAuthenticationHost := s.authenticationHostBaseURL != "" && requestorigin.URLOrigin(issuerURL) == requestorigin.URLOrigin(s.authenticationHostBaseURL)
+	return &sharedAuthorizationServer{
+		issuerID:             issuer.ID,
+		issuer:               issuerURL,
+		onAuthenticationHost: onAuthenticationHost,
+		projectID:            issuer.ProjectID.UUID,
+	}, nil
 }
 
 // sharedIssuer is the issuer-level state of a request to a shared
@@ -371,7 +404,13 @@ func (s *Service) resolveSharedResource(ctx context.Context, logger *slog.Logger
 // resource's host would carry: the request origin, and for a custom domain the
 // customdomains.Context, that the request middleware would stamp. It mirrors
 // customdomains.Middleware for the hosts it classifies.
+//
+// A resource is never on the authentication host, so the derived context drops
+// the request's arrival there. An issuer whose shared authorization server is
+// pinned to the authentication host then resolves its MCP servers whether or
+// not it also opts in to use_authentication_host.
 func (s *Service) sharedResourceContext(ctx context.Context, host string) (context.Context, requestorigin.Origin, sharedResourceRejection, error) {
+	ctx = withoutAuthenticationHost(ctx)
 	var noOrigin requestorigin.Origin
 	platform := func(baseURL string) (context.Context, requestorigin.Origin, sharedResourceRejection, error) {
 		origin := requestorigin.Origin{
@@ -543,6 +582,38 @@ func (s *Service) checkSharedResourceSession(ctx context.Context, session sessio
 		return true, nil
 	}
 	return false, fmt.Errorf("%w: %w: token issuer %q", errCredentialRejected, errSharedTokenIssuerMismatch, session.Issuer())
+}
+
+// checkIssuerMCPServersSession checks a token accepted on the audience naming
+// all of the endpoint issuer's MCP servers. Only the issuer's shared
+// authorization server mints that audience, and only for workload sessions, so
+// the token must be a workload's, name that server as its issuer, and find the
+// issuer still in shared mode. Taking the issuer out of shared mode retires
+// the sessions its shared authorization server minted.
+//
+// On success the endpoint carries the issuer's shared authorization server.
+func (s *Service) checkIssuerMCPServersSession(ctx context.Context, session sessiontokens.ValidatedSession, endpoint *ResolvedMcpEndpoint) error {
+	if session.Subject().Kind != urn.SessionSubjectKindWorkload {
+		return fmt.Errorf("%w: %w", errCredentialRejected, errIssuerMCPServersSessionSubject)
+	}
+	if !endpoint.issuerStamped {
+		if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
+			// An issuer that is gone takes its sessions with it.
+			var shareable *oops.ShareableError
+			if errors.As(err, &shareable) && shareable.Code == oops.CodeNotFound {
+				return fmt.Errorf("%w: load issuer of issuer-wide session: %w", errCredentialRejected, err)
+			}
+			return fmt.Errorf("%w: %w", errIssuerGateIssuerLookup, err)
+		}
+	}
+	shared := endpoint.sharedAuthorizationServer
+	if shared == nil {
+		return fmt.Errorf("%w: %w", errCredentialRejected, errIssuerMCPServersSessionNotShared)
+	}
+	if !s.sameIssuer(session.Issuer(), shared.issuer) {
+		return fmt.Errorf("%w: %w: token issuer %q", errCredentialRejected, errSharedTokenIssuerMismatch, session.Issuer())
+	}
+	return nil
 }
 
 // sameIssuer reports whether two issuer URLs name the same authorization

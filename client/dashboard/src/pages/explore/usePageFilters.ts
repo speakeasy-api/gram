@@ -1,15 +1,19 @@
 import { useFilterState, type OptionsById } from "@/components/filters";
-import type {
-  DateRangeValue,
-  FilterDimension,
-  FilterValue,
+import {
+  defaultValueForDimension,
+  type DateRangeValue,
+  type FilterDimension,
+  type FilterValue,
 } from "@/components/filters/filter-schema";
+import { DATE_RANGE_PARAMS } from "@/components/filters/useFilterState";
 import { useProject } from "@/contexts/Auth";
 import type { DateRangePreset } from "@/elements";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
+import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { useQueries } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router";
 import {
   findDataset,
   WINDOW_PRESETS,
@@ -27,11 +31,62 @@ export interface PageFilterField {
   label: string;
 }
 
+// The fields a page of widgets may offer, in order: the dimensions most
+// questions about agent activity are cut by. A page offers the ones some
+// widget on it can be filtered by.
+const PAGE_FILTER_FIELDS: readonly PageFilterField[] = [
+  { field: "user", label: "User" },
+  { field: "surface", label: "Agent" },
+  { field: "model", label: "Model" },
+  { field: "mcp_server", label: "MCP server" },
+  { field: "status", label: "Status" },
+];
+
+// The bar shows the date range and this many fields as chips, like the
+// other observability pages; the rest wait behind "More filters" and only
+// join the row once they are set, so the row stays short enough to share
+// with the page's actions.
+const PINNED_FIELDS = 2;
+
+/**
+ * The fields a page offers over the given datasets: those some of them can
+ * filter by, in the usual order.
+ */
+export function pageFieldsFor(
+  catalog: AnalyticsDataset[] | undefined,
+  datasets: readonly string[],
+): PageFilterField[] {
+  return PAGE_FILTER_FIELDS.filter(({ field }) =>
+    datasets.some((name) =>
+      pageCanFilter(findDataset(catalog ?? [], name), field),
+    ),
+  );
+}
+
+/**
+ * Removes every value a page's bar keeps in the URL, so the next page opens
+ * on its own: a dashboard on its saved filters.
+ */
+export function clearPageFilterParams(params: URLSearchParams): void {
+  for (const name of DATE_RANGE_PARAMS) params.delete(name);
+  for (const { field } of PAGE_FILTER_FIELDS) params.delete(field);
+}
+
+/** Everything a page's bar is set to at once. */
+export interface PageFilterValues {
+  /** The date range; absent means the page's default. */
+  window?: DateRangeValue | undefined;
+  /** The values picked per field; a field left out is cleared. */
+  filters: Readonly<Record<string, readonly string[]>>;
+}
+
 /** What a page's filter bar shows. */
 export interface PageFilterConfig {
   /**
    * The dimensions the bar offers, in order. Only these: a page names the
-   * few its widgets are about, not every field the catalog has.
+   * few its widgets are about, not every field the catalog has. The first
+   * two are chips beside the date range; the rest live behind "More
+   * filters".
    */
   fields: readonly PageFilterField[];
   /**
@@ -90,6 +145,13 @@ interface ToolbarFiltersProps {
 export function usePageFilters(config: PageFilterConfig): {
   toolbar: ToolbarFiltersProps;
   context: PageContext;
+  /**
+   * Whether the URL holds any of the bar's values: a range, or a value for
+   * one of its fields. A link that says what to show is left alone.
+   */
+  touched: boolean;
+  /** Set the whole bar at once: a dashboard opening on its saved filters. */
+  apply: (values: PageFilterValues) => void;
 } {
   // Keyed on the configuration's content, so a page may declare it inline.
   const configKey = JSON.stringify(config);
@@ -105,11 +167,11 @@ export function usePageFilters(config: PageFilterConfig): {
           ? { defaultPreset: config.defaultPreset }
           : { allLabel: "Each widget's window" }),
       },
-      ...config.fields.map(({ field, label }): FilterDimension => ({
+      ...config.fields.map(({ field, label }, index): FilterDimension => ({
         id: field,
         label,
         kind: "multiselect",
-        pinned: true,
+        pinned: index < PINNED_FIELDS,
       })),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -142,6 +204,28 @@ export function usePageFilters(config: PageFilterConfig): {
 
   const optionsById = useFieldOptions(config, date);
 
+  const [params] = useSearchParams();
+  // A parameter left empty says nothing, so it does not count.
+  const touched =
+    DATE_RANGE_PARAMS.some((name) => Boolean(params.get(name))) ||
+    config.fields.some(({ field }) => Boolean(params.get(field)));
+  const { setValues } = state;
+  const apply = useCallback(
+    (next: PageFilterValues) => {
+      const [dateDimension] = schema;
+      const out: Record<string, unknown> = {
+        [DATE_ID]:
+          next.window ??
+          (dateDimension ? defaultValueForDimension(dateDimension) : null),
+      };
+      for (const dimension of schema.slice(1)) {
+        out[dimension.id] = [...(next.filters[dimension.id] ?? [])];
+      }
+      setValues(out as never);
+    },
+    [schema, setValues],
+  );
+
   return {
     toolbar: {
       schema,
@@ -152,6 +236,8 @@ export function usePageFilters(config: PageFilterConfig): {
       onClearAll: state.clearAll,
     },
     context: { window: date, filters, onRangeSelect },
+    touched,
+    apply,
   };
 }
 

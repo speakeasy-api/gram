@@ -73,6 +73,30 @@ var _ = Service("workloadIdentities", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WorkloadPlatforms"}`)
 	})
 
+	Method("getCustomFlows", func() {
+		Description("Get the forms for trusting a platform the catalog does not list and allowing its workloads: registering and editing a trusted platform, and allowing and editing access. The same for every organization. Requires workload:read.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(WorkloadCustomFlows)
+
+		HTTP(func() {
+			GET("/rpc/workloadIdentities.getCustomFlows")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getWorkloadCustomFlows")
+		Meta("openapi:extension:x-speakeasy-name-override", "getCustomFlows")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WorkloadCustomFlows"}`)
+	})
+
 	Method("listTokenEndpoints", func() {
 		Description("List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.")
 
@@ -515,6 +539,62 @@ var WorkloadPlatformCatalog = Type("WorkloadPlatformCatalog", func() {
 	Attribute("platforms", ArrayOf(WorkloadPlatform), "The catalog entries.")
 
 	Required("platforms")
+})
+
+var WorkloadFormBlock = Type("WorkloadFormBlock", func() {
+	Description("One piece of a custom flow's form. Which fields are set depends on type; the rest are empty.")
+
+	Attribute("type", String, "The kind of content. wildcard_caution marks where the form warns that a wildcard rule admits more than one identity; the dashboard writes that warning, since it names the rule and the agent.", func() {
+		Enum("text", "link", "input", "agent_picker", "tags", "wildcard_caution")
+	})
+	Attribute("markdown", String, "A text block's Markdown. Raw HTML in it must not be rendered.")
+	Attribute("href", String, "A link's https target.")
+	Attribute("label", String, "A link's label, or a form control's.")
+	Attribute("field", String, "The form value an input collects. label is submitted as an admission's name.", func() {
+		Enum("", "name", "description", "issuer", "jwks_uri", "subject", "label")
+	})
+	Attribute("placeholder", String, "Shown in an empty form control.")
+	Attribute("help", String, "Markdown shown under a form control while it has no validation message. Raw HTML in it must not be rendered.")
+	Attribute("multiline", Boolean, "Whether an input is a text area.")
+	Attribute("read_only", Boolean, "Whether an input shows its value without letting it change. A read-only value is not submitted.")
+	Attribute("format", String, "The dashboard validator an input's value must pass. The server applies the same rules when the form is submitted.", func() {
+		Enum("", "issuer_url", "jwks_uri", "platform_name", "platform_description", "subject_rule", "none")
+	})
+
+	Required("type", "markdown", "href", "label", "field", "placeholder", "help", "multiline", "read_only", "format")
+})
+
+var WorkloadFormStep = Type("WorkloadFormStep", func() {
+	Description("One screen of a custom flow's form.")
+
+	Attribute("id", String, "Stable within the form.")
+	Attribute("title", String, "Heads the step.")
+	Attribute("blocks", ArrayOf(WorkloadFormBlock), "Rendered in order.")
+
+	Required("id", "title", "blocks")
+})
+
+var WorkloadForm = Type("WorkloadForm", func() {
+	Description("A custom flow's form, held to the management API form it submits.")
+
+	Attribute("title", String, "Heads the form.")
+	Attribute("description", String, "Shown under the title.")
+	Attribute("submit_label", String, "The submit button's label.")
+	Attribute("pending_label", String, "The submit button's label while the form submits.")
+	Attribute("steps", ArrayOf(WorkloadFormStep), "The form's steps, in order.")
+
+	Required("title", "description", "submit_label", "pending_label", "steps")
+})
+
+var WorkloadCustomFlows = Type("WorkloadCustomFlows", func() {
+	Description("The forms for trusting a platform the catalog does not list and allowing its workloads.")
+
+	Attribute("register_platform", WorkloadForm, "Trusts a new platform; submits registerIssuer.")
+	Attribute("edit_platform", WorkloadForm, "Edits a trusted platform; submits updateIssuer.")
+	Attribute("allow_access", WorkloadForm, "Allows a subject under a trusted platform; submits admitSubject.")
+	Attribute("edit_access", WorkloadForm, "Edits allowed access; submits updateSubject.")
+
+	Required("register_platform", "edit_platform", "allow_access", "edit_access")
 })
 
 var WorkloadTokenEndpoint = Type("WorkloadTokenEndpoint", func() {

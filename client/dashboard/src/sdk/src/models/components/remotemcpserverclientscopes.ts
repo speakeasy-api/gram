@@ -37,6 +37,14 @@ export type RemoteMcpServerClientScopes = {
    */
   clientId: string;
   /**
+   * The configured name of the client's authorization server; absent when it has none.
+   */
+  issuerName?: string | undefined;
+  /**
+   * The issuer URL of the client's authorization server.
+   */
+  issuerUrl?: string | undefined;
+  /**
    * Whether a pin, if set, decides this client's request: discovery is on, the client owns the resource, and neither its own scope nor a challenge outranks the pin.
    */
   pinWouldDecide: boolean;
@@ -65,6 +73,8 @@ export const RemoteMcpServerClientScopes$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     client_id: z.string(),
+    issuer_name: z.optional(z.string()),
+    issuer_url: z.optional(z.string()),
     pin_would_decide: z.boolean(),
     requested_scopes: z.array(z.string()),
     scope_source: ScopeSource$inboundSchema,
@@ -73,6 +83,8 @@ export const RemoteMcpServerClientScopes$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "client_id": "clientId",
+      "issuer_name": "issuerName",
+      "issuer_url": "issuerUrl",
       "pin_would_decide": "pinWouldDecide",
       "requested_scopes": "requestedScopes",
       "scope_source": "scopeSource",
