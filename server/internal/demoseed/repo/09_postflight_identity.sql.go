@@ -616,8 +616,8 @@ WHERE project_id = $1::uuid AND deleted IS FALSE
 // duplicated any of them would leave the badges telling a different story
 // than the one they were seeded to tell.
 // One issuer per Connections credential story (acme-partner-gateway), three
-// project MCP issuers, and the organization-wide workforce issuer used by
-// GitHub.
+// project MCP issuers, one for each MCP server on the shared tunnel, and the
+// organization-wide workforce issuer used by GitHub.
 func (q *Queries) PostflightIDProjectUserSessionIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDProjectUserSessionIssuers, projectID)
 	var count int64
@@ -801,6 +801,24 @@ WHERE organization_id = $1::text
 
 func (q *Queries) PostflightIDSessionBindings(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDSessionBindings, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDSharedTunnelMCPServers = `-- name: PostflightIDSharedTunnelMCPServers :one
+SELECT count(*) FROM mcp_servers
+WHERE project_id = $1::uuid AND deleted IS FALSE
+  AND tunneled_mcp_server_id = $2::uuid
+`
+
+type PostflightIDSharedTunnelMCPServersParams struct {
+	ProjectID uuid.UUID
+	TunnelID  uuid.UUID
+}
+
+func (q *Queries) PostflightIDSharedTunnelMCPServers(ctx context.Context, arg PostflightIDSharedTunnelMCPServersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDSharedTunnelMCPServers, arg.ProjectID, arg.TunnelID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -1062,6 +1080,18 @@ WHERE organization_id = $1::text
 
 func (q *Queries) PostflightIDTrustedIssuerSessions(ctx context.Context, orgID string) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDTrustedIssuerSessions, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const postflightIDTunneledMCPServers = `-- name: PostflightIDTunneledMCPServers :one
+SELECT count(*) FROM tunneled_mcp_servers
+WHERE project_id = $1::uuid AND deleted IS FALSE
+`
+
+func (q *Queries) PostflightIDTunneledMCPServers(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDTunneledMCPServers, projectID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
