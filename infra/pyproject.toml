@@ -1,7 +1,7 @@
 [project]
 name = "gram-infra"
 version = "0.1.0"
-description = "Gram infra Python package: generated protobuf types and a Pub/Sub convenience layer"
+description = "Speakeasy infra Python package: generated protobuf types and a Pub/Sub convenience layer"
 requires-python = ">=3.14"
 dependencies = [
   # protobuf must satisfy the runtime-version guard emitted in the generated

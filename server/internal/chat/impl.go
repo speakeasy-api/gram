@@ -390,6 +390,7 @@ func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.Auth
 			ExternalUserID:       conv.FromPGText[string](row.ExternalUserID),
 			AssistantID:          conv.FromNullableUUID(row.AssistantID),
 			AssistantName:        conv.FromPGText[string](row.AssistantName),
+			AssistantAgentID:     conv.FromNullableUUID(row.AssistantAgentID),
 			Source:               conv.FromPGText[string](row.Source),
 			OriginatingClient:    conv.PtrEmpty(row.OriginatingClient),
 			LitellmProxied:       conv.PtrEmpty(row.LitellmProxied),
@@ -1463,6 +1464,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		ExternalUserID:       &chat.ExternalUserID.String,
 		AssistantID:          conv.FromNullableUUID(chat.AssistantID),
 		AssistantName:        conv.FromPGText[string](chat.AssistantName),
+		AssistantAgentID:     conv.FromNullableUUID(chat.AssistantAgentID),
 		Source:               source,
 		OriginatingClient:    originatingClient,
 		LitellmProxied:       conv.PtrEmpty(chat.LitellmProxied),
@@ -2139,7 +2141,7 @@ func maybeInjectContextWindow(eventText string, getContextWindow func() int) (st
 
 // isFinalFrame reports whether an SSE chunk is OpenRouter's metadata/usage
 // frame — the trailing data event that carries the `usage` block before
-// `[DONE]`. We inject Gram metadata next to OpenRouter's so the two travel
+// `[DONE]`. We inject Speakeasy metadata next to OpenRouter's so the two travel
 // together rather than landing on the earlier finish_reason chunk.
 func isFinalFrame(obj map[string]json.RawMessage) bool {
 	usage, ok := obj["usage"]

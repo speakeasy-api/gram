@@ -134,6 +134,12 @@ fi
 
 echo -e "\n⏳ Installing tools"
 mise install
+# mise.toml installs the SDK generator as speakeasy-sdks, but mise only renames
+# on install: an install made before the rename still serves the old speakeasy
+# name and shadows the AI Control Plane CLI. Reinstall it once in that case.
+if mise which speakeasy >/dev/null 2>&1; then
+    mise install --force "github:speakeasy-api/speakeasy"
+fi
 
 echo -e "\n⏳ Installing dependencies"
 mise run install

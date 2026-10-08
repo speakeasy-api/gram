@@ -59,7 +59,7 @@ export type ServeFunctionQueryError =
  * serveFunction assets
  *
  * @remarks
- * Serve a Gram Functions asset from Gram.
+ * Serve a Speakeasy Functions asset from Speakeasy.
  */
 export function useServeFunction(
   request: ServeFunctionRequest,
@@ -82,7 +82,7 @@ export function useServeFunction(
  * serveFunction assets
  *
  * @remarks
- * Serve a Gram Functions asset from Gram.
+ * Serve a Speakeasy Functions asset from Speakeasy.
  */
 export function useServeFunctionSuspense(
   request: ServeFunctionRequest,

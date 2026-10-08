@@ -19,8 +19,15 @@ import (
 const consentIdentityCopy = "Reconnect to add account details"
 
 // grantScoped writes a live session for the fixture subject on clientID that
-// carries the given scopes.
+// carries the given scopes and no resource.
 func grantScoped(t *testing.T, ctx context.Context, fx consentActionFixture, clientID uuid.UUID, scopes []string) {
+	t.Helper()
+	grantScopedTo(t, ctx, fx, clientID, scopes, "")
+}
+
+// grantScopedTo writes a live session for the fixture subject on clientID
+// that carries the given scopes, qualified to resource when not empty.
+func grantScopedTo(t *testing.T, ctx context.Context, fx consentActionFixture, clientID uuid.UUID, scopes []string, resource string) {
 	t.Helper()
 	encrypted, err := fx.ti.enc.Encrypt([]byte("token-" + clientID.String()))
 	require.NoError(t, err)
@@ -34,7 +41,7 @@ func grantScoped(t *testing.T, ctx context.Context, fx consentActionFixture, cli
 		AuthorizationExpiresAt: pgtype.Timestamptz{Valid: false},
 		RefreshExpiresAt:       pgtype.Timestamptz{Valid: false},
 		Scopes:                 scopes,
-		Resource:               conv.ToPGTextEmpty(""),
+		Resource:               conv.ToPGTextEmpty(resource),
 		AutoRefresh:            true,
 	})
 	require.NoError(t, err)

@@ -1,7 +1,7 @@
 ---
 name: gram-pubsub
 description: |
-  Gram's declarative GCP Pub/Sub system — topics and subscriptions are declared as protobuf message options, generated into `infra/gen/kcc.yaml`, and used at runtime via a type-safe publisher/subscriber library and the `gram streams` process. Activate for any Pub/Sub work in Gram: adding or changing a topic/subscription, declaring `(gcp.pubsub.v1.topic)`/`(gcp.pubsub.v1.subscription)` options, publishing or consuming messages, implementing a stream handler, dead-letter queues, or the local emulator — including phrasings like "add an outbox topic", "wire up a consumer", or "why isn't my topic created in GCP" even when Pub/Sub isn't named.
+  Speakeasy's declarative GCP Pub/Sub system — topics and subscriptions are declared as protobuf message options, generated into `infra/gen/kcc.yaml`, and used at runtime via a type-safe publisher/subscriber library and the `gram streams` process. Activate for any Pub/Sub work in Speakeasy: adding or changing a topic/subscription, declaring `(gcp.pubsub.v1.topic)`/`(gcp.pubsub.v1.subscription)` options, publishing or consuming messages, implementing a stream handler, dead-letter queues, or the local emulator — including phrasings like "add an outbox topic", "wire up a consumer", or "why isn't my topic created in GCP" even when Pub/Sub isn't named.
 metadata:
   relevant_files:
     - "infra/proto/**/*.proto"
@@ -16,9 +16,9 @@ metadata:
     - ".mise-tasks/gen/infra.sh"
 ---
 
-# Gram Pub/Sub
+# Speakeasy Pub/Sub
 
-Gram declares its GCP Pub/Sub topology **as data on protobuf messages**, not as
+Speakeasy declares its GCP Pub/Sub topology **as data on protobuf messages**, not as
 hand-written Terraform or Config Connector YAML. You annotate a "marker" message
 with a topic or subscription option; a generator walks the compiled descriptors
 and emits a Config Connector Helm values document (`infra/gen/kcc.yaml`); the
@@ -204,7 +204,7 @@ callback's return value drives ack/nack — nil acks, non-nil nacks — so you n
 longer call `Ack`/`Nack` yourself. Tune behavior with
 `WithPubSubPublishSettings` / `WithPubSubReceiveSettings`.
 
-This is the low-level library. **Inside the Gram server you almost never call
+This is the low-level library. **Inside the Speakeasy server you almost never call
 `sub.Receive` directly** — you write a `streams.Handler` and register it in the
 `gram streams` process, which wraps the receive loop with tracing, panic
 recovery, and ack/nack plumbing for you. See the next section.

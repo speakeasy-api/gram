@@ -36,7 +36,7 @@ type workloadIdentity struct {
 	// discovery refresh cannot silently repoint an existing admission.
 	WorkloadIssuerID uuid.UUID
 	// ExternalSubject is the sub claim the issuer asserted. Named to stay
-	// distinct from urn.SessionSubject, the Gram identity derived from it.
+	// distinct from urn.SessionSubject, the Speakeasy identity derived from it.
 	ExternalSubject string
 }
 

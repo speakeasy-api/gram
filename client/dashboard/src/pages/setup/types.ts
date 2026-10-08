@@ -30,7 +30,7 @@ export interface PlatformSetupStep {
    * image — use it to call out what the user should look for or click. */
   screenshot?: { src: string; alt: string; caption?: string };
   /**
-   * When true, the instrument-agents component generates a Gram API key with
+   * When true, the instrument-agents component generates a Speakeasy API key with
    * the "hooks" scope on demand and substitutes the literal "{{GRAM_API_KEY}}"
    * marker in `code` or `fields` with the issued key token.
    */

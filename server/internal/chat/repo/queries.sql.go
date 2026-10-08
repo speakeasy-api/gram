@@ -866,14 +866,15 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 
 const getChat = `-- name: GetChat :one
 SELECT c.session_surface, c.slack_team_id, c.slack_channel_id, c.slack_channel_name, c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.inference_accepted_checkpoint, c.inference_actor_key, c.user_account_id, c.litellm_proxied, c.cwd, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
-  at.assistant_id, a.name AS assistant_name,
+  a.id AS assistant_id, a.name AS assistant_name, b.original_agent_id AS assistant_agent_id,
   coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links l
     WHERE l.project_id = c.project_id AND l.child_chat_id = c.id AND l.kind = 'subagent'
       AND l.source_surface = 'claude-tag') THEN 'claude-tag' END, '')::text AS captured_surface
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
-LEFT JOIN assistant_threads at ON at.chat_id = c.id AND at.deleted IS FALSE
-LEFT JOIN assistants a ON a.id = at.assistant_id AND a.deleted IS FALSE
+LEFT JOIN assistant_threads at ON at.chat_id = c.id AND at.project_id = c.project_id AND at.deleted IS FALSE
+LEFT JOIN assistants a ON a.id = at.assistant_id AND a.project_id = c.project_id AND a.deleted IS FALSE
+LEFT JOIN assistant_agent_bindings b ON b.original_assistant_id = a.id AND b.project_id = c.project_id AND b.deleted IS FALSE
 WHERE c.id = $1 AND c.project_id = $2 AND c.deleted IS FALSE
 `
 
@@ -911,6 +912,7 @@ type GetChatRow struct {
 	AccountEmail                string
 	AssistantID                 uuid.NullUUID
 	AssistantName               pgtype.Text
+	AssistantAgentID            uuid.NullUUID
 	CapturedSurface             string
 }
 
@@ -950,6 +952,7 @@ func (q *Queries) GetChat(ctx context.Context, arg GetChatParams) (GetChatRow, e
 		&i.AccountEmail,
 		&i.AssistantID,
 		&i.AssistantName,
+		&i.AssistantAgentID,
 		&i.CapturedSurface,
 	)
 	return i, err
@@ -3103,6 +3106,9 @@ page_chats AS (
     -- assistant_id) key to rule that row out.
     a.id AS assistant_id,
     a.name AS assistant_name,
+    -- The agent identity the assistant acts as, when it has one. At most one
+    -- live binding exists per assistant, so this join adds no rows.
+    b.original_agent_id AS assistant_agent_id,
     lc.total_count,
     lc.page_position
   FROM limited_chats lc
@@ -3122,10 +3128,11 @@ page_chats AS (
   ) picked ON TRUE
   LEFT JOIN assistant_threads thread ON thread.id = picked.thread_id AND thread.project_id = $1
   LEFT JOIN assistants a ON a.id = thread.assistant_id AND a.project_id = $1 AND a.deleted IS FALSE
+  LEFT JOIN assistant_agent_bindings b ON b.original_assistant_id = a.id AND b.project_id = $1 AND b.deleted IS FALSE
 ),
 chat_attribution AS (
   SELECT
-    lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.litellm_proxied, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.total_count, lc.page_position,
+    lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.litellm_proxied, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.assistant_agent_id, lc.total_count, lc.page_position,
     COALESCE(CASE WHEN lc.source = 'litellm' THEN (
       SELECT CASE
         WHEN user_agent = ANY (ARRAY['claude-code', 'codex', 'opencode']::text[]) THEN user_agent
@@ -3170,6 +3177,7 @@ SELECT
   lc.account_email,
   lc.assistant_id,
   lc.assistant_name,
+  lc.assistant_agent_id,
   lc.total_count
 FROM chat_attribution lc
 ORDER BY lc.page_position
@@ -3215,6 +3223,7 @@ type ListChatsRow struct {
 	AccountEmail         string
 	AssistantID          uuid.NullUUID
 	AssistantName        pgtype.Text
+	AssistantAgentID     uuid.NullUUID
 	TotalCount           int64
 }
 
@@ -3274,6 +3283,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 			&i.AccountEmail,
 			&i.AssistantID,
 			&i.AssistantName,
+			&i.AssistantAgentID,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err

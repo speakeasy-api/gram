@@ -1,6 +1,6 @@
 // Package remotesessions implements the management API services that surface
 // remote_session_issuer / remote_session_client / remote_session resources —
-// Gram-as-OAuth-Client configuration and the upstream sessions Gram is
+// Speakeasy-as-OAuth-Client configuration and the upstream sessions Speakeasy is
 // holding on a principal's behalf. A single Go package owns three Goa
 // services' shared implementation, dependencies, and lifecycle.
 package remotesessions

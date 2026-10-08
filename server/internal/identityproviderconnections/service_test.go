@@ -115,7 +115,7 @@ func TestCreate_ProvisionsPendingConnection(t *testing.T) {
 	require.Equal(t, fullOrgURL, created.OrgURL)
 	require.Equal(t, fullOrgURL, created.IssuerURL)
 	require.Equal(t, identityproviderconnections.ListingModeCustomApp, created.ListingMode)
-	require.Contains(t, created.JwksURL, testServerURL)
+	require.Contains(t, conv.PtrValOr(created.JwksURL, ""), testServerURL)
 	require.Nil(t, created.ClientID)
 	require.False(t, created.ClientIDSubmitted)
 	require.Equal(t, allScopes(), created.RequiredScopes)
@@ -555,7 +555,7 @@ func TestRevoke_IsIdempotentAndFreesTheOrganization(t *testing.T) {
 	// The managed client stays live serving an empty JWKS at the same URL.
 	managed, err := si.provisioner.GetManagedClient(ctx, si.orgID, mustParseUUID(t, created.ID))
 	require.NoError(t, err)
-	require.Equal(t, created.JwksURL, managed.JSONWebKeySetURL)
+	require.Equal(t, conv.PtrValOr(created.JwksURL, ""), managed.JSONWebKeySetURL)
 	require.False(t, managed.ActiveKeyID.Valid)
 	require.JSONEq(t, `{"keys":[]}`, managedJWKS(t, ctx, si, managed))
 

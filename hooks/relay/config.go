@@ -1,6 +1,6 @@
-// Package relay wires the agenthooks runtime to the Gram hooks backend. It
+// Package relay wires the agenthooks runtime to the Speakeasy hooks backend. It
 // builds an agenthooks.Runner whose handlers translate every coding-agent hook
-// event into the canonical Gram ingest contract, POST it to the authenticated
+// event into the canonical Speakeasy ingest contract, POST it to the authenticated
 // /rpc/hooks.ingest endpoint, and honor the server's allow/deny verdict. The
 // server remains the sole authority on blocking; this package only relays
 // events and enforces the returned decision.
@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-// DefaultServerURL is the production Gram endpoint used when no override is
+// DefaultServerURL is the production Speakeasy endpoint used when no override is
 // configured in the environment.
 const DefaultServerURL = "https://app.getgram.ai"
 
@@ -22,7 +22,7 @@ const DefaultServerURL = "https://app.getgram.ai"
 // project/org without recompilation, mirroring the env knobs the legacy bash
 // senders read.
 type Config struct {
-	// ServerURL is the Gram API base, e.g. https://app.getgram.ai.
+	// ServerURL is the Speakeasy API base, e.g. https://app.getgram.ai.
 	ServerURL string
 	// SiteURL is the dashboard origin the browser sign-in opens. Production
 	// serves the API and dashboard from one domain, so this stays empty and
@@ -48,8 +48,12 @@ type Config struct {
 	// the fail-open posture (unreachable/5xx allow); explicit deny decisions
 	// and credential failures enforce regardless. New plugins never set it.
 	Nonblocking bool
-	// DebugLog, when set, appends one diagnostic line per event. It travels as a
-	// command flag so it survives providers that scrub the hook environment.
+	// DebugLog, when set, appends one diagnostic line per event. It travels as
+	// a command flag (--debug-log=) so it survives providers that scrub the
+	// hook environment, and as GRAM_HOOKS_DEBUG_LOG for the providers that
+	// pass the environment through, where a customer can turn diagnostics on
+	// without hand-editing a generated hook command. The flag wins when both
+	// name a path.
 	DebugLog string
 	// ConfigPath records the speakeasy.json the config was loaded from, so the
 	// login nudge can point the sign-in command at the same deployment identity
@@ -140,6 +144,16 @@ func SplitInlineFlags(defaults Config, args []string) (Config, []string) {
 	return cfg, rest
 }
 
+// envDebugLog returns the GRAM_HOOKS_DEBUG_LOG path, or "" when the override
+// is unset. It is the environment half of the debug log: the flag remains the
+// only way to reach providers that scrub the hook environment, so this is a
+// fallback rather than a replacement, and every entrypoint that resolves a
+// config picks it up. Entrypoints that run without one (the drain process)
+// read it directly.
+func envDebugLog() string {
+	return strings.TrimSpace(os.Getenv("GRAM_HOOKS_DEBUG_LOG"))
+}
+
 // readFileConfig loads a speakeasy.json. A missing or malformed file yields an
 // error so the caller keeps its defaults; hooks must not crash over config.
 func readFileConfig(path string) (FileConfig, error) {
@@ -181,6 +195,9 @@ func LoadConfig(defaults Config) Config {
 	}
 	if os.Getenv("GRAM_HOOKS_NONBLOCKING") != "" || os.Getenv("GRAM_HOOKS_OBSERVABILITY_MODE") != "" {
 		cfg.Nonblocking = true
+	}
+	if cfg.DebugLog == "" {
+		cfg.DebugLog = envDebugLog()
 	}
 	cfg.ServerURL = strings.TrimRight(cfg.ServerURL, "/")
 	cfg.SiteURL = strings.TrimRight(cfg.SiteURL, "/")

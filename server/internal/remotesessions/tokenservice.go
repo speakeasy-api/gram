@@ -1,7 +1,7 @@
 // tokenservice.go is the MCP-runtime side of the remote-session flow.
 // challenge.go drives the *login* leg (build authz URL, exchange code,
 // persist tokens). This file drives the *use* leg: given a subject the
-// MCP runtime has just authenticated via a Gram user-session JWT, find
+// MCP runtime has just authenticated via a Speakeasy user-session JWT, find
 // the upstream access token to forward on the request.
 //
 // Three entry points exposed:
@@ -56,17 +56,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// newTokenEndpointRequest assembles a request and owns client identification:
-// callers must not put client_id or client_secret in form themselves. RFC 6749
-// §2.3 allows exactly one placement for client credentials: Basic-auth clients
-// identify via the Authorization header, everyone else (client_secret_post and
-// public clients) via the body. Double-sending client_id is rejected by some
-// upstreams (e.g. Pylon) as ambiguous client identification.
-//
-// Method must come from ResolveTokenEndpointAuthMethod, which guarantees a
-// Basic or Post client carries a non-empty secret and a secret-less client is
-// public.
-type tokenEndpointClientAuth struct {
+// TokenEndpointClientAuth is the client authentication for one token endpoint
+// request. Method must be resolved so that a Basic or Post client carries a
+// non-empty secret and a secret-less client is public, as
+// ResolveTokenEndpointAuthMethod guarantees.
+type TokenEndpointClientAuth struct {
 	Method                TokenEndpointAuthMethod
 	RemoteSessionClientID uuid.UUID
 	OrganizationID        string
@@ -77,7 +71,13 @@ type tokenEndpointClientAuth struct {
 	AssertionSigner       TokenEndpointAssertionSigner
 }
 
-func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Values, auth tokenEndpointClientAuth) (*http.Request, error) {
+// NewTokenEndpointRequest assembles a request and owns client identification:
+// callers must not put client_id or client_secret in form themselves. RFC 6749
+// §2.3 allows exactly one placement for client credentials: Basic-auth clients
+// identify via the Authorization header, everyone else (client_secret_post and
+// public clients) via the body. Double-sending client_id is rejected by some
+// upstreams (e.g. Pylon) as ambiguous client identification.
+func NewTokenEndpointRequest(ctx context.Context, endpoint string, form url.Values, auth TokenEndpointClientAuth) (*http.Request, error) {
 	if !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
 		return nil, fmt.Errorf("token endpoint must be an absolute https URL, or http on loopback")
 	}
@@ -804,7 +804,7 @@ func (s *RefreshService) refreshSessionTokens(
 	postCtx, cancel := context.WithTimeout(ctx, refreshUpstreamTimeout)
 	defer cancel()
 
-	clientAuth := tokenEndpointClientAuth{
+	clientAuth := TokenEndpointClientAuth{
 		Method:                authMethod,
 		RemoteSessionClientID: client.ClientID,
 		OrganizationID:        client.ClientOrganizationID.String,
@@ -1030,11 +1030,11 @@ func (s *RefreshService) postRefreshGrant(
 	ctx context.Context,
 	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
 	form url.Values,
-	clientAuth tokenEndpointClientAuth,
+	clientAuth TokenEndpointClientAuth,
 ) (tokenResponse, error) {
 	var zero tokenResponse
 
-	req, err := newTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, clientAuth)
+	req, err := NewTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, clientAuth)
 	if err != nil {
 		if clientAssertionUnconfigured(err) {
 			return zero, newTokenRefreshError("the client's assertion signing key is not configured; check the issuer's configuration", err, refreshRemedyAdministrator)

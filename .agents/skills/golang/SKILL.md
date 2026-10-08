@@ -35,7 +35,7 @@ When a change touches one of these areas, activate the matching skill as well:
 | New or changed lint rules (`glint` analyzers) or their fixtures                                                           | `glint`                           |
 | Recording or exposing audit events                                                                                        | `gram-audit-logging`              |
 | Features that surface data in the dashboard (demo and local seed data)                                                    | `gram-demo-seed`                  |
-| Gram Functions runner (`functions/`) or `server/internal/functions`                                                       | `gram-functions`                  |
+| Speakeasy Functions runner (`functions/`) or `server/internal/functions`                                                  | `gram-functions`                  |
 | Goa management endpoints under `/rpc/<service>.<method>`                                                                  | `gram-management-api`             |
 | Pub/Sub topics, publishers, or stream handlers                                                                            | `gram-pubsub`                     |
 | Scopes, grants, roles, or `authz.Engine.Require` checks                                                                   | `gram-rbac`                       |
@@ -220,3 +220,24 @@ The [Functions](#functions) and [Reuse existing packages](#reuse-existing-packag
 - Never `time.Sleep` to wait for async state. When the test owns the goroutine, wait on a channel or `sync.WaitGroup` it signals. Otherwise poll with `require.EventuallyWithT`. Use `require.Never` only for in-process state, never to prove a database operation is blocked. Use `testing/synctest` (`synctest.Test` and `synctest.Wait`) for in-process timer and debounce logic; `time.Sleep` inside the synctest bubble is allowed because it advances the fake clock.
 - Write a separate test function for each scenario that needs its own setup or assertions, so it can be read, run with `-run`, and fail on its own. Use a table-driven test only when cases differ just in inputs and expected outputs (a value or an error), running each case with `t.Run(tc.name, ...)` so a failure is named and can be rerun with `-run`.
 - Parallelize isolated tests and independent table cases: call `t.Parallel()` first in the test and in each `t.Run` closure (`paralleltest` and `tparallel` report missing calls). Keep a test and its ancestors sequential when it mutates process-global state (`t.Setenv` and `t.Chdir` panic under `t.Parallel()`) or must share a mutable fixture. Prefer isolated fixtures; when sequential execution is necessary, explain the constraint in a narrowly scoped suppression as described under Tooling.
+
+## Readability
+
+Separate logical blocks with a blank line. Keep a call and its error check together; for resource acquisition, keep the cleanup `defer` immediately after the check in that same block (`o11y.NoLogDefer`, or `o11y.LogDefer` when cleanup errors matter). Put a blank line before and after these blocks when adjacent statements exist. Keep related straight-line statements together; do not add blank lines just inside braces.
+
+```go
+key = strings.TrimSpace(key)
+
+val, err := action(ctx, key)
+if err != nil {
+    return err
+}
+
+resource, err := newResource(ctx, val)
+if err != nil {
+    return err
+}
+defer o11y.NoLogDefer(func() error { return resource.Close() })
+
+return use(ctx, resource)
+```

@@ -279,7 +279,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 
 // CreateCimd registers a remote_session_client in Client ID Metadata Document
 // (CIMD) mode. Unlike the manual create path the caller supplies no client_id
-// or secret: Gram generates the row id, derives the platform-canonical document
+// or secret: Speakeasy generates the row id, derives the platform-canonical document
 // URL from it, and writes that URL as both client_id and client_id_metadata_uri
 // in a single INSERT (token_endpoint_auth_method none, no secret). The owning
 // issuer must advertise client_id_metadata_document support.

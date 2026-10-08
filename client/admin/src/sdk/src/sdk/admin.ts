@@ -45,6 +45,7 @@ import { adminGetStripeSubscription } from "../funcs/adminGetStripeSubscription.
 import { adminGetStripeSubscriptionCandidate } from "../funcs/adminGetStripeSubscriptionCandidate.js";
 import { adminGetSupportCoverage } from "../funcs/adminGetSupportCoverage.js";
 import { adminGetSupportMatrix } from "../funcs/adminGetSupportMatrix.js";
+import { adminListCustomerUsage } from "../funcs/adminListCustomerUsage.js";
 import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGlobalIssuerConvergenceCandidates.js";
 import { adminListGlobalIssuers } from "../funcs/adminListGlobalIssuers.js";
 import { adminListOnboardingPlaybooks } from "../funcs/adminListOnboardingPlaybooks.js";
@@ -86,6 +87,7 @@ import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulkupdateaccounttyperesult.js";
 import { AdminChatAnalysisSettings } from "../models/components/adminchatanalysissettings.js";
 import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatanalysistriggerresult.js";
+import { AdminCustomerUsageResponse } from "../models/components/admincustomerusageresponse.js";
 import { AdminInferenceKey } from "../models/components/admininferencekey.js";
 import { AdminInferenceKeyLimit } from "../models/components/admininferencekeylimit.js";
 import { AdminInferenceSpendMonth } from "../models/components/admininferencespendmonth.js";
@@ -189,6 +191,7 @@ import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstri
 import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
 import { AdminGetStripeSubscriptionCandidateRequest } from "../models/operations/admingetstripesubscriptioncandidate.js";
 import { AdminGetSupportCoverageRequest } from "../models/operations/admingetsupportcoverage.js";
+import { AdminListCustomerUsageRequest } from "../models/operations/adminlistcustomerusage.js";
 import {
   AdminListGlobalIssuerConvergenceCandidatesRequest,
   AdminListGlobalIssuerConvergenceCandidatesResponse,
@@ -529,7 +532,7 @@ export class Admin extends ClientSDK {
    * createOrganization admin
    *
    * @remarks
-   * Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.
+   * Creates an organization in WorkOS and in Speakeasy, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Speakeasy ID is derived from the WorkOS ID, so both writers converge on one row.
    */
   async createOrganization(
     request: CreateOrganizationRequestBody,
@@ -945,6 +948,23 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * listCustomerUsage admin
+   *
+   * @remarks
+   * Returns estimated usage at current PAYG list prices for every active paying organization: enterprise organizations not on a running or ending trial, and pro or payg organizations that never trialled.
+   */
+  async listCustomerUsage(
+    request?: AdminListCustomerUsageRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<AdminCustomerUsageResponse> {
+    return unwrapAsync(adminListCustomerUsage(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * getMeterUsage admin
    *
    * @remarks
@@ -1344,7 +1364,7 @@ export class Admin extends ClientSDK {
    * refreshGlobalIssuerMetadata admin
    *
    * @remarks
-   * Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.
+   * Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.
    */
   async refreshGlobalIssuerMetadata(
     request: RiskIDRequestBody,

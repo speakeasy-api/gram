@@ -32,7 +32,7 @@ customer whose models all route through the Claude CLI.
 
 ## Install (developer laptop)
 
-1. In the Gram dashboard, download the OpenClaw observability plugin ZIP
+1. In the Speakeasy dashboard, download the OpenClaw observability plugin ZIP
    (**Plugins → Observability → OpenClaw**). This mints a hooks API key and
    bakes it into the package's `speakeasy.json`. Requires `OrgAdmin`.
 
@@ -110,9 +110,9 @@ environment instead of the key baked into the download.
    to a directory baked into the image and populate it at build time; the
    bootstrap uses that instead of its per-OS cache location.
 
-   If you leave the download in place, the host to allowlist is **your own Gram
+   If you leave the download in place, the host to allowlist is **your own Speakeasy
    server** (`<GRAM_HOOKS_SERVER_URL>/hooks/releases/...`), not GitHub. The
-   binary is served by the org's Gram deployment precisely so that egress
+   binary is served by the org's Speakeasy deployment precisely so that egress
    restricted environments only ever need the one domain they already allow for
    ingest.
 
@@ -120,7 +120,7 @@ environment instead of the key baked into the download.
 
 | Variable                  | Purpose                                 |
 | ------------------------- | --------------------------------------- |
-| `GRAM_HOOKS_SERVER_URL`   | Gram server base URL                    |
+| `GRAM_HOOKS_SERVER_URL`   | Speakeasy server base URL               |
 | `GRAM_HOOKS_ORG_KEY`      | Org hooks key (mint one per deployment) |
 | `GRAM_HOOKS_PROJECT_SLUG` | Target project; defaults to `default`   |
 | `GRAM_HOOKS_ORG_ID`       | Org ID                                  |
@@ -153,6 +153,13 @@ Per-user attribution on shared gateways is tracked separately in DNO-971.
    - `openclaw plugins list` shows `speakeasy-observability` enabled?
    - Is the model on the Claude CLI harness? (see the coverage table above)
    - Gateway logs for `speakeasy-observability` errors.
+   - Still nothing? Set `GRAM_HOOKS_DEBUG_LOG=<path>` in the gateway's
+     environment, restart it, and reproduce: the relay records diagnostic
+     lines for each event, including the server and status when it sends a
+     request. A launchd-managed gateway (`ai.openclaw.open`) does not inherit
+     shell exports; use `launchctl setenv GRAM_HOOKS_DEBUG_LOG <path>` before
+     restarting it, and `launchctl unsetenv` afterwards. See
+     [Hooks environment overrides](./hooks-environment-overrides.md).
 
 ## Enforcement
 

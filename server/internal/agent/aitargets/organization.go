@@ -39,7 +39,7 @@ const DefaultsVersion int32 = 7
 type Source string
 
 const (
-	// SourceDefault marks a target compiled into Gram.
+	// SourceDefault marks a target compiled into Speakeasy.
 	SourceDefault Source = "default"
 
 	// SourceOrganization marks a target the organization added.

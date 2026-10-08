@@ -905,15 +905,15 @@ function ServerEndpoints({ servers }: { servers: KeyServer[] }) {
           ) : (
             <Text small muted>
               {server.kind === "Unproxied"
-                ? "Unproxied servers require their own upstream connection and do not accept this Gram key."
+                ? "Unproxied servers require their own upstream connection and do not accept this Speakeasy key."
                 : "No connection URL is available. Open this server’s settings to configure its endpoint."}
             </Text>
           )}
         </div>
       ))}
       <Text small muted>
-        Use the key as a Bearer token only with Gram endpoints. Do not send it
-        to an upstream server.
+        Use the key as a Bearer token only with Speakeasy endpoints. Do not send
+        it to an upstream server.
       </Text>
     </div>
   );

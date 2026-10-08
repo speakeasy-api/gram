@@ -1,6 +1,6 @@
 // Package orgprovision holds the parts of creating an organization that every
 // caller must do identically: validating the display name, and creating the
-// WorkOS organization so that its Gram organization ID is derivable from its
+// WorkOS organization so that its Speakeasy organization ID is derivable from its
 // WorkOS ID.
 //
 // Callers own their own database transaction. Self-serve signup attaches the
@@ -33,7 +33,7 @@ import (
 // written by WorkOS organization sync, which learns about an organization
 // without knowing what asked for it.
 const (
-	// SourceSignup is a self-serve signup: someone named a company and Gram
+	// SourceSignup is a self-serve signup: someone named a company and Speakeasy
 	// created the organization around them.
 	SourceSignup = "signup"
 
@@ -47,7 +47,7 @@ const (
 )
 
 // WorkOSOrganizationCreator is the WorkOS surface CreateInWorkOS needs. It
-// takes two methods rather than one because the Gram organization ID is derived
+// takes two methods rather than one because the Speakeasy organization ID is derived
 // from the WorkOS ID that only the create call returns, so external_id can only
 // be set by a second call.
 type WorkOSOrganizationCreator interface {
@@ -69,7 +69,7 @@ type WorkOSVerifiedDomainCreator interface {
 	UpdateOrganizationExternalIDWithoutRetry(ctx context.Context, workosOrgID, externalID string) error
 }
 
-// CreatedOrganization is an organization that exists in WorkOS and has no Gram
+// CreatedOrganization is an organization that exists in WorkOS and has no Speakeasy
 // row yet.
 type CreatedOrganization struct {
 	// WorkOSOrganizationID is the ID WorkOS assigned.
@@ -81,9 +81,9 @@ type CreatedOrganization struct {
 }
 
 // CreateInWorkOS creates a WorkOS organization for name and returns it paired
-// with the Gram organization ID derived from the ID WorkOS assigned.
+// with the Speakeasy organization ID derived from the ID WorkOS assigned.
 //
-// Deriving the Gram ID rather than minting one is what lets two writers reach
+// Deriving the Speakeasy ID rather than minting one is what lets two writers reach
 // the same row. The WorkOS organization webhook derives the same ID for an
 // organization it has not seen before (see
 // background/activities.ProcessWorkOSOrganizationEvents), so whichever of the
@@ -102,7 +102,7 @@ func CreateInWorkOS(ctx context.Context, client WorkOSOrganizationCreator, name 
 	// idempotency key, and the only value available before the create returns
 	// is derived from the name. Two organizations may legitimately share a
 	// display name, and a name-derived key would make WorkOS answer the second
-	// create with the first organization, after which the second Gram insert
+	// create with the first organization, after which the second Speakeasy insert
 	// collides on the unique index over workos_id. AGE-3214 covers giving this
 	// call a key that is actually unique per attempt.
 	workosOrgID, err := client.CreateOrganization(ctx, name, "")
@@ -144,7 +144,7 @@ var ErrUnavailable = errors.New("WorkOS is not configured on this server")
 // Unavailable is the WorkOSOrganizationCreator for a deployment with no WorkOS
 // configuration. Every call fails with ErrUnavailable, because an organization
 // the identity provider does not know about cannot be logged into. Failing is
-// more honest than creating a Gram-only row that looks like a success.
+// more honest than creating a Speakeasy-only row that looks like a success.
 type Unavailable struct{}
 
 // CreateOrganizationWithVerifiedDomain always fails with ErrUnavailable.

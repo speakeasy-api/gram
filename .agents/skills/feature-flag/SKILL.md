@@ -20,7 +20,7 @@ metadata:
 
 ## Two systems, two purposes
 
-Gram has two distinct feature-gating mechanisms. They are **not interchangeable** — pick based on the semantics of the flag, not on convenience.
+Speakeasy has two distinct feature-gating mechanisms. They are **not interchangeable** — pick based on the semantics of the flag, not on convenience.
 
 |                     | `productfeatures`                                 | PostHog feature flags                      |
 | ------------------- | ------------------------------------------------- | ------------------------------------------ |

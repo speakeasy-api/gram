@@ -52,13 +52,13 @@ export function usePlatformPlaceholders(): PlatformPlaceholders {
   );
   const projectSlug = useProjectSlugForRequests();
   const deviceAgentUrl = useOrgRoutes().deviceAgent.href();
-  // The marketplace.json "name" field — what `enabledPlugins`/`plugins.required`
-  // reference as the `<plugin>@<marketplace>` suffix. Sourced from the server
+  // The marketplace.json "name" field: the `extraKnownMarketplaces` key and the
+  // `<plugin>@<marketplace>` suffix in `enabledPlugins`. Sourced from the server
   // (naming.ResolveMarketplaceName: the override, else the frozen name the
-  // project last published under, else the org-slug-normalized,
-  // project-scoped computed name) rather than re-derived here, which
-  // previously hardcoded the wrong "-gram" suffix instead of "-speakeasy" and
-  // ignored non-default-project scoping entirely.
+  // project last published under, else the org-slug-normalized, project-scoped
+  // computed name) rather than re-derived here, which previously hardcoded the
+  // wrong "-gram" suffix instead of "-speakeasy" and ignored non-default-project
+  // scoping entirely.
   const marketplaceName = marketplaceSettings?.effectiveName ?? "";
   // The plugin slugs come from the server for the same reason the marketplace
   // name does: it derives them from the name the plugins were published under

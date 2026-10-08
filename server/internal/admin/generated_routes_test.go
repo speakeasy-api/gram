@@ -48,6 +48,7 @@ func TestGeneratedAdminRoutes_ExposeExactMigratedMounts(t *testing.T) {
 		"OpenOrganizationInDashboard":           "POST /admin/organization.open-dashboard",
 		"GetMeterUsage":                         "GET /admin/organizations.getMeterUsage",
 		"GetSpendBreakdown":                     "GET /admin/organization.spendBreakdown",
+		"ListCustomerUsage":                     "GET /admin/organizations.customerUsage",
 	}
 	got := map[string]string{}
 	for _, mount := range server.Mounts {
@@ -115,8 +116,10 @@ func TestGeneratedAdminRoutes_AuthenticateBeforeDecode(t *testing.T) {
 		"get Stripe subscription candidate": httptest.NewRequest(http.MethodGet, "/admin/organization.stripeSubscriptionCandidate", nil),
 		"meter usage":                       httptest.NewRequest(http.MethodGet, "/admin/organizations.getMeterUsage", nil),
 		"spend breakdown":                   httptest.NewRequest(http.MethodGet, "/admin/organization.spendBreakdown", nil),
-		"analysis trigger":                  httptest.NewRequest(http.MethodPost, "/admin/organization.chatAnalysisTrigger", bytes.NewBufferString(`{`)),
-		"open dashboard":                    httptest.NewRequest(http.MethodPost, "/admin/organization.open-dashboard", nil),
+		// An invalid interval must still read as unauthenticated, not as a bad request.
+		"customer usage":   httptest.NewRequest(http.MethodGet, "/admin/organizations.customerUsage?interval=yearly", nil),
+		"analysis trigger": httptest.NewRequest(http.MethodPost, "/admin/organization.chatAnalysisTrigger", bytes.NewBufferString(`{`)),
+		"open dashboard":   httptest.NewRequest(http.MethodPost, "/admin/organization.open-dashboard", nil),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

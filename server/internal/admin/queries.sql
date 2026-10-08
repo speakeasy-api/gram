@@ -412,7 +412,7 @@ WHERE id = ANY(@ids::text[])
 RETURNING id;
 
 -- name: AdminDisableOrganization :execrows
--- Operator-initiated disable. Keyed on the Gram organization id rather than
+-- Operator-initiated disable. Keyed on the Speakeasy organization id rather than
 -- workos_id so an organization that was never linked to WorkOS can still be
 -- disabled. Deliberately leaves workos_last_event_id alone: that column is the
 -- WorkOS webhook cursor and this is not a WorkOS event, so stamping it would
@@ -1073,6 +1073,7 @@ SELECT
     r.code_challenge_methods_supported AS issuer_code_challenge_methods_supported,
     r.client_id_metadata_document_supported AS issuer_cimd_supported,
     r.scope_override AS issuer_scope_override,
+    r.omit_scope_fallback AS issuer_omit_scope_fallback,
     r.metadata_fetched_at AS issuer_metadata_fetched_at,
     r.metadata_last_error_at AS issuer_metadata_last_error_at,
     r.jwks_last_error_at AS issuer_jwks_last_error_at
@@ -1109,3 +1110,37 @@ WHERE remote_session_client_id = ANY(@remote_session_client_ids::uuid[])
   AND deleted IS FALSE
   AND validation_status IS NOT NULL
 GROUP BY remote_session_client_id, validation_status;
+
+-- name: AdminListCustomerUsageOrganizations :many
+-- The paying organizations the customer usage page reports on: active
+-- enterprise organizations not on a running or ending trial, and active pro or
+-- payg organizations that never trialled. A missing billing_metadata row means
+-- calendar-month cycles, the same fallback the per-organization page applies.
+WITH organizations AS (
+    SELECT
+        om.id,
+        om.name,
+        om.slug,
+        om.gram_account_type AS account_type,
+        -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
+        CASE
+            WHEN t.organization_id IS NULL THEN 'none'
+            WHEN t.converted_at IS NOT NULL THEN 'converted'
+            WHEN t.demoted_at IS NOT NULL THEN 'demoted'
+            WHEN t.ends_at <= now() THEN 'expired'
+            WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
+            ELSE 'running'
+        END::text AS trial_state,
+        coalesce(bm.billing_cycle_anchor_day, 1)::int AS billing_cycle_anchor_day,
+        om.created_at
+    FROM organization_metadata om
+    LEFT JOIN trials t ON t.organization_id = om.id
+    LEFT JOIN billing_metadata bm ON bm.organization_id = om.id
+    WHERE om.disabled_at IS NULL
+      AND om.gram_account_type IN ('enterprise', 'pro', 'payg')
+)
+SELECT id, name, slug, account_type, trial_state, billing_cycle_anchor_day, created_at
+FROM organizations
+WHERE (account_type = 'enterprise' AND trial_state NOT IN ('running', 'ending_soon'))
+   OR (account_type IN ('pro', 'payg') AND trial_state = 'none')
+ORDER BY lower(name) ASC, id ASC;

@@ -7,8 +7,8 @@ settings:
 catalogs:
   default:
     '@ai-sdk/react':
-      specifier: ^4.0.123
-      version: 4.0.123
+      specifier: ^4.0.126
+      version: 4.0.126
     '@assistant-ui/react':
       specifier: ^0.15.22
       version: 0.15.22
@@ -34,8 +34,8 @@ catalogs:
       specifier: ^6.1.1
       version: 6.1.1
     ai:
-      specifier: ^7.0.120
-      version: 7.0.120
+      specifier: ^7.0.123
+      version: 7.0.123
     lucide-react:
       specifier: ^1.28.0
       version: 1.28.0
@@ -47,9 +47,9 @@ catalogs:
       version: 8.3.0
 
 overrides:
-  '@ai-sdk/react': 4.0.123
+  '@ai-sdk/react': 4.0.126
   '@radix-ui/react-dismissable-layer': 1.1.13
-  ai: 7.0.120
+  ai: 7.0.123
   assistant-cloud: 0.2.1
   dompurify@<3.4.16: 3.4.16
   fast-uri@<3.1.8: 3.1.8
@@ -220,17 +220,17 @@ importers:
   client/dashboard:
     dependencies:
       '@ai-sdk/mcp':
-        specifier: 2.0.61
-        version: 2.0.61(zod@4.4.3)
+        specifier: 2.0.63
+        version: 2.0.63(zod@4.4.3)
       '@ai-sdk/react':
         specifier: 'catalog:'
-        version: 4.0.123(react@19.3.0)
+        version: 4.0.126(react@19.3.0)
       '@assistant-ui/react':
         specifier: 'catalog:'
         version: 0.15.22(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.0)(react-dom@19.3.0(react@19.3.0))
       '@assistant-ui/react-ai-sdk':
         specifier: ~1.4.13
-        version: 1.4.13(@types/react@19.3.0)(ai@7.0.120(zod@4.4.3))(react@19.3.0)
+        version: 1.4.13(@types/react@19.3.0)(ai@7.0.123(zod@4.4.3))(react@19.3.0)
       '@assistant-ui/react-markdown':
         specifier: ^0.14.17
         version: 0.14.17(@assistant-ui/react@0.15.22(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.0)(react-dom@19.3.0(react@19.3.0)))(@types/react@19.3.0)(react@19.3.0)
@@ -251,7 +251,7 @@ importers:
         version: 4.7.0(monaco-editor@0.57.0)(react@19.3.0)(react-dom@19.3.0(react@19.3.0))
       '@openrouter/ai-sdk-provider':
         specifier: ^3.1.0
-        version: 3.1.0(ai@7.0.120(zod@4.4.3))(zod@4.4.3)
+        version: 3.1.0(ai@7.0.123(zod@4.4.3))(zod@4.4.3)
       '@pierre/diffs':
         specifier: ^1.2.11
         version: 1.2.11(react@19.3.0)(react-dom@19.3.0(react@19.3.0))
@@ -332,7 +332,7 @@ importers:
         version: 12.11.1(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.0)(react-dom@19.3.0(react@19.3.0))
       ai:
         specifier: 'catalog:'
-        version: 7.0.120(zod@4.4.3)
+        version: 7.0.123(zod@4.4.3)
       assistant-stream:
         specifier: ^0.3.29
         version: 0.3.29
@@ -377,7 +377,7 @@ importers:
         version: 0.4.6(react@19.3.0)(react-dom@19.3.0(react@19.3.0))
       nuqs:
         specifier: ^2.9.0
-        version: 2.9.0(@tanstack/react-router@1.170.29(react@19.3.0)(react-dom@19.3.0(react@19.3.0)))(react@19.3.0)(react-router@8.3.1(react@19.3.0)(react-dom@19.3.0(react@19.3.0)))
+        version: 2.9.0(@tanstack/react-router@1.170.29(react@19.3.0)(react-dom@19.3.0(react@19.3.0)))(react@19.3.0)(react-router@8.4.0(react@19.3.0)(react-dom@19.3.0(react@19.3.0)))
       posthog-js:
         specifier: ^1.411.0
         version: 1.411.0
@@ -406,8 +406,8 @@ importers:
         specifier: ^4.12.2
         version: 4.12.2(react@19.3.0)(react-dom@19.3.0(react@19.3.0))
       react-router:
-        specifier: ^8.3.1
-        version: 8.3.1(react@19.3.0)(react-dom@19.3.0(react@19.3.0))
+        specifier: ^8.4.0
+        version: 8.4.0(react@19.3.0)(react-dom@19.3.0(react@19.3.0))
       recharts:
         specifier: ^3.9.2
         version: 3.9.2(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react-is@17.0.2)
@@ -458,14 +458,14 @@ importers:
         version: 5.0.15(@types/react@19.3.0)(immer@11.1.11)(react@19.3.0)(use-sync-external-store@1.6.0(react@19.3.0))
     devDependencies:
       '@storybook/addon-docs':
-        specifier: ^10.6.0
-        version: 10.6.0(@types/react@19.3.0)(storybook@10.6.0(@types/react@19.3.0))
+        specifier: ^10.6.1
+        version: 10.6.1(@types/react@19.3.0)(storybook@10.6.1(@types/react@19.3.0))
       '@storybook/addon-themes':
-        specifier: ^10.6.0
-        version: 10.6.0(storybook@10.6.0(@types/react@19.3.0))
+        specifier: ^10.6.1
+        version: 10.6.1(storybook@10.6.1(@types/react@19.3.0))
       '@storybook/react-vite':
-        specifier: ^10.6.0
-        version: 10.6.0(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(storybook@10.6.0(@types/react@19.3.0))(typescript@7.0.2)(vite@8.3.0(@types/node@24.13.3)(tsx@4.23.5))
+        specifier: ^10.6.1
+        version: 10.6.1(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(storybook@10.6.1(@types/react@19.3.0))(typescript@7.0.2)(vite@8.3.0(@types/node@24.13.3)(tsx@4.23.5))
       '@tailwindcss/typography':
         specifier: ^0.5.20
         version: 0.5.20(tailwindcss@4.3.3)
@@ -509,14 +509,14 @@ importers:
         specifier: ^0.2.0
         version: 0.2.0(react@19.3.0)
       storybook:
-        specifier: ^10.6.0
-        version: 10.6.0(@types/react@19.3.0)
+        specifier: ^10.6.1
+        version: 10.6.1(@types/react@19.3.0)
       svix:
-        specifier: 2.4.0
-        version: 2.4.0
+        specifier: 2.6.0
+        version: 2.6.0
       svix-react:
         specifier: ^1.13.9
-        version: 1.13.9(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(svix@2.4.0)
+        version: 1.13.9(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(svix@2.6.0)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -644,12 +644,12 @@ importers:
         specifier: 8.8.5-lite
         version: 8.8.5-lite
     devDependencies:
-      '@gram-ai/functions':
-        specifier: workspace:^
-        version: 0.18.3
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.30.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
+      '@speakeasy-api/functions':
+        specifier: workspace:^
+        version: 0.20.0
       '@types/node':
         specifier: ~22.20.0
         version: 22.20.0
@@ -666,11 +666,11 @@ importers:
         specifier: ^1.7.0
         version: 1.7.0
       '@logtape/logtape':
-        specifier: ^2.3.9
-        version: 2.3.9
+        specifier: ^2.3.10
+        version: 2.3.10
       '@logtape/pretty':
-        specifier: ^2.3.9
-        version: 2.3.9(@logtape/logtape@2.3.9)
+        specifier: ^2.3.10
+        version: 2.3.10(@logtape/logtape@2.3.10)
       '@stricli/core':
         specifier: ^1.3.0
         version: 1.3.0
@@ -700,6 +700,22 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0(@types/node@22.20.0)(vite@8.3.0(@types/node@22.20.0)(tsx@4.23.5))
 
+  ts-framework/functions-compat:
+    dependencies:
+      '@speakeasy-api/functions':
+        specifier: workspace:*
+        version: 0.20.0
+    devDependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: 'catalog:'
+        version: 1.30.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: ^5.0.0
+        version: 5.0.0(@types/node@22.20.0)(vite@8.3.0(@types/node@22.20.0)(tsx@4.23.5))
+
   tunnel: {}
 
 packages:
@@ -707,8 +723,8 @@ packages:
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
 
-  '@ai-sdk/gateway@4.0.98':
-    resolution: {integrity: sha512-p2q0rrlnCnSI86nZvF+kaAou97sUh0iI2ZcKM24u/JCfGuldyyinvBleJJLuuPuhJ3RLiBaO8R+CpKgn7jwluA==}
+  '@ai-sdk/gateway@4.0.101':
+    resolution: {integrity: sha512-lBMXWbNSAb3eQD/F8ja9Egi32PsL9lLajC4DUvionnWO8V+X0nYw9hWJVBJdZ0SftfE/OyKySkoHRfIg/UafYg==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -719,8 +735,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/mcp@2.0.61':
-    resolution: {integrity: sha512-X6wENye7s0ygd5/wRCRclyI5nuoiE2GRoeLgzhLAlgyAe85XOhH2uHbiWHMPJJJkBdoRItWrF7iE51moovODMg==}
+  '@ai-sdk/mcp@2.0.63':
+    resolution: {integrity: sha512-D+3JXFWYEA2VmOEFyW/ZuTP65Z1NfxDY6u+nvpiHeIAXl/yqyAMSFoVvahQTQe45Ue3G1KwZYflwctXfl3Of2Q==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -731,8 +747,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider-utils@5.0.50':
-    resolution: {integrity: sha512-qg2LutM5RlUT/tuuFf+VkhFGNZ2sEJHL0oDIrFN/sMoVbDBANglqtGCJUOnBqGMoFBH8IfAXMrFZvbFWx4dMOg==}
+  '@ai-sdk/provider-utils@5.0.52':
+    resolution: {integrity: sha512-PWWa14kVJlBj/G4E85D+IMM28H9W9SC3cQ/yyRHTMzRmtLkNgmDOLhSYBJ9ZT+w83a+DQ9+QIcCaY36iuD89mw==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -741,12 +757,12 @@ packages:
     resolution: {integrity: sha512-VYMBxIQdcHqbIf1j+YZlI9Ati6LZ4wJe0GGd4z4a5H/KxTggjeOiyaVYTnfF7LHZK5jMQ+rofmzz4QPqf++NUw==}
     engines: {node: '>=22'}
 
-  '@ai-sdk/provider@4.0.19':
-    resolution: {integrity: sha512-ryVZSSfmpEsr4bM8rbt9cSBWal+KGYRrm57C+k/hiPQHMiMahaqg2bPF0MpxSUWY8mGpt7s/ajM6PAqNTMKqPQ==}
+  '@ai-sdk/provider@4.0.20':
+    resolution: {integrity: sha512-daWW1Jxnvcn6+VhUuPqR7i5DtbdontcPCC5pH3QYU2r/x0hl31AIGiejWThGU499pJYA9DzwnBm+tc3EMKQeLQ==}
     engines: {node: '>=22'}
 
-  '@ai-sdk/react@4.0.123':
-    resolution: {integrity: sha512-YwPC3Cp3RUDnoaDDlbWyd9Ni+F1JQqxC4m0DAGecR4Ysk2VRi+hj9bPs8+b6rvH6TRw6IppNY8nHR6R4zOF5Qw==}
+  '@ai-sdk/react@4.0.126':
+    resolution: {integrity: sha512-+Nbyzo6z+Ldk2NWgmSYtjPfOxpKwPZr31HBpVfFTdpK74uexUn/IsGpuJ3O1JgI9gl9tn61HTXEEjPJdhIqJ0Q==}
     engines: {node: '>=22'}
     peerDependencies:
       react: ^18 || ~19.0.1 || ~19.1.2 || ^19.2.1
@@ -1427,13 +1443,13 @@ packages:
   '@kurkle/color@0.3.4':
     resolution: {integrity: sha512-M5UknZPHRu3DEDWoipU6sE8PdkZ6Z/S+v4dD+Ke8IaNlpdSQah50lz1KtcFBa2vsdOnwbbnxJwVM4wty6udA5w==}
 
-  '@logtape/logtape@2.3.9':
-    resolution: {integrity: sha512-VwrfX+GSWEtk+v17nQzANwt3/8iAZw1Kbk6HvwPiKHadrAv/P/AiDTTxar1l1XNkSmkRZICfPEUBdxTPRDLcHQ==}
+  '@logtape/logtape@2.3.10':
+    resolution: {integrity: sha512-IdOrFCHMSGYz+fq7xrxKCjXxItHHdiVenNaHeFJhXOkaVXFAHCdrPPBQJvJVmYbAUY5PCP8kSMxY+GIoxkmwHA==}
 
-  '@logtape/pretty@2.3.9':
-    resolution: {integrity: sha512-jt4unqEoAnnSil5NZyoDqyZUJFh8ai/9fVv6obuATq9bKPKh+Zgp0vAbz1oT3XvdRl6YQWUYMxiLJlkS+cQtsA==}
+  '@logtape/pretty@2.3.10':
+    resolution: {integrity: sha512-gu2o3ajb2BAQjguNPhgE48JN9sw0lP2gzVSM59L0Aq7cvV0QJXgvIhgrKyd5E1qSAdZ1k4V2rueOcf3eabuR+w==}
     peerDependencies:
-      '@logtape/logtape': ^2.3.9
+      '@logtape/logtape': ^2.3.10
 
   '@manypkg/find-root@3.1.0':
     resolution: {integrity: sha512-BcSqCyKhBVZ5YkSzOiheMCV41kqAFptW6xGqYSTjkVTl9XQpr+pqHhwgGCOHQtjDCv7Is6EFyA14Sm5GVbVABA==}
@@ -3214,6 +3230,9 @@ packages:
       react-redux:
         optional: true
 
+  '@remix-run/route-pattern@0.22.1':
+    resolution: {integrity: sha512-czdGJWh09Lapvcqt7Vb09KlrU2PhRJ8xQaI+AItTuD9aDJ5MAgxnS38lnys6Ll+6RJEqPiaUqTwIQhVLwFvv+w==}
+
   '@rolldown/binding-android-arm-eabi@1.2.8':
     resolution: {integrity: sha512-tN5aztYkKCte4i5SIrrz5yK/HMjEuCqCSCJa418jOV8tZ1cBY3YF2otxB1ktPxzsLA1BeTqwapK0bfjxNvHJVw==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -3466,24 +3485,24 @@ packages:
   '@standard-schema/utils@0.3.0':
     resolution: {integrity: sha512-e7Mew686owMaPJVNNLs55PUvgz371nKgwsc4vxE49zsODpJEnxgxRo2y/OKrqueavXgZNMDVj3DdHFlaSAeU8g==}
 
-  '@storybook/addon-docs@10.6.0':
-    resolution: {integrity: sha512-Fk3rUQWeGyCfL170OkmRp6Ruyv7MHPb/xrKa6YNk7FlGmlVLi5tKzh2T/0J13vWEy8wiu2MV3IBu8iRsaUR+Cw==}
+  '@storybook/addon-docs@10.6.1':
+    resolution: {integrity: sha512-31PXR+MCWfI5YHKKah6tWnbV1FJWA9qbTHxtvpszPLd8FBekXtPOnmyYOpFF9CfciBF9bkeJFdFanJvUCjWbjA==}
     peerDependencies:
       '@types/react': ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-      storybook: ^10.6.0
+      storybook: ^10.6.1
     peerDependenciesMeta:
       '@types/react':
         optional: true
 
-  '@storybook/addon-themes@10.6.0':
-    resolution: {integrity: sha512-PJtRtaCzKCAcouEqkHevMwv0aeQNsYWab4K/qszNGuSyFXxdcPQguKwmbB6Ajd/FxW+Of/mLXjRgpjrGVSgm1g==}
+  '@storybook/addon-themes@10.6.1':
+    resolution: {integrity: sha512-SVZSM+mIiyK56d/3mRpRwPkAlpr9fdSSz/XpkT6fzI1PYFWDGSdElu2YmauzhaFGnlmAKL//tmXVvHXD4qCkIQ==}
     peerDependencies:
-      storybook: ^10.6.0
+      storybook: ^10.6.1
 
-  '@storybook/builder-vite@10.6.0':
-    resolution: {integrity: sha512-7zt8tYB6dnSO8fbjUz91MHexGDpf9HrLlA3FAmlVb+2ZL3eWUs499L3I6BDUymcWu7oW5WCBJlB8ERj8ZLLzig==}
+  '@storybook/builder-vite@10.6.1':
+    resolution: {integrity: sha512-kUMRRRS4MpJdxOLhrlQX3cpMYi2vVB3tIIRXyqWmAjVM6xT7OZ1SCQEMFPP+S3ToRqaYWZQb8aBqrJucbbYufA==}
     peerDependencies:
-      storybook: ^10.6.0
+      storybook: ^10.6.1
       vite: ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0
 
   '@storybook/global@5.0.0':
@@ -3494,40 +3513,40 @@ packages:
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  '@storybook/react-dom-shim@10.6.0':
-    resolution: {integrity: sha512-ZE0l4xL6d00rKFeJhRDuh0t3r+/2ffhx47lIyaSWrTD5kuM3nDjKDxCIWwX4E3gLV+oNX8E1prXRMuEWJUJwJg==}
+  '@storybook/react-dom-shim@10.6.1':
+    resolution: {integrity: sha512-OkPFycR6kVE+9ZsgQWRqnUfZm/sLY6dxsNAn3lsvV7DSAQWH9QnHLkqP9E/N/Hg6cKPDtGzDZ8vPNDz2FuaDuQ==}
     peerDependencies:
       '@types/react': ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       '@types/react-dom': ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-      storybook: ^10.6.0
+      storybook: ^10.6.1
     peerDependenciesMeta:
       '@types/react':
         optional: true
       '@types/react-dom':
         optional: true
 
-  '@storybook/react-vite@10.6.0':
-    resolution: {integrity: sha512-nc1dqnmjGOcDJvPCkAn4Hmu1gi7dNHHoibNmlBp0d1adosejELZxuNjHBkPl/KxZjbzP3jljQHnHB/guxd8e2g==}
+  '@storybook/react-vite@10.6.1':
+    resolution: {integrity: sha512-oyUZxuW2lIJN8BRbYyMyZbfjeYqtF6HwmNfqa1SAF525zRnMewYp66wm/5d8FAgwqejOf6N2+wR3hX866lSwMA==}
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-      storybook: ^10.6.0
+      storybook: ^10.6.1
       typescript: '>= 4.9.x'
       vite: ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       typescript:
         optional: true
 
-  '@storybook/react@10.6.0':
-    resolution: {integrity: sha512-0xfYYPRHcr5ta1hmXJCSezH4JGuUHJ+xVF9f1j+Y/MWEMOQE4wnaKWKsk/HLrDjZkT5hKfvmogt9b0yduP6zEQ==}
+  '@storybook/react@10.6.1':
+    resolution: {integrity: sha512-t0QIzO0MVcpD52UEMZKSv35nO/+8vUnLGoFC1E3BIVjHEIdr6IFFM7ty2E7FWsaZGsah3XrFINKT3dPd2Atz+Q==}
     peerDependencies:
       '@types/react': ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       '@types/react-dom': ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-      storybook: ^10.6.0
+      storybook: ^10.6.1
       typescript: '>= 4.9.x'
     peerDependenciesMeta:
       '@types/react':
@@ -4031,12 +4050,6 @@ packages:
       '@types/react-dom':
         optional: true
 
-  '@testing-library/user-event@14.6.4':
-    resolution: {integrity: sha512-QCGwP6QrjypBLwyj5cuyfVamkaIEy/XGY+1VDehbtbQqOggYmTFpFOdWR5mPz14vX8vXLMVjDHlRNBcClyO9ew==}
-    engines: {node: '>=12', npm: '>=6'}
-    peerDependencies:
-      '@testing-library/dom': '>=7.21.4'
-
   '@testing-library/user-event@14.6.7':
     resolution: {integrity: sha512-MPCpX8bxe8zS+JmmTwLp8jd0dy1rAm60Te/SL8JrQM3qvQJcBOs1d7IefJMyZzqM3EWBrDn/LWDt1BCGu4ASfg==}
     engines: {node: '>=12', npm: '>=6'}
@@ -4501,8 +4514,8 @@ packages:
     resolution: {integrity: sha512-7NRMZ/ZDz2vHevQTgJsocBFpakB1/Wx5ip19YSJuj4VOXpraWztTerViNtdSyARKZT9e2yVwUUB5JXXCE7mNrA==}
     hasBin: true
 
-  ai@7.0.120:
-    resolution: {integrity: sha512-HMNH1OZW4C7wSGQ802CC9tBQsxjgjR7ZaNg9XyYL3v5zM1gPolVS8PzdmyUdhceQzrsRz+2JXj+jqULZmLi/Aw==}
+  ai@7.0.123:
+    resolution: {integrity: sha512-blyApVMNpQfendoGLAQRjQgh0EdbwhAI4SJYBTS4Dw+BygPzdj/Pcgt6AaClvy5+ibV8v+d+k8PABam0QxORtw==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -6729,11 +6742,6 @@ packages:
     resolution: {integrity: sha512-aEZ9qP+/M+58x2qgfSFEWH1BxLyHe5+qkLNJOZQb5iGS017jpbRnoKhNRrXPeA6RfBrZO5wZrT9DMC1UqE1f1w==}
     engines: {node: ^20.9.0 || >=22}
 
-  react-dom@19.2.8:
-    resolution: {integrity: sha512-rVprimfGBG3DR+Tq0IQG2DT5PxKth1WIGDmj5yPmlzr4YBe7uyE+Du4oVqTDXZSHGGGXRtTJEGSSePyQCMBglQ==}
-    peerDependencies:
-      react: ^19.2.8
-
   react-dom@19.3.0:
     resolution: {integrity: sha512-JDk8dgif51OjFoDE70+OT9ICyYr+69HlmihNwp1+Nsfbna3t5sIiCa9ZJktDmQ4/1b/rn26hIAR2uYXDMr5r0Q==}
     peerDependencies:
@@ -6821,8 +6829,8 @@ packages:
       react: '>= 16.3'
       react-dom: '>= 16.3'
 
-  react-router@8.3.1:
-    resolution: {integrity: sha512-TEOpiO2g0TJHEOJeRVv4amUFun9v1npCKszvcquNvzETUtJ8udV86ah5eFoHT7g26bsBvT6EiIhqulR8eDF++A==}
+  react-router@8.4.0:
+    resolution: {integrity: sha512-JtydAkBvU9UTEe5qNC+POhu+ZBNM7rlKY2IegwXc7Idj7xfRG16x5RZrw3mju+XlqBxfvb2ky9P3jUp9WyWC1g==}
     engines: {node: '>=22.22.0'}
     peerDependencies:
       react: '>=19.2.7'
@@ -6846,10 +6854,6 @@ packages:
     engines: {node: '>=10'}
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-
-  react@19.2.8:
-    resolution: {integrity: sha512-PWaYA1L/q9u2u7xYQi+Y3L3Yfnie7XyLeaJICV1MGD6LprsBxcAqGjYyr0eY3p+QdsA+x/Irkt4Qif8D63+Sbw==}
-    engines: {node: '>=0.10.0'}
 
   react@19.3.0:
     resolution: {integrity: sha512-E8LUcbtBWt20bbl2YoHfx4ZDBdxVTfOKtCZn9cDSJ4l6/nuoApcpIBcj47t2wZoVX8g2ZHuMHbiShgCR1T5Sog==}
@@ -7012,9 +7016,6 @@ packages:
   safer-buffer@2.1.2:
     resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
 
-  scheduler@0.27.0:
-    resolution: {integrity: sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==}
-
   scheduler@0.28.0:
     resolution: {integrity: sha512-juorfCmIkIw8tT+p5BXSm6PJjQF/ycEYmKyzURCIt/RaZIhL+PulbQ9Yu2z1HdOJDdqDTlxA1+xKBmHXJsczAw==}
 
@@ -7158,8 +7159,8 @@ packages:
     resolution: {integrity: sha512-eCPu1qRxPVkl5605OTWF8Wz40b4Mf45NY5LQmVPQ599knfs5QhASUm9GbJ5BDMDOXgrnh0wyEdvzmL//YMlw0A==}
     engines: {node: '>=18'}
 
-  storybook@10.6.0:
-    resolution: {integrity: sha512-H48X6AURAFTpfN2zEux6vNesee5Oq8Gxj1IanYmblPZ218sfKSeyyerF1NC7GD7BrruoC8L4/cU0zII4y+d6zw==}
+  storybook@10.6.1:
+    resolution: {integrity: sha512-NeEmukMWPA5OqHizUkQtxCIhGt7MUZLPY4FFgpC0LNiipjrac/oKpH0TxI+9Zc+vI5+IoN+NiskOmBP7gtYfmA==}
     hasBin: true
     peerDependencies:
       '@types/react': ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
@@ -7262,8 +7263,8 @@ packages:
       react-dom: '>=16'
       svix: '>=1.26.0'
 
-  svix@2.4.0:
-    resolution: {integrity: sha512-xE/8otzIu/4ahnGrTKHw1MRIyfpZYQXsUbzb3eKQQOKu1lHMneR34o0QayKZZ1sxm3yudRjFD+Nvr/RF2WNzzA==}
+  svix@2.6.0:
+    resolution: {integrity: sha512-VYfF6HF6TqbjJhLN1hkjhzpK0OCEzMe2vBW2MGXBkQDb8HSHvYogPHOC/xwhX9d5DvL9Wj1/eIf0I3nWUVrrBw==}
     engines: {node: '>=22'}
 
   swr@2.5.0:
@@ -7937,17 +7938,17 @@ snapshots:
 
   '@adobe/css-tools@4.5.0': {}
 
-  '@ai-sdk/gateway@4.0.98(zod@4.4.3)':
+  '@ai-sdk/gateway@4.0.101(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/provider': 4.0.19
-      '@ai-sdk/provider-utils': 5.0.50(zod@4.4.3)
+      '@ai-sdk/provider': 4.0.20
+      '@ai-sdk/provider-utils': 5.0.52(zod@4.4.3)
       '@vercel/oidc': 3.2.0
       zod: 4.4.3
 
-  '@ai-sdk/gateway@4.0.98(zod@4.6.5)':
+  '@ai-sdk/gateway@4.0.101(zod@4.6.5)':
     dependencies:
-      '@ai-sdk/provider': 4.0.19
-      '@ai-sdk/provider-utils': 5.0.50(zod@4.6.5)
+      '@ai-sdk/provider': 4.0.20
+      '@ai-sdk/provider-utils': 5.0.52(zod@4.6.5)
       '@vercel/oidc': 3.2.0
       zod: 4.6.5
 
@@ -7959,10 +7960,10 @@ snapshots:
       pkce-challenge: 5.0.1
       zod: 4.4.3
 
-  '@ai-sdk/mcp@2.0.61(zod@4.4.3)':
+  '@ai-sdk/mcp@2.0.63(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/provider': 4.0.19
-      '@ai-sdk/provider-utils': 5.0.50(zod@4.4.3)
+      '@ai-sdk/provider': 4.0.20
+      '@ai-sdk/provider-utils': 5.0.52(zod@4.4.3)
       cross-spawn: 7.0.6
       pkce-challenge: 5.0.1
       zod: 4.4.3
@@ -7976,18 +7977,18 @@ snapshots:
       undici: 7.29.1
       zod: 4.4.3
 
-  '@ai-sdk/provider-utils@5.0.50(zod@4.4.3)':
+  '@ai-sdk/provider-utils@5.0.52(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/provider': 4.0.19
+      '@ai-sdk/provider': 4.0.20
       '@standard-schema/spec': 1.1.0
       '@workflow/serde': 4.1.0
       eventsource-parser: 3.1.0
       undici: 7.29.1
       zod: 4.4.3
 
-  '@ai-sdk/provider-utils@5.0.50(zod@4.6.5)':
+  '@ai-sdk/provider-utils@5.0.52(zod@4.6.5)':
     dependencies:
-      '@ai-sdk/provider': 4.0.19
+      '@ai-sdk/provider': 4.0.20
       '@standard-schema/spec': 1.1.0
       '@workflow/serde': 4.1.0
       eventsource-parser: 3.1.0
@@ -7998,16 +7999,16 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
-  '@ai-sdk/provider@4.0.19':
+  '@ai-sdk/provider@4.0.20':
     dependencies:
       json-schema: 0.4.0
 
-  '@ai-sdk/react@4.0.123(react@19.3.0)':
+  '@ai-sdk/react@4.0.126(react@19.3.0)':
     dependencies:
-      '@ai-sdk/mcp': 2.0.61(zod@4.4.3)
-      '@ai-sdk/provider': 4.0.19
-      '@ai-sdk/provider-utils': 5.0.50(zod@4.4.3)
-      ai: 7.0.120(zod@4.4.3)
+      '@ai-sdk/mcp': 2.0.63(zod@4.4.3)
+      '@ai-sdk/provider': 4.0.20
+      '@ai-sdk/provider-utils': 5.0.52(zod@4.4.3)
+      ai: 7.0.123(zod@4.4.3)
       react: 19.3.0
       swr: 2.5.0(react@19.3.0)
       throttleit: 2.1.0
@@ -8017,16 +8018,16 @@ snapshots:
       package-manager-detector: 1.8.0
       tinyexec: 1.3.0
 
-  '@assistant-ui/ai-sdk@0.0.8(@types/react@19.3.0)(ai@7.0.120(zod@4.4.3))(react@19.3.0)':
+  '@assistant-ui/ai-sdk@0.0.8(@types/react@19.3.0)(ai@7.0.123(zod@4.4.3))(react@19.3.0)':
     dependencies:
       '@ai-sdk/mcp': 2.0.55(zod@4.4.3)
-      '@ai-sdk/react': 4.0.123(react@19.3.0)
-      '@assistant-ui/core': 0.3.21(@assistant-ui/store@0.3.15(@assistant-ui/tap@0.9.19(@types/react@19.3.0)(react@19.3.0))(@types/react@19.3.0)(react@19.3.0))(@assistant-ui/tap@0.9.19(@types/react@19.3.0)(react@19.3.0))(@types/react@19.3.0)(assistant-cloud@0.2.1(ai@7.0.120(zod@4.4.3)))(react@19.3.0)
+      '@ai-sdk/react': 4.0.126(react@19.3.0)
+      '@assistant-ui/core': 0.3.21(@assistant-ui/store@0.3.15(@assistant-ui/tap@0.9.19(@types/react@19.3.0)(react@19.3.0))(@types/react@19.3.0)(react@19.3.0))(@assistant-ui/tap@0.9.19(@types/react@19.3.0)(react@19.3.0))(@types/react@19.3.0)(assistant-cloud@0.2.1(ai@7.0.123(zod@4.4.3)))(react@19.3.0)
       '@assistant-ui/store': 0.3.15(@assistant-ui/tap@0.9.19(@types/react@19.3.0)(react@19.3.0))(@types/react@19.3.0)(react@19.3.0)
       '@assistant-ui/tap': 0.9.19(@types/react@19.3.0)(react@19.3.0)
       '@types/react': 19.3.0
-      ai: 7.0.120(zod@4.4.3)
-      assistant-cloud: 0.2.1(ai@7.0.120(zod@4.4.3))
+      ai: 7.0.123(zod@4.4.3)
+      assistant-cloud: 0.2.1(ai@7.0.123(zod@4.4.3))
       assistant-stream: 0.3.45
       react: 19.3.0
     transitivePeerDependencies:
@@ -8036,12 +8037,12 @@ snapshots:
       - ioredis
       - redis
 
-  '@assistant-ui/core@0.3.21(@assistant-ui/store@0.3.15(@assistant-ui/tap@0.9.19(@types/react@19.3.0)(react@19.3.0))(@types/react@19.3.0)(react@19.3.0))(@assistant-ui/tap@0.9.19(@types/react@19.3.0)(react@19.3.0))(@types/react@19.3.0)(assistant-cloud@0.2.1(ai@7.0.120(zod@4.4.3)))(react@19.3.0)':
+  '@assistant-ui/core@0.3.21(@assistant-ui/store@0.3.15(@assistant-ui/tap@0.9.19(@types/react@19.3.0)(react@19.3.0))(@types/react@19.3.0)(react@19.3.0))(@assistant-ui/tap@0.9.19(@types/react@19.3.0)(react@19.3.0))(@types/react@19.3.0)(assistant-cloud@0.2.1(ai@7.0.123(zod@4.4.3)))(react@19.3.0)':
     dependencies:
       '@assistant-ui/store': 0.3.15(@assistant-ui/tap@0.9.19(@types/react@19.3.0)(react@19.3.0))(@types/react@19.3.0)(react@19.3.0)
       '@assistant-ui/tap': 0.9.19(@types/react@19.3.0)(react@19.3.0)
       '@types/react': 19.3.0
-      assistant-cloud: 0.2.1(ai@7.0.120(zod@4.4.3))
+      assistant-cloud: 0.2.1(ai@7.0.123(zod@4.4.3))
       assistant-stream: 0.3.45
       nanoid: 6.0.1
       react: 19.3.0
@@ -8049,11 +8050,11 @@ snapshots:
       - ioredis
       - redis
 
-  '@assistant-ui/react-ai-sdk@1.4.13(@types/react@19.3.0)(ai@7.0.120(zod@4.4.3))(react@19.3.0)':
+  '@assistant-ui/react-ai-sdk@1.4.13(@types/react@19.3.0)(ai@7.0.123(zod@4.4.3))(react@19.3.0)':
     dependencies:
-      '@assistant-ui/ai-sdk': 0.0.8(@types/react@19.3.0)(ai@7.0.120(zod@4.4.3))(react@19.3.0)
+      '@assistant-ui/ai-sdk': 0.0.8(@types/react@19.3.0)(ai@7.0.123(zod@4.4.3))(react@19.3.0)
       '@types/react': 19.3.0
-      ai: 7.0.120(zod@4.4.3)
+      ai: 7.0.123(zod@4.4.3)
       react: 19.3.0
     transitivePeerDependencies:
       - '@opentelemetry/api'
@@ -8077,12 +8078,12 @@ snapshots:
 
   '@assistant-ui/react@0.15.22(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.0)(react-dom@19.3.0(react@19.3.0))':
     dependencies:
-      '@assistant-ui/core': 0.3.21(@assistant-ui/store@0.3.15(@assistant-ui/tap@0.9.19(@types/react@19.3.0)(react@19.3.0))(@types/react@19.3.0)(react@19.3.0))(@assistant-ui/tap@0.9.19(@types/react@19.3.0)(react@19.3.0))(@types/react@19.3.0)(assistant-cloud@0.2.1(ai@7.0.120(zod@4.4.3)))(react@19.3.0)
+      '@assistant-ui/core': 0.3.21(@assistant-ui/store@0.3.15(@assistant-ui/tap@0.9.19(@types/react@19.3.0)(react@19.3.0))(@types/react@19.3.0)(react@19.3.0))(@assistant-ui/tap@0.9.19(@types/react@19.3.0)(react@19.3.0))(@types/react@19.3.0)(assistant-cloud@0.2.1(ai@7.0.123(zod@4.4.3)))(react@19.3.0)
       '@assistant-ui/store': 0.3.15(@assistant-ui/tap@0.9.19(@types/react@19.3.0)(react@19.3.0))(@types/react@19.3.0)(react@19.3.0)
       '@assistant-ui/tap': 0.9.19(@types/react@19.3.0)(react@19.3.0)
       '@types/react': 19.3.0
       '@types/react-dom': 19.3.0(@types/react@19.3.0)
-      assistant-cloud: 0.2.1(ai@7.0.120(zod@4.4.3))
+      assistant-cloud: 0.2.1(ai@7.0.123(zod@4.4.3))
       assistant-stream: 0.3.45
       radix-ui: 1.6.7(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.0)(react-dom@19.3.0(react@19.3.0))
       react: 19.3.0
@@ -8751,11 +8752,11 @@ snapshots:
 
   '@kurkle/color@0.3.4': {}
 
-  '@logtape/logtape@2.3.9': {}
+  '@logtape/logtape@2.3.10': {}
 
-  '@logtape/pretty@2.3.9(@logtape/logtape@2.3.9)':
+  '@logtape/pretty@2.3.10(@logtape/logtape@2.3.10)':
     dependencies:
-      '@logtape/logtape': 2.3.9
+      '@logtape/logtape': 2.3.10
 
   '@manypkg/find-root@3.1.0':
     dependencies:
@@ -8772,11 +8773,11 @@ snapshots:
       tinyglobby: 0.2.17
       yaml: 2.9.0
 
-  '@mdx-js/react@3.1.1(@types/react@19.3.0)(react@19.2.8)':
+  '@mdx-js/react@3.1.1(@types/react@19.3.0)(react@19.3.0)':
     dependencies:
       '@types/mdx': 2.0.14
       '@types/react': 19.3.0
-      react: 19.2.8
+      react: 19.3.0
 
   '@mermaid-js/parser@1.2.0':
     dependencies:
@@ -8911,9 +8912,9 @@ snapshots:
 
   '@open-draft/until@2.1.0': {}
 
-  '@openrouter/ai-sdk-provider@3.1.0(ai@7.0.120(zod@4.4.3))(zod@4.4.3)':
+  '@openrouter/ai-sdk-provider@3.1.0(ai@7.0.123(zod@4.4.3))(zod@4.4.3)':
     dependencies:
-      ai: 7.0.120(zod@4.4.3)
+      ai: 7.0.123(zod@4.4.3)
       zod: 4.4.3
 
   '@oxc-parser/binding-android-arm-eabi@0.127.0':
@@ -10252,6 +10253,8 @@ snapshots:
       react: 19.3.0
       react-redux: 9.3.0(@types/react@19.3.0)(react@19.3.0)(redux@5.0.1)
 
+  '@remix-run/route-pattern@0.22.1': {}
+
   '@rolldown/binding-android-arm-eabi@1.2.8':
     optional: true
 
@@ -10404,64 +10407,56 @@ snapshots:
 
   '@standard-schema/utils@0.3.0': {}
 
-  '@storybook/addon-docs@10.6.0(@types/react@19.3.0)(storybook@10.6.0(@types/react@19.3.0))':
+  '@storybook/addon-docs@10.6.1(@types/react@19.3.0)(storybook@10.6.1(@types/react@19.3.0))':
     dependencies:
-      '@mdx-js/react': 3.1.1(@types/react@19.3.0)(react@19.2.8)
-      '@storybook/icons': 2.1.0(react@19.2.8)
-      '@storybook/react-dom-shim': 10.6.0(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.2.8)(react-dom@19.2.8(react@19.2.8))(storybook@10.6.0(@types/react@19.3.0))
+      '@mdx-js/react': 3.1.1(@types/react@19.3.0)(react@19.3.0)
+      '@storybook/icons': 2.1.0(react@19.3.0)
+      '@storybook/react-dom-shim': 10.6.1(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(storybook@10.6.1(@types/react@19.3.0))
       '@types/react': 19.3.0
-      react: 19.2.8
-      react-dom: 19.2.8(react@19.2.8)
-      storybook: 10.6.0(@types/react@19.3.0)
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
+      storybook: 10.6.1(@types/react@19.3.0)
       ts-dedent: 2.3.0
       unplugin: 2.3.11
 
-  '@storybook/addon-themes@10.6.0(storybook@10.6.0(@types/react@19.3.0))':
+  '@storybook/addon-themes@10.6.1(storybook@10.6.1(@types/react@19.3.0))':
     dependencies:
-      storybook: 10.6.0(@types/react@19.3.0)
+      storybook: 10.6.1(@types/react@19.3.0)
       ts-dedent: 2.3.0
 
-  '@storybook/builder-vite@10.6.0(storybook@10.6.0(@types/react@19.3.0))(vite@8.3.0(@types/node@24.13.3)(tsx@4.23.5))':
+  '@storybook/builder-vite@10.6.1(storybook@10.6.1(@types/react@19.3.0))(vite@8.3.0(@types/node@24.13.3)(tsx@4.23.5))':
     dependencies:
-      storybook: 10.6.0(@types/react@19.3.0)
+      storybook: 10.6.1(@types/react@19.3.0)
       ts-dedent: 2.3.0
       vite: 8.3.0(@types/node@24.13.3)(tsx@4.23.5)
 
   '@storybook/global@5.0.0': {}
 
-  '@storybook/icons@2.1.0(react@19.2.8)':
+  '@storybook/icons@2.1.0(react@19.3.0)':
     dependencies:
-      react: 19.2.8
+      react: 19.3.0
 
-  '@storybook/react-dom-shim@10.6.0(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.2.8)(react-dom@19.2.8(react@19.2.8))(storybook@10.6.0(@types/react@19.3.0))':
-    dependencies:
-      '@types/react': 19.3.0
-      '@types/react-dom': 19.3.0(@types/react@19.3.0)
-      react: 19.2.8
-      react-dom: 19.2.8(react@19.2.8)
-      storybook: 10.6.0(@types/react@19.3.0)
-
-  '@storybook/react-dom-shim@10.6.0(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(storybook@10.6.0(@types/react@19.3.0))':
+  '@storybook/react-dom-shim@10.6.1(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(storybook@10.6.1(@types/react@19.3.0))':
     dependencies:
       '@types/react': 19.3.0
       '@types/react-dom': 19.3.0(@types/react@19.3.0)
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
-      storybook: 10.6.0(@types/react@19.3.0)
+      storybook: 10.6.1(@types/react@19.3.0)
 
-  '@storybook/react-vite@10.6.0(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(storybook@10.6.0(@types/react@19.3.0))(typescript@7.0.2)(vite@8.3.0(@types/node@24.13.3)(tsx@4.23.5))':
+  '@storybook/react-vite@10.6.1(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(storybook@10.6.1(@types/react@19.3.0))(typescript@7.0.2)(vite@8.3.0(@types/node@24.13.3)(tsx@4.23.5))':
     dependencies:
       '@joshwooding/vite-plugin-react-docgen-typescript': 0.7.0(typescript@7.0.2)(vite@8.3.0(@types/node@24.13.3)(tsx@4.23.5))
       '@rollup/pluginutils': 5.4.0
-      '@storybook/builder-vite': 10.6.0(storybook@10.6.0(@types/react@19.3.0))(vite@8.3.0(@types/node@24.13.3)(tsx@4.23.5))
-      '@storybook/react': 10.6.0(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(storybook@10.6.0(@types/react@19.3.0))(typescript@7.0.2)
+      '@storybook/builder-vite': 10.6.1(storybook@10.6.1(@types/react@19.3.0))(vite@8.3.0(@types/node@24.13.3)(tsx@4.23.5))
+      '@storybook/react': 10.6.1(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(storybook@10.6.1(@types/react@19.3.0))(typescript@7.0.2)
       empathic: 2.0.1
       magic-string: 1.2.3
       react: 19.3.0
       react-docgen: 8.0.3
       react-dom: 19.3.0(react@19.3.0)
       resolve: 1.22.12
-      storybook: 10.6.0(@types/react@19.3.0)
+      storybook: 10.6.1(@types/react@19.3.0)
       tsconfig-paths: 4.2.0
       typescript: 7.0.2
       vite: 8.3.0(@types/node@24.13.3)(tsx@4.23.5)
@@ -10469,17 +10464,17 @@ snapshots:
       - rollup
       - supports-color
 
-  '@storybook/react@10.6.0(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(storybook@10.6.0(@types/react@19.3.0))(typescript@7.0.2)':
+  '@storybook/react@10.6.1(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(storybook@10.6.1(@types/react@19.3.0))(typescript@7.0.2)':
     dependencies:
       '@storybook/global': 5.0.0
-      '@storybook/react-dom-shim': 10.6.0(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(storybook@10.6.0(@types/react@19.3.0))
+      '@storybook/react-dom-shim': 10.6.1(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(storybook@10.6.1(@types/react@19.3.0))
       '@types/react': 19.3.0
       '@types/react-dom': 19.3.0(@types/react@19.3.0)
       react: 19.3.0
       react-docgen: 8.0.3
       react-docgen-typescript: 2.4.0(typescript@7.0.2)
       react-dom: 19.3.0(react@19.3.0)
-      storybook: 10.6.0(@types/react@19.3.0)
+      storybook: 10.6.1(@types/react@19.3.0)
       typescript: 7.0.2
     transitivePeerDependencies:
       - supports-color
@@ -11117,10 +11112,6 @@ snapshots:
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
 
-  '@testing-library/user-event@14.6.4(@testing-library/dom@10.4.1)':
-    dependencies:
-      '@testing-library/dom': 10.4.1
-
   '@testing-library/user-event@14.6.7(@testing-library/dom@10.4.1)':
     dependencies:
       '@testing-library/dom': 10.4.1
@@ -11562,18 +11553,18 @@ snapshots:
       prompts: 2.4.2
       yaml: 2.9.0
 
-  ai@7.0.120(zod@4.4.3):
+  ai@7.0.123(zod@4.4.3):
     dependencies:
-      '@ai-sdk/gateway': 4.0.98(zod@4.4.3)
-      '@ai-sdk/provider': 4.0.19
-      '@ai-sdk/provider-utils': 5.0.50(zod@4.4.3)
+      '@ai-sdk/gateway': 4.0.101(zod@4.4.3)
+      '@ai-sdk/provider': 4.0.20
+      '@ai-sdk/provider-utils': 5.0.52(zod@4.4.3)
       zod: 4.4.3
 
-  ai@7.0.120(zod@4.6.5):
+  ai@7.0.123(zod@4.6.5):
     dependencies:
-      '@ai-sdk/gateway': 4.0.98(zod@4.6.5)
-      '@ai-sdk/provider': 4.0.19
-      '@ai-sdk/provider-utils': 5.0.50(zod@4.6.5)
+      '@ai-sdk/gateway': 4.0.101(zod@4.6.5)
+      '@ai-sdk/provider': 4.0.20
+      '@ai-sdk/provider-utils': 5.0.52(zod@4.6.5)
       zod: 4.6.5
 
   ajv-formats@2.1.1:
@@ -11633,9 +11624,9 @@ snapshots:
 
   assertion-error@2.0.1: {}
 
-  assistant-cloud@0.2.1(ai@7.0.120(zod@4.4.3)):
+  assistant-cloud@0.2.1(ai@7.0.123(zod@4.4.3)):
     dependencies:
-      ai: 7.0.120(zod@4.6.5)
+      ai: 7.0.123(zod@4.6.5)
       assistant-stream: 0.3.43
     transitivePeerDependencies:
       - ioredis
@@ -13526,13 +13517,13 @@ snapshots:
       path-key: 4.0.0
       unicorn-magic: 0.3.0
 
-  nuqs@2.9.0(@tanstack/react-router@1.170.29(react@19.3.0)(react-dom@19.3.0(react@19.3.0)))(react@19.3.0)(react-router@8.3.1(react@19.3.0)(react-dom@19.3.0(react@19.3.0))):
+  nuqs@2.9.0(@tanstack/react-router@1.170.29(react@19.3.0)(react-dom@19.3.0(react@19.3.0)))(react@19.3.0)(react-router@8.4.0(react@19.3.0)(react-dom@19.3.0(react@19.3.0))):
     dependencies:
       '@standard-schema/spec': 1.0.0
       react: 19.3.0
     optionalDependencies:
       '@tanstack/react-router': 1.170.29(react@19.3.0)(react-dom@19.3.0(react@19.3.0))
-      react-router: 8.3.1(react@19.3.0)(react-dom@19.3.0(react@19.3.0))
+      react-router: 8.4.0(react@19.3.0)(react-dom@19.3.0(react@19.3.0))
 
   object-assign@4.1.1: {}
 
@@ -14059,11 +14050,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  react-dom@19.2.8(react@19.2.8):
-    dependencies:
-      react: 19.2.8
-      scheduler: 0.27.0
-
   react-dom@19.3.0(react@19.3.0):
     dependencies:
       react: 19.3.0
@@ -14160,8 +14146,9 @@ snapshots:
       react-dom: 19.3.0(react@19.3.0)
       react-draggable: 4.7.2(react@19.3.0)(react-dom@19.3.0(react@19.3.0))
 
-  react-router@8.3.1(react@19.3.0)(react-dom@19.3.0(react@19.3.0)):
+  react-router@8.4.0(react@19.3.0)(react-dom@19.3.0(react@19.3.0)):
     dependencies:
+      '@remix-run/route-pattern': 0.22.1
       cookie-es: 3.1.1
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
@@ -14180,8 +14167,6 @@ snapshots:
       react: 19.3.0
       use-composed-ref: 1.4.0(@types/react@19.3.0)(react@19.3.0)
       use-latest: 1.3.0(@types/react@19.3.0)(react@19.3.0)
-
-  react@19.2.8: {}
 
   react@19.3.0: {}
 
@@ -14415,8 +14400,6 @@ snapshots:
 
   safer-buffer@2.1.2: {}
 
-  scheduler@0.27.0: {}
-
   scheduler@0.28.0: {}
 
   secure-json-parse@4.1.0: {}
@@ -14587,13 +14570,13 @@ snapshots:
 
   stdin-discarder@0.3.2: {}
 
-  storybook@10.6.0(@types/react@19.3.0):
+  storybook@10.6.1(@types/react@19.3.0):
     dependencies:
       '@storybook/global': 5.0.0
-      '@storybook/icons': 2.1.0(react@19.2.8)
+      '@storybook/icons': 2.1.0(react@19.3.0)
       '@testing-library/dom': 10.4.1
       '@testing-library/jest-dom': 6.9.1
-      '@testing-library/user-event': 14.6.4(@testing-library/dom@10.4.1)
+      '@testing-library/user-event': 14.6.7(@testing-library/dom@10.4.1)
       '@types/react': 19.3.0
       '@vitest/expect': 3.2.4
       '@vitest/spy': 3.2.4
@@ -14605,7 +14588,7 @@ snapshots:
       oxc-resolver: 11.21.2
       recast: 0.23.12
       semver: 7.8.5
-      use-sync-external-store: 1.6.0(react@19.2.8)
+      use-sync-external-store: 1.6.0(react@19.3.0)
       ws: 8.21.3
     transitivePeerDependencies:
       - bufferutil
@@ -14714,13 +14697,13 @@ snapshots:
 
   supports-preserve-symlinks-flag@1.0.0: {}
 
-  svix-react@1.13.9(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(svix@2.4.0):
+  svix-react@1.13.9(react@19.3.0)(react-dom@19.3.0(react@19.3.0))(svix@2.6.0):
     dependencies:
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
-      svix: 2.4.0
+      svix: 2.6.0
 
-  svix@2.4.0:
+  svix@2.6.0:
     dependencies:
       standardwebhooks: 1.1.1
 
@@ -14976,10 +14959,6 @@ snapshots:
   use-stick-to-bottom@1.1.6(react@19.3.0):
     dependencies:
       react: 19.3.0
-
-  use-sync-external-store@1.6.0(react@19.2.8):
-    dependencies:
-      react: 19.2.8
 
   use-sync-external-store@1.6.0(react@19.3.0):
     dependencies:

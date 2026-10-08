@@ -194,7 +194,7 @@ func TestServeMCP_PublicRemoteBackend_IssuerTokenForwardsUpstream(t *testing.T) 
 	require.NotEmpty(t, sessionID, "proxy must relay Mcp-Session-Id from upstream")
 }
 
-// The issuer gate accepts only user-session JWTs, so a Gram API key — even
+// The issuer gate accepts only user-session JWTs, so a Speakeasy API key — even
 // one in the server's own org — is rejected with an OAuth challenge.
 func TestServeMCP_PrivateRemoteBackend_APIKeyRejectedWithChallenge(t *testing.T) {
 	t.Parallel()
@@ -278,8 +278,8 @@ func TestServeMCP_PublicRemoteBackend_DeleteForwardsSessionTermination(t *testin
 	require.Equal(t, "abc-session", gotSession)
 }
 
-// A Gram API key is rejected at the issuer gate, so no request — and
-// therefore no Gram credential — ever reaches the upstream.
+// A Speakeasy API key is rejected at the issuer gate, so no request — and
+// therefore no Speakeasy credential — ever reaches the upstream.
 func TestServeMCP_PrivateRemoteBackend_APIKeyNeverReachesUpstream(t *testing.T) {
 	t.Parallel()
 
@@ -302,7 +302,7 @@ func TestServeMCP_PrivateRemoteBackend_APIKeyNeverReachesUpstream(t *testing.T) 
 
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(key), []byte(initializeBody))
 	require.Equal(t, http.StatusUnauthorized, rr.Code, "body=%s", rr.Body.String())
-	require.False(t, upstreamCalled, "Gram API key must never leak to the remote MCP server")
+	require.False(t, upstreamCalled, "Speakeasy API key must never leak to the remote MCP server")
 }
 
 // Public mcp_server with an issuer-gated bearer: the proxy strips the inbound
@@ -361,7 +361,7 @@ func TestServeMCP_PublicRemoteBackend_GramAPIKeyNeverReachesUpstream(t *testing.
 
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(key), []byte(initializeBody))
 	require.Equal(t, http.StatusUnauthorized, rr.Code, "body=%s", rr.Body.String())
-	require.False(t, upstreamCalled, "Gram API key must never leak even on a public mcp_server")
+	require.False(t, upstreamCalled, "Speakeasy API key must never leak even on a public mcp_server")
 }
 
 // The gate only accepts user-session JWTs, so org membership never enters
@@ -711,7 +711,7 @@ func mintIssuerGatedAccessToken(
 // A bearer minted against the mcp_server's issuer must authorise a
 // subsequent ServeMCP request to dispatch through the toolset-backed
 // runtime path (no upstream remote MCP server in this case — the
-// initialize response comes from Gram itself).
+// initialize response comes from Speakeasy itself).
 //
 // Catches the symmetric bug of the one fixed in serveRemoteBackend:
 // inside ServeToolsetResolved the legacy auth chain is skipped on

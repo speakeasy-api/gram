@@ -14,7 +14,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -879,19 +878,6 @@ func jsonStringToYAMLNode(s string) *yaml.Node {
 		n.Style = yaml.LiteralStyle
 	}
 	return n
-}
-
-// truncateAtRuneBoundary returns the longest prefix of s whose byte length is
-// <= n and that does not split a UTF-8 rune. Returns s unchanged when it
-// already fits.
-func truncateAtRuneBoundary(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	for n > 0 && !utf8.RuneStart(s[n]) {
-		n--
-	}
-	return s[:n]
 }
 
 // sleepCtx pauses for d, returning false if ctx is cancelled before the

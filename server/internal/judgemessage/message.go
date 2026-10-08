@@ -17,7 +17,7 @@ type Message struct {
 	// ChatID locates available history for an event that has not been persisted.
 	ChatID uuid.UUID
 
-	// Type is the Gram chat message type that produced this judge input.
+	// Type is the Speakeasy chat message type that produced this judge input.
 	Type message.Type
 	// Body is the text content rendered for judge evaluation.
 	Body string

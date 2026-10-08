@@ -68,6 +68,18 @@ type DiscoverProtectedResourceMetadataRequestBody struct {
 	RemoteMcpServerID string `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
 }
 
+// SetServerScopePinRequestBody is the type of the "remoteMcp" service
+// "setServerScopePin" endpoint HTTP request body.
+type SetServerScopePinRequestBody struct {
+	// The ID of the remote-backed MCP server.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// Scopes to pin on the server's protected resource, shared by servers with the
+	// same upstream URL, in request order. Whitespace is trimmed, blanks and
+	// duplicates are dropped, and at most 100 scopes may remain; an empty list
+	// clears the pin.
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
+}
+
 // ProbeURLRequestBody is the type of the "remoteMcp" service "probeURL"
 // endpoint HTTP request body.
 type ProbeURLRequestBody struct {
@@ -217,6 +229,60 @@ type DiscoverProtectedResourceMetadataResponseBody struct {
 	// missing resource field, mismatched resource value). Empty when available is
 	// false.
 	DiscoveryWarnings []string `form:"discovery_warnings,omitempty" json:"discovery_warnings,omitempty" xml:"discovery_warnings,omitempty"`
+}
+
+// GetServerScopesResponseBody is the type of the "remoteMcp" service
+// "getServerScopes" endpoint HTTP response body.
+type GetServerScopesResponseBody struct {
+	// The protected resource: the server's upstream URL.
+	ResourceURL *string `form:"resource_url,omitempty" json:"resource_url,omitempty" xml:"resource_url,omitempty"`
+	// The operator's scope pin on the protected resource, shared by servers with
+	// the same upstream URL; empty when unset.
+	PinnedScopes []string `form:"pinned_scopes,omitempty" json:"pinned_scopes,omitempty" xml:"pinned_scopes,omitempty"`
+	// Whether a read of the resource's metadata within the last good window
+	// captured an advertised list.
+	AdvertisedScopesKnown *bool `form:"advertised_scopes_known,omitempty" json:"advertised_scopes_known,omitempty" xml:"advertised_scopes_known,omitempty"`
+	// The resource's advertised scopes_supported from that read. Absent when
+	// unknown or empty; see advertised_scopes_known.
+	AdvertisedScopes []string `form:"advertised_scopes,omitempty" json:"advertised_scopes,omitempty" xml:"advertised_scopes,omitempty"`
+	// The scope parameter of the resource's last WWW-Authenticate challenge; empty
+	// when none was seen.
+	ChallengeScopes []string `form:"challenge_scopes,omitempty" json:"challenge_scopes,omitempty" xml:"challenge_scopes,omitempty"`
+	// Whether the organization's logins consult the protected resource (challenge
+	// scopes, pin, advertised list). Off, the pin is stored but not applied.
+	DiscoveryEnabled *bool `form:"discovery_enabled,omitempty" json:"discovery_enabled,omitempty" xml:"discovery_enabled,omitempty"`
+	// One entry per client bound to the server's user session issuer.
+	Clients []*RemoteMcpServerClientScopesResponseBody `form:"clients,omitempty" json:"clients,omitempty" xml:"clients,omitempty"`
+	// How many other live MCP servers in the project share this upstream URL, and
+	// so this pin.
+	SharedServerCount *int `form:"shared_server_count,omitempty" json:"shared_server_count,omitempty" xml:"shared_server_count,omitempty"`
+}
+
+// SetServerScopePinResponseBody is the type of the "remoteMcp" service
+// "setServerScopePin" endpoint HTTP response body.
+type SetServerScopePinResponseBody struct {
+	// The protected resource: the server's upstream URL.
+	ResourceURL *string `form:"resource_url,omitempty" json:"resource_url,omitempty" xml:"resource_url,omitempty"`
+	// The operator's scope pin on the protected resource, shared by servers with
+	// the same upstream URL; empty when unset.
+	PinnedScopes []string `form:"pinned_scopes,omitempty" json:"pinned_scopes,omitempty" xml:"pinned_scopes,omitempty"`
+	// Whether a read of the resource's metadata within the last good window
+	// captured an advertised list.
+	AdvertisedScopesKnown *bool `form:"advertised_scopes_known,omitempty" json:"advertised_scopes_known,omitempty" xml:"advertised_scopes_known,omitempty"`
+	// The resource's advertised scopes_supported from that read. Absent when
+	// unknown or empty; see advertised_scopes_known.
+	AdvertisedScopes []string `form:"advertised_scopes,omitempty" json:"advertised_scopes,omitempty" xml:"advertised_scopes,omitempty"`
+	// The scope parameter of the resource's last WWW-Authenticate challenge; empty
+	// when none was seen.
+	ChallengeScopes []string `form:"challenge_scopes,omitempty" json:"challenge_scopes,omitempty" xml:"challenge_scopes,omitempty"`
+	// Whether the organization's logins consult the protected resource (challenge
+	// scopes, pin, advertised list). Off, the pin is stored but not applied.
+	DiscoveryEnabled *bool `form:"discovery_enabled,omitempty" json:"discovery_enabled,omitempty" xml:"discovery_enabled,omitempty"`
+	// One entry per client bound to the server's user session issuer.
+	Clients []*RemoteMcpServerClientScopesResponseBody `form:"clients,omitempty" json:"clients,omitempty" xml:"clients,omitempty"`
+	// How many other live MCP servers in the project share this upstream URL, and
+	// so this pin.
+	SharedServerCount *int `form:"shared_server_count,omitempty" json:"shared_server_count,omitempty" xml:"shared_server_count,omitempty"`
 }
 
 // ProbeURLResponseBody is the type of the "remoteMcp" service "probeURL"
@@ -1415,6 +1481,377 @@ type DiscoverProtectedResourceMetadataUnexpectedResponseBody struct {
 // "remoteMcp" service "discoverProtectedResourceMetadata" endpoint HTTP
 // response body for the "gateway_error" error.
 type DiscoverProtectedResourceMetadataGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerScopesUnauthorizedResponseBody is the type of the "remoteMcp"
+// service "getServerScopes" endpoint HTTP response body for the "unauthorized"
+// error.
+type GetServerScopesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerScopesForbiddenResponseBody is the type of the "remoteMcp" service
+// "getServerScopes" endpoint HTTP response body for the "forbidden" error.
+type GetServerScopesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerScopesBadRequestResponseBody is the type of the "remoteMcp" service
+// "getServerScopes" endpoint HTTP response body for the "bad_request" error.
+type GetServerScopesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerScopesNotFoundResponseBody is the type of the "remoteMcp" service
+// "getServerScopes" endpoint HTTP response body for the "not_found" error.
+type GetServerScopesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerScopesConflictResponseBody is the type of the "remoteMcp" service
+// "getServerScopes" endpoint HTTP response body for the "conflict" error.
+type GetServerScopesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerScopesUnsupportedMediaResponseBody is the type of the "remoteMcp"
+// service "getServerScopes" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetServerScopesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerScopesInvalidResponseBody is the type of the "remoteMcp" service
+// "getServerScopes" endpoint HTTP response body for the "invalid" error.
+type GetServerScopesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerScopesInvariantViolationResponseBody is the type of the "remoteMcp"
+// service "getServerScopes" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetServerScopesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerScopesUnexpectedResponseBody is the type of the "remoteMcp" service
+// "getServerScopes" endpoint HTTP response body for the "unexpected" error.
+type GetServerScopesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetServerScopesGatewayErrorResponseBody is the type of the "remoteMcp"
+// service "getServerScopes" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetServerScopesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetServerScopePinUnauthorizedResponseBody is the type of the "remoteMcp"
+// service "setServerScopePin" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetServerScopePinUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetServerScopePinForbiddenResponseBody is the type of the "remoteMcp"
+// service "setServerScopePin" endpoint HTTP response body for the "forbidden"
+// error.
+type SetServerScopePinForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetServerScopePinBadRequestResponseBody is the type of the "remoteMcp"
+// service "setServerScopePin" endpoint HTTP response body for the
+// "bad_request" error.
+type SetServerScopePinBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetServerScopePinNotFoundResponseBody is the type of the "remoteMcp" service
+// "setServerScopePin" endpoint HTTP response body for the "not_found" error.
+type SetServerScopePinNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetServerScopePinConflictResponseBody is the type of the "remoteMcp" service
+// "setServerScopePin" endpoint HTTP response body for the "conflict" error.
+type SetServerScopePinConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetServerScopePinUnsupportedMediaResponseBody is the type of the "remoteMcp"
+// service "setServerScopePin" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetServerScopePinUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetServerScopePinInvalidResponseBody is the type of the "remoteMcp" service
+// "setServerScopePin" endpoint HTTP response body for the "invalid" error.
+type SetServerScopePinInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetServerScopePinInvariantViolationResponseBody is the type of the
+// "remoteMcp" service "setServerScopePin" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetServerScopePinInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetServerScopePinUnexpectedResponseBody is the type of the "remoteMcp"
+// service "setServerScopePin" endpoint HTTP response body for the "unexpected"
+// error.
+type SetServerScopePinUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetServerScopePinGatewayErrorResponseBody is the type of the "remoteMcp"
+// service "setServerScopePin" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetServerScopePinGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2954,7 +3391,7 @@ type McpServerResponseBody struct {
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the unproxied MCP server used as the backend, if any. A server
-	// backed by an unproxied MCP server is never proxied by Gram.
+	// backed by an unproxied MCP server is never proxied by Speakeasy.
 	UnproxiedMcpServerID *string `form:"unproxied_mcp_server_id,omitempty" json:"unproxied_mcp_server_id,omitempty" xml:"unproxied_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
@@ -3000,6 +3437,24 @@ type ProtectedResourceMetadataUnavailableResponseBody struct {
 	// Human-readable summary of the unavailability reason, composed by the
 	// backend. Dashboards should render verbatim.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
+// RemoteMcpServerClientScopesResponseBody is used to define fields on response
+// body types.
+type RemoteMcpServerClientScopesResponseBody struct {
+	// The remote session client's ID.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// The precedence step that decided the request.
+	ScopeSource *string `form:"scope_source,omitempty" json:"scope_source,omitempty" xml:"scope_source,omitempty"`
+	// The scope parameter the login would send; empty sends none.
+	RequestedScopes []string `form:"requested_scopes,omitempty" json:"requested_scopes,omitempty" xml:"requested_scopes,omitempty"`
+	// Pinned scopes the resource does not advertise; sent regardless. Empty when
+	// the pin does not decide or the resource's list is unknown.
+	UnadvertisedPinnedScopes []string `form:"unadvertised_pinned_scopes,omitempty" json:"unadvertised_pinned_scopes,omitempty" xml:"unadvertised_pinned_scopes,omitempty"`
+	// Whether a pin, if set, decides this client's request: discovery is on, the
+	// client owns the resource, and neither its own scope nor a challenge outranks
+	// the pin.
+	PinWouldDecide *bool `form:"pin_would_decide,omitempty" json:"pin_would_decide,omitempty" xml:"pin_would_decide,omitempty"`
 }
 
 // RemoteMcpServerHeaderResponseBody is used to define fields on response body
@@ -3068,6 +3523,23 @@ func NewUpdateServerRequestBody(p *remotemcp.UpdateServerPayload) *UpdateServerR
 func NewDiscoverProtectedResourceMetadataRequestBody(p *remotemcp.DiscoverProtectedResourceMetadataPayload) *DiscoverProtectedResourceMetadataRequestBody {
 	body := &DiscoverProtectedResourceMetadataRequestBody{
 		RemoteMcpServerID: p.RemoteMcpServerID,
+	}
+	return body
+}
+
+// NewSetServerScopePinRequestBody builds the HTTP request body from the
+// payload of the "setServerScopePin" endpoint of the "remoteMcp" service.
+func NewSetServerScopePinRequestBody(p *remotemcp.SetServerScopePinPayload) *SetServerScopePinRequestBody {
+	body := &SetServerScopePinRequestBody{
+		McpServerID: p.McpServerID,
+	}
+	if p.Scopes != nil {
+		body.Scopes = make([]string, len(p.Scopes))
+		for i, val := range p.Scopes {
+			body.Scopes[i] = val
+		}
+	} else {
+		body.Scopes = []string{}
 	}
 	return body
 }
@@ -4107,6 +4579,376 @@ func NewDiscoverProtectedResourceMetadataUnexpected(body *DiscoverProtectedResou
 // NewDiscoverProtectedResourceMetadataGatewayError builds a remoteMcp service
 // discoverProtectedResourceMetadata endpoint gateway_error error.
 func NewDiscoverProtectedResourceMetadataGatewayError(body *DiscoverProtectedResourceMetadataGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerScopesRemoteMcpServerScopesOK builds a "remoteMcp" service
+// "getServerScopes" endpoint result from a HTTP "OK" response.
+func NewGetServerScopesRemoteMcpServerScopesOK(body *GetServerScopesResponseBody) *remotemcp.RemoteMcpServerScopes {
+	v := &remotemcp.RemoteMcpServerScopes{
+		ResourceURL:           *body.ResourceURL,
+		AdvertisedScopesKnown: *body.AdvertisedScopesKnown,
+		DiscoveryEnabled:      *body.DiscoveryEnabled,
+		SharedServerCount:     *body.SharedServerCount,
+	}
+	v.PinnedScopes = make([]string, len(body.PinnedScopes))
+	for i, val := range body.PinnedScopes {
+		v.PinnedScopes[i] = val
+	}
+	if body.AdvertisedScopes != nil {
+		v.AdvertisedScopes = make([]string, len(body.AdvertisedScopes))
+		for i, val := range body.AdvertisedScopes {
+			v.AdvertisedScopes[i] = val
+		}
+	}
+	v.ChallengeScopes = make([]string, len(body.ChallengeScopes))
+	for i, val := range body.ChallengeScopes {
+		v.ChallengeScopes[i] = val
+	}
+	v.Clients = make([]*remotemcp.RemoteMcpServerClientScopes, len(body.Clients))
+	for i, val := range body.Clients {
+		if val == nil {
+			v.Clients[i] = nil
+			continue
+		}
+		v.Clients[i] = unmarshalRemoteMcpServerClientScopesResponseBodyToRemotemcpRemoteMcpServerClientScopes(val)
+	}
+
+	return v
+}
+
+// NewGetServerScopesUnauthorized builds a remoteMcp service getServerScopes
+// endpoint unauthorized error.
+func NewGetServerScopesUnauthorized(body *GetServerScopesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerScopesForbidden builds a remoteMcp service getServerScopes
+// endpoint forbidden error.
+func NewGetServerScopesForbidden(body *GetServerScopesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerScopesBadRequest builds a remoteMcp service getServerScopes
+// endpoint bad_request error.
+func NewGetServerScopesBadRequest(body *GetServerScopesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerScopesNotFound builds a remoteMcp service getServerScopes
+// endpoint not_found error.
+func NewGetServerScopesNotFound(body *GetServerScopesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerScopesConflict builds a remoteMcp service getServerScopes
+// endpoint conflict error.
+func NewGetServerScopesConflict(body *GetServerScopesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerScopesUnsupportedMedia builds a remoteMcp service
+// getServerScopes endpoint unsupported_media error.
+func NewGetServerScopesUnsupportedMedia(body *GetServerScopesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerScopesInvalid builds a remoteMcp service getServerScopes
+// endpoint invalid error.
+func NewGetServerScopesInvalid(body *GetServerScopesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerScopesInvariantViolation builds a remoteMcp service
+// getServerScopes endpoint invariant_violation error.
+func NewGetServerScopesInvariantViolation(body *GetServerScopesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerScopesUnexpected builds a remoteMcp service getServerScopes
+// endpoint unexpected error.
+func NewGetServerScopesUnexpected(body *GetServerScopesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetServerScopesGatewayError builds a remoteMcp service getServerScopes
+// endpoint gateway_error error.
+func NewGetServerScopesGatewayError(body *GetServerScopesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetServerScopePinRemoteMcpServerScopesOK builds a "remoteMcp" service
+// "setServerScopePin" endpoint result from a HTTP "OK" response.
+func NewSetServerScopePinRemoteMcpServerScopesOK(body *SetServerScopePinResponseBody) *remotemcp.RemoteMcpServerScopes {
+	v := &remotemcp.RemoteMcpServerScopes{
+		ResourceURL:           *body.ResourceURL,
+		AdvertisedScopesKnown: *body.AdvertisedScopesKnown,
+		DiscoveryEnabled:      *body.DiscoveryEnabled,
+		SharedServerCount:     *body.SharedServerCount,
+	}
+	v.PinnedScopes = make([]string, len(body.PinnedScopes))
+	for i, val := range body.PinnedScopes {
+		v.PinnedScopes[i] = val
+	}
+	if body.AdvertisedScopes != nil {
+		v.AdvertisedScopes = make([]string, len(body.AdvertisedScopes))
+		for i, val := range body.AdvertisedScopes {
+			v.AdvertisedScopes[i] = val
+		}
+	}
+	v.ChallengeScopes = make([]string, len(body.ChallengeScopes))
+	for i, val := range body.ChallengeScopes {
+		v.ChallengeScopes[i] = val
+	}
+	v.Clients = make([]*remotemcp.RemoteMcpServerClientScopes, len(body.Clients))
+	for i, val := range body.Clients {
+		if val == nil {
+			v.Clients[i] = nil
+			continue
+		}
+		v.Clients[i] = unmarshalRemoteMcpServerClientScopesResponseBodyToRemotemcpRemoteMcpServerClientScopes(val)
+	}
+
+	return v
+}
+
+// NewSetServerScopePinUnauthorized builds a remoteMcp service
+// setServerScopePin endpoint unauthorized error.
+func NewSetServerScopePinUnauthorized(body *SetServerScopePinUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetServerScopePinForbidden builds a remoteMcp service setServerScopePin
+// endpoint forbidden error.
+func NewSetServerScopePinForbidden(body *SetServerScopePinForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetServerScopePinBadRequest builds a remoteMcp service setServerScopePin
+// endpoint bad_request error.
+func NewSetServerScopePinBadRequest(body *SetServerScopePinBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetServerScopePinNotFound builds a remoteMcp service setServerScopePin
+// endpoint not_found error.
+func NewSetServerScopePinNotFound(body *SetServerScopePinNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetServerScopePinConflict builds a remoteMcp service setServerScopePin
+// endpoint conflict error.
+func NewSetServerScopePinConflict(body *SetServerScopePinConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetServerScopePinUnsupportedMedia builds a remoteMcp service
+// setServerScopePin endpoint unsupported_media error.
+func NewSetServerScopePinUnsupportedMedia(body *SetServerScopePinUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetServerScopePinInvalid builds a remoteMcp service setServerScopePin
+// endpoint invalid error.
+func NewSetServerScopePinInvalid(body *SetServerScopePinInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetServerScopePinInvariantViolation builds a remoteMcp service
+// setServerScopePin endpoint invariant_violation error.
+func NewSetServerScopePinInvariantViolation(body *SetServerScopePinInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetServerScopePinUnexpected builds a remoteMcp service setServerScopePin
+// endpoint unexpected error.
+func NewSetServerScopePinUnexpected(body *SetServerScopePinUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetServerScopePinGatewayError builds a remoteMcp service
+// setServerScopePin endpoint gateway_error error.
+func NewSetServerScopePinGatewayError(body *SetServerScopePinGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5581,6 +6423,80 @@ func ValidateDiscoverProtectedResourceMetadataResponseBody(body *DiscoverProtect
 	if body.Unavailable != nil {
 		if err2 := ValidateProtectedResourceMetadataUnavailableResponseBody(body.Unavailable); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateGetServerScopesResponseBody runs the validations defined on
+// GetServerScopesResponseBody
+func ValidateGetServerScopesResponseBody(body *GetServerScopesResponseBody) (err error) {
+	if body.ResourceURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_url", "body"))
+	}
+	if body.PinnedScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pinned_scopes", "body"))
+	}
+	if body.AdvertisedScopesKnown == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("advertised_scopes_known", "body"))
+	}
+	if body.ChallengeScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("challenge_scopes", "body"))
+	}
+	if body.DiscoveryEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("discovery_enabled", "body"))
+	}
+	if body.Clients == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("clients", "body"))
+	}
+	if body.SharedServerCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("shared_server_count", "body"))
+	}
+	if body.ResourceURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource_url", *body.ResourceURL, goa.FormatURI))
+	}
+	for _, e := range body.Clients {
+		if e != nil {
+			if err2 := ValidateRemoteMcpServerClientScopesResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateSetServerScopePinResponseBody runs the validations defined on
+// SetServerScopePinResponseBody
+func ValidateSetServerScopePinResponseBody(body *SetServerScopePinResponseBody) (err error) {
+	if body.ResourceURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_url", "body"))
+	}
+	if body.PinnedScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pinned_scopes", "body"))
+	}
+	if body.AdvertisedScopesKnown == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("advertised_scopes_known", "body"))
+	}
+	if body.ChallengeScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("challenge_scopes", "body"))
+	}
+	if body.DiscoveryEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("discovery_enabled", "body"))
+	}
+	if body.Clients == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("clients", "body"))
+	}
+	if body.SharedServerCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("shared_server_count", "body"))
+	}
+	if body.ResourceURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource_url", *body.ResourceURL, goa.FormatURI))
+	}
+	for _, e := range body.Clients {
+		if e != nil {
+			if err2 := ValidateRemoteMcpServerClientScopesResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -7161,6 +8077,486 @@ func ValidateDiscoverProtectedResourceMetadataUnexpectedResponseBody(body *Disco
 // validations defined on
 // discoverProtectedResourceMetadata_gateway_error_response_body
 func ValidateDiscoverProtectedResourceMetadataGatewayErrorResponseBody(body *DiscoverProtectedResourceMetadataGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerScopesUnauthorizedResponseBody runs the validations defined
+// on getServerScopes_unauthorized_response_body
+func ValidateGetServerScopesUnauthorizedResponseBody(body *GetServerScopesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerScopesForbiddenResponseBody runs the validations defined on
+// getServerScopes_forbidden_response_body
+func ValidateGetServerScopesForbiddenResponseBody(body *GetServerScopesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerScopesBadRequestResponseBody runs the validations defined
+// on getServerScopes_bad_request_response_body
+func ValidateGetServerScopesBadRequestResponseBody(body *GetServerScopesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerScopesNotFoundResponseBody runs the validations defined on
+// getServerScopes_not_found_response_body
+func ValidateGetServerScopesNotFoundResponseBody(body *GetServerScopesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerScopesConflictResponseBody runs the validations defined on
+// getServerScopes_conflict_response_body
+func ValidateGetServerScopesConflictResponseBody(body *GetServerScopesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerScopesUnsupportedMediaResponseBody runs the validations
+// defined on getServerScopes_unsupported_media_response_body
+func ValidateGetServerScopesUnsupportedMediaResponseBody(body *GetServerScopesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerScopesInvalidResponseBody runs the validations defined on
+// getServerScopes_invalid_response_body
+func ValidateGetServerScopesInvalidResponseBody(body *GetServerScopesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerScopesInvariantViolationResponseBody runs the validations
+// defined on getServerScopes_invariant_violation_response_body
+func ValidateGetServerScopesInvariantViolationResponseBody(body *GetServerScopesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerScopesUnexpectedResponseBody runs the validations defined
+// on getServerScopes_unexpected_response_body
+func ValidateGetServerScopesUnexpectedResponseBody(body *GetServerScopesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetServerScopesGatewayErrorResponseBody runs the validations defined
+// on getServerScopes_gateway_error_response_body
+func ValidateGetServerScopesGatewayErrorResponseBody(body *GetServerScopesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetServerScopePinUnauthorizedResponseBody runs the validations
+// defined on setServerScopePin_unauthorized_response_body
+func ValidateSetServerScopePinUnauthorizedResponseBody(body *SetServerScopePinUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetServerScopePinForbiddenResponseBody runs the validations defined
+// on setServerScopePin_forbidden_response_body
+func ValidateSetServerScopePinForbiddenResponseBody(body *SetServerScopePinForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetServerScopePinBadRequestResponseBody runs the validations defined
+// on setServerScopePin_bad_request_response_body
+func ValidateSetServerScopePinBadRequestResponseBody(body *SetServerScopePinBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetServerScopePinNotFoundResponseBody runs the validations defined
+// on setServerScopePin_not_found_response_body
+func ValidateSetServerScopePinNotFoundResponseBody(body *SetServerScopePinNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetServerScopePinConflictResponseBody runs the validations defined
+// on setServerScopePin_conflict_response_body
+func ValidateSetServerScopePinConflictResponseBody(body *SetServerScopePinConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetServerScopePinUnsupportedMediaResponseBody runs the validations
+// defined on setServerScopePin_unsupported_media_response_body
+func ValidateSetServerScopePinUnsupportedMediaResponseBody(body *SetServerScopePinUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetServerScopePinInvalidResponseBody runs the validations defined on
+// setServerScopePin_invalid_response_body
+func ValidateSetServerScopePinInvalidResponseBody(body *SetServerScopePinInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetServerScopePinInvariantViolationResponseBody runs the validations
+// defined on setServerScopePin_invariant_violation_response_body
+func ValidateSetServerScopePinInvariantViolationResponseBody(body *SetServerScopePinInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetServerScopePinUnexpectedResponseBody runs the validations defined
+// on setServerScopePin_unexpected_response_body
+func ValidateSetServerScopePinUnexpectedResponseBody(body *SetServerScopePinUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetServerScopePinGatewayErrorResponseBody runs the validations
+// defined on setServerScopePin_gateway_error_response_body
+func ValidateSetServerScopePinGatewayErrorResponseBody(body *SetServerScopePinGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9216,6 +10612,35 @@ func ValidateProtectedResourceMetadataUnavailableResponseBody(body *ProtectedRes
 	}
 	if body.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	return
+}
+
+// ValidateRemoteMcpServerClientScopesResponseBody runs the validations defined
+// on RemoteMcpServerClientScopesResponseBody
+func ValidateRemoteMcpServerClientScopesResponseBody(body *RemoteMcpServerClientScopesResponseBody) (err error) {
+	if body.ClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id", "body"))
+	}
+	if body.ScopeSource == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope_source", "body"))
+	}
+	if body.RequestedScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requested_scopes", "body"))
+	}
+	if body.UnadvertisedPinnedScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unadvertised_pinned_scopes", "body"))
+	}
+	if body.PinWouldDecide == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pin_would_decide", "body"))
+	}
+	if body.ClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id", *body.ClientID, goa.FormatUUID))
+	}
+	if body.ScopeSource != nil {
+		if !(*body.ScopeSource == "resource_pin" || *body.ScopeSource == "client_scope" || *body.ScopeSource == "challenge_scope" || *body.ScopeSource == "live_resource" || *body.ScopeSource == "cached_resource" || *body.ScopeSource == "issuer_override" || *body.ScopeSource == "issuer_omitted" || *body.ScopeSource == "issuer_catalogue" || *body.ScopeSource == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope_source", *body.ScopeSource, []any{"resource_pin", "client_scope", "challenge_scope", "live_resource", "cached_resource", "issuer_override", "issuer_omitted", "issuer_catalogue", "none"}))
+		}
 	}
 	return
 }

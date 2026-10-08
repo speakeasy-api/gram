@@ -14,29 +14,133 @@ interface ClaudeTagWake {
   }>;
 }
 
-export function parseClaudeTagWake(content: unknown): ClaudeTagWake | null {
-  let text = messageText(content).trim();
-  let botId: string | undefined;
-  let contextChannel: { id: string; name: string } | undefined;
-  const context = text.match(/^<session-context nonce="([A-Za-z0-9_-]+)">/);
-  if (context) {
-    const closing = `</session-context nonce="${context[1]}">`;
-    const end = text.indexOf(closing, context[0].length);
-    if (end < 0) return null;
-    botId = text
-      .slice(context[0].length, end)
-      .match(/^You: .*bot user id `([^`]+)`/m)?.[1];
-    const channel = text
-      .slice(context[0].length, end)
-      .match(/^Channel: #([^\n]+) \(id: `([^`]+)`\)\r?$/m);
-    if (channel) contextChannel = { id: channel[2]!, name: channel[1]! };
-    text = text.slice(end + closing.length).trim();
+/** Only harness framing may precede a delivery. Quoted markup and history
+ * remain ordinary text, and nonce-bearing context is opaque until its own end. */
+function deliveryEnvelope(text: string): { body: string; context: string } {
+  text = text.trim();
+  const contexts: string[] = [];
+  for (;;) {
+    const header = text.match(
+      /^<(system-reminder|session-context)(?:\s[^>]*|)>/,
+    );
+    if (!header) return { body: text, context: contexts.join("\n") };
+    let end = -1;
+    let closingLength = 0;
+    if (header[1] === "session-context") {
+      const nonce = contextNonce(header[0]);
+      if (nonce === null) return { body: "", context: "" };
+      const closings = text
+        .slice(header[0].length)
+        .matchAll(/<\/session-context(?:\s[^>]*|)>/g);
+      for (const closing of closings) {
+        if (contextNonce(closing[0]) === nonce) {
+          end = closing.index + header[0].length;
+          closingLength = closing[0].length;
+          break;
+        }
+      }
+    } else {
+      const closing = `</${header[1]}>`;
+      end = text.indexOf(closing, header[0].length);
+      closingLength = closing.length;
+    }
+    if (end < 0) return { body: "", context: "" };
+    if (header[1] === "session-context")
+      contexts.push(text.slice(header[0].length, end));
+    text = text.slice(end + closingLength).trim();
   }
+}
+
+function contextNonce(tag: string): string | undefined | null {
+  const doc = new DOMParser().parseFromString(
+    tag.replace(/^<\//, "<").replace(/>$/, "/>"),
+    "application/xml",
+  );
+  if (doc.querySelector("parsererror")) return null;
+  return Array.from(doc.documentElement.attributes)
+    .find((attribute) => attribute.localName.split(":").at(-1) === "nonce")
+    ?.value.trim();
+}
+
+function deliveryEnd(text: string, name: string): number {
+  const closing = `</${name}>`;
+  const token = /<!\[CDATA\[[\s\S]*?\]\]>|<\/[^>]*>/g;
+  for (const match of text.matchAll(token)) {
+    if (match[0] === closing) return match.index + closing.length;
+  }
+  return -1;
+}
+
+function deliveryXML(text: string): string {
+  return text
+    .split(/(<!\[CDATA\[[\s\S]*?\]\]>)/)
+    .map((part) => {
+      if (part.startsWith("<![CDATA["))
+        return part
+          .slice(9, -3)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      return (
+        part
+          .replace(
+            /<(?:[@#][^<>\s]+|https?:\/\/[^<>\s]+)>/g,
+            (value) => `&lt;${value.slice(1, -1)}&gt;`,
+          )
+          // Keep tag-like markup intact so malformed envelopes still fail XML parsing.
+          .replace(/<(?![A-Za-z_:/!?])/g, "&lt;")
+          .replace(
+            /&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/g,
+            "&amp;",
+          )
+      );
+    })
+    .join("");
+}
+
+function deliveryMessages(element: Element): Element[] {
+  return Array.from(element.children).flatMap((child): Element[] => {
+    if (child.tagName === "message") return [child];
+    if (
+      [
+        "participants",
+        "system-note",
+        "system-reminder",
+        "session-context",
+        "history",
+        "reference",
+        "thread_activity",
+        "channel",
+      ].includes(child.tagName)
+    )
+      return [];
+    return deliveryMessages(child);
+  });
+}
+
+function attribute(element: Element, ...names: string[]): string | undefined {
+  for (const name of names) {
+    const value = element.getAttribute(name)?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function slackText(text: string): string {
+  return text.replace(/<@[^>|]+\|([^>]+)>/g, "@$1");
+}
+
+export function parseClaudeTagWake(content: unknown): ClaudeTagWake | null {
+  const { body: text, context } = deliveryEnvelope(messageText(content));
+  const botId = context.match(/^You: .*bot user id `([^`]+)`/m)?.[1]?.trim();
+  const channel = context.match(/^Channel: #([^\n]+) \(id: `([^`]+)`\)\r?$/m);
+  let contextChannel: { id: string; name: string } | undefined;
+  if (channel) contextChannel = { id: channel[2]!, name: channel[1]! };
   if (/^<standing_owner_message[\s>]/.test(text)) {
-    const end = text.indexOf("</standing_owner_message>");
+    const end = deliveryEnd(text, "standing_owner_message");
     if (end < 0) return null;
     const doc = new DOMParser().parseFromString(
-      text.slice(0, end + "</standing_owner_message>".length),
+      deliveryXML(text.slice(0, end)),
       "application/xml",
     );
     const el = doc.documentElement;
@@ -47,10 +151,13 @@ export function parseClaudeTagWake(content: unknown): ClaudeTagWake | null {
     )
       return null;
     return {
-      title: (el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 80),
+      title: slackText(el.textContent ?? "")
+        .trim()
+        .replace(/\s+/g, " ")
+        .slice(0, 80),
       messages: [
         {
-          text: el.textContent ?? "",
+          text: slackText(el.textContent ?? ""),
           author: el.getAttribute("sender")!,
           sender: el.getAttribute("sender")!,
           id: el.getAttribute("ts"),
@@ -62,10 +169,10 @@ export function parseClaudeTagWake(content: unknown): ClaudeTagWake | null {
     };
   }
   if (!text.startsWith("<wake")) return null;
-  const end = text.indexOf("</wake>");
+  const end = deliveryEnd(text, "wake");
   if (end < 0) return null;
   const doc = new DOMParser().parseFromString(
-    text.slice(0, end + "</wake>".length),
+    deliveryXML(text.slice(0, end)),
     "application/xml",
   );
   if (
@@ -74,38 +181,34 @@ export function parseClaudeTagWake(content: unknown): ClaudeTagWake | null {
   )
     return null;
   const channels = Array.from(doc.documentElement.children).filter(
-    (el) => el.tagName === "channel" && el.getAttribute("id"),
+    (el) => el.tagName === "channel" && attribute(el, "id", "channel-id"),
   );
-  const messages = channels.flatMap((channel) =>
-    Array.from(channel.children)
+  const messages = channels.flatMap((channel) => {
+    const channelId = attribute(channel, "id", "channel-id")!;
+    let channelName = attribute(channel, "name", "channel-name") ?? channelId;
+    if (contextChannel && contextChannel.id === channelId)
+      channelName = contextChannel.name;
+    return deliveryMessages(channel)
       .filter(
         (el) =>
           el.tagName === "message" &&
           el.getAttribute("from") === "human" &&
-          (!botId || el.getAttribute("author-id") !== botId),
+          (!botId ||
+            attribute(el, "author-id", "sender", "slack-id") !== botId),
       )
       .map((el) => ({
-        text: (el.textContent ?? "").replace(/<@[^>|]+\|([^>]+)>/g, "@$1"),
+        text: slackText(el.textContent ?? ""),
         author:
           el.getAttribute("author") ||
           el.getAttribute("author-handle") ||
           "User",
-        sender:
-          el.getAttribute("author-id") ??
-          el.getAttribute("sender") ??
-          undefined,
-        id: el.getAttribute("id"),
+        sender: attribute(el, "author-id", "sender", "slack-id"),
+        id: attribute(el, "id", "ts") ?? null,
         timestamp: el.getAttribute("sent-at"),
         trigger: el.getAttribute("trigger") === "true",
-        channel:
-          (contextChannel?.id === channel.getAttribute("id")
-            ? contextChannel.name
-            : undefined) ||
-          channel.getAttribute("name") ||
-          channel.getAttribute("channel-name") ||
-          channel.getAttribute("id")!,
-      })),
-  );
+        channel: channelName,
+      }));
+  });
   if (!messages.length) return null;
   return {
     messages,
@@ -199,13 +302,22 @@ export function projectClaudeTagRows(rows: TranscriptRow[]): TranscriptRow[] {
         const timestamp = message.timestamp
           ? new Date(message.timestamp)
           : row.message.createdAt;
+        let displayName: string | undefined;
+        if (message.author !== "User" && message.author !== message.sender)
+          displayName = message.author;
+        const participant = row.message.participants?.find(
+          (participant) =>
+            participant.provider === "slack" &&
+            participant.providerUserId === message.sender,
+        );
         const participants = message.sender
           ? [
-              row.message.participants?.find(
-                (participant) =>
-                  participant.provider === "slack" &&
-                  participant.providerUserId === message.sender,
-              ) ?? { provider: "slack", providerUserId: message.sender },
+              {
+                ...participant,
+                provider: "slack",
+                providerUserId: message.sender,
+                displayName: participant?.displayName ?? displayName,
+              },
             ]
           : undefined;
         return [

@@ -1740,7 +1740,7 @@ jobs:
           done
           echo "All login attempts failed"
           exit 1
-      # The Gram admin dashboard. It ships as its own image because it is
+      # The Speakeasy admin dashboard. It ships as its own image because it is
       # served from the admin origin (same host as the admin API) rather than
       # the app origin. The `pnpm build` step above already produced its dist,
       # so this only packages it; it needs no CDN asset upload.
@@ -2097,7 +2097,7 @@ jobs:
       - name: Test Go server
         run: mise run test:functions
 
-      - name: Build Gram Functions host
+      - name: Build Speakeasy Functions host
         env:
           MELANGE_PRIVATE_KEY: ${{ secrets.MELANGE_PRIVATE_KEY }}
         run: |
@@ -2343,11 +2343,13 @@ jobs:
       - name: Install dependencies
         run: aube install --frozen-lockfile
 
-      - name: Test TypeScript framework
-        run: aube run --filter "./ts-framework/**" --if-present test
-
+      # Build first: the @gram-ai/functions compat tests import the built
+      # @speakeasy-api/functions package.
       - name: Build TypeScript framework
         run: aube run --filter "./ts-framework/**" --if-present build
+
+      - name: Test TypeScript framework
+        run: aube run --filter "./ts-framework/**" --if-present test
 
       - name: Prune aube store
         if: success()

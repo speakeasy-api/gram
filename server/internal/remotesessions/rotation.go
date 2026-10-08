@@ -66,7 +66,7 @@ var (
 	ErrClientRotationInProgress = errors.New("remotesessions: client registration rotation already in progress")
 
 	// ErrIssuerHasNoRegistrationEndpoint reports that the client's issuer
-	// publishes no RFC 7591 registration endpoint, so Gram has nowhere to
+	// publishes no RFC 7591 registration endpoint, so Speakeasy has nowhere to
 	// re-register the client.
 	ErrIssuerHasNoRegistrationEndpoint = errors.New("remotesessions: issuer publishes no registration endpoint to re-register at")
 
@@ -344,7 +344,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	// its users just re-established, and probing the replacement only to hand
 	// back the caller's snapshot would send its user out with the dead
 	// client_id. This runs before every refusal below: a row another caller
-	// already repaired is the one to use even when Gram could not rotate it
+	// already repaired is the one to use even when Speakeasy could not rotate it
 	// again, such as an issuer whose metadata has since lost its registration
 	// endpoint.
 	if params.Trigger != RotationTriggerManual {
@@ -678,7 +678,7 @@ func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, row repo.G
 
 	probeCtx, cancel := context.WithTimeout(ctx, registrationProbeTimeout)
 	defer cancel()
-	req, err := newTokenEndpointRequest(probeCtx, tokenEndpoint, form, tokenEndpointClientAuth{
+	req, err := NewTokenEndpointRequest(probeCtx, tokenEndpoint, form, TokenEndpointClientAuth{
 		Method:                method,
 		RemoteSessionClientID: client.ID,
 		OrganizationID:        client.OrganizationID.String,

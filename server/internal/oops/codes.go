@@ -27,7 +27,7 @@ const (
 	CodeInvariantViolation Code = "invariant_violation"
 	CodeGatewayError       Code = "gateway_error"
 	// CodeUnavailable is a temporary, retryable inability to serve caused by
-	// a Gram-side dependency being down (e.g. Redis unreachable), distinct
+	// a Speakeasy-side dependency being down (e.g. Redis unreachable), distinct
 	// from CodeGatewayError (502, an upstream/tunnel failure). Maps to 503.
 	CodeUnavailable         Code = "unavailable"
 	CodeNotImplemented      Code = "not_implemented"

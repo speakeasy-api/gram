@@ -59,7 +59,7 @@ func TestBuildAuthorizationURL_WorkOS(t *testing.T) {
 	require.Equal(t, "client_test123", q.Get("client_id"))
 
 	// WorkOS's reference does not list `scope` for this endpoint, so it is
-	// likely inert here. Asserted anyway: it is what Gram has always sent, and
+	// likely inert here. Asserted anyway: it is what Speakeasy has always sent, and
 	// "not documented" is not "verified ignored".
 	require.Equal(t, "openid email profile", q.Get("scope"))
 }

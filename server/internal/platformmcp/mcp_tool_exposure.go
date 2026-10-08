@@ -309,7 +309,7 @@ func (s *MCPToolExposureService) ListProjectTools(ctx context.Context, principal
 }
 
 // Exposure reads the tool list of one hosted MCP server. It returns
-// ErrMCPToolExposureMissing when the server has no Gram toolset behind it:
+// ErrMCPToolExposureMissing when the server has no Speakeasy toolset behind it:
 // a remote, tunneled, or unproxied server's tools come from its upstream.
 func (s *MCPToolExposureService) Exposure(ctx context.Context, principal Principal, projectID, mcpID uuid.UUID) (MCPToolExposure, error) {
 	if !s.valid() {

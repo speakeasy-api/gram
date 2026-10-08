@@ -7,7 +7,7 @@ This directory holds the labeled corpus consumed by `mise risk:report`. Notes be
 | File                        | Origin                                                                                                                | License    | Rows | Class balance              |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------- | ---- | -------------------------- |
 | `deepset.jsonl`             | `deepset/prompt-injections` on HuggingFace, train + test splits concatenated                                          | Apache 2.0 | 662  | 163 malicious / 499 benign |
-| `gram_benigns.jsonl`        | Hand-authored realistic Gram-style prompts                                                                            | Internal   | 140  | 0 malicious / 140 benign   |
+| `gram_benigns.jsonl`        | Hand-authored realistic Speakeasy-style prompts                                                                       | Internal   | 140  | 0 malicious / 140 benign   |
 | `litellm_extended.jsonl`    | Hand-authored, inspired by injection patterns in BerriAI/litellm tests                                                | Internal   | 51   | 51 malicious / 0 benign    |
 | `mutations.jsonl`           | Pre-baked output of `mise gen:risk-mutations`, deterministic from fixed seeds                                         | Internal   | 70   | 70 malicious / 0 benign    |
 | `operational_benigns.jsonl` | Hand-authored CI/build/tool-output logs that should not create Risk Overview noise; typed as tool output              | Internal   | 10   | 0 malicious / 10 benign    |
@@ -51,7 +51,7 @@ Licenses: LLMail-Inject, MIT, Copyright (c) Microsoft Corporation. AgentDojo and
 
 ## Deepset labeling philosophy mismatch
 
-deepset's notion of "prompt injection" is broader than ours. Many rows it labels `malicious` are not injection attempts under Gram's taxonomy.
+deepset's notion of "prompt injection" is broader than ours. Many rows it labels `malicious` are not injection attempts under Speakeasy's taxonomy.
 
 100 of those rows are relabelled `benign`. Each keeps deepset's label in `original_label` and says why in `relabel_reason`:
 

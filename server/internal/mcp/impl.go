@@ -161,7 +161,7 @@ type Service struct {
 	// surface without Redis, which refuses the grant.
 	workloadGrant *workloadGrant
 	// idJAGValidator authenticates enterprise identity grants, enforces replay
-	// protection, and resolves their subjects to provisioned Gram users.
+	// protection, and resolves their subjects to provisioned Speakeasy users.
 	idJAGValidator *idjag.Validator
 	// aiToolBlockReads are the database reads behind the Shadow AI gateway
 	// block check, held as values so a test can make one of them fail.
@@ -574,7 +574,7 @@ func (s *Service) SetCallbackOrigins(origins remotesessions.CallbackOrigins) {
 
 // outboundOrigin is the pinned outbound origin of the WorkOS IdP callback and
 // of federated trusted clients with no recorded callback origin. It falls back
-// to the server URL. It pins only URLs Gram sends to external systems, never
+// to the server URL. It pins only URLs Speakeasy sends to external systems, never
 // an authorization server issuer: shared-mode issuers carry their own pinned
 // issuer (<host>/oauth/usi/{id}) and must not be routed through it.
 func (s *Service) outboundOrigin() *url.URL {
@@ -709,7 +709,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	// client assertions.
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}/jwks.json", oops.ErrHandle(service.logger, service.HandleClientJSONWebKeySet).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/.well-known/openai-apps-challenge", oops.ErrHandle(service.logger, service.HandleOpenAIAppsChallenge).ServeHTTP)
-	// Agents live outside Gram and reach it on the public host, so the gateway
+	// Agents live outside Speakeasy and reach it on the public host, so the gateway
 	// mounts here as well as on the private listener. Its own key is the
 	// credential, so being publicly routable is not being publicly readable.
 	o11y.AttachHandler(mux, "POST", AgentGatewayRoute, oops.MCPErrHandle(service.logger, service.ServeAgentGateway).ServeHTTP)
@@ -1558,7 +1558,7 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 		mergedEnv.Set(k, v)
 	}
 
-	// Load authenticated user's Gram environment.
+	// Load authenticated user's Speakeasy environment.
 	if payload.environment != "" && payload.authenticated {
 		storedEnvVars, err := s.env.Load(ctx, payload.projectID, toolconfig.Slug(payload.environment))
 		if err != nil && !errors.Is(err, toolconfig.ErrNotFound) {
@@ -1895,7 +1895,7 @@ func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, is
 // Each successful strategy stamps its mcpidentity provenance here, at the
 // point of credential validation: assistant tokens are KindAssistant, API
 // keys (either scope) are KindAPIKey, and chat-session tokens are
-// KindChatSession. None of these credentials proves an acting Gram user, so
+// KindChatSession. None of these credentials proves an acting Speakeasy user, so
 // none stamps KindUserSession — even though every strategy populates an
 // AuthContext whose user-shaped fields exist for attribution only. A token
 // rejected by every strategy leaves the context unstamped, so downstream

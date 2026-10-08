@@ -17,7 +17,7 @@ const (
 )
 
 // callbackOriginFlags configure the origins of the redirect_uri and client
-// identity URLs Gram registers with upstream OAuth providers.
+// identity URLs Speakeasy registers with upstream OAuth providers.
 func callbackOriginFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.StringFlag{

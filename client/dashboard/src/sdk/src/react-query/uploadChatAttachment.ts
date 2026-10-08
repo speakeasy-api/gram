@@ -54,7 +54,7 @@ export type UploadChatAttachmentMutationError =
  * uploadChatAttachment assets
  *
  * @remarks
- * Upload a chat attachment to Gram.
+ * Upload a chat attachment to Speakeasy.
  */
 export function useUploadChatAttachmentMutation(
   options?: MutationHookOptions<

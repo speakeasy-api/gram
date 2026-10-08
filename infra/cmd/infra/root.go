@@ -16,7 +16,7 @@ import (
 func newApp() *cli.App {
 	return &cli.App{
 		Name:  "infra",
-		Usage: "CLI for managing Gram infrastructure",
+		Usage: "CLI for managing Speakeasy infrastructure",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "log-level",

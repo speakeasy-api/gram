@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://www.speakeasy.com/product/gram" target="_blank">
-    <img src="https://raw.githubusercontent.com/speakeasy-api/gram/main/.github/speakeasy-icon.png" alt="Gram by Speakeasy" width="140">
+    <img src="https://raw.githubusercontent.com/speakeasy-api/gram/main/.github/speakeasy-icon.png" alt="Speakeasy" width="140">
   </a>
 </p>
 
@@ -23,7 +23,7 @@
 
 # Introduction
 
-Gram is the open source stack behind Speakeasy's AI control plane. Secure and centrally manage MCPs, Skills, and Assistants your whole company to access, with fine-grained permissions, threat detection, and full observability of token use and costs. Every tool call, permission change, and access event logged and searchable. SOC 2 Type II and ISO 27001 certified.
+This repository is the open source stack behind Speakeasy's AI control plane. Secure and centrally manage MCPs, Skills, and Assistants your whole company to access, with fine-grained permissions, threat detection, and full observability of token use and costs. Every tool call, permission change, and access event logged and searchable. SOC 2 Type II and ISO 27001 certified.
 
 To get started on the hosted platform you can [Sign up](https://app.getgram.ai/), or check out the [Quickstart guide](https://www.getgram.ai/docs/introduction).
 
@@ -108,7 +108,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and detailed cont
 ## Contributors
 
 <a href="https://github.com/speakeasy-api/gram/graphs/contributors">
-  <img alt="Gram contributors" src="https://contrib.rocks/image?repo=speakeasy-api/gram" />
+  <img alt="Speakeasy contributors" src="https://contrib.rocks/image?repo=speakeasy-api/gram" />
 </a>
 
 <hr />

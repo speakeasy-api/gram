@@ -1,11 +1,11 @@
 ---
 name: pitchfork
-description: Manage Gram's local development services (server, worker, dashboard, streams, etc.) with pitchfork — start/stop/restart daemons, check health, and query their logs. Activate whenever you need to bring up the local dev stack, restart a service after a code change, check whether a service is running or why it failed, or read/search service logs — even if the user just says "start the server", "is the worker running?", or "check the logs".
+description: Manage Speakeasy's local development services (server, worker, dashboard, streams, etc.) with pitchfork — start/stop/restart daemons, check health, and query their logs. Activate whenever you need to bring up the local dev stack, restart a service after a code change, check whether a service is running or why it failed, or read/search service logs — even if the user just says "start the server", "is the worker running?", or "check the logs".
 ---
 
 # Pitchfork — Local Dev Services
 
-[Pitchfork](https://pitchfork.jdx.dev) is a daemon manager. All Gram local services are declared in `pitchfork.toml` at the repo root and run under a pitchfork supervisor. Each daemon's `run` command is a mise task (`mise run start:<name>`) and its readiness is polled via `mise run check:daemon --name <name>`, so `start` only returns once the service is actually healthy.
+[Pitchfork](https://pitchfork.jdx.dev) is a daemon manager. All Speakeasy local services are declared in `pitchfork.toml` at the repo root and run under a pitchfork supervisor. Each daemon's `run` command is a mise task (`mise run start:<name>`) and its readiness is polled via `mise run check:daemon --name <name>`, so `start` only returns once the service is actually healthy.
 
 ## How to interact with pitchfork (in order of preference)
 
@@ -19,7 +19,7 @@ Declared in `pitchfork.toml`. Names are shown namespaced by project (e.g. `gram/
 
 | Daemon                                      | What it is                                          |
 | ------------------------------------------- | --------------------------------------------------- |
-| `server`                                    | Main Gram API server                                |
+| `server`                                    | Main Speakeasy API server                           |
 | `worker`                                    | Temporal worker                                     |
 | `dashboard`                                 | Dashboard frontend dev server (depends on `server`) |
 | `streams`                                   | Go Pub/Sub consumers (`gram streams`)               |

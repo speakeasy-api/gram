@@ -162,7 +162,7 @@ func TestHandleToken_RefreshProceedsWhileUpstreamUnavailable(t *testing.T) {
 	})
 
 	// Many clients read a failed refresh as a sign-out, so an upstream blip
-	// must not cost the user their Gram session, and Gram's refresh must not
+	// must not cost the user their Speakeasy session, and Speakeasy's refresh must not
 	// wait on the upstream to find out.
 	refreshed := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
 	require.NoError(t, refreshed.err)
@@ -171,7 +171,7 @@ func TestHandleToken_RefreshProceedsWhileUpstreamUnavailable(t *testing.T) {
 }
 
 // The runtime and the token endpoint must agree: once a refresh the gate ran
-// fails for good and the gate answers invalid_token, the client's Gram
+// fails for good and the gate answers invalid_token, the client's Speakeasy
 // refresh is refused rather than handing it a token for the same rejection.
 func TestIssuerGate_UpstreamInvalidGrantRefusesTheFollowingRefresh(t *testing.T) {
 	t.Parallel()

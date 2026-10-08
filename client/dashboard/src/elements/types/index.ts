@@ -219,7 +219,7 @@ export interface ElementsConfig {
   /**
    * The project slug to use for the Elements library.
    *
-   * Your project slug can be found within the Gram dashboard.
+   * Your project slug can be found within the Speakeasy dashboard.
    *
    * @example
    * const config: ElementsConfig = {
@@ -229,7 +229,7 @@ export interface ElementsConfig {
   projectSlug: string;
 
   /**
-   * The Gram Server URL to use for the Elements library.
+   * The Speakeasy Server URL to use for the Elements library.
    * Can be retrieved from https://app.getgram.ai/{team}/{project}/mcp/{mcp_slug}
    *
    * For multiple MCP servers in a single chat, use {@link mcps} instead;
@@ -243,7 +243,7 @@ export interface ElementsConfig {
   mcp?: ServerUrl;
 
   /**
-   * One or more Gram MCP servers to connect to in a single chat. Tools from
+   * One or more Speakeasy MCP servers to connect to in a single chat. Tools from
    * each server are merged and namespaced as `<name>__<tool>` to avoid
    * collisions when names overlap. Takes precedence over {@link mcp} when
    * both are provided.
@@ -262,7 +262,7 @@ export interface ElementsConfig {
    * Custom environment variable overrides for the Elements library.
    * Will be used to override the environment variables for the MCP server.
    *
-   * For more documentation on passing through different kinds of environment variables, including bearer tokens, see the [Gram documentation](https://www.speakeasy.com/docs/gram/host-mcp/public-private-servers#pass-through-authentication).
+   * For more documentation on passing through different kinds of environment variables, including bearer tokens, see the [Speakeasy documentation](https://www.speakeasy.com/docs/gram/host-mcp/public-private-servers#pass-through-authentication).
    */
   environment?: Record<string, unknown>;
 
@@ -342,7 +342,7 @@ export interface ElementsConfig {
 
   /**
    * Optional property to override the LLM provider. If you override the model,
-   * then logs & usage metrics will not be tracked directly via Gram.
+   * then logs & usage metrics will not be tracked directly via Speakeasy.
    *
    * Please ensure that you are using an AI SDK v2 compatible model (e.g a
    * Vercel AI sdk provider in the v2 semver range), as this is the only variant
@@ -501,7 +501,7 @@ export interface ErrorTrackingConfigOption {
  */
 export type BaseApiConfig = {
   /**
-   * The Gram API URL to use for the Elements library.
+   * The Speakeasy API URL to use for the Elements library.
    *
    * @example
    * const config: ElementsConfig = {
@@ -767,7 +767,7 @@ export interface ToolsConfig {
    * `components` can be used to override the default components used by the
    * Elements library for a given tool result.
    *
-   * Please ensure that the tool name directly matches the tool name in your Gram toolset.
+   * Please ensure that the tool name directly matches the tool name in your Speakeasy toolset.
    *
    * @example
    * const config: ElementsConfig = {
@@ -1085,7 +1085,7 @@ export interface ComposerSlashCommand {
 /**
  * AttachmentsConfig provides fine-grained control over file attachments.
  *
- * Files upload to Gram as soon as they are attached; the transport sends the
+ * Files upload to Speakeasy as soon as they are attached; the transport sends the
  * resulting asset ids with the turn. `maxCount` is not enforced yet.
  */
 export interface AttachmentsConfig {

@@ -281,6 +281,7 @@ trackedFiles:
   src/funcs/featuresGet.ts: {}
   src/funcs/featuresSet.ts: {}
   src/funcs/featuresSetRemoteSessionAutoRefreshPolicy.ts: {}
+  src/funcs/hooksGetStatus.ts: {}
   src/funcs/hooksHooksNumberClaude.ts: {}
   src/funcs/hooksHooksNumberCodex.ts: {}
   src/funcs/hooksHooksNumberCursor.ts: {}
@@ -296,7 +297,9 @@ trackedFiles:
   src/funcs/identityProviderConnectionsGet.ts: {}
   src/funcs/identityProviderConnectionsListApplications.ts: {}
   src/funcs/identityProviderConnectionsRecordAgent.ts: {}
+  src/funcs/identityProviderConnectionsReplaceClientSecret.ts: {}
   src/funcs/identityProviderConnectionsRevoke.ts: {}
+  src/funcs/identityProviderConnectionsSetSetupMethod.ts: {}
   src/funcs/identityProviderConnectionsSubmitClientId.ts: {}
   src/funcs/identityProviderConnectionsSyncApplications.ts: {}
   src/funcs/identityProviderConnectionsVerify.ts: {}
@@ -523,9 +526,11 @@ trackedFiles:
   src/funcs/remoteMcpDiscoverProtectedResourceMetadata.ts: {}
   src/funcs/remoteMcpGetServer.ts: {}
   src/funcs/remoteMcpGetServerHeader.ts: {}
+  src/funcs/remoteMcpGetServerScopes.ts: {}
   src/funcs/remoteMcpListServerHeaders.ts: {}
   src/funcs/remoteMcpListServers.ts: {}
   src/funcs/remoteMcpProbeURL.ts: {}
+  src/funcs/remoteMcpSetServerScopePin.ts: {}
   src/funcs/remoteMcpUpdateServer.ts: {}
   src/funcs/remoteMcpUpdateServerHeader.ts: {}
   src/funcs/remoteMcpVerifyURL.ts: {}
@@ -790,6 +795,8 @@ trackedFiles:
   src/funcs/widgetsUpdate.ts: {}
   src/funcs/workloadIdentitiesAdmitSubject.ts: {}
   src/funcs/workloadIdentitiesList.ts: {}
+  src/funcs/workloadIdentitiesListPlatforms.ts: {}
+  src/funcs/workloadIdentitiesListTokenEndpoints.ts: {}
   src/funcs/workloadIdentitiesRegisterIssuer.ts: {}
   src/funcs/workloadIdentitiesUpdateIssuer.ts: {}
   src/funcs/workloadIdentitiesUpdateSubject.ts: {}
@@ -1173,6 +1180,7 @@ trackedFiles:
   src/models/components/hookskilldata.ts: {}
   src/models/components/hooksourceusage.ts: {}
   src/models/components/hooksserversummary.ts: {}
+  src/models/components/hooksstatus.ts: {}
   src/models/components/hookstimeseriespoint.ts: {}
   src/models/components/hooksusersummary.ts: {}
   src/models/components/hooktoolcalldata.ts: {}
@@ -1544,7 +1552,9 @@ trackedFiles:
   src/models/components/registrydiscoverymetadata.ts: {}
   src/models/components/registrydiscoverypage.ts: {}
   src/models/components/remotemcpserver.ts: {}
+  src/models/components/remotemcpserverclientscopes.ts: {}
   src/models/components/remotemcpserverheader.ts: {}
+  src/models/components/remotemcpserverscopes.ts: {}
   src/models/components/remotesession.ts: {}
   src/models/components/remotesessionclient.ts: {}
   src/models/components/remotesessionissuer.ts: {}
@@ -1558,6 +1568,7 @@ trackedFiles:
   src/models/components/rendertemplatebyidrequestbody.ts: {}
   src/models/components/rendertemplaterequestbody.ts: {}
   src/models/components/rendertemplateresult.ts: {}
+  src/models/components/replaceidentityproviderconnectionclientsecretrequestbody.ts: {}
   src/models/components/reportaiscanrequestbody.ts: {}
   src/models/components/reportsessionmovedrequestbody.ts: {}
   src/models/components/requestaccessform.ts: {}
@@ -1669,6 +1680,7 @@ trackedFiles:
   src/models/components/setaitooldecisionresult.ts: {}
   src/models/components/setbillingmetadatarequestbody.ts: {}
   src/models/components/setdirectoryrolemappingform.ts: {}
+  src/models/components/setidentityproviderconnectionsetupmethodrequestbody.ts: {}
   src/models/components/setkeyenabledrequestbody.ts: {}
   src/models/components/setmcpmetadatarequestbody.ts: {}
   src/models/components/setorganizationwhitelistrequestbody.ts: {}
@@ -1682,6 +1694,7 @@ trackedFiles:
   src/models/components/setresourceaudienceform.ts: {}
   src/models/components/setrootmcpendpointrequestbody.ts: {}
   src/models/components/setscheduleenabledrequestbody.ts: {}
+  src/models/components/setserverscopepinrequestbody.ts: {}
   src/models/components/setslackidentitymappingrequestbody.ts: {}
   src/models/components/setsourceenvironmentlinkrequestbody.ts: {}
   src/models/components/setspendcaprequestbody.ts: {}
@@ -1950,6 +1963,15 @@ trackedFiles:
   src/models/components/workloadadmission.ts: {}
   src/models/components/workloadidentitypolicy.ts: {}
   src/models/components/workloadissuer.ts: {}
+  src/models/components/workloadplatform.ts: {}
+  src/models/components/workloadplatformblock.ts: {}
+  src/models/components/workloadplatformcatalog.ts: {}
+  src/models/components/workloadplatformconstant.ts: {}
+  src/models/components/workloadplatformstep.ts: {}
+  src/models/components/workloadplatformsubject.ts: {}
+  src/models/components/workloadplatformvariable.ts: {}
+  src/models/components/workloadtokenendpoint.ts: {}
+  src/models/components/workloadtokenendpoints.ts: {}
   src/models/components/workosdomainverificationintentoptions.ts: {}
   src/models/components/workosintentoptions.ts: {}
   src/models/components/workosssointentoptions.ts: {}
@@ -2196,6 +2218,7 @@ trackedFiles:
   src/models/operations/getglobalremotesessionissuer.ts: {}
   src/models/operations/getglobalremotesessionissuerduplicatepreflight.ts: {}
   src/models/operations/getglobalremotesessionissuermigratepreflight.ts: {}
+  src/models/operations/gethooksstatus.ts: {}
   src/models/operations/gethookssummary.ts: {}
   src/models/operations/getidentityproviderconnection.ts: {}
   src/models/operations/getinferencespendcaps.ts: {}
@@ -2244,6 +2267,7 @@ trackedFiles:
   src/models/operations/getpublishstatus.ts: {}
   src/models/operations/getremotemcpserver.ts: {}
   src/models/operations/getremotemcpserverheader.ts: {}
+  src/models/operations/getremotemcpserverscopes.ts: {}
   src/models/operations/getremotesessionclient.ts: {}
   src/models/operations/getremotesessionissuer.ts: {}
   src/models/operations/getremotesessionissuerduplicatepreflight.ts: {}
@@ -2472,6 +2496,8 @@ trackedFiles:
   src/models/operations/listversions.ts: {}
   src/models/operations/listwidgets.ts: {}
   src/models/operations/listworkloadidentities.ts: {}
+  src/models/operations/listworkloadplatforms.ts: {}
+  src/models/operations/listworkloadtokenendpoints.ts: {}
   src/models/operations/loadchat.ts: {}
   src/models/operations/loadchatoverview.ts: {}
   src/models/operations/logout.ts: {}
@@ -2530,6 +2556,7 @@ trackedFiles:
   src/models/operations/rendertemplate.ts: {}
   src/models/operations/rendertemplatebyid.ts: {}
   src/models/operations/repairplatformmcponboardingpublication.ts: {}
+  src/models/operations/replaceidentityproviderconnectionclientsecret.ts: {}
   src/models/operations/reportagentaiscan.ts: {}
   src/models/operations/reportagentsessionmoved.ts: {}
   src/models/operations/requestaccess.ts: {}
@@ -2591,6 +2618,7 @@ trackedFiles:
   src/models/operations/setchatpinned.ts: {}
   src/models/operations/setdeviceintegrationscheduleenabled.ts: {}
   src/models/operations/setdirectoryrolemapping.ts: {}
+  src/models/operations/setidentityproviderconnectionsetupmethod.ts: {}
   src/models/operations/setmcpmetadata.ts: {}
   src/models/operations/setmcpservertoolmetadata.ts: {}
   src/models/operations/setmcpservertoolmetadatabatch.ts: {}
@@ -2599,6 +2627,7 @@ trackedFiles:
   src/models/operations/setpluginassignments.ts: {}
   src/models/operations/setproductfeature.ts: {}
   src/models/operations/setprojectlogo.ts: {}
+  src/models/operations/setremotemcpserverscopepin.ts: {}
   src/models/operations/setremotesessionautorefreshpolicy.ts: {}
   src/models/operations/setresourceaudience.ts: {}
   src/models/operations/setrootmcpendpoint.ts: {}
@@ -3021,6 +3050,8 @@ trackedFiles:
   src/react-query/getGcpIamPlatformCredential.ts: {}
   src/react-query/getGcpKmsKey.core.ts: {}
   src/react-query/getGcpKmsKey.ts: {}
+  src/react-query/getHooksStatus.core.ts: {}
+  src/react-query/getHooksStatus.ts: {}
   src/react-query/getHooksSummary.core.ts: {}
   src/react-query/getHooksSummary.ts: {}
   src/react-query/getInferenceSpendCaps.core.ts: {}
@@ -3061,6 +3092,8 @@ trackedFiles:
   src/react-query/getRemoteMcpServer.ts: {}
   src/react-query/getRemoteMcpServerHeader.core.ts: {}
   src/react-query/getRemoteMcpServerHeader.ts: {}
+  src/react-query/getRemoteMcpServerScopes.core.ts: {}
+  src/react-query/getRemoteMcpServerScopes.ts: {}
   src/react-query/getSourceEnvironment.core.ts: {}
   src/react-query/getSourceEnvironment.ts: {}
   src/react-query/getSpendBreakdown.core.ts: {}
@@ -3450,6 +3483,7 @@ trackedFiles:
   src/react-query/renderTemplateByID.core.ts: {}
   src/react-query/renderTemplateByID.ts: {}
   src/react-query/repairPlatformMCPOnboardingPublication.ts: {}
+  src/react-query/replaceIdentityProviderConnectionClientSecret.ts: {}
   src/react-query/reportAgentAIScan.ts: {}
   src/react-query/reportAgentSessionMoved.ts: {}
   src/react-query/requestAccess.ts: {}
@@ -3596,11 +3630,13 @@ trackedFiles:
   src/react-query/setBillingMetadata.ts: {}
   src/react-query/setDeviceIntegrationScheduleEnabled.ts: {}
   src/react-query/setDirectoryRoleMapping.ts: {}
+  src/react-query/setIdentityProviderConnectionSetupMethod.ts: {}
   src/react-query/setMcpServerToolMetadata.ts: {}
   src/react-query/setMcpServerToolMetadataBatch.ts: {}
   src/react-query/setModelProviderKeyEnabled.ts: {}
   src/react-query/setPluginAssignments.ts: {}
   src/react-query/setProjectLogo.ts: {}
+  src/react-query/setRemoteMcpServerScopePin.ts: {}
   src/react-query/setRemoteSessionAutoRefreshPolicy.ts: {}
   src/react-query/setResourceAudience.ts: {}
   src/react-query/setRootMcpEndpoint.ts: {}
@@ -3815,6 +3851,10 @@ trackedFiles:
   src/react-query/workUnitsTrend.ts: {}
   src/react-query/workloadIdentities.core.ts: {}
   src/react-query/workloadIdentities.ts: {}
+  src/react-query/workloadPlatforms.core.ts: {}
+  src/react-query/workloadPlatforms.ts: {}
+  src/react-query/workloadTokenEndpoints.core.ts: {}
+  src/react-query/workloadTokenEndpoints.ts: {}
   src/sdk/access.ts: {}
   src/sdk/actorattributes.ts: {}
   src/sdk/adminassets.ts: {}
@@ -4801,7 +4841,7 @@ examples:
         application/json: {"org_url": "https://blank-jury.name"}
       responses:
         "200":
-          application/json: {"applications_sync": {}, "checklist": [{"description": "draw negligible pleased after nearly uniform", "details": ["<value 1>", "<value 2>", "<value 3>"], "group": "connect", "key": "first_resource_connection", "title": "<value>"}], "client_id_submitted": true, "created_at": "2026-03-17T04:19:21.535Z", "dpop_required": true, "granted_scopes": [], "id": "785762cf-7d7e-4cc8-ba09-26ffbbbf8f51", "issuer_url": "https://clear-footrest.biz", "jwks_url": "https://hairy-bowler.biz", "listing_mode": "custom_app", "missing_scopes": ["<value 1>"], "org_url": "https://firm-celsius.net", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>", "<value 2>"], "status": "verified", "updated_at": "2026-10-06T09:08:45.322Z", "verification_reasons": ["read_failed:okta.groups.read"]}
+          application/json: {"applications_sync": {}, "checklist": [{"description": "draw negligible pleased after nearly uniform", "details": ["<value 1>", "<value 2>", "<value 3>"], "group": "connect", "key": "first_resource_connection", "title": "<value>"}], "client_id_submitted": true, "created_at": "2026-03-17T04:19:21.535Z", "dpop_required": true, "granted_scopes": [], "id": "785762cf-7d7e-4cc8-ba09-26ffbbbf8f51", "issuer_url": "https://clear-footrest.biz", "listing_mode": "custom_app", "missing_scopes": ["<value 1>"], "org_url": "https://firm-celsius.net", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>", "<value 2>"], "status": "verified", "updated_at": "2026-10-06T09:08:45.322Z", "verification_reasons": ["read_failed:okta.groups.read"]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -6875,6 +6915,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getHooksStatus:
+    speakeasy-default-get-hooks-status:
+      responses:
+        "200":
+          application/json: {"agent_hooks_key": false, "anthropic_inference_hooks": false, "configured": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getHooksSummary:
     speakeasy-default-get-hooks-summary:
       requestBody:
@@ -7434,6 +7483,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getRemoteMcpServerScopes:
+    speakeasy-default-get-remote-mcp-server-scopes:
+      parameters:
+        query:
+          mcp_server_id: "5a149d89-78f9-4c10-afc1-8539d6721f85"
+      responses:
+        "200":
+          application/json: {"advertised_scopes_known": false, "challenge_scopes": ["<value 1>", "<value 2>", "<value 3>"], "clients": [{"client_id": "b44a5d27-6afc-4330-9d4c-2c00e586c851", "pin_would_decide": true, "requested_scopes": [], "scope_source": "resource_pin", "unadvertised_pinned_scopes": []}], "discovery_enabled": true, "pinned_scopes": ["<value 1>"], "resource_url": "https://smug-plain.org/", "shared_server_count": 335278}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getRemoteSessionClient:
     speakeasy-default-get-remote-session-client:
       parameters:
@@ -10139,6 +10200,24 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listWorkloadPlatforms:
+    speakeasy-default-list-workload-platforms:
+      responses:
+        "200":
+          application/json: {"platforms": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listWorkloadTokenEndpoints:
+    speakeasy-default-list-workload-token-endpoints:
+      responses:
+        "200":
+          application/json: {"items": [{"issuer": "discover", "mcp_host": "<value>", "project_id": "<id>", "project_name": "<value>", "token_endpoint": "<value>", "user_session_issuer_id": "530963df-8f46-458c-8ea8-5db8b2f4ef40", "user_session_issuer_slug": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listXaaReadiness:
     speakeasy-default-list-xaa-readiness:
       parameters:
@@ -10562,7 +10641,7 @@ examples:
         application/json: {"id": "bd4f43dc-03e0-47bb-a1b2-3b14b2ee055d"}
       responses:
         "200":
-          application/json: {"applications_sync": {}, "checklist": [{"description": "juvenile whenever yum", "details": ["<value 1>", "<value 2>"], "group": "cross_app_access", "key": "link_agent_app", "title": "<value>"}], "client_id_submitted": false, "created_at": "2025-12-22T22:28:13.302Z", "dpop_required": true, "granted_scopes": [], "id": "71d30187-8971-4caf-8b04-bd98850f709d", "issuer_url": "https://vague-underpants.name/", "jwks_url": "https://putrid-schedule.com/", "listing_mode": "custom_app", "missing_scopes": ["<value 1>", "<value 2>"], "org_url": "https://strange-ice-cream.com", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>", "<value 2>"], "status": "pending", "updated_at": "2024-04-13T10:30:54.744Z", "verification_reasons": ["missing_scope"]}
+          application/json: {"applications_sync": {}, "checklist": [{"description": "juvenile whenever yum", "details": ["<value 1>", "<value 2>"], "group": "cross_app_access", "key": "link_agent_app", "title": "<value>"}], "client_id_submitted": false, "created_at": "2025-12-22T22:28:13.302Z", "dpop_required": true, "granted_scopes": [], "id": "71d30187-8971-4caf-8b04-bd98850f709d", "issuer_url": "https://vague-underpants.name/", "listing_mode": "custom_app", "missing_scopes": ["<value 1>", "<value 2>"], "org_url": "https://strange-ice-cream.com", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>", "<value 2>"], "status": "pending", "updated_at": "2024-04-13T10:30:54.744Z", "verification_reasons": ["missing_scope"]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -10861,6 +10940,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  replaceIdentityProviderConnectionClientSecret:
+    speakeasy-default-replace-identity-provider-connection-client-secret:
+      requestBody:
+        application/json: {"client_secret": "<value>", "id": "a57cb204-72ba-4b37-bc4d-c12e1950a2de"}
+      responses:
+        "200":
+          application/json: {"applications_sync": {}, "checklist": [], "client_id_submitted": false, "created_at": "2026-09-20T03:47:19.193Z", "dpop_required": true, "granted_scopes": ["<value 1>"], "id": "da243d90-4ad9-41ce-8f1a-5be5d9401407", "issuer_url": "https://stormy-manner.name", "listing_mode": "oin", "missing_scopes": ["<value 1>", "<value 2>"], "org_url": "https://knotty-integer.info", "organization_id": "<id>", "provider": "okta", "required_scopes": [], "status": "revoked", "updated_at": "2024-09-14T07:29:56.523Z", "verification_reasons": ["read_failed:okta.groups.read"]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   reportAgentAIScan:
     speakeasy-default-report-agent-AI-scan:
       requestBody:
@@ -11105,7 +11195,7 @@ examples:
         application/json: {"id": "4e9e21f2-d91a-4fdd-bd2f-1bf6769f9d5d"}
       responses:
         "200":
-          application/json: {"applications_sync": {}, "checklist": [{"description": "pulp but whether lest on", "details": ["<value 1>"], "group": "cross_app_access", "key": "dpop", "title": "<value>"}], "client_id_submitted": true, "created_at": "2024-12-21T18:46:41.853Z", "dpop_required": true, "granted_scopes": [], "id": "46d39253-d76d-4e02-b982-b341f96413d9", "issuer_url": "https://inexperienced-following.info/", "jwks_url": "https://slimy-netsuke.com/", "listing_mode": "oin", "missing_scopes": ["<value 1>", "<value 2>", "<value 3>"], "org_url": "https://menacing-resolve.com/", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>", "<value 2>"], "status": "verified", "updated_at": "2026-01-24T18:07:57.149Z", "verification_reasons": []}
+          application/json: {"applications_sync": {}, "checklist": [{"description": "pulp but whether lest on", "details": ["<value 1>"], "group": "cross_app_access", "key": "dpop", "title": "<value>"}], "client_id_submitted": true, "created_at": "2024-12-21T18:46:41.853Z", "dpop_required": true, "granted_scopes": [], "id": "46d39253-d76d-4e02-b982-b341f96413d9", "issuer_url": "https://inexperienced-following.info/", "listing_mode": "oin", "missing_scopes": ["<value 1>", "<value 2>", "<value 3>"], "org_url": "https://menacing-resolve.com/", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>", "<value 2>"], "status": "verified", "updated_at": "2026-01-24T18:07:57.149Z", "verification_reasons": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -11565,6 +11655,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  setIdentityProviderConnectionSetupMethod:
+    speakeasy-default-set-identity-provider-connection-setup-method:
+      requestBody:
+        application/json: {"id": "c56ccbec-a4a7-41f0-a3d1-c5d5e099e4a5", "listing_mode": "custom_app"}
+      responses:
+        "200":
+          application/json: {"applications_sync": {}, "checklist": [{"description": "deduct oxygenate via experience fuss jovially holster", "details": ["<value 1>", "<value 2>", "<value 3>"], "group": "connect", "key": "create_api_services_app", "title": "<value>"}], "client_id_submitted": true, "created_at": "2025-03-02T12:04:43.017Z", "dpop_required": true, "granted_scopes": [], "id": "301f5ffd-e157-4175-af55-a3187f8ed4e6", "issuer_url": "https://black-and-white-bathrobe.net/", "listing_mode": "oin", "missing_scopes": [], "org_url": "https://deep-hubris.org/", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>"], "status": "pending", "updated_at": "2026-09-26T08:59:40.478Z", "verification_reasons": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   setMcpMetadata:
     speakeasy-default-set-mcp-metadata:
       requestBody:
@@ -11660,6 +11761,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  setRemoteMcpServerScopePin:
+    speakeasy-default-set-remote-mcp-server-scope-pin:
+      requestBody:
+        application/json: {"mcp_server_id": "5353c293-642c-4480-be2f-b05fe48d5f98", "scopes": ["<value 1>"]}
+      responses:
+        "200":
+          application/json: {"advertised_scopes_known": false, "challenge_scopes": [], "clients": [{"client_id": "b5aff61a-32be-45f7-aa3c-f81e4904b2cf", "pin_would_decide": true, "requested_scopes": [], "scope_source": "cached_resource", "unadvertised_pinned_scopes": ["<value 1>"]}], "discovery_enabled": true, "pinned_scopes": ["<value 1>", "<value 2>"], "resource_url": "https://secondary-outrun.com", "shared_server_count": 342158}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   setRemoteSessionAutoRefreshPolicy:
     speakeasy-default-set-remote-session-auto-refresh-policy:
       requestBody:
@@ -11832,7 +11944,7 @@ examples:
         application/json: {"client_id": "<id>", "id": "74101fc1-d56d-433b-ad4f-89c9eca4a82b"}
       responses:
         "200":
-          application/json: {"applications_sync": {}, "checklist": [], "client_id_submitted": true, "created_at": "2024-12-04T05:26:37.900Z", "dpop_required": true, "granted_scopes": ["<value 1>", "<value 2>"], "id": "cc1cb8a1-6eed-49de-b041-9d710e14f8bc", "issuer_url": "https://dramatic-cardboard.org/", "jwks_url": "https://punctual-duffel.org/", "listing_mode": "custom_app", "missing_scopes": ["<value 1>", "<value 2>", "<value 3>"], "org_url": "https://sociable-cinder.biz/", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>"], "status": "verified", "updated_at": "2025-11-17T07:48:16.690Z", "verification_reasons": []}
+          application/json: {"applications_sync": {}, "checklist": [], "client_id_submitted": true, "created_at": "2024-12-04T05:26:37.900Z", "dpop_required": true, "granted_scopes": ["<value 1>", "<value 2>"], "id": "cc1cb8a1-6eed-49de-b041-9d710e14f8bc", "issuer_url": "https://dramatic-cardboard.org/", "listing_mode": "custom_app", "missing_scopes": ["<value 1>", "<value 2>", "<value 3>"], "org_url": "https://sociable-cinder.biz/", "organization_id": "<id>", "provider": "okta", "required_scopes": ["<value 1>"], "status": "verified", "updated_at": "2025-11-17T07:48:16.690Z", "verification_reasons": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -11936,7 +12048,7 @@ examples:
         application/json: {"id": "2c4c51e3-3e27-44ca-95e5-d8d65dae937a"}
       responses:
         "200":
-          application/json: {"applications_sync": {}, "checklist": [{"description": "pfft coagulate than within", "details": [], "group": "cross_app_access", "key": "create_api_services_app", "title": "<value>"}], "client_id_submitted": false, "created_at": "2026-08-03T00:08:01.699Z", "dpop_required": false, "granted_scopes": ["<value 1>", "<value 2>"], "id": "7cf5aa3f-4237-4128-b142-d7761e6cbf51", "issuer_url": "https://infinite-diversity.com/", "jwks_url": "https://excellent-signature.net", "listing_mode": "custom_app", "missing_scopes": [], "org_url": "https://lustrous-expansion.net/", "organization_id": "<id>", "provider": "okta", "required_scopes": [], "status": "pending", "updated_at": "2025-06-26T07:50:43.284Z", "verification_reasons": []}
+          application/json: {"applications_sync": {}, "checklist": [{"description": "pfft coagulate than within", "details": [], "group": "cross_app_access", "key": "create_api_services_app", "title": "<value>"}], "client_id_submitted": false, "created_at": "2026-08-03T00:08:01.699Z", "dpop_required": false, "granted_scopes": ["<value 1>", "<value 2>"], "id": "7cf5aa3f-4237-4128-b142-d7761e6cbf51", "issuer_url": "https://infinite-diversity.com/", "listing_mode": "custom_app", "missing_scopes": [], "org_url": "https://lustrous-expansion.net/", "organization_id": "<id>", "provider": "okta", "required_scopes": [], "status": "pending", "updated_at": "2025-06-26T07:50:43.284Z", "verification_reasons": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -13085,7 +13197,7 @@ examples:
         application/json: {"id": "e0b3f9d6-8625-4460-bb63-fac2bdfff33e"}
       responses:
         "200":
-          application/json: {"applications_sync": {}, "checklist": [{"description": "gadzooks chasuble as nor between fatally a until kindheartedly", "details": ["<value 1>", "<value 2>", "<value 3>"], "group": "connect", "key": "first_resource_connection", "title": "<value>"}], "client_id_submitted": true, "created_at": "2026-12-19T16:46:29.312Z", "dpop_required": false, "granted_scopes": [], "id": "9d5e4a27-a83b-420e-bc94-8942ba440e43", "issuer_url": "https://firm-swing.name", "jwks_url": "https://warped-expansion.biz", "listing_mode": "oin", "missing_scopes": ["<value 1>", "<value 2>", "<value 3>"], "org_url": "https://formal-procurement.org", "organization_id": "<id>", "provider": "okta", "required_scopes": [], "status": "verified", "updated_at": "2024-10-22T22:51:40.381Z", "verification_reasons": []}
+          application/json: {"applications_sync": {}, "checklist": [{"description": "gadzooks chasuble as nor between fatally a until kindheartedly", "details": ["<value 1>", "<value 2>", "<value 3>"], "group": "connect", "key": "first_resource_connection", "title": "<value>"}], "client_id_submitted": true, "created_at": "2026-12-19T16:46:29.312Z", "dpop_required": false, "granted_scopes": [], "id": "9d5e4a27-a83b-420e-bc94-8942ba440e43", "issuer_url": "https://firm-swing.name", "listing_mode": "oin", "missing_scopes": ["<value 1>", "<value 2>", "<value 3>"], "org_url": "https://formal-procurement.org", "organization_id": "<id>", "provider": "okta", "required_scopes": [], "status": "verified", "updated_at": "2024-10-22T22:51:40.381Z", "verification_reasons": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

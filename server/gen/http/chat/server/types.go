@@ -119,6 +119,9 @@ type LoadChatOverviewResponseBody struct {
 	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
 	// The name of the assistant that produced this chat, if any
 	AssistantName *string `form:"assistant_name,omitempty" json:"assistant_name,omitempty" xml:"assistant_name,omitempty"`
+	// The ID of the agent the assistant acts as, when the assistant has a
+	// dedicated agent identity
+	AssistantAgentID *string `form:"assistant_agent_id,omitempty" json:"assistant_agent_id,omitempty" xml:"assistant_agent_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -225,6 +228,9 @@ type LoadChatResponseBody struct {
 	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
 	// The name of the assistant that produced this chat, if any
 	AssistantName *string `form:"assistant_name,omitempty" json:"assistant_name,omitempty" xml:"assistant_name,omitempty"`
+	// The ID of the agent the assistant acts as, when the assistant has a
+	// dedicated agent identity
+	AssistantAgentID *string `form:"assistant_agent_id,omitempty" json:"assistant_agent_id,omitempty" xml:"assistant_agent_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -2900,6 +2906,9 @@ type ChatOverviewResponseBody struct {
 	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
 	// The name of the assistant that produced this chat, if any
 	AssistantName *string `form:"assistant_name,omitempty" json:"assistant_name,omitempty" xml:"assistant_name,omitempty"`
+	// The ID of the agent the assistant acts as, when the assistant has a
+	// dedicated agent identity
+	AssistantAgentID *string `form:"assistant_agent_id,omitempty" json:"assistant_agent_id,omitempty" xml:"assistant_agent_id,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -2955,8 +2964,8 @@ type ChatParticipantResponseBody struct {
 	ProviderUserID string `form:"provider_user_id" json:"provider_user_id" xml:"provider_user_id"`
 	// Workspace resolved from the organization directory, when unambiguous.
 	ProviderTeamID *string `form:"provider_team_id,omitempty" json:"provider_team_id,omitempty" xml:"provider_team_id,omitempty"`
-	// Explicitly mapped Gram person at capture time; this attribution grants no
-	// permissions.
+	// Explicitly mapped Speakeasy person at capture time; this attribution grants
+	// no permissions.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// Directory display name at capture time.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
@@ -3240,6 +3249,7 @@ func NewLoadChatOverviewResponseBody(res *chat.ChatOverview) *LoadChatOverviewRe
 		ExternalUserID:       res.ExternalUserID,
 		AssistantID:          res.AssistantID,
 		AssistantName:        res.AssistantName,
+		AssistantAgentID:     res.AssistantAgentID,
 		NumMessages:          res.NumMessages,
 		Source:               res.Source,
 		OriginatingClient:    res.OriginatingClient,
@@ -3290,6 +3300,7 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		ExternalUserID:       res.ExternalUserID,
 		AssistantID:          res.AssistantID,
 		AssistantName:        res.AssistantName,
+		AssistantAgentID:     res.AssistantAgentID,
 		NumMessages:          res.NumMessages,
 		Source:               res.Source,
 		OriginatingClient:    res.OriginatingClient,

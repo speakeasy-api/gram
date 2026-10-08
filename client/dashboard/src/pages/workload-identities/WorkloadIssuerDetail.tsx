@@ -49,37 +49,59 @@ import { toast } from "sonner";
 
 const MACHINES_PAGE_SIZE = 10;
 
+/** Which of a platform's identifiers are shown on its page. */
+interface ShownIdentifiers {
+  issuer: boolean;
+  jwksUri: boolean;
+}
+
+const ALL_IDENTIFIERS: ShownIdentifiers = { issuer: true, jwksUri: true };
+
 // The identifiers sit on labeled lines of their own, apart from the
 // description, because they are what an administrator copies into the
 // platform's console.
 function IssuerIdentifiers({
   issuer,
+  shown,
 }: {
   issuer: WorkloadIssuer;
-}): JSX.Element {
+  shown: ShownIdentifiers;
+}): JSX.Element | null {
+  if (!shown.issuer && !shown.jwksUri) {
+    return null;
+  }
   return (
     <dl className="mb-6 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1">
-      <dt>
-        <Text muted small>
-          Issuer URL
-        </Text>
-      </dt>
-      <dd>
-        <Text small className="font-mono break-all">
-          {issuer.issuer}
-        </Text>
-      </dd>
-      <dt>
-        <Text muted small>
-          Keys URL
-        </Text>
-      </dt>
-      <dd>
-        <Text small className="font-mono break-all">
-          {issuer.jwksUri}
-        </Text>
-      </dd>
+      {shown.issuer && (
+        <IdentifierRow label="Issuer URL" value={issuer.issuer} />
+      )}
+      {shown.jwksUri && (
+        <IdentifierRow label="Keys URL" value={issuer.jwksUri} />
+      )}
     </dl>
+  );
+}
+
+function IdentifierRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}): JSX.Element {
+  return (
+    <>
+      <dt>
+        <Text muted small>
+          {label}
+        </Text>
+      </dt>
+      <dd>
+        <Text small className="font-mono break-all">
+          {value}
+        </Text>
+      </dd>
+    </>
   );
 }
 
@@ -116,7 +138,55 @@ export function WorkloadIssuerDetailPage(): JSX.Element {
   );
 }
 
-function IssuerDetail({ issuerId }: { issuerId: string }): JSX.Element {
+/**
+ * A catalog platform's page reuses this one. Its values come from the catalog
+ * and are locked, so it is not edited or withdrawn here, and new access goes
+ * through the platform's guided setup rather than the hand-written form.
+ */
+export interface CatalogPlatformContext {
+  /** The platform's name, with its logo where it has one. */
+  title: ReactNode;
+
+  /** The platform's name as plain text, for copy. */
+  name: string;
+
+  description: string;
+
+  /** Opens the platform's guided setup. */
+  registerButton: ReactNode;
+
+  /** Opens the guided setup from the empty state. */
+  setupButton: ReactNode;
+
+  /**
+   * The identifiers the catalog marks read-only. The rest are the same for
+   * every customer and stay hidden.
+   */
+  shownIdentifiers: ShownIdentifiers;
+}
+
+export function CatalogEmptyState({
+  catalog,
+}: {
+  catalog: Pick<CatalogPlatformContext, "name" | "setupButton">;
+}): JSX.Element {
+  return (
+    <InlineEmptyState
+      icon="cpu"
+      heading={`No ${catalog.name} connections yet`}
+      description={`There are currently no existing ${catalog.name} connections. Set one up to let it sign in to Speakeasy.`}
+      action={catalog.setupButton}
+    />
+  );
+}
+
+export function IssuerDetail({
+  issuerId,
+  catalog,
+}: {
+  issuerId: string;
+  catalog?: CatalogPlatformContext;
+}): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
   const [admitOpen, setAdmitOpen] = useState(false);
@@ -396,12 +466,14 @@ function IssuerDetail({ issuerId }: { issuerId: string }): JSX.Element {
   let machinesSection: ReactNode;
   if (isPending) {
     machinesSection = <SkeletonTable />;
+  } else if (admissions.length === 0 && catalog !== undefined) {
+    machinesSection = <CatalogEmptyState catalog={catalog} />;
   } else if (admissions.length === 0) {
     machinesSection = (
       <InlineEmptyState
         icon="cpu"
         heading="No machines allowed from this platform"
-        description="Trusting a platform allows nothing on its own. Allow access for a machine so it can exchange its identity token for a Gram session."
+        description="Trusting a platform allows nothing on its own. Allow access for a machine so it can exchange its identity token for a Speakeasy session."
       />
     );
   } else {
@@ -545,15 +617,26 @@ function IssuerDetail({ issuerId }: { issuerId: string }): JSX.Element {
   return (
     <ResourceListPage
       primaryAction={
-        <Stack direction="horizontal" gap={2}>
-          {editButton}
-          {allowButton}
-        </Stack>
+        catalog?.registerButton ?? (
+          <Stack direction="horizontal" gap={2}>
+            {editButton}
+            {allowButton}
+          </Stack>
+        )
       }
-      title={issuer?.name ?? "Trusted platform"}
+      title={catalog?.title ?? issuer?.name ?? "Trusted platform"}
       stage="preview"
-      description={issuer?.description.trim() || undefined}
-      belowHeader={issuer && <IssuerIdentifiers issuer={issuer} />}
+      description={
+        catalog?.description ?? (issuer?.description.trim() || undefined)
+      }
+      belowHeader={
+        issuer && (
+          <IssuerIdentifiers
+            issuer={issuer}
+            shown={catalog?.shownIdentifiers ?? ALL_IDENTIFIERS}
+          />
+        )
+      }
     >
       {allowUnavailableReason !== null && (
         <Text muted small className="mb-4">
@@ -561,7 +644,10 @@ function IssuerDetail({ issuerId }: { issuerId: string }): JSX.Element {
         </Text>
       )}
       {machinesSection}
-      {issuer && stopTrustingSection}
+      {/* A catalog platform is vetted by Speakeasy, so the organization does
+          not withdraw its trust here; removing its access rules is what
+          stops its identities signing in. */}
+      {issuer && catalog === undefined && stopTrustingSection}
       <RemoveSubjectDialog
         admission={removing}
         onOpenChange={(open) => {

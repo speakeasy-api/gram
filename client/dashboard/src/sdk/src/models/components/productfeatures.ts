@@ -50,7 +50,7 @@ export type ProductFeatures = {
    */
   networkIngressEnabled: boolean;
   /**
-   * Whether the organization can use the Gram Platform MCP capability
+   * Whether the organization can use the Speakeasy Platform MCP capability
    */
   platformMcpEnabled: boolean;
   /**

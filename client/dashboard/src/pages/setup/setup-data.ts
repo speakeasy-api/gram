@@ -1,3 +1,7 @@
+import {
+  CLAUDE_CODE_EXACT_NAME_NOTE,
+  CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL,
+} from "@/lib/claude-code-marketplace";
 import { getCursorInstallCommand } from "@/lib/cursor-install-command";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import {
@@ -37,6 +41,10 @@ const claudeCodeSettingsJSON = (origin: string) => `{
   }
 }`;
 
+// Every step carrying the settings block reminds the reader that the
+// marketplace keys must stay the marketplace.json name shown in the snippet.
+const claudeCodeMarketplaceNameNote = [` ${CLAUDE_CODE_EXACT_NAME_NOTE}`];
+
 // Setup copy names the host the reader is on (app.getgram.ai or
 // ai.speakeasy.com): every platform host serves the OTLP and hooks endpoints.
 const setupAgentPlatforms = (
@@ -70,6 +78,7 @@ const setupAgentPlatforms = (
                   fallback: "~/.claude/settings.json",
                 },
                 `, preserving existing values. It registers the marketplace, enables the plugin, and configures logs, metrics, and beta traces for export. Higher-precedence policy can override user settings. The API key and token-bearing marketplace URL are secrets: share privately and never commit them. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
+                ...claudeCodeMarketplaceNameNote,
               ],
               code: claudeCodeSettingsJSON(origin),
               language: "json",
@@ -111,8 +120,15 @@ const setupAgentPlatforms = (
       },
       {
         title: "Update Managed settings on Claude.ai",
-        description:
+        description: [
           "Merge this block into existing server-managed JSON to register the marketplace, enable the plugin, and configure logs, metrics, and beta trace export for eligible sessions. Treat both the API key and token-bearing marketplace URL as secrets; never commit or distribute them publicly. Settings are fetched at the next startup or hourly poll, not instantly.",
+          ...claudeCodeMarketplaceNameNote,
+        ],
+        helpLink: {
+          url: CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL,
+          linkLabel: "Require a marketplace and its plugins",
+          sentence: "See {LINK} in the Claude Code docs",
+        },
         screenshot: {
           src: "/setup/claude-managed-settings-editor.png",
           alt: "Claude Code Managed settings JSON editor dialog with Update settings button",

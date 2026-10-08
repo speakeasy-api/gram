@@ -1,5 +1,5 @@
 // Package diagram generates a single mermaid diagram (plus text tables) that
-// ties Gram's proto-declared Pub/Sub topology to the Go and Python call sites
+// ties Speakeasy's proto-declared Pub/Sub topology to the Go and Python call sites
 // that publish to topics and consume subscriptions.
 //
 // The topology comes from the compiled proto descriptors (the same source of

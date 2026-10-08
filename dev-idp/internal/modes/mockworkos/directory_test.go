@@ -13,7 +13,7 @@ import (
 )
 
 // The emulator is exercised through the real workos-go client so the wire
-// shapes stay decodable by Gram's WorkOS wrapper.
+// shapes stay decodable by Speakeasy's WorkOS wrapper.
 func TestDirectorySyncThroughSDK(t *testing.T) {
 	t.Parallel()
 	_, handler := openOrganizationEmulator(t, filepath.Join(t.TempDir(), "devidp.db"))
