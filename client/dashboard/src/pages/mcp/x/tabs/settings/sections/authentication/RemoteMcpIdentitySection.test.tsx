@@ -1,4 +1,3 @@
-import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
@@ -40,10 +39,6 @@ const mocks = vi.hoisted(() => ({
   detach: vi.fn(),
   userSessionIssuer: vi.fn(),
   toastSuccess: vi.fn(),
-  scopes: vi.fn(),
-  setPin: vi.fn(),
-  invalidateScopes: vi.fn(),
-  setScopesData: vi.fn(),
   toastError: vi.fn(),
 }));
 
@@ -212,21 +207,6 @@ vi.mock("@/lib/remote-identity/queries/useProtectedResourceMetadata", () => ({
     mocks.protectedResourceMetadata(...args),
 }));
 
-vi.mock("@gram/client/react-query/getRemoteMcpServerScopes.js", () => ({
-  useGetRemoteMcpServerScopes: (...args: unknown[]) => mocks.scopes(...args),
-  setGetRemoteMcpServerScopesData: (...args: unknown[]) =>
-    mocks.setScopesData(...args),
-  invalidateAllGetRemoteMcpServerScopes: (...args: unknown[]) =>
-    mocks.invalidateScopes(...args),
-}));
-
-vi.mock("@gram/client/react-query/setRemoteMcpServerScopePin.js", () => ({
-  useSetRemoteMcpServerScopePinMutation: () => ({
-    mutateAsync: mocks.setPin,
-    isPending: false,
-  }),
-}));
-
 vi.mock("@gram/client/react-query/createRemoteMcpServerHeader.js", () => ({
   useCreateRemoteMcpServerHeaderMutation: () => ({
     mutateAsync: mocks.create,
@@ -294,41 +274,6 @@ function configuredHeader(overrides: Record<string, unknown> = {}) {
     updatedAt: new Date(0),
     ...overrides,
   };
-}
-
-function serverScopes(overrides: Record<string, unknown> = {}) {
-  return {
-    resourceUrl: "https://mcp.linear.app/mcp",
-    pinnedScopes: ["read"],
-    advertisedScopesKnown: true,
-    advertisedScopes: ["read", "write"],
-    challengeScopes: [],
-    discoveryEnabled: true,
-    sharedServerCount: 0,
-    clients: [
-      {
-        clientId: "client-1",
-        scopeSource: "resource_pin",
-        requestedScopes: ["read"],
-        unadvertisedPinnedScopes: [],
-        pinWouldDecide: true,
-      },
-    ],
-    ...overrides,
-  };
-}
-
-function sharedSource(): void {
-  mocks.siblings.mockReturnValue({
-    data: {
-      mcpServers: [
-        { id: "mcp-server-1", remoteMcpServerId: "remote-source-1" },
-        { id: "mcp-server-2", remoteMcpServerId: "remote-source-1" },
-      ],
-    },
-    isLoading: false,
-    isError: false,
-  });
 }
 
 function connectClient(): void {
@@ -482,17 +427,6 @@ beforeEach(() => {
   mocks.invalidateHeaders.mockResolvedValue(undefined);
   mocks.detach.mockResolvedValue({});
   mocks.authenticationProbe.mockReturnValue("available");
-  mocks.scopes.mockReturnValue({ data: undefined, isError: false });
-  mocks.setPin.mockImplementation(
-    async ({
-      request,
-    }: {
-      request: { setServerScopePinRequestBody: { scopes: string[] } };
-    }) =>
-      serverScopes({
-        pinnedScopes: request.setServerScopePinRequestBody.scopes,
-      }),
-  );
 });
 
 afterEach(() => {
@@ -1032,7 +966,6 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(mocks.remove).not.toHaveBeenCalled();
     expect(mocks.create).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
-    expect(mocks.setPin).not.toHaveBeenCalled();
     expect(mocks.toastSuccess).not.toHaveBeenCalled();
   });
 
@@ -1597,8 +1530,6 @@ describe("RemoteMcpIdentitySectionBody", () => {
         }),
       }),
     );
-    // The new client changes what the pin view resolves.
-    await waitFor(() => expect(mocks.invalidateScopes).toHaveBeenCalled());
   });
 
   it("drops scopes chosen for a manual client when Auto-Configure is saved", async () => {
@@ -2103,363 +2034,19 @@ describe("RemoteMcpIdentitySectionBody", () => {
     ).toBe("/remote-identity-providers");
   });
 
-  describe("pinned scopes", () => {
-    it("shows the pin under the connected provider for a writer", () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+  it("saves a header edit without recommitting the connected client", async () => {
+    connectClient();
 
-      renderIdentity();
+    renderIdentity();
+    addCustomHeader("X-Team", "eng");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-      expect(mocks.scopes).toHaveBeenCalledWith(
-        { mcpServerId: "mcp-server-1" },
-        undefined,
-        expect.objectContaining({ enabled: true }),
-      );
-      expect(
-        screen.getByRole("combobox", { name: "Pinned scopes" }),
-      ).toBeDefined();
-      expect(screen.getByText("read")).toBeDefined();
-      expect(screen.getByText("Sign-ins request these scopes.")).toBeDefined();
-    });
-
-    it("neither fetches nor shows the pin without mcp:write", () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
-      mocks.rbac.mockReturnValue({
-        isLoading: false,
-        hasScope: () => false,
-        hasAllScopes: () => false,
-        hasAnyScope: () => false,
-      });
-
-      renderIdentity();
-
-      for (const call of mocks.scopes.mock.calls) {
-        expect(call[2]).toMatchObject({ enabled: false });
-      }
-      expect(
-        screen.queryByRole("combobox", { name: "Pinned scopes" }),
-      ).toBeNull();
-    });
-
-    it("saves an added scope with the section's Save", async () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
-
-      renderIdentity();
-      const save = screen.getByRole("button", { name: "Save" });
-      expect((save as HTMLButtonElement).disabled).toBe(true);
-
-      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
-      // Advertised scopes and the provider's are both offered.
-      expect(
-        screen
-          .getAllByRole("option", { name: /not selected/ })
-          .map((option) => option.textContent),
-      ).toEqual(["write", "profile"]);
-      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
-      fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
-      await waitFor(() => expect(mocks.setPin).toHaveBeenCalledOnce());
-      expect(mocks.setPin).toHaveBeenCalledWith({
-        request: {
-          setServerScopePinRequestBody: {
-            mcpServerId: "mcp-server-1",
-            scopes: ["read", "write"],
-          },
-        },
-      });
-      expect(mocks.commit).not.toHaveBeenCalled();
-      await waitFor(() =>
-        expect(mocks.toastSuccess).toHaveBeenCalledWith(
-          "Pinned scopes updated",
-        ),
-      );
-    });
-
-    it("writes the saved pin into the view without a refetch", async () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
-
-      renderIdentity();
-      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
-      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
-      fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
-      await waitFor(() =>
-        expect(mocks.toastSuccess).toHaveBeenCalledWith(
-          "Pinned scopes updated",
-        ),
-      );
-      expect(mocks.setScopesData).toHaveBeenCalledOnce();
-      expect(mocks.setScopesData).toHaveBeenCalledWith(
-        expect.anything(),
-        [{ mcpServerId: "mcp-server-1" }],
-        serverScopes({ pinnedScopes: ["read", "write"] }),
-      );
-      expect(mocks.invalidateScopes).not.toHaveBeenCalled();
-    });
-
-    it("leaves the pin view alone when headers are saved", async () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
-
-      renderIdentity();
-      addCustomHeader("X-Team", "eng");
-      fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
-      await waitFor(() =>
-        expect(mocks.toastSuccess).toHaveBeenCalledWith(
-          "Upstream headers updated",
-        ),
-      );
-      expect(mocks.create).toHaveBeenCalledOnce();
-      expect(mocks.invalidateScopes).not.toHaveBeenCalled();
-    });
-
-    it("keeps the saved pin when headers save alongside it", async () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
-
-      renderIdentity();
-      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
-      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
-      addCustomHeader("X-Team", "eng");
-      fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
-      await waitFor(() =>
-        expect(mocks.toastSuccess).toHaveBeenCalledWith(
-          "Upstream headers updated",
-        ),
-      );
-      expect(mocks.toastSuccess).toHaveBeenCalledWith("Pinned scopes updated");
-      expect(mocks.create).toHaveBeenCalledOnce();
-      expect(mocks.setScopesData).toHaveBeenCalledOnce();
-      expect(mocks.invalidateScopes).not.toHaveBeenCalled();
-    });
-
-    it("lets a pin-only edit through a locked identity", async () => {
-      sharedSource();
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
-
-      renderIdentity();
-      expect(
-        (
-          screen.getByRole("radio", {
-            name: /Service Account/,
-          }) as HTMLButtonElement
-        ).disabled,
-      ).toBe(true);
-      const field = screen.getByRole("combobox", { name: "Pinned scopes" });
-      expect((field as HTMLButtonElement).disabled).toBe(false);
-      const save = screen.getByRole("button", { name: "Save" });
-      expect((save as HTMLButtonElement).disabled).toBe(true);
-
-      fireEvent.click(field);
-      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
-      expect((save as HTMLButtonElement).disabled).toBe(false);
-      fireEvent.click(save);
-
-      await waitFor(() => expect(mocks.setPin).toHaveBeenCalledOnce());
-      expect(mocks.setPin).toHaveBeenCalledWith({
-        request: {
-          setServerScopePinRequestBody: {
-            mcpServerId: "mcp-server-1",
-            scopes: ["read", "write"],
-          },
-        },
-      });
-      expect(mocks.commit).not.toHaveBeenCalled();
-      expect(mocks.create).not.toHaveBeenCalled();
-    });
-
-    it("keeps Save shut under a locked identity once headers are also edited", () => {
-      sharedSource();
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
-
-      renderIdentity();
-      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
-      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
-      addCustomHeader("X-Team", "eng");
-
-      const save = screen.getByRole("button", { name: "Save" });
-      expect((save as HTMLButtonElement).disabled).toBe(true);
-    });
-
-    it("saves a cleared pin with the flag off", async () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({
-        data: serverScopes({ discoveryEnabled: false }),
-        isError: false,
-      });
-
-      renderIdentity();
-      const field = screen.getByRole("combobox", { name: "Pinned scopes" });
-      expect((field as HTMLButtonElement).disabled).toBe(true);
-      const save = screen.getByRole("button", { name: "Save" });
-      expect((save as HTMLButtonElement).disabled).toBe(true);
-
-      fireEvent.click(
-        screen.getByRole("button", { name: "Clear pinned scopes" }),
-      );
-      expect((save as HTMLButtonElement).disabled).toBe(false);
-      fireEvent.click(save);
-
-      await waitFor(() => expect(mocks.setPin).toHaveBeenCalledOnce());
-      expect(mocks.setPin).toHaveBeenCalledWith({
-        request: {
-          setServerScopePinRequestBody: {
-            mcpServerId: "mcp-server-1",
-            scopes: [],
-          },
-        },
-      });
-    });
-
-    it("drops a draft edited back to the saved pin", () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
-
-      const { rerenderIdentity } = renderIdentity();
-      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
-      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
-      fireEvent.click(screen.getByRole("option", { name: /^write, selected/ }));
-      const save = screen.getByRole("button", { name: "Save" });
-      expect((save as HTMLButtonElement).disabled).toBe(true);
-
-      // A refetch now shows through instead of a stale draft.
-      mocks.scopes.mockReturnValue({
-        data: serverScopes({ pinnedScopes: ["read", "admin"] }),
-        isError: false,
-      });
-      rerenderIdentity();
-      expect(
-        screen.getByRole("option", { name: /^admin, selected/ }),
-      ).toBeDefined();
-    });
-
-    it("saves headers even when the pin save fails", async () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
-      mocks.setPin.mockRejectedValue(new Error("pin refused"));
-
-      renderIdentity();
-      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
-      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
-      addCustomHeader("X-Team", "eng");
-      fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
-      await waitFor(() =>
-        expect(mocks.toastSuccess).toHaveBeenCalledWith(
-          "Upstream headers updated",
-        ),
-      );
-      expect(mocks.create).toHaveBeenCalledOnce();
-      expect(mocks.toastError).toHaveBeenCalledWith("pin refused");
-      expect(mocks.toastSuccess).not.toHaveBeenCalledWith(
-        "Pinned scopes updated",
-      );
-    });
-
-    it("saves the pin even when the header save fails", async () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
-      mocks.create.mockRejectedValue(new Error("header refused"));
-
-      renderIdentity();
-      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
-      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
-      addCustomHeader("X-Team", "eng");
-      fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
-      await waitFor(() =>
-        expect(mocks.toastSuccess).toHaveBeenCalledWith(
-          "Pinned scopes updated",
-        ),
-      );
-      await waitFor(() =>
-        expect(mocks.toastError).toHaveBeenCalledWith("header refused"),
-      );
-      expect(mocks.toastSuccess).not.toHaveBeenCalledWith(
+    await waitFor(() =>
+      expect(mocks.toastSuccess).toHaveBeenCalledWith(
         "Upstream headers updated",
-      );
-    });
-
-    it("says so when the pin cannot be loaded", () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: undefined, isError: true });
-
-      renderIdentity();
-
-      expect(screen.getByText("Couldn't load pinned scopes.")).toBeDefined();
-      expect(
-        screen.queryByRole("combobox", { name: "Pinned scopes" }),
-      ).toBeNull();
-    });
-
-    it("explains a refusal: the pin needs edit access to every server on the URL", () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({
-        data: undefined,
-        isError: true,
-        error: new GramError("permission denied", {
-          response: new Response(null, { status: 403 }),
-          request: new Request("https://app.getgram.ai/rpc/example"),
-          body: "",
-        }),
-      });
-
-      renderIdentity();
-
-      expect(
-        screen.getByText(
-          "Pinned scopes are shared by every MCP server that uses this URL. You need edit access to all of them to view or change the pin.",
-        ),
-      ).toBeDefined();
-      expect(screen.queryByText("Couldn't load pinned scopes.")).toBeNull();
-    });
-
-    it("says the pin is loading until it arrives", () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: undefined, isError: false });
-
-      renderIdentity();
-
-      expect(screen.getByText("Loading pinned scopes…")).toBeDefined();
-      expect(
-        screen.queryByRole("combobox", { name: "Pinned scopes" }),
-      ).toBeNull();
-      expect(screen.queryByText("Couldn't load pinned scopes.")).toBeNull();
-    });
-
-    it("shows no loading line outside User Identity", () => {
-      mocks.scopes.mockReturnValue({ data: undefined, isError: false });
-
-      renderIdentity();
-
-      expect(screen.queryByText("Loading pinned scopes…")).toBeNull();
-    });
-
-    it("clears the pin with an empty list", async () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
-
-      renderIdentity();
-      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
-      fireEvent.click(screen.getByRole("option", { name: /^read, selected/ }));
-      fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
-      await waitFor(() => expect(mocks.setPin).toHaveBeenCalledOnce());
-      expect(mocks.setPin).toHaveBeenCalledWith({
-        request: {
-          setServerScopePinRequestBody: {
-            mcpServerId: "mcp-server-1",
-            scopes: [],
-          },
-        },
-      });
-    });
+      ),
+    );
+    expect(mocks.create).toHaveBeenCalledOnce();
+    expect(mocks.commit).not.toHaveBeenCalled();
   });
 });
