@@ -116,12 +116,21 @@ func newAssertionVerifier(cfg CredentialsConfig, client *http.Client, now func()
 // values, or any alias spelling alongside the header, are refused.
 func assertionHeader(header http.Header) (string, error) {
 	var values []string
+	alias := false
 	for name, vs := range header {
-		if identity.ReservedHeader(name) {
-			values = append(values, vs...)
+		if !identity.ReservedHeader(name) {
+			continue
 		}
+		// Only the hyphenated name, in any case, is the header. An
+		// underscore spelling is never trusted, alone or alongside it.
+		if !strings.EqualFold(name, identity.Header) {
+			alias = true
+		}
+		values = append(values, vs...)
 	}
 	switch {
+	case alias:
+		return "", errAssertionInvalid
 	case len(values) == 0:
 		return "", errAssertionMissing
 	case len(values) > 1 || len(values[0]) > maxAssertionBytes || values[0] == "":
