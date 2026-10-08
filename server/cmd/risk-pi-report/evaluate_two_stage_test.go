@@ -1,11 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
@@ -115,4 +121,87 @@ func TestTransientCallFailure(t *testing.T) {
 			require.Equal(t, tc.want, transientCallFailure(callObservation{Err: tc.err}))
 		})
 	}
+}
+
+func TestCascadeCaseRetryReporting(t *testing.T) {
+	t.Parallel()
+	transient := &typesafe.StatusError{StatusCode: http.StatusTooManyRequests}
+	permanent := &typesafe.StatusError{StatusCode: http.StatusUnauthorized}
+	for _, tc := range []struct {
+		name                   string
+		failures               []error
+		stopWait               bool
+		wantAttempts           int
+		wantLatency            time.Duration
+		wantInitialUnavailable bool
+		wantFinalUnavailable   bool
+	}{
+		{name: "immediate success", failures: []error{nil}, wantAttempts: 1, wantLatency: time.Second},
+		{name: "recovers", failures: []error{transient, nil}, wantAttempts: 2, wantLatency: 7 * time.Second, wantInitialUnavailable: true},
+		{name: "exhausts retries", failures: []error{transient, transient, transient, transient}, wantAttempts: 4, wantLatency: 39 * time.Second, wantInitialUnavailable: true, wantFinalUnavailable: true},
+		{name: "permanent failure", failures: []error{permanent}, wantAttempts: 1, wantLatency: time.Second, wantInitialUnavailable: true, wantFinalUnavailable: true},
+		{name: "canceled retry wait", failures: []error{transient}, stopWait: true, wantAttempts: 1, wantLatency: 3 * time.Second, wantInitialUnavailable: true, wantFinalUnavailable: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			clock := time.Unix(0, 0)
+			observation := &decisionObservation{}
+			attempts := 0
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			scan := func() (scanners.Result, promptinjection.Result, error) {
+				require.Less(t, attempts, len(tc.failures))
+				err := tc.failures[attempts]
+				attempts++
+				clock = clock.Add(time.Second)
+				observation.Calls = append(observation.Calls, callObservation{Latency: time.Second, Err: err})
+				verdict := promptinjection.Result{Label: promptinjection.LabelSafe, Completed: true}
+				if err != nil {
+					verdict.Label = promptinjection.LabelUnavailable
+					verdict.Completed = false
+				}
+				return scanners.Result{}, verdict, err
+			}
+			wait := func(ctx context.Context, attempt int) bool {
+				if tc.stopWait {
+					clock = clock.Add(2 * time.Second)
+					cancel()
+					return ctx.Err() == nil
+				}
+				clock = clock.Add(caseRetryBaseDelay << (attempt - 1))
+				return true
+			}
+			_, verdict, err, firstUnavailable := runCascadeCase(ctx, observation, scan, func() time.Time { return clock }, wait)
+			require.Equal(t, tc.wantAttempts, attempts)
+			require.Equal(t, tc.wantLatency, observation.Latency)
+			require.Equal(t, tc.wantInitialUnavailable, firstUnavailable)
+			require.Equal(t, tc.wantFinalUnavailable, err != nil || verdict.Label == promptinjection.LabelUnavailable)
+			require.Len(t, observation.Calls, attempts, "every physical attempt remains in cost/error reporting")
+			stats := summarizeEvaluation([]decisionObservation{*observation})
+			require.InDelta(t, float64(tc.wantLatency.Milliseconds()), stats.DecisionLatencyP50MS, 0.001)
+			require.Equal(t, attempts, stats.PhysicalCalls)
+		})
+	}
+}
+
+func TestBenchmarkAvailabilityReportLabels(t *testing.T) {
+	t.Parallel()
+	stats := evaluationStats{BenchmarkCases: 2, BenchmarkFirstAttemptUnavailable: 1, FailOpenEvents: 0, PhysicalCalls: 3, DecisionLatencyP50MS: 7000}
+	raw, err := json.Marshal(stats)
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `"benchmark_cases":2`)
+	require.Contains(t, string(raw), `"benchmark_first_attempt_unavailable":1`)
+	require.Contains(t, string(raw), `"fail_open_events":0`)
+	var output bytes.Buffer
+	printSummary(&output, []modeSummary{{Evaluation: stats}})
+	require.Contains(t, output.String(), "benchmark_first_attempt_unavailable=1 final_unavailable=0")
+	require.Contains(t, output.String(), "benchmark attempts include confirmer retries")
+	require.Contains(t, output.String(), "total_case_latency_ms[p50=7000")
+	stats.BenchmarkFirstAttemptUnavailable = 0
+	raw, err = json.Marshal(stats)
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `"benchmark_first_attempt_unavailable":0`)
+	output.Reset()
+	printSummary(&output, []modeSummary{{Evaluation: stats}})
+	require.Contains(t, output.String(), "benchmark_first_attempt_unavailable=0 final_unavailable=0")
 }

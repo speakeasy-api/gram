@@ -186,6 +186,14 @@ type modeSummary struct {
 }
 
 type evaluationStats struct {
+	// BenchmarkCases counts distinct cascade cases regardless of whole-case retries.
+	BenchmarkCases int `json:"benchmark_cases,omitempty"`
+
+	// BenchmarkFirstAttemptUnavailable counts unavailable first benchmark
+	// attempts, even when a later retry recovers. Confirmer retries are included
+	// in each attempt, so this does not measure production availability.
+	BenchmarkFirstAttemptUnavailable int `json:"benchmark_first_attempt_unavailable"`
+
 	PrefilterMissedAttacks int     `json:"prefilter_missed_attacks,omitempty"`
 	ConfirmationCalls      int     `json:"confirmation_calls,omitempty"`
 	ConfirmationRefusals   int     `json:"confirmation_refusals,omitempty"`
@@ -444,7 +452,7 @@ func run(ctx context.Context, opts options) error {
 	if len(corpus) == 0 {
 		return fmt.Errorf("no cases after --sources filter %q and --exclude-sources filter %q", opts.sources, opts.excludeSources)
 	}
-	if opts.minRecall < 0 || opts.minRecall > 1 {
+	if math.IsNaN(opts.minRecall) || opts.minRecall < 0 || opts.minRecall > 1 {
 		return fmt.Errorf("--min-recall must be between 0 and 1")
 	}
 	if opts.maxFalsePositives < gateDisabledFalsePositives {
@@ -837,11 +845,15 @@ func printSummary(w io.Writer, modes []modeSummary) {
 		p("%-12s TP=%-4d FP=%-4d TN=%-4d FN=%-4d | P=%.3f R=%.3f F1=%.3f FPr=%.4f\n",
 			m.Name, c.TP, c.FP, c.TN, c.FN, m.Overall.Precision, m.Overall.Recall, m.Overall.F1, m.Overall.FPRate)
 		if m.Evaluation.PhysicalCalls > 0 {
-			p("             calls=%d errors=%d fail_open=%d over_10s=%d latency_ms[p50=%.0f p95=%.0f p99=%.0f] tokens[prompt=%d completion=%d] cost=$%.6f\n",
+			p("             calls=%d errors=%d fail_open=%d over_10s=%d total_case_latency_ms[p50=%.0f p95=%.0f p99=%.0f] tokens[prompt=%d completion=%d] cost=$%.6f\n",
 				m.Evaluation.PhysicalCalls, m.Evaluation.Errors, m.Evaluation.FailOpenEvents,
 				m.Evaluation.CallsOver10Seconds,
 				m.Evaluation.DecisionLatencyP50MS, m.Evaluation.DecisionLatencyP95MS, m.Evaluation.DecisionLatencyP99MS,
 				m.Evaluation.PromptTokens, m.Evaluation.CompletionTokens, m.Evaluation.CostUSD)
+		}
+		if m.Evaluation.BenchmarkCases > 0 {
+			p("             benchmark_cases=%d benchmark_first_attempt_unavailable=%d final_unavailable=%d (benchmark attempts include confirmer retries)\n",
+				m.Evaluation.BenchmarkCases, m.Evaluation.BenchmarkFirstAttemptUnavailable, m.Evaluation.FailOpenEvents)
 		}
 		if m.Evaluation.ConfirmationCalls > 0 || m.Evaluation.PrefilterMissedAttacks > 0 {
 			p("             confirmations=%d refusals=%d refused_events=%d refusal_fallbacks=%d prefilter_missed_attacks=%d\n",

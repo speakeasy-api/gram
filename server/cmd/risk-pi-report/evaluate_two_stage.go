@@ -62,6 +62,7 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 	fallbacks := make([]int, len(corpus))
 	refused := make([]bool, len(corpus))
 	failed := make([]bool, len(corpus))
+	firstUnavailable := make([]bool, len(corpus))
 	sem := make(chan struct{}, opts.judgeConcurrency)
 	var wg sync.WaitGroup
 	for i, row := range corpus {
@@ -88,39 +89,25 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 			}
 			cascade := piopenrouter.NewCascade(logger, tracer, meter, completion, prefilter, load)
 			scanner := promptinjection.NewScanner(logger, cascade.Classify)
-			for attempt := 1; ; attempt++ {
-				start := time.Now()
-				firstCall := len(observation.Calls)
+			result, verdict, err, initialUnavailable := runCascadeCase(ctx, observation, func() (scanners.Result, promptinjection.Result, error) {
 				refused[i] = false
-				result, verdict, err := scanner.ScanStrictWithVerdict(ctx, row.Text, benchOrgID, benchProjectID, "", row.judgeMessage(), row.trajectory())
-				observation.Latency = time.Since(start)
-				unavailable := err != nil || verdict.Label == promptinjection.LabelUnavailable
-				if unavailable && attempt < maxCaseAttempts && slices.ContainsFunc(observation.Calls[firstCall:], transientCallFailure) && waitToRetry(ctx, attempt) {
-					continue
-				}
-				results[i] = result.Findings
-				missed[i] = row.Label == "malicious" && (verdict.Model == typesafe.Model || strings.HasPrefix(verdict.Model, typesafe.Model+"-")) && verdict.Completed && verdict.Label == promptinjection.LabelSafe
-				if !unavailable {
-					return
-				}
-				failed[i] = true
-				if err == nil {
-					err = promptinjection.ErrNoVerdict
-				}
-				// Context/metering failures need an event error even if both
-				// transports succeeded; do not count them as extra physical calls.
-				if len(observation.Calls) > 0 && observation.Calls[len(observation.Calls)-1].Err == nil {
-					observation.Calls[len(observation.Calls)-1].Err = err
-				}
-				return
-			}
+				return scanner.ScanStrictWithVerdict(ctx, row.Text, benchOrgID, benchProjectID, "", row.judgeMessage(), row.trajectory())
+			}, time.Now, waitToRetry)
+			firstUnavailable[i] = initialUnavailable
+			results[i] = result.Findings
+			missed[i] = row.Label == "malicious" && (verdict.Model == typesafe.Model || strings.HasPrefix(verdict.Model, typesafe.Model+"-")) && verdict.Completed && verdict.Label == promptinjection.LabelSafe
+			failed[i] = err != nil || verdict.Label == promptinjection.LabelUnavailable
 		})
 	}
 	wg.Wait()
 	stats := summarizeEvaluation(observations)
 	// A recovered Jev overflow is a failed physical call, not a failed scan.
 	stats.FailOpenEvents = 0
+	stats.BenchmarkCases = len(corpus)
 	for i := range observations {
+		if firstUnavailable[i] {
+			stats.BenchmarkFirstAttemptUnavailable++
+		}
 		stats.ConfirmationCalls += confirmations[i]
 		stats.ConfirmationRefusals += refusals[i]
 		stats.RefusalFallbackCalls += fallbacks[i]
@@ -135,6 +122,37 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 		}
 	}
 	return results, stats, nil
+}
+
+// runCascadeCase measures the complete benchmark case, including failed attempts
+// and retry waits. The first attempt includes benchmark-only confirmer retries;
+// its availability is not a measurement of the production deadline.
+func runCascadeCase(ctx context.Context, observation *decisionObservation, scan func() (scanners.Result, promptinjection.Result, error), now func() time.Time, wait func(context.Context, int) bool) (scanners.Result, promptinjection.Result, error, bool) {
+	started := now()
+	defer func() { observation.Latency = now().Sub(started) }()
+	firstUnavailable := false
+	for attempt := 1; ; attempt++ {
+		firstCall := len(observation.Calls)
+		result, verdict, err := scan()
+		unavailable := err != nil || verdict.Label == promptinjection.LabelUnavailable
+		if attempt == 1 {
+			firstUnavailable = unavailable
+		}
+		if unavailable && attempt < maxCaseAttempts && slices.ContainsFunc(observation.Calls[firstCall:], transientCallFailure) && wait(ctx, attempt) {
+			continue
+		}
+		if unavailable {
+			if err == nil {
+				err = promptinjection.ErrNoVerdict
+			}
+			// Context/metering failures need an event error even if both
+			// transports succeeded; do not count them as extra physical calls.
+			if len(observation.Calls) > firstCall && observation.Calls[len(observation.Calls)-1].Err == nil {
+				observation.Calls[len(observation.Calls)-1].Err = err
+			}
+		}
+		return result, verdict, err, firstUnavailable
+	}
 }
 
 type observedPrefilter struct {

@@ -104,7 +104,15 @@ contracts; no new tool, permission, or seed shape is needed.
 Run `mise exec -- go run ./server/cmd/risk-pi-report -cascade` from the repository
 root with `OPENROUTER_DEV_KEY` configured. The report uses production orchestration
 and records confirmation calls, confirmation refusals, refusal-fallback calls,
-prefilter misses, total provider cost, latency, precision, and recall. Run without
+prefilter misses, total provider cost, latency, precision, and recall. Benchmark
+case latency includes all whole-case attempts and retry waits, from the first
+attempt until the final result; physical-call latency remains separate. The
+`benchmark_first_attempt_unavailable` count records unavailable first benchmark
+attempts even if a later whole-case retry succeeds. `fail_open_events` records
+only final unavailable cases after retries. A benchmark attempt includes the
+harness's confirmer retries. The gate measures recovered model accuracy, not
+production availability within the relay's five-second budget; that budget is not
+enforced or measured by this report. Run without
 `-cascade` for the baseline. JSONL cases can
 provide a `window` with up to five rendered messages and a `target_index`; cases
 without a window evaluate the target with its trajectory. Both Jev and the confirmer
@@ -129,7 +137,8 @@ does not check them. A run costs about $2.30. `--no-refusal-fallback` scores
 refusals without calling Opus 4.8, as the report scored the confirmer-only options.
 
 The `Prompt injection benchmark` check (`.github/workflows/pi-benchmark.yml`) runs
-the gate on pull requests that change this package or risk-pi-report, and on
+the gate on pull requests that change this package, risk-pi-report, the gate task,
+or the benchmark workflow, and on
 manual dispatch, with the `OPENROUTER_API_KEY` repository secret. Its
 `pull_request` trigger stays commented out until the gate is enabled; until then
 `TestPromptInjectionBenchmarkGateIsEnabled` fails, so CI Gate blocks the merge

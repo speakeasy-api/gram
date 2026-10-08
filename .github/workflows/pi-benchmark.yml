@@ -15,6 +15,8 @@ on:
   #   paths:
   #     - "server/internal/scanners/promptinjection/**"
   #     - "server/cmd/risk-pi-report/**"
+  #     - ".mise-tasks/risk/pi-gate.sh"
+  #     - ".github/workflows/pi-benchmark.yml"
   workflow_dispatch:
 
 concurrency:

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"path/filepath"
 	"testing"
 
@@ -123,4 +124,27 @@ func TestExcludeSourcesDropsMatchingSources(t *testing.T) {
 	corpus := []labeledCase{{ID: "a", Source: "cascade_context"}, {ID: "b", Source: "deepset"}, {ID: "c", Source: "mutation:base64"}}
 	require.Equal(t, []labeledCase{{ID: "b", Source: "deepset"}}, excludeSources(corpus, "cascade_context, mutation"))
 	require.Equal(t, corpus, excludeSources(corpus, " "))
+}
+
+func TestRunRejectsInvalidMinRecall(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		value float64
+	}{
+		{name: "NaN", value: math.NaN()},
+		{name: "negative", value: -0.01},
+		{name: "above one", value: 1.01},
+		{name: "positive infinity", value: math.Inf(1)},
+		{name: "negative infinity", value: math.Inf(-1)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			corpusDir := filepath.Join("..", "..", "internal", "scanners", "promptinjection", "testdata", "prompt_injection")
+			// Zero repeats prevents provider calls even if validation regresses.
+			err := run(t.Context(), options{corpusDir: corpusDir, minRecall: tc.value})
+			require.ErrorContains(t, err, "--min-recall must be between 0 and 1")
+		})
+	}
 }
