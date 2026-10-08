@@ -188,8 +188,14 @@ func validateFederatedCallbackRoute(r *http.Request, callback string, clientID u
 }
 
 // federatedCallbackMisrouted reports, before state is consumed, a federated challenge arriving off its recorded callback.
-func federatedCallbackMisrouted(r *http.Request, federation *FederatedChallenge, routeClientID string) string {
-	if _, err := recordedIDPCallbackOrigin(federation.CallbackURL, federation.ClientID); err != nil {
+func federatedCallbackMisrouted(r *http.Request, federation *FederatedChallenge, routeClientID, requestBaseURL string) string {
+	recorded, err := recordedIDPCallbackOrigin(federation.CallbackURL, federation.ClientID)
+	if err != nil {
+		return "origin_mismatch"
+	}
+	// Use the middleware-classified origin, never forwarding headers or the raw Host.
+	actual, err := url.Parse(requestBaseURL)
+	if err != nil || !sameOrigin(recorded, actual) {
 		return "origin_mismatch"
 	}
 	if validateFederatedCallbackRoute(r, federation.CallbackURL, federation.ClientID, routeClientID) != nil {
