@@ -239,17 +239,27 @@ a new prefix. DuckDB's `union_by_name=true` handles additive file schemas.
 ## Batching and failure behavior
 
 Defaults: 10,000 messages, 32 MiB raw input, 30-second maximum accumulation age,
-128 partitions, four concurrent encode/upload workers, two-minute **whole-batch**
-processing timeout, ten-minute lease extension, 20,000-message/128 MiB admitted
-input budget. Set `Config.Settings` to override positive values.
+128 partitions per processing window, four concurrent encode/upload workers,
+two-minute **whole-batch** processing timeout, ten-minute lease extension,
+20,000-message/128 MiB admitted input budget. Set `Config.Settings` to override
+positive values.
 
-There is one processing batch and one accumulating/pending batch, with at most
-one carry message when a new partition exceeds the limit. Permits remain held
-through settlement. A larger-than-budget single message acquires the full byte
-budget exclusively; a byte-triggered batch may overshoot by one message. These
-are raw-input bounds: decoded values, page construction, compression and the SDK's
+Google's `support/bundler` owns count/byte/time-triggered batching and its queue.
+One batch handler runs at a time; queued batches share the admitted count and
+byte budgets, held through settlement. The byte threshold triggers flushing,
+rather than capping batch size: queued bundles can continue growing up to the
+count and outstanding byte limits. A larger-than-budget single message acquires
+the full byte budget exclusively; empty payloads account for one byte. These are
+raw-input budgets: decoded values, page construction, compression and the SDK's
 separately bounded outstanding deliveries add to process memory. They are not a
 hard total-memory cap.
+
+The runner splits each batch into sequential windows of at most `MaxPartitions`
+distinct routes. Windows share one whole-batch deadline, capped by the oldest
+delivery's remaining lease budget. Queued work that has exhausted that budget is
+nacked without opening an object. The startup lease check requires more than
+twice `ProcessTimeout` plus `MaxLatency`; this reserves headroom but does not
+guarantee that every queued batch can finish before its lease expires.
 
 Encoded Parquet column pages are **spooled to temporary files** while each row
 group is assembled. Completed row groups stream to GCS; no complete encoded file
