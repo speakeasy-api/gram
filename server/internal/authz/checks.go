@@ -2,14 +2,14 @@ package authz
 
 // MCPToolCallDimensions carries the typed attributes of an MCP tool call.
 // Zero-value Tool and ProjectID are omitted from the check dimensions. A
-// zero-value Disposition on a named tool means the tool has no classification
-// and becomes [DispositionUnclassified].
+// zero-value Disposition on a named tool means no annotation hint classifies
+// it and becomes [DispositionUnclassified].
 type MCPToolCallDimensions struct {
 	// Tool is the name of the tool being listed or called.
 	Tool string
 
 	// Disposition is the tool's classification derived from its annotations,
-	// or empty when it carries none.
+	// or empty when no annotation hint is set to true.
 	Disposition string
 
 	// ProjectID is the project the MCP server belongs to, so project-wide
@@ -22,7 +22,7 @@ type MCPToolCallDimensions struct {
 // A named tool always carries a disposition dimension. Without one, a grant
 // narrowed only by disposition would match through the selector rule that
 // skips grant keys a check does not constrain, so a "read_only" grant would
-// admit every tool that has no annotations. An unclassified tool is therefore
+// admit every tool with no annotation hint set to true. An unclassified tool is therefore
 // checked as [DispositionUnclassified], which no grant can name: it is reached
 // only by grants that do not constrain disposition, such as a whole-server
 // grant or a grant naming the tool.
