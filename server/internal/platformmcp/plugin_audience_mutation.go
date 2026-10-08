@@ -33,10 +33,18 @@ type PluginAssignmentMutationError struct {
 	Code    string
 	Message string
 	Cause   error
-	// Review is set when the refusal filed a Shadow MCP review request on the
-	// administrator's behalf.
-	Review *ShadowMCPReviewToolOutput
 }
+
+// shadowMCPReviewFiledError wraps a plugin assignment refusal with the Shadow
+// MCP review that was filed for it, so the tool result can carry the review
+// without widening the shared refusal type.
+type shadowMCPReviewFiledError struct {
+	cause  *PluginAssignmentMutationError
+	review ShadowMCPReviewToolOutput
+}
+
+func (e *shadowMCPReviewFiledError) Error() string { return e.cause.Error() }
+func (e *shadowMCPReviewFiledError) Unwrap() error { return e.cause }
 
 func (e *PluginAssignmentMutationError) Error() string { return e.Message }
 func (e *PluginAssignmentMutationError) Unwrap() error { return e.Cause }
@@ -130,8 +138,10 @@ func (s *PluginsService) reviewAssignmentRefusal(ctx context.Context, principal 
 	if fileErr != nil {
 		return err
 	}
-	output := review.toolOutput()
-	return &PluginAssignmentMutationError{Code: shadowMCPReviewRequestedCode, Message: review.Explanation, Cause: err, Review: &output}
+	return &shadowMCPReviewFiledError{
+		cause:  &PluginAssignmentMutationError{Code: shadowMCPReviewRequestedCode, Message: review.Explanation, Cause: err},
+		review: review.toolOutput(),
+	}
 }
 
 func (s *PluginsService) mutationValid() bool {

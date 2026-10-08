@@ -182,8 +182,9 @@ func TestPluginAssignmentRefusalFilesAReviewForTheRefusedServer(t *testing.T) {
 	require.ErrorAs(t, err, &mutation)
 	require.Equal(t, "shadow_mcp_review_requested", mutation.Code)
 	require.Equal(t, "why", mutation.Message)
-	require.NotNil(t, mutation.Review)
-	require.Equal(t, "request-1", mutation.Review.RequestID)
+	var filed *shadowMCPReviewFiledError
+	require.ErrorAs(t, err, &filed)
+	require.Equal(t, "request-1", filed.review.RequestID)
 	require.ErrorIs(t, err, admission.ErrApprovalRequired, "the original refusal stays in the chain")
 	require.Equal(t, "https://mcp.example.test/server", filer.url)
 	require.Equal(t, "changing who receives the Support plugin in project project", filer.activity)

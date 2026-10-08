@@ -412,6 +412,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		shadowAI:                  nil,
 		reviewRequests:            nil,
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
+		reviewLinks:               nil,
 		toolExposure:              nil,
 		projectLifecycle:          nil,
 		analytics:                 nil,
