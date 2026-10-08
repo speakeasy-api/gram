@@ -8,7 +8,7 @@ import { useSetMcpServerToolMetadataMutation } from "@gram/client/react-query/se
 import { useSetMcpServerToolMetadataBatchMutation } from "@gram/client/react-query/setMcpServerToolMetadataBatch.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   advertisedToForm,
@@ -42,6 +42,18 @@ export interface UseSyncToolMetadataResult {
    * annotations with what the session advertises, or remove a stored tool.
    */
   toolActions: ToolMetadataActions | undefined;
+}
+
+/** The automatic pass's progress for one server and project. */
+interface AutoRecordState {
+  /** The request in flight, if any; nothing else is sent until it settles. */
+  inFlight: number | undefined;
+
+  /** The batch last sent (newline-joined tool names; empty in mirror mode). */
+  sent: string | undefined;
+
+  /** The batch that last failed, and the listing it was sent from. */
+  failed: { batch: string; listedAt: number } | undefined;
 }
 
 export interface ToolMetadataActions {
@@ -102,20 +114,34 @@ export function useSyncToolMetadata({
       refetchType: "all",
     });
 
-  // What the automatic pass last wrote (or is writing) per server and project:
-  // in additive mode the names of the batch, in mirror mode just that it ran.
-  // A re-render, or the refetch the write itself triggers, never sends the
-  // same batch twice, while a later listing showing other unrecorded tools
-  // writes those. A failed write forgets only its own entry, so the next
-  // successful listing — even one returning the same tools — tries again, and
-  // a persistent failure is retried once per listing rather than in a loop.
-  const autoWritten = useRef(new Map<string, string>());
+  // The automatic pass's bookkeeping, per server and project. Writes for one
+  // server are serialized: while a batch is in flight nothing else is sent for
+  // that server, and once it settles the latest snapshot is reconciled. A
+  // batch is never sent twice, while a later listing showing other unrecorded
+  // tools writes those. A failed batch is retried by the next successful
+  // listing — even one returning the same tools — and never in a loop.
+  const autoState = useRef(new Map<string, AutoRecordState>());
+  const nextRequestId = useRef(0);
+  // Bumped when a write settles, so the latest snapshot is reconciled even if
+  // nothing else about it changed.
+  const [settled, setSettled] = useState(0);
 
   // Records tools with no stored entry. Strictly additive: it rejects the whole
   // batch if any tool already has one, so a 409 means our stored snapshot was
   // stale rather than that anything went wrong. This pass is invisible, so that
-  // case just reloads the list instead of surfacing an error.
-  const add = useAddMcpServerToolMetadataBatchMutation({ onSuccess: refresh });
+  // case just reloads the list instead of surfacing an error. This handler is
+  // the only one that reports the pass's failures: it replaces the client's
+  // default "Request failed" notification for this mutation.
+  const add = useAddMcpServerToolMetadataBatchMutation({
+    onSuccess: refresh,
+    onError: async (error) => {
+      if (error instanceof GramError && error.statusCode === 409) {
+        await refresh();
+        return;
+      }
+      handleAPIError(error, "Failed to record new tool metadata");
+    },
+  });
 
   // Makes the stored set mirror the session, deleting tools it dropped.
   const set = useSetMcpServerToolMetadataBatchMutation({
@@ -147,14 +173,28 @@ export function useSyncToolMetadata({
 
     const tools = newToolsBatch(live, stored);
     const serverKey = `${project?.slug ?? ""}:${mcpServerId}`;
-    const batchKey =
+    const batch =
       mode === "additive"
         ? (tools ?? []).map((tool) => tool.toolName).join("\n")
         : "";
-    if (autoWritten.current.get(serverKey) === batchKey) return;
-    autoWritten.current.set(serverKey, batchKey);
+    const state = autoState.current.get(serverKey) ?? {
+      inFlight: undefined,
+      sent: undefined,
+      failed: undefined,
+    };
+    autoState.current.set(serverKey, state);
+    if (state.inFlight !== undefined) return;
+    if (state.sent === batch) return;
+    if (state.failed?.batch === batch && state.failed.listedAt === listedAt) {
+      return;
+    }
+    state.sent = batch;
     if (!tools) return;
 
+    const requestId = ++nextRequestId.current;
+    state.inFlight = requestId;
+    state.failed = undefined;
+    const sentListedAt = listedAt;
     add
       .mutateAsync({
         request: {
@@ -162,18 +202,22 @@ export function useSyncToolMetadata({
           setToolMetadataBatchRequestBody: { mcpServerId, tools },
         },
       })
-      .catch(async (error: unknown) => {
-        // Only this request's entry: a newer batch, or another server's, keeps
-        // its own guard.
-        if (autoWritten.current.get(serverKey) === batchKey) {
-          autoWritten.current.delete(serverKey);
-        }
-        if (error instanceof GramError && error.statusCode === 409) {
-          await refresh();
-          return;
-        }
-        handleAPIError(error, "Failed to record new tool metadata");
-      });
+      .then(
+        () => {
+          if (state.inFlight !== requestId) return;
+          state.inFlight = undefined;
+          setSettled((n) => n + 1);
+        },
+        // The mutation's onError reports the failure; this only releases the
+        // request so the next successful listing can retry it.
+        () => {
+          if (state.inFlight !== requestId) return;
+          state.inFlight = undefined;
+          state.sent = undefined;
+          state.failed = { batch, listedAt: sentListedAt };
+          setSettled((n) => n + 1);
+        },
+      );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     enabled,
@@ -184,6 +228,7 @@ export function useSyncToolMetadata({
     stored,
     mode,
     project?.slug,
+    settled,
   ]);
 
   const pendingTool =
