@@ -19,6 +19,11 @@ const live = vi.hoisted(() => ({
     | Record<string, { annotations?: { readOnlyHint?: boolean } }>
     | undefined,
   lastOptions: undefined as { enabled?: boolean } | undefined,
+  canWrite: true,
+}));
+
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasAnyScope: () => live.canWrite }),
 }));
 
 vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
@@ -152,6 +157,7 @@ beforeEach(() => {
   live.connect.mockReset();
   live.needsAuth = true;
   live.tools = undefined;
+  live.canWrite = true;
   inventory.groups = [
     {
       projectId: "p-default",
@@ -321,5 +327,20 @@ describe("McpAccessPanel", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "1 Tool" }));
     expect(screen.getByText("1 of 2 tools selected")).toBeTruthy();
+  });
+
+  it("asks for mcp:write instead of connecting when the editor cannot record tools", () => {
+    live.canWrite = false;
+    renderPanel({
+      "mcp:connect": connect([
+        { resourceKind: "mcp", resourceId: "remote", tool: "search" },
+      ]),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "1 Tool" }));
+    expect(
+      screen.getByText("Setting tool-level permissions requires mcp:write"),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+    expect(live.lastOptions?.enabled).toBe(false);
   });
 });

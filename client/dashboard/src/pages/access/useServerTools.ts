@@ -1,4 +1,5 @@
 import { useOrganization } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useToolMetadata } from "@/hooks/useToolMetadata";
 import { platformEndpointSlug } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
@@ -26,6 +27,11 @@ export type ToolSource =
   | { status: "error"; retry: () => void }
   /** `connect` is undefined when the server has no connect page. */
   | { status: "needs-connect"; connect: (() => void) | undefined }
+  /**
+   * Nothing is stored and this editor cannot store it: recording a server's
+   * tools takes `mcp:write` on it, so no live session is opened.
+   */
+  | { status: "needs-write" }
   | { status: "dynamic" }
   | { status: "none" };
 
@@ -57,10 +63,18 @@ export function useServerTools(
     [server, stored.metadataByTool],
   );
 
+  // Recording a server's tools takes mcp:write on it (useSyncToolMetadata), so
+  // an editor without it gets no live session: a list nobody can store would
+  // only be a preview of tools the role cannot be limited to reliably.
+  const { hasAnyScope } = useRBAC();
+  const canRecordTools =
+    !!server && hasAnyScope(["mcp:write"], server.id, project?.id);
+
   // Only a remote server with nothing stored opens a live session, the way
   // the Inspect tab does; one that lists records its tools as it goes.
-  const needsLive =
+  const nothingStored =
     remote && !stored.isLoading && !stored.isError && storedTools.length === 0;
+  const needsLive = nothingStored && canRecordTools;
   const mcpServer = useGetMcpServer(
     { id: server?.id, gramProject: project?.slug },
     undefined,
@@ -98,6 +112,7 @@ export function useServerTools(
   if (stored.isLoading) return { status: "loading" };
   if (stored.isError) return { status: "error", retry: stored.refetch };
   if (storedTools.length > 0) return { status: "ready", tools: storedTools };
+  if (!canRecordTools) return { status: "needs-write" };
   if (mcpServer.isError || endpoints.isError) {
     return {
       status: "error",

@@ -260,6 +260,14 @@ function ToolChecklist({
       );
     case "needs-connect":
       return <ConnectPrompt entry={entry} connect={source.connect} />;
+    case "needs-write":
+      return (
+        <InlineEmptyState
+          icon="lock"
+          heading="Setting tool-level permissions requires mcp:write"
+          description={`Someone with mcp:write on ${entry.server.name} can connect it to record its tools. Until then, limit it by annotation.`}
+        />
+      );
     case "ready":
       break;
   }
