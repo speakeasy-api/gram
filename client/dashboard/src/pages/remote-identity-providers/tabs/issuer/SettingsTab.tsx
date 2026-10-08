@@ -381,7 +381,7 @@ export function SettingsTab({
             value={scopeOverride}
             onValueChange={setScopeOverride}
             placeholder="No override"
-            disabled={false}
+            disabled={!hasOrgAdminScope}
           />
           <Text small muted>
             Choose from the scopes this identity provider advertises, or type

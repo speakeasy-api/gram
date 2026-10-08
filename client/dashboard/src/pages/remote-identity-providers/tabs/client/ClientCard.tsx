@@ -136,7 +136,7 @@ export function ClientCard({
             ? authAudienceFormat
             : undefined,
           scope,
-          audience: audience.trim() || undefined,
+          audience: audience.trim(),
           clientSecret: clientSecretUpdateValue(authMethod, clientSecret),
           legacyCallbackUrl:
             isPlatformAdmin &&

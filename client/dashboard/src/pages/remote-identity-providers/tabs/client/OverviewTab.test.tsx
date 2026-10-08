@@ -436,6 +436,17 @@ describe("client overview settings", () => {
     expect(lastSaved().audience).toBe("api://example");
   });
 
+  it("clears the audience when the field is emptied", () => {
+    renderTab({ client: client(undefined, { audience: "old-aud" }) });
+
+    fireEvent.change(screen.getByLabelText("Audience"), {
+      target: { value: "  " },
+    });
+    save();
+
+    expect(lastSaved().audience).toBe("");
+  });
+
   it("hides secret rotation when private_key_jwt is selected", () => {
     renderTab({ client: client(AuthMethod.PrivateKeyJwt) });
 
