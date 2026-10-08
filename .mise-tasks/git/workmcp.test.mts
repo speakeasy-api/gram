@@ -231,3 +231,81 @@ esac
   assert.match(result.stderr, /MCP setup failed/);
   assert.match(readFileSync(log, "utf8"), /run zero:tunnel-identity/);
 });
+
+test("workclean runs MCP cleanup from the invoking checkout with an explicit target", (t) => {
+  const f = fixture(t);
+  const target = join(f.root, "selected-worktree");
+  mkdirSync(target);
+  const log = join(f.root, "workclean.jsonl");
+  for (const command of ["git", "gum", "mise"]) {
+    writeFileSync(
+      join(f.bin, command),
+      `#!${process.execPath}
+const fs = require('node:fs');
+const command = require('node:path').basename(process.argv[1]);
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.WORKCLEAN_LOG, JSON.stringify({ command, args, cwd: process.cwd() }) + '\\n');
+if (command === 'git' && args[0] === 'rev-parse') {
+  console.log(process.env.SOURCE_WORKTREE);
+} else if (command === 'git' && args[0] === 'worktree' && args[1] === 'list') {
+  console.log(process.env.SOURCE_WORKTREE + ' abc123 [main]');
+  console.log(process.env.TARGET_WORKTREE + ' abc123 [topic]');
+} else if (command === 'gum' && args[0] === 'choose') {
+  console.log(process.env.TARGET_WORKTREE);
+} else if (command === 'mise' && args[1] === 'git:workmcp') {
+  process.exit(1);
+}
+`,
+      { mode: 0o755 },
+    );
+  }
+  const result = spawnSync(
+    "bash",
+    [fileURLToPath(new URL("./workclean.sh", import.meta.url))],
+    {
+      cwd: f.worktree,
+      env: {
+        ...f.env,
+        WORKCLEAN_LOG: log,
+        SOURCE_WORKTREE: f.worktree,
+        TARGET_WORKTREE: target,
+      },
+      encoding: "utf8",
+    },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const calls = readFileSync(log, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  assert.deepEqual(
+    calls.filter(
+      (call) => call.command === "mise" && call.args[1] === "git:workmcp",
+    ),
+    [
+      {
+        command: "mise",
+        args: ["run", "git:workmcp", "--remove", "--worktree", target],
+        cwd: f.worktree,
+      },
+    ],
+  );
+  assert.ok(
+    result.stderr.includes(`Warning: MCP cleanup failed for ${target}`),
+  );
+  assert.ok(
+    calls.some(
+      (call) =>
+        call.command === "mise" &&
+        call.args[1] === "nuke" &&
+        call.cwd === target,
+    ),
+  );
+  assert.ok(
+    calls.some(
+      (call) =>
+        call.command === "git" &&
+        call.args.join(" ") === `worktree remove ${target}`,
+    ),
+  );
+});
