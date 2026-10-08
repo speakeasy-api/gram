@@ -30,7 +30,8 @@ func TestDescribe(t *testing.T) {
 	}
 	require.Equal(t, "dimension", byName["user"].Role)
 	require.Equal(t, []string{"equals", "in"}, byName["user"].Operators)
-	require.Empty(t, byName["user"].Aggregations)
+	require.Equal(t, []string{"count_distinct"}, byName["user"].Aggregations, "describe advertises the one aggregation a dimension admits")
+	require.Empty(t, byName["model"].Aggregations)
 	require.Equal(t, "measure", byName["duration_seconds"].Role)
 	require.Equal(t, "float64", byName["duration_seconds"].Type)
 	require.NotNil(t, byName["duration_seconds"].Unit)
@@ -61,6 +62,9 @@ func TestQuery(t *testing.T) {
 		r := agentEventFixture(ti.organizationID, recordID, sessionID, turnID, eventID, eventType, at.UnixNano())
 		r.ProjectID = ti.projectID
 		r.UserEmail = user
+		if eventType == "tool_call" || eventType == "tool_call_result" {
+			r.ToolName = "Bash"
+		}
 		return r
 	}
 	require.NoError(t, chrepo.New(ti.ch).InsertAgentEvents(ctx, []chrepo.AgentEventRow{
@@ -105,6 +109,26 @@ func TestQuery(t *testing.T) {
 		require.EqualValues(t, 1, ann["count"])
 		require.EqualValues(t, 1, ann["tool_calls"], "two observations of tc1 are one call")
 		require.EqualValues(t, 2, ann["sum_turn_count"], "the redelivered record does not add a turn")
+	})
+
+	t.Run("it counts distinct values of a dimension", func(t *testing.T) {
+		t.Parallel()
+		result, err := ti.service.Query(ctx, &gen.QueryPayload{
+			SessionToken: nil, ProjectSlugInput: nil,
+			Dataset: "tool_calls", From: from, To: to, Grain: nil,
+			Dimensions: nil,
+			Measures: []*gen.AnalyticsMeasure{
+				{Op: "count", Field: nil, Alias: nil},
+				{Op: "count_distinct", Field: str("tool_name"), Alias: str("tools_used")},
+				{Op: "count_distinct", Field: str("user"), Alias: str("people")},
+			},
+			Filters: nil, OrderBy: nil, Limit: 0, Ungrouped: false,
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Rows, 1)
+		require.EqualValues(t, 2, result.Rows[0]["count"], "tc1 and tc2")
+		require.EqualValues(t, 1, result.Rows[0]["tools_used"], "both calls are Bash")
+		require.EqualValues(t, 2, result.Rows[0]["people"])
 	})
 
 	t.Run("it buckets by day and formats the bucket as RFC 3339", func(t *testing.T) {

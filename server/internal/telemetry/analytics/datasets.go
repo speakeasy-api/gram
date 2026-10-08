@@ -11,7 +11,7 @@ var Sessions = &Dataset{
 		{Name: "session", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "session_id"},
 		// A session opens broken down by who was in it: text lives on events,
 		// not on the collapsed session row.
-		{Name: "user", Type: TypeString, Role: RoleDimension, Default: true, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "user_email"},
+		{Name: "user", Type: TypeString, Role: RoleDimension, Default: true, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "user_email"},
 		{Name: "model", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "model"},
 		{Name: "surface", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "surface"},
 		{Name: "provider", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "provider"},
@@ -28,17 +28,17 @@ var ToolCalls = &Dataset{
 	Name:        "tool_calls",
 	Kind:        KindEvent,
 	Grain:       "tool call",
-	Description: "One row per tool call, resolved to its latest observation. count counts tool calls; failed calls are count with a status filter.",
+	Description: "One row per tool call, resolved to its latest observation. count counts tool calls; failed calls are count with a status filter. Tools used is count_distinct over tool_name, people over user.",
 	TimeExpr:    "started_at",
 	Fields: []Field{
 		{Name: "tool_call", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "tool_call_id"},
-		{Name: "tool_name", Type: TypeString, Role: RoleDimension, Default: true, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "tool_name"},
+		{Name: "tool_name", Type: TypeString, Role: RoleDimension, Default: true, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "tool_name"},
 		// Every MCP call carries the tool name mcp_tool; the server and tool the
 		// producer named are what tell them apart.
-		{Name: "mcp_server", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "mcp_server_name"},
+		{Name: "mcp_server", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "mcp_server_name"},
 		{Name: "mcp_tool", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "mcp_tool_name"},
-		{Name: "session", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "session_id"},
-		{Name: "user", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "user_email"},
+		{Name: "session", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "session_id"},
+		{Name: "user", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "user_email"},
 		{Name: "surface", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "surface"},
 		// status reads outcome in agent vocabulary, not a protocol status
 		// code: ok, error, rejected (a call a decision blocked) or refused (a

@@ -43,7 +43,7 @@ const (
 	OperatorIn     Operator = "in"
 )
 
-// Aggregation is an op a measure admits. Count is not listed here: it is an
+// Aggregation is an op a field admits. Count is not listed here: it is an
 // op without a field and every dataset admits it at its grain.
 type Aggregation string
 
@@ -55,6 +55,12 @@ const (
 	AggregationP50 Aggregation = "p50"
 	AggregationP95 Aggregation = "p95"
 	AggregationP99 Aggregation = "p99"
+
+	// AggregationCountDistinct is the one aggregation a dimension declares:
+	// how many distinct values of it the matching rows carry, exact, over
+	// the dimension's own values. A measure may not declare it, since
+	// counting distinct durations is not a question anyone asks.
+	AggregationCountDistinct Aggregation = "count_distinct"
 )
 
 // AggregationCount is the one op that takes no field.
@@ -159,15 +165,19 @@ func (d *Dataset) Field(name string) (*Field, bool) {
 	return nil, false
 }
 
-// Admits says whether a field admits an operator or aggregation.
-func (f *Field) Admits(op string) bool {
-	switch f.Role {
-	case RoleDimension:
-		return slices.Contains(f.Operators, Operator(op))
-	case RoleMeasure:
-		return slices.Contains(f.Aggregations, Aggregation(op))
-	}
-	return false
+// AdmitsOperator says whether a filter may compare the field with op: a
+// dimension admits the operators it declares, a measure none.
+func (f *Field) AdmitsOperator(op string) bool {
+	return f.Role == RoleDimension && slices.Contains(f.Operators, Operator(op))
+}
+
+// AdmitsAggregation says whether a measure may aggregate the field with
+// agg: a measure admits the aggregations it declares, a dimension the one
+// over its own values when it declares it. A filter and a measure are
+// different questions, so they are asked separately: an aggregation
+// offered as a filter operator is refused, not silently dropped.
+func (f *Field) AdmitsAggregation(agg string) bool {
+	return slices.Contains(f.Aggregations, Aggregation(agg))
 }
 
 // Catalog is the declaration of every dataset and field: the contract the
@@ -263,8 +273,19 @@ func (d *Dataset) validate() error {
 		}
 		switch f.Role {
 		case RoleDimension:
-			if len(f.Operators) == 0 || len(f.Aggregations) != 0 {
-				return fmt.Errorf("catalog: dataset %q dimension %q must declare operators and no aggregations", d.Name, f.Name)
+			if len(f.Operators) == 0 {
+				return fmt.Errorf("catalog: dataset %q dimension %q must declare operators", d.Name, f.Name)
+			}
+			// The one aggregation a dimension can carry is over its own
+			// values; a sum or a percentile of a string means nothing.
+			for _, agg := range f.Aggregations {
+				switch agg {
+				case AggregationCountDistinct:
+				case AggregationSum, AggregationAvg, AggregationMin, AggregationMax, AggregationP50, AggregationP95, AggregationP99:
+					return fmt.Errorf("catalog: dataset %q dimension %q may declare count_distinct and no other aggregation", d.Name, f.Name)
+				default:
+					return fmt.Errorf("catalog: dataset %q dimension %q has unknown aggregation %q", d.Name, f.Name, agg)
+				}
 			}
 			// Filters and value pickers compare a dimension as a string; a
 			// numeric one would need casting in both the compiler and the
@@ -290,6 +311,8 @@ func (d *Dataset) validate() error {
 			for _, agg := range f.Aggregations {
 				switch agg {
 				case AggregationSum, AggregationAvg, AggregationMin, AggregationMax, AggregationP50, AggregationP95, AggregationP99:
+				case AggregationCountDistinct:
+					return fmt.Errorf("catalog: dataset %q measure %q cannot declare count_distinct, which counts a dimension", d.Name, f.Name)
 				default:
 					return fmt.Errorf("catalog: dataset %q measure %q has unknown aggregation %q", d.Name, f.Name, agg)
 				}
@@ -304,4 +327,7 @@ func (d *Dataset) validate() error {
 // timeBucketColumn is the reserved result column for a bucketed query.
 const timeBucketColumn = "time_bucket"
 
-var equalsIn = []Operator{OperatorEquals, OperatorIn}
+var (
+	equalsIn      = []Operator{OperatorEquals, OperatorIn}
+	countDistinct = []Aggregation{AggregationCountDistinct}
+)

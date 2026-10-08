@@ -189,7 +189,7 @@ func Compile(catalog *Catalog, organizationID, projectID string, req Request) (*
 		if !ok || field.Role != RoleDimension {
 			return nil, newError(ErrUnknownField, name, position+".field", filter.Field, fmt.Sprintf("dataset %s has no dimension %s", name, filter.Field))
 		}
-		if !field.Admits(filter.Operator) {
+		if !field.AdmitsOperator(filter.Operator) {
 			return nil, newError(ErrUnsupportedOperator, name, position+".operator", filter.Operator, fmt.Sprintf("%s does not admit %s", filter.Field, filter.Operator))
 		}
 		if len(filter.Values) == 0 {
@@ -333,10 +333,38 @@ func measureExpr(ds *Dataset, measure Measure, position string) (string, string,
 		return "", "", newError(ErrUnsatisfiable, ds.Name, position+".field", "", fmt.Sprintf("%s needs a field", op))
 	}
 	field, ok := ds.Field(measure.Field)
+
+	// count_distinct is the one aggregation over a dimension: how many
+	// distinct values of it the matching rows carry. It is exact, since the
+	// rows are already collapsed to the dataset's grain inside a bounded
+	// window and the cardinalities are tools, servers and people, not
+	// events. A collapsed row whose observations never carried the value
+	// holds the empty string, which is no value, so it is not counted, the
+	// same guard the sources put on their own identity counts. uniqExactIf
+	// yields UInt64, which the runner narrows on the wire.
+	if op == string(AggregationCountDistinct) {
+		if ok && field.Role == RoleMeasure {
+			return "", "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s counts a dimension, and %s is a measure", op, field.Name))
+		}
+		if !ok || field.Role != RoleDimension {
+			return "", "", newError(ErrUnknownField, ds.Name, position+".field", measure.Field, fmt.Sprintf("dataset %s has no dimension %s", ds.Name, measure.Field))
+		}
+		if !field.AdmitsAggregation(op) {
+			return "", "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s does not admit %s", field.Name, op))
+		}
+		if alias == "" {
+			alias = op + "_" + field.Name
+		}
+		if err := checkAlias(ds, alias, position); err != nil {
+			return "", "", err
+		}
+		return fmt.Sprintf("uniqExactIf(%s, %s != '')", field.Expr, field.Expr), alias, nil
+	}
+
 	if !ok || field.Role != RoleMeasure {
 		return "", "", newError(ErrUnknownField, ds.Name, position+".field", measure.Field, fmt.Sprintf("dataset %s has no measure %s", ds.Name, measure.Field))
 	}
-	if !field.Admits(op) {
+	if !field.AdmitsAggregation(op) {
 		return "", "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s does not admit %s", field.Name, op))
 	}
 	if alias == "" {
@@ -356,6 +384,10 @@ func measureExpr(ds *Dataset, measure Measure, position string) (string, string,
 		expr = fmt.Sprintf("quantile(0.95)(%s)", field.Expr)
 	case AggregationP99:
 		expr = fmt.Sprintf("quantile(0.99)(%s)", field.Expr)
+	case AggregationCountDistinct:
+		// Handled above: a measure never admits it, so this is unreachable
+		// through Admits, and the switch stays exhaustive.
+		return "", "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s counts a dimension, and %s is a measure", op, field.Name))
 	default:
 		return "", "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s is not an aggregation", op))
 	}

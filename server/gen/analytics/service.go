@@ -95,7 +95,7 @@ type AnalyticsField struct {
 	Unit *string
 	// Filter operators a dimension admits
 	Operators []string
-	// Ops a measure admits
+	// Ops a field admits: aggregations on a measure, count_distinct on a dimension
 	Aggregations []string
 }
 
@@ -111,10 +111,12 @@ type AnalyticsFilter struct {
 
 // A composed measure: an op over a field, or count alone.
 type AnalyticsMeasure struct {
-	// Aggregation to apply. count takes no field; every other op needs a measure
-	// field that admits it, per describe.
+	// Aggregation to apply. count takes no field; count_distinct takes a dimension
+	// that admits it; every other op needs a measure field that admits it, per
+	// describe.
 	Op string
-	// Measure field the op applies to. Absent for count.
+	// Field the op applies to: a dimension for count_distinct, a measure
+	// otherwise. Absent for count.
 	Field *string
 	// Result column name. Defaults to the op, or op_field.
 	Alias *string

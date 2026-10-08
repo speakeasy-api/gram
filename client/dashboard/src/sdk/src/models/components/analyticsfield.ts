@@ -26,7 +26,7 @@ export type Type = ClosedEnum<typeof Type>;
  */
 export type AnalyticsField = {
   /**
-   * Ops a measure admits
+   * Ops a field admits: aggregations on a measure, count_distinct on a dimension
    */
   aggregations?: Array<string> | undefined;
   /**

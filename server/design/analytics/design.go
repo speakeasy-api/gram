@@ -6,17 +6,17 @@ import (
 	. "goa.design/goa/v3/dsl"
 )
 
-var analyticsOps = []any{"count", "sum", "avg", "min", "max", "p50", "p95", "p99"}
+var analyticsOps = []any{"count", "count_distinct", "sum", "avg", "min", "max", "p50", "p95", "p99"}
 var analyticsOperators = []any{"equals", "in"}
 var analyticsGrains = []any{"none", "hour", "day", "week", "month"}
 
 var Measure = Type("AnalyticsMeasure", func() {
 	Description("A composed measure: an op over a field, or count alone.")
-	Attribute("op", String, "Aggregation to apply. count takes no field; every other op needs a measure field that admits it, per describe.", func() {
+	Attribute("op", String, "Aggregation to apply. count takes no field; count_distinct takes a dimension that admits it; every other op needs a measure field that admits it, per describe.", func() {
 		Enum(analyticsOps...)
 		Example("sum")
 	})
-	Attribute("field", String, "Measure field the op applies to. Absent for count.", func() {
+	Attribute("field", String, "Field the op applies to: a dimension for count_distinct, a measure otherwise. Absent for count.", func() {
 		Example("tool_call_count")
 	})
 	Attribute("alias", String, "Result column name. Defaults to the op, or op_field.", func() {
@@ -92,7 +92,7 @@ var FieldType = Type("AnalyticsField", func() {
 	Attribute("default", Boolean, "Part of the query the dataset opens on: a default dimension is in the opening group-by", func() { Example(true) })
 	Attribute("unit", String, "Unit of a measure, when it has one", func() { Example("s") })
 	Attribute("operators", ArrayOf(String), "Filter operators a dimension admits")
-	Attribute("aggregations", ArrayOf(String), "Ops a measure admits")
+	Attribute("aggregations", ArrayOf(String), "Ops a field admits: aggregations on a measure, count_distinct on a dimension")
 	Required("name", "type", "role", "default")
 })
 
