@@ -13,70 +13,28 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-// A column enricher fills one agent_events column in the transform stage.
-// It holds a table from event type to a getter: how the value is read for
-// that type, a question the provider dialect answers or a constant the type
-// implies. The value lands on the record as a canonical
-// speakeasy.agent.<column> attribute, next to the producer's original
-// attributes, and the agent_events writer copies it from there. The file
-// that declares a column's table is the documentation of that column.
-//
-// A column is declared once and serves both signals: every getter has a log
-// leg and a span leg, and a column definition yields a log enricher and a
-// span enricher from the same table, so the two cannot drift. In
-// OpenTelemetry's terms the definitions form an attribute registry, and each
-// one is used the way an attribute group is: declared once, referenced by
-// more than one signal, with a requirement level set per context, which here
-// is the event type.
-//
-// Each table entry carries a requirement level, after OpenTelemetry's
-// attribute requirement levels
-// (https://opentelemetry.io/docs/specs/semconv/general/attribute-requirement-level/):
-//
-//	Required                a bare entry                     absence is counted
-//	Conditionally Required  conditionallyRequired(g, when)   absence is counted when the condition holds
-//	Recommended             recommended(g)                   absence is not counted
-//	Opt-In                  optIn(g)                         absence is not counted
-//
-// A gap is counted at Required, and at Conditionally Required when the
-// condition holds, never at Recommended or Opt-In. A stated value is written
-// at every level.
-//
-// The rules every table follows:
-//
-//   - An event type absent from the table means the column is never set for
-//     that type. There is no forbidden list: a tool result never gets tokens
-//     because the tokens table does not name tool results.
-//   - A type in the table whose provider stated nothing writes nothing. At
-//     Required it is counted by source, event type and column; absent is
-//     never an error, and never a guess.
-//   - An unclassified record matches no table, so no column enricher applies
-//     to it. It still lands with its payload.
+// A column is declared once as a table from event type to getter and serves
+// both signals. A type absent from the table never gets the column; a type in
+// the table whose producer stated nothing gets no value and is counted when
+// the entry is Required. Entries carry OpenTelemetry's attribute requirement
+// levels (https://opentelemetry.io/docs/specs/semconv/general/attribute-requirement-level/):
+// a bare entry is Required, and recommended, optIn and conditionallyRequired
+// say when an absence is not a gap.
 
-// columnValue is what a column enricher can write: the agent_events columns
-// the enrichers fill are strings, integers and floating-point numbers.
 type columnValue interface {
 	string | int64 | float64
 }
 
-// getter reads one column's value out of a record for one event type, in the
-// sense OpenTelemetry's transformation language gives the word. It has a
-// leg per signal, since the log and span dialects answer the same questions
-// over different record types, so one table serves both. A getter answers
-// with the attribute it read from, the value, and an error only when the
-// value was present but unreadable; an empty key means the producer did not
-// say.
+// getter reads one column's value for one event type, with a leg per signal.
+// An empty key means the producer did not state the value.
 type getter[V columnValue] struct {
 	log  func(dialect.LogDialect, *otelv1.InboundLogRecord) (key string, value V, err error)
 	span func(dialect.SpanDialect, *otelv1.InboundSpan) (key string, value V, err error)
 }
 
-// constantKey is what a constant answers as the attribute it was read from:
-// the event type implied the value, so the type is what stated it.
+// constantKey is the key a constant answers with: the event type stated it.
 const constantKey = "event.type"
 
-// constant is a getter whose answer the event type implies, such as an
-// api_response's outcome being ok.
 func constant[V columnValue](value V) getter[V] {
 	return getter[V]{
 		log: func(dialect.LogDialect, *otelv1.InboundLogRecord) (string, V, error) {
@@ -88,16 +46,12 @@ func constant[V columnValue](value V) getter[V] {
 	}
 }
 
-// condition is a yes-or-no question about a record, with a leg per signal,
-// for the table entries whose requirement depends on the record itself.
 type condition struct {
 	log  func(dialect.LogDialect, *otelv1.InboundLogRecord) bool
 	span func(dialect.SpanDialect, *otelv1.InboundSpan) bool
 }
 
-// statedBy is the condition that a getter answers with a non-empty key: the
-// record stated that value. It expresses a pair such as the MCP server and
-// tool, where one half is required once the other half is present.
+// statedBy holds when the getter answers with a non-empty key.
 func statedBy[V columnValue](g getter[V]) condition {
 	return condition{
 		log: func(d dialect.LogDialect, r *otelv1.InboundLogRecord) bool {
@@ -111,31 +65,17 @@ func statedBy[V columnValue](g getter[V]) condition {
 	}
 }
 
-// errNotRequired is a getter's answer when the value is absent and its
-// requirement level says that is not a gap: the column stays empty and
-// nothing is counted, since nothing is missing.
+// errNotRequired is a getter's answer when an absent value is not a gap.
 var errNotRequired = errors.New("column is not required on this record")
 
-// recommended marks an entry at the Recommended level: the producer carries
-// the value only sometimes, by nature rather than by omission, such as the
-// skill a request was made on behalf of. An absent value is not counted,
-// since the counter exists to catch a producer renaming an attribute, and a
-// column that is empty most of the time by design would drown that signal.
 func recommended[V columnValue](g getter[V]) getter[V] {
 	return notCountedWhenAbsent(g)
 }
 
-// optIn marks an entry at the Opt-In level: the producer sends the value
-// only when the person running the agent agreed to it, such as the words of
-// a prompt. An absent value is a choice rather than a gap and is not
-// counted.
 func optIn[V columnValue](g getter[V]) getter[V] {
 	return notCountedWhenAbsent(g)
 }
 
-// notCountedWhenAbsent is the one mechanism behind Recommended and Opt-In:
-// the two levels differ in why a value may be absent, not in what the
-// enricher does about it.
 func notCountedWhenAbsent[V columnValue](g getter[V]) getter[V] {
 	return getter[V]{
 		log: func(d dialect.LogDialect, r *otelv1.InboundLogRecord) (string, V, error) {
@@ -155,10 +95,8 @@ func notCountedWhenAbsent[V columnValue](g getter[V]) getter[V] {
 	}
 }
 
-// conditionallyRequired marks an entry at the Conditionally Required level:
-// the value is required when the condition holds, such as the message of an
-// outcome that is an error. A stated value is written whichever way the
-// condition goes; an absent one is a gap only when the condition holds.
+// conditionallyRequired counts an absence only when the condition holds; a
+// stated value is written either way.
 func conditionallyRequired[V columnValue](g getter[V], when condition) getter[V] {
 	return getter[V]{
 		log: func(d dialect.LogDialect, r *otelv1.InboundLogRecord) (string, V, error) {
@@ -178,14 +116,10 @@ func conditionallyRequired[V columnValue](g getter[V], when condition) getter[V]
 	}
 }
 
-// perEventType says, per event type, how a column's value is read and at
-// which requirement level. Keys are the agent vocabulary's event types; a
-// table never names the unclassified type, since an unclassified record gets
-// no column enricher.
+// perEventType never names the unclassified type: an unclassified record gets
+// no column.
 type perEventType[V columnValue] map[string]getter[V]
 
-// classifiedEventTypes is every event type in the agent vocabulary, for the
-// columns that every classified record carries.
 var classifiedEventTypes = []string{
 	dialect.EventTypePrompt,
 	dialect.EventTypeAPIRequest,
@@ -200,9 +134,6 @@ var classifiedEventTypes = []string{
 	dialect.EventTypeCompaction,
 }
 
-// everyClassifiedType builds a table that reads the same getter for every
-// classified event type, for the columns such as session_id that any kind
-// of event carries.
 func everyClassifiedType[V columnValue](g getter[V]) perEventType[V] {
 	table := make(perEventType[V], len(classifiedEventTypes))
 	for _, eventType := range classifiedEventTypes {
@@ -211,16 +142,14 @@ func everyClassifiedType[V columnValue](g getter[V]) perEventType[V] {
 	return table
 }
 
-// columnDefinition is one agent_events column as declared in its file: the
-// key it is written under and, per event type, how it is read. It yields
-// the enricher for each signal, so a column declared once serves both.
+// columnDefinition is one column declared once, yielding an enricher per
+// signal.
 type columnDefinition interface {
 	name() string
 	log(in *Instruments) LogEnricher
 	span(in *Instruments) SpanEnricher
 }
 
-// column is the one columnDefinition, generic over the value it writes.
 type column[V columnValue] struct {
 	key    attribute.Key
 	byType perEventType[V]
@@ -236,11 +165,9 @@ func (c column[V]) span(in *Instruments) SpanEnricher {
 	return &spanColumnEnricher[V]{column: c, instruments: in, capBytes: 0}
 }
 
-// cappedColumn is a string column whose canonical copy is bounded. The copy
-// sits beside the producer's own attribute, so a value with no natural
-// size would double a near-limit record and push it past what a relay
-// export may carry. A copy over the cap is cut at a character boundary and
-// counted; the producer's attribute is untouched.
+// cappedColumn is a string column whose canonical copy is cut at capBytes on a
+// character boundary and counted, so a value with no natural size cannot push
+// a near-limit record past what a relay export may carry.
 type cappedColumn struct {
 	column[string]
 	capBytes int
@@ -254,7 +181,6 @@ func (c cappedColumn) span(in *Instruments) SpanEnricher {
 	return &spanColumnEnricher[string]{column: c.column, instruments: in, capBytes: c.capBytes}
 }
 
-// logColumnEnricher fills one agent_events column for log records.
 type logColumnEnricher[V columnValue] struct {
 	column      column[V]
 	instruments *Instruments
@@ -274,8 +200,6 @@ func (e *logColumnEnricher[V]) Enrich(ctx context.Context, record *otelv1.Inboun
 	})
 }
 
-// spanColumnEnricher fills one agent_events column for spans, from the same
-// table as the log enricher for that column.
 type spanColumnEnricher[V columnValue] struct {
 	column      column[V]
 	instruments *Instruments
@@ -295,13 +219,9 @@ func (e *spanColumnEnricher[V]) Enrich(ctx context.Context, span *otelv1.Inbound
 	})
 }
 
-// insertColumn is the one decision behind both signals, and it is the
-// Collector attributes processor's insert action: add the attribute when the
-// record has none, never overwrite. It looks the event type up in the
-// column's table, reads the getter the table names, and writes the value or
-// counts its absence. A string value longer than capBytes, when the cap is
-// set, is cut and counted. The surface label is read lazily, since it is
-// only needed to count a missing or a cut value.
+// insertColumn looks the event type up in the column's table, reads the
+// getter and writes the value, or counts its absence. It never overwrites.
+// The surface label is read lazily, since only a count needs it.
 func insertColumn[V columnValue](
 	ctx context.Context,
 	in *Instruments,
@@ -321,9 +241,7 @@ func insertColumn[V columnValue](
 		return nil, nil
 	}
 	if err != nil || key == "" {
-		// The provider did not say, or said something unreadable. Either way
-		// the column stays empty: absent, never a guess, and counted so a
-		// producer renaming an attribute is visible the same day.
+		// Absent or unreadable: the column stays empty, never a guess.
 		in.recordColumnValueMissing(ctx, surface(), eventType, c.name())
 		return nil, nil
 	}
@@ -340,8 +258,6 @@ func insertColumn[V columnValue](
 	return []attribute.KeyValue{kv}, nil
 }
 
-// truncateUTF8 cuts a string to at most maxBytes without splitting a
-// character, so the copy stays valid UTF-8 for every consumer.
 func truncateUTF8(s string, maxBytes int) string {
 	if len(s) <= maxBytes {
 		return s
@@ -353,31 +269,19 @@ func truncateUTF8(s string, maxBytes int) string {
 	return s[:cut]
 }
 
-// missingLabelOther is the missing-value counter's surface label for a
-// producer whose surface the dialects do not know from its scope, or that
-// is not in the agent surface vocabulary.
 const missingLabelOther = string(agentsurface.SurfaceOther)
 
-// missingLabelLog is the surface label of the missing-value counter for a
-// log record.
 func missingLabelLog(d dialect.LogDialect, record *otelv1.InboundLogRecord) string {
 	return missingLabel(d.Surface(record))
 }
 
-// missingLabelSpan is missingLabelLog for a span.
 func missingLabelSpan(d dialect.SpanDialect, span *otelv1.InboundSpan) string {
 	return missingLabel(d.Surface(span))
 }
 
-// missingLabel is the surface label the missing-value counter uses: the
-// surface the dialect reported, folded into the agent surface vocabulary
-// (claude_code, claude_chat, cowork, codex, cursor), or "other" when the
-// dialect reported nothing, could not read it, or named a surface outside
-// the vocabulary. Folding is what bounds the label set, which is what
-// matters for a metric: a producer's free-form service.name is never a
-// label. The hooks dialect reports its surface from the attribute Gram's
-// own tee stamps rather than from the scope, and folding keeps that
-// traffic attributable per surface too.
+// missingLabel folds the surface the dialect reported into the agent surface
+// vocabulary, or "other". Folding is what keeps the counter's label set
+// bounded: a producer's free-form service.name is never a label.
 func missingLabel(_, surface string, err error) string {
 	if err != nil || surface == "" {
 		return missingLabelOther
@@ -389,13 +293,11 @@ func missingLabel(_, surface string, err error) string {
 	return string(folded)
 }
 
-// columnOf is the agent_events column a canonical key carries.
 func columnOf(key attribute.Key) string {
 	return strings.TrimPrefix(string(key), agentColumnKeyPrefix)
 }
 
-// columnKeyValue encodes a column's value under its canonical key. A stated
-// zero is still stated: a request that read nothing from the cache says so.
+// columnKeyValue writes a stated zero as a value, not an absence.
 func columnKeyValue[V columnValue](key attribute.Key, value V) (attribute.KeyValue, error) {
 	switch v := any(value).(type) {
 	case string:
@@ -409,21 +311,16 @@ func columnKeyValue[V columnValue](key attribute.Key, value V) (attribute.KeyVal
 	}
 }
 
-// inboundLogSource is the canonical source of an inbound log record, derived
-// from the resource's service.name the way the event feed derives it, so the
-// source column, the missing-value counter and the feed agree on what to
-// call a producer.
+// inboundLogSource derives the source from the resource's service.name the
+// way the event feed does, so every consumer calls a producer the same thing.
 func inboundLogSource(record *otelv1.InboundLogRecord) string {
 	return CanonicalSource(inboundLogResourceString(record, ServiceNameAttribute))
 }
 
-// inboundSpanSource is inboundLogSource for a span.
 func inboundSpanSource(span *otelv1.InboundSpan) string {
 	return CanonicalSource(inboundSpanResourceString(span, ServiceNameAttribute))
 }
 
-// inboundLogResourceString reads one string attribute off an inbound log
-// record's resource, or "" when the resource does not state it.
 func inboundLogResourceString(record *otelv1.InboundLogRecord, key string) string {
 	for _, kv := range record.GetResource().GetAttributes() {
 		if kv.GetKey() == key && kv.GetValue().HasStringValue() {
@@ -442,8 +339,6 @@ func inboundSpanResourceString(span *otelv1.InboundSpan, key string) string {
 	return ""
 }
 
-// inboundLogAttributeString reads one string attribute off an inbound log
-// record, or "" when the record does not carry it as a non-empty string.
 func inboundLogAttributeString(record *otelv1.InboundLogRecord, key string) string {
 	for _, kv := range record.GetAttributes() {
 		if kv.GetKey() == key && kv.GetValue().HasStringValue() {
@@ -462,8 +357,7 @@ func inboundSpanAttributeString(span *otelv1.InboundSpan, key string) string {
 	return ""
 }
 
-// stated keeps a dialect's answer only when it stated one: an empty key or
-// a read error means absent, never a guess.
+// stated keeps a dialect's answer only when it stated one.
 func stated[T any](key string, value T, err error) T {
 	var zero T
 	if err != nil || key == "" {

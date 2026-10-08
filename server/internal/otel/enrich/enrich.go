@@ -1,15 +1,11 @@
-// Package enrich holds every enricher the OTel transform handlers run over an
-// inbound record before it is published to the normalized topics, the
-// interfaces those handlers run them through, and the attribute keys the
-// enrichers write under.
+// Package enrich holds the enrichers the OTel transform handlers run over an
+// inbound record before it is published to the normalized topics, and the
+// attribute keys they write under.
 //
-// An enricher reads the inbound record and returns attributes to add to it;
-// it never removes or rewrites what the producer sent. The handlers run every
-// enricher for a signal concurrently and append what they return in
-// registration order, so an enricher must not depend on another's output.
-// Returning an error fails the record, which is then redelivered, so an
-// enricher returns one only for a real failure and never for a value the
-// producer did not state.
+// An enricher returns attributes to add and never rewrites what the producer
+// sent. Enrichers run concurrently and must not depend on each other's
+// output. An error fails the record for redelivery, so an enricher returns
+// one only for a real failure, never for a value the producer did not state.
 package enrich
 
 import (
@@ -44,10 +40,8 @@ type SpanEnricher interface {
 	Enrich(ctx context.Context, span *otelv1.InboundSpan) ([]attribute.KeyValue, error)
 }
 
-// MetricEnricher derives bounded resource attributes that describe the entity
-// producing a metric. Per-user, per-request, and other unbounded values do not
-// belong here because resource and data point attributes identify metric
-// streams and increase cardinality.
+// MetricEnricher derives bounded resource attributes for a metric; unbounded
+// values would multiply metric streams.
 type MetricEnricher interface {
 	Name() string
 	Enrich(ctx context.Context, metric *otelv1.InboundMetric, metricDialect dialect.MetricDialect) ([]attribute.KeyValue, error)
@@ -103,15 +97,13 @@ func Metric(
 	})
 }
 
-// named is what every enricher kind has in common for the runner.
 type named interface {
 	Name() string
 }
 
-// run is the one runner behind Log, Span and Metric: the enrichers run
-// concurrently, bounded by the CPU count, each one's duration and outcome is
-// recorded, a panic in one is turned into its error, and the results are
-// concatenated in registration order so the output is deterministic.
+// run executes the enrichers concurrently, records each one's duration and
+// outcome, turns a panic into that enricher's error, and concatenates the
+// results in registration order.
 func run[E named](
 	ctx context.Context,
 	signal string,
@@ -152,9 +144,7 @@ func run[E named](
 			return nil
 		})
 	}
-	// Every goroutine returns nil and records its own failure in errs (a
-	// panic is recovered into it), so Wait only ever blocks and its error is
-	// always nil.
+	// Every goroutine returns nil and records its failure in errs.
 	_ = group.Wait()
 
 	if err := errors.Join(errs...); err != nil {

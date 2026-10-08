@@ -59,23 +59,11 @@ func DirectoryGroupNames(v []string) attribute.KeyValue {
 
 func GramUserRoles(v []string) attribute.KeyValue { return GramUserRolesKey.StringSlice(v) }
 
-// agentColumnKeyPrefix is the namespace of the canonical agent_events
-// columns on a normalized record: one key per column, named after it.
 const agentColumnKeyPrefix = "speakeasy.agent."
 
-// AgentColumnKey is the attribute key that carries one agent_events column
-// on a normalized record. The speakeasy.agent namespace holds one record
-// described in the agent vocabulary: what kind of event it is, whose session
-// it belongs to, what model or tool it concerns, how it went and what it
-// used. Only the column enrichers in the transform write these keys, next to
-// the producer's original attributes, which stay as they were; a key a
-// producer sends under this namespace is stripped before the enrichers run.
-// The keys are forwarded to customer destinations like the other speakeasy.*
-// keys, and the agent_events writer copies them into the row without asking
-// a dialect. The set below is the contract between the transform and every
-// consumer on the normalized topics: a column that is not listed is filled
-// by the pipeline some other way (tenancy, timing, the directory enricher)
-// or not at all.
+// AgentColumnKey is the attribute that carries one agent_events column on a
+// normalized record: speakeasy.agent.<column>. Only the transform writes
+// these keys; the writer copies them into the row without asking a dialect.
 func AgentColumnKey(column string) attribute.Key {
 	return attribute.Key(agentColumnKeyPrefix + column)
 }
@@ -118,34 +106,21 @@ const (
 	CostUSDColumnKey          = attribute.Key(agentColumnKeyPrefix + "cost_usd")
 )
 
-// IsAgentColumnKey reports whether an attribute key is in the reserved
-// speakeasy.agent namespace. Only the column enrichers write there: a
-// producer that sends such a key is trying to classify its own record, and
-// the transform drops it before the enrichers write theirs.
+// IsAgentColumnKey reports whether a key is in the reserved speakeasy.agent
+// namespace, which only the transform writes.
 func IsAgentColumnKey(key string) bool {
 	return strings.HasPrefix(key, agentColumnKeyPrefix)
 }
 
-// pipelineKeyPrefix is the namespace of most attributes the pipeline itself
-// writes on a record: tenancy, token counts, the producer's original scope,
-// the person's roles and the agent_events columns.
-const pipelineKeyPrefix = "speakeasy."
+const (
+	pipelineKeyPrefix  = "speakeasy."
+	directoryKeyPrefix = "directory."
+)
 
-// directoryKeyPrefix is the namespace the directory enricher writes: the
-// directory id, the directory attributes and the group memberships the
-// agent_events writer stores beside the row.
-const directoryKeyPrefix = "directory."
-
-// IsPipelineKey reports whether an attribute key is in a namespace the
-// pipeline owns outright: speakeasy, and directory. Nothing upstream of the
-// transform writes there, so a key a producer sends under either is a
-// mistake or an attempt to pass as the pipeline: to classify its own record
-// (speakeasy.agent), to claim another tenant (speakeasy.organization), to
-// pose as another producer (speakeasy.original_instrumentation_scope) or to
-// give a person a department or group the directory never did
-// (directory.attribute, directory.group). The transform drops every such
-// key before it writes its own, so a value a lookup leaves out stays empty
-// rather than taking what the producer offered.
+// IsPipelineKey reports whether a key is in a namespace the pipeline owns,
+// speakeasy or directory. The transform drops what a producer sends there
+// before it writes its own, so a producer cannot classify its own record,
+// claim another tenant, pose as another scope or give a person a group.
 func IsPipelineKey(key string) bool {
 	return strings.HasPrefix(key, pipelineKeyPrefix) || strings.HasPrefix(key, directoryKeyPrefix)
 }
