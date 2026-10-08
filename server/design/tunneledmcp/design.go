@@ -176,7 +176,7 @@ var _ = Service("tunneledMcp", func() {
 	})
 
 	Method("deleteServer", func() {
-		Description("Delete a tunneled MCP server source")
+		Description("Delete a tunneled MCP server source. Refused with a conflict while any MCP server still uses the tunnel: delete those MCP servers first. Deleting a tunnel that does not exist or is already deleted succeeds without changing anything.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the tunneled MCP server to delete", func() {
