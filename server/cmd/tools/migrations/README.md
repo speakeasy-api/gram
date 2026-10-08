@@ -88,8 +88,10 @@ for the migration you want to run. The general shape is:
 go run ./server/cmd/tools/migrations [migration] [flags]
 ```
 
-`-dry-run` defaults to **true** for every migration: a plain run reads and
-transforms but writes nothing. Pass `-dry-run=false` to write.
+`-dry-run` defaults to **true** for every pipeline migration: a plain run reads
+and transforms but writes nothing. Pass `-dry-run=false` to write. The hosted MCP
+wrapper backfill is not a pipeline migration: it is a dry run by default and
+writes only with `-apply`.
 
 ## Adding a new migration
 

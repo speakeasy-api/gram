@@ -123,23 +123,24 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 		Mode: report.Mode, Scanned: report.Scanned, Writes: report.Writes, Outcomes: report.Outcomes,
 		FreshIDServersPresent: report.FreshIDServersPresent, LastCursor: report.LastCursor, ReportPath: cfg.reportPath,
 	}
+	code := 0
+	// The report is the record of committed rows, so write it before anything that can fail.
+	if cfg.reportPath != "" {
+		if err := writeHostedMCPWrappersReport(reportFile, report); err != nil {
+			log.Printf("write hosted-mcp-wrappers report: %v", err)
+			code = 1
+		}
+	}
 	if err := json.NewEncoder(stdout).Encode(summary); err != nil {
 		log.Printf("write hosted-mcp-wrappers summary: %v", err)
-		return 1
+		code = 1
 	}
-	code := 0
 	if runErr != nil {
 		code = 1
 		if cfg.options.Apply {
 			log.Printf("hosted-mcp-wrappers stopped early: %v; resume with -cursor %s", runErr, report.LastCursor)
 		} else {
 			log.Printf("hosted-mcp-wrappers stopped early: %v; dry-run cursors commit nothing, so rerun without -cursor", runErr)
-		}
-	}
-	if cfg.reportPath != "" {
-		if err := writeHostedMCPWrappersReport(reportFile, report); err != nil {
-			log.Printf("write hosted-mcp-wrappers report: %v", err)
-			code = 1
 		}
 	}
 	return code

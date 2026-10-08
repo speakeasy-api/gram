@@ -26,6 +26,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// ErrAddressInUse marks a Sync conflict caused by another server holding the hosted address.
+var ErrAddressInUse = errors.New("hosted MCP address is already in use")
+
 // Actor is who wrapper writes are audited under: a user, or a server component when UserID is empty.
 type Actor struct {
 	// UserID is the acting user; it takes precedence over System.
@@ -38,7 +41,7 @@ type Actor struct {
 	System string
 }
 
-// SystemActor audits wrapper writes as the named server component.
+// SystemActor audits Sync writes as the named server component; Delete takes users and agents only.
 func SystemActor(component string) Actor {
 	return Actor{UserID: "", Email: nil, System: component}
 }
@@ -258,7 +261,7 @@ func syncEndpoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, pri
 		return nil, oops.E(oops.CodeUnexpected, err, "check hosted MCP address")
 	}
 	if !available.Valid || !available.Bool {
-		return nil, oops.E(oops.CodeConflict, nil, "hosted MCP address is already in use")
+		return nil, oops.E(oops.CodeConflict, ErrAddressInUse, "hosted MCP address is already in use")
 	}
 	if len(endpoints) == 0 {
 		endpoint, err := endpointRepo.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{

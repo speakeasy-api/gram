@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"io"
 	"os"
@@ -116,4 +117,27 @@ func TestWriteHostedMCPWrappersReportReplacesPreviousContent(t *testing.T) {
 	var decoded hostedmcpbackfill.Report
 	require.NoError(t, json.Unmarshal(got, &decoded), "the old report must not trail the new one")
 	require.Equal(t, "dry-run", decoded.Mode)
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("stdout closed") }
+
+func TestRunHostedMCPWrappersWritesReportEvenWhenSummaryFails(t *testing.T) {
+	t.Parallel()
+
+	report := filepath.Join(t.TempDir(), "report.json")
+	require.NoError(t, os.WriteFile(report, []byte("previous run"), 0o600))
+	getenv := func(key string) string {
+		if key == "GRAM_DATABASE_URL" {
+			return "postgres://127.0.0.1:1/unreachable?connect_timeout=1"
+		}
+		return ""
+	}
+	code := runHostedMCPWrappers([]string{"-report", report}, failingWriter{}, getenv)
+	require.Equal(t, 1, code)
+	got, err := os.ReadFile(report)
+	require.NoError(t, err)
+	var decoded hostedmcpbackfill.Report
+	require.NoError(t, json.Unmarshal(got, &decoded), "the report must be written before the summary")
 }

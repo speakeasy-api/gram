@@ -10,7 +10,9 @@ import (
 	"reflect"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -296,14 +298,11 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 
 	domains, err := hostedmcp.Sync(ctx, tx, r.audit, hostedmcp.SystemActor(ActorComponent), toolset, nil)
 	if err != nil {
-		var shareable *oops.ShareableError
-		if !errors.As(err, &shareable) || shareable.Code == oops.CodeUnexpected || shareable.Code == oops.CodeUnauthorized {
+		outcome, ok := classifySyncError(err)
+		if !ok {
 			return row, fmt.Errorf("sync hosted wrapper: %w", err)
 		}
-		if shareable.Code == oops.CodeConflict {
-			return blocked(row, OutcomeBlockedSlugCollision, shareable.Error()), nil
-		}
-		return blocked(row, OutcomeBlockedSyncRejected, shareable.Error()), nil
+		return blocked(row, outcome, err.Error()), nil
 	}
 
 	after, err := loadCanonical(ctx, tx, toolset)
@@ -343,4 +342,17 @@ func blocked(row RowReport, outcome Outcome, reason string) RowReport {
 	row.Outcome = outcome
 	row.Reason = reason
 	return row
+}
+
+// classifySyncError maps a Sync refusal to a blocked outcome; ok is false for errors that must stop the run.
+func classifySyncError(err error) (Outcome, bool) {
+	var shareable *oops.ShareableError
+	if !errors.As(err, &shareable) || shareable.Code == oops.CodeUnexpected || shareable.Code == oops.CodeUnauthorized {
+		return "", false
+	}
+	var pgErr *pgconn.PgError
+	if errors.Is(err, hostedmcp.ErrAddressInUse) || (errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation) {
+		return OutcomeBlockedSlugCollision, true
+	}
+	return OutcomeBlockedSyncRejected, true
 }

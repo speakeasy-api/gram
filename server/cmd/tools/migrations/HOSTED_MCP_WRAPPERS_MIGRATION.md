@@ -36,7 +36,7 @@ Toolset-backed `mcp_servers` rows with a fresh id (gateway members, create-from-
 
 Every row also carries `fresh_id_servers` (other live toolset-backed servers for the toolset), and the summary counts `fresh_id_servers_present`. Rows list `domains_to_reconcile` when Sync cleared a domain root; start a custom domain reconcile for each.
 
-Stdout carries the mode, outcome counts, writes, and the last toolset id processed. The `-report` file holds ids and slugs only.
+Stdout carries the mode, outcome counts, writes, and the last toolset id processed. The `-report` file holds ids, slugs, outcomes, reasons, and counts; it never holds names or emails.
 
 ## Run book
 
