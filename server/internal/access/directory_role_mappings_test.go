@@ -17,12 +17,43 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+// Each service fixture has a private database clone. Simulate the later index
+// removal here so this writer can be proved before the rollout enables role sets.
+func enableDirectoryRoleSetsForTest(t *testing.T, ctx context.Context, ti *testInstance) {
+	t.Helper()
+	//nolint:glint // notestingrawsql: schema-only rollout simulation in a private test database; never expose destructive DDL through production SQLc methods.
+	_, err := ti.conn.Exec(ctx, `DROP INDEX IF EXISTS directory_role_mappings_org_group_key;
+		DROP INDEX IF EXISTS directory_role_mappings_org_attribute_key;`)
+	require.NoError(t, err)
+}
+
+func installLegacyDirectoryMappingIndexesForTest(t *testing.T, ctx context.Context, ti *testInstance) {
+	t.Helper()
+	//nolint:glint // notestingrawsql: simulate the legacy rollout schema in a private test database, including after those indexes leave schema.sql.
+	_, err := ti.conn.Exec(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_group_key
+		ON directory_role_mappings (organization_id, directory_group_id)
+		WHERE deleted IS FALSE AND directory_group_id IS NOT NULL;
+		CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_attribute_key
+		ON directory_role_mappings (organization_id, attribute_key, attribute_value)
+		WHERE deleted IS FALSE AND attribute_key IS NOT NULL;`)
+	require.NoError(t, err)
+}
+
+func seedMappingAdministrator(t *testing.T, ctx context.Context, ti *testInstance) {
+	t.Helper()
+	ac := testAccessAuthContext(t, ctx)
+	seedGrant(t, ctx, ti.conn, ac.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), authz.ScopeOrgAdmin, ac.ActiveOrganizationID)
+}
 
 func seedMappingDirectoryGroup(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, name string) uuid.UUID {
 	t.Helper()
@@ -114,10 +145,11 @@ func TestService_ListDirectoryRoleMappings_ForbiddenWithOrgReadOnly(t *testing.T
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
-func TestService_SetDirectoryRoleMapping_GroupCreatesAndReplaces(t *testing.T) {
+func TestService_SetDirectoryRoleMappings_GroupCreatesAndReplaces(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	orgID := authCtx.ActiveOrganizationID
@@ -131,25 +163,25 @@ func TestService_SetDirectoryRoleMapping_GroupCreatesAndReplaces(t *testing.T) {
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingSet)
 	require.NoError(t, err)
 
-	created, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	created, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:       directoryRoleMappingSourceGroup,
 		DirectoryGroupID: &groupID,
-		RoleUrn:          builder,
+		RoleUrns:         []string{builder},
 	})
 	require.NoError(t, err)
-	require.Equal(t, directoryRoleMappingSourceGroup, created.SourceKind)
-	require.Equal(t, groupID, conv.PtrValOr(created.DirectoryGroupID, ""))
-	require.Equal(t, "Engineering", conv.PtrValOr(created.DirectoryGroupName, ""))
-	require.Equal(t, builder, created.RoleUrn)
+	require.Equal(t, directoryRoleMappingSourceGroup, created[0].SourceKind)
+	require.Equal(t, groupID, conv.PtrValOr(created[0].DirectoryGroupID, ""))
+	require.Equal(t, "Engineering", conv.PtrValOr(created[0].DirectoryGroupName, ""))
+	require.Equal(t, builder, created[0].RoleUrn)
 
-	replaced, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	replaced, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:       directoryRoleMappingSourceGroup,
 		DirectoryGroupID: &groupID,
-		RoleUrn:          viewer,
+		RoleUrns:         []string{viewer},
 	})
 	require.NoError(t, err)
-	require.Equal(t, created.ID, replaced.ID)
-	require.Equal(t, viewer, replaced.RoleUrn)
+	require.NotEqual(t, created[0].ID, replaced[0].ID)
+	require.Equal(t, viewer, replaced[0].RoleUrn)
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingSet)
 	require.NoError(t, err)
@@ -161,7 +193,13 @@ func TestService_SetDirectoryRoleMapping_GroupCreatesAndReplaces(t *testing.T) {
 	metadata, err := audittest.DecodeAuditData(record.Metadata)
 	require.NoError(t, err)
 	require.Equal(t, viewer, metadata["role_urn"])
-	require.Equal(t, builder, metadata["previous_role_urn"])
+	require.NotContains(t, metadata, "previous_role_urn")
+	removed, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingDelete)
+	require.NoError(t, err)
+	require.Equal(t, created[0].ID, removed.SubjectID)
+	removedMetadata, err := audittest.DecodeAuditData(removed.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, builder, removedMetadata["role_urn"])
 
 	listed, err := ti.service.ListDirectoryRoleMappings(ctx, &gen.ListDirectoryRoleMappingsPayload{})
 	require.NoError(t, err)
@@ -171,10 +209,11 @@ func TestService_SetDirectoryRoleMapping_GroupCreatesAndReplaces(t *testing.T) {
 	require.Equal(t, "Engineering", listed.Groups[0].Name)
 }
 
-func TestService_SetDirectoryRoleMapping_AttributeRequiresKnownValue(t *testing.T) {
+func TestService_SetDirectoryRoleMappings_AttributeRequiresKnownValue(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	orgID := authCtx.ActiveOrganizationID
@@ -185,50 +224,318 @@ func TestService_SetDirectoryRoleMapping_AttributeRequiresKnownValue(t *testing.
 
 	key := "department_name"
 	unknown := "Marketing"
-	_, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:     directoryRoleMappingSourceAttribute,
 		AttributeKey:   &key,
 		AttributeValue: &unknown,
-		RoleUrn:        builder,
+		RoleUrns:       []string{builder},
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	known := "Sales"
-	mapping, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	mapping, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:     directoryRoleMappingSourceAttribute,
 		AttributeKey:   &key,
 		AttributeValue: &known,
-		RoleUrn:        builder,
+		RoleUrns:       []string{builder},
 	})
 	require.NoError(t, err)
-	require.Equal(t, directoryRoleMappingSourceAttribute, mapping.SourceKind)
-	require.Nil(t, mapping.DirectoryGroupID)
+	require.Equal(t, directoryRoleMappingSourceAttribute, mapping[0].SourceKind)
+	require.Nil(t, mapping[0].DirectoryGroupID)
 
 	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingSet)
 	require.NoError(t, err)
 	require.Equal(t, "department_name=Sales", record.SubjectDisplay)
 }
 
-func TestService_SetDirectoryRoleMapping_RejectsUnknownRole(t *testing.T) {
+func TestService_SetDirectoryRoleMappings_UnchangedAndEmptySets(t *testing.T) {
+	t.Parallel()
+	for _, sourceKind := range []string{directoryRoleMappingSourceGroup, directoryRoleMappingSourceAttribute} {
+		t.Run(sourceKind, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAccessService(t)
+			seedMappingAdministrator(t, ctx, ti)
+			orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+			seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+			role := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
+			payload := &gen.SetDirectoryRoleMappingsPayload{SourceKind: sourceKind, RoleUrns: []string{role, role}}
+			if sourceKind == directoryRoleMappingSourceGroup {
+				payload.DirectoryGroupID = conv.PtrEmpty(seedMappingDirectoryGroup(t, ctx, ti.conn, orgID, "Engineering").String())
+			} else {
+				seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "", "person@example.test", `{"department":"Engineering"}`)
+				payload.AttributeKey, payload.AttributeValue = conv.PtrEmpty("department"), conv.PtrEmpty("Engineering")
+			}
+			created, err := ti.service.SetDirectoryRoleMappings(ctx, payload)
+			require.NoError(t, err)
+			require.Len(t, created, 1)
+			before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingSet)
+			require.NoError(t, err)
+			unchanged, err := ti.service.SetDirectoryRoleMappings(ctx, payload)
+			require.NoError(t, err)
+			require.Equal(t, created, unchanged)
+			after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingSet)
+			require.NoError(t, err)
+			require.Equal(t, before, after)
+
+			beforeDelete, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingDelete)
+			require.NoError(t, err)
+			payload.RoleUrns = []string{}
+			removed, err := ti.service.SetDirectoryRoleMappings(ctx, payload)
+			require.NoError(t, err)
+			require.NotNil(t, removed)
+			require.Empty(t, removed)
+			listed, err := ti.service.ListDirectoryRoleMappings(ctx, &gen.ListDirectoryRoleMappingsPayload{})
+			require.NoError(t, err)
+			require.Empty(t, listed.Mappings)
+			afterDelete, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingDelete)
+			require.NoError(t, err)
+			require.Equal(t, beforeDelete+1, afterDelete)
+			_, err = ti.service.SetDirectoryRoleMappings(ctx, payload)
+			require.NoError(t, err)
+			finalDelete, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingDelete)
+			require.NoError(t, err)
+			require.Equal(t, afterDelete, finalDelete)
+		})
+	}
+}
+
+func TestService_SetDirectoryRoleMappings_MultipleRoles(t *testing.T) {
+	t.Parallel()
+	for _, sourceKind := range []string{directoryRoleMappingSourceGroup, directoryRoleMappingSourceAttribute} {
+		t.Run(sourceKind, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestAccessService(t)
+			seedMappingAdministrator(t, ctx, ti)
+			orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+			seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+			seedRole(t, ctx, ti.conn, orgID, mockRole("role_viewer", "Viewer", "viewer", ""))
+			builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder")
+			viewer := seededRolePrincipal(t, ctx, ti.conn, orgID, "viewer")
+			const userID = "directory_member"
+			seedConnectedUser(t, ctx, ti.conn, orgID, userID, "person@example.test", "Directory Member", "user_directory_member", "membership_directory_member")
+			directoryUserID, workosUserID := seedMappingDirectoryUser(t, ctx, ti.conn, orgID, userID, "person@example.test", `{"department":"Engineering"}`)
+			payload := &gen.SetDirectoryRoleMappingsPayload{SourceKind: sourceKind, RoleUrns: []string{viewer.String(), builder.String(), viewer.String()}}
+			if sourceKind == directoryRoleMappingSourceGroup {
+				groupID, workosGroupID := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "Engineering")
+				addMappingGroupMember(t, ctx, ti.conn, directoryUserID, workosUserID, groupID, workosGroupID)
+				payload.DirectoryGroupID = conv.PtrEmpty(groupID.String())
+			} else {
+				payload.AttributeKey, payload.AttributeValue = conv.PtrEmpty("department"), conv.PtrEmpty("Engineering")
+			}
+			installLegacyDirectoryMappingIndexesForTest(t, ctx, ti)
+			beforeSet, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingSet)
+			require.NoError(t, err)
+			_, err = ti.service.SetDirectoryRoleMappings(ctx, payload)
+			requireOopsCode(t, err, oops.CodeConflict)
+			beforeRollout, err := repo.New(ti.conn).ListDirectoryRoleMappings(ctx, orgID)
+			require.NoError(t, err)
+			require.Empty(t, beforeRollout, "the pre-rollout conflict rolls back the complete set")
+			enableDirectoryRoleSetsForTest(t, ctx, ti)
+			created, err := ti.service.SetDirectoryRoleMappings(ctx, payload)
+			require.NoError(t, err)
+			require.Len(t, created, 2)
+			listed, err := ti.service.ListDirectoryRoleMappings(ctx, &gen.ListDirectoryRoleMappingsPayload{})
+			require.NoError(t, err)
+			require.ElementsMatch(t, created, listed.Mappings)
+			principals, err := authz.ResolveUserPrincipals(ctx, ti.conn, orgID, userID)
+			require.NoError(t, err)
+			require.Contains(t, principals, builder)
+			require.Contains(t, principals, viewer)
+			sources, err := repo.New(ti.conn).ListUserDirectoryRoleMappingSources(ctx, repo.ListUserDirectoryRoleMappingSourcesParams{OrganizationID: orgID, UserID: userID})
+			require.NoError(t, err)
+			require.Len(t, sources, 2)
+			for _, source := range sources {
+				require.Equal(t, sourceKind, source.SourceKind)
+			}
+			counts, err := repo.New(ti.conn).ListDirectoryMappedRoleMemberCounts(ctx, repo.ListDirectoryMappedRoleMemberCountsParams{OrganizationID: orgID, RoleUrns: []string{builder.String(), viewer.String()}})
+			require.NoError(t, err)
+			require.Len(t, counts, 2)
+			for _, count := range counts {
+				require.EqualValues(t, 1, count.MemberCount)
+			}
+			unchanged, err := ti.service.SetDirectoryRoleMappings(ctx, payload)
+			require.NoError(t, err)
+			require.Equal(t, created, unchanged)
+			afterSet, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingSet)
+			require.NoError(t, err)
+			require.Equal(t, beforeSet+2, afterSet)
+			beforeDelete, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingDelete)
+			require.NoError(t, err)
+			payload.RoleUrns = []string{}
+			removed, err := ti.service.SetDirectoryRoleMappings(ctx, payload)
+			require.NoError(t, err)
+			require.Empty(t, removed)
+			afterDelete, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingDelete)
+			require.NoError(t, err)
+			require.Equal(t, beforeDelete+2, afterDelete)
+		})
+	}
+}
+
+func TestService_SetDirectoryRoleMapping_LegacyWrapper(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
+	orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_viewer", "Viewer", "viewer", ""))
+	builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
+	viewer := seededRolePrincipal(t, ctx, ti.conn, orgID, "viewer").String()
+	groupID := seedMappingDirectoryGroup(t, ctx, ti.conn, orgID, "Engineering").String()
+	legacy := &gen.SetDirectoryRoleMappingPayload{SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &groupID, RoleUrn: builder}
+	created, err := ti.service.SetDirectoryRoleMapping(ctx, legacy)
+	require.NoError(t, err)
+	require.Equal(t, builder, created.RoleUrn)
+	legacy.RoleUrn = viewer
+	replaced, err := ti.service.SetDirectoryRoleMapping(ctx, legacy)
+	require.NoError(t, err)
+	require.Equal(t, viewer, replaced.RoleUrn)
+	enableDirectoryRoleSetsForTest(t, ctx, ti)
+	fullSet, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &groupID, RoleUrns: []string{builder, viewer},
+	})
+	require.NoError(t, err)
+	_, err = ti.service.SetDirectoryRoleMapping(ctx, legacy)
+	requireOopsCode(t, err, oops.CodeConflict)
+	listed, err := ti.service.ListDirectoryRoleMappings(ctx, &gen.ListDirectoryRoleMappingsPayload{})
+	require.NoError(t, err)
+	require.ElementsMatch(t, fullSet, listed.Mappings)
+}
+
+func TestService_SetDirectoryRoleMappings_RequiresLiveAdmin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	groupID := seedMappingDirectoryGroup(t, ctx, ti.conn, testAccessAuthContext(t, ctx).ActiveOrganizationID, "Engineering").String()
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &groupID, RoleUrns: []string{},
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestService_DirectoryRoleMappings_UsesTransactionForLiveAuthorization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
+	orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	role := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
+	groupID := seedMappingDirectoryGroup(t, ctx, ti.conn, orgID, "Engineering").String()
+
+	config := ti.conn.Config()
+	config.MaxConns = 1
+	config.MinConns = 0
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+	ti.service.db = pool
+	ti.service.authz = authz.NewEngine(testenv.NewLogger(t), pool, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	created, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &groupID, RoleUrns: []string{role},
+	})
+	require.NoError(t, err, "the live check must not acquire a second connection while the transaction holds the only one")
+	require.Len(t, created, 1)
+	require.NoError(t, ti.service.DeleteDirectoryRoleMapping(ctx, &gen.DeleteDirectoryRoleMappingPayload{ID: created[0].ID}))
+}
+
+func TestService_SetDirectoryRoleMappings_InvalidSetPreservesCurrent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
+	orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	role := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
+	groupID := seedMappingDirectoryGroup(t, ctx, ti.conn, orgID, "Engineering").String()
+	payload := &gen.SetDirectoryRoleMappingsPayload{SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &groupID, RoleUrns: []string{role}}
+	created, err := ti.service.SetDirectoryRoleMappings(ctx, payload)
+	require.NoError(t, err)
+	payload.RoleUrns = []string{"role:organization:" + uuid.NewString()}
+	_, err = ti.service.SetDirectoryRoleMappings(ctx, payload)
+	requireOopsCode(t, err, oops.CodeNotFound)
+	listed, err := ti.service.ListDirectoryRoleMappings(ctx, &gen.ListDirectoryRoleMappingsPayload{})
+	require.NoError(t, err)
+	require.Equal(t, created, listed.Mappings)
+}
+
+func TestService_SetDirectoryRoleMappings_RejectsUnknownRole(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	groupID := seedMappingDirectoryGroup(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "Engineering").String()
 
-	_, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:       directoryRoleMappingSourceGroup,
 		DirectoryGroupID: &groupID,
-		RoleUrn:          "role:organization:" + uuid.NewString(),
+		RoleUrns:         []string{"role:organization:" + uuid.NewString()},
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
-func TestService_SetDirectoryRoleMapping_RejectsMixedSourceFields(t *testing.T) {
+func TestService_SetDirectoryRoleMappings_RejectsOtherOrganization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
+	orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+	otherOrgID := "other-" + uuid.NewString()
+	seedOrganization(t, ctx, ti.conn, otherOrgID)
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	seedRole(t, ctx, ti.conn, otherOrgID, mockRole("role_viewer", "Viewer", "viewer", ""))
+	role := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
+	otherRole := seededRolePrincipal(t, ctx, ti.conn, otherOrgID, "viewer").String()
+	groupID := seedMappingDirectoryGroup(t, ctx, ti.conn, orgID, "Engineering").String()
+	otherGroupID := seedMappingDirectoryGroup(t, ctx, ti.conn, otherOrgID, "Engineering").String()
+	for _, payload := range []*gen.SetDirectoryRoleMappingsPayload{
+		{SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &groupID, RoleUrns: []string{otherRole}},
+		{SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &otherGroupID, RoleUrns: []string{role}},
+		{SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &otherGroupID, RoleUrns: []string{}},
+	} {
+		_, err := ti.service.SetDirectoryRoleMappings(ctx, payload)
+		requireOopsCode(t, err, oops.CodeNotFound)
+	}
+	seedMappingDirectoryUser(t, ctx, ti.conn, otherOrgID, "", "person@example.test", `{"department":"Other"}`)
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind: directoryRoleMappingSourceAttribute, AttributeKey: conv.PtrEmpty("department"), AttributeValue: conv.PtrEmpty("Other"), RoleUrns: []string{role},
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	mappings, err := repo.New(ti.conn).ListDirectoryRoleMappings(ctx, orgID)
+	require.NoError(t, err)
+	require.Empty(t, mappings)
+	mappings, err = repo.New(ti.conn).ListDirectoryRoleMappings(ctx, otherOrgID)
+	require.NoError(t, err)
+	require.Empty(t, mappings)
+}
+
+func TestService_SetDirectoryRoleMappings_ClearsDeletedGroup(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
+	orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	role := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
+	groupUUID, workosID := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "Engineering")
+	groupID := groupUUID.String()
+	payload := &gen.SetDirectoryRoleMappingsPayload{SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &groupID, RoleUrns: []string{role}}
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, payload)
+	require.NoError(t, err)
+	deleteMappingDirectoryGroup(t, ctx, ti.conn, workosID)
+	_, err = ti.service.SetDirectoryRoleMappings(ctx, payload)
+	requireOopsCode(t, err, oops.CodeNotFound)
+	payload.RoleUrns = []string{}
+	removed, err := ti.service.SetDirectoryRoleMappings(ctx, payload)
+	require.NoError(t, err)
+	require.Empty(t, removed)
+}
+
+func TestService_SetDirectoryRoleMappings_RejectsMixedSourceFields(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	orgID := authCtx.ActiveOrganizationID
@@ -238,18 +545,18 @@ func TestService_SetDirectoryRoleMapping_RejectsMixedSourceFields(t *testing.T) 
 	groupID := uuid.NewString()
 	key := "department_name"
 
-	_, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:       directoryRoleMappingSourceGroup,
 		DirectoryGroupID: &groupID,
 		AttributeKey:     &key,
-		RoleUrn:          builder,
+		RoleUrns:         []string{builder},
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
-	_, err = ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	_, err = ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:   directoryRoleMappingSourceAttribute,
 		AttributeKey: &key,
-		RoleUrn:      builder,
+		RoleUrns:     []string{builder},
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
@@ -258,6 +565,7 @@ func TestService_DeleteDirectoryRoleMapping(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	orgID := authCtx.ActiveOrganizationID
@@ -266,17 +574,17 @@ func TestService_DeleteDirectoryRoleMapping(t *testing.T) {
 	builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
 	groupID := seedMappingDirectoryGroup(t, ctx, ti.conn, orgID, "Engineering").String()
 
-	mapping, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	mapping, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:       directoryRoleMappingSourceGroup,
 		DirectoryGroupID: &groupID,
-		RoleUrn:          builder,
+		RoleUrns:         []string{builder},
 	})
 	require.NoError(t, err)
 
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingDelete)
 	require.NoError(t, err)
 
-	require.NoError(t, ti.service.DeleteDirectoryRoleMapping(ctx, &gen.DeleteDirectoryRoleMappingPayload{ID: mapping.ID}))
+	require.NoError(t, ti.service.DeleteDirectoryRoleMapping(ctx, &gen.DeleteDirectoryRoleMappingPayload{ID: mapping[0].ID}))
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingDelete)
 	require.NoError(t, err)
@@ -284,14 +592,14 @@ func TestService_DeleteDirectoryRoleMapping(t *testing.T) {
 
 	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingDelete)
 	require.NoError(t, err)
-	require.Equal(t, mapping.ID, record.SubjectID)
+	require.Equal(t, mapping[0].ID, record.SubjectID)
 	require.Equal(t, "Engineering", record.SubjectDisplay)
 
 	listed, err := ti.service.ListDirectoryRoleMappings(ctx, &gen.ListDirectoryRoleMappingsPayload{})
 	require.NoError(t, err)
 	require.Empty(t, listed.Mappings)
 
-	err = ti.service.DeleteDirectoryRoleMapping(ctx, &gen.DeleteDirectoryRoleMappingPayload{ID: mapping.ID})
+	err = ti.service.DeleteDirectoryRoleMapping(ctx, &gen.DeleteDirectoryRoleMappingPayload{ID: mapping[0].ID})
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
@@ -327,6 +635,7 @@ func TestService_DirectoryRoleMapping_GrantsRoleToMatchingMember(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	orgID := authCtx.ActiveOrganizationID
@@ -342,11 +651,11 @@ func TestService_DirectoryRoleMapping_GrantsRoleToMatchingMember(t *testing.T) {
 
 	key := "department_name"
 	value := "Sales"
-	_, err = ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	_, err = ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:     directoryRoleMappingSourceAttribute,
 		AttributeKey:   &key,
 		AttributeValue: &value,
-		RoleUrn:        builder.String(),
+		RoleUrns:       []string{builder.String()},
 	})
 	require.NoError(t, err)
 
@@ -411,6 +720,7 @@ func TestService_DirectoryRoleMapping_GroupMappingFollowsGroupLifecycle(t *testi
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	orgID := authCtx.ActiveOrganizationID
@@ -423,10 +733,10 @@ func TestService_DirectoryRoleMapping_GroupMappingFollowsGroupLifecycle(t *testi
 	addMappingGroupMember(t, ctx, ti.conn, directoryUserID, workosUserID, groupID, workosGroupID)
 
 	group := groupID.String()
-	_, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:       directoryRoleMappingSourceGroup,
 		DirectoryGroupID: &group,
-		RoleUrn:          builder.String(),
+		RoleUrns:         []string{builder.String()},
 	})
 	require.NoError(t, err)
 
@@ -444,6 +754,7 @@ func TestService_DirectoryRoleMapping_SkipsDeletedRole(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	orgID := authCtx.ActiveOrganizationID
@@ -455,11 +766,11 @@ func TestService_DirectoryRoleMapping_SkipsDeletedRole(t *testing.T) {
 
 	key := "department_name"
 	value := "Sales"
-	_, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:     directoryRoleMappingSourceAttribute,
 		AttributeKey:   &key,
 		AttributeValue: &value,
-		RoleUrn:        builder.String(),
+		RoleUrns:       []string{builder.String()},
 	})
 	require.NoError(t, err)
 
@@ -482,6 +793,7 @@ func TestService_DirectoryRoleMapping_EmailFallbackIgnoresProfileLinkedToAnother
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	orgID := authCtx.ActiveOrganizationID
@@ -495,11 +807,11 @@ func TestService_DirectoryRoleMapping_EmailFallbackIgnoresProfileLinkedToAnother
 
 	key := "department_name"
 	value := "Sales"
-	_, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:     directoryRoleMappingSourceAttribute,
 		AttributeKey:   &key,
 		AttributeValue: &value,
-		RoleUrn:        builder.String(),
+		RoleUrns:       []string{builder.String()},
 	})
 	require.NoError(t, err)
 
@@ -520,6 +832,7 @@ func TestService_ListDirectoryRoleMappings_LeavesOutHighCardinalityAttributeKeys
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	orgID := authCtx.ActiveOrganizationID
@@ -540,11 +853,11 @@ func TestService_ListDirectoryRoleMappings_LeavesOutHighCardinalityAttributeKeys
 	builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
 	key := "employee_id"
 	value := "E7"
-	_, err = ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	_, err = ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:     directoryRoleMappingSourceAttribute,
 		AttributeKey:   &key,
 		AttributeValue: &value,
-		RoleUrn:        builder,
+		RoleUrns:       []string{builder},
 	})
 	require.NoError(t, err)
 }
@@ -553,6 +866,7 @@ func TestService_ListAudienceOptions_CountsDirectoryMappedRoleMembers(t *testing
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	orgID := authCtx.ActiveOrganizationID
@@ -564,11 +878,11 @@ func TestService_ListAudienceOptions_CountsDirectoryMappedRoleMembers(t *testing
 
 	key := "department_name"
 	value := "Sales"
-	_, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:     directoryRoleMappingSourceAttribute,
 		AttributeKey:   &key,
 		AttributeValue: &value,
-		RoleUrn:        builder,
+		RoleUrns:       []string{builder},
 	})
 	require.NoError(t, err)
 

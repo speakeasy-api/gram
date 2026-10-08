@@ -381,11 +381,12 @@ func TestService_UpdateMemberRoles_ReturnsDirectoryMappedRoles(t *testing.T) {
 
 	key := "department_name"
 	value := "Research"
-	_, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	seedMappingAdministrator(t, ctx, ti)
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:     directoryRoleMappingSourceAttribute,
 		AttributeKey:   &key,
 		AttributeValue: &value,
-		RoleUrn:        viewer,
+		RoleUrns:       []string{viewer},
 	})
 	require.NoError(t, err)
 

@@ -28,7 +28,7 @@ import { accessRequestAccess } from "../funcs/accessRequestAccess.js";
 import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
 import { accessResolveShadowMCPInventoryRequest } from "../funcs/accessResolveShadowMCPInventoryRequest.js";
 import { accessSetAIToolDecision } from "../funcs/accessSetAIToolDecision.js";
-import { accessSetDirectoryRoleMapping } from "../funcs/accessSetDirectoryRoleMapping.js";
+import { accessSetDirectoryRoleMappings } from "../funcs/accessSetDirectoryRoleMappings.js";
 import { accessSetResourceAudience } from "../funcs/accessSetResourceAudience.js";
 import { accessSyncDirectoryGroups } from "../funcs/accessSyncDirectoryGroups.js";
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
@@ -164,9 +164,9 @@ import {
   SetAIToolDecisionSecurity,
 } from "../models/operations/setaitooldecision.js";
 import {
-  SetDirectoryRoleMappingRequest,
-  SetDirectoryRoleMappingSecurity,
-} from "../models/operations/setdirectoryrolemapping.js";
+  SetDirectoryRoleMappingsRequest,
+  SetDirectoryRoleMappingsSecurity,
+} from "../models/operations/setdirectoryrolemappings.js";
 import {
   SetResourceAudienceRequest,
   SetResourceAudienceSecurity,
@@ -685,17 +685,17 @@ export class Access extends ClientSDK {
   }
 
   /**
-   * setDirectoryRoleMapping access
+   * setDirectoryRoleMappings access
    *
    * @remarks
-   * Map a directory group or attribute value to a role, replacing any role it was mapped to before.
+   * Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.
    */
-  async setDirectoryRoleMapping(
-    request: SetDirectoryRoleMappingRequest,
-    security?: SetDirectoryRoleMappingSecurity | undefined,
+  async setDirectoryRoleMappings(
+    request: SetDirectoryRoleMappingsRequest,
+    security?: SetDirectoryRoleMappingsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<DirectoryRoleMapping> {
-    return unwrapAsync(accessSetDirectoryRoleMapping(
+  ): Promise<Array<DirectoryRoleMapping>> {
+    return unwrapAsync(accessSetDirectoryRoleMappings(
       this,
       request,
       security,

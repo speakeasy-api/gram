@@ -102,10 +102,11 @@ func seedExplainAccessFixture(t *testing.T, ctx context.Context, ti *testInstanc
 	groupID, workosGroupID := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "okta/contractors")
 	addMappingGroupMember(t, ctx, ti.conn, directoryUserID, workosUserID, groupID, workosGroupID)
 	group := groupID.String()
-	_, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+	seedMappingAdministrator(t, ctx, ti)
+	_, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
 		SourceKind:       directoryRoleMappingSourceGroup,
 		DirectoryGroupID: &group,
-		RoleUrn:          contractors.String(),
+		RoleUrns:         []string{contractors.String()},
 	})
 	require.NoError(t, err)
 
@@ -166,6 +167,31 @@ func TestService_ExplainResourceAccess_BlockFromMappedRoleWins(t *testing.T) {
 	manage := explainedLevel(t, result, audienceLevelManage)
 	require.False(t, manage.Allowed)
 	require.Empty(t, manage.Rules)
+}
+
+func TestService_ExplainResourceAccess_ShowsEachRoleFromOneGroup(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	enableDirectoryRoleSetsForTest(t, ctx, ti)
+	fixture := seedExplainAccessFixture(t, ctx, ti)
+	mappings, err := ti.service.ListDirectoryRoleMappings(ctx, &gen.ListDirectoryRoleMappingsPayload{})
+	require.NoError(t, err)
+	require.Len(t, mappings.Mappings, 1)
+	engineer := seededRolePrincipal(t, ctx, ti.conn, fixture.orgID, "engineer")
+	contractors := seededRolePrincipal(t, ctx, ti.conn, fixture.orgID, "contractors")
+	_, err = ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind:       directoryRoleMappingSourceGroup,
+		DirectoryGroupID: mappings.Mappings[0].DirectoryGroupID,
+		RoleUrns:         []string{engineer.String(), contractors.String()},
+	})
+	require.NoError(t, err)
+	use := explainedLevel(t, explainAccess(t, ctx, ti, fixture.serverID, fixture.userID), audienceLevelUse)
+	for _, name := range []string{"Engineer", "Contractors"} {
+		rule := explainedRule(t, use.Rules, name)
+		require.Equal(t, name == "Contractors", rule.ViaDirectoryMapping, "unexpected directory-only marker for %s", name)
+		require.Len(t, rule.DirectorySources, 1)
+		require.Equal(t, "okta/contractors", *rule.DirectorySources[0].DirectoryGroupName)
+	}
 }
 
 func TestService_ExplainResourceAccess_DirectGrantOutranksRoleBlock(t *testing.T) {
