@@ -246,6 +246,12 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		return err
 	}
 
+	// After the role server memberships, which take every MCP server in the
+	// project: the shared tunnel's servers stay out of the role plugins.
+	if err := s.seedSharedTunnel(ctx); err != nil {
+		return err
+	}
+
 	if err := s.q.ServersInsertUserSessionClients(ctx, repo.ServersInsertUserSessionClientsParams{
 		LinearClientID:  s.det("usc-linear"),
 		ProjectID:       proj,
@@ -538,6 +544,53 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 		RemoteSessionIssuerID: s.det("ema-idp"),
 	}); err != nil {
 		return fmt.Errorf("insert demo ema provider order: %w", err)
+	}
+	return nil
+}
+
+// seedSharedTunnel: one tunnel fronted by a private and a public MCP server,
+// each with its own issuer and platform endpoint.
+func (s *seeder) seedSharedTunnel(ctx context.Context) error {
+	org := s.orgID()
+	proj := s.projectID()
+
+	if err := s.q.ServersInsertSharedTunnel(ctx, repo.ServersInsertSharedTunnelParams{
+		TunnelID:  s.det("tunshare-tunnel"),
+		ProjectID: proj,
+		// Unique per tenant (key_hash is globally unique) and never a hash
+		// of any key.
+		KeyHash: "DEMO-NOT-A-VALID-HASH-" + s.det("tunshare-tunnel").String(),
+	}); err != nil {
+		return fmt.Errorf("insert demo shared tunnel: %w", err)
+	}
+	if err := s.q.ServersInsertSharedTunnelIssuers(ctx, repo.ServersInsertSharedTunnelIssuersParams{
+		PrivateIssuerID: s.det("tunshare-issuer-private"),
+		ProjectID:       proj,
+		OrgID:           org,
+		PublicIssuerID:  s.det("tunshare-issuer-public"),
+	}); err != nil {
+		return fmt.Errorf("insert demo shared tunnel issuers: %w", err)
+	}
+	if err := s.q.ServersInsertSharedTunnelMCPServers(ctx, repo.ServersInsertSharedTunnelMCPServersParams{
+		PrivateServerID: s.det("tunshare-mcpserver-private"),
+		ProjectID:       proj,
+		TunnelID:        s.det("tunshare-tunnel"),
+		PrivateIssuerID: s.det("tunshare-issuer-private"),
+		PublicServerID:  s.det("tunshare-mcpserver-public"),
+		PublicIssuerID:  s.det("tunshare-issuer-public"),
+	}); err != nil {
+		return fmt.Errorf("insert demo shared tunnel mcp servers: %w", err)
+	}
+	if err := s.q.ServersInsertSharedTunnelEndpoints(ctx, repo.ServersInsertSharedTunnelEndpointsParams{
+		PrivateEndpointID: s.det("tunshare-endpoint-private"),
+		ProjectID:         proj,
+		PrivateServerID:   s.det("tunshare-mcpserver-private"),
+		PrivateSlug:       s.spec.OrgSlug + "-jamf-inventory",
+		PublicEndpointID:  s.det("tunshare-endpoint-public"),
+		PublicServerID:    s.det("tunshare-mcpserver-public"),
+		PublicSlug:        s.spec.OrgSlug + "-jamf-inventory-public",
+	}); err != nil {
+		return fmt.Errorf("insert demo shared tunnel endpoints: %w", err)
 	}
 	return nil
 }

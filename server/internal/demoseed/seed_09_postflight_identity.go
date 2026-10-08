@@ -142,9 +142,9 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		// duplicated any of them would leave the badges telling a different
 		// story than the one they were seeded to tell.
 		// One issuer per Connections credential story (acme-partner-gateway),
-		// three project MCP issuers, and the organization-wide workforce issuer
-		// used by GitHub.
-		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 4, "demo seed postflight: expected 4 project user session issuers, found %d"},
+		// three project MCP issuers, one for each MCP server on the shared
+		// tunnel, and the organization-wide workforce issuer used by GitHub.
+		{byProj(s.q.PostflightIDProjectUserSessionIssuers), 6, "demo seed postflight: expected 6 project user session issuers, found %d"},
 		{byOrg(s.q.PostflightIDOrgUserSessionIssuers), 1, "demo seed postflight: expected 1 organization user session issuer, found %d"},
 		// The workforce issuer shows a shared authorization server.
 		{func(ctx context.Context) (int64, error) {
@@ -304,6 +304,13 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{byOrg(s.q.PostflightIDSlackDirectoryMemberships), 10, "demo seed postflight: expected 10 Slack workspace memberships, found %d"},
 		{byOrg(s.q.PostflightIDSlackDirectoryConnections), 2, "demo seed postflight: expected 2 Slack workspace connections, found %d"},
 		{byProj(s.q.PostflightIDWidgets), 6, "demo seed postflight: expected 6 Explore widgets, found %d"},
+		{byProj(s.q.PostflightIDTunneledMCPServers), 1, "demo seed postflight: expected 1 tunneled MCP source, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDSharedTunnelMCPServers(ctx, repo.PostflightIDSharedTunnelMCPServersParams{
+				ProjectID: proj,
+				TunnelID:  s.det("tunshare-tunnel"),
+			})
+		}, 2, "demo seed postflight: expected 2 MCP servers sharing the demo tunnel, found %d"},
 		// Sigint postflights preserve the complete authoring story: all modes,
 		// ordered memberships, a shared catalog entry, and an incomplete draft.
 		{byProj(s.q.PostflightIDSigintSignals), 9, "demo seed postflight: expected 9 sigint signals, found %d"},
