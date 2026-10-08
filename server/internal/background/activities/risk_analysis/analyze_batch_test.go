@@ -41,6 +41,7 @@ import (
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -2456,4 +2457,155 @@ func TestAnalyzeBatch_LegacyRandomIDRowsConverge(t *testing.T) {
 		return row.Topic != string(proto.MessageName(&webhooksv1.Event{}))
 	})
 	require.Len(t, afterOutbox, len(announced), "legacy rows were already announced; the re-analysis must not re-announce them")
+}
+
+// classifierReturning is a fake promptinjection.Classifier that labels every
+// message the same way; the judge itself is out of scope here.
+func classifierReturning(label string) promptinjection.Classifier {
+	return func(_ context.Context, req promptinjection.Request) ([]promptinjection.Result, error) {
+		results := make([]promptinjection.Result, len(req.Messages))
+		for i := range results {
+			results[i] = promptinjection.Result{Label: label, Score: 1, Rationale: "test rationale", DirectiveKind: "", Target: "", Operational: false, STokens: 1, Completed: true, Model: "test-model", Provider: "test-provider"}
+		}
+		return results, nil
+	}
+}
+
+func TestAnalyzeBatch_PromptInjectionFindingsPublishedToFindingsTopic(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	msgIDs := seedMessages(t, conn, td, 1)
+
+	findingsPub, published := capturingFindingsPub(t)
+	ab, err := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		nil,
+		&risk_analysis.StubPIIScanner{},
+		promptinjection.NewScanner(testenv.NewLogger(t), classifierReturning(promptinjection.LabelInjection)),
+		nil,
+		nil,
+		nil,
+		nil,
+		newPresidioPub(),
+		newGitleaksPub(),
+		newPromptInjectionPub(),
+		newPromptPolicyPub(),
+		newCustomRulesPub(), newLLMPub(),
+		findingsPub,
+		mustCustomRuleScanner(t, conn),
+		mustCELEngine(t),
+		nil,
+		nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
+	)
+	require.NoError(t, err)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		RiskPolicyID:   td.policyID,
+		PolicyVersion:  td.policyVersion,
+		MessageIDs:     msgIDs,
+		Sources:        []string{risk_analysis.SourcePromptInjection},
+	})
+	require.NoError(t, err)
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+	require.Equal(t, 1, result.Findings)
+
+	// The stream handler only runs the real judge for the shadow sample, so
+	// the batch is what puts prompt_injection findings into ClickHouse.
+	require.Len(t, *published, 1)
+	got := (*published)[0]
+	require.Equal(t, promptinjection.Source, got.GetSource())
+	require.Equal(t, msgIDs[0].String(), got.GetChatMessageId())
+	require.Equal(t, td.policyID.String(), got.GetRiskPolicyId())
+	require.NotEmpty(t, got.GetId())
+	require.False(t, got.GetShadow())
+}
+
+func TestAnalyzeBatch_PromptPolicyFindingsPublishedToFindingsTopic(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	policyID, err := uuid.NewV7()
+	require.NoError(t, err)
+	policy, err := riskrepo.New(conn).CreateRiskPolicy(t.Context(), riskrepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		Name:           "prompt policy",
+		PolicyType:     "prompt_based",
+		Sources:        []string{},
+		Enabled:        true,
+		Action:         "flag",
+		AudienceType:   "everyone",
+		AutoName:       false,
+		Prompt:         pgtype.Text{String: "Block unsafe requests", Valid: true},
+	})
+	require.NoError(t, err)
+	msgIDs := seedMessages(t, conn, td, 2)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
+
+	findingsPub, published := capturingFindingsPub(t)
+	ab, err := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		nil,
+		&risk_analysis.StubPIIScanner{},
+		nil,
+		nil,
+		nil,
+		(&recordingPromptJudge{}).Evaluate,
+		flags,
+		newPresidioPub(),
+		newGitleaksPub(),
+		newPromptInjectionPub(),
+		newPromptPolicyPub(),
+		newCustomRulesPub(), newLLMPub(),
+		findingsPub,
+		mustCustomRuleScanner(t, conn),
+		mustCELEngine(t),
+		nil,
+		nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
+	)
+	require.NoError(t, err)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		RiskPolicyID:   policy.ID,
+		PolicyVersion:  policy.Version,
+		MessageIDs:     msgIDs,
+		Sources:        nil,
+	})
+	require.NoError(t, err)
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+	require.Equal(t, len(msgIDs), result.Findings)
+
+	require.Len(t, *published, len(msgIDs))
+	for _, got := range *published {
+		require.Equal(t, promptpolicy.Source, got.GetSource())
+		require.Equal(t, policy.ID.String(), got.GetRiskPolicyId())
+		require.NotEmpty(t, got.GetId())
+	}
 }

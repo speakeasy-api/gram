@@ -317,14 +317,14 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if err != nil {
 		return nil, err
 	}
-	// Mirror the stream scanners onto the shared findings topic for sources
-	// that have no stream publisher (ClickHouse would otherwise never see
-	// them). Only after a committed write: a batch dropped because its policy
-	// was deleted mid-analysis must not leak findings into ClickHouse that
-	// Postgres never stored. A publish failure fails the activity — the
-	// redriven batch repeats only idempotent writes, so the retry converges.
+	// Publish the sources the batch is the ClickHouse publisher for (see
+	// batchPublishedFindingSources). Only after a committed write: a batch
+	// dropped because its policy was deleted mid-analysis must not leak
+	// findings into ClickHouse that Postgres never stored. A publish failure
+	// fails the activity — the redriven batch repeats only idempotent writes,
+	// so the retry converges.
 	if written {
-		if err := a.publishBatchOnlyFindings(ctx, args, ids, findings); err != nil {
+		if err := a.publishBatchFindings(ctx, args, ids, findings); err != nil {
 			return nil, err
 		}
 	}
