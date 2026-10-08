@@ -352,3 +352,41 @@ func TestLookupFoldsADimensionInClickHouse(t *testing.T) {
 	require.Equal(t, map[string]int64{"GitHub": 2}, servers(t, maps, onRawName), "a filter on the raw name still matches after the override, and reaches every raw name folded with it")
 	require.Equal(t, map[string]int64{"GitHub": 2, "linear": 1}, servers(t, maps, []Filter{{Field: "mcp_server", Operator: "in", Values: []string{"gh", "github-mcp", "linear"}}}))
 }
+
+// A folded dimension named after its column renders
+// transform(x, ?, ?, x) AS x, which ClickHouse resolves: the alias shadows
+// the column for the outer query while the expression reads the source.
+func TestLookupFieldNamedAfterItsColumnRunsInClickHouse(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestClickhouse(t)
+	orgID := "org-" + uuid.NewString()
+	base := time.Now().Add(-time.Hour).UnixNano()
+	tenant := Tenant{OrganizationID: orgID, ProjectID: "project-1"}
+
+	gh := agentEventFixture(orgID, "c1", "s1", "t1", "c1", "tool_call_result", base+1)
+	gh.ToolName, gh.MCPServerName = "mcp_tool", "gh"
+	linear := agentEventFixture(orgID, "c2", "s1", "t1", "c2", "tool_call_result", base+2)
+	linear.ToolName, linear.MCPServerName = "mcp_tool", "linear"
+	require.NoError(t, chrepo.New(conn).InsertAgentEvents(t.Context(), []chrepo.AgentEventRow{gh, linear}))
+
+	named := *ToolCalls
+	named.Fields = append([]Field(nil), ToolCalls.Fields...)
+	for i := range named.Fields {
+		if named.Fields[i].Name == "mcp_server" {
+			named.Fields[i].Name = named.Fields[i].Expr
+		}
+	}
+	plan, err := Compile(MustCatalog(Lookups, &named), tenant, LookupMaps{MCPServerDisplayNamesLookup: {"gh": "GitHub"}}, Request{
+		Dataset: "tool_calls", FromUnixNano: base - 1, ToUnixNano: base + int64(time.Hour), Grain: TimeGrainNone,
+		Dimensions: []string{"mcp_server_name"}, Measures: []Measure{{Op: "count", Field: "", Alias: ""}},
+		Filters: []Filter{{Field: "mcp_server_name", Operator: "equals", Values: []string{"gh"}}}, OrderBy: nil, Limit: 0, Ungrouped: false,
+	})
+	require.NoError(t, err)
+	require.Contains(t, plan.SQL, "transform(mcp_server_name, ?, ?, mcp_server_name) AS mcp_server_name")
+	rows, err := plan.Run(t.Context(), conn)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "GitHub", rows[0]["mcp_server_name"])
+	require.EqualValues(t, 1, rows[0]["count"])
+}
