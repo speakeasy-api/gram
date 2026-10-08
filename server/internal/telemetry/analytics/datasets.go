@@ -76,9 +76,9 @@ var Skills = &Dataset{
 	Source: skillsSource,
 }
 
-// A filter on an overridden raw name matches nothing, so the field says it
-// speaks display names.
-const mcpServerDescription = "MCP server the call went to, under the display name set in Hooks settings. A raw name with no override shows as reported."
+// Filters fold their values the way the column folds, so a raw name or its
+// display name both match; the field says which name it shows.
+const mcpServerDescription = "MCP server the call went to, under the display name set in Hooks settings. A raw name with no override shows as reported; a filter may name either."
 
 // MCPServerDisplayNamesLookup names the lookup mcp_server reads through: the
 // project's hook server-name overrides, raw name to display name.

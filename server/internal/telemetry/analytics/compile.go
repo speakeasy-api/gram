@@ -214,15 +214,16 @@ func Compile(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Request) (
 		if len(filter.Values) > MaxFilterValues {
 			return nil, newError(ErrLimitExceeded, name, position+".values", "", fmt.Sprintf("at most %d values per filter", MaxFilterValues))
 		}
+		if Operator(filter.Operator) == OperatorEquals && len(filter.Values) != 1 {
+			return nil, newError(ErrUnsatisfiable, name, position+".values", "", "equals takes exactly one value")
+		}
 		expr, args := readExpr(qc, field)
+		// A folded value may stand for itself and its display name, so even
+		// equals can compare against two values.
 		values := foldValues(qc, field, filter.Values)
-		switch Operator(filter.Operator) {
-		case OperatorEquals:
-			if len(values) != 1 {
-				return nil, newError(ErrUnsatisfiable, name, position+".values", "", "equals takes exactly one value")
-			}
+		if len(values) == 1 {
 			builder = builder.Where(expr+" = ?", append(args, values[0])...)
-		case OperatorIn:
+		} else {
 			builder = builder.Where(expr+" IN ("+placeholders(len(values))+")", append(args, anyValues(values)...)...)
 		}
 	}
@@ -429,9 +430,9 @@ func readExpr(qc QueryContext, field *Field) (string, []any) {
 	return "transform(" + field.Expr + ", ?, ?, " + field.Expr + ")", []any{raws, targets}
 }
 
-// foldValues reads filter values the way readExpr reads the column, so a raw
-// name still matches once it is overridden; duplicates after the fold are
-// dropped.
+// foldValues keeps each filter value and adds what the map folds it to, so
+// a raw name still matches once it is overridden and a display name keeps
+// matching even when it is also someone's raw name. Duplicates are dropped.
 func foldValues(qc QueryContext, field *Field, values []string) []string {
 	if field.Lookup == "" {
 		return values
@@ -442,8 +443,10 @@ func foldValues(qc QueryContext, field *Field, values []string) []string {
 	}
 	folded := make([]string, 0, len(values))
 	for _, v := range values {
-		if v = foldValue(m, v); !slices.Contains(folded, v) {
-			folded = append(folded, v)
+		for _, candidate := range []string{v, foldValue(m, v)} {
+			if !slices.Contains(folded, candidate) {
+				folded = append(folded, candidate)
+			}
 		}
 	}
 	return folded

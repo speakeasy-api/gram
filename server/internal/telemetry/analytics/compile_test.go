@@ -319,16 +319,30 @@ func TestCompileFoldsAFilterValueThroughItsLookup(t *testing.T) {
 
 	plan, err := Compile(Default, tenant, maps, req)
 	require.NoError(t, err)
-	require.Equal(t, "GitHub", plan.Args[len(plan.Args)-1], "a saved filter on a raw name keeps matching once the name is overridden")
+	require.Contains(t, plan.SQL, "IN (?,?)", "equals on a raw name compares against the name and what it folds to")
+	require.Equal(t, []any{"gh", "GitHub"}, plan.Args[len(plan.Args)-2:], "a saved filter on a raw name keeps matching once the name is overridden")
+
+	chained := LookupMaps{MCPServerDisplayNamesLookup: {"alpha": "beta", "beta": "gamma"}}
+	display := req
+	display.Filters = []Filter{{Field: "mcp_server", Operator: "equals", Values: []string{"beta"}}}
+	plan, err = Compile(Default, tenant, chained, display)
+	require.NoError(t, err)
+	require.Equal(t, []any{"beta", "gamma"}, plan.Args[len(plan.Args)-2:], "a display name that is also a raw name still matches what folds to it")
+
+	two := req
+	two.Filters = []Filter{{Field: "mcp_server", Operator: "equals", Values: []string{"gh", "github-mcp"}}}
+	_, err = Compile(Default, tenant, maps, two)
+	require.ErrorContains(t, err, "equals takes exactly one value", "the guard reads the request, not the folded list")
 
 	in := req
 	in.Filters = []Filter{{Field: "mcp_server", Operator: "in", Values: []string{"gh", "github-mcp", "linear", "GitHub"}}}
 	plan, err = Compile(Default, tenant, maps, in)
 	require.NoError(t, err)
-	require.Contains(t, plan.SQL, "IN (?,?)", "values that fold to one name are one value")
-	require.Equal(t, []any{"GitHub", "linear"}, plan.Args[len(plan.Args)-2:])
+	require.Contains(t, plan.SQL, "IN (?,?,?,?)", "each value and its fold, once")
+	require.Equal(t, []any{"gh", "GitHub", "github-mcp", "linear"}, plan.Args[len(plan.Args)-4:])
 
 	plain, err := Compile(Default, tenant, nil, req)
 	require.NoError(t, err)
+	require.Contains(t, plain.SQL, "= ?")
 	require.Equal(t, "gh", plain.Args[len(plain.Args)-1], "no loaded map, the value is read as given")
 }
