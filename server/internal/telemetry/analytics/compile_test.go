@@ -95,8 +95,8 @@ func TestCompileCountDistinct(t *testing.T) {
 		{Name: "count_distinct_tool_name", Kind: ColumnMeasure},
 		{Name: "people", Kind: ColumnMeasure},
 	}, plan.Columns)
-	require.Contains(t, plan.SQL, "uniqExactIf(tool_name, tool_name != '') AS count_distinct_tool_name", "a collapsed row with no value is not a distinct value")
-	require.Contains(t, plan.SQL, "uniqExactIf(user_email, user_email != '') AS people")
+	require.Contains(t, plan.SQL, "uniqExact(nullIf(tool_name, '')) AS count_distinct_tool_name", "a collapsed row with no value is not a distinct value")
+	require.Contains(t, plan.SQL, "uniqExact(nullIf(user_email, '')) AS people")
 	require.Contains(t, plan.SQL, "ORDER BY people DESC, mcp_server ASC")
 }
 
@@ -129,7 +129,7 @@ func TestCompileSkills(t *testing.T) {
 		{Name: "count_distinct_skill", Kind: ColumnMeasure},
 	}, plan.Columns)
 	require.Contains(t, plan.SQL, "skill_name AS skill")
-	require.Contains(t, plan.SQL, "uniqExactIf(skill_name, skill_name != '') AS count_distinct_skill", "skills used counts the invocations that named one")
+	require.Contains(t, plan.SQL, "uniqExact(nullIf(skill_name, '')) AS count_distinct_skill", "skills used counts the invocations that named one")
 	require.Contains(t, plan.SQL, "HAVING skill_name != ''", "the source keeps only the collapsed calls that named a skill")
 	require.Contains(t, plan.SQL, "WHERE skill_name IN (?,?)")
 	require.Contains(t, plan.SQL, "GROUP BY skill")
@@ -277,10 +277,12 @@ func TestCompileFoldsADimensionThroughItsLookup(t *testing.T) {
 	require.NoError(t, err)
 	const fold = "transform(mcp_server_name, ?, ?, mcp_server_name)"
 	require.Contains(t, plan.SQL, fold+" AS mcp_server")
-	require.Contains(t, plan.SQL, "uniqExactIf("+fold+", "+fold+" != '') AS servers")
+	require.Contains(t, plan.SQL, "uniqExact(nullIf("+fold+", '')) AS servers", "the distinct count reads the fold once")
 	require.Contains(t, plan.SQL, "WHERE "+fold+" = ?", "the filter compares the folded value")
 	require.Equal(t, []string{"gh", "github-mcp"}, plan.Args[0], "the select list's arrays come first")
 	require.Equal(t, []string{"GitHub", "GitHub"}, plan.Args[1])
+	require.Equal(t, []string{"gh", "github-mcp"}, plan.Args[2], "the distinct count binds its arrays once")
+	require.Equal(t, "org-1", plan.Args[4], "the tenant follows the select list's binds")
 	require.Equal(t, "GitHub", plan.Args[len(plan.Args)-1])
 	require.NotContains(t, plan.SQL, "GROUP BY "+fold, "the group names the alias, not the expression")
 
@@ -295,4 +297,38 @@ func TestCompileFoldsADimensionThroughItsLookup(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, plan.SQL, "WHERE "+fold+" IN (?,?)")
 	require.Equal(t, []any{"GitHub", "linear"}, plan.Args[len(plan.Args)-2:])
+}
+
+func TestCompileFoldsAFilterValueThroughItsLookup(t *testing.T) {
+	t.Parallel()
+
+	tenant := Tenant{OrganizationID: "org-1", ProjectID: "project-1"}
+	maps := LookupMaps{MCPServerDisplayNamesLookup: {"gh": "GitHub", "github-mcp": "GitHub"}}
+	req := Request{
+		Dataset:      "tool_calls",
+		FromUnixNano: testFrom,
+		ToUnixNano:   testTo,
+		Grain:        "",
+		Dimensions:   []string{"mcp_server"},
+		Measures:     []Measure{{Op: "count", Field: "", Alias: ""}},
+		Filters:      []Filter{{Field: "mcp_server", Operator: "equals", Values: []string{"gh"}}},
+		OrderBy:      nil,
+		Limit:        0,
+		Ungrouped:    false,
+	}
+
+	plan, err := Compile(Default, tenant, maps, req)
+	require.NoError(t, err)
+	require.Equal(t, "GitHub", plan.Args[len(plan.Args)-1], "a saved filter on a raw name keeps matching once the name is overridden")
+
+	in := req
+	in.Filters = []Filter{{Field: "mcp_server", Operator: "in", Values: []string{"gh", "github-mcp", "linear", "GitHub"}}}
+	plan, err = Compile(Default, tenant, maps, in)
+	require.NoError(t, err)
+	require.Contains(t, plan.SQL, "IN (?,?)", "values that fold to one name are one value")
+	require.Equal(t, []any{"GitHub", "linear"}, plan.Args[len(plan.Args)-2:])
+
+	plain, err := Compile(Default, tenant, nil, req)
+	require.NoError(t, err)
+	require.Equal(t, "gh", plain.Args[len(plain.Args)-1], "no loaded map, the value is read as given")
 }

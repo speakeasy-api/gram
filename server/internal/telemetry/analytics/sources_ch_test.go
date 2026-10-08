@@ -310,12 +310,12 @@ func TestLookupFoldsADimensionInClickHouse(t *testing.T) {
 		call("c3", "linear", base+3),
 	}))
 
-	servers := func(t *testing.T, maps LookupMaps) map[string]int64 {
+	servers := func(t *testing.T, maps LookupMaps, filters []Filter) map[string]int64 {
 		t.Helper()
 		plan, err := Compile(Default, tenant, maps, Request{
 			Dataset: "tool_calls", FromUnixNano: base - 1, ToUnixNano: base + int64(time.Hour), Grain: TimeGrainNone,
 			Dimensions: []string{"mcp_server"}, Measures: []Measure{{Op: "count", Field: "", Alias: ""}},
-			Filters: nil, OrderBy: nil, Limit: 0, Ungrouped: false,
+			Filters: filters, OrderBy: nil, Limit: 0, Ungrouped: false,
 		})
 		require.NoError(t, err)
 		rows, err := plan.Run(t.Context(), conn)
@@ -342,8 +342,13 @@ func TestLookupFoldsADimensionInClickHouse(t *testing.T) {
 	}
 
 	maps := LookupMaps{MCPServerDisplayNamesLookup: {"github-mcp": "GitHub", "gh": "GitHub", "unused": "Nothing"}}
-	require.Equal(t, map[string]int64{"github-mcp": 1, "gh": 1, "linear": 1}, servers(t, nil))
-	require.Equal(t, map[string]int64{"GitHub": 2, "linear": 1}, servers(t, maps))
+	require.Equal(t, map[string]int64{"github-mcp": 1, "gh": 1, "linear": 1}, servers(t, nil, nil))
+	require.Equal(t, map[string]int64{"GitHub": 2, "linear": 1}, servers(t, maps, nil))
 	require.Equal(t, map[string]int64{"github-mcp": 1, "gh": 1, "linear": 1}, picker(t, nil))
 	require.Equal(t, map[string]int64{"GitHub": 2, "linear": 1}, picker(t, maps), "the picker offers what a filter will match")
+
+	onRawName := []Filter{{Field: "mcp_server", Operator: "equals", Values: []string{"gh"}}}
+	require.Equal(t, map[string]int64{"gh": 1}, servers(t, nil, onRawName))
+	require.Equal(t, map[string]int64{"GitHub": 2}, servers(t, maps, onRawName), "a filter on the raw name still matches after the override, and reaches every raw name folded with it")
+	require.Equal(t, map[string]int64{"GitHub": 2, "linear": 1}, servers(t, maps, []Filter{{Field: "mcp_server", Operator: "in", Values: []string{"gh", "github-mcp", "linear"}}}))
 }

@@ -215,14 +215,15 @@ func Compile(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Request) (
 			return nil, newError(ErrLimitExceeded, name, position+".values", "", fmt.Sprintf("at most %d values per filter", MaxFilterValues))
 		}
 		expr, args := readExpr(qc, field)
+		values := foldValues(qc, field, filter.Values)
 		switch Operator(filter.Operator) {
 		case OperatorEquals:
-			if len(filter.Values) != 1 {
+			if len(values) != 1 {
 				return nil, newError(ErrUnsatisfiable, name, position+".values", "", "equals takes exactly one value")
 			}
-			builder = builder.Where(expr+" = ?", append(args, filter.Values[0])...)
+			builder = builder.Where(expr+" = ?", append(args, values[0])...)
 		case OperatorIn:
-			builder = builder.Where(expr+" IN ("+placeholders(len(filter.Values))+")", append(args, anyValues(filter.Values)...)...)
+			builder = builder.Where(expr+" IN ("+placeholders(len(values))+")", append(args, anyValues(values)...)...)
 		}
 	}
 
@@ -378,9 +379,8 @@ func measureExpr(ds *Dataset, qc QueryContext, measure Measure, position string)
 		if err := checkAlias(ds, alias, position); err != nil {
 			return "", nil, "", err
 		}
-		// The dimension is read twice, so its binds are too.
 		expr, args := readExpr(qc, field)
-		return fmt.Sprintf("uniqExactIf(%s, %s != '')", expr, expr), append(slices.Clone(args), args...), alias, nil
+		return fmt.Sprintf("uniqExact(nullIf(%s, ''))", expr), args, alias, nil
 	}
 
 	if !ok || field.Role != RoleMeasure {
@@ -427,6 +427,26 @@ func readExpr(qc QueryContext, field *Field) (string, []any) {
 		return field.Expr, nil
 	}
 	return "transform(" + field.Expr + ", ?, ?, " + field.Expr + ")", []any{raws, targets}
+}
+
+// foldValues reads filter values the way readExpr reads the column, so a raw
+// name still matches once it is overridden; duplicates after the fold are
+// dropped.
+func foldValues(qc QueryContext, field *Field, values []string) []string {
+	if field.Lookup == "" {
+		return values
+	}
+	m := qc.Lookups[field.Lookup]
+	if len(m) == 0 {
+		return values
+	}
+	folded := make([]string, 0, len(values))
+	for _, v := range values {
+		if v = foldValue(m, v); !slices.Contains(folded, v) {
+			folded = append(folded, v)
+		}
+	}
+	return folded
 }
 
 // placeholders renders n bound slots for an IN list.

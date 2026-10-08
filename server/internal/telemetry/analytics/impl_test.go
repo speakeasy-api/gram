@@ -150,7 +150,8 @@ func TestQueryReadsMCPServerThroughTheOverrideLookup(t *testing.T) {
 	require.EqualValues(t, 2, rows[0]["count"])
 
 	rows = byServer(t, []*gen.AnalyticsFilter{{Field: "mcp_server", Operator: "equals", Values: []string{"gh"}}})
-	require.Empty(t, rows, "a raw name that is overridden is no longer a value a filter can reach")
+	require.Len(t, rows, 1, "a filter saved on a raw name still matches after the override")
+	require.EqualValues(t, 2, rows[0]["count"], "and reaches every raw name folded with it")
 }
 
 func TestQuery(t *testing.T) {

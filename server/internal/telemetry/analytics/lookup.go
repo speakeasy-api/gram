@@ -85,6 +85,15 @@ func (c *Catalog) LoadLookups(ctx context.Context, tenant Tenant, dataset string
 	return maps, nil
 }
 
+// foldValue reads one value through a map the way transform reads the
+// column: an entry with a non-empty target wins, anything else stays.
+func foldValue(m map[string]string, value string) string {
+	if target := m[value]; value != "" && target != "" {
+		return target
+	}
+	return value
+}
+
 // lookupPairs lays a map out as transform's two arrays, sorted for stable
 // binds. An entry with an empty side is skipped: an empty raw value matches
 // nothing, and an empty target would fold a value into the one never offered.

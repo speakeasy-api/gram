@@ -317,6 +317,10 @@ func (d *Dataset) validate(lookups map[string]struct{}) error {
 				if _, declared := lookups[f.Lookup]; !declared {
 					return fmt.Errorf("catalog: dataset %q dimension %q reads through undeclared lookup %q", d.Name, f.Name, f.Lookup)
 				}
+				// transform(x, ?, ?, x) AS x is a cyclic alias to ClickHouse.
+				if f.Name == f.Expr {
+					return fmt.Errorf("catalog: dataset %q dimension %q reads through a lookup and cannot be named after its column", d.Name, f.Name)
+				}
 			}
 			for _, op := range f.Operators {
 				switch op {
