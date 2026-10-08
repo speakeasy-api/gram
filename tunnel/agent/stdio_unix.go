@@ -3,6 +3,7 @@
 package agent
 
 import (
+	"errors"
 	"os/exec"
 	"syscall"
 )
@@ -21,6 +22,15 @@ func terminateProcessGroup(cmd *exec.Cmd) {
 	if cmd.Process != nil {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
 	}
+}
+
+// processGroupAlive reports whether any process remains in the server's group,
+// including its leader before it is reaped.
+func processGroupAlive(cmd *exec.Cmd, _ <-chan struct{}) bool {
+	if cmd.Process == nil {
+		return false
+	}
+	return !errors.Is(syscall.Kill(-cmd.Process.Pid, 0), syscall.ESRCH)
 }
 
 func killProcessGroup(cmd *exec.Cmd) {
