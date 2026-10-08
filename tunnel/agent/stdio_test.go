@@ -1,3 +1,5 @@
+//go:build unix
+
 package agent
 
 import (
@@ -421,7 +423,7 @@ func TestStdioRouteCutsOffSlowListenerWithoutBlocking(t *testing.T) {
 	require.NoError(t, err)
 	listener.limit = 256
 
-	post, err := sess.openStream([]string{mustParseRPC(t, `{"id":7,"method":"x"}`).id}, true)
+	post, err := sess.openStream([]rpcMessage{mustParseRPC(t, `{"id":7,"method":"x"}`)}, true)
 	require.NoError(t, err)
 
 	notification := `{"jsonrpc":"2.0","method":"notifications/message","params":{"data":"` + strings.Repeat("x", 100) + `"}}`
@@ -468,7 +470,7 @@ func TestStdioRouteBacklogsWhenNoStreamCanTakeMessage(t *testing.T) {
 func TestStdioRouteRetiresAnsweredStream(t *testing.T) {
 	t.Parallel()
 	sess := newRoutingSession()
-	post, err := sess.openStream([]string{mustParseRPC(t, `{"id":1,"method":"x"}`).id}, true)
+	post, err := sess.openStream([]rpcMessage{mustParseRPC(t, `{"id":1,"method":"x"}`)}, true)
 	require.NoError(t, err)
 
 	sess.route(mustParseRPC(t, `{"jsonrpc":"2.0","id":1,"result":{}}`))
@@ -512,4 +514,77 @@ func TestStdioBridgeReleasesSessionWhenServerIgnoresStdin(t *testing.T) {
 		defer a.stdio.mu.Unlock()
 		return len(a.stdio.sessions) == 0
 	}, 20*time.Second, 100*time.Millisecond, "a cancelled initialize must release its session slot")
+}
+
+func TestStdioBridgeRejectsDuplicateIDsInBatch(t *testing.T) {
+	t.Parallel()
+	srv, _ := newStdioTestServer(t, 0)
+	sid := initializeSession(t, srv)
+
+	resp := mcpRequest(t, srv, http.MethodPost, sid, `[{"jsonrpc":"2.0","id":5,"method":"tools/list"},{"jsonrpc":"2.0","id":5.0,"method":"tools/list"}]`)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestStdioBridgeAnswersRequestsWhenServerExits(t *testing.T) {
+	t.Parallel()
+	srv, _ := newStdioTestServer(t, 0)
+	sid := initializeSession(t, srv)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/", strings.NewReader(`[{"jsonrpc":"2.0","id":"c","method":"tools/call","params":{"name":"crash"}},{"jsonrpc":"2.0","id":"l","method":"tools/list"}]`))
+	require.NoError(t, err)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set(headerMCPSessionID, sid)
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var batch []map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&batch))
+	require.Len(t, batch, 2, "every request gets a response even though the server exited")
+	ids := make([]any, 0, len(batch))
+	for _, item := range batch {
+		ids = append(ids, item["id"])
+		if item["id"] == "c" {
+			require.Contains(t, item, "error")
+		}
+	}
+	require.ElementsMatch(t, []any{"c", "l"}, ids)
+}
+
+func TestAcceptsSSEHonorsQualityZero(t *testing.T) {
+	t.Parallel()
+	accepts := func(header string) bool {
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("Accept", header)
+		return acceptsSSE(req)
+	}
+	require.True(t, accepts("application/json, text/event-stream"))
+	require.True(t, accepts("text/event-stream;q=0.5"))
+	require.True(t, accepts("TEXT/EVENT-STREAM"))
+	require.False(t, accepts("application/json, text/event-stream;q=0"))
+	require.False(t, accepts("application/json"))
+}
+
+func TestStdioBridgeReapsQuietSessionWithOpenGetStream(t *testing.T) {
+	t.Parallel()
+	srv, a := newStdioTestServer(t, 0)
+	a.stdio.idleTimeout = 300 * time.Millisecond
+	go a.stdio.reap(t.Context())
+	sid := initializeSession(t, srv)
+
+	listen := mcpRequest(t, srv, http.MethodGet, sid, "")
+	require.Equal(t, http.StatusOK, listen.StatusCode)
+
+	require.Eventually(t, func() bool {
+		return a.stdio.session(sid) == nil
+	}, 20*time.Second, 50*time.Millisecond, "an open GET stream alone must not keep a quiet session alive")
+}
+
+func TestStdioReapTickerToleratesTinyIdleTimeout(t *testing.T) {
+	t.Parallel()
+	b := newStdioBridge("true", 1, time.Nanosecond, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	require.NotPanics(t, func() { b.reap(ctx) })
 }
