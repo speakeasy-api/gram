@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 )
@@ -47,7 +49,27 @@ func (r *recordingReviewRequests) ReadPlatformRequesterReview(context.Context, m
 func newTestShadowMCPReviewService(requests MCPReviewRequestService, names []string) *ShadowMCPReviewService {
 	dashboard, _ := url.Parse("https://app.example.test")
 	return NewShadowMCPReviewService(nil, requests, dashboard, fixedOrganizationSlugs{slug: "acme"}).
+		WithBudget(allowBudget()).
 		WithPolicyNames(func(context.Context, uuid.UUID) ([]string, error) { return names, nil })
+}
+
+// Filing gathers evidence over the network, so it is charged to the same
+// budget as request_mcp_review rather than running free on every retry.
+func TestShadowMCPReviewServiceChargesTheReviewRequestBudget(t *testing.T) {
+	t.Parallel()
+
+	requests := &recordingReviewRequests{}
+	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+	principal := Principal{OrganizationID: "org", UserID: "admin", ConnectionID: "connection"}
+	denied := OperationBudget{Connection: &recordingOperationLimiter{result: ratelimit.Result{Allowed: false}}, Organization: allowOperationLimiter{}}
+
+	_, err := newTestShadowMCPReviewService(requests, nil).WithBudget(denied).FileShadowMCPReview(t.Context(), principal, project, "https://mcp.example.test/server", "adding it", "")
+	require.ErrorIs(t, err, ErrOperationRateLimited)
+	require.Zero(t, requests.calls, "a denied budget files nothing")
+
+	_, err = newTestShadowMCPReviewService(requests, nil).WithBudget(OperationBudget{}).FileShadowMCPReview(t.Context(), principal, project, "https://mcp.example.test/server", "adding it", "")
+	require.ErrorIs(t, err, ErrUnavailable, "no budget fails closed")
+	require.Zero(t, requests.calls)
 }
 
 func TestShadowMCPReviewServiceFilesRequestWithLinkAndPolicies(t *testing.T) {

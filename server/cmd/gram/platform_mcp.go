@@ -384,7 +384,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create Platform MCP lifecycle visibility service: %w", err)
 	}
-	shadowReviews := newPlatformMCPShadowReviewService(config)
+	shadowReviews := newPlatformMCPShadowReviewService(config, budgets.ReviewRequests)
 	registrations := platformmcp.NewRegistrationService(catalog, registrationGate, store).
 		WithDirectRemoteInspector(platformmcp.NewGuardianDirectRemoteInspector(config.GuardianPolicy)).
 		WithShadowMCPReview(platformmcp.NewPostgresDirectRemotePolicy(config.DB), shadowReviews).
@@ -671,12 +671,13 @@ func newPlatformMCPLifecycleVisibilityService(config platformMCPConfig, readines
 // approval service the review-request tools use. A nil approval service is
 // passed as a nil interface so the review service reports itself unavailable
 // instead of calling through a typed nil.
-func newPlatformMCPShadowReviewService(config platformMCPConfig) *platformmcp.ShadowMCPReviewService {
+func newPlatformMCPShadowReviewService(config platformMCPConfig, budget platformmcp.OperationBudget) *platformmcp.ShadowMCPReviewService {
 	var requests platformmcp.MCPReviewRequestService
 	if config.ShadowReview != nil {
 		requests = config.ShadowReview
 	}
-	return platformmcp.NewShadowMCPReviewService(config.DB, requests, config.DashboardURL, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))
+	return platformmcp.NewShadowMCPReviewService(config.DB, requests, config.DashboardURL, platformmcp.NewPostgresOrganizationSlugResolver(config.DB)).
+		WithBudget(budget)
 }
 
 func newPlatformMCPDistributionService(config platformMCPConfig, pluginTargets platformmcp.PluginTargetResolver) *platformmcp.DistributionService {
@@ -987,7 +988,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create browser Platform MCP lifecycle visibility service: %w", err)
 	}
-	shadowReviews := newPlatformMCPShadowReviewService(config)
+	shadowReviews := newPlatformMCPShadowReviewService(config, budgets.ReviewRequests)
 	registrations := platformmcp.NewRegistrationService(catalog, registrationGate, store).
 		WithDirectRemoteInspector(platformmcp.NewGuardianDirectRemoteInspector(config.GuardianPolicy)).
 		WithShadowMCPReview(platformmcp.NewPostgresDirectRemotePolicy(config.DB), shadowReviews).

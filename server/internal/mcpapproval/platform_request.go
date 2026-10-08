@@ -38,9 +38,9 @@ type PlatformRequesterReview struct {
 	// target, derived from the canonical key exactly as the queue derives it.
 	ServerSlug  string `json:"server_slug,omitempty"`
 	RequestedAt string `json:"requested_at"`
-	CreatedAt        string `json:"created_at"`
-	UpdatedAt        string `json:"updated_at"`
-	NextAction       string `json:"next_action"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+	NextAction  string `json:"next_action"`
 }
 
 // ReadPlatformRequesterReview returns one request only when the caller owns its

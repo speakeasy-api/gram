@@ -39,7 +39,6 @@ var (
 	ErrDistributionAdmissionUnavailable   = errors.New("platform mcp distribution admission unavailable")
 )
 
-
 // DistributionInput identifies the project selected by its slug and the plugin
 // inside it that receives the distribution. The active onboarding workflow
 // still supplies the registration and MCP server, so a caller can choose which
@@ -107,14 +106,14 @@ type ProjectPublisher func(context.Context, uuid.UUID, string, string) error
 // existing Default plugin. plugin_servers remains the attachment authority;
 // platform_mcp_distributions records the caller-bound lifecycle projection.
 type DistributionService struct {
-	db            *pgxpool.Pool
-	audit         *audit.Logger
-	attach        ExistingPluginAttacher
-	plugins       PluginTargetResolver
-	publish       ProjectPublisher
-	now           func() time.Time
-	admission     *admission.Guard
-	reviews       ShadowMCPReviewFiler
+	db        *pgxpool.Pool
+	audit     *audit.Logger
+	attach    ExistingPluginAttacher
+	plugins   PluginTargetResolver
+	publish   ProjectPublisher
+	now       func() time.Time
+	admission *admission.Guard
+	reviews   ShadowMCPReviewFiler
 }
 
 func NewDistributionService(db *pgxpool.Pool, auditLogger *audit.Logger, attach ExistingPluginAttacher, publish ProjectPublisher, plugins PluginTargetResolver) *DistributionService {

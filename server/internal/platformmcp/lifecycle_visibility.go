@@ -72,16 +72,16 @@ type LifecycleVisibilityUpdate struct {
 }
 
 type LifecycleVisibilityService struct {
-	db            *pgxpool.Pool
-	audit         *audit.Logger
-	locker        LifecycleVisibilityLocker
-	updater       LifecycleVisibilityUpdater
-	publisher     ProjectPublisher
-	reconcile     func(context.Context, []uuid.UUID) error
-	readiness     *ReadinessService
-	key           []byte
-	now           func() time.Time
-	admission     *admission.Guard
+	db        *pgxpool.Pool
+	audit     *audit.Logger
+	locker    LifecycleVisibilityLocker
+	updater   LifecycleVisibilityUpdater
+	publisher ProjectPublisher
+	reconcile func(context.Context, []uuid.UUID) error
+	readiness *ReadinessService
+	key       []byte
+	now       func() time.Time
+	admission *admission.Guard
 }
 
 func NewLifecycleVisibilityService(db *pgxpool.Pool, auditLogger *audit.Logger, locker LifecycleVisibilityLocker, updater LifecycleVisibilityUpdater, publisher ProjectPublisher, reconcile func(context.Context, []uuid.UUID) error, readiness *ReadinessService, keyMaterial string) (*LifecycleVisibilityService, error) {

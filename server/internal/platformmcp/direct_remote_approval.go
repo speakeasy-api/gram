@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -60,6 +61,11 @@ func (c *PostgresDirectRemoteApprovals) CheckDirectRemoteApprovalTx(ctx context.
 	policies, err := riskrepo.New(db).ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
 	if err != nil {
 		return DirectRemoteApprovalState{}, fmt.Errorf("list Shadow MCP policies for direct remote approval consult: %w", err)
+	}
+	if !slices.ContainsFunc(policies, func(policy riskrepo.RiskPolicy) bool { return policy.Action == shadowMCPPolicyActionBlock }) {
+		// Most projects have no block policy; answer before resolving the
+		// caller's principals and grants.
+		return DirectRemoteApprovalState{EnforcementActive: false, Approved: true}, nil
 	}
 
 	principals, err := authz.ResolveUserPrincipals(ctx, db, organizationID, userID)

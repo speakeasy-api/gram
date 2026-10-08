@@ -99,10 +99,11 @@ type ShadowMCPReviewService struct {
 	policyNames   ShadowMCPPolicyNameLister
 	dashboardURL  *url.URL
 	organizations OrganizationSlugResolver
+	budget        OperationBudget
 }
 
 func NewShadowMCPReviewService(db *pgxpool.Pool, requests MCPReviewRequestService, dashboardURL *url.URL, organizations OrganizationSlugResolver) *ShadowMCPReviewService {
-	service := &ShadowMCPReviewService{requests: requests, policyNames: nil, dashboardURL: nil, organizations: organizations}
+	service := &ShadowMCPReviewService{requests: requests, policyNames: nil, dashboardURL: nil, organizations: organizations, budget: OperationBudget{}}
 	if db != nil {
 		service.policyNames = postgresShadowMCPPolicyNames(db)
 	}
@@ -111,6 +112,17 @@ func NewShadowMCPReviewService(db *pgxpool.Pool, requests MCPReviewRequestServic
 		service.dashboardURL = &copyURL
 	}
 	return service
+}
+
+// WithBudget charges each filing to the review-request budget. Filing a review
+// gathers evidence over the network, so a refused call that is retried in a
+// loop must not file faster than request_mcp_review itself may. Without a
+// valid budget the service reports itself unavailable.
+func (s *ShadowMCPReviewService) WithBudget(budget OperationBudget) *ShadowMCPReviewService {
+	if s != nil {
+		s.budget = budget
+	}
+	return s
 }
 
 // WithPolicyNames replaces the policy-name source, which tests use to avoid a
@@ -126,8 +138,11 @@ var _ ShadowMCPReviewFiler = (*ShadowMCPReviewService)(nil)
 var _ ShadowMCPReviewLinker = (*ShadowMCPReviewService)(nil)
 
 func (s *ShadowMCPReviewService) FileShadowMCPReview(ctx context.Context, principal Principal, project ResolvedProject, canonicalURL, activity, justification string) (ShadowMCPReviewRequest, error) {
-	if s == nil || s.requests == nil || s.policyNames == nil || principal.OrganizationID == "" || principal.UserID == "" || project.ID == uuid.Nil || canonicalURL == "" {
+	if s == nil || s.requests == nil || s.policyNames == nil || !s.budget.valid() || principal.OrganizationID == "" || principal.UserID == "" || project.ID == uuid.Nil || canonicalURL == "" {
 		return ShadowMCPReviewRequest{}, ErrUnavailable
+	}
+	if err := s.budget.AllowConnectionOrOrganization(ctx, principal); err != nil {
+		return ShadowMCPReviewRequest{}, err
 	}
 	names, err := s.policyNames(ctx, project.ID)
 	if err != nil {
