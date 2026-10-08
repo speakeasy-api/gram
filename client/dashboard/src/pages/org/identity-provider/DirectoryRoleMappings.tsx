@@ -1,4 +1,8 @@
-import { useIsMutating, useQueryClient } from "@tanstack/react-query";
+import {
+  useIsFetching,
+  useIsMutating,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   Check,
   ChevronRight,
@@ -135,6 +139,12 @@ function attributeMappingRows(
   data: ListDirectoryRoleMappingsResult,
 ): SourceRow[] {
   const rows = new Map<string, SourceRow>();
+  const attributes = new Map(
+    data.attributes.map((attribute) => [
+      JSON.stringify([attribute.key, attribute.value]),
+      attribute,
+    ]),
+  );
   for (const mapping of data.mappings) {
     if (mapping.sourceKind !== "attribute") continue;
     const key = mapping.attributeKey ?? "";
@@ -145,9 +155,7 @@ function attributeMappingRows(
       existing.mappings.push(mapping);
       continue;
     }
-    const option = data.attributes.find(
-      (a) => a.key === key && a.value === value,
-    );
+    const option = attributes.get(sourceKey);
     rows.set(sourceKey, {
       key: sourceKey,
       label: `${key} = ${value}`,
@@ -177,11 +185,15 @@ export function DirectoryRoleMappings({
   /** Shown at the right of the footer bar, such as the connection button. */
   footerAction?: ReactNode;
 }): JSX.Element {
-  const { data, isPending, isFetching, isError } = useDirectoryRoleMappings(
-    undefined,
-    undefined,
-    { refetchOnMount: "always" },
-  );
+  const { data, isPending, isFetching, isFetchedAfterMount, isError, refetch } =
+    useDirectoryRoleMappings(undefined, undefined, {
+      refetchOnMount: "always",
+    });
+  const refreshMappings = async (): Promise<DirectoryRoleMapping[]> => {
+    const result = await refetch({ throwOnError: true });
+    if (!result.data) throw new Error("Failed to refresh role mappings");
+    return result.data.mappings;
+  };
   const { data: rolesData } = useRoles();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
@@ -205,7 +217,7 @@ export function DirectoryRoleMappings({
   // retries. Only a round trip this tab started can get here.
   const [params, setParams] = useSearchParams();
   const pending =
-    data && !isFetching && !isError
+    data && isFetchedAfterMount && !isFetching && !isError
       ? pendingMappingFromParams(params, data.mappings)
       : undefined;
   const queryClient = useQueryClient();
@@ -263,7 +275,11 @@ export function DirectoryRoleMappings({
   }, [rows, deferredSearch, mappedAtLoad]);
 
   const mappedCount = rows.filter((row) => row.mappings.length > 0).length;
-  const attributeCount = data ? attributeMappingRows(data).length : 0;
+  const attributeRows = useMemo(
+    () => (data ? attributeMappingRows(data) : []),
+    [data],
+  );
+  const attributeCount = attributeRows.length;
 
   return (
     <div className="mt-4 space-y-3">
@@ -300,6 +316,7 @@ export function DirectoryRoleMappings({
           <MappingTable
             rows={visibleRows}
             roles={roles}
+            refreshMappings={refreshMappings}
             sourceHeader="Directory group"
             noResults="No groups match"
             scrollable
@@ -329,7 +346,14 @@ export function DirectoryRoleMappings({
           {footerAction}
         </div>
         <CollapsibleContent className="border-border space-y-2 border border-t-0 p-4">
-          {data && <AttributeMappings data={data} roles={roles} />}
+          {data && (
+            <AttributeMappings
+              data={data}
+              rows={attributeRows}
+              roles={roles}
+              refreshMappings={refreshMappings}
+            />
+          )}
         </CollapsibleContent>
       </Collapsible>
     </div>
@@ -344,12 +368,14 @@ export function DirectoryRoleMappings({
 function MappingTable({
   rows,
   roles,
+  refreshMappings,
   sourceHeader,
   noResults,
   scrollable = false,
 }: {
   rows: SourceRow[];
   roles: Role[];
+  refreshMappings: () => Promise<DirectoryRoleMapping[]>;
   sourceHeader: string;
   noResults: string;
   scrollable?: boolean;
@@ -377,7 +403,9 @@ function MappingTable({
       key: "role",
       header: "Roles",
       width: "280px",
-      render: (row) => <RolePicker row={row} roles={roles} />,
+      render: (row) => (
+        <RolePicker row={row} roles={roles} refreshMappings={refreshMappings} />
+      ),
     },
     {
       key: "status",
@@ -425,12 +453,15 @@ function MappingTable({
  */
 function AttributeMappings({
   data,
+  rows,
   roles,
+  refreshMappings,
 }: {
   data: ListDirectoryRoleMappingsResult;
+  rows: SourceRow[];
   roles: Role[];
+  refreshMappings: () => Promise<DirectoryRoleMapping[]>;
 }): JSX.Element {
-  const rows = attributeMappingRows(data);
   const [attributeKey, setAttributeKey] = useState("");
   const [attributeValue, setAttributeValue] = useState("");
 
@@ -465,6 +496,7 @@ function AttributeMappings({
           <MappingTable
             rows={rows}
             roles={roles}
+            refreshMappings={refreshMappings}
             sourceHeader="Attribute value"
 
             noResults="No attribute mappings"
@@ -517,6 +549,7 @@ function AttributeMappings({
             <RolePicker
               row={draft}
               roles={roles}
+              refreshMappings={refreshMappings}
               disabledMessage={
                 attributeValue === ""
                   ? "Pick an attribute and value first"
@@ -539,11 +572,13 @@ function AttributeMappings({
 function RolePicker({
   row,
   roles,
+  refreshMappings,
   disabledMessage,
   onSaved,
 }: {
   row: SourceRow;
   roles: Role[];
+  refreshMappings: () => Promise<DirectoryRoleMapping[]>;
   disabledMessage?: string;
   onSaved?: () => void;
 }): JSX.Element {
@@ -561,7 +596,42 @@ function RolePicker({
   });
   const setting =
     useIsMutating({ mutationKey: mutationKeySetDirectoryRoleMappings() }) > 0;
-  const saving = save.isPending || setting;
+  const refreshing =
+    useIsFetching({
+      queryKey: ["@gram/client", "access", "listDirectoryRoleMappings"],
+    }) > 0;
+  const [preparing, setPreparing] = useState(false);
+  const saving = preparing || refreshing || save.isPending || setting;
+  const changeRole = async (roleUrn: string, remove = false) => {
+    setPreparing(true);
+    try {
+      const mappings = await refreshMappings();
+      const current = mappings
+        .filter((mapping) =>
+          row.form.sourceKind === "group"
+            ? mapping.sourceKind === "group" &&
+              mapping.directoryGroupId === row.form.directoryGroupId
+            : mapping.sourceKind === "attribute" &&
+              mapping.attributeKey === row.form.attributeKey &&
+              mapping.attributeValue === row.form.attributeValue,
+        )
+        .map((mapping) => mapping.roleUrn);
+      save.mutate({
+        request: {
+          setDirectoryRoleMappingsForm: {
+            ...row.form,
+            roleUrns: remove
+              ? current.filter((role) => role !== roleUrn)
+              : [...new Set([...current, roleUrn])],
+          },
+        },
+      });
+    } catch (error) {
+      toast.error(errorMessage(error, "Failed to refresh role mappings"));
+    } finally {
+      setPreparing(false);
+    }
+  };
   const mappedRoles = row.mappings.map((mapping) => mapping.roleUrn);
   const items: DropdownItem[] = roles
     .filter((role) => !mappedRoles.includes(role.principalUrn))
@@ -590,14 +660,7 @@ function RolePicker({
       void navigate(`${orgRoutes.createRole.href()}?${params.toString()}`);
       return;
     }
-    save.mutate({
-      request: {
-        setDirectoryRoleMappingsForm: {
-          ...row.form,
-          roleUrns: [...mappedRoles, value],
-        },
-      },
-    });
+    void changeRole(value);
   };
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -616,18 +679,7 @@ function RolePicker({
             <RemoveMappingButton
               label={`${name} from ${row.label}`}
               disabled={saving || !!disabledMessage}
-              onRemove={() =>
-                save.mutate({
-                  request: {
-                    setDirectoryRoleMappingsForm: {
-                      ...row.form,
-                      roleUrns: mappedRoles.filter(
-                        (roleUrn) => roleUrn !== mapping.roleUrn,
-                      ),
-                    },
-                  },
-                })
-              }
+              onRemove={() => void changeRole(mapping.roleUrn, true)}
             />
           </span>
         );
