@@ -681,6 +681,15 @@ type AnalyticsFieldResponseBody struct {
 	// What the field is and which producers fill it, when the catalog has
 	// something to say beyond the name
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The map this dimension reads through, when it reads through one
+	Lookup *AnalyticsLookupResponseBody `form:"lookup,omitempty" json:"lookup,omitempty" xml:"lookup,omitempty"`
+}
+
+// AnalyticsLookupResponseBody is used to define fields on response body types.
+type AnalyticsLookupResponseBody struct {
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// What the map is and where it is set
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 }
 
 // AnalyticsDimensionValueResponseBody is used to define fields on response
@@ -2136,6 +2145,23 @@ func ValidateAnalyticsFieldResponseBody(body *AnalyticsFieldResponseBody) (err e
 		if !(*body.Role == "dimension" || *body.Role == "measure") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.role", *body.Role, []any{"dimension", "measure"}))
 		}
+	}
+	if body.Lookup != nil {
+		if err2 := ValidateAnalyticsLookupResponseBody(body.Lookup); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateAnalyticsLookupResponseBody runs the validations defined on
+// AnalyticsLookupResponseBody
+func ValidateAnalyticsLookupResponseBody(body *AnalyticsLookupResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
 	}
 	return
 }

@@ -100,6 +100,8 @@ type AnalyticsField struct {
 	// What the field is and which producers fill it, when the catalog has
 	// something to say beyond the name
 	Description *string
+	// The map this dimension reads through, when it reads through one
+	Lookup *AnalyticsLookup
 }
 
 // A filter on a dimension. All filters are ANDed.
@@ -110,6 +112,14 @@ type AnalyticsFilter struct {
 	Operator string
 	// equals takes exactly one value; in matches any of them.
 	Values []string
+}
+
+// A per-project map a dimension reads through at query time: a reported value
+// with an entry shows as its target, the rest show as reported.
+type AnalyticsLookup struct {
+	Name string
+	// What the map is and where it is set
+	Description string
 }
 
 // A composed measure: an op over a field, or count alone.

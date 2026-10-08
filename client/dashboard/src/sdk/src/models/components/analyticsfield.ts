@@ -7,6 +7,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  AnalyticsLookup,
+  AnalyticsLookup$inboundSchema,
+} from "./analyticslookup.js";
 
 export const AnalyticsFieldRole = {
   Dimension: "dimension",
@@ -37,6 +41,10 @@ export type AnalyticsField = {
    * What the field is and which producers fill it, when the catalog has something to say beyond the name
    */
   description?: string | undefined;
+  /**
+   * A per-project map a dimension reads through at query time: a reported value with an entry shows as its target, the rest show as reported.
+   */
+  lookup?: AnalyticsLookup | undefined;
   name: string;
   /**
    * Filter operators a dimension admits
@@ -66,6 +74,7 @@ export const AnalyticsField$inboundSchema: z.ZodMiniType<
   aggregations: z.optional(z.array(z.string())),
   default: z.boolean(),
   description: z.optional(z.string()),
+  lookup: z.optional(AnalyticsLookup$inboundSchema),
   name: z.string(),
   operators: z.optional(z.array(z.string())),
   role: AnalyticsFieldRole$inboundSchema,

@@ -894,6 +894,24 @@ func unmarshalAnalyticsFieldResponseBodyToAnalyticsAnalyticsField(v *AnalyticsFi
 			res.Aggregations[i] = val
 		}
 	}
+	if v.Lookup != nil {
+		res.Lookup = unmarshalAnalyticsLookupResponseBodyToAnalyticsAnalyticsLookup(v.Lookup)
+	}
+
+	return res
+}
+
+// unmarshalAnalyticsLookupResponseBodyToAnalyticsAnalyticsLookup builds a
+// value of type *analytics.AnalyticsLookup from a value of type
+// *AnalyticsLookupResponseBody.
+func unmarshalAnalyticsLookupResponseBodyToAnalyticsAnalyticsLookup(v *AnalyticsLookupResponseBody) *analytics.AnalyticsLookup {
+	if v == nil {
+		return nil
+	}
+	res := &analytics.AnalyticsLookup{
+		Name:        *v.Name,
+		Description: *v.Description,
+	}
 
 	return res
 }

@@ -779,6 +779,24 @@ func marshalAnalyticsAnalyticsFieldToAnalyticsFieldResponseBody(v *analytics.Ana
 			res.Aggregations[i] = val
 		}
 	}
+	if v.Lookup != nil {
+		res.Lookup = marshalAnalyticsAnalyticsLookupToAnalyticsLookupResponseBody(v.Lookup)
+	}
+
+	return res
+}
+
+// marshalAnalyticsAnalyticsLookupToAnalyticsLookupResponseBody builds a value
+// of type *AnalyticsLookupResponseBody from a value of type
+// *analytics.AnalyticsLookup.
+func marshalAnalyticsAnalyticsLookupToAnalyticsLookupResponseBody(v *analytics.AnalyticsLookup) *AnalyticsLookupResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &AnalyticsLookupResponseBody{
+		Name:        v.Name,
+		Description: v.Description,
+	}
 
 	return res
 }
