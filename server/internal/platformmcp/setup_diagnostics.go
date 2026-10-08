@@ -195,7 +195,7 @@ func setupCategoryFromReadiness(readiness Readiness) SetupCategory {
 		return SetupCategoryTemporarilyUnavailable
 	case "readiness_not_managed":
 		return ""
-	case "upstream_authorization_required", "no_valid_authorization":
+	case "upstream_authorization_required", "no_valid_authorization", ReadinessEvidenceIdentityChainingConfigured:
 		return SetupCategoryAuthenticationRequired
 	case "required_header_missing", "request_header_not_supported", "multiple_upstream_identity_providers", "upstream_identity_provider_not_configured", "no_reviewed_client":
 		return SetupCategoryConfigurationRequired

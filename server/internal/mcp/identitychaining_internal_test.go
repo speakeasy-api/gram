@@ -30,6 +30,14 @@ func (c *recordingChainer) Governs(context.Context, identitychaining.Request) bo
 	return c.governs
 }
 
+func (c *recordingChainer) Serves(context.Context, identitychaining.Request) (uuid.UUID, bool) {
+	return uuid.Nil, false
+}
+
+func (c *recordingChainer) Configured(context.Context, string, uuid.UUID, uuid.UUID) bool {
+	return false
+}
+
 func (c *recordingChainer) Acquire(_ context.Context, req identitychaining.Request) (identitychaining.Token, identitychaining.Outcome) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

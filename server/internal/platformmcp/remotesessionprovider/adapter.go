@@ -68,6 +68,7 @@ type Adapter struct {
 	sessions     *remotesessions.ChallengeManager
 	descriptor   Descriptor
 	configurator ProviderClientConfigurator
+	chaining     platformmcp.IdentityChainingGovernor
 }
 
 // New accepts an optional configurator so existing reviewed adapters retain
@@ -83,7 +84,18 @@ func New(policy *guardian.Policy, sessions *remotesessions.ChallengeManager, des
 		sessions:     sessions,
 		descriptor:   descriptor,
 		configurator: configured,
+		chaining:     nil,
 	}
+}
+
+// WithIdentityChaining judges a provider without an interactive session by
+// identity chaining: ready on a usable chained credential, otherwise marked
+// configured.
+func (a *Adapter) WithIdentityChaining(governor platformmcp.IdentityChainingGovernor) *Adapter {
+	if a != nil {
+		a.chaining = governor
+	}
+	return a
 }
 
 func (a *Adapter) ProviderKey() string {
@@ -211,13 +223,18 @@ func (a *Adapter) ProbeReadiness(ctx context.Context, request platformmcp.Provid
 		}, "no_client"), nil
 	}
 	if errors.Is(err, remotesessions.ErrNoValidToken) {
-		return a.readinessResult(platformmcp.ReadinessNeedsGramAuthorization, "no_valid_authorization", request, remotesessions.ResolvedAuthorization{
+		absent := remotesessions.ResolvedAuthorization{
 			AccessToken:            "",
 			RemoteSessionID:        uuid.Nil,
 			RemoteSessionUpdatedAt: time.Time{},
 			RemoteSessionClientID:  uuid.Nil,
 			RemoteSessionIssuerID:  descriptor.RemoteSessionIssuerID,
-		}, "no_session"), nil
+		}
+		if chained, ok := platformmcp.ResolveIdentityChainingReadiness(ctx, a.chaining, request.OrganizationID, request.UserID, request.ProjectID, request.UserSessionIssuerID, descriptor.StreamableHTTPURL); ok {
+			absent.RemoteSessionIssuerID = chained.RemoteSessionIssuerID
+			return a.readinessResult(chained.State, chained.EvidenceCode, request, absent, chained.Absence), nil
+		}
+		return a.readinessResult(platformmcp.ReadinessNeedsGramAuthorization, "no_valid_authorization", request, absent, "no_session"), nil
 	}
 	if err != nil {
 		return platformmcp.ProviderReadinessProbeResult{}, fmt.Errorf("resolve reviewed provider authorization: %w", err)

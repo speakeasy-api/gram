@@ -142,6 +142,37 @@ const (
 	ParamRefreshToken = "refresh_token"
 )
 
+// Scope values OpenID Connect reserves (OIDC Core §5.4, §11).
+const (
+	// ScopeOpenID marks an OpenID Connect request.
+	ScopeOpenID = "openid"
+
+	// ScopeProfile requests the default profile claims.
+	ScopeProfile = "profile"
+
+	// ScopeEmail requests the email and email_verified claims.
+	ScopeEmail = "email"
+
+	// ScopeAddress requests the address claim.
+	ScopeAddress = "address"
+
+	// ScopePhone requests the phone_number and phone_number_verified claims.
+	ScopePhone = "phone"
+
+	// ScopeOfflineAccess requests a refresh token.
+	ScopeOfflineAccess = "offline_access"
+)
+
+// IsOIDCReservedScope reports whether scope is one OpenID Connect reserves.
+func IsOIDCReservedScope(scope string) bool {
+	switch scope {
+	case ScopeOpenID, ScopeProfile, ScopeEmail, ScopeAddress, ScopePhone, ScopeOfflineAccess:
+		return true
+	default:
+		return false
+	}
+}
+
 // Error carries an OAuth wire error: the shared shape used across the
 // issuer-gated endpoints (RFC 6749 / RFC 7591 / RFC 7009). The structure is
 // identical everywhere — error code plus human-readable description — so

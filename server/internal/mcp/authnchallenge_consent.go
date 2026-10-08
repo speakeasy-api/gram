@@ -248,6 +248,8 @@ type remoteSessionCard struct {
 	Connected  bool
 	Expired    bool
 	Unroutable bool
+	// Chained marks a card without a usable interactive link whose upstream identity chaining is configured to serve; Connect stays a fallback.
+	Chained    bool
 	CanRefresh bool
 	// IdentityReconnect marks a connected grant lacking openid while a reconnect would request it.
 	IdentityReconnect bool
@@ -567,6 +569,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	connectedCardCount := 0
+	chainedCardCount := 0
 	autoRefreshHasSessions := false
 	// Every card already carries the organization's policy applied to its own
 	// stored preference, so the page value is on only when none of them is off.
@@ -575,13 +578,17 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		if c.Connected {
 			connectedCardCount++
 		}
+		if c.Chained {
+			chainedCardCount++
+		}
 		if c.Connected || c.Expired || c.Unroutable {
 			autoRefreshHasSessions = true
 		}
 		everyCardAutoRefreshes = everyCardAutoRefreshes && c.AutoRefreshChecked
 	}
 	autoRefreshOn := len(cards) > 0 && everyCardAutoRefreshes
-	consentEnabled := len(cards) == 0 || connectedCardCount > 0
+	// Chained cards enable access too: the runtime chains when no interactive token exists.
+	consentEnabled := len(cards) == 0 || connectedCardCount > 0 || chainedCardCount > 0
 
 	agentSelectionEnabled := false
 	agentSetupURL := ""
@@ -1442,13 +1449,14 @@ func (s *Service) buildRemoteSessionCards(
 		}
 	}
 
-	var routing consentRouting
+	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: nil}
 	if len(statuses) > 0 {
 		routing, err = s.resolveConsentRouting(ctx, endpoint, challengeState, clients, statuses)
 		if err != nil {
 			return nil, err
 		}
 	}
+	chainedClients := s.consentChainedClients(ctx, endpoint, challengeState, clients, routing)
 
 	cards := make([]remoteSessionCard, 0, len(clients))
 	renderedAt := time.Now()
@@ -1510,6 +1518,7 @@ func (s *Service) buildRemoteSessionCards(
 		}
 		requested := c.RequestedScopes(resourceScopes).Scopes
 		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable
+		chained := chainedClients[c.ID] && !connected && !unroutable
 		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
 		cards = append(cards, remoteSessionCard{
 			ClientID:               c.ID.String(),
@@ -1522,6 +1531,7 @@ func (s *Service) buildRemoteSessionCards(
 			Connected:              connected,
 			Expired:                state.Status == remotesessions.RemoteSessionExpired,
 			Unroutable:             unroutable,
+			Chained:                chained,
 			CanRefresh:             state.CanRefresh,
 			IdentityReconnect:      identityReconnect,
 			AccessExpiresAt:        accessExpiresAt,
@@ -1610,7 +1620,7 @@ func (s *Service) maybeAutoConnect(
 	challengeState AuthnChallengeState,
 	cards []remoteSessionCard,
 ) (bool, error) {
-	if challengeState.AutoConnectDone || len(cards) != 1 || cards[0].Connected {
+	if challengeState.AutoConnectDone || len(cards) != 1 || cards[0].Connected || cards[0].Chained {
 		return false, nil
 	}
 

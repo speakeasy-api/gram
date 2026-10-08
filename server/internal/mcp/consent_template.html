@@ -271,6 +271,10 @@
                     >Reconnect to add account details</span
                   >
                   {{end}}
+                  {{else if .Chained}}
+                  <span class="text-xs text-muted-foreground" data-card-status data-identity-chained
+                    >Managed by your identity provider</span
+                  >
                   {{else if .Expired}}
                   <span class="text-xs text-default-warning"
                     >Expired — reconnect to continue</span
@@ -326,6 +330,18 @@
                   Verify
                 </button>
                 {{end}} {{if or (not .Connected) .IdentityReconnect .Rejected .Inactive}}
+                {{if .Chained}}
+                <button
+                  type="submit"
+                  name="action"
+                  value="connect"
+                  class="interact:bg-accent flex h-8 items-center border px-3 text-sm"
+                  data-connect-link
+                  data-connect-fallback
+                >
+                  Connect manually
+                </button>
+                {{else}}
                 <button
                   type="submit"
                   name="action"
@@ -335,6 +351,7 @@
                 >
                   {{if or .Expired .Unroutable .IdentityReconnect .Rejected .Inactive}}Reconnect{{else}}Connect{{end}}
                 </button>
+                {{end}}
                 {{end}} {{if or .Connected .Expired .Unroutable}}
                 <button
                   type="submit"

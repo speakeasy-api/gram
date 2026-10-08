@@ -441,6 +441,7 @@ type PluginsService struct {
 	assignmentReferences *subjectReferenceCodec
 	assignmentVersionKey []byte
 	remoteSessions       MemberMCPConnectionReader
+	identityChaining     IdentityChainingGovernor
 	now                  func() time.Time
 	// recordedPublish reads the project's marketplace connection row, whose
 	// updated_at is the last recorded publish. A field so tests can fail the
@@ -491,6 +492,7 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		assignmentReferences:  references,
 		assignmentVersionKey:  versionKey,
 		remoteSessions:        nil,
+		identityChaining:      nil,
 		now:                   time.Now,
 		recordedPublish:       pluginsrepo.New(db).GetGitHubConnection,
 		mutationFlags:         nil,
@@ -544,6 +546,15 @@ func (s *PluginsService) WithRemoteSessions(remoteSessions *remotesessions.Chall
 		return s
 	}
 	return s.withMemberMCPConnectionReader(remoteSessions)
+}
+
+// WithIdentityChaining reports MCP servers that identity chaining serves as
+// active when the caller has no usable interactive session for them.
+func (s *PluginsService) WithIdentityChaining(governor IdentityChainingGovernor) *PluginsService {
+	if s != nil {
+		s.identityChaining = governor
+	}
+	return s
 }
 
 func (s *PluginsService) withMemberMCPConnectionReader(reader MemberMCPConnectionReader) *PluginsService {

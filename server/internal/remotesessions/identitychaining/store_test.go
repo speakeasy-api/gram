@@ -67,7 +67,7 @@ func newChainStoreFixture(t *testing.T) chainStoreFixture {
 	})
 	require.NoError(t, err)
 
-	chainer := &Chainer{logger: testenv.NewLogger(t), db: db, enc: enc, challenges: nil, delegation: nil, keys: nil, locks: nil, now: time.Now}
+	chainer := &Chainer{Governor: Governor{logger: testenv.NewLogger(t), db: db, enc: enc, now: time.Now}, challenges: nil, delegation: nil, keys: nil, locks: nil}
 	return chainStoreFixture{
 		db:      db,
 		chainer: chainer,

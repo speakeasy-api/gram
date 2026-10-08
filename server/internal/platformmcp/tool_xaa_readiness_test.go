@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	srv "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -168,4 +169,61 @@ func TestXAAReadinessRefusals(t *testing.T) {
 			require.Equal(t, tc.calls, reader.calls)
 		})
 	}
+}
+
+type xaaIdentityStub struct {
+	chaining XAAIdentityChaining
+	callback *string
+	err      error
+	issuer   uuid.UUID
+	resource string
+	calls    int
+}
+
+func (s *xaaIdentityStub) Inspect(_ context.Context, _ string, _, _, issuer uuid.UUID, resource string) (XAAIdentityChaining, *string, error) {
+	s.calls++
+	s.issuer, s.resource = issuer, resource
+	return s.chaining, s.callback, s.err
+}
+
+func TestXAAReadinessReportsIdentityChainingAndFederatedCallback(t *testing.T) {
+	t.Parallel()
+	issuer := uuid.New()
+	issuerID := issuer.String()
+	callback := "https://gram.example.test/oauth/idp_callback/" + uuid.NewString()
+	reader := &xaaReaderStub{result: &srv.ListOktaResourceConnectionsResult{Servers: []*srv.OktaResourceConnectionServer{
+		{ProjectID: xaaProjectID, McpServerID: xaaServerID, State: "connected", IssuerID: &issuerID, ResourceIndicator: "https://upstream.example.test/mcp"},
+	}}}
+	identity := &xaaIdentityStub{callback: &callback, chaining: XAAIdentityChaining{Served: false, Bindings: []XAAIdentityChainingBinding{
+		{State: "unknown_grants", Stage: "registration", Remediation: "An administrator must confirm effective registration grants.", GrantSource: "unknown", RequestedScopes: []string{"read"}},
+	}}}
+	enabled := func(context.Context, string) (bool, error) { return true, nil }
+	session := xaaTestSession(t, &xaaReadinessService{connections: reader, enabled: enabled, identity: identity}, false)
+	result := xaaCall(t, session, xaaProjectID, xaaServerID)
+	require.False(t, result.IsError)
+	var output GetXAAReadinessOutput
+	wire, err := json.Marshal(result.StructuredContent)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(wire, &output))
+	require.Equal(t, issuer, identity.issuer)
+	require.Equal(t, "https://upstream.example.test/mcp", identity.resource)
+	require.NotNil(t, output.IdentityChaining)
+	require.Equal(t, identity.chaining, *output.IdentityChaining)
+	require.Equal(t, &callback, output.FederatedCallbackURL)
+	require.NotContains(t, string(wire), "upstream.example.test", "the resource indicator stays internal")
+
+	identity.err = errors.New("private database detail")
+	failed := xaaCall(t, session, xaaProjectID, xaaServerID)
+	require.True(t, failed.IsError)
+	content, ok := failed.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, content.Text, `"code":"`+unavailableCode+`"`)
+	require.NotContains(t, content.Text, "private")
+
+	plain := xaaCall(t, xaaTestSession(t, &xaaReadinessService{connections: reader, enabled: enabled}, false), xaaProjectID, xaaServerID)
+	require.False(t, plain.IsError)
+	wire, err = json.Marshal(plain.StructuredContent)
+	require.NoError(t, err)
+	require.NotContains(t, string(wire), "identity_chaining")
+	require.NotContains(t, string(wire), "federated_callback_url")
 }
