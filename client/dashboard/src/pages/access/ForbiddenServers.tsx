@@ -29,7 +29,7 @@ export function ForbiddenServers({
       {/* Title over its explanation, with room around both: the explanation
           runs long, and wrapped beside the title it crowded the row. */}
       <div className="bg-muted/40 flex flex-col gap-1.5 px-3 py-3">
-        <span className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <Ban className="text-default-destructive h-3.5 w-3.5" />
           <h3
             id="forbidden-servers-heading"
@@ -37,7 +37,7 @@ export function ForbiddenServers({
           >
             Forbidden ({servers.length})
           </h3>
-        </span>
+        </div>
         <Text small muted>
           Members of this role can&rsquo;t connect to these servers, even if
           another role allows it. Only a grant made to a member directly for the
