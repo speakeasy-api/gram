@@ -19,7 +19,6 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -98,10 +97,8 @@ func TestCreateMcpServer_RefusedWhenTunnelDeletedWhileWaiting(t *testing.T) {
 	authCtx := requireAuth(t, ctx)
 	tunnelID := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
 
-	deleteTx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	defer o11y.NoLogDefer(func() error { return deleteTx.Rollback(ctx) })
-	_, err = tunneledmcprepo.New(deleteTx).GetServerByIDForUpdate(ctx, tunneledmcprepo.GetServerByIDForUpdateParams{ID: tunnelID, ProjectID: *authCtx.ProjectID})
+	deleteTx := testenv.BeginTx(t, ctx, ti.conn)
+	_, err := tunneledmcprepo.New(deleteTx).GetServerByIDForUpdate(ctx, tunneledmcprepo.GetServerByIDForUpdateParams{ID: tunnelID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 
 	createErr := make(chan error, 1)
@@ -129,9 +126,7 @@ func TestTunnelDelete_RefusedWhenMcpServerCreatedWhileWaiting(t *testing.T) {
 	tunnels := newTunnelService(t, ti)
 	tunnelID := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
 
-	createTx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	defer o11y.NoLogDefer(func() error { return createTx.Rollback(ctx) })
+	createTx := testenv.BeginTx(t, ctx, ti.conn)
 	created, err := mcpservers.CreateProjectMCPServerInTransaction(ctx, createTx, audit.NewLogger(), mcpservers.MCPServerTransactionInput{
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ProjectID:           *authCtx.ProjectID,
@@ -166,10 +161,8 @@ func TestTunnelDelete_ProceedsWhenWaitingCreateRollsBack(t *testing.T) {
 	tunnels := newTunnelService(t, ti)
 	tunnelID := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
 
-	createTx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	defer o11y.NoLogDefer(func() error { return createTx.Rollback(ctx) })
-	_, err = mcpservers.CreateProjectMCPServerInTransaction(ctx, createTx, audit.NewLogger(), mcpservers.MCPServerTransactionInput{
+	createTx := testenv.BeginTx(t, ctx, ti.conn)
+	_, err := mcpservers.CreateProjectMCPServerInTransaction(ctx, createTx, audit.NewLogger(), mcpservers.MCPServerTransactionInput{
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ProjectID:           *authCtx.ProjectID,
 		ActorUserID:         authCtx.UserID,
@@ -201,10 +194,8 @@ func TestUpdateMcpServer_RepointRefusedWhenTunnelDeletedWhileWaiting(t *testing.
 	subject := seedMcpServerForBackend(t, ctx, ti, "repoint subject", seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String())
 	tunnelID := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
 
-	deleteTx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	defer o11y.NoLogDefer(func() error { return deleteTx.Rollback(ctx) })
-	_, err = tunneledmcprepo.New(deleteTx).GetServerByIDForUpdate(ctx, tunneledmcprepo.GetServerByIDForUpdateParams{ID: tunnelID, ProjectID: *authCtx.ProjectID})
+	deleteTx := testenv.BeginTx(t, ctx, ti.conn)
+	_, err := tunneledmcprepo.New(deleteTx).GetServerByIDForUpdate(ctx, tunneledmcprepo.GetServerByIDForUpdateParams{ID: tunnelID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 
 	updateErr := make(chan error, 1)
@@ -236,10 +227,8 @@ func TestTunnelDelete_RefusedWhenMcpServerRepointedWhileWaiting(t *testing.T) {
 
 	// A third transaction holds the tunnel row so the repoint and the delete
 	// both queue behind it in a known order: repoint first, then delete.
-	gateTx, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	defer o11y.NoLogDefer(func() error { return gateTx.Rollback(ctx) })
-	_, err = tunneledmcprepo.New(gateTx).GetServerByIDForUpdate(ctx, tunneledmcprepo.GetServerByIDForUpdateParams{ID: tunnelID, ProjectID: *authCtx.ProjectID})
+	gateTx := testenv.BeginTx(t, ctx, ti.conn)
+	_, err := tunneledmcprepo.New(gateTx).GetServerByIDForUpdate(ctx, tunneledmcprepo.GetServerByIDForUpdateParams{ID: tunnelID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 
 	updateErr := make(chan error, 1)
