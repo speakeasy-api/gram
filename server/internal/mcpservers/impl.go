@@ -1377,7 +1377,9 @@ func verifyServerReferenceOwnership(
 	}
 
 	if ids.TunneledMcpServerID.Valid {
-		if _, err := tunneledmcprepo.New(dbtx).GetServerByID(ctx, tunneledmcprepo.GetServerByIDParams{
+		// FOR SHARE, held until commit: a concurrent tunnel delete waits for
+		// this server to commit and then refuses because it is referenced.
+		if _, err := tunneledmcprepo.New(dbtx).GetServerByIDForShare(ctx, tunneledmcprepo.GetServerByIDForShareParams{
 			ID:        ids.TunneledMcpServerID.UUID,
 			ProjectID: projectID,
 		}); err != nil {

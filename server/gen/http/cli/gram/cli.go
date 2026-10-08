@@ -29168,7 +29168,7 @@ func tunneledMcpUsage() {
 	fmt.Fprintln(os.Stderr, `    list-server-connections: List live tunnel connections for a tunneled MCP server`)
 	fmt.Fprintln(os.Stderr, `    update-server: Update a tunneled MCP server source`)
 	fmt.Fprintln(os.Stderr, `    rotate-server-key: Rotate a tunneled MCP server source key. Returns the new tunnel key once.`)
-	fmt.Fprintln(os.Stderr, `    delete-server: Delete a tunneled MCP server source`)
+	fmt.Fprintln(os.Stderr, `    delete-server: Delete a tunneled MCP server source. Refused with a conflict while any MCP server still uses the tunnel: delete those MCP servers first. Deleting a tunnel that does not exist or is already deleted succeeds without changing anything.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s tunneled-mcp COMMAND --help\n", os.Args[0])
@@ -29326,7 +29326,7 @@ func tunneledMcpDeleteServerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Delete a tunneled MCP server source`)
+	fmt.Fprintln(os.Stderr, `Delete a tunneled MCP server source. Refused with a conflict while any MCP server still uses the tunnel: delete those MCP servers first. Deleting a tunnel that does not exist or is already deleted succeeds without changing anything.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)

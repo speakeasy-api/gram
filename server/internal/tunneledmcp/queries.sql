@@ -43,6 +43,25 @@ FROM tunneled_mcp_servers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 FOR UPDATE;
 
+-- name: GetServerByIDForShare :one
+-- Held by every MCP server create or repoint that references this tunnel, for
+-- the rest of that transaction. It conflicts with the FOR UPDATE lock taken by
+-- DeleteServer, so a server can never end up referencing a deleted tunnel and
+-- a delete never misses a reference that is about to commit.
+SELECT *
+FROM tunneled_mcp_servers
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+FOR SHARE;
+
+-- name: CountLiveMcpServersByTunneledMcpServerID :one
+-- Every live MCP server on the tunnel, whatever its visibility and whoever can
+-- read it: deleting the tunnel is refused while any of them remain.
+SELECT COUNT(*)
+FROM mcp_servers
+WHERE tunneled_mcp_server_id = @tunneled_mcp_server_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
 -- name: UpdateServer :one
 UPDATE tunneled_mcp_servers
 SET
