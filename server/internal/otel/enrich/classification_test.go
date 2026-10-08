@@ -4,10 +4,7 @@ import (
 	"testing"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
-	"github.com/speakeasy-api/gram/server/internal/agentsurface"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -110,30 +107,24 @@ func TestLogClassificationNamesWhatARecordIs(t *testing.T) {
 	})
 }
 
-// An event the vocabulary does not name is counted on its agent surface,
-// folded into the vocabulary's spelling; a free-form surface lands under
-// "other"; a typed record is not counted at all.
-func TestLogClassificationCountsWhatNoDialectNames(t *testing.T) {
+// A session lifecycle hook row has no type in the vocabulary, whichever
+// surface sent it, while a tool hook row on the same source is typed.
+func TestLogClassificationLeavesLifecycleHookRowsUntyped(t *testing.T) {
 	t.Parallel()
 
-	reader, meterProvider := readableMeter(t)
-	enricher := &logClassification{instruments: NewInstruments(testenv.NewLogger(t), meterProvider)}
+	enricher := &logClassification{}
 
-	attrs := enriched(t, enricher, inboundTestLog(claudeCodeScopeName, "claude-code", "hook_registered"))
+	attrs := enriched(t, enricher, inboundTestLog(dialect.HooksLogScopeName, "claude-code", "SessionStart", logStringAttribute("gram.hook.source", "claude-code")))
 	require.NotContains(t, attrs, AgentEventTypeKey)
-	attrs = enriched(t, enricher, inboundTestLog(dialect.HooksLogScopeName, "claude-code", "SessionStart", logStringAttribute("gram.hook.source", "claude-code")))
-	require.NotContains(t, attrs, AgentEventTypeKey)
-	attrs = enriched(t, enricher, inboundTestLog(dialect.HooksLogScopeName, "codex", "PostToolUse", logStringAttribute("gram.hook.source", "codex")))
-	require.Equal(t, dialect.EventTypeToolCallResult, attrs[AgentEventTypeKey].AsString())
-
-	require.Equal(t, int64(2), counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface(string(agentsurface.SurfaceClaudeCode))), "the scope-known and the hook-stamped claude-code surfaces fold to one label")
-	require.Zero(t, counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface("claude-code")), "the raw surface is never a label")
-	require.Zero(t, counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface(string(agentsurface.SurfaceCodex))))
+	require.Equal(t, "SessionStart", attrs[AgentRawEventNameKey].AsString())
+	require.Equal(t, "claude-code", attrs[AgentSurfaceKey].AsString())
 
 	attrs = enriched(t, enricher, inboundTestLog(dialect.HooksLogScopeName, "x", "SessionStart", logStringAttribute("gram.hook.source", "my-custom-agent-7")))
 	require.NotContains(t, attrs, AgentEventTypeKey)
-	require.Equal(t, int64(1), counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface(missingLabelOther)), "a surface outside the vocabulary lands under other")
-	require.Zero(t, counterValue(t, reader, meterClassificationUnclassified, attr.AgentEventSurface("my-custom-agent-7")))
+	require.Equal(t, "my-custom-agent-7", attrs[AgentSurfaceKey].AsString(), "the surface is whatever the endpoint resolved")
+
+	attrs = enriched(t, enricher, inboundTestLog(dialect.HooksLogScopeName, "codex", "PostToolUse", logStringAttribute("gram.hook.source", "codex")))
+	require.Equal(t, dialect.EventTypeToolCallResult, attrs[AgentEventTypeKey].AsString())
 }
 
 func TestSpanClassificationNamesWhatASpanIs(t *testing.T) {
