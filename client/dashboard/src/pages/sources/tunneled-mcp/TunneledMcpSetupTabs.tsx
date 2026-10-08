@@ -289,17 +289,14 @@ spec:
   ];
 }
 
-// Snippets for a stdio MCP server. The published agent image carries no
-// language runtime, so each platform builds an image that adds the agent
-// binary to a base image with the runtime the command needs.
+// The published agent image has no language runtime for the command to use.
 function stdioServerTabs(ctx: SnippetContext): SnippetTab[] {
   const { renderedKey, slug, gateway, mcpCommand, serviceVersion } = ctx;
   const localImage = `gram-tunnel-${slug}:local`;
 
   const dockerfile = `cat > Dockerfile <<'DOCKERFILE'
-# Use a base image with the runtime your command needs. The tunnel agent is a
-# static binary, so any Linux image works. Point USER at a non-root user that
-# exists in that image and has a writable home directory.
+# Any Linux base image with your command's runtime works. Keep USER pointed
+# at a non-root user in that image with a writable home directory.
 FROM node:22-alpine
 COPY --from=${TUNNEL_AGENT_IMAGE} /usr/local/bin/tunnel-agent /usr/local/bin/tunnel-agent
 USER node
