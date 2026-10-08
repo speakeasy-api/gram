@@ -104,30 +104,21 @@ func sessionsSource(scope Scope) squirrel.SelectBuilder {
 		GroupBy("organization_id", "project_id", "session_id")
 }
 
-// toolCallsSource collapses agent_events to one row per tool call. A Skill
-// invocation is an ordinary call here; the skills dataset is the view over
-// the calls that named one.
+// toolCallsSource is one row per tool call, Skill invocations included.
 func toolCallsSource(scope Scope) squirrel.SelectBuilder {
 	return collapsedToolCalls(scope)
 }
 
-// skillsSource collapses agent_events to one row per skill invocation: a
-// tool call that named a skill. The name is tested on the collapsed call,
-// not on its raw rows, because the observations of one call do not all
-// carry it: a blocked invocation's decision names no skill while its result
-// does, and dropping the decision first would lose the status and start
-// time the invocation resolves to.
+// skillsSource is one row per tool call that named a skill. The filter runs
+// after the collapse because not every observation of a call carries the
+// name: a blocked invocation's decision does not, its result does.
 func skillsSource(scope Scope) squirrel.SelectBuilder {
 	return collapsedToolCalls(scope).Having("skill_name != ''")
 }
 
-// collapsedToolCalls is the collapse both tool-call-grained datasets start
-// from: one row per tool call, carrying every column either dataset reads.
-// Pre- and post-observations of one call are separate rows by design (the
-// canonical event type is part of identity), so argMax by observation time
-// resolves to the terminal observation. A call that was blocked never ran,
-// so its only observation is the decision that blocked it: that row alone
-// is the call, and its outcome resolves to rejected.
+// collapsedToolCalls folds the observations of each tool call (decision,
+// call, result) into one row at its latest observation. A blocked call has
+// only its decision, so that row is the call and its status is rejected.
 func collapsedToolCalls(scope Scope) squirrel.SelectBuilder {
 	return sq.Select(
 		"organization_id",
