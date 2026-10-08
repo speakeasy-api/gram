@@ -121,8 +121,8 @@ absent when the request carries no upstream credential, a configured
 
 To use it, verify the assertion, then require exactly one `Authorization:
 Bearer` value whose SHA-256 equals `token_sha256`. The tunnel agent's
-per-user stdio credentials mode does this on every request and accepts only
-`owner: "subject"`. `mcp_server_id` and `upstream_credential` are additive:
+per-user stdio credentials mode does this on every POST and accepts only
+`owner: "subject"`; GET and DELETE need only the caller's own session. `mcp_server_id` and `upstream_credential` are additive:
 `version` stays `1`, and verifiers that ignore them keep working.
 
 ## Verification

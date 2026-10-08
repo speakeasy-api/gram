@@ -132,17 +132,20 @@ and carries the SHA-256 of the token it vouches for (see the
   a user can always end their own session.
 
 Tokens within one grant are interchangeable, so the file holds the token of
-the last admitted request. A delayed request can briefly put back an older
-token of the same grant; if the upstream rejects it, the next request restores
-the newest. A token whose stated expiry has passed is never written.
+the last admitted POST, and makes no promise about order: a request that was
+delayed can put back an older token of the same grant, and the server may read
+a token written for a later request. The server should reopen the file for
+each upstream call and report an upstream rejection as an error rather than
+fall back to other credentials; nothing guarantees that the next request
+brings a newer token. A token whose stated expiry has passed is never written.
 
-A session ends once its token expires (plus 30 seconds for a refreshed token
-to arrive) or, when the upstream stated no expiry,
+A session ends at the earlier of its token's stated expiry plus 30 seconds and
 `TUNNEL_STDIO_CREDENTIALS_MAX_AGE` (default `1h`) after the last admitted
-token, whichever comes first. This bounds how long a revoked credential stays
-on disk even when Speakeasy stops sending requests. Stopping the session can
-take up to about 40 seconds more (an in-flight stdin write, then stdin close,
-SIGTERM and SIGKILL to the process group).
+token, unless a newer token arrives first. When the user unlinks or
+reauthorizes the account, the session ends at the next request that reaches
+the agent, or at that deadline if Speakeasy stops forwarding requests. Stopping
+the session can take up to about 40 seconds more (an in-flight stdin write,
+then stdin close, SIGTERM and SIGKILL to the process group).
 
 ### Configuration
 
@@ -155,7 +158,7 @@ SIGTERM and SIGKILL to the process group).
 | `TUNNEL_IDENTITY_JWKS_URL`         | Verification keys. Defaults to `<issuer>/.well-known/jwks.json`. Never taken from a token.                           |
 | `TUNNEL_IDENTITY_ALLOW_INSECURE`   | `true` admits `http://` issuer and JWKS URLs on localhost or `host.docker.internal`, for local development only.     |
 | `TUNNEL_STDIO_CREDENTIALS_DIR`     | Memory-backed directory for token files. Defaults to `/dev/shm`.                                                     |
-| `TUNNEL_STDIO_CREDENTIALS_MAX_AGE` | Lifetime of a token with no stated expiry, from its last write. Defaults to `1h`.                                    |
+| `TUNNEL_STDIO_CREDENTIALS_MAX_AGE` | Longest a session keeps a token after its last write, whatever its stated expiry. Defaults to `1h`.                  |
 
 The agent refuses to start in this mode unless it runs on Linux with a stdio
 command, the verifier settings are valid, the credentials directory is on
@@ -180,7 +183,8 @@ credentials. The agent logs only its size.
 
 Token files are written only to a memory-backed filesystem, under an
 agent-owned `speakeasy-tunnel-agent/<instance>/` directory (mode `0700`,
-files `0600`), and removed when the session ends. At startup the agent removes
+files `0600`), and removed when the session ends: once its processes have
+stopped, or after a bounded attempt to stop them fails. At startup the agent removes
 files left by agents that crashed, and never touches anything else in the
 directory. Several agents may share a credentials directory.
 
