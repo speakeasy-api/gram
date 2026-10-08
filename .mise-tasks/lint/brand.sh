@@ -40,7 +40,7 @@ git diff "${range[@]}" -U0 --no-color --no-ext-diff -- . \
     my $n = $line++;
     next if $text =~ /brand-ok:\s*\S/;
     (my $s = $text) =~ s{
-        \bX-Gram-[\w-]+         # HTTP headers
+        \bX-Gram-[\w*-]*        # HTTP headers, including the X-Gram-* family
       | \bGram-[A-Z][\w-]*      # HTTP headers (Gram-Key, Gram-Project, ...)
       | Speakeasy-Gram/         # device-management user agent
     }{}gx;
