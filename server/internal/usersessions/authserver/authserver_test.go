@@ -14,30 +14,43 @@ import (
 const (
 	testServerURL                 = "https://app.example.com"
 	testAuthenticationHostBaseURL = "https://id.example.com"
+	testPlatformHostBaseURL       = "https://mcp.example.com"
 )
 
-func sharedIssuer(pinnedIssuerURL string, useAuthenticationHost bool) repo.UserSessionIssuer {
+// testHosts is a deployment with an authentication host and one extra
+// platform host.
+var testHosts = authserver.Hosts{
+	ServerURL:                 testServerURL,
+	AuthenticationHostBaseURL: testAuthenticationHostBaseURL,
+	PlatformHosts:             map[string]string{"mcp.example.com": testPlatformHostBaseURL},
+}
+
+func sharedIssuer(useAuthenticationHost bool) repo.UserSessionIssuer {
 	return repo.UserSessionIssuer{
 		ID:                      uuid.New(),
 		AuthorizationServerMode: string(authserver.ModeShared),
-		PinnedIssuerUrl:         conv.ToPGTextEmpty(pinnedIssuerURL),
 		UseAuthenticationHost:   useAuthenticationHost,
 	}
+}
+
+// pinnedIssuer is an issuer in shared mode pinned to its own shared
+// authorization server path on origin.
+func pinnedIssuer(origin string) repo.UserSessionIssuer {
+	issuer := sharedIssuer(false)
+	issuer.PinnedIssuerUrl = conv.ToPGText(origin + authserver.SharedPath(issuer.ID))
+	return issuer
 }
 
 func TestHosts_SharedIssuerURLOnAuthenticationHost(t *testing.T) {
 	t.Parallel()
 
-	hosts := authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: testAuthenticationHostBaseURL, PlatformHosts: nil}
-
-	pinned := sharedIssuer("", false)
-	pinned.PinnedIssuerUrl = conv.ToPGText(testAuthenticationHostBaseURL + authserver.SharedPath(pinned.ID))
-	issuerURL, err := hosts.SharedIssuerURL(pinned)
+	pinned := pinnedIssuer(testAuthenticationHostBaseURL)
+	issuerURL, err := testHosts.SharedIssuerURL(pinned)
 	require.NoError(t, err)
 	require.Equal(t, testAuthenticationHostBaseURL+authserver.SharedPath(pinned.ID), issuerURL)
 
-	optedIn := sharedIssuer("", true)
-	issuerURL, err = hosts.SharedIssuerURL(optedIn)
+	optedIn := sharedIssuer(true)
+	issuerURL, err = testHosts.SharedIssuerURL(optedIn)
 	require.NoError(t, err)
 	require.Equal(t, testAuthenticationHostBaseURL+authserver.SharedPath(optedIn.ID), issuerURL)
 
@@ -53,25 +66,61 @@ func TestHosts_SharedIssuerURLRefusesUnconfiguredAuthenticationHost(t *testing.T
 
 	hosts := authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: "", PlatformHosts: nil}
 
-	pinned := sharedIssuer("", false)
-	pinned.PinnedIssuerUrl = conv.ToPGText(testAuthenticationHostBaseURL + authserver.SharedPath(pinned.ID))
-	_, err := hosts.SharedIssuerURL(pinned)
+	_, err := hosts.SharedIssuerURL(pinnedIssuer(testAuthenticationHostBaseURL))
 	require.Error(t, err)
 
-	optedIn := sharedIssuer("", true)
+	optedIn := sharedIssuer(true)
 	issuerURL, err := hosts.SharedIssuerURL(optedIn)
 	require.NoError(t, err)
 	require.Equal(t, testServerURL+authserver.SharedPath(optedIn.ID), issuerURL)
 }
 
-func TestHosts_ServesSharedOn(t *testing.T) {
+func TestHosts_SharedIssuerURLOnPlatformHost(t *testing.T) {
 	t.Parallel()
 
-	hosts := authserver.Hosts{
-		ServerURL:                 testServerURL,
-		AuthenticationHostBaseURL: testAuthenticationHostBaseURL,
-		PlatformHosts:             map[string]string{"mcp.example.com": "https://mcp.example.com"},
+	pinned := pinnedIssuer(testPlatformHostBaseURL)
+	issuerURL, err := testHosts.SharedIssuerURL(pinned)
+	require.NoError(t, err)
+	require.Equal(t, testPlatformHostBaseURL+authserver.SharedPath(pinned.ID), issuerURL)
+}
+
+func TestHosts_SharedIssuerURLRefusals(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		issuer func() repo.UserSessionIssuer
+	}{
+		{name: "endpoint mode", issuer: func() repo.UserSessionIssuer {
+			issuer := sharedIssuer(false)
+			issuer.AuthorizationServerMode = string(authserver.ModeEndpoint)
+			return issuer
+		}},
+		{name: "another issuer's path", issuer: func() repo.UserSessionIssuer {
+			issuer := sharedIssuer(false)
+			issuer.PinnedIssuerUrl = conv.ToPGText(testServerURL + authserver.SharedPath(uuid.New()))
+			return issuer
+		}},
+		{name: "query", issuer: func() repo.UserSessionIssuer {
+			issuer := pinnedIssuer(testServerURL)
+			issuer.PinnedIssuerUrl = conv.ToPGText(issuer.PinnedIssuerUrl.String + "?x=1")
+			return issuer
+		}},
+		{name: "unserved host", issuer: func() repo.UserSessionIssuer {
+			return pinnedIssuer("https://other.example.com")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := testHosts.SharedIssuerURL(tc.issuer())
+			require.Error(t, err)
+		})
 	}
+}
+
+func TestHosts_ServesSharedOn(t *testing.T) {
+	t.Parallel()
 
 	for _, tc := range []struct {
 		name   string
@@ -80,7 +129,7 @@ func TestHosts_ServesSharedOn(t *testing.T) {
 	}{
 		{name: "server url", origin: testServerURL, served: true},
 		{name: "authentication host", origin: testAuthenticationHostBaseURL, served: true},
-		{name: "platform host", origin: "https://mcp.example.com", served: true},
+		{name: "platform host", origin: testPlatformHostBaseURL, served: true},
 		{name: "authentication host over http", origin: "http://id.example.com", served: false},
 		{name: "other host", origin: "https://other.example.com", served: false},
 		{name: "empty", origin: "", served: false},
@@ -88,7 +137,7 @@ func TestHosts_ServesSharedOn(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			require.Equal(t, tc.served, hosts.ServesSharedOn(tc.origin))
+			require.Equal(t, tc.served, testHosts.ServesSharedOn(tc.origin))
 		})
 	}
 }

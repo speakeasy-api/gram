@@ -162,9 +162,9 @@ type authenticationHostSharedMetadata struct {
 	AuthorizationEndpoint           *string   `json:"authorization_endpoint"`
 	RegistrationEndpoint            *string   `json:"registration_endpoint"`
 	TokenEndpointAuthSigningAlgs    *[]string `json:"token_endpoint_auth_signing_alg_values_supported"`
-	GrantProfiles                   []string  `json:"authorization_grant_profiles_supported"`
-	CodeChallengeMethods            []string  `json:"code_challenge_methods_supported"`
-	RefreshTokenExpirationTypes     []string  `json:"refresh_token_expiration_types_supported"`
+	GrantProfiles                   *[]string `json:"authorization_grant_profiles_supported"`
+	CodeChallengeMethods            *[]string `json:"code_challenge_methods_supported"`
+	RefreshTokenExpirationTypes     *[]string `json:"refresh_token_expiration_types_supported"`
 	AuthorizationResponseIss        *bool     `json:"authorization_response_iss_parameter_supported"`
 	ClientIDMetadataDocumentSupport *bool     `json:"client_id_metadata_document_supported"`
 }
@@ -206,9 +206,9 @@ func TestAuthenticationHostSharedAuthorizationServer_MetadataAdvertisesWorkloadG
 			require.Nil(t, metadata.AuthorizationEndpoint)
 			require.Nil(t, metadata.RegistrationEndpoint)
 			require.Nil(t, metadata.TokenEndpointAuthSigningAlgs)
-			require.Empty(t, metadata.GrantProfiles)
-			require.Empty(t, metadata.CodeChallengeMethods)
-			require.Empty(t, metadata.RefreshTokenExpirationTypes)
+			require.Nil(t, metadata.GrantProfiles)
+			require.Nil(t, metadata.CodeChallengeMethods)
+			require.Nil(t, metadata.RefreshTokenExpirationTypes)
 			require.Nil(t, metadata.AuthorizationResponseIss)
 			require.Nil(t, metadata.ClientIDMetadataDocumentSupport)
 		})

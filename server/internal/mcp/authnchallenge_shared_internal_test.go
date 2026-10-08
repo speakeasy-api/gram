@@ -54,6 +54,10 @@ func TestWorkloadAuthorizationServerMetadata_NoGrantWhenWorkloadGrantNotServed(t
 			require.JSONEq(t, tc.want, string(fields["grant_types_supported"]))
 			require.JSONEq(t, `["`+oauthwire.AuthMethodNone+`"]`, string(fields["token_endpoint_auth_methods_supported"]))
 			require.NotContains(t, fields, "token_endpoint_auth_signing_alg_values_supported")
+			require.NotContains(t, fields, "authorization_endpoint")
+			require.NotContains(t, fields, "registration_endpoint")
+			// Omitted, RFC 8414 would read response_types_supported as ["code"].
+			require.JSONEq(t, `[]`, string(fields["response_types_supported"]))
 		})
 	}
 }
