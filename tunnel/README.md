@@ -56,8 +56,10 @@ MCP server row and overwrites any inbound tunnel header before forwarding.
 ## Stdio MCP Servers
 
 Set `TUNNEL_LOCAL_MCP_COMMAND` instead of `TUNNEL_LOCAL_MCP_URL` to serve an
-MCP server that speaks the stdio transport. The agent runs the command with
-`/bin/sh -c` and bridges Streamable HTTP onto it:
+MCP server that speaks the stdio transport. Stdio mode needs a Unix agent,
+such as the published Linux image, because shutdown relies on process groups.
+The agent runs the command with `/bin/sh -c` and bridges Streamable HTTP onto
+it:
 
 - Each MCP session gets its own server process, started by `initialize` and
   addressed by an agent-minted `Mcp-Session-Id`.
@@ -66,6 +68,8 @@ MCP server that speaks the stdio transport. The agent runs the command with
   stream, otherwise to a bounded backlog drained by the next GET stream.
 - DELETE, `TUNNEL_STDIO_IDLE_TIMEOUT` (default `30m`), and agent shutdown stop
   the process: stdin closes, then SIGTERM, then SIGKILL to its process group.
+  The idle timer counts MCP messages in either direction; an open GET stream
+  with nothing on it does not keep a session alive.
 - `TUNNEL_STDIO_MAX_SESSIONS` (default `16`) caps concurrent processes; an
   `initialize` past the cap gets HTTP 503.
 - A single message over 32 MiB in either direction is refused; from the server

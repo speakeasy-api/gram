@@ -89,6 +89,9 @@ func New(cfg Config, logger *slog.Logger) (*Agent, error) {
 	if hasURL == hasCommand {
 		return nil, errors.New("exactly one of a local MCP URL or a local MCP command is required")
 	}
+	if hasCommand && !stdioSupported {
+		return nil, errors.New("a local MCP command requires a Unix tunnel agent")
+	}
 	if cfg.MinBackoff <= 0 {
 		cfg.MinBackoff = defaultMinBackoff
 	}

@@ -4,6 +4,10 @@ package agent
 
 import "os/exec"
 
+// stdioSupported is false here: without process groups the agent cannot
+// guarantee a server's children stop with it, so stdio mode is refused.
+const stdioSupported = false
+
 func shellCommand(command string) *exec.Cmd {
 	return exec.Command("cmd", "/C", command)
 }

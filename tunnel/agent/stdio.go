@@ -158,8 +158,8 @@ func (b *stdioBridge) handlePost(w http.ResponseWriter, r *http.Request) {
 	release := sess.acquire()
 	defer release()
 
-	ids := requestIDs(msgs)
-	if len(ids) == 0 {
+	requests := requestMessages(msgs)
+	if len(requests) == 0 {
 		if err := sess.send(r.Context(), msgs); err != nil {
 			writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
 			return
@@ -169,7 +169,7 @@ func (b *stdioBridge) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sse := acceptsSSE(r)
-	stream, err := sess.openStream(ids, sse)
+	stream, err := sess.openStream(requests, sse)
 	if err != nil {
 		if errors.Is(err, errStdioDuplicateID) {
 			writeRPCError(w, http.StatusBadRequest, nil, rpcCodeInvalidRequest, err.Error())
@@ -187,7 +187,12 @@ func (b *stdioBridge) handlePost(w http.ResponseWriter, r *http.Request) {
 
 	if sse {
 		writeSSEHeaders(w, sid)
-		for msg := range stream.events(r.Context(), sess, len(ids)) {
+		for msg := range stream.events(r.Context(), sess, len(requests)) {
+			if err := writeSSEEvent(w, msg); err != nil {
+				return
+			}
+		}
+		for _, msg := range sess.unanswered(stream) {
 			if err := writeSSEEvent(w, msg); err != nil {
 				return
 			}
@@ -195,13 +200,14 @@ func (b *stdioBridge) handlePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	responses := make([]json.RawMessage, 0, len(ids))
-	for msg := range stream.events(r.Context(), sess, len(ids)) {
+	responses := make([]json.RawMessage, 0, len(requests))
+	for msg := range stream.events(r.Context(), sess, len(requests)) {
 		responses = append(responses, msg)
 	}
 	if r.Context().Err() != nil {
 		return
 	}
+	responses = append(responses, sess.unanswered(stream)...)
 	w.Header().Set(headerMCPSessionID, sid)
 	writeJSONResponses(w, responses, batch)
 }
@@ -237,7 +243,7 @@ func (b *stdioBridge) handleInitialize(w http.ResponseWriter, r *http.Request, m
 	ctx, cancel := context.WithTimeout(r.Context(), stdioInitializeTimeout)
 	defer cancel()
 
-	stream, err := sess.openStream([]string{msgs[0].id}, false)
+	stream, err := sess.openStream(msgs, false)
 	if err != nil {
 		writeRPCError(w, http.StatusBadGateway, msgs[0].rawID, rpcCodeServerError, "MCP server exited during initialize")
 		return
@@ -284,8 +290,9 @@ func (b *stdioBridge) handleGet(w http.ResponseWriter, r *http.Request) {
 		writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
 		return
 	}
-	release := sess.acquire()
-	defer release()
+	// An open GET stream is not activity on its own; the session stays alive
+	// through the messages that flow over it.
+	sess.touch()
 
 	listener, err := sess.attachListener()
 	if err != nil {
@@ -359,7 +366,7 @@ func (b *stdioBridge) start() (*stdioSession, error) {
 
 // reap closes sessions that have been idle for longer than the idle timeout.
 func (b *stdioBridge) reap(ctx context.Context) {
-	interval := min(b.idleTimeout/4, time.Minute)
+	interval := max(min(b.idleTimeout/4, time.Minute), 10*time.Millisecond)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -535,6 +542,13 @@ func (s *stdioSession) acquire() func() {
 	}
 }
 
+// touch records MCP traffic on the session for the idle reaper.
+func (s *stdioSession) touch() {
+	s.mu.Lock()
+	s.lastActive = time.Now()
+	s.mu.Unlock()
+}
+
 func (s *stdioSession) idleSince(now time.Time) time.Duration {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -600,8 +614,14 @@ func (s *stdioSession) send(ctx context.Context, msgs []rpcMessage) error {
 	return errStdioSessionClosed
 }
 
-func (s *stdioSession) openStream(ids []string, unsolicited bool) (*rpcStream, error) {
-	stream := newRPCStream(len(ids))
+func (s *stdioSession) openStream(requests []rpcMessage, unsolicited bool) (*rpcStream, error) {
+	stream := newRPCStream(len(requests))
+	for _, req := range requests {
+		if _, dup := stream.rawIDs[req.id]; dup {
+			return nil, errStdioDuplicateID
+		}
+		stream.rawIDs[req.id] = req.rawID
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	select {
@@ -609,18 +629,40 @@ func (s *stdioSession) openStream(ids []string, unsolicited bool) (*rpcStream, e
 		return nil, errStdioSessionClosed
 	default:
 	}
-	for _, id := range ids {
+	for id := range stream.rawIDs {
 		if _, exists := s.pending[id]; exists {
 			return nil, errStdioDuplicateID
 		}
 	}
-	for _, id := range ids {
+	for id := range stream.rawIDs {
 		s.pending[id] = stream
 	}
 	if unsolicited {
 		s.streams[stream] = struct{}{}
 	}
 	return stream, nil
+}
+
+// unanswered returns error responses for the stream's requests that the
+// server exited without answering, so a client never waits on, or receives a
+// short batch for, a request that can no longer complete.
+func (s *stdioSession) unanswered(stream *rpcStream) []json.RawMessage {
+	select {
+	case <-s.done:
+	default:
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []json.RawMessage
+	for id, owner := range s.pending {
+		if owner != stream {
+			continue
+		}
+		delete(s.pending, id)
+		out = append(out, rpcErrorPayload(stream.rawIDs[id], rpcCodeServerError, "MCP server exited before responding"))
+	}
+	return out
 }
 
 func (s *stdioSession) closeStream(stream *rpcStream) {
@@ -711,6 +753,7 @@ func readFrame(r *bufio.Reader, limit int) ([]byte, error) {
 func (s *stdioSession) route(msg rpcMessage) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.lastActive = time.Now()
 
 	if msg.method == "" && msg.id != "" {
 		stream, ok := s.pending[msg.id]
@@ -848,6 +891,8 @@ type rpcStream struct {
 
 	// remaining counts responses not yet routed; guarded by the session's mu.
 	remaining int
+	// rawIDs maps each awaited request's canonical id to its id as sent.
+	rawIDs map[string]json.RawMessage
 }
 
 func newRPCStream(remaining int) *rpcStream {
@@ -860,6 +905,7 @@ func newRPCStream(remaining int) *rpcStream {
 		gone:      make(chan struct{}),
 		goneOnce:  sync.Once{},
 		remaining: remaining,
+		rawIDs:    make(map[string]json.RawMessage),
 	}
 }
 
@@ -1030,14 +1076,14 @@ func canonicalRPCID(raw json.RawMessage) (string, error) {
 	}
 }
 
-func requestIDs(msgs []rpcMessage) []string {
-	ids := make([]string, 0, len(msgs))
+func requestMessages(msgs []rpcMessage) []rpcMessage {
+	requests := make([]rpcMessage, 0, len(msgs))
 	for _, msg := range msgs {
 		if msg.method != "" && msg.id != "" {
-			ids = append(ids, msg.id)
+			requests = append(requests, msg)
 		}
 	}
-	return ids
+	return requests
 }
 
 func isRPCError(raw json.RawMessage) bool {
@@ -1047,10 +1093,27 @@ func isRPCError(raw json.RawMessage) bool {
 	return json.Unmarshal(raw, &envelope) == nil && len(envelope.Error) > 0 && !bytes.Equal(envelope.Error, []byte("null"))
 }
 
+// acceptsSSE reports whether the client accepts text/event-stream, honoring
+// an explicit q=0 refusal.
 func acceptsSSE(r *http.Request) bool {
 	for _, value := range r.Header.Values("Accept") {
-		if strings.Contains(value, "text/event-stream") {
-			return true
+		for mediaRange := range strings.SplitSeq(value, ",") {
+			params := strings.Split(mediaRange, ";")
+			if !strings.EqualFold(strings.TrimSpace(params[0]), "text/event-stream") {
+				continue
+			}
+			refused := false
+			for _, param := range params[1:] {
+				key, val, _ := strings.Cut(strings.TrimSpace(param), "=")
+				if strings.EqualFold(strings.TrimSpace(key), "q") {
+					if q, err := strconv.ParseFloat(strings.TrimSpace(val), 64); err == nil && q == 0 {
+						refused = true
+					}
+				}
+			}
+			if !refused {
+				return true
+			}
 		}
 	}
 	return false
@@ -1087,7 +1150,7 @@ func writeJSONResponses(w http.ResponseWriter, responses []json.RawMessage, batc
 	_, _ = w.Write(payload)
 }
 
-func writeRPCError(w http.ResponseWriter, status int, id json.RawMessage, code int, message string) {
+func rpcErrorPayload(id json.RawMessage, code int, message string) json.RawMessage {
 	if id == nil {
 		id = json.RawMessage("null")
 	}
@@ -1096,9 +1159,13 @@ func writeRPCError(w http.ResponseWriter, status int, id json.RawMessage, code i
 		"id":      id,
 		"error":   map[string]any{"code": code, "message": message},
 	})
+	return payload
+}
+
+func writeRPCError(w http.ResponseWriter, status int, id json.RawMessage, code int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_, _ = w.Write(payload)
+	_, _ = w.Write(rpcErrorPayload(id, code, message))
 }
 
 func newStdioSessionID() (string, error) {
