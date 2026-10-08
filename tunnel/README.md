@@ -90,6 +90,133 @@ Only MCP traffic at the root path is served. OAuth back-channel paths return
 The published image contains no language runtimes. To run a Node or Python
 server, build on top of it and add the runtime the command needs.
 
+## Per-User Credentials for Stdio Servers
+
+A stdio server can act upstream as each Speakeasy user. Set
+`TUNNEL_STDIO_CREDENTIALS=user` and the agent gives every MCP session its own
+server process and a file holding that user's upstream access token. The
+server reads the file named by `SPEAKEASY_ACCESS_TOKEN_FILE` each time it calls
+the upstream API. It never runs its own sign-in.
+
+Speakeasy owns sign-in and refresh. A user connects the upstream account once
+in Speakeasy (authorization code with PKCE); Speakeasy stores and refreshes the
+tokens in its encrypted storage. On each request to a private tunneled MCP
+server with a linked upstream grant, it forwards the user's current access
+token as `Authorization: Bearer` together with a signed `X-Speakeasy-Identity`
+assertion. The assertion names the user, the MCP server and the exact grant,
+and carries the SHA-256 of the token it vouches for (see the
+[signed caller identity guide](../docs/tunnel-identity.md)).
+
+### What the agent enforces
+
+- Every request must carry a valid assertion for this tunnel: RS256 signed by
+  a key in the configured JWKS, the configured issuer, audience and
+  organization, at most 60 seconds long. Missing or invalid assertions get
+  HTTP 401 and touch no session.
+- Each session belongs to one principal: issuer, subject, organization, MCP
+  server and whether the session is consent discovery. Another principal's
+  request for that session gets 404 exactly like an unknown session and does
+  not affect it.
+- Every POST must carry a bearer whose SHA-256 matches the assertion's
+  `upstream_credential.token_sha256`, from a grant the subject owns
+  (`owner: "subject"`). An `initialize` without one gets 401 and starts no
+  process. For an existing session the principal is proven, so a POST without
+  a valid credential (for example after the user unlinks the account) gets 401
+  and ends the session.
+- A session is bound to its grant: client, grant row and grant generation. A
+  refreshed token for the same grant replaces the file in the running session.
+  Reauthorizing, switching upstream account or another client ends the session
+  (404) so the client starts over with a fresh process.
+- Consent discovery sessions only admit the methods their assertion allows.
+- GET and DELETE need only a valid assertion from the session's principal, so
+  a user can always end their own session.
+
+Tokens within one grant are interchangeable, so the file holds the token of
+the last admitted request. A delayed request can briefly put back an older
+token of the same grant; if the upstream rejects it, the next request restores
+the newest. A token whose stated expiry has passed is never written.
+
+A session ends once its token expires (plus 30 seconds for a refreshed token
+to arrive) or, when the upstream stated no expiry,
+`TUNNEL_STDIO_CREDENTIALS_MAX_AGE` (default `1h`) after the last admitted
+token, whichever comes first. This bounds how long a revoked credential stays
+on disk even when Speakeasy stops sending requests. Stopping the session can
+take up to about 40 seconds more (an in-flight stdin write, then stdin close,
+SIGTERM and SIGKILL to the process group).
+
+### Configuration
+
+| Variable                           | Meaning                                                                                                              |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `TUNNEL_STDIO_CREDENTIALS`         | `user` enables per-user credentials. Unset keeps the default behavior.                                               |
+| `TUNNEL_IDENTITY_ISSUER`           | Exact assertion issuer, an origin without a trailing slash: `https://tunnel.speakeasy.com`.                          |
+| `TUNNEL_IDENTITY_AUDIENCE`         | The tunneled source's saved resource identifier, or `tunneled-mcp-server:<TUNNELED_MCP_SERVER_ID>` when it has none. |
+| `TUNNEL_IDENTITY_ORGANIZATION_ID`  | Your Speakeasy organization ID, shown under **Caller Identity** in the MCP server's settings.                        |
+| `TUNNEL_IDENTITY_JWKS_URL`         | Verification keys. Defaults to `<issuer>/.well-known/jwks.json`. Never taken from a token.                           |
+| `TUNNEL_IDENTITY_ALLOW_INSECURE`   | `true` admits `http://` issuer and JWKS URLs on localhost or `host.docker.internal`, for local development only.     |
+| `TUNNEL_STDIO_CREDENTIALS_DIR`     | Memory-backed directory for token files. Defaults to `/dev/shm`.                                                     |
+| `TUNNEL_STDIO_CREDENTIALS_MAX_AGE` | Lifetime of a token with no stated expiry, from its last write. Defaults to `1h`.                                    |
+
+The agent refuses to start in this mode unless it runs on Linux with a stdio
+command, the verifier settings are valid, the credentials directory is on
+tmpfs or ramfs, and `SPEAKEASY_ACCESS_TOKEN_FILE` is not set in its own
+environment. It fetches verification keys on demand, trusts them for five
+minutes, and rejects every assertion when it cannot revalidate expired keys.
+
+### Server process contract
+
+The agent sets `SPEAKEASY_ACCESS_TOKEN_FILE`, `HOME`, `XDG_CONFIG_HOME` and
+`XDG_DATA_HOME` for each process to paths inside a private session directory,
+replacing inherited values, and removes `OKTA_ACCESS_TOKEN_FILE`. The server
+must read the token file when it calls the upstream API rather than caching it
+at startup; the file is written before the process starts and replaced
+atomically. Package caches such as `XDG_CACHE_HOME` stay shared across
+sessions; keep them free of credentials.
+
+The server's stderr is not logged in this mode, because SDK errors can print
+credentials. The agent logs only its size.
+
+### Storage and host requirements
+
+Token files are written only to a memory-backed filesystem, under an
+agent-owned `speakeasy-tunnel-agent/<instance>/` directory (mode `0700`,
+files `0600`), and removed when the session ends. At startup the agent removes
+files left by agents that crashed, and never touches anything else in the
+directory. Several agents may share a credentials directory.
+
+This promises that no credential file is written to a persistent filesystem.
+It does not stop the kernel from writing memory to disk. For that, also:
+
+- disable swap on the host, or mount the directory as tmpfs with `noswap`;
+- disable core dumps for the container;
+- avoid host hibernation.
+
+Run the agent as the container's main process, under a minimal init such as
+`docker run --init` or tini, and start the server with `exec`, so stopping the
+container stops every server process. The agent also asks the kernel to kill
+its direct child if the agent dies. A server that daemonizes or starts a new
+session escapes its process group; the agent removes its token file anyway
+when the session ends.
+
+On Kubernetes, mount `emptyDir: {medium: Memory}` at the credentials
+directory, and set `securityContext` with `runAsNonRoot`,
+`allowPrivilegeEscalation: false` and `readOnlyRootFilesystem` where your
+server allows it.
+
+Every server process runs as the agent's user. File permissions do not
+isolate processes of the same user from each other, so run only a trusted,
+pinned server binary in this mode.
+
+### Callers that cannot use this mode
+
+The whole tunnel switches to this mode, so every MCP server on the tunnel must
+be private and its callers must have a linked per-user grant. These fail
+closed with 401: public MCP servers, anonymous callers, background connection
+probes, API keys and agents without their own subject grant, the MCP server's
+own client credentials (`owner: "self"`), and tokens obtained by identity
+chaining. Assertions from Speakeasy versions that do not send
+`mcp_server_id` and `upstream_credential` are refused.
+
 ## OAuth Back-Channel Requests
 
 An issuer bound to a tunnel uses the same agent for persisted metadata refresh,
