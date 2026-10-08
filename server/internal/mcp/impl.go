@@ -263,6 +263,11 @@ type oauthTokenInputs struct {
 	// the matching tool's *_ACCESS_TOKEN env var, which the gateway forwards
 	// as the Authorization header on the outgoing upstream request.
 	Token string
+
+	// fromCaller marks a bearer the MCP client presented on this request and
+	// Gram forwarded unvalidated, so an upstream 401 means the client must
+	// replace it.
+	fromCaller bool
 }
 
 // appendRemoteSessionTokenInputs converts a remote_session_issuer_id -> token
@@ -295,6 +300,7 @@ func appendRemoteSessionTokenInputs(dst []oauthTokenInputs, tokens map[uuid.UUID
 			securityKeys:          nil,
 			remoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 			Token:                 entry.Token,
+			fromCaller:            false,
 		})
 	}
 	return dst, nil
@@ -1236,6 +1242,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 					securityKeys:          []string{},
 					remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 					Token:                 authToken,
+					fromCaller:            true,
 				})
 			}
 		case !cfg.isPublic:
@@ -1450,6 +1457,8 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 
 	body, err := s.handleRequest(ctx, mcpInputs, &req)
 	switch {
+	case oauthRequired && errors.Is(err, errUpstreamUnauthorized):
+		return writeInvalidTokenChallenge(w, oauthProtectedResourceURL, "the upstream API rejected the access token")
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
 	case err != nil:
