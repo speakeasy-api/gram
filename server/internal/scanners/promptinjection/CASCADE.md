@@ -141,11 +141,16 @@ system prompt, DAN or a fake system override.
 | Jev → Opus 5.5 → Opus 4.8       | 0               | 171 of 175        | 82.1%       | 4.9 s           |
 
 Sonnet costs about $0.002 per confirmation against $0.003 for Opus 5.5, and
-refuses far less. The confirm-v4 prompt treats role-play and "act as" requests
-as content requests unless they also try to drop the agent's rules, reveal
-protected data or send data out; personas with no rules (DAN, developer mode)
-and discarding earlier instructions stay overrides. With the earlier prompt,
-Sonnet flagged 2 relabelled deepset role-plays behind Jev.
+refuses far less. The current prompt clarifies confirm-v4: role-play and "act as"
+requests remain content requests unless the evidence shows they displace higher-priority
+runtime rules or the authorized user's intent, including through role or priority
+changes. Explicit override wording is not required for a role-play directive
+planted in untrusted content to redirect the agent away from the user's task.
+Personas with no rules (DAN, developer mode) and discarding earlier instructions
+stay overrides. The paired examples distinguish authorized user role-play from
+the same directive planted in a tool result. This clarification has not been
+benchmarked; the table above reports confirm-v4 before the clarification. With
+the earlier prompt, Sonnet flagged 2 relabelled deepset role-plays behind Jev.
 
 ## Platform MCP assessment
 
