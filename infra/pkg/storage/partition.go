@@ -46,6 +46,7 @@ func partition(def Definition, attributes map[string]string, received time.Time)
 		}
 		return received.UTC().Format(layout), DropNone
 	}
+
 	value, ok := attributes[def.PartitionAttribute]
 	if !ok {
 		return "", DropMissing
@@ -53,6 +54,7 @@ func partition(def Definition, attributes map[string]string, received time.Time)
 	if len(value) > partitionLimit {
 		return "", DropLimit
 	}
+
 	parts := strings.Split(value, "/")
 	if len(parts) > partitionKeyLimit {
 		return "", DropLimit
@@ -60,6 +62,7 @@ func partition(def Definition, attributes map[string]string, received time.Time)
 	if len(parts) != len(def.PartitionKeys) {
 		return "", DropMalformed
 	}
+
 	for i, part := range parts {
 		key, val, ok := strings.Cut(part, "=")
 		if !ok || key != def.PartitionKeys[i] {
@@ -72,5 +75,6 @@ func partition(def Definition, attributes map[string]string, received time.Time)
 			return "", DropMalformed
 		}
 	}
+
 	return value, DropNone
 }

@@ -35,17 +35,22 @@ func (s *captureStore) Write(_ context.Context, object storage.Object, encode fu
 	if err := encode(&out); err != nil {
 		return err
 	}
+
 	s.mu.Lock()
 	s.data, s.object = out.Bytes(), object
 	s.mu.Unlock()
+
 	s.cancel()
+
 	return nil
 }
 
 func TestRun_GeneratedBindingThroughPubSub(t *testing.T) {
 	t.Parallel()
+
 	server := pstest.NewServer()
 	t.Cleanup(func() { require.NoError(t, server.Close()) })
+
 	conn, err := grpc.NewClient(server.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
 	client, err := pubsub.NewClient(t.Context(), "test-project", option.WithGRPCConn(conn))
@@ -55,22 +60,30 @@ func TestRun_GeneratedBindingThroughPubSub(t *testing.T) {
 		// Pub/Sub owns and closes the connection supplied via WithGRPCConn.
 		require.Equal(t, connectivity.Shutdown, conn.GetState())
 	})
+
 	broker := gcp.NewEmulatedPubSub(slog.New(slog.DiscardHandler), "test-project", client, nil)
 	def := storagefixture.FixtureV1Archive()
+
 	// Reconciliation precedes publication; Run resolves the same resources.
 	_, err = broker.StorageSubscriberForMessage(t.Context(), def.Payload, def.Marker)
 	require.NoError(t, err)
+
 	publisher, err := gcp.PubSubPublisherForMessage(t.Context(), broker, &v1.Event{})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, publisher.Stop(context.WithoutCancel(t.Context()))) })
+
 	_, err = publisher.Publish(t.Context(), v1.Event_builder{Id: new("hello")}.Build()).Get(t.Context())
 	require.NoError(t, err)
+
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
+
 	store := &captureStore{cancel: cancel}
 	require.NoError(t, storage.Run(ctx, def, storage.Config{Broker: broker, Store: store, Buckets: map[string]string{def.Bucket: "123-fixture-archive"}, Settings: storage.Settings{MaxMessages: 1}}))
+
 	store.mu.Lock()
 	defer store.mu.Unlock()
+
 	require.NotEmpty(t, store.data)
 	file, err := parquet.OpenFile(bytes.NewReader(store.data), int64(len(store.data)))
 	require.NoError(t, err)

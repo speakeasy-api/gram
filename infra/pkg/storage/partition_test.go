@@ -11,6 +11,7 @@ import (
 
 func TestPartition_StrictExternalGrammar(t *testing.T) {
 	t.Parallel()
+
 	for _, tt := range []struct {
 		value  string
 		reason DropReason
@@ -30,6 +31,7 @@ func TestPartition_StrictExternalGrammar(t *testing.T) {
 	} {
 		t.Run(tt.value, func(t *testing.T) {
 			t.Parallel()
+
 			def := Definition{Partitioning: pubsubv1.StoragePartitioning_STORAGE_PARTITIONING_HIVE_EXTERNAL, PartitionAttribute: "partition", PartitionKeys: []string{"region", "account"}}
 			got, reason := partition(def, map[string]string{"partition": tt.value}, time.Time{})
 			require.Equal(t, tt.reason, reason)
@@ -44,6 +46,7 @@ func TestPartition_StrictExternalGrammar(t *testing.T) {
 
 func TestPartition_MissingExternalAttribute(t *testing.T) {
 	t.Parallel()
+
 	def := Definition{Partitioning: pubsubv1.StoragePartitioning_STORAGE_PARTITIONING_HIVE_EXTERNAL, PartitionAttribute: "partition", PartitionKeys: []string{"region"}}
 	got, reason := partition(def, nil, time.Time{})
 	require.Equal(t, DropMissing, reason)
@@ -52,6 +55,7 @@ func TestPartition_MissingExternalAttribute(t *testing.T) {
 
 func TestPartition_IngestionUsesUTC(t *testing.T) {
 	t.Parallel()
+
 	received := time.Date(2026, 10, 7, 23, 30, 0, 0, time.FixedZone("local", -7*60*60))
 	for _, tt := range []struct {
 		mode   pubsubv1.StoragePartitioning
@@ -68,6 +72,7 @@ func TestPartition_IngestionUsesUTC(t *testing.T) {
 
 func TestParseBucketMapping(t *testing.T) {
 	t.Parallel()
+
 	for _, raw := range []string{`null`, `[]`, `{"archive":"gs://bucket"}`, `{"archive":"short" , "another":"short"}`, `{"bad/name":"123-bucket"}`, `{"archive":"goog-reserved"}`,
 		`{"archive":"first-bucket","archive":"second-bucket"}`, `{"archive":"first-bucket","\u0061rchive":"second-bucket"}`,
 		`{"archive":"123-google-data"}`, `{"archive":"123-g00gle-data"}`, `{"archive":"123-go0gle-data"}`, `{"archive":"123-g0ogle-data"}`,
@@ -76,6 +81,7 @@ func TestParseBucketMapping(t *testing.T) {
 		_, err := ParseBucketMapping(raw)
 		require.Error(t, err, raw)
 	}
+
 	mapping, err := ParseBucketMapping(`{"event-archive":"123-dev-event-archive"}`)
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"event-archive": "123-dev-event-archive"}, mapping)

@@ -19,6 +19,7 @@ func (p *PubSubBroker) StorageSubscriberForMessage(_ context.Context, payload, m
 	if err != nil {
 		return nil, err
 	}
+
 	return p.client.Subscriber(gcp.ResolveSubscriptionName(marker.ProtoReflect().Descriptor(), opts)), nil
 }
 
@@ -29,6 +30,7 @@ func (e *EmulatedPubSubBroker) StorageSubscriberForMessage(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
+
 	topicName := gcp.ResolveTopicName(payload.ProtoReflect().Descriptor(), topicOpts)
 	subName := gcp.ResolveSubscriptionName(marker.ProtoReflect().Descriptor(), opts)
 	if err := e.reconcileTopic(ctx, topicName, topicOpts); err != nil {
@@ -37,6 +39,7 @@ func (e *EmulatedPubSubBroker) StorageSubscriberForMessage(ctx context.Context, 
 	if err := e.reconcileSubscriptions(ctx, subName, topicName, opts); err != nil {
 		return nil, fmt.Errorf("reconcile storage subscription: %w", err)
 	}
+
 	return e.client.Subscriber(subName), nil
 }
 
@@ -44,6 +47,7 @@ func storageTransportOptions(payload, marker proto.Message) (*pubsubv1.StorageSu
 	if isNilMessage(payload) || isNilMessage(marker) {
 		return nil, nil, fmt.Errorf("storage payload and marker must not be nil")
 	}
+
 	md, pd := marker.ProtoReflect().Descriptor(), payload.ProtoReflect().Descriptor()
 	opts, ok := gcp.StorageOptionsFromMessage(md)
 	if !ok {
@@ -58,10 +62,12 @@ func storageTransportOptions(payload, marker proto.Message) (*pubsubv1.StorageSu
 	if _, ok := gcp.TopicOptionsFromMessage(md); ok {
 		return nil, nil, fmt.Errorf("storage marker %s also declares a topic", md.FullName())
 	}
+
 	topicOpts, ok := gcp.TopicOptionsFromMessage(pd)
 	if !ok || strings.TrimSpace(topicOpts.GetName()) != "" {
 		return nil, nil, fmt.Errorf("storage payload %s must declare a schema-bound topic without a name override", pd.FullName())
 	}
+
 	return opts, topicOpts, nil
 }
 

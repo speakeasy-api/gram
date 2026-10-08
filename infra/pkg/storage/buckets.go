@@ -18,6 +18,7 @@ func ParseBucketMapping(raw string) (map[string]string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return mapping, nil
 	}
+
 	decoder := json.NewDecoder(strings.NewReader(raw))
 	opening, err := decoder.Token()
 	if err != nil {
@@ -26,11 +27,13 @@ func ParseBucketMapping(raw string) (map[string]string, error) {
 	if opening != json.Delim('{') {
 		return nil, fmt.Errorf("storage bucket mapping must be a JSON object")
 	}
+
 	for decoder.More() {
 		token, err := decoder.Token()
 		if err != nil {
 			return nil, fmt.Errorf("decode storage bucket key: %w", err)
 		}
+
 		logical, ok := token.(string)
 		if !ok {
 			return nil, fmt.Errorf("storage bucket key must be a string")
@@ -38,18 +41,22 @@ func ParseBucketMapping(raw string) (map[string]string, error) {
 		if _, exists := mapping[logical]; exists {
 			return nil, fmt.Errorf("duplicate logical bucket %q", logical)
 		}
+
 		var bucket string
 		if err := decoder.Decode(&bucket); err != nil {
 			return nil, fmt.Errorf("decode physical bucket: %w", err)
 		}
+
 		mapping[logical] = bucket
 	}
+
 	if _, err := decoder.Token(); err != nil {
 		return nil, fmt.Errorf("close storage bucket mapping: %w", err)
 	}
 	if _, err := decoder.Token(); err != io.EOF {
 		return nil, fmt.Errorf("unexpected data after storage bucket mapping")
 	}
+
 	physical := map[string]string{}
 	for logical, bucket := range mapping {
 		if !logicalBucket.MatchString(logical) || !validPhysicalBucket(bucket) {
@@ -60,6 +67,7 @@ func ParseBucketMapping(raw string) (map[string]string, error) {
 		}
 		physical[bucket] = logical
 	}
+
 	return mapping, nil
 }
 

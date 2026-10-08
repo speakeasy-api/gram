@@ -82,10 +82,12 @@ func (s BatchReceiveSettings) bufferLimits() (messages, bytes int) {
 		}
 		messages = 2 * size
 	}
+
 	bytes = s.MaxBufferedBytes
 	if bytes <= 0 {
 		bytes = max(2*s.MaxBytes, defaultBatchBufferedBytes)
 	}
+
 	return messages, bytes
 }
 
@@ -95,6 +97,7 @@ func (s *psSubscriber[M]) boundBatchReceiver(settings BatchReceiveSettings) {
 	if settings.MaxBufferedMessages <= 0 && settings.MaxBufferedBytes <= 0 {
 		return
 	}
+
 	messages, bytes := settings.bufferLimits()
 	if limit := s.sub.ReceiveSettings.MaxOutstandingMessages; limit > 0 {
 		messages = min(messages, limit)
@@ -102,6 +105,7 @@ func (s *psSubscriber[M]) boundBatchReceiver(settings BatchReceiveSettings) {
 	if limit := s.sub.ReceiveSettings.MaxOutstandingBytes; limit > 0 {
 		bytes = min(bytes, limit)
 	}
+
 	s.sub.ReceiveSettings.MaxOutstandingMessages = messages
 	s.sub.ReceiveSettings.MaxOutstandingBytes = bytes
 }
@@ -315,6 +319,7 @@ func (s *psSubscriber[M]) handle(ctx context.Context, m incomingMessage, f func(
 // to unmarshal are nacked individually and excluded from the batch handed to f.
 func (s *psSubscriber[M]) ReceiveBatch(ctx context.Context, settings BatchReceiveSettings, f func(context.Context, []M, []MessageMetadata) error) error {
 	s.boundBatchReceiver(settings)
+
 	return s.batchLoop(ctx, settings, func(ctx context.Context, deliver func(incomingMessage)) error {
 		return s.sub.Receive(ctx, func(_ context.Context, m *pubsub.Message) {
 			deliver(incomingMessage{
@@ -341,6 +346,7 @@ func (s *psSubscriber[M]) ReceiveBatch(ctx context.Context, settings BatchReceiv
 // excluded from f.
 func (s *psSubscriber[M]) ReceiveBatchWithResult(ctx context.Context, settings BatchReceiveSettings, f func(context.Context, []BatchMessage[M]) error) error {
 	s.boundBatchReceiver(settings)
+
 	return s.batchLoopWithResult(ctx, settings, func(ctx context.Context, deliver func(incomingMessage)) error {
 		return s.sub.Receive(ctx, func(_ context.Context, m *pubsub.Message) {
 			deliver(incomingMessage{
@@ -415,6 +421,7 @@ func (s *psSubscriber[M]) batchLoopMessages(
 		if err != nil {
 			return fmt.Errorf("receive batch: %w", err)
 		}
+
 		return nil
 	}
 

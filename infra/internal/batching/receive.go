@@ -53,6 +53,7 @@ func Run[T any](ctx context.Context, settings Settings,
 ) error {
 	handlerCtx, stopHandlers := context.WithCancel(ctx)
 	defer stopHandlers()
+
 	counts := semaphore.NewWeighted(int64(settings.OutstandingMessages))
 	weights := semaphore.NewWeighted(int64(settings.OutstandingBytes))
 	in := make(chan item[T])
@@ -60,6 +61,7 @@ func Run[T any](ctx context.Context, settings Settings,
 	stopped := make(chan struct{})
 	collectorDone, workerDone := make(chan struct{}), make(chan struct{})
 	release := func(m item[T]) { weights.Release(m.weight); counts.Release(1) }
+
 	go func() {
 		defer close(workerDone)
 		for batch := range work {
@@ -69,10 +71,12 @@ func Run[T any](ctx context.Context, settings Settings,
 						release(m)
 					}
 				}()
+
 				values := make([]T, len(batch))
 				for i, m := range batch {
 					values[i] = m.value
 				}
+
 				select {
 				case <-stopped:
 					for _, value := range values {
@@ -84,9 +88,11 @@ func Run[T any](ctx context.Context, settings Settings,
 			}()
 		}
 	}()
+
 	go func() {
 		defer close(collectorDone)
 		defer close(work)
+
 		var pending []item[T]
 		var carry *item[T]
 		var timer *time.Timer
@@ -94,6 +100,7 @@ func Run[T any](ctx context.Context, settings Settings,
 		var groups map[string]bool
 		bytes, ready := 0, false
 		cancelled := ctx.Done()
+
 		stopTimer := func() {
 			if timer != nil {
 				timer.Stop()
@@ -101,6 +108,7 @@ func Run[T any](ctx context.Context, settings Settings,
 			tick = nil
 		}
 		defer stopTimer()
+
 		appendItem := func(m item[T]) {
 			if len(pending) == 0 {
 				groups = map[string]bool{}
@@ -112,6 +120,7 @@ func Run[T any](ctx context.Context, settings Settings,
 			groups[m.group] = true
 			ready = len(pending) >= settings.MaxMessages || (settings.MaxBytes > 0 && bytes >= settings.MaxBytes) || ctx.Err() != nil
 		}
+
 		for {
 			input := in
 			var output chan []item[T]
@@ -120,6 +129,7 @@ func Run[T any](ctx context.Context, settings Settings,
 				output = work
 				stopTimer()
 			}
+
 			select {
 			case m := <-input:
 				if len(pending) > 0 && settings.MaxGroups > 0 && !groups[m.group] && len(groups) >= settings.MaxGroups {
@@ -153,6 +163,7 @@ func Run[T any](ctx context.Context, settings Settings,
 			}
 		}
 	}()
+
 	err := receive(ctx, func(deliveryCtx context.Context, value T) {
 		size, group := measure(value)
 		weight := int64(min(max(size, 1), settings.OutstandingBytes))
@@ -165,6 +176,7 @@ func Run[T any](ctx context.Context, settings Settings,
 			reject(value)
 			return
 		}
+
 		m := item[T]{value: value, weight: weight, bytes: size, group: group}
 		select {
 		case in <- m:
@@ -173,9 +185,11 @@ func Run[T any](ctx context.Context, settings Settings,
 			release(m)
 		}
 	})
+
 	close(stopped)
 	stopHandlers()
 	<-collectorDone
 	<-workerDone
+
 	return err
 }

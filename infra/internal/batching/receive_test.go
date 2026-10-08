@@ -14,13 +14,16 @@ import (
 
 func TestRun_BudgetHeldUntilHandlerSettles(t *testing.T) {
 	t.Parallel()
+
 	synctest.Test(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
+
 		blocked := make(chan struct{})
 		var accepted, handled atomic.Int32
 		var settled sync.WaitGroup
 		settled.Add(3)
+
 		done := make(chan error, 1)
 		go func() {
 			done <- Run(ctx, Settings{MaxMessages: 1, MaxLatency: time.Minute, OutstandingMessages: 2, OutstandingBytes: 10},
@@ -34,9 +37,11 @@ func TestRun_BudgetHeldUntilHandlerSettles(t *testing.T) {
 				}, func(s string) (int, string) { return len(s), "" }, func(string) { settled.Done() },
 				func(context.Context, []string) { <-blocked; handled.Add(1); settled.Done() })
 		}()
+
 		synctest.Wait()
 		require.Equal(t, int32(2), accepted.Load(), "one active and one pending batch; third callback waits")
 		require.Zero(t, handled.Load())
+
 		close(blocked)
 		require.NoError(t, <-done)
 		require.Equal(t, int32(3), handled.Load())
@@ -45,10 +50,12 @@ func TestRun_BudgetHeldUntilHandlerSettles(t *testing.T) {
 
 func TestRun_GroupOverflowStartsAnotherBatch(t *testing.T) {
 	t.Parallel()
+
 	synctest.Test(t, func(t *testing.T) {
 		var batches [][]string
 		var settled sync.WaitGroup
 		settled.Add(4)
+
 		err := Run(t.Context(), Settings{MaxMessages: 100, MaxLatency: time.Second, MaxGroups: 2, OutstandingMessages: 5, OutstandingBytes: 100},
 			func(ctx context.Context, deliver func(context.Context, string)) error {
 				for _, route := range []string{"a", "b", "a", "c"} {
@@ -70,13 +77,16 @@ func TestRun_GroupOverflowStartsAnotherBatch(t *testing.T) {
 
 func TestRun_CancellationSettlesBeforeReceiverReturns(t *testing.T) {
 	t.Parallel()
+
 	synctest.Test(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
+
 		var settled sync.WaitGroup
 		settled.Add(3)
 		done := make(chan error, 1)
 		var rejected atomic.Int32
+
 		go func() {
 			done <- Run(ctx, Settings{MaxMessages: 1, MaxLatency: time.Hour, OutstandingMessages: 2, OutstandingBytes: 2},
 				func(ctx context.Context, deliver func(context.Context, int)) error {
@@ -93,6 +103,7 @@ func TestRun_CancellationSettlesBeforeReceiverReturns(t *testing.T) {
 					}
 				})
 		}()
+
 		synctest.Wait()
 		cancel()
 		require.NoError(t, <-done)
@@ -102,6 +113,7 @@ func TestRun_CancellationSettlesBeforeReceiverReturns(t *testing.T) {
 
 func TestRun_StreamFailureDoesNotFlushPending(t *testing.T) {
 	t.Parallel()
+
 	var rejected, handled atomic.Int32
 	err := Run(t.Context(), Settings{MaxMessages: 100, MaxLatency: time.Hour, OutstandingMessages: 2, OutstandingBytes: 10},
 		func(ctx context.Context, deliver func(context.Context, int)) error {
@@ -116,10 +128,12 @@ func TestRun_StreamFailureDoesNotFlushPending(t *testing.T) {
 
 func TestRun_OversizedMessageAndLatencyFlush(t *testing.T) {
 	t.Parallel()
+
 	synctest.Test(t, func(t *testing.T) {
 		var batches [][]string
 		var settled sync.WaitGroup
 		settled.Add(2)
+
 		err := Run(t.Context(), Settings{MaxMessages: 100, MaxBytes: 5, MaxLatency: time.Second, OutstandingMessages: 2, OutstandingBytes: 5},
 			func(ctx context.Context, deliver func(context.Context, string)) error {
 				deliver(ctx, "123456789")

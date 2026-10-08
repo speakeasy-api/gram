@@ -176,13 +176,16 @@ func Run(ctx context.Context, def Definition, config Config) error {
 	if config.Broker == nil {
 		return errors.New("storage broker is required")
 	}
+
 	sub, err := config.Broker.StorageSubscriberForMessage(ctx, def.Payload, def.Marker)
 	if err != nil {
 		return fmt.Errorf("resolve storage subscription: %w", err)
 	}
+
 	sub.ReceiveSettings.MaxOutstandingMessages = r.settings.OutstandingMessages
 	sub.ReceiveSettings.MaxOutstandingBytes = r.settings.OutstandingBytes
 	sub.ReceiveSettings.MaxExtension = r.settings.MaxExtension
+
 	err = r.receive(ctx, func(ctx context.Context, deliver func(context.Context, *delivery)) error {
 		return sub.Receive(ctx, func(callbackCtx context.Context, msg *pubsub.Message) {
 			r.accept(callbackCtx, &delivery{data: msg.Data, id: msg.ID, received: r.now(), ack: msg.Ack, nack: msg.Nack}, msg.Attributes, deliver)
@@ -191,6 +194,7 @@ func Run(ctx context.Context, def Definition, config Config) error {
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("receive storage subscription: %w", err)
 	}
+
 	return nil
 }
 
@@ -201,9 +205,11 @@ func (r *runner) accept(ctx context.Context, m *delivery, attributes map[string]
 		m.settle(true)
 		return
 	}
+
 	m.partition = route
 	r.unsettled.Add(ctx, 1, r.label)
 	r.inputBytes.Add(ctx, int64(len(m.data)), r.label)
+
 	ack, nack := m.ack, m.nack
 	release := func() {
 		r.unsettled.Add(ctx, -1, r.label)
@@ -211,10 +217,12 @@ func (r *runner) accept(ctx context.Context, m *delivery, attributes map[string]
 	}
 	m.ack = func() { release(); ack() }
 	m.nack = func() { release(); nack() }
+
 	// Admission leaves room for encoding and settlement within this lease, even
 	// when many SDK callbacks are waiting behind the application input budget.
 	admitCtx, cancel := context.WithDeadline(ctx, m.received.Add(r.settings.MaxExtension-r.settings.ProcessTimeout-r.settings.MaxLatency))
 	defer cancel()
+
 	deliver(admitCtx, m)
 }
 
@@ -223,21 +231,25 @@ func newRunner(def Definition, config Config) (*runner, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if config.Store == nil {
 		return nil, errors.New("storage object store is required")
 	}
 	if def.Schema == nil || def.Decode == nil || def.Marker == nil || def.Payload == nil || len(def.Fingerprint) != 64 {
 		return nil, errors.New("a generated storage definition is required")
 	}
+
 	md, pd := def.Marker.ProtoReflect().Descriptor(), def.Payload.ProtoReflect().Descriptor()
 	opts, ok := declarations.StorageOptionsFromMessage(md)
 	if !ok || string(md.FullName()) != def.ProtoName || strings.TrimSpace(opts.GetTopic()) != string(pd.FullName()) || opts.GetBucket() != def.Bucket || declarations.ResolveSubscriptionName(md, opts) != def.SubscriptionID {
 		return nil, errors.New("storage definition disagrees with proto declaration; regenerate")
 	}
+
 	topic, ok := declarations.TopicOptionsFromMessage(pd)
 	if !ok || strings.TrimSpace(topic.GetName()) != "" || declarations.ResolveTopicName(pd, topic) != def.TopicID {
 		return nil, errors.New("storage topic definition is stale or has no attached schema; regenerate")
 	}
+
 	partitioning := opts.GetPartitioning()
 	if partitioning == pubsubv1.StoragePartitioning_STORAGE_PARTITIONING_UNSPECIFIED {
 		partitioning = pubsubv1.StoragePartitioning_STORAGE_PARTITIONING_HIVE_DAILY
@@ -251,45 +263,55 @@ func newRunner(def Definition, config Config) (*runner, error) {
 	if codec := opts.GetCodec(); codec != pubsubv1.StorageCodec_STORAGE_CODEC_UNSPECIFIED && codec != pubsubv1.StorageCodec_STORAGE_CODEC_PARQUET {
 		return nil, errors.New("unsupported storage codec; regenerate")
 	}
+
 	bucket := config.Buckets[def.Bucket]
 	if !validPhysicalBucket(bucket) {
 		return nil, fmt.Errorf("missing or invalid physical bucket mapping for %q", def.Bucket)
 	}
+
 	if config.Logger == nil {
 		config.Logger = slog.Default()
 	}
 	if config.MeterProvider == nil {
 		config.MeterProvider = otel.GetMeterProvider()
 	}
+
 	meter := config.MeterProvider.Meter("github.com/speakeasy-api/gram/infra/pkg/storage")
 	dropped, err := meter.Int64Counter("storage_subscription_dropped_messages", metric.WithUnit("{message}"))
 	if err != nil {
 		return nil, fmt.Errorf("create storage drops metric: %w", err)
 	}
+
 	objects, err := meter.Int64Counter("storage_subscription_uploaded_objects", metric.WithUnit("{object}"))
 	if err != nil {
 		return nil, fmt.Errorf("create storage objects metric: %w", err)
 	}
+
 	written, err := meter.Int64Counter("storage_subscription_written_messages", metric.WithUnit("{message}"))
 	if err != nil {
 		return nil, fmt.Errorf("create storage written metric: %w", err)
 	}
+
 	failures, err := meter.Int64Counter("storage_subscription_failures", metric.WithUnit("{failure}"))
 	if err != nil {
 		return nil, fmt.Errorf("create storage failure metric: %w", err)
 	}
+
 	unsettled, err := meter.Int64UpDownCounter("storage_subscription_unsettled_messages", metric.WithUnit("{message}"))
 	if err != nil {
 		return nil, fmt.Errorf("create storage input metric: %w", err)
 	}
+
 	inputBytes, err := meter.Int64UpDownCounter("storage_subscription_unsettled_bytes", metric.WithUnit("By"))
 	if err != nil {
 		return nil, fmt.Errorf("create storage input bytes metric: %w", err)
 	}
+
 	writeDuration, err := meter.Float64Histogram("storage_subscription_object_write_duration", metric.WithUnit("s"))
 	if err != nil {
 		return nil, fmt.Errorf("create storage duration metric: %w", err)
 	}
+
 	return &runner{def: def, config: config, settings: settings, bucket: bucket, now: time.Now,
 		label:   metric.WithAttributes(attr.StorageProtoMessage(strcase.ToKebab(def.ProtoName))),
 		dropped: dropped, objects: objects, written: written, failures: failures,
@@ -304,6 +326,7 @@ func defaultSettings(s Settings) (Settings, error) {
 	if s.MaxMessages < 0 || s.MaxBytes < 0 || s.MaxLatency < 0 || s.MaxPartitions < 0 || s.Concurrency < 0 || s.ProcessTimeout < 0 || s.MaxExtension < 0 || s.OutstandingMessages < 0 || s.OutstandingBytes < 0 {
 		return s, errors.New("storage settings cannot be negative")
 	}
+
 	if s.MaxMessages == 0 {
 		s.MaxMessages = defaultMaxMessages
 	}
@@ -331,9 +354,11 @@ func defaultSettings(s Settings) (Settings, error) {
 	if s.OutstandingBytes == 0 {
 		s.OutstandingBytes = defaultOutstandingBytes
 	}
+
 	if s.MaxExtension > time.Hour || s.ProcessTimeout >= (s.MaxExtension-s.MaxLatency)/2 {
 		return s, errors.New("storage lease must exceed two processing windows plus batch latency and be at most one hour")
 	}
+
 	return s, nil
 }
 
@@ -350,6 +375,7 @@ func (r *runner) process(ctx context.Context, batch []*delivery) {
 			m.settle(false)
 		}
 	}()
+
 	deadline := r.now().Add(r.settings.ProcessTimeout)
 	for _, m := range batch {
 		if d := m.received.Add(r.settings.MaxExtension - r.settings.MaxLatency); d.Before(deadline) {
@@ -358,10 +384,12 @@ func (r *runner) process(ctx context.Context, batch []*delivery) {
 	}
 	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
+
 	groups := map[string][]*delivery{}
 	for _, m := range batch {
 		groups[m.partition] = append(groups[m.partition], m)
 	}
+
 	var group errgroup.Group
 	group.SetLimit(r.settings.Concurrency)
 	for route, messages := range groups {
@@ -377,9 +405,11 @@ func (r *runner) process(ctx context.Context, batch []*delivery) {
 				}
 				r.writeDuration.Record(ctx, r.now().Sub(started).Seconds(), r.label)
 			}()
+
 			return r.writePartition(ctx, route, messages)
 		})
 	}
+
 	// Failures are per-object outcomes, not terminal receive-loop errors.
 	_ = group.Wait()
 }
@@ -388,6 +418,7 @@ func (r *runner) writePartition(ctx context.Context, route string, messages []*d
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+
 	decode := func(m *delivery) (parquet.Row, bool) {
 		row, err := r.def.Decode(m.data, Metadata{MessageID: m.id, ReceivedMicros: m.received.UnixMicro()})
 		if err != nil {
@@ -395,8 +426,10 @@ func (r *runner) writePartition(ctx context.Context, route string, messages []*d
 			r.failures.Add(ctx, 1, r.label, metric.WithAttributes(attr.StorageReason("payload_decode")))
 			return nil, false
 		}
+
 		return row, true
 	}
+
 	// Find a valid first row before opening a writer, avoiding empty objects for
 	// poison-only partitions. Each subsequent row is decoded just before writing.
 	var first parquet.Row
@@ -413,11 +446,14 @@ func (r *runner) writePartition(ctx context.Context, route string, messages []*d
 	if first == nil {
 		return nil
 	}
+
 	id, err := uuid.NewRandom()
 	if err != nil {
 		return fmt.Errorf("allocate object identity: %w", err)
 	}
+
 	object := Object{Bucket: r.bucket, Name: r.def.ProtoName + "/" + route + "/" + id.String() + ".parquet", Metadata: map[string]string{"schema_fingerprint": r.def.Fingerprint, "mapping_version": declarations.StorageMappingVersion, "subscription": r.def.ProtoName}}
+
 	var written []*delivery
 	err = r.config.Store.Write(ctx, object, func(out io.Writer) error {
 		tempDir, err := os.MkdirTemp(r.config.TempDir, "gram-parquet-*")
@@ -429,6 +465,7 @@ func (r *runner) writePartition(ctx context.Context, route string, messages []*d
 				r.config.Logger.ErrorContext(ctx, "remove parquet page directory", attr.SlogError(err), attr.SlogSubscriptionProtoName(r.def.ProtoName))
 			}
 		}()
+
 		// Encoded column pages spill to disk while each row group is assembled.
 		// Decoding, page construction, compression and output still use memory;
 		// completed row groups stream directly to the object store.
@@ -438,10 +475,12 @@ func (r *runner) writePartition(ctx context.Context, route string, messages []*d
 		// Reset releases open page files without flushing or completing a failed
 		// object. It runs before directory removal, even on cancellation/panic.
 		defer w.Reset(nil)
+
 		for i := start; i < len(messages); i++ {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
+
 			row := first
 			if i != start {
 				var ok bool
@@ -450,19 +489,23 @@ func (r *runner) writePartition(ctx context.Context, route string, messages []*d
 					continue
 				}
 			}
+
 			if _, err := w.WriteRows([]parquet.Row{row}); err != nil {
 				return fmt.Errorf("write parquet row: %w", err)
 			}
 			written = append(written, messages[i])
 		}
+
 		if err := w.Close(); err != nil {
 			return fmt.Errorf("finish parquet footer: %w", err)
 		}
+
 		return nil
 	})
 	if err != nil {
 		return err
 	}
+
 	// A successful durable close wins over a racing cancellation. Already
 	// committed partitions are never nacked because a sibling partition failed.
 	for _, m := range written {
@@ -470,5 +513,6 @@ func (r *runner) writePartition(ctx context.Context, route string, messages []*d
 	}
 	r.objects.Add(ctx, 1, r.label)
 	r.written.Add(ctx, int64(len(written)), r.label)
+
 	return nil
 }

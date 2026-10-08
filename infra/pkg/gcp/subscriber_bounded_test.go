@@ -12,6 +12,7 @@ import (
 
 func TestBoundBatchReceiver_CapsWaitingCallbacks(t *testing.T) {
 	t.Parallel()
+
 	for _, tc := range []struct {
 		name            string
 		settings        BatchReceiveSettings
@@ -27,8 +28,10 @@ func TestBoundBatchReceiver_CapsWaitingCallbacks(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			s := &psSubscriber[*emptypb.Empty]{sub: &pubsub.Subscriber{ReceiveSettings: tc.current}}
 			s.boundBatchReceiver(tc.settings)
+
 			require.Equal(t, tc.messages, s.sub.ReceiveSettings.MaxOutstandingMessages)
 			require.Equal(t, tc.bytes, s.sub.ReceiveSettings.MaxOutstandingBytes)
 		})
@@ -37,19 +40,23 @@ func TestBoundBatchReceiver_CapsWaitingCallbacks(t *testing.T) {
 
 func TestBatchLoop_BoundedReceiverErrorContext(t *testing.T) {
 	t.Parallel()
+
 	for _, mode := range []string{"batch", "per-message"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
+
 			s := newPanicSubscriber(nil)
 			failure := errors.New("stream failed")
 			receive := func(context.Context, func(incomingMessage)) error { return failure }
 			settings := BatchReceiveSettings{MaxBufferedMessages: 2}
+
 			var err error
 			if mode == "batch" {
 				err = s.batchLoop(t.Context(), settings, receive, func(context.Context, []*emptypb.Empty, []MessageMetadata) error { return nil })
 			} else {
 				err = s.batchLoopWithResult(t.Context(), settings, receive, func(context.Context, []BatchMessage[*emptypb.Empty]) error { return nil })
 			}
+
 			require.ErrorIs(t, err, failure)
 			require.EqualError(t, err, "receive batch: stream failed")
 		})

@@ -20,9 +20,11 @@ import (
 
 func TestGCSStore_CreateOnlyAndDurableClose(t *testing.T) {
 	t.Parallel()
+
 	for _, commitStatus := range []int{http.StatusOK, http.StatusPreconditionFailed} {
 		t.Run(fmt.Sprint(commitStatus), func(t *testing.T) {
 			t.Parallel()
+
 			var commits atomic.Int32
 			type upload struct {
 				generation, uploadType, contentType string
@@ -48,9 +50,11 @@ func TestGCSStore_CreateOnlyAndDurableClose(t *testing.T) {
 				}
 			}))
 			t.Cleanup(server.Close)
+
 			client, err := gcs.NewClient(t.Context(), option.WithEndpoint(server.URL), option.WithoutAuthentication())
 			require.NoError(t, err)
 			t.Cleanup(func() { require.NoError(t, client.Close()) })
+
 			store := &GCSStore{Client: client}
 			err = store.Write(t.Context(), Object{Bucket: "test-bucket", Name: "object.parquet"}, func(w io.Writer) error { _, err := io.WriteString(w, "complete parquet footer"); return err })
 			if commitStatus == http.StatusOK {
@@ -59,10 +63,12 @@ func TestGCSStore_CreateOnlyAndDurableClose(t *testing.T) {
 				require.ErrorContains(t, err, "commit storage object")
 			}
 			require.Equal(t, int32(1), commits.Load())
+
 			got := <-observed
 			require.NoError(t, got.err)
 			require.Equal(t, "0", got.generation)
 			require.Equal(t, "multipart", got.uploadType)
+
 			_, params, err := mime.ParseMediaType(got.contentType)
 			require.NoError(t, err)
 			parts := multipart.NewReader(bytes.NewReader(got.body), params["boundary"])
@@ -79,15 +85,18 @@ func TestGCSStore_CreateOnlyAndDurableClose(t *testing.T) {
 
 func TestGCSStore_AbortsFailedEncoder(t *testing.T) {
 	t.Parallel()
+
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
 		http.Error(w, "must not commit", http.StatusBadRequest)
 	}))
 	t.Cleanup(server.Close)
+
 	client, err := gcs.NewClient(t.Context(), option.WithEndpoint(server.URL), option.WithoutAuthentication())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
+
 	store := &GCSStore{Client: client}
 	err = store.Write(context.WithoutCancel(t.Context()), Object{Bucket: "test-bucket", Name: "aborted.parquet"}, func(w io.Writer) error {
 		_, err := io.WriteString(w, "incomplete")

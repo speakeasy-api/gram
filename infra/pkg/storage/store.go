@@ -41,8 +41,10 @@ func (s *GCSStore) Write(ctx context.Context, object Object, encode func(io.Writ
 	if s.Client == nil {
 		return errors.New("GCS client is required")
 	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
 	w := s.Client.Bucket(object.Bucket).Object(object.Name).If(gcs.Conditions{DoesNotExist: true}).NewWriter(ctx)
 	// One MiB per concurrent upload bounds the SDK's resumable-upload buffers.
 	w.ChunkSize = gcsChunkBytes
@@ -55,12 +57,15 @@ func (s *GCSStore) Write(ctx context.Context, object Object, encode func(io.Writ
 			_ = w.CloseWithError(errors.New("storage object write aborted"))
 		}
 	}()
+
 	if err := encode(w); err != nil {
 		return fmt.Errorf("encode storage object: %w", err)
 	}
 	if err := w.Close(); err != nil {
 		return fmt.Errorf("commit storage object: %w", err)
 	}
+
 	committed = true
+
 	return nil
 }
