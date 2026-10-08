@@ -317,12 +317,8 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if err != nil {
 		return nil, err
 	}
-	// Publish the sources the batch is the ClickHouse publisher for (see
-	// batchPublishedFindingSources). Only after a committed write: a batch
-	// dropped because its policy was deleted mid-analysis must not leak
-	// findings into ClickHouse that Postgres never stored. A publish failure
-	// fails the activity — the redriven batch repeats only idempotent writes,
-	// so the retry converges.
+	// Publish only after a committed write so a policy deleted mid-analysis
+	// never leaks findings into ClickHouse; a failed publish fails the activity.
 	if written {
 		if err := a.publishBatchFindings(ctx, args, ids, findings); err != nil {
 			return nil, err

@@ -2522,8 +2522,7 @@ func TestAnalyzeBatch_PromptInjectionFindingsPublishedToFindingsTopic(t *testing
 	require.NoError(t, val.Get(&result))
 	require.Equal(t, 1, result.Findings)
 
-	// The stream handler only runs the real judge for the shadow sample, so
-	// the batch is what puts prompt_injection findings into ClickHouse.
+	// The batch, not the sampled stream handler, feeds ClickHouse.
 	require.Len(t, *published, 1)
 	got := (*published)[0]
 	require.Equal(t, promptinjection.Source, got.GetSource())
