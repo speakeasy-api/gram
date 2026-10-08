@@ -31,6 +31,7 @@ import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   Bot,
@@ -342,6 +343,18 @@ export function CreateRoleDialog({
         invalidateAllRoles(queryClient),
         invalidateAllMembers(queryClient),
       ]);
+      // On its own page the editor stays open after a save: what was saved
+      // becomes the starting point, so Save waits for the next change. The
+      // sheet over the roles list closes as before.
+      if (presentation === "page") {
+        setInitialName(name);
+        setInitialDescription(description);
+        setInitialGrantKeys(grantKeysStringFn(grants));
+        setInitialMembers(new Set(selectedMembers));
+        setInitialAgents(new Set(selectedAgents));
+        toast.success("Role saved");
+        return;
+      }
       handleClose();
     },
   });
