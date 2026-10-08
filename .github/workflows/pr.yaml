@@ -339,6 +339,10 @@ jobs:
       - name: Check formatting
         run: hk check --all
 
+      # Blocks added lines that say "Gram"; the product is called Speakeasy.
+      - name: Check product naming
+        run: mise run lint:brand --base "origin/${{ github.base_ref || 'main' }}"
+
       - name: Prune aube store
         if: success()
         run: aube store prune

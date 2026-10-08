@@ -118,7 +118,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, endpoint
 // a caller can classify:
 //   - ErrClientNotFound;
 //   - remotesessions.ErrTokenEndpointConfiguration: the registration cannot
-//     authenticate, or the upstream issued a token Gram cannot present;
+//     authenticate, or the upstream issued a token Speakeasy cannot present;
 //   - *remotesessions.TokenEndpointError: the token endpoint rejected the
 //     grant or could not be reached. Code is oautherr.CodeInvalidClient when
 //     the upstream rejected the client's credentials.

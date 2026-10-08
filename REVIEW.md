@@ -14,6 +14,11 @@ This document consolidates the project's coding conventions and review rules so 
 - `server/gen/` — Generated code (DO NOT EDIT)
 - `server/internal/*/repo/` — SQLc-generated code (DO NOT EDIT)
 
+## Product Naming
+
+- The product is called Speakeasy, not Gram. Flag any new "Gram" in user-facing text, error messages, comments, docs, or changesets. `mise run lint:brand` enforces this on added lines. <!-- brand-ok: states the naming rule -->
+- Still allowed until their own renames land: HTTP headers (`Gram-Key`, `X-Gram-*`), `GRAM_*` environment variables, package names, URLs, and code uses of the SDK/Functions `Gram` class. Other intentional uses need a `brand-ok: <reason>` comment on the line.
+
 ---
 
 ## Go (server/, functions/, cli/)
