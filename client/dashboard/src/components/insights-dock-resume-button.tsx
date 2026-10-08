@@ -20,7 +20,8 @@ export function InsightsDockResumeButton(): JSX.Element | null {
   const { dismissed, resume } = useInsightsDockCta();
 
   // While the dock is off this button is the always-on entry point: it opens
-  // the assistant panel over the current page instead of restoring the dock.
+  // the expanded dock (with suggestions) over the current page instead of
+  // restoring the always-on dock.
   if (INSIGHTS_DOCK_ENABLED && !dismissed) return null;
 
   return (

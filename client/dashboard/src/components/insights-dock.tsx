@@ -55,6 +55,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -384,6 +385,12 @@ interface InsightsDockProps {
    *  tool mentions); until then it falls back to a plain input so the dock is
    *  never a dead control. */
   runtimeReady: boolean;
+  /** Mount with the composer already expanded (suggestions showing). Used
+   *  when the dock is summoned on demand rather than always resting. */
+  startExpanded?: boolean;
+  /** Called when the dock settles back to the resting pill (composer
+   *  collapsed, no draft, panel closed). */
+  onIdle?: () => void;
 }
 
 /** Width of the dock card across its states: chat panel open, composer
@@ -421,13 +428,15 @@ function InsightsDock({
   onOpenHistory,
   panel,
   runtimeReady,
+  startExpanded = false,
+  onIdle,
 }: InsightsDockProps): ReactElement {
   const [value, setValue] = useState("");
   // Expansion is sticky state, not a focus mirror: it must survive the input
   // losing focus to an in-app navigation so the new page's suggestions show
   // without re-opening the dock. Collapses commit through a grace timer that
   // a route change can cancel (or, for slow clicks, undo).
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(startExpanded);
   const inputRef = useRef<HTMLInputElement>(null);
   /** Wraps the shared composer; also the focus target for Cmd+/. */
   const composerHostRef = useRef<HTMLDivElement>(null);
@@ -513,6 +522,11 @@ function InsightsDock({
   // the same rule: a non-empty draft holds the dock open even without focus.
   const hasDraft = value.trim().length > 0 || sharedDraft;
   const composerExpanded = !open && (expanded || hasDraft);
+
+  // Layout-timed so a summoned dock unmounts before the resting pill paints.
+  useLayoutEffect(() => {
+    if (!open && !composerExpanded) onIdle?.();
+  }, [open, composerExpanded, onIdle]);
 
   const shortcutAria = isMacPlatform() ? "Meta+/" : "Control+/";
 
@@ -841,6 +855,15 @@ export function InsightsProvider({
   // the docked composer grabs focus and expands. Starts at 0; the dock
   // ignores the initial value.
   const [focusComposerKey, setFocusComposerKey] = useState(0);
+  // While the dock is turned off (INSIGHTS_DOCK_ENABLED) it is mounted only
+  // on demand: the sidebar button or Cmd+/ summons it expanded, and it goes
+  // away again once it settles back to the resting pill.
+  const [dockSummoned, setDockSummoned] = useState(false);
+  const summonDock = useCallback(() => {
+    setDockSummoned(true);
+    setFocusComposerKey((k) => k + 1);
+  }, []);
+  const unsummonDock = useCallback(() => setDockSummoned(false), []);
   const [pendingPrompt, setPendingPrompt] = useState<{
     text: string;
     nonce: number;
@@ -1300,10 +1323,16 @@ export function InsightsProvider({
   useAskAiListener(
     useCallback(
       (prompt: string) => {
+        // With the dock turned off, an empty request (the sidebar button)
+        // summons the expanded dock with its suggestions.
+        if (!INSIGHTS_DOCK_ENABLED && !prompt.trim()) {
+          summonDock();
+          return;
+        }
         setIsExpanded(true);
         if (prompt.trim()) handleSendPrompt(prompt);
       },
-      [handleSendPrompt],
+      [handleSendPrompt, summonDock],
     ),
   );
 
@@ -1325,8 +1354,9 @@ export function InsightsProvider({
     useInsightsDockCta();
   const handleDockDismiss = useCallback(() => {
     setIsExpanded(false);
-    dismissDock();
-  }, [dismissDock]);
+    if (INSIGHTS_DOCK_ENABLED) dismissDock();
+    else unsummonDock();
+  }, [dismissDock, unsummonDock]);
 
   // Start a brand-new Project Assistant conversation. Bumping the runtime key
   // remounts the shared runtime onto a fresh thread; the new thread gets its
@@ -1383,13 +1413,12 @@ export function InsightsProvider({
       } else if (INSIGHTS_DOCK_ENABLED) {
         setFocusComposerKey((k) => k + 1);
       } else {
-        // No resting composer to focus while the dock is off — open the panel.
-        setIsExpanded(true);
+        summonDock();
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [panelBlocked, isExpanded]);
+  }, [panelBlocked, isExpanded, summonDock]);
 
   const contextValue = useMemo(
     () => ({
@@ -1602,10 +1631,13 @@ export function InsightsProvider({
             the Project Assistant. Expands in place into the chat panel.
             Hidden on pages that opt out via hideTrigger, and while dismissed
             to the sidebar resume button. While the dock is turned off it
-            mounts only with the panel open (opened from the sidebar button or
-            Cmd+/), so the resting composer never shows. */}
+            mounts only when summoned (sidebar button or Cmd+/) or with the
+            panel open, and unmounts once it settles back to the resting pill,
+            so the resting composer never shows. */}
       {!panelBlocked &&
-        (INSIGHTS_DOCK_ENABLED ? !dockDismissed : isExpanded) && (
+        (INSIGHTS_DOCK_ENABLED
+          ? !dockDismissed
+          : dockSummoned || isExpanded) && (
           <div className="pointer-events-none sticky bottom-0 z-30 h-0 shrink-0">
             <InsightsDock
               suggestions={suggestions}
@@ -1618,6 +1650,8 @@ export function InsightsProvider({
               onOpenHistory={handleOpenHistory}
               panel={panelContent}
               runtimeReady={runtimeMounted}
+              startExpanded={!INSIGHTS_DOCK_ENABLED}
+              onIdle={INSIGHTS_DOCK_ENABLED ? undefined : unsummonDock}
             />
           </div>
         )}
