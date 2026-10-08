@@ -289,9 +289,9 @@ func (s *stdioSession) terminate() {
 }
 
 // removeCredentials deletes the session's storage once nothing can publish
-// to it any more: the session is closing and the gate is free. A gate holder
-// is bounded by the stdin write timeout or its request ending, so this waits
-// for it rather than pull its directory out from under it.
+// to it any more: the session is closing and the gate is free. It waits for
+// an admitted publisher, whose token write and stdin write must finish before
+// the gate is free, rather than pull its directory out from under it.
 func (s *stdioSession) removeCredentials() {
 	s.cred.gate <- struct{}{}
 	defer s.leaveGate()

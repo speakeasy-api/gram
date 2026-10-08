@@ -165,3 +165,4 @@ tunnel:
   - "go.mod"
   - "go.sum"
   - "tunnel/**"
+  - "internal/jwk/**"
