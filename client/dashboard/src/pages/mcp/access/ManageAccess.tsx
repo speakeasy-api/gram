@@ -588,11 +588,13 @@ function PrincipalRow({
 
         {canManage && rolePlugins !== undefined && (
           <div className="min-w-0">
-            {row.kind === "role" && (
+            {row.kind === "role" ? (
               <RolePluginLinks
                 principalUrn={row.principalUrn}
                 plugins={rolePlugins}
               />
+            ) : (
+              <span className="text-muted-foreground text-sm">—</span>
             )}
           </div>
         )}
