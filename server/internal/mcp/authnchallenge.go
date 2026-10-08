@@ -371,6 +371,13 @@ const (
 	// but a required upstream token could not be refreshed because the issuer
 	// or client configuration is broken, which only an administrator repairs.
 	issuerGateReasonRemoteSessionMisconfigured = "remote_session_misconfigured"
+
+	// issuerGateReasonClientCredentialMisconfigured: the bearer token was
+	// accepted but the upstream credential a self client holds for itself
+	// could not be obtained, which only an administrator repairs. Separate
+	// from remote_session_misconfigured because no caller connects that
+	// credential, so the answer carries no challenge.
+	issuerGateReasonClientCredentialMisconfigured = "client_credential_misconfigured"
 )
 
 // The texts the issuer gate returns when the bearer token was accepted but a
@@ -384,6 +391,11 @@ const (
 	// remoteSessionMisconfiguredDescription tells the user that reconnecting
 	// cannot help and who can.
 	remoteSessionMisconfiguredDescription = "The upstream connection for this MCP server is misconfigured. Contact the MCP server administrator."
+
+	// selfClientMisconfiguredDescription tells the caller that the
+	// credential the MCP server presents upstream on everyone's behalf cannot
+	// be used, which nothing the caller does repairs.
+	selfClientMisconfiguredDescription = "The upstream credential this MCP server uses is misconfigured or was rejected by the upstream. Contact the MCP server administrator."
 
 	// remoteSessionUnavailableMessage tells the client the failure is
 	// temporary and the request can be retried unchanged.
@@ -1017,6 +1029,12 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 		// the client is told to retry the same request instead.
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate deferred: upstream remote session temporarily unavailable", issuerGateReasonRemoteSessionUnavailable)
 		return remoteSessionUnavailableError(w, err)
+	case errors.Is(err, remotesessions.ErrClientCredentialMisconfigured):
+		// No authorization the caller performs supplies a self client's
+		// credential, so a challenge would only loop the client through
+		// reauthorization. Name the administrator instead.
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream client credential misconfigured", issuerGateReasonClientCredentialMisconfigured)
+		return clientCredentialMisconfiguredError(err)
 	case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured):
 		// Reauthorizing goes through the same broken issuer or client
 		// configuration, so the challenge omits invalid_token and names who
@@ -1030,6 +1048,13 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 	default:
 		return oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 	}
+}
+
+// clientCredentialMisconfiguredError is the answer when a self client's
+// upstream credential cannot be obtained or the upstream rejects it: a
+// precondition failure naming the administrator, never a challenge.
+func clientCredentialMisconfiguredError(err error) *oops.ShareableError {
+	return oops.E(oops.CodeFailedPrecondition, err, "%s", selfClientMisconfiguredDescription)
 }
 
 // remoteSessionUnavailableError sets Retry-After on w and returns the 503 for a

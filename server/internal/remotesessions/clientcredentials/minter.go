@@ -55,11 +55,6 @@ const (
 	forgetMinAge = 30 * time.Second
 )
 
-// ErrClientNotFound reports that the organization has no live client with the
-// requested id. Global clients are never found: their credential would be
-// shared across tenants.
-var ErrClientNotFound = errors.New("clientcredentials: client not found in organization")
-
 // errWaitExpired reports that a concurrent holder kept the lease without
 // storing a credential or a failure for waitBudget.
 var errWaitExpired = errors.New("clientcredentials: concurrent grant did not finish")
@@ -93,7 +88,7 @@ type Minter struct {
 	now func() time.Time
 }
 
-var _ Source = (*Minter)(nil)
+var _ remotesessions.ClientCredentialSource = (*Minter)(nil)
 
 // New builds a minter over the challenge manager's egress, tunnel and client
 // assertion configuration. store holds credentials, recent failures and the
@@ -116,7 +111,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, endpoint
 
 // Credential returns a cached credential for the client, or mints one. Errors
 // a caller can classify:
-//   - ErrClientNotFound;
+//   - remotesessions.ErrClientCredentialClientNotFound;
 //   - remotesessions.ErrTokenEndpointConfiguration: the registration cannot
 //     authenticate, or the upstream issued a token Speakeasy cannot present;
 //   - *remotesessions.TokenEndpointError: the token endpoint rejected the
@@ -125,8 +120,8 @@ func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, endpoint
 //
 // A rejection a retry cannot fix is replayed from the cache for failureTTL,
 // or until the client's credentials change.
-func (m *Minter) Credential(ctx context.Context, req Request) (Credential, error) {
-	var none Credential
+func (m *Minter) Credential(ctx context.Context, req remotesessions.ClientCredentialRequest) (remotesessions.ClientCredential, error) {
+	var none remotesessions.ClientCredential
 
 	if req.OrganizationID == "" || req.ClientID == uuid.Nil {
 		return none, errors.New("client credentials request requires an organization and a client")
@@ -143,7 +138,7 @@ func (m *Minter) Credential(ctx context.Context, req Request) (Credential, error
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return none, ErrClientNotFound
+		return none, remotesessions.ErrClientCredentialClientNotFound
 	case err != nil:
 		return none, fmt.Errorf("read client credentials client: %w", err)
 	}
@@ -217,25 +212,29 @@ func (m *Minter) Credential(ctx context.Context, req Request) (Credential, error
 	return cred, nil
 }
 
-// Forget drops cred from the cache after the upstream rejected it, so the
-// next Credential call mints a new one. It reports false, and keeps cred, when
-// cred was minted less than forgetMinAge ago; the caller should then treat the
-// rejection as final rather than retry. An entry another replica already
-// replaced is left in place.
-func (m *Minter) Forget(ctx context.Context, cred Credential) (bool, error) {
-	if m.now().Sub(cred.mintedAt) < forgetMinAge {
-		return false, nil
-	}
+// credential wraps a minted or cached token. Its Forget drops exactly entry
+// from the cache after the upstream rejected the token, so the next Credential
+// call mints a new one; nil entry, a token that was never cached, has nothing
+// to drop. Forget reports false, and keeps the token, when it was minted less
+// than forgetMinAge ago: an upstream that rejects a fresh token rejects the
+// next one too, so minting again would only turn every request into a token
+// request. An entry another replica already replaced is left in place.
+func (m *Minter) credential(value string, scheme remotesessions.ClientCredentialScheme, expiresAt, mintedAt time.Time, entry *credentialEntry) remotesessions.ClientCredential {
+	return remotesessions.NewClientCredential(value, scheme, expiresAt, func(ctx context.Context) (bool, error) {
+		if m.now().Sub(mintedAt) < forgetMinAge {
+			return false, nil
+		}
 
-	if cred.entry == nil {
+		if entry == nil {
+			return true, nil
+		}
+
+		if _, err := m.credentials.CompareAndDelete(ctx, *entry); err != nil {
+			return false, fmt.Errorf("forget client credential: %w", err)
+		}
+
 		return true, nil
-	}
-
-	if _, err := m.credentials.CompareAndDelete(ctx, *cred.entry); err != nil {
-		return false, fmt.Errorf("forget client credential: %w", err)
-	}
-
-	return true, nil
+	})
 }
 
 func (m *Minter) acquire(ctx context.Context, keys cacheKeys, owner string) (bool, error) {
@@ -253,8 +252,8 @@ func (m *Minter) acquire(ctx context.Context, keys cacheKeys, owner string) (boo
 
 // cached returns the stored credential while it is still served. Any cache or
 // decryption failure is a miss.
-func (m *Minter) cached(ctx context.Context, logger *slog.Logger, keys cacheKeys) (Credential, bool) {
-	var none Credential
+func (m *Minter) cached(ctx context.Context, logger *slog.Logger, keys cacheKeys) (remotesessions.ClientCredential, bool) {
+	var none remotesessions.ClientCredential
 
 	entry, err := m.credentials.Get(ctx, keys.credential)
 	if err != nil || entry.AccessTokenEncrypted == "" || !m.now().Before(entry.ExpiresAt) {
@@ -272,13 +271,7 @@ func (m *Minter) cached(ctx context.Context, logger *slog.Logger, keys cacheKeys
 		return none, false
 	}
 
-	return Credential{
-		value:     value,
-		scheme:    entry.Scheme,
-		expiresAt: entry.ExpiresAt,
-		mintedAt:  entry.MintedAt,
-		entry:     &entry,
-	}, true
+	return m.credential(value, entry.Scheme, entry.ExpiresAt, entry.MintedAt, &entry), true
 }
 
 // cachedFailure replays a recent failure as the error class it was recorded
@@ -337,8 +330,8 @@ func (m *Minter) rememberFailure(ctx context.Context, logger *slog.Logger, keys 
 // storing either, as after a transport or server failure. The bool reports
 // that this request then holds the lease under owner. It returns
 // errWaitExpired when the lease outlives waitBudget.
-func (m *Minter) await(ctx context.Context, logger *slog.Logger, keys cacheKeys, owner string) (Credential, bool, error) {
-	var none Credential
+func (m *Minter) await(ctx context.Context, logger *slog.Logger, keys cacheKeys, owner string) (remotesessions.ClientCredential, bool, error) {
+	var none remotesessions.ClientCredential
 
 	deadline := time.NewTimer(waitBudget)
 	defer deadline.Stop()

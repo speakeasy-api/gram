@@ -1503,6 +1503,21 @@ WHERE remote_session_clients.id = @id
   AND (remote_session_clients.organization_id = @organization_id AND remote_session_clients.project_id IS NULL
     OR EXISTS (SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id AND p.organization_id = @organization_id));
 
+-- name: ForceRemoteSessionClientCredentialOwnerFixture :execrows
+-- Test fixture: sets who owns a client's upstream credential, which no
+-- application query changes after creation. A 'self' owner must satisfy
+-- remote_session_clients_credential_owner_check, so the client needs a
+-- confidential token endpoint auth method first.
+UPDATE remote_session_clients
+SET credential_owner = @credential_owner,
+    updated_at = clock_timestamp()
+WHERE remote_session_clients.id = @id
+  AND remote_session_clients.deleted IS FALSE
+  AND remote_session_clients.project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
+  AND (remote_session_clients.organization_id IS NULL OR remote_session_clients.organization_id = @organization_id)
+  AND (remote_session_clients.organization_id = @organization_id AND remote_session_clients.project_id IS NULL
+    OR EXISTS (SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id AND p.organization_id = @organization_id));
+
 -- name: ForceRemoteSessionIssuerRegistrationEndpointFixture :execrows
 -- Test fixture: sets the registration endpoint on a client's issuer, which is
 -- where a rotation re-registers the client. NULL stages an issuer that

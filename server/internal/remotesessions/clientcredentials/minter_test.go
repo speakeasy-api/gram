@@ -35,7 +35,7 @@ func TestCredential_ClientSecretBasic(t *testing.T) {
 	cred, err := f.newMinter(t).Credential(t.Context(), f.request(clientID, testResource))
 	require.NoError(t, err)
 	require.Equal(t, "basic-token", cred.Value())
-	require.Equal(t, SchemeBearer, cred.Scheme())
+	require.Equal(t, remotesessions.ClientCredentialSchemeBearer, cred.Scheme())
 	require.WithinDuration(t, time.Now().Add(time.Hour-expirySkew), cred.ExpiresAt(), 10*time.Second)
 
 	requests := f.tokens.received()
@@ -295,6 +295,54 @@ func TestCredential_CachesRejectionUntilCredentialsChange(t *testing.T) {
 	require.Len(t, f.tokens.received(), 2)
 }
 
+func TestCredential_MarksClientRejectedByIssuer(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, func(int) tokenResponse { return oauthError(http.StatusUnauthorized, oautherr.CodeInvalidClient) })
+	clientID := f.secretClient(t, oauthwire.AuthMethodClientSecretBasic, []string{})
+
+	_, err := f.newMinter(t).Credential(t.Context(), f.request(clientID, ""))
+	require.Error(t, err)
+
+	require.True(t, f.grantClient(t, clientID).UpstreamRejectedAt.Valid)
+}
+
+func TestCredential_DoesNotMarkClientForOtherRejections(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, func(int) tokenResponse { return oauthError(http.StatusBadRequest, oautherr.CodeInvalidScope) })
+	clientID := f.secretClient(t, oauthwire.AuthMethodClientSecretBasic, []string{})
+
+	_, err := f.newMinter(t).Credential(t.Context(), f.request(clientID, ""))
+	require.Error(t, err)
+
+	require.False(t, f.grantClient(t, clientID).UpstreamRejectedAt.Valid)
+}
+
+func TestCredential_ClearsRejectionAfterSuccessfulGrant(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, func(n int) tokenResponse {
+		if n == 0 {
+			return oauthError(http.StatusUnauthorized, oautherr.CodeInvalidClient)
+		}
+		return bearerToken("token-after-rotation")
+	})
+	clientID := f.secretClient(t, oauthwire.AuthMethodClientSecretBasic, []string{})
+	minter := f.newMinter(t)
+
+	_, err := minter.Credential(t.Context(), f.request(clientID, ""))
+	require.Error(t, err)
+	require.True(t, f.grantClient(t, clientID).UpstreamRejectedAt.Valid)
+
+	// A changed secret misses the cached rejection.
+	f.rotateSecret(t, clientID, "rotated-secret")
+
+	_, err = minter.Credential(t.Context(), f.request(clientID, ""))
+	require.NoError(t, err)
+	require.False(t, f.grantClient(t, clientID).UpstreamRejectedAt.Valid)
+}
+
 func TestCredential_CachesConfigurationFailure(t *testing.T) {
 	t.Parallel()
 
@@ -435,7 +483,7 @@ func TestCredential_TreatsMissingTokenTypeAsBearer(t *testing.T) {
 
 	cred, err := f.newMinter(t).Credential(t.Context(), f.request(clientID, ""))
 	require.NoError(t, err)
-	require.Equal(t, SchemeBearer, cred.Scheme())
+	require.Equal(t, remotesessions.ClientCredentialSchemeBearer, cred.Scheme())
 	require.WithinDuration(t, time.Now().Add(unknownExpiryLifetime-expirySkew), cred.ExpiresAt(), 10*time.Second)
 }
 
@@ -479,8 +527,8 @@ func TestCredential_DoesNotFindClientOutsideOrganization(t *testing.T) {
 	f := newFixture(t, func(int) tokenResponse { return bearerToken("token") })
 	clientID := f.secretClient(t, oauthwire.AuthMethodClientSecretBasic, []string{})
 
-	_, err := f.newMinter(t).Credential(t.Context(), Request{OrganizationID: "org-" + uuid.NewString(), ClientID: clientID, Resource: ""})
-	require.ErrorIs(t, err, ErrClientNotFound)
+	_, err := f.newMinter(t).Credential(t.Context(), remotesessions.ClientCredentialRequest{OrganizationID: "org-" + uuid.NewString(), ClientID: clientID, Resource: ""})
+	require.ErrorIs(t, err, remotesessions.ErrClientCredentialClientNotFound)
 	require.Empty(t, f.tokens.received())
 }
 
@@ -511,7 +559,7 @@ func TestCredential_DoesNotFindGlobalClient(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = f.newMinter(t).Credential(t.Context(), f.request(client.ID, ""))
-	require.ErrorIs(t, err, ErrClientNotFound)
+	require.ErrorIs(t, err, remotesessions.ErrClientCredentialClientNotFound)
 	require.Empty(t, f.tokens.received())
 }
 
@@ -528,7 +576,7 @@ func TestCredential_DoesNotUseAnotherOrganizationsIssuer(t *testing.T) {
 	clientID := f.secretClientAt(t, issuer.ID)
 
 	_, err = f.newMinter(t).Credential(t.Context(), f.request(clientID, ""))
-	require.ErrorIs(t, err, ErrClientNotFound)
+	require.ErrorIs(t, err, remotesessions.ErrClientCredentialClientNotFound)
 	require.Empty(t, f.tokens.received())
 }
 
@@ -578,19 +626,6 @@ func TestNewCacheKeys_IgnoresScopeOrder(t *testing.T) {
 
 	require.Equal(t, newCacheKeys(client, ""), newCacheKeys(reordered, ""))
 	require.Equal(t, []string{"read", "write"}, client.ClientScope)
-}
-
-func TestNewCredential(t *testing.T) {
-	t.Parallel()
-
-	expiresAt := time.Now().Add(time.Hour)
-
-	cred := NewCredential("api-key", SchemeBearer, expiresAt)
-
-	require.Equal(t, "api-key", cred.Value())
-	require.Equal(t, SchemeBearer, cred.Scheme())
-	require.Equal(t, expiresAt, cred.ExpiresAt())
-	require.Equal(t, "[redacted client credential]", cred.String())
 }
 
 func TestAwait_TakesOverReleasedLease(t *testing.T) {
@@ -672,7 +707,7 @@ func TestAwait_AdoptsHolderCredential(t *testing.T) {
 	require.True(t, held)
 
 	type result struct {
-		cred     Credential
+		cred     remotesessions.ClientCredential
 		acquired bool
 		err      error
 	}
@@ -688,7 +723,7 @@ func TestAwait_AdoptsHolderCredential(t *testing.T) {
 
 	now := time.Now()
 	require.NoError(t, minter.credentials.Store(t.Context(), credentialEntry{
-		Key: keys.credential, AccessTokenEncrypted: encrypted, Scheme: SchemeBearer,
+		Key: keys.credential, AccessTokenEncrypted: encrypted, Scheme: remotesessions.ClientCredentialSchemeBearer,
 		ExpiresAt: now.Add(time.Hour), MintedAt: now, ttl: time.Hour,
 	}))
 
@@ -753,7 +788,7 @@ func TestForget_DropsRejectedCredential(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, first.Value(), cached.Value())
 
-	forgotten, err := later.Forget(t.Context(), cached)
+	forgotten, err := cached.Forget(t.Context())
 	require.NoError(t, err)
 	require.True(t, forgotten)
 
@@ -773,7 +808,7 @@ func TestForget_KeepsJustMintedCredential(t *testing.T) {
 	cred, err := minter.Credential(t.Context(), f.request(clientID, ""))
 	require.NoError(t, err)
 
-	forgotten, err := minter.Forget(t.Context(), cred)
+	forgotten, err := cred.Forget(t.Context())
 	require.NoError(t, err)
 	require.False(t, forgotten)
 
@@ -798,7 +833,16 @@ func TestForget_KeepsReplacementFromAnotherReplica(t *testing.T) {
 	stale := f.newMinter(t)
 	stale.now = later
 
-	forgotten, err := peer.Forget(t.Context(), original)
+	// Both replicas hold the original from the shared cache.
+	peerOriginal, err := peer.Credential(t.Context(), f.request(clientID, ""))
+	require.NoError(t, err)
+	require.Equal(t, original.Value(), peerOriginal.Value())
+
+	staleOriginal, err := stale.Credential(t.Context(), f.request(clientID, ""))
+	require.NoError(t, err)
+	require.Equal(t, original.Value(), staleOriginal.Value())
+
+	forgotten, err := peerOriginal.Forget(t.Context())
 	require.NoError(t, err)
 	require.True(t, forgotten)
 
@@ -806,7 +850,7 @@ func TestForget_KeepsReplacementFromAnotherReplica(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "token-1", replacement.Value())
 
-	forgotten, err = stale.Forget(t.Context(), original)
+	forgotten, err = staleOriginal.Forget(t.Context())
 	require.NoError(t, err)
 	require.True(t, forgotten)
 

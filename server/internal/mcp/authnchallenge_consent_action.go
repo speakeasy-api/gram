@@ -103,6 +103,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
 	}
+	clients = subjectConnectedClients(clients)
 
 	// The posted client_id is only a lookup key; the acted-on client is
 	// re-resolved through the endpoint's current bindings so a crafted form

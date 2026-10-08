@@ -1396,6 +1396,7 @@ func (s *Service) buildRemoteSessionCards(
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
+	clients = subjectConnectedClients(clients)
 	if len(clients) == 0 {
 		return nil, nil
 	}
@@ -1618,6 +1619,7 @@ func (s *Service) maybeAutoConnect(
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
 	}
+	clients = subjectConnectedClients(clients)
 	var client *remotesessions.Client
 	for i := range clients {
 		if clients[i].ID.String() == cards[0].ClientID {

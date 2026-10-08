@@ -1251,6 +1251,42 @@ func (q *Queries) ForceRemoteSessionClientAuthMethodFixture(ctx context.Context,
 	return result.RowsAffected(), nil
 }
 
+const forceRemoteSessionClientCredentialOwnerFixture = `-- name: ForceRemoteSessionClientCredentialOwnerFixture :execrows
+UPDATE remote_session_clients
+SET credential_owner = $1,
+    updated_at = clock_timestamp()
+WHERE remote_session_clients.id = $2
+  AND remote_session_clients.deleted IS FALSE
+  AND remote_session_clients.project_id IS NOT DISTINCT FROM $3::uuid
+  AND (remote_session_clients.organization_id IS NULL OR remote_session_clients.organization_id = $4)
+  AND (remote_session_clients.organization_id = $4 AND remote_session_clients.project_id IS NULL
+    OR EXISTS (SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id AND p.organization_id = $4))
+`
+
+type ForceRemoteSessionClientCredentialOwnerFixtureParams struct {
+	CredentialOwner string
+	ID              uuid.UUID
+	ProjectID       uuid.NullUUID
+	OrganizationID  pgtype.Text
+}
+
+// Test fixture: sets who owns a client's upstream credential, which no
+// application query changes after creation. A 'self' owner must satisfy
+// remote_session_clients_credential_owner_check, so the client needs a
+// confidential token endpoint auth method first.
+func (q *Queries) ForceRemoteSessionClientCredentialOwnerFixture(ctx context.Context, arg ForceRemoteSessionClientCredentialOwnerFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, forceRemoteSessionClientCredentialOwnerFixture,
+		arg.CredentialOwner,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const forceRemoteSessionClientRegistrationFixture = `-- name: ForceRemoteSessionClientRegistrationFixture :execrows
 UPDATE remote_session_clients
 SET client_secret_expires_at = $1,
