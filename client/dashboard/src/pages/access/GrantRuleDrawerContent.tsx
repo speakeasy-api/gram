@@ -1199,7 +1199,7 @@ function RoleToolSelectionPanel({
         selectedTools={selectedTools}
         onSelectionChange={handleSelectionChange}
         annotationSelectionSupported={!!onChangeAnnotations}
-        annotationsDescription="Tools can be annotated with labels that provide more context about the properties of the tool, such as if it's a destructive operation. OpenAPI sources are tagged automatically based on HTTP method. You can edit annotations on the MCP tools tab."
+        annotationsDescription="Tools can be annotated with labels that provide more context about the properties of the tool, such as if it's a destructive operation. OpenAPI sources are tagged automatically based on HTTP method. You can edit annotations on the MCP tools tab. Tools with no annotations aren't covered by an annotation rule; grant them by name."
         toolsDescription={
           isDeny
             ? "Select specific tools to exclude. Expand a server to choose which tools this role should not access."
