@@ -88,7 +88,7 @@ function excerptAttachment(part: ChatContentPart): ExcerptMessage {
     id: part.id,
     role: `Attachment · ${displayPath}`,
     mono: true,
-    text: content,
+    text: messageText(content),
   };
 }
 
@@ -303,10 +303,12 @@ export function FindingContext({
   const rows = excerpt.map((raw) =>
     excerptRow(excerptMessage(raw), raw.id === result.chatMessageId),
   );
-  if (flaggedPart) {
-    // Unparented attachments have no prompt to anchor on, so they stand alone.
+  if (flaggedPart && idx >= 0) {
     const at = excerpt.findIndex((m) => m.id === anchorId) + 1;
     rows.splice(at, 0, excerptRow(excerptAttachment(flaggedPart), true));
+  } else if (flaggedPart && !flaggedPart.parentChatMessageId) {
+    // An unparented attachment has no prompt to anchor on, so it stands alone.
+    rows.push(excerptRow(excerptAttachment(flaggedPart), true));
   }
   // The toggle reveals only this finding, so it shows only when that is masked.
   const revealable =

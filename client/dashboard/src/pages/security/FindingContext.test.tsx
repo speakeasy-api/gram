@@ -30,7 +30,7 @@ const ATTACHED_SECRET = "AKIAQRSTUVWXYZ012345";
 const attachment = (parentChatMessageId?: string): ChatContentPart => ({
   id: "a1",
   kind: "prompt_attachment",
-  content: `region,key\nus-west,${ATTACHED_SECRET}`,
+  content: `region,key\nus-west,${ATTACHED_SECRET}   \n`,
   metadata: { display_path: "keys.csv", kind: "file" },
   isRisk: true,
   parentChatMessageId,
@@ -151,6 +151,20 @@ describe("FindingContext attachment findings", () => {
     contentParts = [attachment("m1")];
     renderContext(attached, [attached], { revealed: true });
     expect(shows(ATTACHED_SECRET)).toBe(true);
+  });
+
+  it("renders the attachment's cleaned text", () => {
+    contentParts = [attachment("m1")];
+    renderContext(attached, [attached], { revealed: true });
+    expect(shows(`us-west,${ATTACHED_SECRET}   `)).toBe(false);
+    expect(shows(`us-west,${ATTACHED_SECRET}`)).toBe(true);
+  });
+
+  it("keeps the placeholder when the parent prompt is outside the window", () => {
+    contentParts = [attachment("m-elsewhere")];
+    renderContext(attached, [attached]);
+    expect(screen.queryByText("Attachment · keys.csv")).toBeNull();
+    expect(shows("outside the loaded transcript")).toBe(true);
   });
 
   it("shows an unparented attachment on its own", () => {
