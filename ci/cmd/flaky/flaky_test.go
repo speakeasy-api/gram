@@ -31,12 +31,33 @@ const gotestsumJUnit = `<?xml version="1.0" encoding="UTF-8"?>
 func TestParseJUnitFailures(t *testing.T) {
 	t.Parallel()
 
-	got, err := parseJUnitFailures(strings.NewReader(gotestsumJUnit))
+	got, crashed, err := parseJUnitFailures(strings.NewReader(gotestsumJUnit))
 	require.NoError(t, err)
 	require.Equal(t, []testKey{
 		{Package: "server/internal/crash", Test: "TestMain"},
 		{Package: "server/internal/mcp", Test: "TestFlaky"},
 	}, got, "subtests fold into their parent; package-level failures keep their package")
+	require.Empty(t, crashed)
+}
+
+func TestParseJUnitFailures_Panic(t *testing.T) {
+	t.Parallel()
+
+	// Real gotestsum output for a panicking test: only the panicking test is
+	// recorded; the package's later tests never ran.
+	const report = `<testsuites>
+	<testsuite name="github.com/speakeasy-api/gram/server/internal/pan">
+		<testcase classname="github.com/speakeasy-api/gram/server/internal/pan" name="TestBoom" time="0.000000">
+			<failure message="Failed" type="">=== RUN   TestBoom&#xA;--- FAIL: TestBoom (0.00s)&#xA;panic: boom [recovered, repanicked]&#xA;</failure>
+		</testcase>
+		<testcase classname="github.com/speakeasy-api/gram/server/internal/pan" name="TestA" time="0.000000"></testcase>
+	</testsuite>
+</testsuites>`
+
+	got, crashed, err := parseJUnitFailures(strings.NewReader(report))
+	require.NoError(t, err)
+	require.Equal(t, []testKey{{Package: "server/internal/pan", Test: "TestBoom"}}, got)
+	require.Equal(t, []string{"server/internal/pan"}, crashed)
 }
 
 func TestParseLogFailures(t *testing.T) {
@@ -96,40 +117,46 @@ func TestDecide(t *testing.T) {
 
 	t.Run("every failure tracked", func(t *testing.T) {
 		t.Parallel()
-		d := decide([]testKey{flakyA, flakyB}, issues)
+		d := decide([]testKey{flakyA, flakyB}, nil, issues)
 		require.Empty(t, d.Blocking)
 		require.Len(t, d.Bypass, 2)
 	})
 
 	t.Run("an untracked failure blocks", func(t *testing.T) {
 		t.Parallel()
-		d := decide([]testKey{flakyA, {Package: "server/internal/mcp", Test: "TestReal"}}, issues)
+		d := decide([]testKey{flakyA, {Package: "server/internal/mcp", Test: "TestReal"}}, nil, issues)
 		require.Contains(t, d.Blocking, "not tracked as flaky")
 		require.Empty(t, d.Bypass)
 	})
 
+	t.Run("a panic blocks even when the test is tracked", func(t *testing.T) {
+		t.Parallel()
+		d := decide([]testKey{flakyA}, []string{flakyA.Package}, issues)
+		require.Contains(t, d.Blocking, "never ran")
+	})
+
 	t.Run("a package-level failure blocks", func(t *testing.T) {
 		t.Parallel()
-		d := decide([]testKey{flakyA, {Package: "server/internal/mcp", Test: "TestMain"}}, issues)
+		d := decide([]testKey{flakyA, {Package: "server/internal/mcp", Test: "TestMain"}}, nil, issues)
 		require.Contains(t, d.Blocking, "outside a single test")
 	})
 
 	t.Run("a failed step with no failing test blocks", func(t *testing.T) {
 		t.Parallel()
-		d := decide(nil, issues)
+		d := decide(nil, nil, issues)
 		require.Contains(t, d.Blocking, "without a failing test")
 	})
 
 	t.Run("a cluster of tracked failures in one package passes", func(t *testing.T) {
 		t.Parallel()
-		d := decide(append(slices.Clone(cluster), flakyA), issues)
+		d := decide(append(slices.Clone(cluster), flakyA), nil, issues)
 		require.Empty(t, d.Blocking)
 		require.Len(t, d.Bypass, 7)
 	})
 
 	t.Run("tracked failures across too many packages block", func(t *testing.T) {
 		t.Parallel()
-		d := decide(spread, issues)
+		d := decide(spread, nil, issues)
 		require.Contains(t, d.Blocking, "failed in 4 packages at once")
 	})
 }
@@ -164,4 +191,19 @@ func TestEvidenceCandidates(t *testing.T) {
 
 	require.Equal(t, []testKey{flaky}, ev.candidates(),
 		"a test failing repeatedly on one PR is that PR's bug, not a flake")
+}
+
+func TestAnnotateEscapesWorkflowCommands(t *testing.T) {
+	t.Parallel()
+
+	var b strings.Builder
+	annotate(&b, "Title: a, b", "line one\n::error::injected 100%")
+	require.Equal(t, "::warning title=Title%3A a%2C b::line one%0A::error::injected 100%25\n", b.String())
+}
+
+func TestSplitList(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, []string{"merge_group", "push"}, splitList(" merge_group, push ,,"))
+	require.Nil(t, splitList(""))
 }

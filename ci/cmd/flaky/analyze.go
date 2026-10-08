@@ -110,8 +110,9 @@ func newGitHubClient(token, repo string) *githubClient {
 	return &githubClient{token: token, repo: repo, http: &http.Client{Timeout: 2 * time.Minute}}
 }
 
-// get retries GitHub's intermittent 5xx responses, which a scan of hundreds of
-// runs and logs reliably hits.
+// get retries GitHub's intermittent 5xx responses and rate limiting (429, or
+// 403 with Retry-After), which a scan of hundreds of runs and logs reliably
+// hits.
 func (c *githubClient) get(ctx context.Context, path string) (*http.Response, error) {
 	const attempts = 4
 
@@ -135,13 +136,20 @@ func (c *githubClient) get(ctx context.Context, path string) (*http.Response, er
 		if resp.StatusCode == http.StatusNotFound {
 			return nil, fmt.Errorf("github %s: %w", path, errNotFound)
 		}
-		if resp.StatusCode < 500 || attempt == attempts {
+		wait := time.Duration(attempt) * 2 * time.Second
+		retryAfter, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
+		if retryAfter > 0 {
+			wait = time.Duration(retryAfter) * time.Second
+		}
+		rateLimited := resp.StatusCode == http.StatusTooManyRequests ||
+			(resp.StatusCode == http.StatusForbidden && retryAfter > 0)
+		if (resp.StatusCode < 500 && !rateLimited) || attempt == attempts {
 			return nil, fmt.Errorf("github %s returned status %d", path, resp.StatusCode)
 		}
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(time.Duration(attempt) * 2 * time.Second):
+		case <-time.After(wait):
 		}
 	}
 }

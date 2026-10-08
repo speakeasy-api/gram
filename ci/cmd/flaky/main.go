@@ -67,13 +67,16 @@ func run(ctx context.Context, argv []string, stdout io.Writer) error {
 		if token == "" || repo == "" {
 			return errors.New("GITHUB_TOKEN and GITHUB_REPOSITORY must be set")
 		}
+		if *days < 1 {
+			return fmt.Errorf("-days must be at least 1, got %d", *days)
+		}
 		if linear == nil && !*dryRun {
 			return errors.New("LINEAR_API_KEY must be set unless -dry-run is given")
 		}
 
 		return runAnalyze(ctx, newGitHubClient(token, repo), linear, analyzeOptions{
 			Workflow:  *workflow,
-			Events:    strings.Split(*events, ","),
+			Events:    splitList(*events),
 			JobPrefix: *jobPrefix,
 			Window:    time.Duration(*days) * 24 * time.Hour,
 			DryRun:    *dryRun,
@@ -95,11 +98,23 @@ func run(ctx context.Context, argv []string, stdout io.Writer) error {
 			Quarantine: quarantineConfig{
 				Assignee: *assignee,
 				Delegate: *delegate,
-				Labels:   strings.Split(*labels, ","),
+				Labels:   splitList(*labels),
 			},
 		}, stdout)
 
 	default:
 		return fmt.Errorf("unknown subcommand %q: want analyze or gate", argv[0])
 	}
+}
+
+// splitList splits a comma-separated flag value, trimming spaces and dropping
+// empty entries.
+func splitList(v string) []string {
+	var out []string
+	for item := range strings.SplitSeq(v, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }

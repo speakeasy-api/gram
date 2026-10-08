@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 // maxBypassedPackages caps how many packages one run may excuse flaky failures
@@ -24,7 +25,10 @@ type gateDecision struct {
 
 // decide lets a failed run pass only when every failure is a whole test with an
 // open flaky-test ticket and there are few enough of them.
-func decide(failures []testKey, issues map[testKey]flakyIssue) gateDecision {
+func decide(failures []testKey, crashed []string, issues map[testKey]flakyIssue) gateDecision {
+	if len(crashed) > 0 {
+		return gateDecision{Blocking: fmt.Sprintf("a test panicked in %v, so the rest of that package never ran", crashed)}
+	}
 	if len(failures) == 0 {
 		return gateDecision{Blocking: "the test step failed without a failing test in the junit report (build failure, timeout, or crash)"}
 	}
@@ -71,7 +75,7 @@ func runGate(ctx context.Context, linear *linearClient, opts gateOptions, stdout
 	}
 	defer func() { _ = f.Close() }()
 
-	failures, err := parseJUnitFailures(f)
+	failures, crashed, err := parseJUnitFailures(f)
 	if err != nil {
 		return err
 	}
@@ -85,27 +89,39 @@ func runGate(ctx context.Context, linear *linearClient, opts gateOptions, stdout
 		return err
 	}
 
-	decision := decide(failures, issues)
+	decision := decide(failures, crashed, issues)
 	if decision.Blocking != "" {
 		return fmt.Errorf("not bypassing: %s", decision.Blocking)
 	}
 
+	// The pass is decided by the read above. Quarantining and commenting are
+	// bookkeeping: a Linear write failure is reported, not allowed to fail a run
+	// that every failure already excuses.
 	for _, issue := range decision.Bypass {
 		note := fmt.Sprintf("Failed again in %s. CI let the run pass because this test is tracked as flaky.", opts.RunURL)
 		if !issue.Quarantined {
 			if err := linear.quarantine(ctx, issue, opts.Quarantine); err != nil {
-				return err
+				annotate(stdout, "Flaky test not quarantined", fmt.Sprintf("%s: %v", issue.Identifier, err))
+			} else {
+				note = fmt.Sprintf("Quarantined: this candidate failed again in %s, so CI let the run pass. Fix the flakiness, then close this ticket to make the test blocking again.", opts.RunURL)
 			}
-			note = fmt.Sprintf("Quarantined: this candidate failed again in %s, so CI let the run pass. Fix the flakiness, then close this ticket to make the test blocking again.", opts.RunURL)
 		}
 		if err := linear.comment(ctx, issue, note); err != nil {
-			return err
+			annotate(stdout, "Flaky test run not recorded", fmt.Sprintf("%s: %v", issue.Identifier, err))
 		}
 
 		// A workflow annotation keeps the bypass visible on a green job.
-		fmt.Fprintf(stdout, "::warning title=Flaky test bypassed::%s failed but is tracked as flaky in %s (%s)\n",
-			issue.Key, issue.Identifier, issue.URL)
+		annotate(stdout, "Flaky test bypassed",
+			fmt.Sprintf("%s failed but is tracked as flaky in %s (%s)", issue.Key, issue.Identifier, issue.URL))
 	}
 
 	return nil
+}
+
+// annotate prints a GitHub Actions warning. Ticket and test data reach the
+// message, so it is escaped: a raw newline would end the command and let the
+// rest run as a workflow command of its own.
+func annotate(w io.Writer, title, message string) {
+	escape := strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A")
+	fmt.Fprintf(w, "::warning title=%s::%s\n", strings.NewReplacer(",", "%2C", ":", "%3A").Replace(escape.Replace(title)), escape.Replace(message))
 }

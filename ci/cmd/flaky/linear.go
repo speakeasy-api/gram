@@ -106,18 +106,23 @@ func (c *linearClient) do(ctx context.Context, query string, vars map[string]any
 // openFlakyIssues returns the team's open candidate and quarantined tickets,
 // keyed by test.
 func (c *linearClient) openFlakyIssues(ctx context.Context) (map[testKey]flakyIssue, error) {
-	const query = `query($team: String!, $labels: [String!]!) {
-  issues(first: 250, filter: {
+	const query = `query($team: String!, $labels: [String!]!, $after: String) {
+  issues(first: 250, after: $after, filter: {
     team: { key: { eq: $team } }
     labels: { some: { name: { in: $labels } } }
     state: { type: { nin: ["completed", "canceled"] } }
   }) {
     nodes { id identifier url title labels { nodes { id name } } }
+    pageInfo { hasNextPage endCursor }
   }
 }`
 
-	var out struct {
+	type page struct {
 		Issues struct {
+			PageInfo struct {
+				HasNextPage bool   `json:"hasNextPage"`
+				EndCursor   string `json:"endCursor"`
+			} `json:"pageInfo"`
 			Nodes []struct {
 				ID         string `json:"id"`
 				Identifier string `json:"identifier"`
@@ -132,27 +137,35 @@ func (c *linearClient) openFlakyIssues(ctx context.Context) (map[testKey]flakyIs
 			} `json:"nodes"`
 		} `json:"issues"`
 	}
-	vars := map[string]any{"team": c.team, "labels": []string{labelCandidate, labelQuarantined}}
-	if err := c.do(ctx, query, vars, &out); err != nil {
-		return nil, fmt.Errorf("list flaky issues: %w", err)
-	}
 
-	issues := make(map[testKey]flakyIssue, len(out.Issues.Nodes))
-	for _, n := range out.Issues.Nodes {
-		key, ok := keyFromTitle(n.Title)
-		if !ok {
-			continue
+	issues := map[testKey]flakyIssue{}
+	vars := map[string]any{"team": c.team, "labels": []string{labelCandidate, labelQuarantined}, "after": nil}
+	for {
+		var out page
+		if err := c.do(ctx, query, vars, &out); err != nil {
+			return nil, fmt.Errorf("list flaky issues: %w", err)
 		}
-		issue := flakyIssue{ID: n.ID, Identifier: n.Identifier, URL: n.URL, Key: key}
-		for _, l := range n.Labels.Nodes {
-			issue.LabelIDs = append(issue.LabelIDs, l.ID)
-			if l.Name == labelQuarantined {
-				issue.Quarantined = true
+
+		for _, n := range out.Issues.Nodes {
+			key, ok := keyFromTitle(n.Title)
+			if !ok {
+				continue
 			}
+			issue := flakyIssue{ID: n.ID, Identifier: n.Identifier, URL: n.URL, Key: key}
+			for _, l := range n.Labels.Nodes {
+				issue.LabelIDs = append(issue.LabelIDs, l.ID)
+				if l.Name == labelQuarantined {
+					issue.Quarantined = true
+				}
+			}
+			issues[key] = issue
 		}
-		issues[key] = issue
+
+		if !out.Issues.PageInfo.HasNextPage {
+			return issues, nil
+		}
+		vars["after"] = out.Issues.PageInfo.EndCursor
 	}
-	return issues, nil
 }
 
 func (c *linearClient) teamID(ctx context.Context) (string, error) {
@@ -331,6 +344,9 @@ func (c *linearClient) comment(ctx context.Context, issue flakyIssue, body strin
 	input := map[string]any{"issueId": issue.ID, "body": body}
 	if err := c.do(ctx, mutation, map[string]any{"input": input}, &out); err != nil {
 		return fmt.Errorf("comment on %s: %w", issue.Identifier, err)
+	}
+	if !out.CommentCreate.Success {
+		return errors.New("comment on " + issue.Identifier + ": comment not created")
 	}
 	return nil
 }

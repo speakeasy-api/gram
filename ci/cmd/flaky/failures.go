@@ -42,20 +42,26 @@ type junitReport struct {
 	Suites []struct {
 		Name  string `xml:"name,attr"`
 		Cases []struct {
-			Classname string    `xml:"classname,attr"`
-			Name      string    `xml:"name,attr"`
-			Failure   *struct{} `xml:"failure"`
-			Error     *struct{} `xml:"error"`
+			Classname string `xml:"classname,attr"`
+			Name      string `xml:"name,attr"`
+			Failure   *struct {
+				Text string `xml:",chardata"`
+			} `xml:"failure"`
+			Error *struct {
+				Text string `xml:",chardata"`
+			} `xml:"error"`
 		} `xml:"testcase"`
 	} `xml:"testsuite"`
 }
 
 // parseJUnitFailures returns the distinct failing tests in a gotestsum junit
-// report, sorted.
-func parseJUnitFailures(r io.Reader) ([]testKey, error) {
+// report, sorted, and the packages whose test binary panicked. A panic ends the
+// binary, so the package's remaining tests never ran and are absent from the
+// report.
+func parseJUnitFailures(r io.Reader) (failures []testKey, crashed []string, err error) {
 	var report junitReport
 	if err := xml.NewDecoder(r).Decode(&report); err != nil {
-		return nil, fmt.Errorf("decode junit report: %w", err)
+		return nil, nil, fmt.Errorf("decode junit report: %w", err)
 	}
 
 	var keys []testKey
@@ -69,11 +75,24 @@ func parseJUnitFailures(r io.Reader) ([]testKey, error) {
 			if pkg == "" {
 				pkg = suite.Name
 			}
-			keys = append(keys, newTestKey(pkg, c.Name))
+			k := newTestKey(pkg, c.Name)
+			keys = append(keys, k)
+
+			output := ""
+			if c.Failure != nil {
+				output += c.Failure.Text
+			}
+			if c.Error != nil {
+				output += c.Error.Text
+			}
+			if strings.HasPrefix(output, "panic: ") || strings.Contains(output, "\npanic: ") {
+				crashed = append(crashed, k.Package)
+			}
 		}
 	}
 
-	return sortedUnique(keys), nil
+	slices.Sort(crashed)
+	return sortedUnique(keys), slices.Compact(crashed), nil
 }
 
 var (
