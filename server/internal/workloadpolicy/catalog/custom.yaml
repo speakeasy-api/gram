@@ -10,7 +10,7 @@
 
 register_platform:
   title: Register new access
-  description: Both values come from the platform issuing your machines' tokens. Gram trims surrounding spaces and otherwise stores them exactly as entered, because an assertion is matched against the spelling you register.
+  description: Both values come from the platform issuing your machines' tokens. Speakeasy trims surrounding spaces and otherwise stores them exactly as entered, because an assertion is matched against the spelling you register.
   submit_label: Register
   pending_label: Registering…
   steps:
@@ -41,7 +41,7 @@ register_platform:
           format: jwks_uri
           label: JWKS URI
           placeholder: https://identity.example.com/.well-known/jwks.json
-          help: Where the issuer publishes its signing keys. This is the only field Gram reads when verifying an assertion.
+          help: Where the issuer publishes its signing keys. This is the only field Speakeasy reads when verifying an assertion.
         - type: tags
           label: Tags
           placeholder: production, ci
@@ -49,7 +49,7 @@ register_platform:
 
 edit_platform:
   title: Edit platform
-  description: The issuer URL is fixed once a platform is registered. Changing the JWKS URI changes which keys Gram accepts assertions from.
+  description: The issuer URL is fixed once a platform is registered. Changing the JWKS URI changes which keys Speakeasy accepts assertions from.
   submit_label: Save changes
   pending_label: Saving…
   steps:
@@ -81,7 +81,7 @@ edit_platform:
           format: jwks_uri
           label: JWKS URI
           placeholder: https://identity.example.com/.well-known/jwks.json
-          help: Where the issuer publishes its signing keys. This is the only field Gram reads when verifying an assertion.
+          help: Where the issuer publishes its signing keys. This is the only field Speakeasy reads when verifying an assertion.
         - type: tags
           label: Tags
           placeholder: production, ci
@@ -89,7 +89,7 @@ edit_platform:
 
 allow_access:
   title: Allow access
-  description: Allowing access lets a machine sign in to Gram. The agent you choose supplies the whole policy that the machine acts under, so it is chosen at the same time.
+  description: Allowing access lets a machine sign in to Speakeasy. The agent you choose supplies the whole policy that the machine acts under, so it is chosen at the same time.
   submit_label: Allow access
   pending_label: Allowing…
   steps:

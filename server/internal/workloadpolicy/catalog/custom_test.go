@@ -42,7 +42,7 @@ func TestParseCustomFlowsRefusesContractViolations(t *testing.T) {
 	}{
 		{
 			name:    "missing required field",
-			from:    "- type: input\n          field: jwks_uri\n          format: jwks_uri\n          label: JWKS URI\n          placeholder: https://identity.example.com/.well-known/jwks.json\n          help: Where the issuer publishes its signing keys. This is the only field Gram reads when verifying an assertion.\n",
+			from:    "- type: input\n          field: jwks_uri\n          format: jwks_uri\n          label: JWKS URI\n          placeholder: https://identity.example.com/.well-known/jwks.json\n          help: Where the issuer publishes its signing keys. This is the only field Speakeasy reads when verifying an assertion.\n",
 			to:      "- type: link\n          href: https://identity.example.com/.well-known/jwks.json\n          label: JWKS URI\n",
 			wantErr: `register_platform: step "platform": input jwks_uri is required`,
 		},
