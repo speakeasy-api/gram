@@ -22,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -108,7 +107,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
-func seedBlockedDirectRemoteDistribution(t *testing.T, ctx context.Context, ti *testInstance, serverID uuid.UUID) *feature.InMemory {
+func seedBlockedDirectRemoteDistribution(t *testing.T, ctx context.Context, ti *testInstance, serverID uuid.UUID) {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -124,12 +123,7 @@ func seedBlockedDirectRemoteDistribution(t *testing.T, ctx context.Context, ti *
 		Status: "registered", McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
 	})
 	require.NoError(t, err)
-	flags := new(feature.InMemory)
-	flags.SetFlag(feature.FlagPlatformMCPShadowAudienceEnforcement, authCtx.ActiveOrganizationID, true)
-	flags.SetFlagPayload(feature.FlagPlatformMCPShadowAudienceEnforcement, authCtx.ActiveOrganizationID, []byte(`{"mode":"enforce"}`))
-	flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, authCtx.ActiveOrganizationID, true)
-	ti.service.WithDistributionAdmission(admission.NewGuard(flags, nil))
-	return flags
+	ti.service.WithDistributionAdmission(admission.NewGuard())
 }
 
 func withExactAuthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {

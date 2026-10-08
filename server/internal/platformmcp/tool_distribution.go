@@ -12,16 +12,19 @@ import (
 )
 
 type DistributeMCPToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug selected by the user"`
-	Plugin      string `json:"plugin" jsonschema:"exact existing plugin in the project, by ID, slug, or name, as returned by list_plugins; there is no implicit default"`
+	ProjectSlug   string `json:"project_slug" jsonschema:"explicit project slug selected by the user"`
+	Plugin        string `json:"plugin" jsonschema:"exact existing plugin in the project, by ID, slug, or name, as returned by list_plugins; there is no implicit default"`
+	Justification string `json:"justification,omitempty" jsonschema:"optional reason recorded on the Shadow MCP review request when the project's policy refuses this server; empty uses a generated note naming the server, plugin, and project"`
 }
 
 type DistributeMCPToolOutput struct {
-	ProjectSlug      string `json:"project_slug"`
-	Plugin           string `json:"plugin"`
-	Attached         bool   `json:"attached"`
-	PublicationState string `json:"publication_state"`
-	Message          string `json:"message"`
+	ProjectSlug      string                     `json:"project_slug"`
+	Plugin           string                     `json:"plugin"`
+	Attached         bool                       `json:"attached"`
+	PublicationState string                     `json:"publication_state,omitempty"`
+	NextAction       string                     `json:"next_action,omitempty"`
+	Review           *ShadowMCPReviewToolOutput `json:"review,omitempty"`
+	Message          string                     `json:"message"`
 }
 
 type distributionErrorResult struct {
@@ -33,7 +36,7 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 	addTool(reg, &mcp.Tool{
 		Name:        "distribute_mcp_to_plugin",
 		Title:       "Add an MCP Server to a Plugin",
-		Description: "Give a working MCP server to one plugin — the bundle of MCP servers and skills you share with people — so everyone it is shared with gets it. Constraints: the project must already be selected, the MCP server registered, and freshly confirmed working through the dashboard setup flow. Name the plugin exactly by ID, slug, or name: a name matching nothing is refused as not_found and a name matching more than one plugin as ambiguous_target, and neither falls back to the default plugin. This never creates a plugin.",
+		Description: "Give a working MCP server to one plugin — the bundle of MCP servers and skills you share with people — so everyone it is shared with gets it. Constraints: the project must already be selected, the MCP server registered, and freshly confirmed working through the dashboard setup flow. Name the plugin exactly by ID, slug, or name: a name matching nothing is refused as not_found and a name matching more than one plugin as ambiguous_target, and neither falls back to the default plugin. This never creates a plugin. When the project has a Shadow MCP policy that blocks unreviewed servers and this one is not yet approved for the plugin's audience, nothing is shared: a review request is filed on the administrator's behalf and returned with next_action await_shadow_mcp_review, the review page, and the policies in force. Relay its explanation, then run this again once the review is approved.",
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
 		// External-only: distribution rows require a connection, which a
@@ -56,8 +59,18 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 			result, _ := distributionToolError(ErrPluginNotFound)
 			return result, DistributeMCPToolOutput{}, nil
 		}
-		distribution, err := distributions.DistributeForOnboarding(ctx, principal, input.ProjectSlug, input.Plugin)
+		distribution, err := distributions.DistributeForOnboarding(ctx, principal, input.ProjectSlug, input.Plugin, input.Justification)
 		if err != nil {
+			if review, ok := shadowMCPReviewToolOutput(err); ok {
+				return nil, DistributeMCPToolOutput{
+					ProjectSlug: input.ProjectSlug,
+					Plugin:      input.Plugin,
+					Attached:    false,
+					NextAction:  shadowMCPReviewNextAction,
+					Review:      &review,
+					Message:     review.Explanation,
+				}, nil
+			}
 			if result, ok := distributionToolError(err); ok {
 				return result, DistributeMCPToolOutput{}, nil
 			}
@@ -148,9 +161,7 @@ func distributionToolError(err error) (*mcp.CallToolResult, bool) {
 	case errors.Is(err, ErrDistributionConflict):
 		result = distributionErrorResult{Code: "conflict", Message: "What this project shares has changed since you last looked. Check where setup got to and try the next step it offers."}
 	case errors.Is(err, ErrDistributionBlockedPendingApproval):
-		result = distributionErrorResult{Code: "approval_required", Message: "This MCP server does not have the approval required for this operation. Review the server approval for the requesting user and, when audience enforcement applies, the plugin's complete audience before trying again."}
-	case errors.Is(err, ErrDistributionDisabled):
-		result = distributionErrorResult{Code: "distribution_disabled", Message: "Direct-remote distribution is temporarily disabled. Existing attachments can still be removed and audiences can still be narrowed."}
+		result = distributionErrorResult{Code: "approval_required", Message: "This organisation's Shadow MCP policy blocks this server for the people it would reach, and a review could not be filed automatically. Request one with request_mcp_review or in the dashboard, and try again once it is approved for the plugin's audience."}
 	case errors.Is(err, ErrDistributionAdmissionUnavailable):
 		result = distributionErrorResult{Code: "distribution_unavailable", Message: "Distribution approval could not be verified safely. No sharing change was made."}
 	default:

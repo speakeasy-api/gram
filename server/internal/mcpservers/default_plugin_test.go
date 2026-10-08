@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -42,7 +41,7 @@ func TestAttachToDefaultPlugin_ExcludesPlatformWrapper(t *testing.T) {
 	require.NoError(t, err)
 	seedEndpointFor(t, ctx, ti.conn, *authCtx.ProjectID, server.ID.String())
 	tx := testenv.BeginTx(t, ctx, ti.conn)
-	attached, pluginCreated, err := mcpservers.AttachToDefaultPlugin(ti.service, ctx, tx, authCtx, server, admission.RolloutConfig{}, nil)
+	attached, pluginCreated, err := mcpservers.AttachToDefaultPlugin(ti.service, ctx, tx, authCtx, server)
 	require.NoError(t, err)
 	require.False(t, attached, "excluded wrappers must not trigger an initial marketplace publication")
 	require.False(t, pluginCreated)

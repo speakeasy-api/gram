@@ -25,21 +25,14 @@ import (
 // Redelivery can re-add assignments removed by an administrator.
 // Errors are retried by the existing transport, not by an application sweep.
 func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publication plugins.PublicationRequests, guard *admission.Guard, roleURN string, organizationID string) (bool, error) {
-	// Resolve external rollout state before taking database locks. The selected
-	// project and organization are revalidated inside the transaction.
+	// The selected project is revalidated inside the transaction.
 	var projectID uuid.UUID
-	var organizationSlug, projectSlug string
-	err := db.QueryRow(ctx, `SELECT p.id, o.slug, p.slug FROM projects p
+	err := db.QueryRow(ctx, `SELECT p.id FROM projects p
  JOIN organization_metadata o ON o.id = p.organization_id
  WHERE p.organization_id = $1 AND p.deleted IS FALSE AND o.disabled_at IS NULL
- ORDER BY p.created_at, p.id LIMIT 1`, organizationID).Scan(&projectID, &organizationSlug, &projectSlug)
+ ORDER BY p.created_at, p.id LIMIT 1`, organizationID).Scan(&projectID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return false, fmt.Errorf("select role setup project: %w", err)
-	}
-	rollout, rolloutErr := guard.Resolve(ctx, organizationID, organizationSlug, projectSlug)
-	ctx, err = roledelivery.PrepareAdmission(ctx, db, guard, organizationID)
-	if err != nil {
-		return false, fmt.Errorf("prepare role setup admission: %w", err)
 	}
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -150,7 +143,7 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 		desired = append(desired, roleURN)
 	}
 	if !assignments.IsSubset(desired, current) {
-		if err := guard.CheckPluginAudience(ctx, tx, rollout, rolloutErr, organizationID, projectID, pluginID, desired); err != nil {
+		if err := guard.CheckPluginAudience(ctx, tx, organizationID, projectID, pluginID, desired); err != nil {
 			return false, fmt.Errorf("check role plugin audience: %w", err)
 		}
 	}

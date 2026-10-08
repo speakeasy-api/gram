@@ -454,6 +454,7 @@ type PluginsService struct {
 	mutationReceipts          *PluginAssignmentMutationReceiptStore
 	distributionAdmission     *admission.Guard
 	distributionAdmissionRead distributionAdmissionReader
+	reviews                   ShadowMCPReviewFiler
 
 	// publication and publisher request a plugin publish. republish_plugin
 	// uses both; create_plugin and rename_plugin signal through publisher
@@ -498,7 +499,7 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		audit:                 nil,
 		mutationBudget:        OperationBudget{},
 		mutationReceipts:      nil,
-		distributionAdmission: admission.NewGuard(nil, nil),
+		distributionAdmission: admission.NewGuard(),
 		publication:           plugindelivery.PublicationRequests{Enabled: false},
 		publisher:             nil,
 		republishBudget:       OperationBudget{},

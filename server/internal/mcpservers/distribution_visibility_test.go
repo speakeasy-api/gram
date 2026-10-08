@@ -9,7 +9,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -25,8 +24,7 @@ func TestUpdateMcpServer_PrivateDirectRemoteCannotBecomePublic(t *testing.T) {
 		ID: created.ID, RemoteMcpServerID: &remoteID, Visibility: types.McpServerVisibility("private"),
 	})
 	require.NoError(t, err)
-	flags := seedBlockedDirectRemoteDistribution(t, ctx, ti, uuid.MustParse(created.ID))
-	flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, authCtx.ActiveOrganizationID, false)
+	seedBlockedDirectRemoteDistribution(t, ctx, ti, uuid.MustParse(created.ID))
 
 	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
 		ID: created.ID, RemoteMcpServerID: &remoteID, Visibility: types.McpServerVisibility("public"),
@@ -46,8 +44,7 @@ func TestUpdateMcpServer_DisabledDirectRemoteCannotBecomePublic(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	created, remoteID := createDisabledRemoteServer(t, ctx, ti, *authCtx.ProjectID, "Disabled direct remote")
-	flags := seedBlockedDirectRemoteDistribution(t, ctx, ti, uuid.MustParse(created.ID))
-	flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, authCtx.ActiveOrganizationID, false)
+	seedBlockedDirectRemoteDistribution(t, ctx, ti, uuid.MustParse(created.ID))
 
 	_, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
 		ID: created.ID, RemoteMcpServerID: &remoteID, Visibility: types.McpServerVisibility("public"),
@@ -59,24 +56,6 @@ func TestUpdateMcpServer_DisabledDirectRemoteCannotBecomePublic(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "disabled", server.Visibility)
-}
-
-func TestUpdateMcpServer_PublicVisibilityAdmissionUnavailableReturnsServiceUnavailable(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	created, remoteID := createDisabledRemoteServer(t, ctx, ti, *authCtx.ProjectID, "Unavailable direct remote")
-	flags := seedBlockedDirectRemoteDistribution(t, ctx, ti, uuid.MustParse(created.ID))
-	flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, authCtx.ActiveOrganizationID, false)
-	flags.SetFlagPayload(feature.FlagPlatformMCPShadowAudienceEnforcement, authCtx.ActiveOrganizationID, []byte(`{"mode":"unknown"}`))
-
-	_, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
-		ID: created.ID, RemoteMcpServerID: &remoteID, Visibility: types.McpServerVisibility("public"),
-	})
-
-	require.ErrorIs(t, err, admission.ErrUnavailable)
-	requireOopsCode(t, err, oops.CodeUnavailable)
 }
 
 func TestUpdateMcpServer_PublicDirectRemoteCanNarrowVisibility(t *testing.T) {

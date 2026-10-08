@@ -59,9 +59,7 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	features.SetFlag(feature.FlagGatewayPluginMembership, ac.ActiveOrganizationID, true)
-	features.SetFlag(feature.FlagPlatformMCPShadowAudienceEnforcement, ac.ActiveOrganizationID, false)
-	features.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, ac.ActiveOrganizationID, false)
-	ti.service.WithDistributionAdmission(admission.NewGuard(features, nil))
+	ti.service.WithDistributionAdmission(admission.NewGuard())
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Gateway member"})
 	require.NoError(t, err)

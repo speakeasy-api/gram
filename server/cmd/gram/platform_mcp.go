@@ -387,8 +387,10 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create Platform MCP lifecycle visibility service: %w", err)
 	}
+	shadowReviews := newPlatformMCPShadowReviewService(config, budgets.ReviewRequests)
 	registrations := platformmcp.NewRegistrationService(catalog, registrationGate, store).
 		WithDirectRemoteInspector(platformmcp.NewGuardianDirectRemoteInspector(config.GuardianPolicy)).
+		WithShadowMCPReview(platformmcp.NewPostgresDirectRemotePolicy(config.DB), shadowReviews).
 		WithLifecycleMetadata(lifecycleMetadata).
 		WithLifecycleVisibility(lifecycleVisibility).
 		WithOperationBudgets(budgets).
@@ -409,7 +411,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		Organization: ratelimit.New(limitStore, platformmcp.PluginAssignmentMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginAssignmentMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 	}
 	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
-	distributionAdmissionReads := platformmcp.NewShadowDistributionReadService(config.Logger, config.DB, config.DistributionAdmission, organizationSlugs)
+	distributionAdmissionReads := platformmcp.NewShadowDistributionReadService(config.Logger, config.DB, organizationSlugs)
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
 		WithAuthorization(config.Authz).
 		WithRemoteSessions(config.RemoteChallengeManager).
@@ -418,7 +420,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithMetadataMutations(config.Logger, plugins.NewPluginMetadataCore(config.AuditLogger, config.PublicationRequests), platformMCPPluginMetadataBudget(config, limitStore)).
 		WithPublicationRequests(config.PublicationRequests).
 		WithDistributionAdmission(config.DistributionAdmission).
-		WithDistributionAdmissionReads(distributionAdmissionReads)
+		WithDistributionAdmissionReads(distributionAdmissionReads).
+		WithShadowMCPReview(shadowReviews)
 	if config.PluginPublisher != nil {
 		pluginInventory.WithPublicationEvidence(config.PluginPublisher)
 	}
@@ -440,7 +443,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		config.Logger.WarnContext(ctx, "Platform MCP access role mutations unavailable", attr.SlogError(accessRoleMutationErr))
 	}
 	distributions := newPlatformMCPDistributionService(config, pluginInventory).
-		WithDistributionAdmission(config.DistributionAdmission, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))
+		WithDistributionAdmission(config.DistributionAdmission).
+		WithShadowMCPReview(shadowReviews)
 
 	// Keep the local fixture on its original paths unless discovery owns them.
 	registryPrefix := ""
@@ -466,6 +470,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), config.FeatureFlags).
 		WithAuthorization(config.Authz).
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
+		WithShadowMCPReviewLinks(shadowReviews).
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
@@ -560,7 +565,7 @@ func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMC
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(err))
 		return false
 	}
-	shadowInventory.WithDistributionAdmissionReads(platformmcp.NewShadowDistributionReadService(config.Logger, config.DB, config.DistributionAdmission, organizationSlugs))
+	shadowInventory.WithDistributionAdmissionReads(platformmcp.NewShadowDistributionReadService(config.Logger, config.DB, organizationSlugs))
 	reader.WithShadowInventory(shadowInventory)
 	return true
 }
@@ -664,7 +669,20 @@ func newPlatformMCPLifecycleVisibilityService(config platformMCPConfig, readines
 	if err != nil {
 		return nil, err
 	}
-	return service.WithDistributionAdmission(config.DistributionAdmission, platformmcp.NewPostgresOrganizationSlugResolver(config.DB)), nil
+	return service.WithDistributionAdmission(config.DistributionAdmission), nil
+}
+
+// newPlatformMCPShadowReviewService files Shadow MCP reviews through the same
+// approval service the review-request tools use. A nil approval service is
+// passed as a nil interface so the review service reports itself unavailable
+// instead of calling through a typed nil.
+func newPlatformMCPShadowReviewService(config platformMCPConfig, budget platformmcp.OperationBudget) *platformmcp.ShadowMCPReviewService {
+	var requests platformmcp.MCPReviewRequestService
+	if config.ShadowReview != nil {
+		requests = config.ShadowReview
+	}
+	return platformmcp.NewShadowMCPReviewService(config.DB, requests, config.DashboardURL, platformmcp.NewPostgresOrganizationSlugResolver(config.DB)).
+		WithBudget(budget)
 }
 
 func newPlatformMCPDistributionService(config platformMCPConfig, pluginTargets platformmcp.PluginTargetResolver) *platformmcp.DistributionService {
@@ -975,8 +993,10 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create browser Platform MCP lifecycle visibility service: %w", err)
 	}
+	shadowReviews := newPlatformMCPShadowReviewService(config, budgets.ReviewRequests)
 	registrations := platformmcp.NewRegistrationService(catalog, registrationGate, store).
 		WithDirectRemoteInspector(platformmcp.NewGuardianDirectRemoteInspector(config.GuardianPolicy)).
+		WithShadowMCPReview(platformmcp.NewPostgresDirectRemotePolicy(config.DB), shadowReviews).
 		WithLifecycleMetadata(lifecycleMetadata).
 		WithLifecycleVisibility(lifecycleVisibility).
 		WithOperationBudgets(budgets).
@@ -997,7 +1017,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		Organization: ratelimit.New(limitStore, platformmcp.PluginAssignmentMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginAssignmentMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 	}
 	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
-	distributionAdmissionReads := platformmcp.NewShadowDistributionReadService(config.Logger, config.DB, config.DistributionAdmission, organizationSlugs)
+	distributionAdmissionReads := platformmcp.NewShadowDistributionReadService(config.Logger, config.DB, organizationSlugs)
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
 		WithAuthorization(config.Authz).
 		WithRemoteSessions(config.RemoteChallengeManager).
@@ -1006,7 +1026,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithMetadataMutations(config.Logger, plugins.NewPluginMetadataCore(config.AuditLogger, config.PublicationRequests), platformMCPPluginMetadataBudget(config, limitStore)).
 		WithPublicationRequests(config.PublicationRequests).
 		WithDistributionAdmission(config.DistributionAdmission).
-		WithDistributionAdmissionReads(distributionAdmissionReads)
+		WithDistributionAdmissionReads(distributionAdmissionReads).
+		WithShadowMCPReview(shadowReviews)
 	if config.PluginPublisher != nil {
 		pluginInventory.WithPublicationEvidence(config.PluginPublisher)
 	}
@@ -1028,13 +1049,15 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		config.Logger.WarnContext(ctx, "Platform MCP access role mutations unavailable", attr.SlogError(accessRoleMutationErr))
 	}
 	distributions := newPlatformMCPDistributionService(config, pluginInventory).
-		WithDistributionAdmission(config.DistributionAdmission, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))
+		WithDistributionAdmission(config.DistributionAdmission).
+		WithShadowMCPReview(shadowReviews)
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), config.FeatureFlags).
 		WithAuthorization(config.Authz).
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
+		WithShadowMCPReviewLinks(shadowReviews).
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).

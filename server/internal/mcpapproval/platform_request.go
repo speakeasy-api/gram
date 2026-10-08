@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 // PlatformRequesterReviewInput identifies a review owned by the calling user.
@@ -33,10 +34,13 @@ type PlatformRequesterReview struct {
 	Target           string `json:"target"`
 	Status           string `json:"status"`
 	StandingDecision string `json:"standing_decision,omitempty"`
-	RequestedAt      string `json:"requested_at"`
-	CreatedAt        string `json:"created_at"`
-	UpdatedAt        string `json:"updated_at"`
-	NextAction       string `json:"next_action"`
+	// ServerSlug is the Shadow MCP inventory page slug for a server_url
+	// target, derived from the canonical key exactly as the queue derives it.
+	ServerSlug  string `json:"server_slug,omitempty"`
+	RequestedAt string `json:"requested_at"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+	NextAction  string `json:"next_action"`
 }
 
 // ReadPlatformRequesterReview returns one request only when the caller owns its
@@ -70,9 +74,13 @@ func (s *Service) ReadPlatformRequesterReview(ctx context.Context, input Platfor
 	}
 
 	status := newPlatformReviewSummary(row.Status).Status
+	serverSlug := ""
+	if row.TargetKind == targetKindServerURL && row.TargetKey != "" {
+		serverSlug = shadowmcp.ServerSlug(row.TargetKey)
+	}
 	return PlatformRequesterReview{
 		RequestID: row.ID.String(), TargetKind: row.TargetKind, Target: row.TargetRaw,
-		Status: status, StandingDecision: row.StandingDecision,
+		Status: status, StandingDecision: row.StandingDecision, ServerSlug: serverSlug,
 		RequestedAt: conv.FromPGTimestamptz(row.RequestedAt), CreatedAt: conv.FromPGTimestamptz(row.CreatedAt), UpdatedAt: conv.FromPGTimestamptz(row.UpdatedAt),
 		NextAction: PlatformRequesterNextAction(status, row.StandingDecision),
 	}, nil

@@ -3,8 +3,10 @@ package platformmcp
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -60,6 +62,11 @@ func (c *PostgresDirectRemoteApprovals) CheckDirectRemoteApprovalTx(ctx context.
 	if err != nil {
 		return DirectRemoteApprovalState{}, fmt.Errorf("list Shadow MCP policies for direct remote approval consult: %w", err)
 	}
+	if !slices.ContainsFunc(policies, func(policy riskrepo.RiskPolicy) bool { return policy.Action == shadowMCPPolicyActionBlock }) {
+		// Most projects have no block policy; answer before resolving the
+		// caller's principals and grants.
+		return DirectRemoteApprovalState{EnforcementActive: false, Approved: true}, nil
+	}
 
 	principals, err := authz.ResolveUserPrincipals(ctx, db, organizationID, userID)
 	if err != nil {
@@ -72,7 +79,7 @@ func (c *PostgresDirectRemoteApprovals) CheckDirectRemoteApprovalTx(ctx context.
 	candidates := make([]directRemoteApprovalCandidate, 0, len(policies))
 	evaluations := make([]risk.PolicyBypassEvaluation, 0, len(policies)*2)
 	for _, policy := range policies {
-		if policy.Action != "block" || !authz.GrantsSatisfy(grants, authz.RiskPolicyEvaluateCheck(policy.ID.String())) {
+		if policy.Action != shadowMCPPolicyActionBlock || !authz.GrantsSatisfy(grants, authz.RiskPolicyEvaluateCheck(policy.ID.String())) {
 			continue
 		}
 		wholeTarget := risk.WholePolicyBypassTarget()
@@ -142,6 +149,38 @@ func (c *PostgresDirectRemoteApprovals) CheckDirectRemoteApprovalTx(ctx context.
 		if !decisions[candidate.serverPolicyBypass] {
 			state.Approved = false
 		}
+	}
+	return state, nil
+}
+
+// DirectRemotePolicyChecker reports whether the project's enabled Shadow MCP
+// block policies permit a user-supplied URL for the calling principal. It is
+// consulted at registration, where no plugin audience exists yet.
+type DirectRemotePolicyChecker interface {
+	CheckDirectRemotePolicy(ctx context.Context, principal Principal, project ResolvedProject, canonicalURL string) (DirectRemoteApprovalState, error)
+}
+
+// PostgresDirectRemotePolicy adapts the transactional approval check to a pool
+// so the registration service, which holds no transaction of its own, can ask
+// the same question distribution asks.
+type PostgresDirectRemotePolicy struct {
+	db        *pgxpool.Pool
+	approvals DirectRemoteApprovalTxChecker
+}
+
+func NewPostgresDirectRemotePolicy(db *pgxpool.Pool) *PostgresDirectRemotePolicy {
+	return &PostgresDirectRemotePolicy{db: db, approvals: NewPostgresDirectRemoteApprovals()}
+}
+
+var _ DirectRemotePolicyChecker = (*PostgresDirectRemotePolicy)(nil)
+
+func (p *PostgresDirectRemotePolicy) CheckDirectRemotePolicy(ctx context.Context, principal Principal, project ResolvedProject, canonicalURL string) (DirectRemoteApprovalState, error) {
+	if p == nil || p.db == nil || p.approvals == nil {
+		return DirectRemoteApprovalState{}, ErrRegistrationUnavailable
+	}
+	state, err := p.approvals.CheckDirectRemoteApprovalTx(ctx, p.db, principal.OrganizationID, principal.UserID, project.ID, canonicalURL)
+	if err != nil {
+		return DirectRemoteApprovalState{}, fmt.Errorf("check direct remote Shadow MCP policy: %w", err)
 	}
 	return state, nil
 }

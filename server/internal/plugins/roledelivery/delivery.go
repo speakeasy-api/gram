@@ -138,8 +138,8 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 		return false, nil
 	}
 	if s.BackendKind == "mcp_server" {
-		// An absent rollout context fails closed for provenance-bound remotes, while
-		// CheckAttachment leaves legacy/non-remote backends unaffected.
+		// CheckAttachment refuses only provenance-bound remotes the project's
+		// Shadow MCP policy does not permit; other backends are unaffected.
 		if err := checkAttachment(ctx, tx, guard, org, s.ProjectID, pluginID, s.ID); err != nil {
 			return false, err
 		}

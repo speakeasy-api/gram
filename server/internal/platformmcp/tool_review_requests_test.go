@@ -46,7 +46,7 @@ func (s stubMCPReviewProjects) ResolveReviewProject(_ context.Context, _ Princip
 
 func liveReviewRequestRegistrar(service MCPReviewRequestService, projects MCPReviewProjectResolver) *Registrar {
 	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "review-request-test", Version: "test"}, nil))
-	registerReviewRequestTools(registrar, service, projects, allowBudget())
+	registerReviewRequestTools(registrar, service, projects, allowBudget(), nil)
 	return registrar
 }
 
@@ -98,7 +98,7 @@ func TestMCPReviewRequestBudgetStopsBeforeEvidenceGathering(t *testing.T) {
 	denied := OperationBudget{Connection: &recordingOperationLimiter{result: ratelimit.Result{Allowed: false}}, Organization: allowOperationLimiter{}}
 	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "review-request-test", Version: "test"}, nil))
 	projectID := uuid.New()
-	registerReviewRequestTools(registrar, service, stubMCPReviewProjects{project: ResolvedProject{ID: projectID}}, denied)
+	registerReviewRequestTools(registrar, service, stubMCPReviewProjects{project: ResolvedProject{ID: projectID}}, denied, nil)
 	principal := Principal{UserID: "requester", OrganizationID: "organization", ConnectionID: "connection", Generation: "generation", ClientID: "client", Surface: SurfacePlatformMCP}
 
 	_, err := descriptorByName(t, registrar, "request_mcp_review").Invoke(ContextWithPrincipal(t.Context(), principal), json.RawMessage(`{"project_id":"`+projectID.String()+`","target_kind":"server_url","target":"https://example.test/mcp","justification":"needed for work"}`))

@@ -39,15 +39,14 @@ func TestGatewayMemberAdmissionChecksEveryPluginAudience(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	guard := NewGuard(nil, nil)
-	rollout := RolloutConfig{Mode: ModeEnforce}
+	guard := NewGuard()
 	tx := testenv.BeginTx(t, ctx, fixture.conn)
-	require.ErrorIs(t, guard.CheckGatewayMemberAddition(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, gateway.ID, serverID), ErrApprovalRequired)
+	require.ErrorIs(t, guard.CheckGatewayMemberAddition(ctx, tx, fixture.orgID, fixture.projectID, gateway.ID, serverID), ErrApprovalRequired)
 	require.NoError(t, tx.Rollback(ctx))
 
 	seedDecision(t, fixture, "https://mcp.example.test/server", "approved", []string{"role:developers"})
 	tx = testenv.BeginTx(t, ctx, fixture.conn)
-	require.NoError(t, guard.CheckGatewayMemberAddition(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, gateway.ID, serverID))
+	require.NoError(t, guard.CheckGatewayMemberAddition(ctx, tx, fixture.orgID, fixture.projectID, gateway.ID, serverID))
 	require.NoError(t, tx.Rollback(ctx))
 
 	_, err = pluginsrepo.New(fixture.conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
@@ -55,7 +54,7 @@ func TestGatewayMemberAdmissionChecksEveryPluginAudience(t *testing.T) {
 	})
 	require.NoError(t, err)
 	tx = testenv.BeginTx(t, ctx, fixture.conn)
-	require.ErrorIs(t, guard.CheckGatewayMemberAddition(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, gateway.ID, serverID), ErrApprovalRequired)
+	require.ErrorIs(t, guard.CheckGatewayMemberAddition(ctx, tx, fixture.orgID, fixture.projectID, gateway.ID, serverID), ErrApprovalRequired)
 	require.NoError(t, tx.Rollback(ctx))
 
 	_, err = metamcprepo.New(fixture.conn).CreateMetaMCPMember(ctx, metamcprepo.CreateMetaMCPMemberParams{
@@ -63,10 +62,10 @@ func TestGatewayMemberAdmissionChecksEveryPluginAudience(t *testing.T) {
 	})
 	require.NoError(t, err)
 	tx = testenv.BeginTx(t, ctx, fixture.conn)
-	require.ErrorIs(t, (*Guard)(nil).CheckGatewayAttachment(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, gateway.ID), ErrUnavailable)
-	require.ErrorIs(t, guard.CheckGatewayAttachment(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, gateway.ID), ErrApprovalRequired)
-	require.ErrorIs(t, guard.CheckPluginAudience(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, []string{"role:developers", "role:operators"}), ErrApprovalRequired)
-	require.ErrorIs(t, guard.CheckRemoteTarget(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, remoteID, "https://mcp.example.test/changed"), ErrApprovalRequired)
+	require.ErrorIs(t, (*Guard)(nil).CheckGatewayAttachment(ctx, tx, fixture.orgID, fixture.projectID, plugin.ID, gateway.ID), ErrUnavailable)
+	require.ErrorIs(t, guard.CheckGatewayAttachment(ctx, tx, fixture.orgID, fixture.projectID, plugin.ID, gateway.ID), ErrApprovalRequired)
+	require.ErrorIs(t, guard.CheckPluginAudience(ctx, tx, fixture.orgID, fixture.projectID, plugin.ID, []string{"role:developers", "role:operators"}), ErrApprovalRequired)
+	require.ErrorIs(t, guard.CheckRemoteTarget(ctx, tx, fixture.orgID, fixture.projectID, remoteID, "https://mcp.example.test/changed"), ErrApprovalRequired)
 }
 
 func TestPrivateGatewayAudienceBlocksEveryone(t *testing.T) {
@@ -87,11 +86,10 @@ func TestPrivateGatewayAudienceBlocksEveryone(t *testing.T) {
 		DisplayName: "Gateway", Policy: "required", SortOrder: 0,
 	})
 	require.NoError(t, err)
-	guard := NewGuard(nil, nil)
-	rollout := RolloutConfig{Mode: ModeLegacy}
+	guard := NewGuard()
 	tx := testenv.BeginTx(t, ctx, fixture.conn)
-	require.NoError(t, guard.CheckGatewayAttachment(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, gateway.ID))
-	require.ErrorIs(t, guard.CheckPluginAudience(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, []string{urn.PrincipalWildcard}), ErrPrivateGatewayAudience)
+	require.NoError(t, guard.CheckGatewayAttachment(ctx, tx, fixture.orgID, fixture.projectID, plugin.ID, gateway.ID))
+	require.ErrorIs(t, guard.CheckPluginAudience(ctx, tx, fixture.orgID, fixture.projectID, plugin.ID, []string{urn.PrincipalWildcard}), ErrPrivateGatewayAudience)
 	require.NoError(t, tx.Rollback(ctx))
 
 	_, err = pluginsrepo.New(fixture.conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
@@ -99,20 +97,9 @@ func TestPrivateGatewayAudienceBlocksEveryone(t *testing.T) {
 	})
 	require.NoError(t, err)
 	tx = testenv.BeginTx(t, ctx, fixture.conn)
-	require.ErrorIs(t, guard.CheckGatewayAttachment(ctx, tx, rollout, nil, fixture.orgID, fixture.projectID, plugin.ID, gateway.ID), ErrPrivateGatewayAudience)
+	require.ErrorIs(t, guard.CheckGatewayAttachment(ctx, tx, fixture.orgID, fixture.projectID, plugin.ID, gateway.ID), ErrPrivateGatewayAudience)
 	require.ErrorIs(t, CheckGatewayNetworkMode(ctx, tx, fixture.orgID, fixture.projectID, gateway.ID, networkaccess.ModePrivateOnly), ErrPrivateGatewayAudience)
 	require.NoError(t, CheckGatewayNetworkMode(ctx, tx, fixture.orgID, fixture.projectID, gateway.ID, networkaccess.ModePublicOnly))
-}
-
-func TestGuardRemoteTargetKillSwitchWithoutAttachments(t *testing.T) {
-	t.Parallel()
-	fixture := newAdmissionFixture(t)
-	_, remoteID := seedAdmissionRemote(t, fixture)
-	tx := testenv.BeginTx(t, t.Context(), fixture.conn)
-	guard := NewGuard(nil, nil)
-	rollout := RolloutConfig{Mode: ModeLegacy, DirectRemoteDistributionDisabled: true}
-	require.ErrorIs(t, guard.CheckRemoteTarget(t.Context(), tx, rollout, nil, fixture.orgID, fixture.projectID, remoteID, "https://mcp.example.test/changed"), ErrDistributionDisabled)
-	require.NoError(t, guard.CheckRemoteTarget(t.Context(), tx, rollout, nil, fixture.orgID, fixture.projectID, uuid.New(), "https://mcp.example.test/changed"))
 }
 
 func TestGuardPublicVisibilityCannotUseOrganisationApproval(t *testing.T) {
@@ -122,14 +109,53 @@ func TestGuardPublicVisibilityCannotUseOrganisationApproval(t *testing.T) {
 	seedBlockingPolicy(t, fixture)
 	seedDecision(t, fixture, "https://mcp.example.test/server", "approved", []string{urn.PrincipalWildcard})
 	tx := testenv.BeginTx(t, t.Context(), fixture.conn)
-	reports := &capturedReports{outcomes: nil}
-	guard := NewGuard(nil, reports)
-	require.ErrorIs(t, guard.CheckPublicVisibility(t.Context(), tx, RolloutConfig{Mode: ModeEnforce}, nil, fixture.orgID, fixture.projectID, serverID), ErrApprovalRequired)
-	require.NoError(t, guard.CheckPublicVisibility(t.Context(), tx, RolloutConfig{Mode: ModeReport}, nil, fixture.orgID, fixture.projectID, serverID))
-	require.Equal(t, []ReportOutcome{ReportApprovalRequired}, reports.outcomes)
-	require.NoError(t, guard.CheckPublicVisibility(t.Context(), tx, RolloutConfig{Mode: ModeLegacy}, nil, fixture.orgID, fixture.projectID, serverID))
-	require.ErrorIs(t, guard.CheckPublicVisibility(t.Context(), tx, RolloutConfig{Mode: ModeLegacy, DirectRemoteDistributionDisabled: true}, nil, fixture.orgID, fixture.projectID, serverID), ErrDistributionDisabled)
-	require.NoError(t, guard.CheckPublicVisibility(t.Context(), tx, RolloutConfig{Mode: ModeEnforce}, nil, fixture.orgID, fixture.projectID, uuid.New()))
+	guard := NewGuard()
+	require.ErrorIs(t, guard.CheckPublicVisibility(t.Context(), tx, fixture.orgID, fixture.projectID, serverID), ErrApprovalRequired)
+	require.NoError(t, guard.CheckPublicVisibility(t.Context(), tx, fixture.orgID, fixture.projectID, uuid.New()))
+}
+
+// TestGuardRefusalNamesTheTarget proves a caller can recover the exact URL that
+// lacked approval, which is what lets the Platform MCP file a review for it.
+func TestGuardRefusalNamesTheTarget(t *testing.T) {
+	t.Parallel()
+	fixture := newAdmissionFixture(t)
+	serverID, _ := seedAdmissionRemote(t, fixture)
+	seedBlockingPolicy(t, fixture)
+	plugin, err := pluginsrepo.New(fixture.conn).CreatePlugin(t.Context(), pluginsrepo.CreatePluginParams{
+		OrganizationID: fixture.orgID, ProjectID: fixture.projectID, Name: "Named", Slug: "named", Description: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	_, err = pluginsrepo.New(fixture.conn).AddPluginAssignment(t.Context(), pluginsrepo.AddPluginAssignmentParams{
+		OrganizationID: fixture.orgID, PluginID: plugin.ID, PrincipalUrn: "role:developers",
+	})
+	require.NoError(t, err)
+	tx := testenv.BeginTx(t, t.Context(), fixture.conn)
+	err = NewGuard().CheckAttachment(t.Context(), tx, fixture.orgID, fixture.projectID, plugin.ID, serverID)
+	require.ErrorIs(t, err, ErrApprovalRequired)
+	var refusal *ApprovalRequiredError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "https://mcp.example.test/server", refusal.CanonicalURL)
+}
+
+// TestGuardWithoutBlockingPolicyAdmitsEverything proves the policy, not a flag,
+// is what decides: with no enabled block policy nothing is refused.
+func TestGuardWithoutBlockingPolicyAdmitsEverything(t *testing.T) {
+	t.Parallel()
+	fixture := newAdmissionFixture(t)
+	serverID, remoteID := seedAdmissionRemote(t, fixture)
+	plugin, err := pluginsrepo.New(fixture.conn).CreatePlugin(t.Context(), pluginsrepo.CreatePluginParams{
+		OrganizationID: fixture.orgID, ProjectID: fixture.projectID, Name: "Open", Slug: "open", Description: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	_, err = pluginsrepo.New(fixture.conn).AddPluginAssignment(t.Context(), pluginsrepo.AddPluginAssignmentParams{
+		OrganizationID: fixture.orgID, PluginID: plugin.ID, PrincipalUrn: urn.PrincipalWildcard,
+	})
+	require.NoError(t, err)
+	tx := testenv.BeginTx(t, t.Context(), fixture.conn)
+	guard := NewGuard()
+	require.NoError(t, guard.CheckAttachment(t.Context(), tx, fixture.orgID, fixture.projectID, plugin.ID, serverID))
+	require.NoError(t, guard.CheckPluginAudience(t.Context(), tx, fixture.orgID, fixture.projectID, plugin.ID, []string{urn.PrincipalWildcard}))
+	require.NoError(t, guard.CheckRemoteTarget(t.Context(), tx, fixture.orgID, fixture.projectID, remoteID, "https://mcp.example.test/changed"))
 }
 
 func TestGuardProspectiveDefaultUsesReservedSlugAudience(t *testing.T) {
@@ -141,10 +167,9 @@ func TestGuardProspectiveDefaultUsesReservedSlugAudience(t *testing.T) {
 		OrganizationID: fixture.orgID, ProjectID: fixture.projectID, Name: "Reserved", Slug: "default", Description: pgtype.Text{},
 	})
 	require.NoError(t, err)
-	guard := NewGuard(nil, nil)
-	rollout := RolloutConfig{Mode: ModeEnforce}
+	guard := NewGuard()
 	tx := testenv.BeginTx(t, t.Context(), fixture.conn)
-	require.NoError(t, guard.CheckProspectiveDefaultAttachment(t.Context(), tx, rollout, nil, fixture.orgID, fixture.projectID, serverID))
+	require.NoError(t, guard.CheckProspectiveDefaultAttachment(t.Context(), tx, fixture.orgID, fixture.projectID, serverID))
 	require.NoError(t, tx.Commit(t.Context()))
 	_, err = pluginsrepo.New(fixture.conn).AddPluginAssignment(t.Context(), pluginsrepo.AddPluginAssignmentParams{
 		OrganizationID: fixture.orgID, PluginID: plugin.ID, PrincipalUrn: "role:developers",
@@ -152,7 +177,7 @@ func TestGuardProspectiveDefaultUsesReservedSlugAudience(t *testing.T) {
 	require.NoError(t, err)
 	seedDecision(t, fixture, "https://mcp.example.test/server", "approved", []string{"role:developers"})
 	tx = testenv.BeginTx(t, t.Context(), fixture.conn)
-	require.NoError(t, guard.CheckProspectiveDefaultAttachment(t.Context(), tx, rollout, nil, fixture.orgID, fixture.projectID, serverID))
+	require.NoError(t, guard.CheckProspectiveDefaultAttachment(t.Context(), tx, fixture.orgID, fixture.projectID, serverID))
 }
 
 func TestGuardProspectiveMissingDefaultSeedsOnlyDefaultProject(t *testing.T) {
@@ -160,10 +185,9 @@ func TestGuardProspectiveMissingDefaultSeedsOnlyDefaultProject(t *testing.T) {
 	fixture := newAdmissionFixture(t)
 	serverID, _ := seedAdmissionRemote(t, fixture)
 	seedBlockingPolicy(t, fixture)
-	guard := NewGuard(nil, nil)
-	rollout := RolloutConfig{Mode: ModeEnforce}
+	guard := NewGuard()
 	tx := testenv.BeginTx(t, t.Context(), fixture.conn)
-	require.ErrorIs(t, guard.CheckProspectiveDefaultAttachment(t.Context(), tx, rollout, nil, fixture.orgID, fixture.projectID, serverID), ErrApprovalRequired)
+	require.ErrorIs(t, guard.CheckProspectiveDefaultAttachment(t.Context(), tx, fixture.orgID, fixture.projectID, serverID), ErrApprovalRequired)
 	require.NoError(t, tx.Rollback(t.Context()))
 	project, err := projectsrepo.New(fixture.conn).CreateProject(t.Context(), projectsrepo.CreateProjectParams{OrganizationID: fixture.orgID, Name: "Other", Slug: "other"})
 	require.NoError(t, err)
@@ -171,5 +195,5 @@ func TestGuardProspectiveMissingDefaultSeedsOnlyDefaultProject(t *testing.T) {
 	serverID, _ = seedAdmissionRemote(t, fixture)
 	seedBlockingPolicy(t, fixture)
 	tx = testenv.BeginTx(t, t.Context(), fixture.conn)
-	require.NoError(t, guard.CheckProspectiveDefaultAttachment(t.Context(), tx, rollout, nil, fixture.orgID, fixture.projectID, serverID))
+	require.NoError(t, guard.CheckProspectiveDefaultAttachment(t.Context(), tx, fixture.orgID, fixture.projectID, serverID))
 }

@@ -41,6 +41,7 @@ type RequestMCPReviewOutput struct {
 	CreatedAt  string `json:"created_at"`
 	UpdatedAt  string `json:"updated_at"`
 	NextAction string `json:"next_action"`
+	ReviewURL  string `json:"review_url,omitempty"`
 }
 
 type GetMyMCPReviewRequestInput struct {
@@ -51,29 +52,35 @@ type GetMyMCPReviewRequestInput struct {
 type GetMyMCPReviewRequestOutput struct {
 	ProjectID string `json:"project_id"`
 	mcpapproval.PlatformRequesterReview
+	ReviewURL string `json:"review_url,omitempty"`
 }
 
-func registerReviewRequestTools(reg *Registrar, service MCPReviewRequestService, projects MCPReviewProjectResolver, budget OperationBudget) {
+func registerReviewRequestTools(reg *Registrar, service MCPReviewRequestService, projects MCPReviewProjectResolver, budget OperationBudget, links ShadowMCPReviewLinker) {
 	addTool(reg, &mcp.Tool{
 		Name:        "request_mcp_review",
 		Title:       "Request Review of an MCP Server",
 		Description: "Ask an organization administrator to review an MCP server for one project. This records a request only: it does not grant access, change roles, or approve the server. Credential-shaped values in URLs and commands are redacted before storage.",
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input RequestMCPReviewInput) (*mcp.CallToolResult, RequestMCPReviewOutput, error) {
 		return principalToolCall(ctx, reviewRequestToolResult, func(principal Principal) (RequestMCPReviewOutput, error) {
-			projectID, err := reviewRequestProject(ctx, service, projects, principal, input.ProjectID)
+			project, err := reviewRequestProject(ctx, service, projects, principal, input.ProjectID)
 			if err != nil {
 				return RequestMCPReviewOutput{}, err
 			}
 			if err := budget.Allow(ctx, principal); err != nil {
 				return RequestMCPReviewOutput{}, err
 			}
-			created, err := service.CreatePlatformRequest(ctx, principal.OrganizationID, projectID, principal.UserID, input.TargetKind, input.Target, input.Justification)
+			created, err := service.CreatePlatformRequest(ctx, principal.OrganizationID, project.ID, principal.UserID, input.TargetKind, input.Target, input.Justification)
 			if err != nil {
 				return RequestMCPReviewOutput{}, fmt.Errorf("create MCP review request: %w", err)
 			}
+			reviewURL := ""
+			if links != nil && created.ServerSlug != nil {
+				reviewURL = links.ShadowMCPReviewURL(ctx, principal, project, *created.ServerSlug)
+			}
 			return RequestMCPReviewOutput{
-				RequestID: created.ID, ProjectID: projectID.String(), TargetKind: created.TargetKind, Target: created.TargetRaw,
+				RequestID: created.ID, ProjectID: project.ID.String(), TargetKind: created.TargetKind, Target: created.TargetRaw,
 				Status: created.Status, CreatedAt: created.CreatedAt, UpdatedAt: created.UpdatedAt, NextAction: mcpapproval.PlatformRequesterNextAction(created.Status, ""),
+				ReviewURL: reviewURL,
 			}, nil
 		})
 	})
@@ -85,7 +92,7 @@ func registerReviewRequestTools(reg *Registrar, service MCPReviewRequestService,
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyMCPReviewRequestInput) (*mcp.CallToolResult, GetMyMCPReviewRequestOutput, error) {
 		return principalToolCall(ctx, reviewRequestToolResult, func(principal Principal) (GetMyMCPReviewRequestOutput, error) {
-			projectID, err := reviewRequestProject(ctx, service, projects, principal, input.ProjectID)
+			project, err := reviewRequestProject(ctx, service, projects, principal, input.ProjectID)
 			if err != nil {
 				return GetMyMCPReviewRequestOutput{}, err
 			}
@@ -94,25 +101,29 @@ func registerReviewRequestTools(reg *Registrar, service MCPReviewRequestService,
 				return GetMyMCPReviewRequestOutput{}, oops.E(oops.CodeBadRequest, err, "request_id must be a UUID")
 			}
 			request, err := service.ReadPlatformRequesterReview(ctx, mcpapproval.PlatformRequesterReviewInput{
-				OrganizationID: principal.OrganizationID, ProjectID: projectID, UserID: principal.UserID, RequestID: requestID,
+				OrganizationID: principal.OrganizationID, ProjectID: project.ID, UserID: principal.UserID, RequestID: requestID,
 			})
 			if err != nil {
 				return GetMyMCPReviewRequestOutput{}, fmt.Errorf("read own MCP review request: %w", err)
 			}
-			return GetMyMCPReviewRequestOutput{ProjectID: projectID.String(), PlatformRequesterReview: request}, nil
+			reviewURL := ""
+			if links != nil && request.ServerSlug != "" {
+				reviewURL = links.ShadowMCPReviewURL(ctx, principal, project, request.ServerSlug)
+			}
+			return GetMyMCPReviewRequestOutput{ProjectID: project.ID.String(), PlatformRequesterReview: request, ReviewURL: reviewURL}, nil
 		})
 	})
 }
 
-func reviewRequestProject(ctx context.Context, service MCPReviewRequestService, projects MCPReviewProjectResolver, principal Principal, rawProjectID string) (uuid.UUID, error) {
+func reviewRequestProject(ctx context.Context, service MCPReviewRequestService, projects MCPReviewProjectResolver, principal Principal, rawProjectID string) (ResolvedProject, error) {
 	if service == nil || projects == nil {
-		return uuid.Nil, ErrUnavailable
+		return ResolvedProject{}, ErrUnavailable
 	}
 	project, err := projects.ResolveReviewProject(ctx, principal, rawProjectID)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("resolve MCP review project: %w", err)
+		return ResolvedProject{}, fmt.Errorf("resolve MCP review project: %w", err)
 	}
-	return project.ID, nil
+	return project, nil
 }
 
 type reviewRequestRefusal struct {

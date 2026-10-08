@@ -85,6 +85,8 @@ type RegistrationService struct {
 	clientAdmission            *ClientAdmissionService
 	budgets                    OperationBudgets
 	telemetry                  LifecycleTelemetry
+	directRemotePolicy         DirectRemotePolicyChecker
+	reviews                    ShadowMCPReviewFiler
 }
 
 func NewRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker, store RegistrationPersistence) *RegistrationService {
@@ -133,6 +135,17 @@ func (s *RegistrationService) WithReadiness(readiness *ReadinessService) *Regist
 func (s *RegistrationService) WithIdentityProviderAttachment(attachment CatalogIdentityProviderAttachment) *RegistrationService {
 	if s != nil {
 		s.identityProviderAttachment = attachment
+	}
+	return s
+}
+
+// WithShadowMCPReview makes a direct-remote registration consult the project's
+// enabled Shadow MCP block policies before anything is persisted. A refused
+// URL files a review request on the caller's behalf when a filer is wired.
+func (s *RegistrationService) WithShadowMCPReview(policy DirectRemotePolicyChecker, reviews ShadowMCPReviewFiler) *RegistrationService {
+	if s != nil {
+		s.directRemotePolicy = policy
+		s.reviews = reviews
 	}
 	return s
 }
@@ -203,8 +216,8 @@ func (s *RegistrationService) SetClientAdmission(ctx context.Context, principal 
 }
 
 // clientAdmissionTarget applies the shared preconditions of both admission
-// paths: an available deployment, the caller's operation budget, the rollout
-// gate, and an eligible project.
+// paths: an available deployment, the caller's operation budget, the
+// registration gate, and an eligible project.
 func (s *RegistrationService) clientAdmissionTarget(ctx context.Context, principal Principal, projectSlug, registrationID string) (ResolvedProject, uuid.UUID, error) {
 	if s == nil || s.gate == nil || s.store == nil || !s.clientAdmission.valid() || !s.budgets.LifecycleMetadata.valid() || projectSlug == "" || registrationID == "" {
 		return ResolvedProject{}, uuid.Nil, ErrClientAdmissionUnavailable
@@ -493,6 +506,7 @@ type RegisterRemoteMCPInput struct {
 	RemoteURL      string
 	DisplayName    string
 	IdempotencyKey string
+	Justification  string
 }
 
 type RegisterRemoteMCPResult struct {
@@ -538,6 +552,19 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 	}
 	if err := s.requireEligibleTarget(ctx, principal.OrganizationID, project); err != nil {
 		return RegisterRemoteMCPResult{}, err
+	}
+	// An enabled block policy that does not already permit this URL for the
+	// caller stops the registration before any receipt exists, so a later
+	// approved registration is a fresh call rather than a replay.
+	if s.directRemotePolicy != nil {
+		state, err := s.directRemotePolicy.CheckDirectRemotePolicy(ctx, principal, project, inspection.CanonicalURL)
+		if err != nil {
+			return RegisterRemoteMCPResult{}, fmt.Errorf("consult Shadow MCP policy for direct remote registration: %w", err)
+		}
+		if state.EnforcementActive && !state.Approved {
+			s.telemetry.Record(ctx, LifecycleEvent{Operation: "direct_remote_registration", Phase: "complete", Outcome: "denied", State: ""})
+			return RegisterRemoteMCPResult{}, s.reviewRefusal(ctx, principal, project, inspection.CanonicalURL, input.Justification)
+		}
 	}
 	if displayName == "" {
 		displayName = inspection.CanonicalURL
@@ -680,6 +707,19 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 		Registration:        receipt.RegistrationID.UUID.String(),
 		SecretFieldsPending: append([]CatalogConfigurationField(nil), pendingSecretFields...),
 	}, nil
+}
+
+// reviewRefusal files a Shadow MCP review for a refused URL when a filer is
+// wired, and otherwise returns the bare refusal.
+func (s *RegistrationService) reviewRefusal(ctx context.Context, principal Principal, project ResolvedProject, canonicalURL, justification string) error {
+	if s.reviews == nil {
+		return ErrShadowMCPReviewRequired
+	}
+	review, err := s.reviews.FileShadowMCPReview(ctx, principal, project, canonicalURL, "adding "+canonicalURL+" to project "+project.Slug, justification)
+	if err != nil {
+		return fmt.Errorf("%w: file Shadow MCP review: %w", ErrShadowMCPReviewRequired, err)
+	}
+	return &ShadowMCPReviewRequiredError{Review: review, Cause: ErrShadowMCPReviewRequired}
 }
 
 // isDirectRemoteDisplayNameBreak rejects values that change the structure of a

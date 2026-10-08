@@ -64,6 +64,7 @@ SELECT
   r.id
   , r.target_kind
   , r.target_raw
+  , r.target_key
   , r.status
   , CASE
       WHEN r.status = 'superseded' THEN ''

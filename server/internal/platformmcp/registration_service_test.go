@@ -741,3 +741,121 @@ func TestRegistrationServiceDirectRemoteProtocols(t *testing.T) {
 		})
 	}
 }
+
+type testDirectRemotePolicy struct {
+	state DirectRemoteApprovalState
+	err   error
+	calls int
+	url   string
+}
+
+func (p *testDirectRemotePolicy) CheckDirectRemotePolicy(_ context.Context, _ Principal, _ ResolvedProject, canonicalURL string) (DirectRemoteApprovalState, error) {
+	p.calls++
+	p.url = canonicalURL
+	return p.state, p.err
+}
+
+type recordingShadowMCPReviewFiler struct {
+	review        ShadowMCPReviewRequest
+	err           error
+	calls         int
+	project       ResolvedProject
+	url           string
+	activity      string
+	justification string
+}
+
+func (f *recordingShadowMCPReviewFiler) FileShadowMCPReview(_ context.Context, _ Principal, project ResolvedProject, canonicalURL, activity, justification string) (ShadowMCPReviewRequest, error) {
+	f.calls++
+	f.project, f.url, f.activity, f.justification = project, canonicalURL, activity, justification
+	return f.review, f.err
+}
+
+func newDirectRemoteRegistrationFixture(t *testing.T) (*recordingRegistrationStore, *testDirectRemoteInspector, ResolvedProject) {
+	t.Helper()
+	project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
+	registrationID := uuid.New()
+	store := &recordingRegistrationStore{
+		project:   project,
+		begin:     OperationReceipt{ID: uuid.New()},
+		converged: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusPending},
+		completed: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusSucceeded},
+	}
+	inspector := &testDirectRemoteInspector{inspection: DirectRemoteInspection{CanonicalURL: "https://remote.example.test/mcp", Transport: "streamable-http", Trust: "user_supplied_unreviewed"}}
+	return store, inspector, project
+}
+
+// A block policy that does not permit the URL stops the registration before
+// any receipt exists and files a review on the caller's behalf.
+func TestRegistrationServiceFilesShadowMCPReviewInsteadOfRegisteringARefusedURL(t *testing.T) {
+	t.Parallel()
+
+	store, inspector, project := newDirectRemoteRegistrationFixture(t)
+	policy := &testDirectRemotePolicy{state: DirectRemoteApprovalState{EnforcementActive: true, Approved: false}}
+	filer := &recordingShadowMCPReviewFiler{review: ShadowMCPReviewRequest{RequestID: "request-1", Status: "requested", Target: "https://remote.example.test/mcp", ReviewURL: "https://app.example.test/review", PolicyNames: []string{"Block unreviewed MCPs"}, Explanation: "why"}}
+	service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector).WithShadowMCPReview(policy, filer)
+
+	_, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{ProjectSlug: project.Slug, RemoteURL: "https://REMOTE.example.test/mcp", IdempotencyKey: "request-key", Justification: "support rota"})
+
+	require.ErrorIs(t, err, ErrShadowMCPReviewRequired)
+	var review *ShadowMCPReviewRequiredError
+	require.ErrorAs(t, err, &review)
+	require.Equal(t, "request-1", review.Review.RequestID)
+	require.Equal(t, "https://app.example.test/review", review.Review.ReviewURL)
+	require.Equal(t, 1, inspector.calls, "the URL is still inspected first")
+	require.Equal(t, 1, policy.calls)
+	require.Equal(t, "https://remote.example.test/mcp", policy.url, "the policy sees the canonical URL, not the raw input")
+	require.Equal(t, 1, filer.calls)
+	require.Equal(t, project, filer.project)
+	require.Equal(t, "https://remote.example.test/mcp", filer.url)
+	require.Equal(t, "adding https://remote.example.test/mcp to project project", filer.activity)
+	require.Equal(t, "support rota", filer.justification)
+	require.Zero(t, store.beginCalls, "nothing is persisted when the policy refuses")
+	require.Zero(t, store.convergeCalls)
+	require.Zero(t, store.completeCalls)
+}
+
+func TestRegistrationServiceRegistersWhenThePolicyPermitsOrIsAbsent(t *testing.T) {
+	t.Parallel()
+
+	for name, state := range map[string]DirectRemoteApprovalState{
+		"no block policy":   {EnforcementActive: false, Approved: true},
+		"approved for user": {EnforcementActive: true, Approved: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			store, inspector, project := newDirectRemoteRegistrationFixture(t)
+			policy := &testDirectRemotePolicy{state: state}
+			filer := &recordingShadowMCPReviewFiler{}
+			service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector).WithShadowMCPReview(policy, filer)
+
+			result, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{ProjectSlug: project.Slug, RemoteURL: "https://remote.example.test/mcp", IdempotencyKey: "request-key"})
+			require.NoError(t, err)
+			require.NotEmpty(t, result.Registration)
+			require.Equal(t, 1, policy.calls)
+			require.Zero(t, filer.calls)
+			require.Equal(t, 1, store.completeCalls)
+		})
+	}
+}
+
+// Without a filer the refusal is still a refusal: the policy is never bypassed
+// because the review path is not wired.
+func TestRegistrationServiceRefusesWithoutAFilerWhenThePolicyBlocks(t *testing.T) {
+	t.Parallel()
+
+	store, inspector, project := newDirectRemoteRegistrationFixture(t)
+	policy := &testDirectRemotePolicy{state: DirectRemoteApprovalState{EnforcementActive: true, Approved: false}}
+	service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector).WithShadowMCPReview(policy, nil)
+
+	_, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{ProjectSlug: project.Slug, RemoteURL: "https://remote.example.test/mcp", IdempotencyKey: "request-key"})
+	require.ErrorIs(t, err, ErrShadowMCPReviewRequired)
+	var review *ShadowMCPReviewRequiredError
+	require.NotErrorAs(t, err, &review)
+	require.Zero(t, store.beginCalls)
+
+	policy.err = errors.New("policy read failed")
+	_, err = service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{ProjectSlug: project.Slug, RemoteURL: "https://remote.example.test/mcp", IdempotencyKey: "request-key"})
+	require.ErrorContains(t, err, "policy read failed")
+	require.Zero(t, store.beginCalls, "an unreadable policy fails closed")
+}
